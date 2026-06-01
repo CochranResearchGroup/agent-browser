@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAtomValue, useSetAtom } from "jotai/react";
 import type { ActivityEvent } from "@/types";
+import type { SelectedWorkspaceContext } from "@/lib/selected-workspace-context";
 import { combinedEventsAtom, persistActivityAtom, togglePersistAtom, clearActivityAtom } from "@/store/activity";
 import { Bookmark, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -161,7 +162,11 @@ function ConsoleEntry({
   );
 }
 
-export function ActivityFeed() {
+export function ActivityFeed({
+  selectedWorkspaceContext,
+}: {
+  selectedWorkspaceContext?: SelectedWorkspaceContext | null;
+} = {}) {
   const events = useAtomValue(combinedEventsAtom);
   const persist = useAtomValue(persistActivityAtom);
   const togglePersist = useSetAtom(togglePersistAtom);
@@ -185,7 +190,11 @@ export function ActivityFeed() {
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <div
+      className="flex h-full flex-col"
+      data-selected-workspace-id={selectedWorkspaceContext?.node?.id ?? ""}
+      data-selected-workspace-state={selectedWorkspaceContext?.state ?? ""}
+    >
       <div className="flex shrink-0 items-center gap-2 px-3 py-2">
         <span className="text-xs text-muted-foreground">Activity</span>
         <Badge variant="secondary" className="ml-auto h-4 px-1.5 text-[10px]">

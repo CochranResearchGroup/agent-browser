@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAtomValue } from "jotai/react";
 import { activeSessionNameAtom } from "@/store/sessions";
 import { execCommand, sessionArgs } from "@/lib/exec";
+import type { SelectedWorkspaceContext } from "@/lib/selected-workspace-context";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -71,7 +72,11 @@ function urlHost(url: string): string {
   }
 }
 
-export function NetworkPanel() {
+export function NetworkPanel({
+  selectedWorkspaceContext,
+}: {
+  selectedWorkspaceContext?: SelectedWorkspaceContext | null;
+} = {}) {
   const sessionName = useAtomValue(activeSessionNameAtom);
 
   const [requests, setRequests] = useState<NetworkRequest[]>([]);
@@ -189,7 +194,11 @@ export function NetworkPanel() {
   }, [sessionName, harPath]);
 
   return (
-    <div className="flex h-full flex-col">
+    <div
+      className="flex h-full flex-col"
+      data-selected-workspace-id={selectedWorkspaceContext?.node?.id ?? ""}
+      data-selected-workspace-state={selectedWorkspaceContext?.state ?? ""}
+    >
       <div className="flex shrink-0 items-center gap-1.5 px-3 py-2">
         {TYPE_FILTERS.map((f) => (
           <button

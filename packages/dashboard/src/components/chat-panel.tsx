@@ -1,17 +1,26 @@
 "use client";
 
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
-import { useAtomValue } from "jotai/react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { Streamdown } from "streamdown";
-import { getChatApiUrl, chatModelAtom, availableModelsAtom } from "@/store/chat";
+import { getChatApiUrl } from "@/store/chat";
 import { activeSessionNameAtom } from "@/store/sessions";
-import { ModelSelector } from "@/components/model-selector";
+import { useAtomValue } from "jotai/react";
+import type { SelectedWorkspaceContext } from "@/lib/selected-workspace-context";
+import {
+  CONTEXTUAL_CHAT_PROVIDER_ID,
+  buildSelectedWorkspaceChatPacket,
+  selectedWorkspaceChatPacketSummary,
+  validateSelectedWorkspaceChatPacket,
+  type CodexWorkspaceObservation,
+  type SelectedWorkspaceChatPacket,
+} from "@/lib/selected-workspace-chat-packet";
+import { APP_INTELLIGENCE_INSPECT_API_URL } from "@/lib/dashboard-api";
 import { shikiTheme } from "@/lib/shiki-theme";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { ArrowUp, Square, Trash2, ChevronRight, ImagePlus, X, Loader, Copy, Check, Download } from "lucide-react";
+import { ArrowUp, Square, Trash2, ChevronRight, Loader, Copy, Check, Download, ShieldCheck } from "lucide-react";
 
 type ExtraProps = { node?: unknown };
 type MdImgProps = React.ImgHTMLAttributes<HTMLImageElement> & ExtraProps;
@@ -74,10 +83,10 @@ function stripImagesForStorage(messages: unknown[]): unknown[] {
 }
 
 const SUGGESTIONS = [
-  "Go to vercel.com",
-  "Take a screenshot",
-  "What's on the page?",
-  "Click the first link",
+  "Inspect viewport readiness",
+  "Explain why this browser is not viewable",
+  "Summarize the selected workspace state",
+  "List the next read-only checks",
 ];
 
 interface ToolInvocationPart {
@@ -252,8 +261,6 @@ function ContextMeter({ used, total }: { used: number; total: number }) {
   );
 }
 
-const DEFAULT_MODEL = "anthropic/claude-sonnet-4.6";
-
 function useTimeAgo(ts: number | undefined) {
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -271,10 +278,9 @@ function useTimeAgo(ts: number | undefined) {
   return `${hrs}h ago`;
 }
 
-function MessageFooter({ model, timestamp, text }: { model: string; timestamp?: number; text: string }) {
+function MessageFooter({ provider, timestamp, text }: { provider: string; timestamp?: number; text: string }) {
   const [copied, setCopied] = useState(false);
   const timeAgo = useTimeAgo(timestamp);
-  const shortModel = model.includes("/") ? model.split("/").pop()! : model;
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(text).then(() => {
@@ -285,7 +291,7 @@ function MessageFooter({ model, timestamp, text }: { model: string; timestamp?: 
 
   return (
     <div className="flex items-center gap-2 pt-0.5 text-[10px] text-muted-foreground/50">
-      <span>{shortModel}</span>
+      <span>{provider}</span>
       {timeAgo && (
         <>
           <span>·</span>
@@ -304,18 +310,165 @@ function MessageFooter({ model, timestamp, text }: { model: string; timestamp?: 
   );
 }
 
-interface PendingImage {
-  file: File;
-  preview: string;
+interface CodexInspectionEntry {
+  id: string;
+  prompt: string;
+  observation?: CodexWorkspaceObservation;
+  failure?: {
+    code?: string;
+    message?: string;
+  };
+  ledger?: {
+    runId?: string;
+    contextPacketHash?: string;
+    eventLogPath?: string | null;
+    normalizedEventLogPath?: string | null;
+    observationPath?: string | null;
+    threadId?: string | null;
+    turnId?: string | null;
+    appServerReady?: boolean;
+    appServerReason?: string;
+    appServerTransport?: string | null;
+    appServerCliVersion?: string | null;
+  };
 }
 
-export function ChatPanel() {
+interface CodexInspectResponse {
+  success?: boolean;
+  error?: string;
+  data?: {
+    observation?: CodexWorkspaceObservation;
+    failure?: CodexInspectionEntry["failure"];
+    ledger?: CodexInspectionEntry["ledger"];
+  };
+}
+
+function CodexProviderSummary({
+  packet,
+  packetSummary,
+  packetErrors,
+}: {
+  packet: SelectedWorkspaceChatPacket | null;
+  packetSummary: string;
+  packetErrors: string[];
+}) {
+  return (
+    <div className="rounded-md border border-border/60 bg-secondary/20 px-2 py-1.5 text-[10px]">
+      <div className="flex items-center gap-1.5 text-foreground">
+        <ShieldCheck className="size-3 shrink-0 text-primary" />
+        <span className="font-medium">Codex app server</span>
+        <span className="ml-auto text-muted-foreground">read-only</span>
+      </div>
+      <div className="mt-1 text-muted-foreground break-words">
+        {packet ? packetSummary || packet.workspace.label : "No workspace selected"}
+      </div>
+      {packetErrors.length > 0 && (
+        <div className="mt-1 text-destructive/80">
+          {packetErrors.join(" ")}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CodexInspectionBlock({ entry }: { entry: CodexInspectionEntry }) {
+  const { observation, failure, ledger } = entry;
+  return (
+    <div className="space-y-2 rounded-md border border-border/60 bg-background/40 p-2 text-xs">
+      <div className="space-y-1">
+        <div className="text-[10px] uppercase text-muted-foreground">Request</div>
+        <div className="text-muted-foreground whitespace-pre-wrap">{entry.prompt}</div>
+      </div>
+      {observation ? (
+        <div className="space-y-1">
+          <div className="text-[10px] uppercase text-muted-foreground">Observation</div>
+          <div className="text-foreground leading-relaxed">{observation.summary}</div>
+        </div>
+      ) : (
+        <div className="space-y-1">
+          <div className="text-[10px] uppercase text-destructive/80">Inspection failure</div>
+          <div className="text-destructive/90 leading-relaxed">
+            {failure?.code ? `${failure.code}: ` : ""}{failure?.message ?? "Codex app-server inspection failed."}
+          </div>
+        </div>
+      )}
+      {observation && observation.blockers.length > 0 && (
+        <CodexObservationList
+          title="Blockers"
+          items={observation.blockers.map((item) => `${item.severity}: ${item.summary}`)}
+        />
+      )}
+      {observation && observation.risks.length > 0 && (
+        <CodexObservationList title="Risks" items={observation.risks.map((item) => item.summary)} />
+      )}
+      {observation && observation.suggestedNextInspections.length > 0 && (
+        <CodexObservationList
+          title="Next"
+          items={observation.suggestedNextInspections.map((item) => `${item.label}: ${item.reason}`)}
+        />
+      )}
+      <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+        <span>{observation?.provider ?? CONTEXTUAL_CHAT_PROVIDER_ID}</span>
+        {observation && (
+          <>
+            <span>·</span>
+            <span>{observation.confidence} confidence</span>
+          </>
+        )}
+        {ledger?.threadId && (
+          <>
+            <span>·</span>
+            <span className="font-mono">thread {ledger.threadId.slice(0, 8)}</span>
+          </>
+        )}
+        {ledger?.turnId && (
+          <>
+            <span>·</span>
+            <span className="font-mono">turn {ledger.turnId.slice(0, 8)}</span>
+          </>
+        )}
+        {ledger?.contextPacketHash && (
+          <>
+            <span>·</span>
+            <span className="font-mono">{ledger.contextPacketHash.slice(0, 12)}</span>
+          </>
+        )}
+        {ledger?.eventLogPath && (
+          <>
+            <span>·</span>
+            <span>event log</span>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CodexObservationList({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div className="space-y-1">
+      <div className="text-[10px] uppercase text-muted-foreground">{title}</div>
+      <div className="space-y-1">
+        {items.map((item, index) => (
+          <div key={`${title}-${index}`} className="rounded border border-border/50 px-2 py-1 text-[11px] text-muted-foreground">
+            {item}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function ChatPanel({
+  selectedWorkspaceContext,
+}: {
+  selectedWorkspaceContext?: SelectedWorkspaceContext | null;
+} = {}) {
   const [input, setInput] = useState("");
   const [errorDismissed, setErrorDismissed] = useState(false);
-  const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const defaultModel = useAtomValue(chatModelAtom);
-  const [selectedModel, setSelectedModel] = useState<string>(defaultModel || DEFAULT_MODEL);
+  const [codexInspections, setCodexInspections] = useState<CodexInspectionEntry[]>([]);
+  const [codexError, setCodexError] = useState<string | null>(null);
+  const [codexSubmitting, setCodexSubmitting] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const sessionName = useAtomValue(activeSessionNameAtom);
@@ -323,33 +476,39 @@ export function ChatPanel() {
   const storageKey = `${STORAGE_PREFIX}${chatId}`;
   const sessionRef = useRef(chatId);
   sessionRef.current = chatId;
-  const modelRef = useRef(selectedModel);
-  modelRef.current = selectedModel;
   const messageTimestamps = useRef<Record<string, number>>({});
-
-  useEffect(() => {
-    if (defaultModel) setSelectedModel(defaultModel);
-  }, [defaultModel]);
 
   const transport = useRef(
     new DefaultChatTransport({
       api: getChatApiUrl(),
       body: () => ({
         session: sessionRef.current,
-        model: modelRef.current,
+        provider: CONTEXTUAL_CHAT_PROVIDER_ID,
       }),
     }),
   ).current;
 
-  const { messages, sendMessage, stop, status, setMessages, error } = useChat({
+  const { messages, stop, status, setMessages, error } = useChat({
     id: chatId,
     transport,
     onError: () => setErrorDismissed(false),
   });
 
   const visibleError = error && !errorDismissed ? error : undefined;
-  const isLoading = status === "streaming" || status === "submitted";
-  const hasMessages = messages.length > 0 || !!visibleError;
+  const isLoading = status === "streaming" || status === "submitted" || codexSubmitting;
+  const hasMessages = messages.length > 0 || codexInspections.length > 0 || !!visibleError || !!codexError;
+  const selectedWorkspacePacket = useMemo(() => {
+    if (!selectedWorkspaceContext) return null;
+    return buildSelectedWorkspaceChatPacket(selectedWorkspaceContext);
+  }, [selectedWorkspaceContext]);
+  const selectedWorkspacePacketErrors = useMemo(
+    () => (selectedWorkspacePacket ? validateSelectedWorkspaceChatPacket(selectedWorkspacePacket) : []),
+    [selectedWorkspacePacket],
+  );
+  const packetSummary = useMemo(
+    () => (selectedWorkspacePacket ? selectedWorkspaceChatPacketSummary(selectedWorkspacePacket) : ""),
+    [selectedWorkspacePacket],
+  );
 
   useEffect(() => {
     for (const msg of messages) {
@@ -359,7 +518,6 @@ export function ChatPanel() {
     }
   }, [messages]);
 
-  const models = useAtomValue(availableModelsAtom);
   const estimatedTokens = useMemo(() => {
     let total = 0;
     for (const msg of messages) {
@@ -375,12 +533,10 @@ export function ChatPanel() {
         }
       }
     }
+    if (selectedWorkspacePacket) total += estimateTokens(JSON.stringify(selectedWorkspacePacket));
+    for (const entry of codexInspections) total += estimateTokens(JSON.stringify(entry.observation));
     return total;
-  }, [messages]);
-  const contextWindow = useMemo(() => {
-    const match = models.find((m) => m.id === selectedModel);
-    return match?.context_window ?? DEFAULT_CONTEXT_WINDOW;
-  }, [models, selectedModel]);
+  }, [messages, selectedWorkspacePacket, codexInspections]);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -392,7 +548,7 @@ export function ChatPanel() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, visibleError, scrollToBottom]);
+  }, [messages, codexInspections, visibleError, codexError, scrollToBottom]);
 
   // Restore messages from localStorage when chatId changes
   useEffect(() => {
@@ -425,39 +581,62 @@ export function ChatPanel() {
     }
   }, [messages, isLoading, storageKey]);
 
-  const addImages = useCallback((files: FileList | null) => {
-    if (!files) return;
-    const images = Array.from(files).filter((f) => f.type.startsWith("image/"));
-    setPendingImages((prev) => [
-      ...prev,
-      ...images.map((file) => ({ file, preview: URL.createObjectURL(file) })),
-    ]);
-  }, []);
-
-  const removeImage = useCallback((index: number) => {
-    setPendingImages((prev) => {
-      const next = [...prev];
-      URL.revokeObjectURL(next[index].preview);
-      next.splice(index, 1);
-      return next;
-    });
+  const inspectWithCodex = useCallback(async (prompt: string, packet: SelectedWorkspaceChatPacket) => {
+    setCodexSubmitting(true);
+    setCodexError(null);
+    try {
+      const response = await fetch(APP_INTELLIGENCE_INSPECT_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: CONTEXTUAL_CHAT_PROVIDER_ID,
+          prompt,
+          packet,
+        }),
+      });
+      const data = (await response.json()) as CodexInspectResponse;
+      if (!response.ok && !data.data?.failure) {
+        throw new Error(data.error || `Codex inspection failed with HTTP ${response.status}`);
+      }
+      if (!data.data?.observation && !data.data?.failure) {
+        throw new Error(data.error || `Codex inspection failed with HTTP ${response.status}`);
+      }
+      const observation = data.data.observation;
+      const failure = data.data.failure;
+      const ledger = data.data.ledger;
+      setCodexInspections((prev) => [
+        ...prev,
+        {
+          id: observation?.runId ?? ledger?.runId ?? `codex-inspection-${Date.now()}`,
+          prompt,
+          observation,
+          failure,
+          ledger,
+        },
+      ]);
+    } catch (err) {
+      setCodexError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCodexSubmitting(false);
+    }
   }, []);
 
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
-      if ((!input.trim() && pendingImages.length === 0) || isLoading) return;
-      const dt = new DataTransfer();
-      for (const img of pendingImages) dt.items.add(img.file);
-      const files = dt.files.length > 0 ? dt.files : undefined;
-      sendMessage({ text: input, files });
+      if (!input.trim() || isLoading) return;
+      if (!selectedWorkspacePacket) {
+        setCodexError("Select a workspace before using contextual Chat.");
+        return;
+      }
+      if (selectedWorkspacePacketErrors.length > 0) {
+        setCodexError(selectedWorkspacePacketErrors.join(" "));
+        return;
+      }
+      void inspectWithCodex(input.trim(), selectedWorkspacePacket);
       setInput("");
-      setPendingImages((prev) => {
-        for (const p of prev) URL.revokeObjectURL(p.preview);
-        return [];
-      });
     },
-    [input, isLoading, sendMessage, pendingImages],
+    [input, isLoading, selectedWorkspacePacket, selectedWorkspacePacketErrors, inspectWithCodex],
   );
 
   const lastCompactedId = useRef<string | null>(null);
@@ -492,6 +671,8 @@ export function ChatPanel() {
 
   const handleClear = useCallback(() => {
     setMessages([]);
+    setCodexInspections([]);
+    setCodexError(null);
     setErrorDismissed(true);
     localStorage.removeItem(storageKey);
     requestAnimationFrame(() => inputRef.current?.focus());
@@ -518,7 +699,13 @@ export function ChatPanel() {
         return { type: p.type };
       }),
     }));
-    const json = JSON.stringify({ session: chatId, model: selectedModel, messages: data }, null, 2);
+    const json = JSON.stringify({
+      session: chatId,
+      provider: CONTEXTUAL_CHAT_PROVIDER_ID,
+      selectedWorkspacePacket,
+      codexInspections,
+      messages: data,
+    }, null, 2);
     const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -526,7 +713,7 @@ export function ChatPanel() {
     a.download = `chat-${chatId}-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [messages, chatId, selectedModel]);
+  }, [messages, chatId, selectedWorkspacePacket, codexInspections]);
 
   const hasVisibleContent = (parts: (typeof messages)[number]["parts"]): boolean => {
     return parts.some(
@@ -535,7 +722,13 @@ export function ChatPanel() {
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <div
+      className="flex h-full flex-col"
+      data-selected-workspace-id={selectedWorkspaceContext?.node?.id ?? ""}
+      data-selected-workspace-state={selectedWorkspaceContext?.state ?? ""}
+      data-codex-app-server-contextual-chat="ready"
+      data-contextual-chat-provider={CONTEXTUAL_CHAT_PROVIDER_ID}
+    >
       {hasMessages && (
         <div className="flex items-center justify-end gap-2 px-3 py-1.5 shrink-0 border-b border-border/40">
           <button
@@ -559,15 +752,22 @@ export function ChatPanel() {
         <div className="p-3 space-y-3">
           {!hasMessages && !isLoading && (
             <div className="space-y-2 pt-2">
-              <p className="text-[11px] text-muted-foreground">
-                Control the browser with natural language:
-              </p>
+              <CodexProviderSummary
+                packet={selectedWorkspacePacket}
+                packetSummary={packetSummary}
+                packetErrors={selectedWorkspacePacketErrors}
+              />
               <div className="flex flex-wrap gap-1.5">
                 {SUGGESTIONS.map((s) => (
                   <button
                     key={s}
                     type="button"
-                    onClick={() => sendMessage({ text: s })}
+                    onClick={() => {
+                      setInput(s);
+                      if (selectedWorkspacePacket && selectedWorkspacePacketErrors.length === 0) {
+                        void inspectWithCodex(s, selectedWorkspacePacket);
+                      }
+                    }}
                     className="text-[10px] px-2 py-1 rounded-md border bg-secondary/50 text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
                   >
                     {s}
@@ -576,6 +776,18 @@ export function ChatPanel() {
               </div>
             </div>
           )}
+
+          {hasMessages && (
+            <CodexProviderSummary
+              packet={selectedWorkspacePacket}
+              packetSummary={packetSummary}
+              packetErrors={selectedWorkspacePacketErrors}
+            />
+          )}
+
+          {codexInspections.map((entry) => (
+            <CodexInspectionBlock key={entry.id} entry={entry} />
+          ))}
 
           {messages.map((message) => {
             if (message.id.startsWith("compaction-")) {
@@ -666,8 +878,8 @@ export function ChatPanel() {
                         .map((p) => p.text)
                         .join("");
                       return (
-                        <MessageFooter
-                          model={selectedModel}
+                          <MessageFooter
+                          provider={CONTEXTUAL_CHAT_PROVIDER_ID}
                           timestamp={messageTimestamps.current[message.id]}
                           text={fullText}
                         />
@@ -707,32 +919,18 @@ export function ChatPanel() {
             </div>
           )}
 
+          {codexError && (
+            <div className="text-[10px] text-destructive/80 bg-destructive/10 rounded-md px-2 py-1.5">
+              {codexError}
+            </div>
+          )}
+
           <div ref={messagesEndRef} />
         </div>
       </ScrollArea>
 
       <div className="shrink-0 border-t border-border">
         <form onSubmit={handleSubmit}>
-          {pendingImages.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 px-3 pt-2">
-              {pendingImages.map((img, i) => (
-                <div key={img.preview} className="group relative">
-                  <img
-                    src={img.preview}
-                    alt={img.file.name}
-                    className="h-14 rounded-md border border-border object-cover"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeImage(i)}
-                    className="absolute -top-1.5 -right-1.5 hidden group-hover:flex size-4 items-center justify-center rounded-full bg-background border border-border text-muted-foreground hover:text-foreground"
-                  >
-                    <X className="size-2.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
           <div className="px-3 pt-2 pb-1.5">
             <textarea
               ref={inputRef}
@@ -751,49 +949,23 @@ export function ChatPanel() {
                 }
               }}
               onPaste={(e) => {
-                const items = e.clipboardData?.items;
-                if (!items) return;
-                const imageFiles: File[] = [];
-                for (const item of items) {
-                  if (item.type.startsWith("image/")) {
-                    const file = item.getAsFile();
-                    if (file) imageFiles.push(file);
-                  }
-                }
-                if (imageFiles.length > 0) {
-                  const dt = new DataTransfer();
-                  for (const f of imageFiles) dt.items.add(f);
-                  addImages(dt.files);
+                if (e.clipboardData?.items && Array.from(e.clipboardData.items).some((item) => item.type.startsWith("image/"))) {
+                  e.preventDefault();
+                  setCodexError("Contextual Chat accepts redacted workspace packets only.");
                 }
               }}
               className="w-full bg-transparent text-xs text-foreground outline-none resize-none max-h-24 leading-relaxed placeholder:text-muted-foreground"
             />
           </div>
           <div className="flex items-center justify-between px-3 pb-2">
-            <ModelSelector value={selectedModel} onChange={setSelectedModel} />
+            <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground">
+              <ShieldCheck className="size-3 shrink-0 text-primary" />
+              <span className="truncate">Codex app server</span>
+            </div>
             <div className="flex items-center gap-2">
               {hasMessages && (
-                <ContextMeter used={estimatedTokens} total={contextWindow} />
+                <ContextMeter used={estimatedTokens} total={DEFAULT_CONTEXT_WINDOW} />
               )}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={(e) => {
-                  addImages(e.target.files);
-                  e.target.value = "";
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="text-muted-foreground hover:text-foreground transition-colors shrink-0 p-1"
-                aria-label="Attach image"
-              >
-                <ImagePlus className="size-3.5" />
-              </button>
               {isLoading ? (
                 <button
                   type="button"
@@ -806,9 +978,9 @@ export function ChatPanel() {
               ) : (
                 <button
                   type="submit"
-                  disabled={!input.trim() && pendingImages.length === 0}
+                  disabled={!input.trim() || !selectedWorkspacePacket || selectedWorkspacePacketErrors.length > 0}
                   className="bg-primary text-primary-foreground rounded-full p-1 hover:bg-primary/90 transition-colors disabled:opacity-30 shrink-0"
-                  aria-label="Send message"
+                  aria-label="Inspect with Codex"
                 >
                   <ArrowUp className="size-3" />
                 </button>

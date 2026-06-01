@@ -318,8 +318,38 @@ assert.match(
 
 assert.match(
   navigator,
-  /RotateCcw[\s\S]*action\.id === "resume" \? <RotateCcw/,
+  /actionId === "resume" \|\| actionId === "repair"\) return <RotateCcw/,
   'Workspace navigator takeover Resume affordance must use a familiar resume icon',
+);
+
+assert.match(
+  navigator,
+  /function WorkspaceNodeDetail[\s\S]*processIndicatorItems\(node\)[\s\S]*Selected workspace detail[\s\S]*onAction/,
+  'Workspace navigator must show inspectable selected-row detail with process indicators and actions',
+);
+
+assert.match(
+  navigator,
+  /pushWorkspaceViewportUrl\(node, node\.viewStream\.controllable \? "control" : "view"\)/,
+  'Selecting a workspace with an embeddable stream must open the workspace viewport route',
+);
+
+assert.match(
+  page,
+  /type RightPaneTab = "workspace"[\s\S]*selectedWorkspaceContextEnabled = !rightPaneCollapsed[\s\S]*hasWorkspaceViewportRoute[\s\S]*useSelectedWorkspaceContext\(selectedWorkspaceContextEnabled\)[\s\S]*<WorkspaceRemoteViewport fallback=\{<Viewport \/>\} selectedWorkspaceContext=\{selectedWorkspace\.context\}[\s\S]*<Tabs value=\{sidePanelTab\}[\s\S]*<TabsTrigger value="workspace"[\s\S]*<WorkspaceSelectionPanel[\s\S]*selectedWorkspace\.context/,
+  'Dashboard viewport and right pane must consume the shared selected workspace context',
+);
+
+assert.match(
+  serviceWorkspaces,
+  /function daemonViewStream\(session: SessionInfo, live: boolean\)[\s\S]*provider: "cdp_screencast"[\s\S]*url: streamUrl[\s\S]*controlInput: "cdp_input"/,
+  'Daemon workspace rows must carry a CDP screencast stream so active rows are not blank selections',
+);
+
+assert.match(
+  serviceWorkspaces,
+  /process: live \? \{ streamPort: session\.port, running: true \}/,
+  'Daemon workspace rows must expose stream process indicators',
 );
 
 assert.match(

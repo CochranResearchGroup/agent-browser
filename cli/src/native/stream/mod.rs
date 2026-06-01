@@ -1,3 +1,6 @@
+pub(crate) mod app_intelligence;
+pub(crate) mod app_intelligence_schema;
+pub(crate) mod app_intelligence_supervisor;
 mod cdp_loop;
 pub(crate) mod chat;
 mod dashboard;

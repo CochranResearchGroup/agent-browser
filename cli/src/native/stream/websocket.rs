@@ -10,7 +10,7 @@ use tokio_tungstenite::tungstenite::Message;
 use crate::native::cdp::client::CdpClient;
 
 use super::http::handle_http_request;
-use super::{is_allowed_origin, timestamp_ms};
+use super::{dashboard_auth, is_allowed_origin, timestamp_ms};
 
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn accept_loop(
@@ -94,6 +94,31 @@ fn is_websocket_upgrade(request: &str) -> bool {
     })
 }
 
+fn request_path(request: &str) -> Option<&str> {
+    let mut parts = request.lines().next()?.split_whitespace();
+    let method = parts.next()?;
+    let path = parts.next()?;
+    if method.eq_ignore_ascii_case("GET") {
+        Some(path)
+    } else {
+        None
+    }
+}
+
+fn stream_proxy_port(request: &str) -> Option<u16> {
+    let path = request_path(request)?;
+    let raw = path
+        .strip_prefix("/api/stream/")?
+        .split(['?', '#'])
+        .next()?;
+    let port = raw.parse::<u16>().ok()?;
+    if port > 0 {
+        Some(port)
+    } else {
+        None
+    }
+}
+
 /// Peek at the TCP stream to dispatch between WebSocket upgrade and plain HTTP.
 #[allow(clippy::too_many_arguments)]
 async fn handle_connection(
@@ -122,6 +147,10 @@ async fn handle_connection(
     let request = String::from_utf8_lossy(&buf[..n]);
 
     if is_websocket_upgrade(&request) {
+        if let Some(proxy_port) = stream_proxy_port(&request) {
+            handle_ws_stream_proxy(stream, proxy_port).await;
+            return;
+        }
         let frame_rx = frame_tx.subscribe();
         handle_ws_client(
             stream,
@@ -146,6 +175,86 @@ async fn handle_connection(
     }
 }
 
+async fn accept_origin_checked_ws(
+    stream: tokio::net::TcpStream,
+) -> Option<tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>> {
+    #[allow(clippy::result_large_err)]
+    let callback =
+        |req: &tokio_tungstenite::tungstenite::handshake::server::Request,
+         resp: tokio_tungstenite::tungstenite::handshake::server::Response| {
+            let origin = req
+                .headers()
+                .get("origin")
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.to_string());
+            let authenticated = {
+                let headers: Vec<(String, String)> = req
+                    .headers()
+                    .iter()
+                    .filter_map(|(name, value)| {
+                        value
+                            .to_str()
+                            .ok()
+                            .map(|value| (name.as_str().to_string(), value.to_string()))
+                    })
+                    .collect();
+                matches!(dashboard_auth::authenticate_headers(&headers), Ok(Some(_)))
+            };
+            if !authenticated && !is_allowed_origin(origin.as_deref()) {
+                let mut reject =
+                    tokio_tungstenite::tungstenite::handshake::server::ErrorResponse::new(Some(
+                        "Origin not allowed".to_string(),
+                    ));
+                *reject.status_mut() = tokio_tungstenite::tungstenite::http::StatusCode::FORBIDDEN;
+                return Err(reject);
+            }
+            Ok(resp)
+        };
+
+    tokio_tungstenite::accept_hdr_async(stream, callback)
+        .await
+        .ok()
+}
+
+async fn handle_ws_stream_proxy(stream: tokio::net::TcpStream, port: u16) {
+    let Some(inbound) = accept_origin_checked_ws(stream).await else {
+        return;
+    };
+    let Ok((outbound, _)) =
+        tokio_tungstenite::connect_async(format!("ws://127.0.0.1:{}/", port)).await
+    else {
+        return;
+    };
+
+    let (mut inbound_tx, mut inbound_rx) = inbound.split();
+    let (mut outbound_tx, mut outbound_rx) = outbound.split();
+
+    loop {
+        tokio::select! {
+            from_browser = inbound_rx.next() => {
+                match from_browser {
+                    Some(Ok(message)) => {
+                        if outbound_tx.send(message).await.is_err() {
+                            break;
+                        }
+                    }
+                    _ => break,
+                }
+            }
+            from_stream = outbound_rx.next() => {
+                match from_stream {
+                    Some(Ok(message)) => {
+                        if inbound_tx.send(message).await.is_err() {
+                            break;
+                        }
+                    }
+                    _ => break,
+                }
+            }
+        }
+    }
+}
+
 #[allow(clippy::result_large_err, clippy::too_many_arguments)]
 async fn handle_ws_client(
     stream: tokio::net::TcpStream,
@@ -164,28 +273,8 @@ async fn handle_ws_client(
     recording: Arc<Mutex<bool>>,
     mut shutdown_rx: watch::Receiver<bool>,
 ) {
-    let callback =
-        |req: &tokio_tungstenite::tungstenite::handshake::server::Request,
-         resp: tokio_tungstenite::tungstenite::handshake::server::Response| {
-            let origin = req
-                .headers()
-                .get("origin")
-                .and_then(|v| v.to_str().ok())
-                .map(|s| s.to_string());
-            if !is_allowed_origin(origin.as_deref()) {
-                let mut reject =
-                    tokio_tungstenite::tungstenite::handshake::server::ErrorResponse::new(Some(
-                        "Origin not allowed".to_string(),
-                    ));
-                *reject.status_mut() = tokio_tungstenite::tungstenite::http::StatusCode::FORBIDDEN;
-                return Err(reject);
-            }
-            Ok(resp)
-        };
-
-    let ws_stream = match tokio_tungstenite::accept_hdr_async(stream, callback).await {
-        Ok(ws) => ws,
-        Err(_) => return,
+    let Some(ws_stream) = accept_origin_checked_ws(stream).await else {
+        return;
     };
 
     {

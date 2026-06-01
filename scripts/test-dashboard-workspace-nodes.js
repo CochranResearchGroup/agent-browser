@@ -153,6 +153,22 @@ const nodes = deriveWorkspaceNodes({
       browserBuild: 'stealthcdp_chromium',
       pid: 1234,
       cdpEndpoint: 'ws://127.0.0.1:4101/devtools/browser/live',
+      processStats: {
+        pid: 1234,
+        running: true,
+        rssBytes: 134217728,
+        cpuSeconds: 42,
+      },
+      viewStreams: [
+        {
+          provider: 'cdp_screencast',
+          url: 'http://127.0.0.1:44841/',
+          frameUrl: 'http://127.0.0.1:44841/',
+          controlInput: 'cdp_input',
+          readOnly: false,
+          readiness: { state: 'ready' },
+        },
+      ],
       activeSessionIds: ['session-live'],
     },
     {
@@ -169,6 +185,17 @@ const nodes = deriveWorkspaceNodes({
       health: 'disconnected',
       lastError: 'DevTools endpoint is unreachable.',
       activeSessionIds: ['session-disconnected'],
+    },
+    {
+      id: 'browser-cdp-disconnected',
+      profileId: 'profile-cdp-disconnected',
+      host: 'local_headless',
+      health: 'cdp_disconnected',
+      pid: 30734,
+      cdpEndpoint: 'ws://127.0.0.1:37883/devtools/browser/f1dec9ac',
+      lastError: 'CDP endpoint is unreachable.',
+      activeSessionIds: ['session-cdp-disconnected'],
+      viewStreams: [],
     },
     {
       id: 'browser-control',
@@ -293,6 +320,13 @@ const nodes = deriveWorkspaceNodes({
       serviceName: 'MonitorService',
       profileId: 'profile-disconnected',
       browserIds: ['browser-disconnected'],
+    },
+    {
+      id: 'session-cdp-disconnected',
+      serviceName: 'TranscriptReview',
+      taskName: 'contextualReadout',
+      profileId: 'profile-cdp-disconnected',
+      browserIds: ['browser-cdp-disconnected'],
     },
     {
       id: 'session-control',
@@ -429,6 +463,11 @@ const nodes = deriveWorkspaceNodes({
       serviceNames: ['MonitorService'],
     },
     {
+      profileId: 'profile-cdp-disconnected',
+      profileName: 'Transcript review profile',
+      serviceNames: ['TranscriptReview'],
+    },
+    {
       profileId: 'profile-control',
       profileName: 'Remote control profile',
       serviceNames: ['DashboardSmoke'],
@@ -529,13 +568,21 @@ const nodes = deriveWorkspaceNodes({
 const live = byId(nodes, 'browser:browser-live');
 assert.equal(live.source, 'service-browser');
 assert.equal(live.group, 'active');
-assert.equal(live.state, 'busy');
+assert.equal(live.state, 'controllable');
 assert.equal(live.label, 'JournalDownloader');
 assert.equal(live.profileId, 'profile-ready');
 assert.equal(live.primaryTab?.id, 'tab-live');
 assert.deepEqual(live.relatedIds.serviceSessionIds, ['session-live']);
 assert.deepEqual(live.relatedIds.jobIds, ['job-live']);
+assert.equal(live.viewStream?.provider, 'cdp_screencast');
+assert.equal(live.viewStream?.controllable, true);
+assert.equal(live.process?.pid, 1234);
+assert.equal(live.process?.rssBytes, 134217728);
+assert.equal(live.process?.cpuSeconds, 42);
+assert.equal(live.process?.cdpPort, 4101);
+assert.equal(live.process?.streamPort, 44841);
 assert.equal(action(live, 'focus').enabled, true);
+assert.equal(action(live, 'control').enabled, true);
 assert.equal(action(live, 'close').enabled, true);
 
 const retained = byId(nodes, 'browser:browser-retained');
@@ -549,6 +596,16 @@ assert.equal(disconnected.group, 'needs-attention');
 assert.equal(disconnected.state, 'needs-attention');
 assert.equal(disconnected.attentionReason, 'Repair the retained browser record.');
 assert.equal(action(disconnected, 'repair').enabled, true);
+
+const cdpDisconnected = byId(nodes, 'browser:browser-cdp-disconnected');
+assert.equal(cdpDisconnected.group, 'retained');
+assert.equal(cdpDisconnected.state, 'retained');
+assert.equal(cdpDisconnected.live, false);
+assert.equal(cdpDisconnected.attentionReason, null);
+assert.equal(cdpDisconnected.process?.pid, 30734);
+assert.equal(cdpDisconnected.process?.cdpPort, 37883);
+assert.equal(action(cdpDisconnected, 'repair').enabled, false);
+assert.equal(action(cdpDisconnected, 'control').enabled, false);
 
 const control = byId(nodes, 'browser:browser-control');
 assert.equal(control.group, 'active');
@@ -584,11 +641,11 @@ assert.equal(action(odolloUps, 'control').enabled, true);
 assert.equal(action(odolloUps, 'external-open').enabled, true);
 
 const staleRemote = byId(nodes, 'browser:session:session-2');
-assert.equal(staleRemote.group, 'needs-attention');
-assert.equal(staleRemote.state, 'blocked');
+assert.equal(staleRemote.group, 'retained');
+assert.equal(staleRemote.state, 'retained');
 assert.equal(staleRemote.label, 'session-2');
 assert.equal(staleRemote.live, false);
-assert.equal(staleRemote.attentionReason, 'Use the existing browser, or release the profile when this task is done.');
+assert.equal(staleRemote.attentionReason, null);
 assert.equal(action(staleRemote, 'control').enabled, false);
 assert.equal(action(staleRemote, 'external-open').enabled, false);
 
@@ -624,6 +681,11 @@ assert.equal(daemon.source, 'daemon-session');
 assert.equal(daemon.group, 'active');
 assert.equal(daemon.label, 'Standalone tab');
 assert.equal(daemon.primaryTab?.url, 'https://example.test/standalone');
+assert.equal(daemon.viewStream?.provider, 'cdp_screencast');
+assert.equal(daemon.viewStream?.url, 'http://127.0.0.1:4101/');
+assert.equal(daemon.process?.streamPort, 4101);
+assert.equal(action(daemon, 'view').enabled, true);
+assert.equal(action(daemon, 'control').enabled, true);
 assert.equal(action(daemon, 'add-tab').enabled, true);
 
 const conflict = byId(nodes, 'profile:profile-conflict');

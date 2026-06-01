@@ -43,6 +43,7 @@ agent-browser service status          # Show service control-plane and configure
 agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health records
 agent-browser service prune-retained  # Preview retained closed-tab and inert-browser cleanup
+agent-browser service prune-retained --orphaned-profiles # Preview orphaned custom profile cleanup
 agent-browser service access-plan --login-id canva # Inspect broker routing before browser work
 agent-browser service profiles        # Show retained service profile records
 agent-browser service sessions        # Show retained service session records
@@ -314,6 +315,7 @@ agent-browser service status --watch --interval 1000
 agent-browser service watch --interval 1000 --count 5
 agent-browser service reconcile       # Probe persisted browser records and update service state
 agent-browser service prune-retained  # Dry-run retained closed-tab and inert-browser cleanup
+agent-browser service prune-retained --orphaned-profiles # Dry-run orphaned custom profile cleanup
 agent-browser service access-plan --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace --login-id canva
 agent-browser service profiles        # Show retained profile records
 agent-browser service sessions        # Show retained session records
@@ -374,7 +376,7 @@ The persisted service state also includes bounded audit records for recent contr
 
 `service reconcile` runs the same persisted browser health and target probes intentionally without requesting a control-plane status snapshot. It updates `state.json`, refreshes live tab records for reachable browser CDP endpoints, refreshes the `reconciliation` snapshot, appends service events, and returns the reconciled service state plus counts for total and changed browser records.
 
-`service prune-retained` is dry-run by default for retained inventory cleanup. It previews closed tabs and inert <code>not_started</code> browser records that are safe to remove from service state, then applies the cleanup only when <code>--apply</code> is present. Add <code>--process-exited-browsers</code> only after reviewing failure evidence because those records may explain a crash or shutdown path.
+`service prune-retained` is dry-run by default for retained inventory cleanup. It previews closed tabs and inert <code>not_started</code> browser records that are safe to remove from service state, then applies the cleanup only when <code>--apply</code> is present. Add <code>--process-exited-browsers</code> only after reviewing failure evidence because those records may explain a crash or shutdown path. Add <code>--orphaned-profiles</code> to include only <code>custom:*</code> profile records that have no retained service references and point at missing ephemeral user-data directories.
 
 Add <code>--released-sessions</code> when released or expired session records should be pruned with their inert linked browser placeholders. Add <code>--abandoned-sessions</code> only after operator review because it applies the same inert-placeholder cleanup to shared or exclusive session leases that may otherwise affect profile allocation. Abandoned shared or exclusive sessions must also have a parseable <code>lastLeaseObservedAt</code> or <code>createdAt</code> older than <code>--abandoned-session-min-age-minutes</code>, which defaults to <code>1440</code>. Dry-runs report skipped abandoned sessions as <code>abandonedSessionsMissingAgeTimestamp</code> or <code>abandonedSessionsTooFresh</code> so operators can distinguish missing age evidence from lease observations that are still inside the minimum age guard. The <code>skippedSummary</code> field reports the top skipped groups by stable prefix after trimming trailing numeric run suffixes, including total and omitted group counts. Text output shows the same top groups for faster retained-state triage.
 
@@ -788,7 +790,10 @@ and <code>/activity</code>. Service record tabs persist through
 <code>?view=service:&lt;name&gt;</code>, while the left workspace navigator keeps
 the selected workspace, browser, session, tab, profile, and job IDs in separate
 query parameters so refreshes and handoff links reopen the same operational
-context.
+context. Selecting a workspace row shows PID, memory, CPU time, CDP port, stream
+port, available actions, and disabled-action reasons when the service reports
+them; rows with an embeddable stream open the workspace viewport, including
+<code>cdp_screencast</code> streams synthesized from live session stream files.
 Guided browser/profile launches use <code>/api/service/request</code>. A launch
 response with browser or tab identity moves the operator into
 <code>?view=workspace:control</code> or <code>?view=workspace:view</code> when

@@ -1,9 +1,12 @@
 use rust_embed::Embed;
 use serde_json::{json, Value};
 use std::sync::Arc;
+use std::time::Duration;
 
+use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::RwLock;
+use tokio_tungstenite::tungstenite::Message;
 
 #[cfg(windows)]
 use crate::connection::resolve_port;
@@ -30,6 +33,10 @@ use crate::native::service_monitors::{
     parse_monitor_state, service_monitors_response, MonitorCollectionFilters,
 };
 
+use super::app_intelligence::{
+    app_intelligence_status_json, inspect_workspace_response, APP_INTELLIGENCE_INSPECT_HTTP_ROUTE,
+    APP_INTELLIGENCE_STATUS_HTTP_ROUTE,
+};
 use super::chat::{chat_status_json, handle_chat_request, handle_models_request};
 use super::dashboard::spawn_session;
 use super::dashboard_auth;
@@ -95,6 +102,14 @@ pub(super) async fn handle_http_request(
         return;
     }
 
+    if method == "GET" {
+        if let Some(port) = stream_api_frame_port(path) {
+            let value = stream_api_frame_snapshot(port).await;
+            write_json_value(&mut stream, "200 OK", value).await;
+            return;
+        }
+    }
+
     if method == "GET" && path == "/api/dashboard-auth/status" {
         let response = dashboard_auth::auth_status_response(&headers, secure_cookie);
         let _ = stream.write_all(&response.into_http_bytes()).await;
@@ -111,6 +126,7 @@ pub(super) async fn handle_http_request(
         let full_body = read_full_body(&mut stream, peeked).await;
         if full_body.is_none()
             && (path == "/api/chat"
+                || path == APP_INTELLIGENCE_INSPECT_HTTP_ROUTE
                 || path == "/api/sessions"
                 || path == "/api/command"
                 || path.starts_with("/api/browser/"))
@@ -135,6 +151,12 @@ pub(super) async fn handle_http_request(
         if path == "/api/dashboard-auth/logout" {
             let response = dashboard_auth::logout_response(secure_cookie);
             let _ = stream.write_all(&response.into_http_bytes()).await;
+            return;
+        }
+
+        if let Some(port) = stream_api_input_port(path) {
+            let value = stream_api_send_input(port, body_str).await;
+            write_json_value(&mut stream, "200 OK", value).await;
             return;
         }
 
@@ -188,6 +210,12 @@ pub(super) async fn handle_http_request(
                 }
                 Err(err) => write_json_result(&mut stream, Err(err), "400 Bad Request").await,
             }
+            return;
+        }
+
+        if path == APP_INTELLIGENCE_INSPECT_HTTP_ROUTE {
+            let (status, value) = inspect_workspace_response(body_str);
+            write_json_value(&mut stream, status, value).await;
             return;
         }
 
@@ -816,6 +844,11 @@ pub(super) async fn handle_http_request(
         return;
     }
 
+    if method == "GET" && path == APP_INTELLIGENCE_STATUS_HTTP_ROUTE {
+        write_json_value(&mut stream, "200 OK", app_intelligence_status_json()).await;
+        return;
+    }
+
     let (status, content_type, body): (&str, &str, Vec<u8>) = if path == "/api/sessions" {
         (
             "200 OK",
@@ -898,6 +931,90 @@ async fn write_json_value(stream: &mut tokio::net::TcpStream, status: &str, valu
     );
     let _ = stream.write_all(response.as_bytes()).await;
     let _ = stream.write_all(resp_body.as_bytes()).await;
+}
+
+fn stream_api_port(path: &str, suffix: &str) -> Option<u16> {
+    let rest = path.strip_prefix("/api/stream/")?;
+    let raw_port = rest.strip_suffix(suffix)?;
+    let port = raw_port.parse::<u16>().ok()?;
+    if port > 0 {
+        Some(port)
+    } else {
+        None
+    }
+}
+
+fn stream_api_frame_port(path: &str) -> Option<u16> {
+    stream_api_port(path, "/frame")
+}
+
+fn stream_api_input_port(path: &str) -> Option<u16> {
+    stream_api_port(path, "/input")
+}
+
+async fn stream_api_frame_snapshot(port: u16) -> Value {
+    let connect = tokio_tungstenite::connect_async(format!("ws://127.0.0.1:{}/", port));
+    let Ok((mut ws, _)) = connect.await else {
+        return json!({
+            "success": false,
+            "error": format!("CDP stream port {} is not reachable", port),
+        });
+    };
+
+    let mut status: Option<Value> = None;
+    let mut frame: Option<String> = None;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    while tokio::time::Instant::now() < deadline {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        let next = tokio::time::timeout(remaining, ws.next()).await;
+        let Ok(Some(Ok(message))) = next else {
+            break;
+        };
+        let Message::Text(text) = message else {
+            continue;
+        };
+        let Ok(value) = serde_json::from_str::<Value>(&text) else {
+            continue;
+        };
+        match value.get("type").and_then(|kind| kind.as_str()) {
+            Some("status") => status = Some(value),
+            Some("frame") => {
+                frame = value
+                    .get("data")
+                    .and_then(|data| data.as_str())
+                    .map(ToString::to_string);
+                if frame.is_some() {
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    json!({
+        "success": frame.is_some(),
+        "status": status,
+        "frame": frame,
+        "error": if frame.is_some() { Value::Null } else { json!("No CDP frame was available before the stream snapshot timeout.") },
+    })
+}
+
+async fn stream_api_send_input(port: u16, body: &str) -> Value {
+    let Ok(input) = serde_json::from_str::<Value>(body) else {
+        return json!({"success": false, "error": "Invalid stream input JSON"});
+    };
+    let connect = tokio_tungstenite::connect_async(format!("ws://127.0.0.1:{}/", port));
+    let Ok((mut ws, _)) = connect.await else {
+        return json!({
+            "success": false,
+            "error": format!("CDP stream port {} is not reachable", port),
+        });
+    };
+    if ws.send(Message::Text(input.to_string())).await.is_err() {
+        return json!({"success": false, "error": "Failed to send CDP stream input"});
+    }
+    let _ = ws.close(None).await;
+    json!({"success": true})
 }
 
 fn service_status_command() -> Value {

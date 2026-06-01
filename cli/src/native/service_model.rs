@@ -2764,19 +2764,39 @@ pub(crate) fn service_site_policy_id_for_url(
     service_state: &ServiceState,
     raw_url: &str,
 ) -> Option<String> {
-    let origin = url_origin(raw_url)?;
     let builtin_policies = builtin_site_policies();
     service_state
         .site_policies
         .values()
         .chain(builtin_policies.iter())
-        .find(|policy| {
-            let Some(policy_origin) = url_origin(&policy.origin_pattern) else {
-                return false;
-            };
-            !policy.id.is_empty() && origin == policy_origin
-        })
+        .find(|policy| !policy.id.is_empty() && url_matches_policy_pattern(raw_url, policy))
         .map(|policy| policy.id.clone())
+}
+
+fn url_matches_policy_pattern(raw_url: &str, policy: &SitePolicy) -> bool {
+    let Ok(url) = url::Url::parse(raw_url) else {
+        return false;
+    };
+    let Ok(pattern) = url::Url::parse(&policy.origin_pattern) else {
+        return false;
+    };
+    if url.scheme() != pattern.scheme() || url.host_str() != pattern.host_str() {
+        return false;
+    }
+    match (url.port_or_known_default(), pattern.port_or_known_default()) {
+        (left, right) if left == right => {}
+        _ => return false,
+    }
+    let pattern_path = pattern.path();
+    if pattern_path == "/" {
+        return true;
+    }
+    let pattern_path = pattern_path.trim_end_matches('/');
+    url.path() == pattern_path
+        || url
+            .path()
+            .strip_prefix(pattern_path)
+            .is_some_and(|suffix| suffix.starts_with('/'))
 }
 
 fn url_origin(raw_url: &str) -> Option<String> {
@@ -3042,6 +3062,29 @@ fn builtin_site_policies() -> Vec<SitePolicy> {
             allowed_challenge_providers: vec!["manual".to_string()],
             notes: Some(
                 "Gmail inherits Google sign-in seeding and should prefer a persistent headed profile."
+                    .to_string(),
+            ),
+            ..SitePolicy::default()
+        },
+        SitePolicy {
+            id: "google_sheets".to_string(),
+            origin_pattern: "https://docs.google.com/spreadsheets".to_string(),
+            browser_host: Some(BrowserHost::RemoteHeaded),
+            browser_build: Some(BrowserBuild::StealthcdpChromium),
+            view_stream: Some(ViewStreamProvider::RdpGateway),
+            control_input: Some(ControlInputProvider::ManualAttachedDesktop),
+            interaction_mode: InteractionMode::HumanLikeInput,
+            rate_limit: RateLimitPolicy {
+                min_action_delay_ms: Some(500),
+                jitter_ms: Some(400),
+                cooldown_ms: Some(2_000),
+                max_parallel_sessions: Some(1),
+                retry_budget: Some(1),
+            },
+            profile_required: true,
+            challenge_policy: ChallengePolicy::AvoidFirst,
+            notes: Some(
+                "Google Sheets work should stay on the managed stealth Chromium lane so rendered documents are inspectable through the service viewport."
                     .to_string(),
             ),
             ..SitePolicy::default()
@@ -7685,6 +7728,25 @@ mod tests {
         assert_eq!(
             state.site_policies["gmail"].challenge_policy,
             ChallengePolicy::ManualOnly
+        );
+        assert_eq!(
+            state.site_policies["google_sheets"].browser_build,
+            Some(BrowserBuild::StealthcdpChromium)
+        );
+        assert_eq!(
+            state.site_policies["google_sheets"].browser_host,
+            Some(BrowserHost::RemoteHeaded)
+        );
+        assert_eq!(
+            service_site_policy_id_for_url(
+                &state,
+                "https://docs.google.com/spreadsheets/d/example/edit"
+            ),
+            Some("google_sheets".to_string())
+        );
+        assert_ne!(
+            service_site_policy_id_for_url(&state, "https://docs.google.com/document/d/example"),
+            Some("google_sheets".to_string())
         );
     }
 

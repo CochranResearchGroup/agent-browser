@@ -777,8 +777,8 @@ assert.doesNotMatch(
 
 assert.match(
   servicePanel,
-  /action: "service_prune_retained"[\s\S]*serviceState[\s\S]*Dry-run prune[\s\S]*Apply prune/,
-  'Retained-state warning must expose a real dry-run and guarded apply prune path backed by service_prune_retained',
+  /action: "service_prune_retained"[\s\S]*orphanedProfiles: true[\s\S]*serviceState[\s\S]*Dry-run prune[\s\S]*Apply prune/,
+  'Retained-state warning must expose a real dry-run and guarded apply prune path backed by service_prune_retained, including orphaned custom profiles',
 );
 
 assert.match(

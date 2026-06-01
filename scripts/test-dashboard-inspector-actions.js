@@ -321,6 +321,24 @@ assert.match(
 );
 
 assert.match(
+  servicePanel,
+  /function isInspectableServiceTab\(tab: ServiceTab\)[\s\S]*isActiveServiceTab\(tab\) \|\| !isBlankServiceTab\(tab\)/,
+  'Service tabs workspace must distinguish inspectable tabs from closed blank placeholders',
+);
+
+assert.match(
+  servicePanel,
+  /const filteredTabRecords = useMemo[\s\S]*sessionTabQueryText[\s\S]*tabRecords\.filter\(\(tab\) => includesQuery\(tabSearchText\(tab\), sessionTabQueryText\)\)[\s\S]*tabRecords\.filter\(isInspectableServiceTab\)/,
+  'Service tabs workspace must suppress placeholder tabs by default while allowing search to inspect retained raw records',
+);
+
+assert.match(
+  servicePanel,
+  /hiddenPlaceholderTabCount[\s\S]*placeholder tabs suppressed[\s\S]*Only closed blank placeholder tabs are retained\. Use search to inspect them\./,
+  'Service tabs workspace must explain when placeholder tab records are hidden instead of presenting them as useful rows',
+);
+
+assert.match(
   dashboardPage,
   /const \[serviceInspectorActions, setServiceInspectorActions\] = useState<ServiceInspectorActions>\(\{\}\);/,
   'Dashboard page must hold inspector actions outside the selected-record state',

@@ -145,6 +145,38 @@ assert.equal(
 assert.equal(workspaceViewportUxStateLabel('stale_target_recovered'), 'stale target recovered');
 assert.equal(workspaceViewportReadinessStatusLabel('action_required'), 'action required');
 
+assert.equal(
+  deriveWorkspaceViewportUxState({
+    hasBrowser: true,
+    browserHealth: 'cdp_disconnected',
+    hasStream: false,
+    canEmbed: false,
+    canControl: false,
+    mode: 'control',
+    preflightStatus: 'idle',
+  }),
+  'browser_unavailable',
+);
+assert.deepEqual(
+  deriveWorkspaceViewportReadiness({
+    hasBrowser: true,
+    browserHealth: 'cdp_disconnected',
+    hasStream: false,
+    canEmbed: false,
+    canControl: false,
+    mode: 'control',
+    preflightStatus: 'idle',
+  }),
+  {
+    component: 'browser',
+    status: 'blocked',
+    evidence: 'browser health is cdp_disconnected',
+    nextAction: 'relaunch_browser',
+    title: 'Browser unavailable',
+    recoveryCopy: 'The selected browser process or CDP endpoint is unhealthy. Relaunch the browser or inspect browser health before opening the remote desktop stream.',
+  },
+);
+
 assert.deepEqual(
   deriveWorkspaceViewportReadiness({
     hasBrowser: true,
@@ -367,8 +399,8 @@ assert.equal(viewStreamLabel({}), 'view stream');
 
 assert.match(
   dashboardPage,
-  /import \{ WorkspaceRemoteViewport \} from "@\/components\/workspace-remote-viewport";[\s\S]*<WorkspaceRemoteViewport fallback=\{<Viewport \/>\} \/>/,
-  'Dashboard viewport route must render the workspace remote viewport wrapper before falling back to CDP screencast',
+  /import \{ WorkspaceRemoteViewport \} from "@\/components\/workspace-remote-viewport";[\s\S]*<WorkspaceRemoteViewport fallback=\{<Viewport \/>\} selectedWorkspaceContext=\{selectedWorkspace\.context\} \/>/,
+  'Dashboard viewport route must render the workspace remote viewport wrapper with selected workspace context before falling back to CDP screencast',
 );
 
 assert.match(
@@ -397,8 +429,14 @@ assert.match(
 
 assert.match(
   workspaceViewport,
-  /view === "workspace:control"[\s\S]*view === "workspace:view"[\s\S]*browserIdFromSelection[\s\S]*primaryViewStream[\s\S]*isBlankWorkspaceViewportTab[\s\S]*workspaceViewportTabScore[\s\S]*daemonSessionNameForBrowser[\s\S]*const params = targetId[\s\S]*sessionName[\s\S]*action: "view_focus"[\s\S]*taskName: "workspace-viewport-control"[\s\S]*params,/,
-  'Workspace remote viewport must restore URL selection, choose a live non-blank service-owned stream target, and queue view_focus against the selected browser daemon before control embedding',
+  /view === "workspace:control"[\s\S]*view === "workspace:view"[\s\S]*browserIdFromSelection[\s\S]*daemonSessionFromSelection[\s\S]*daemonBrowserFromSession[\s\S]*primaryViewStream[\s\S]*chooseWorkspaceViewportBrowser[\s\S]*isBlankWorkspaceViewportTab[\s\S]*workspaceViewportTabScore[\s\S]*daemonSessionNameForBrowser[\s\S]*const params = targetId[\s\S]*sessionName[\s\S]*action: "view_focus"[\s\S]*taskName: "workspace-viewport-control"[\s\S]*params,/,
+  'Workspace remote viewport must restore URL selection, synthesize daemon streams, choose a recoverable browser, choose a live non-blank service-owned target, and queue view_focus before control embedding',
+);
+
+assert.match(
+  workspaceViewport,
+  /function chooseWorkspaceViewportBrowser[\s\S]*hasOpenWorkspaceViewportStream\(serviceBrowser\)[\s\S]*return serviceBrowser[\s\S]*hasOpenWorkspaceViewportStream\(daemonBrowser\)[\s\S]*return daemonBrowser[\s\S]*return serviceBrowser \?\? daemonBrowser/,
+  'Workspace remote viewport must prefer an openable daemon stream when a selected service browser is stale or has no embeddable stream',
 );
 
 assert.match(
@@ -444,6 +482,18 @@ assert.match(
   'Workspace remote viewport must not classify cross-origin Guacamole frame inspection limits as browser-error failures',
 );
 
+assert.match(
+  workspaceViewport,
+  /WORKSPACE_VIEWPORT_TERMINAL_BROWSER_HEALTH[\s\S]*process_exited[\s\S]*function browserCanRenderWorkspaceViewport[\s\S]*!WORKSPACE_VIEWPORT_TERMINAL_BROWSER_HEALTH\.has\(health\)[\s\S]*const canRenderSelectedBrowser = browserCanRenderWorkspaceViewport\(browser\)[\s\S]*const canRenderCdpStream = canRenderSelectedBrowser[\s\S]*const canRenderFrame = canRenderSelectedBrowser/,
+  'Workspace remote viewport must not embed retained Guacamole routes for browsers whose process or CDP endpoint is terminal',
+);
+
+assert.match(
+  workspaceViewport,
+  /function workspaceViewportTiles[\s\S]*if \(!browserCanRenderWorkspaceViewport\(browser\)\) return null[\s\S]*canOpenViewStream\(stream\)/,
+  'Workspace tile mode must exclude retained terminal browser records even when they still have Guacamole URLs',
+);
+
 assert.doesNotMatch(
   workspaceViewport,
   /params: \{ index: tabIndex, maximize: true \}/,
@@ -454,6 +504,24 @@ assert.match(
   workspaceViewport,
   /installGuacamoleTouchClickBridge[\s\S]*sendMouse\(touch, true\)[\s\S]*sendMouse\(touch, false\)[\s\S]*<iframe[\s\S]*ref=\{viewportFrameRef\}[\s\S]*className="workspace-remote-viewport-frame"[\s\S]*allow="clipboard-read; clipboard-write; fullscreen; pointer-lock"/,
   'Workspace remote viewport must embed service-owned streams behind dashboard chrome with input capabilities enabled',
+);
+
+assert.match(
+  workspaceViewport,
+  /function isCdpScreencastStream[\s\S]*provider\?\.trim\(\)\.toLowerCase\(\) === "cdp_screencast"[\s\S]*function workspaceCdpWebSocketUrl[\s\S]*\/api\/stream\/\$\{encodeURIComponent\(resolved\.port\)\}[\s\S]*resolved\.protocol = resolved\.protocol === "https:" \? "wss:" : "ws:"[\s\S]*function WorkspaceCdpStreamCanvas[\s\S]*new WebSocket\(websocketUrl\)[\s\S]*case "frame":[\s\S]*drawFrame\(msg\.data\)[\s\S]*type: "input_mouse"[\s\S]*type: "input_keyboard"/,
+  'Workspace remote viewport must render CDP screencast streams through a native WebSocket canvas instead of iframing the stream server HTTP root',
+);
+
+assert.match(
+  workspaceViewport,
+  /const canRenderCdpStream = canRenderSelectedBrowser && isCdpScreencastStream\(stream\)[\s\S]*const canRenderFrame = canRenderSelectedBrowser && !isCdpScreencastStream\(stream\)[\s\S]*<WorkspaceCdpStreamCanvas[\s\S]*: stream && canRenderFrame \? \(/,
+  'Workspace remote viewport must route CDP screencasts to the native canvas before considering the iframe path',
+);
+
+assert.match(
+  css,
+  /\.workspace-cdp-stream[\s\S]*\.workspace-cdp-stream-canvas[\s\S]*\.workspace-cdp-stream-footer/,
+  'Workspace remote viewport must style the native CDP canvas so stream readiness is visible without embedding the dashboard login shell',
 );
 
 assert.match(

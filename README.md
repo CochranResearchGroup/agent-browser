@@ -168,6 +168,7 @@ agent-browser service status          # Show service control-plane and configure
 agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health records
 agent-browser service prune-retained  # Preview retained closed-tab and inert-browser cleanup
+agent-browser service prune-retained --orphaned-profiles # Preview orphaned custom profile cleanup
 agent-browser service access-plan --login-id canva # Inspect broker routing before browser work
 agent-browser service profiles        # Show retained profiles and allocation state
 agent-browser service sessions        # Show retained service session records
@@ -1146,8 +1147,23 @@ restart-on-failure behavior, and starts at user login. Set
 `AGENT_BROWSER_DASHBOARD_PORT` before running the script to choose another
 port.
 
+When changing dashboard source, remember that `pnpm build:dashboard` only
+refreshes `packages/dashboard/out`. The running user service serves the
+dashboard bundle embedded in `~/.local/bin/agent-browser`, so operator-visible
+QA on `http://127.0.0.1:4848` needs the local publish command:
+
+```bash
+pnpm publish:local-dashboard -- --expect-marker "Stream port"
+```
+
+That command builds the dashboard, rebuilds the local CLI, backs up and replaces
+the user-scoped binary, restarts `agent-browser-dashboard.service`, and smokes
+the live dashboard URL. Use `pnpm smoke:local-dashboard-runtime -- --expect-marker
+"Stream port"` when you only need to verify what the currently installed service
+is serving.
+
 The dashboard displays:
-- **Workspace navigator** — a compact left pane derived from service-owned browser, session, tab, profile allocation, job, incident, and view-stream state. It groups Active, Attention, and Retained workspaces; keeps raw IDs secondary to service, agent, task, profile, tab, and URL labels; shows disabled Launch, Seed, View, Control, Resume, Repair, and Close actions with service-sourced reasons; and includes a guided browser/profile launcher that starts the selected combo as its own daemon session. Blocked or human-takeover rows stay in Attention, but a controllable service-owned stream still makes Control or View the primary operator action while disabled Resume records the missing backend release action. The launcher defaults to the shared remote desktop display, RDP gateway view stream, and manual desktop input; selecting RDP gateway starts a `remote_headed` session so the resulting browser has a Guac-ready embedded viewport when `AGENT_BROWSER_REMOTE_VIEW_URL` and `AGENT_BROWSER_REMOTE_HEADED_DISPLAY` are configured. When retained stream metadata is embeddable, the dashboard closes the launcher, queues `view_focus` with the selected live target ID and a stable tab-index fallback when both are known, and opens the workspace viewport; otherwise it falls back to the Service Jobs view.
+- **Workspace navigator** — a compact left pane derived from service-owned browser, session, tab, profile allocation, job, incident, and view-stream state. It groups Active, Attention, and Retained workspaces; keeps raw IDs secondary to service, agent, task, profile, tab, and URL labels; shows disabled Launch, Seed, View, Control, Resume, Repair, and Close actions with service-sourced reasons; and includes a guided browser/profile launcher that starts the selected combo as its own daemon session. Selecting a row opens a dense right-pane Workspace inspector with a compact status strip, PID/RSS/CPU/CDP/stream indicators, action availability with reasons, page identity, ownership, viewport readiness, and a collapsed diagnostic Evidence disclosure. The same selection opens the workspace viewport when the row exposes an embeddable stream. Live daemon sessions publish a `cdp_screencast` stream from their runtime stream port, so rows such as `127.0.0.1:<port>/app` can render directly even when no service-owned browser record exists. Blocked or human-takeover rows stay in Attention, but a controllable service-owned stream still makes Control or View the primary operator action while disabled Resume records the missing backend release action. The launcher defaults to the shared remote desktop display, RDP gateway view stream, and manual desktop input; selecting RDP gateway starts a `remote_headed` session so the resulting browser has a Guac-ready embedded viewport when `AGENT_BROWSER_REMOTE_VIEW_URL` and `AGENT_BROWSER_REMOTE_HEADED_DISPLAY` are configured. When retained stream metadata is embeddable, the dashboard closes the launcher, queues `view_focus` with the selected live target ID and a stable tab-index fallback when both are known, and opens the workspace viewport; otherwise it falls back to the Service Jobs view.
   Guided launches preserve the access-plan selected `runtimeProfile`, configured
   profile path, `browserBuild`, and executable evidence in the spawned session,
   and non-blocking freshness warnings do not disable Launch when the launchable
@@ -1267,7 +1283,7 @@ AGENT_BROWSER_CONFIG=./ci-config.json agent-browser open example.com
 
 All options from the table above can be set in the config file using camelCase keys (e.g., `--executable-path` becomes `"executablePath"`, `--proxy-bypass` becomes `"proxyBypass"`). Unknown keys are ignored for forward compatibility.
 
-Set `service.defaultBrowserBuild` to `stealthcdp_chromium` when service-owned launches should prefer the patched Chromium posture. If no explicit default is configured and a ready `stealthcdp_chromium` manifest is available, fresh installs prefer that build automatically. `agent-browser install stealthcdp-chromium` installs the public `chromium-stealthcdp` Windows asset under `%LOCALAPPDATA%\chromium-stealthcdp` on Windows or the matching WSL-mounted `AppData/Local` directory when available, then exposes `current/manifest.json` and `current/chrome.exe`. When WSL launches that Windows `chrome.exe`, agent-browser translates mounted Windows paths such as `/mnt/c/...` to `C:\...` for Chrome arguments and adds `--no-sandbox`, which this host mode requires for the patched Windows build to expose DevTools. Provide the binary through `executablePath`, `AGENT_BROWSER_EXECUTABLE_PATH`, `AGENT_BROWSER_STEALTHCDP_CHROMIUM_MANIFEST_PATH`, `AGENT_BROWSER_STEALTHCDP_CHROMIUM_INSTALL_ROOT`, or `service.browserBuildManifests.stealthcdp_chromium.manifestPath`. A manifest path points at a promoted artifact `manifest.json`; agent-browser resolves the executable relative to that manifest and reports artifact metadata from the same source. `agent-browser service status` and `GET /api/service/status` include a no-launch `launchConfig` diagnostic with the selected default browser build, executable source, resolved executable path, manifest metadata, file-existence check, `profileSmoke` readiness for validating WSL Windows profile writes, and warnings when `stealthcdp_chromium` is selected without a usable binary or ready manifest.
+Set `service.defaultBrowserBuild` to `stealthcdp_chromium` when service-owned launches should prefer the patched Chromium posture. Ordinary launch and queued tab paths consume that default through the same access-plan resolver used by service clients, so a matching managed profile, site policy, remote view posture, and browser capability binding are applied unless the caller explicitly supplies a profile, browser host, headless mode, executable, or browser build. If no explicit default is configured and a ready `stealthcdp_chromium` manifest is available, fresh installs prefer that build automatically. `agent-browser install stealthcdp-chromium` installs the public `chromium-stealthcdp` Windows asset under `%LOCALAPPDATA%\chromium-stealthcdp` on Windows or the matching WSL-mounted `AppData/Local` directory when available, then exposes `current/manifest.json` and `current/chrome.exe`. When WSL launches that Windows `chrome.exe`, agent-browser translates mounted Windows paths such as `/mnt/c/...` to `C:\...` for Chrome arguments and adds `--no-sandbox`, which this host mode requires for the patched Windows build to expose DevTools. Provide the binary through `executablePath`, `AGENT_BROWSER_EXECUTABLE_PATH`, `AGENT_BROWSER_STEALTHCDP_CHROMIUM_MANIFEST_PATH`, `AGENT_BROWSER_STEALTHCDP_CHROMIUM_INSTALL_ROOT`, or `service.browserBuildManifests.stealthcdp_chromium.manifestPath`. A manifest path points at a promoted artifact `manifest.json`; agent-browser resolves the executable relative to that manifest and reports artifact metadata from the same source. `agent-browser service status` and `GET /api/service/status` include a no-launch `launchConfig` diagnostic with the selected default browser build, executable source, resolved executable path, manifest metadata, file-existence check, `profileSmoke` readiness for validating WSL Windows profile writes, and warnings when `stealthcdp_chromium` is selected without a usable binary or ready manifest.
 
 `stealthcdp_chromium` is worthwhile for the default service posture because it keeps the CDP control plane available while reducing the obvious automation signal exposed by ordinary DevTools-attached Chromium. It is not a captcha bypass and it does not replace site policy, pacing, or manual seeding rules, but it gives bot-sensitive sites a better baseline than stock headless Chrome when CDP-backed control is still acceptable.
 
@@ -1682,7 +1698,9 @@ virtual display, reuse a configured shared display, or deliberately use the
 daemon's inherited `DISPLAY`. The shipped UPS policy selects
 `stealthcdp_chromium`, `remote_headed`, `rdp_gateway`, and
 `manual_attached_desktop` because headed stealth Chromium loaded UPS tracking
-where true headless did not. Remote-headed browser records persist the selected
+where true headless did not. The shipped Google Sheets policy applies the same
+inspectable remote stealth lane for `https://docs.google.com/spreadsheets`
+without changing Google sign-in seeding policy. Remote-headed browser records persist the selected
 view stream provider and control input provider on each `viewStreams` entry.
 They also report `displayIsolation` and `displayName` when the service can tell
 whether the browser is using a private virtual display, an explicitly shared
@@ -1928,6 +1946,7 @@ agent-browser service status --watch --interval 1000
 agent-browser service watch --interval 1000 --count 5
 agent-browser service reconcile
 agent-browser service prune-retained
+agent-browser service prune-retained --orphaned-profiles
 agent-browser service prune-retained --apply
 agent-browser service access-plan --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace --login-id canva
 agent-browser service profiles
@@ -1991,13 +2010,13 @@ The persisted service state also includes bounded audit records for recent contr
 
 Use `service reconcile` to run the persisted browser health and target probes intentionally without requesting a control-plane status snapshot. This command updates the same `reconciliation` snapshot, refreshes live tab records for reachable browser CDP endpoints, and appends service events.
 
-Use `service prune-retained` when the retained service inventory has accumulated closed tabs or inert browser records after many operator and agent sessions. It is dry-run by default and removes nothing unless `--apply` is present. The default candidate set is closed tabs plus `not_started` browser records that have no PID, CDP endpoint, active sessions, view streams, or non-closed tabs. Add `--process-exited-browsers` only after reviewing failure evidence, because `process_exited` records may still explain a crash or shutdown. Applying the prune also removes matching browser and tab IDs from retained session link fields through the serialized service-state repository.
+Use `service prune-retained` when the retained service inventory has accumulated closed tabs or inert browser records after many operator and agent sessions. It is dry-run by default and removes nothing unless `--apply` is present. The default candidate set is closed tabs plus `not_started` browser records that have no PID, CDP endpoint, active sessions, view streams, or non-closed tabs. Add `--process-exited-browsers` only after reviewing failure evidence, because `process_exited` records may still explain a crash or shutdown. Add `--orphaned-profiles` to include `custom:*` profile records that have no retained service references and point at missing ephemeral user-data directories. Applying the prune also removes matching browser, tab, session-link, and reviewed orphaned-profile records through the serialized service-state repository.
 
 Add `--released-sessions` when released or expired session records should be pruned with their inert linked `not_started` browser placeholders. The session must have no retained tabs and every linked browser must have no PID, CDP endpoint, view streams, profile binding, or non-self active sessions. Add `--abandoned-sessions` only after operator review; it applies the same inert-placeholder rule to shared or exclusive session leases that would otherwise continue to affect profile allocation. Abandoned shared or exclusive sessions must also have a parseable `lastLeaseObservedAt` or `createdAt` older than `--abandoned-session-min-age-minutes`, which defaults to `1440`. Dry-runs report skipped abandoned sessions as `abandonedSessionsMissingAgeTimestamp` or `abandonedSessionsTooFresh` so operators can distinguish unsafe stale-looking placeholders from actual prune candidates. The `skippedSummary` field reports the top skipped groups by stable prefix after trimming trailing numeric run suffixes, including total and omitted group counts, and text output shows the same top groups for triage.
 
 Use `service repair-retained` before abandoned-session cleanup when legacy inert session placeholders lack parseable age evidence. It is dry-run by default and only mutates state with `--apply`. The default repair stamps the current observation time into `lastLeaseObservedAt` for shared or exclusive sessions that have no retained tabs and only inert self-linked `not_started` browser placeholders. Repaired sessions become too fresh for `--abandoned-sessions` pruning until the minimum age guard elapses, which prevents a repair from immediately turning into deletion.
 
-The Service dashboard shows a retained-state cleanup workflow when persisted state grows large. It queues `service_prune_retained` and `service_repair_retained` through `POST /api/service/request`, runs dry-runs first, and only enables apply after the operator has a reviewed candidate result in view.
+The Service dashboard shows a retained-state cleanup workflow when persisted state grows large. It queues `service_prune_retained` and `service_repair_retained` through `POST /api/service/request`, runs dry-runs first, includes orphaned custom profile candidates in the reviewed prune result, and only enables apply after the operator has a reviewed candidate result in view.
 
 Browser row remedies also use `POST /api/service/request`. `service_browser_close` politely closes the active service browser identified by `params.browserId` and records the same shutdown health used by CLI close. `service_browser_repair` makes one degraded or faulted retained browser record retryable again after operator review. Dashboard row buttons enable these actions only when `GET /api/service/contracts` advertises support and the selected browser state matches the action.
 
@@ -2463,7 +2482,7 @@ performs a no-launch profile lookup and refuses the run when the broker-selected
 profile does not match the profile being verified.
 
 When no local site policy exists, agent-browser applies shipped defaults for
-Canva, UPS, Google, Gmail, and Microsoft login identities. Local persisted or configured
+Canva, UPS, Google Sheets, Google, Gmail, and Microsoft login identities. Local persisted or configured
 policies with the same IDs override those defaults. `sitePolicySource` reports
 whether the selected policy came from config, persisted state, or a built-in default, how
 it matched the request, and whether it is overrideable.

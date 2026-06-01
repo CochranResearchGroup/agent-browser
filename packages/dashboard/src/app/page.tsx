@@ -9,8 +9,10 @@ import { useActivitySync } from "@/store/activity";
 import { activeExtensionsAtom } from "@/store/sessions";
 import { useChatStatusSync } from "@/store/chat";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { useSelectedWorkspaceContext } from "@/hooks/use-selected-workspace-context";
 import { Viewport } from "@/components/viewport";
 import { WorkspaceRemoteViewport } from "@/components/workspace-remote-viewport";
+import { WorkspaceSelectionPanel } from "@/components/workspace-selection-panel";
 import { ActivityFeed } from "@/components/activity-feed";
 import { ChatPanel } from "@/components/chat-panel";
 import { ConsolePanel } from "@/components/console-panel";
@@ -55,6 +57,7 @@ const SECTION_PATHS: Record<DashboardSection, string> = {
   activity: "/activity",
 };
 type MobileDashboardPanel = "workspaces" | "viewport" | "activity" | "service";
+type RightPaneTab = "workspace" | "chat" | "activity" | "console" | "network" | "storage" | "extensions";
 type DashboardAuthUser = {
   username: string;
   displayName?: string;
@@ -286,6 +289,7 @@ function DashboardExperience({
   const [serviceInspectorSelection, setServiceInspectorSelection] = useState<ServiceInspectorSelection | null>(null);
   const [serviceInspectorActions, setServiceInspectorActions] = useState<ServiceInspectorActions>({});
   const [hasWorkspaceViewportRoute, setHasWorkspaceViewportRoute] = useState(() => readWorkspaceViewportRoute());
+  const [sidePanelTab, setSidePanelTab] = useState<RightPaneTab>("chat");
   const activePort = useAtomValue(activePortAtom);
   useStreamSync(activePort);
   useSessionsSync();
@@ -298,6 +302,11 @@ function DashboardExperience({
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const hasConsoleErrors = useAtomValue(hasConsoleErrorsAtom);
   const activeExtensions = useAtomValue(activeExtensionsAtom);
+  const selectedWorkspaceContextEnabled = !rightPaneCollapsed ||
+    hasWorkspaceViewportRoute ||
+    mobilePanel === "viewport" ||
+    mobilePanel === "activity";
+  const selectedWorkspace = useSelectedWorkspaceContext(selectedWorkspaceContextEnabled);
   const changeDashboardSection = useCallback((section: DashboardSection) => {
     setActiveSection(section);
     if (typeof window === "undefined") return;
@@ -335,6 +344,14 @@ function DashboardExperience({
     setRightPaneCollapsed(false);
     writeStoredBoolean(RIGHT_PANE_COLLAPSED_KEY, false);
   }, []);
+  useEffect(() => {
+    const onWorkspaceSelection = () => {
+      setSidePanelTab("workspace");
+      openRightPane();
+    };
+    window.addEventListener(DASHBOARD_WORKSPACE_SELECTION_EVENT, onWorkspaceSelection);
+    return () => window.removeEventListener(DASHBOARD_WORKSPACE_SELECTION_EVENT, onWorkspaceSelection);
+  }, [openRightPane]);
   const inspectServiceSelection = useCallback((selection: ServiceInspectorSelection) => {
     setServiceInspectorSelection(selection);
     openRightPane();
@@ -384,15 +401,16 @@ function DashboardExperience({
     )
     : activeSection === "activity"
       ? <ActivityFeed />
-      : <WorkspaceRemoteViewport fallback={<Viewport />} />;
+      : <WorkspaceRemoteViewport fallback={<Viewport />} selectedWorkspaceContext={selectedWorkspace.context} />;
   const serviceInspectorPanel = (
     <ServiceDetailInspector selection={serviceInspectorSelection} actions={serviceInspectorActions} />
   );
 
   const sidePanel = (
-    <Tabs defaultValue="chat" className="flex h-full flex-col">
+    <Tabs value={sidePanelTab} onValueChange={(value) => setSidePanelTab(value as RightPaneTab)} className="flex h-full flex-col">
       <div className="shrink-0 px-2 pt-1">
-        <TabsList variant="line" className="h-7 w-full">
+        <TabsList variant="line" className="dashboard-right-tabs h-7 w-full">
+          <TabsTrigger value="workspace" className="text-[11px]">Workspace</TabsTrigger>
           <TabsTrigger value="chat" className="text-[11px]">Chat</TabsTrigger>
           <TabsTrigger value="activity" className="text-[11px]">Activity</TabsTrigger>
           <TabsTrigger value="console" className="text-[11px]">
@@ -411,23 +429,31 @@ function DashboardExperience({
           </TabsTrigger>
         </TabsList>
       </div>
+      <TabsContent value="workspace" className="min-h-0 flex-1 overflow-auto">
+        <WorkspaceSelectionPanel
+          context={selectedWorkspace.context}
+          loading={selectedWorkspace.loading}
+          error={selectedWorkspace.error}
+          onRefresh={() => void selectedWorkspace.refresh()}
+        />
+      </TabsContent>
       <TabsContent value="activity" className="min-h-0 flex-1 overflow-hidden">
-        <ActivityFeed />
+        <ActivityFeed selectedWorkspaceContext={selectedWorkspace.context} />
       </TabsContent>
       <TabsContent value="console" className="min-h-0 flex-1 overflow-hidden">
-        <ConsolePanel />
+        <ConsolePanel selectedWorkspaceContext={selectedWorkspace.context} />
       </TabsContent>
       <TabsContent value="network" className="min-h-0 flex-1 overflow-hidden">
-        <NetworkPanel />
+        <NetworkPanel selectedWorkspaceContext={selectedWorkspace.context} />
       </TabsContent>
       <TabsContent value="storage" className="min-h-0 flex-1 overflow-hidden">
-        <StoragePanel />
+        <StoragePanel selectedWorkspaceContext={selectedWorkspace.context} />
       </TabsContent>
       <TabsContent value="extensions" className="min-h-0 flex-1 overflow-hidden">
-        <ExtensionsPanel />
+        <ExtensionsPanel selectedWorkspaceContext={selectedWorkspace.context} />
       </TabsContent>
       <TabsContent value="chat" className="min-h-0 flex-1 overflow-hidden">
-        <ChatPanel />
+        <ChatPanel selectedWorkspaceContext={selectedWorkspace.context} />
       </TabsContent>
     </Tabs>
   );
@@ -593,7 +619,7 @@ function DashboardExperience({
           <WorkspaceNavigator />
         </TabsContent>
         <TabsContent value="viewport" className="dashboard-mobile-panel min-h-0 overflow-hidden p-3">
-          <WorkspaceRemoteViewport fallback={<Viewport />} />
+          <WorkspaceRemoteViewport fallback={<Viewport />} selectedWorkspaceContext={selectedWorkspace.context} />
         </TabsContent>
         <TabsContent value="activity" className="dashboard-mobile-panel min-h-0 overflow-hidden p-3">
           {sidePanel}

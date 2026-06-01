@@ -1,4 +1,4 @@
-import type { SessionInfo, TabInfo } from "@/types";
+import type { SessionInfo, TabInfo } from "../types.ts";
 
 export type WorkspaceNodeState =
   | "active"
@@ -120,6 +120,7 @@ export type WorkspaceNode = {
   profileId?: string | null;
   browserBuild?: string | null;
   host?: string | null;
+  process?: WorkspaceNodeProcess | null;
   ownership: WorkspaceNodeOwnership;
   primaryTab?: WorkspaceNodePrimaryTab | null;
   viewStream?: WorkspaceNodeViewStream | null;
@@ -143,6 +144,15 @@ export type WorkspaceNode = {
   actions: WorkspaceNodeAction[];
 };
 
+export type WorkspaceNodeProcess = {
+  pid?: number | null;
+  running?: boolean | null;
+  rssBytes?: number | null;
+  cpuSeconds?: number | null;
+  cdpPort?: number | null;
+  streamPort?: number | null;
+};
+
 export type WorkspaceServiceBrowser = {
   id: string;
   profileId?: string | null;
@@ -152,6 +162,12 @@ export type WorkspaceServiceBrowser = {
   displayName?: string | null;
   pid?: number | null;
   cdpEndpoint?: string | null;
+  processStats?: {
+    pid?: number | null;
+    running?: boolean | null;
+    rssBytes?: number | null;
+    cpuSeconds?: number | null;
+  } | null;
   viewStreams?: WorkspaceServiceViewStream[];
   activeSessionIds?: string[];
   lastError?: string | null;
@@ -279,13 +295,17 @@ export type WorkspaceNodeInput = {
 };
 
 const TERMINAL_BROWSER_HEALTH = new Set([
+  "cdp_disconnected",
   "closed",
+  "disconnected",
   "faulted",
   "not_started",
   "process_exited",
+  "unreachable",
 ]);
 
 const ATTENTION_BROWSER_HEALTH = new Set([
+  "cdp_disconnected",
   "degraded",
   "disconnected",
   "error",
@@ -573,10 +593,13 @@ function createBrowserWorkspaceNode({
   const primaryTab = primaryServiceTab(tabs);
   const viewStream = primaryViewStream(browser.viewStreams);
   const takeover = takeoverForSessions(sessions, allocation, jobs);
-  const attentionReason = browserAttentionReason(browser, allocation, incidents);
   const busy = jobs.some(isActiveJob);
+  const terminal = isTerminalBrowser(browser);
+  const attentionReason = browserAttentionReason(browser, allocation, incidents, {
+    includeTerminalHealth: !terminal || busy || incidents.some((incident) => !incident.resolvedAt) || Boolean(takeover),
+  });
   const live = isLiveBrowser(browser);
-  const blockedReason = takeover?.queueImpact ?? (live && viewStream?.controllable ? null : profileBlockedReason(allocation));
+  const blockedReason = takeover?.queueImpact ?? (terminal ? null : live && viewStream?.controllable ? null : profileBlockedReason(allocation));
   const state = workspaceState({
     busy,
     blockedReason,
@@ -622,6 +645,7 @@ function createBrowserWorkspaceNode({
     profileId: browser.profileId ?? allocation?.profileId ?? null,
     browserBuild: browser.browserBuild ?? allocation?.browserBuild ?? null,
     host: browser.host ?? null,
+    process: browserProcessIndicators(browser, viewStream),
     ownership,
     primaryTab,
     viewStream,
@@ -696,6 +720,7 @@ function createServiceSessionWorkspaceNode({
     serviceSessionId: session.id,
     profileId: session.profileId ?? allocation?.profileId ?? null,
     browserBuild: allocation?.browserBuild ?? null,
+    process: null,
     ownership,
     primaryTab,
     viewStream: null,
@@ -732,6 +757,7 @@ function createDaemonWorkspaceNode({
   const activeTab = tabs.find((tab) => tab.active) ?? tabs[0];
   const live = !session.pending && !session.closing && session.port > 0;
   const attentionReason = session.closing ? "Session is closing." : null;
+  const viewStream = daemonViewStream(session, live);
   const state: WorkspaceNodeState = session.pending ? "busy" : attentionReason ? "needs-attention" : live ? "active" : "retained";
   const label = activeTab?.title || session.session;
 
@@ -753,6 +779,7 @@ function createDaemonWorkspaceNode({
     live,
     daemonSession: session.session,
     port: session.port,
+    process: live ? { streamPort: session.port, running: true } : null,
     ownership: {},
     primaryTab: activeTab
       ? {
@@ -762,7 +789,7 @@ function createDaemonWorkspaceNode({
           active: activeTab.active,
         }
       : null,
-    viewStream: null,
+    viewStream,
     takeover: null,
     diagnostics: [],
     counts: {
@@ -780,7 +807,29 @@ function createDaemonWorkspaceNode({
       jobIds: [],
       incidentIds: [],
     },
-    actions: daemonActions(session, live),
+    actions: daemonActions(session, live, viewStream),
+  };
+}
+
+function daemonViewStream(session: SessionInfo, live: boolean): WorkspaceNodeViewStream | null {
+  if (!live || !session.port) return null;
+  const streamUrl = `http://127.0.0.1:${session.port}/`;
+  return {
+    provider: "cdp_screencast",
+    url: streamUrl,
+    routeId: `daemon:${session.session}`,
+    displayAllocationId: null,
+    connectionId: null,
+    connectionName: session.session,
+    routeSource: "daemon-session",
+    providerMode: "single_controller",
+    viewerLeaseIds: [],
+    controllerLeaseId: null,
+    embeddable: true,
+    controllable: true,
+    readOnly: false,
+    controlInput: "cdp_input",
+    routeSummary: `daemon stream ${session.port} / ready`,
   };
 }
 
@@ -823,6 +872,7 @@ function createProfileWorkspaceNode({
     live: false,
     profileId: allocation.profileId,
     browserBuild: allocation.browserBuild ?? null,
+    process: null,
     ownership,
     primaryTab: null,
     viewStream: null,
@@ -879,19 +929,25 @@ function groupForState(state: WorkspaceNodeState): WorkspaceNodeGroup {
 
 function isLiveBrowser(browser: WorkspaceServiceBrowser): boolean {
   const health = normalize(browser.health);
-  if (TERMINAL_BROWSER_HEALTH.has(health)) return false;
+  if (isTerminalBrowser(browser)) return false;
   return Boolean(browser.pid || browser.cdpEndpoint || (browser.activeSessionIds?.length ?? 0) > 0 || health === "ready" || health === "healthy");
+}
+
+function isTerminalBrowser(browser: WorkspaceServiceBrowser): boolean {
+  return TERMINAL_BROWSER_HEALTH.has(normalize(browser.health));
 }
 
 function browserAttentionReason(
   browser: WorkspaceServiceBrowser,
   allocation?: WorkspaceServiceProfileAllocation,
   incidents: WorkspaceServiceIncident[] = [],
+  options: { includeTerminalHealth?: boolean } = {},
 ): string | null {
   const incidentReason = unresolvedIncidentReason(incidents);
   if (incidentReason) return incidentReason;
   const health = normalize(browser.health);
-  if (ATTENTION_BROWSER_HEALTH.has(health)) {
+  const terminalHealth = TERMINAL_BROWSER_HEALTH.has(health);
+  if ((!terminalHealth || options.includeTerminalHealth) && ATTENTION_BROWSER_HEALTH.has(health)) {
     return browser.lastError || `Browser health is ${browser.health}.`;
   }
   return profileAttentionReason(allocation);
@@ -1139,7 +1195,8 @@ function serviceWorkspaceTabScore(tab: WorkspaceServiceTab): number {
 }
 
 function primaryServiceTab(tabs: WorkspaceServiceTab[]): WorkspaceNodePrimaryTab | null {
-  const tab = [...tabs].sort((left, right) => serviceWorkspaceTabScore(right) - serviceWorkspaceTabScore(left))[0];
+  const inspectableTabs = tabs.filter((tab) => isLiveServiceWorkspaceTab(tab) || !isBlankServiceWorkspaceTab(tab));
+  const tab = [...inspectableTabs].sort((left, right) => serviceWorkspaceTabScore(right) - serviceWorkspaceTabScore(left))[0];
   if (!tab) return null;
   return {
     id: tab.id,
@@ -1155,7 +1212,7 @@ function primaryViewStream(streams?: WorkspaceServiceViewStream[]): WorkspaceNod
   const stream = selectPrimaryWorkspaceViewStream(streams);
   if (!stream) return null;
   const streamUrl = stream.frameUrl || stream.url || stream.externalUrl || null;
-  const embeddable = Boolean(streamUrl) && normalize(stream.provider) !== "cdp_screencast";
+  const embeddable = Boolean(streamUrl);
   const readOnly = stream.readOnly === true || !stream.controlInput;
   return {
     provider: stream.provider ?? null,
@@ -1174,6 +1231,35 @@ function primaryViewStream(streams?: WorkspaceServiceViewStream[]): WorkspaceNod
     controlInput: stream.controlInput ?? null,
     routeSummary: viewStreamRouteSummary(stream),
   };
+}
+
+function browserProcessIndicators(
+  browser: WorkspaceServiceBrowser,
+  viewStream?: WorkspaceNodeViewStream | null,
+): WorkspaceNodeProcess | null {
+  const cdpPort = portFromUrl(browser.cdpEndpoint);
+  const streamPort = portFromUrl(viewStream?.url);
+  const stats = browser.processStats ?? null;
+  if (!browser.pid && !stats && !cdpPort && !streamPort) return null;
+  return {
+    pid: browser.pid ?? stats?.pid ?? null,
+    running: stats?.running ?? null,
+    rssBytes: stats?.rssBytes ?? null,
+    cpuSeconds: stats?.cpuSeconds ?? null,
+    cdpPort,
+    streamPort,
+  };
+}
+
+function portFromUrl(value?: string | null): number | null {
+  if (!value) return null;
+  try {
+    const port = new URL(value).port;
+    return port ? Number(port) : null;
+  } catch {
+    const match = value.match(/:(\d{2,5})(?:\/|$)/);
+    return match ? Number(match[1]) : null;
+  }
 }
 
 function selectPrimaryWorkspaceViewStream(streams?: WorkspaceServiceViewStream[]): WorkspaceServiceViewStream | null {
@@ -1339,10 +1425,18 @@ function serviceSessionActions(
   ];
 }
 
-function daemonActions(session: SessionInfo, live: boolean): WorkspaceNodeAction[] {
+function daemonActions(
+  session: SessionInfo,
+  live: boolean,
+  viewStream?: WorkspaceNodeViewStream | null,
+): WorkspaceNodeAction[] {
   const enabled = live && !session.closing;
+  const canViewStream = enabled && Boolean(viewStream?.embeddable);
+  const canControlStream = enabled && Boolean(viewStream?.controllable);
   return [
     { id: "focus", label: "Focus", enabled, reason: enabled ? null : "Session is not focusable yet." },
+    { id: "view", label: "View", enabled: canViewStream, reason: canViewStream ? null : "No daemon stream is registered." },
+    { id: "control", label: "Control", enabled: canControlStream, reason: canControlStream ? null : "No controllable daemon stream is registered." },
     { id: "add-tab", label: "Add tab", enabled, reason: enabled ? null : "Session is not ready for tab creation." },
     { id: "close", label: "Close", enabled, reason: enabled ? null : "Session is not ready to close cleanly." },
     { id: "kill", label: "Kill", enabled: live, reason: live ? null : "No live process is known." },

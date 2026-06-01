@@ -137,8 +137,25 @@ function selectRecommendations(files, base) {
     if (files.some((file) => file === 'packages/dashboard/src/components/service-panel.tsx' || file === 'packages/dashboard/src/app/globals.css')) {
       add('pnpm test:dashboard-browser-table', 'dashboard browser table filtering or visibility changed');
     }
-    if (files.some((file) => file === 'packages/dashboard/src/lib/service-workspaces.ts' || file === 'scripts/test-dashboard-workspace-nodes.js')) {
+    if (files.some((file) =>
+      file === 'packages/dashboard/src/lib/service-workspaces.ts' ||
+      file === 'packages/dashboard/src/lib/selected-workspace-context.ts' ||
+      file === 'packages/dashboard/src/lib/selected-workspace-chat-packet.ts' ||
+      file === 'scripts/test-dashboard-workspace-nodes.js' ||
+      file === 'scripts/test-dashboard-selected-workspace-context.js' ||
+      file === 'scripts/test-dashboard-selected-workspace-chat-packet.js'
+    )) {
       add('pnpm test:dashboard-workspace-nodes', 'dashboard workspace navigator model changed');
+      add('pnpm test:dashboard-selected-workspace-context', 'selected workspace context matching changed');
+      add('pnpm test:dashboard-selected-workspace-chat-packet', 'selected workspace contextual chat packet changed');
+    }
+    if (files.some((file) =>
+      file === 'packages/dashboard/src/components/chat-panel.tsx' ||
+      file === 'packages/dashboard/src/lib/dashboard-api.ts' ||
+      file === 'packages/dashboard/src/lib/selected-workspace-chat-packet.ts' ||
+      file === 'scripts/test-dashboard-contextual-chat.js'
+    )) {
+      add('pnpm test:dashboard-contextual-chat', 'dashboard contextual Chat Codex app-server surface changed');
     }
     if (files.some((file) =>
       file === 'packages/dashboard/src/lib/launcher-eligibility.ts' ||
@@ -150,7 +167,10 @@ function selectRecommendations(files, base) {
     if (files.some((file) =>
       file === 'packages/dashboard/src/components/workspace-navigator.tsx' ||
       file === 'packages/dashboard/src/lib/service-workspaces.ts' ||
+      file === 'packages/dashboard/src/lib/selected-workspace-context.ts' ||
+      file === 'packages/dashboard/src/hooks/use-selected-workspace-context.ts' ||
       file === 'packages/dashboard/src/lib/workspace-url-selection.ts' ||
+      file === 'packages/dashboard/src/components/workspace-selection-panel.tsx' ||
       file === 'packages/dashboard/src/components/workspace-remote-viewport.tsx' ||
       file === 'packages/dashboard/src/app/page.tsx' ||
       file === 'packages/dashboard/src/app/globals.css' ||
@@ -162,6 +182,10 @@ function selectRecommendations(files, base) {
       add('pnpm test:dashboard-inspector-actions', 'dashboard service inspector action wiring changed');
     }
     add('pnpm build:dashboard', 'dashboard package or dashboard UI changed');
+    add(
+      'pnpm publish:local-dashboard -- --expect-marker <changed-ui-marker>',
+      'operator-visible dashboard QA must rebuild the embedded binary, restart the user dashboard service, and prove port 4848 serves the change',
+    );
   }
 
   if (files.some((file) => file === 'skills/agent-browser/SKILL.md')) {

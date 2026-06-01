@@ -70,7 +70,9 @@ export type WorkspaceViewportReadinessResult = {
 };
 
 const DEAD_BROWSER_HEALTH = new Set([
+  "cdp_disconnected",
   "closed",
+  "disconnected",
   "faulted",
   "not_started",
   "process_exited",

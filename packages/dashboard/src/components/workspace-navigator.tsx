@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai/react";
 import {
   AlertTriangle,
@@ -8,9 +8,12 @@ import {
   ChevronDown,
   CheckCircle2,
   CircleDot,
+  Cpu,
   ExternalLink,
   Eye,
+  Info,
   Loader2,
+  MemoryStick,
   MonitorDot,
   MousePointer2,
   Plus,
@@ -355,7 +358,7 @@ function extractServiceRequestWorkspaceIdentity(data: unknown): ServiceRequestWo
 
 function launchViewStream(browser?: WorkspaceServiceBrowser | null): WorkspaceServiceViewStream | null {
   const streams = browser?.viewStreams ?? [];
-  return streams.find((stream) => Boolean(stream.url) && stream.provider !== "cdp_screencast") ?? null;
+  return streams.find((stream) => Boolean(stream.url)) ?? null;
 }
 
 function selectionForLaunchedBrowser(
@@ -506,6 +509,41 @@ function compactCountLabel(node: WorkspaceNode): string {
   if (node.counts.jobs) parts.push(`${node.counts.jobs} jobs`);
   if (node.counts.incidents) parts.push(`${node.counts.incidents} incidents`);
   return parts.join(" / ");
+}
+
+function formatBytes(bytes?: number | null): string | null {
+  if (!bytes || bytes <= 0) return null;
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  return `${Math.round(bytes / (1024 * 1024))} MB`;
+}
+
+function formatCpuSeconds(seconds?: number | null): string | null {
+  if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) return null;
+  if (seconds >= 60) return `${Math.round(seconds / 60)}m CPU`;
+  return `${Math.max(0, Math.round(seconds))}s CPU`;
+}
+
+function processIndicatorItems(node: WorkspaceNode): Array<{ label: string; value: string; icon: ReactNode }> {
+  const process = node.process;
+  if (!process) return [];
+  const items: Array<{ label: string; value: string; icon: ReactNode }> = [];
+  if (process.pid) items.push({ label: "PID", value: String(process.pid), icon: <Cpu className="size-3" /> });
+  const memory = formatBytes(process.rssBytes);
+  if (memory) items.push({ label: "Memory", value: memory, icon: <MemoryStick className="size-3" /> });
+  const cpu = formatCpuSeconds(process.cpuSeconds);
+  if (cpu) items.push({ label: "CPU", value: cpu, icon: <Cpu className="size-3" /> });
+  if (process.cdpPort) items.push({ label: "CDP", value: String(process.cdpPort), icon: <MonitorDot className="size-3" /> });
+  if (process.streamPort) items.push({ label: "Stream", value: String(process.streamPort), icon: <Eye className="size-3" /> });
+  return items;
+}
+
+function actionIcon(actionId: WorkspaceNodeActionId) {
+  if (actionId === "control") return <MousePointer2 className="size-3.5" />;
+  if (actionId === "view") return <Eye className="size-3.5" />;
+  if (actionId === "launch" || actionId === "seed") return <Plus className="size-3.5" />;
+  if (actionId === "resume" || actionId === "repair") return <RotateCcw className="size-3.5" />;
+  if (actionId === "external-open") return <ExternalLink className="size-3.5" />;
+  return <CircleDot className="size-3.5" />;
 }
 
 function launcherStatusLabel(status: LauncherEligibilityRow["status"]): string {
@@ -982,6 +1020,7 @@ function WorkspaceNodeRow({
   const Icon = nodeIcon(node);
   const action = primaryAction(node);
   const countLabel = compactCountLabel(node);
+  const processItems = processIndicatorItems(node).slice(0, 3);
 
   return (
     <div className={cn("workspace-nav-row", selected && "workspace-nav-row-selected")}>
@@ -997,6 +1036,16 @@ function WorkspaceNodeRow({
         <span className="min-w-0 flex-1">
           <span className="workspace-nav-row-title">{node.label}</span>
           <span className="workspace-nav-row-meta">{node.secondaryLabel || node.id}</span>
+          {processItems.length > 0 && (
+            <span className="workspace-nav-row-indicators">
+              {processItems.map((item) => (
+                <span key={`${item.label}:${item.value}`} title={`${item.label}: ${item.value}`}>
+                  {item.icon}
+                  {item.value}
+                </span>
+              ))}
+            </span>
+          )}
           {countLabel && <span className="workspace-nav-row-counts">{countLabel}</span>}
         </span>
       </button>
@@ -1018,11 +1067,7 @@ function WorkspaceNodeRow({
                 aria-label={action.label}
                 title={action.reason ?? action.label}
               >
-                {action.id === "control" ? <MousePointer2 className="size-3.5" /> :
-                  action.id === "view" ? <Eye className="size-3.5" /> :
-                    action.id === "launch" || action.id === "seed" ? <Plus className="size-3.5" /> :
-                      action.id === "resume" ? <RotateCcw className="size-3.5" /> :
-                        <CircleDot className="size-3.5" />}
+                {actionIcon(action.id)}
               </button>
             </TooltipTrigger>
             <TooltipContent side="right">
@@ -1082,6 +1127,86 @@ function WorkspaceNodeRow({
         </div>
       )}
     </div>
+  );
+}
+
+function WorkspaceNodeDetail({
+  node,
+  onAction,
+}: {
+  node: WorkspaceNode;
+  onAction: (node: WorkspaceNode, action: WorkspaceNodeActionId) => void;
+}) {
+  const processItems = processIndicatorItems(node);
+  const detailActionIds = new Set<WorkspaceNodeActionId>([
+    "control",
+    "view",
+    "focus",
+    "launch",
+    "seed",
+    "resume",
+    "repair",
+    "add-tab",
+    "external-open",
+  ]);
+  const enabledActions = node.actions.filter((action) => action.enabled && detailActionIds.has(action.id));
+  const disabledActions = node.actions.filter((action) => !action.enabled).slice(0, 3);
+  return (
+    <section className="workspace-nav-detail" aria-label="Selected workspace detail">
+      <div className="workspace-nav-detail-header">
+        <Info className="size-3.5" />
+        <div className="min-w-0">
+          <p>{node.label}</p>
+          <span>{node.id}</span>
+        </div>
+      </div>
+      {node.attentionReason && (
+        <p className="workspace-nav-detail-attention">{node.attentionReason}</p>
+      )}
+      <div className="workspace-nav-detail-grid">
+        <span>State</span>
+        <strong>{nodeStatusLabel(node)}</strong>
+        <span>Health</span>
+        <strong>{node.health ?? (node.live ? "live" : "retained")}</strong>
+        <span>Browser</span>
+        <strong>{node.browserId ?? node.daemonSession ?? "none"}</strong>
+        <span>Profile</span>
+        <strong>{node.profileId ?? "none"}</strong>
+      </div>
+      {processItems.length > 0 && (
+        <div className="workspace-nav-detail-indicators">
+          {processItems.map((item) => (
+            <span key={`${item.label}:${item.value}`} title={`${item.label}: ${item.value}`}>
+              {item.icon}
+              <strong>{item.value}</strong>
+              <small>{item.label}</small>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="workspace-nav-detail-actions">
+        {enabledActions.map((action) => (
+          <Button
+            key={action.id}
+            type="button"
+            size="sm"
+            variant={action.id === "control" ? "default" : "outline"}
+            className="workspace-nav-detail-action"
+            onClick={() => onAction(node, action.id)}
+          >
+            {actionIcon(action.id)}
+            {action.label}
+          </Button>
+        ))}
+      </div>
+      {disabledActions.length > 0 && (
+        <div className="workspace-nav-detail-disabled">
+          {disabledActions.map((action) => (
+            <span key={action.id}>{action.label}: {action.reason ?? "Unavailable"}</span>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -1232,6 +1357,10 @@ export function WorkspaceNavigator() {
   }, [deferredQuery, scope, visibleNodes]);
   const grouped = useMemo(() => groupNodes(filteredNodes), [filteredNodes]);
   const counts = useMemo(() => groupNodes(visibleNodes), [visibleNodes]);
+  const selectedNode = useMemo(
+    () => selectedNodeId ? nodes.find((node) => node.id === selectedNodeId) ?? null : null,
+    [nodes, selectedNodeId],
+  );
   const launcherPreview = useMemo(() => {
     if (!newSessionOpen) return EMPTY_LAUNCHER_PREVIEW;
     const serviceState = serviceStatus?.service_state;
@@ -1409,6 +1538,7 @@ export function WorkspaceNavigator() {
     persistUrl?: boolean;
     historyMode?: "push" | "replace";
     focusDaemon?: boolean;
+    openViewport?: boolean;
   } = {}) => {
     setSelectedNodeId(node.id);
     const daemonName = node.daemonSession ?? node.relatedIds.daemonSessionNames[0] ?? node.relatedIds.serviceSessionIds[0];
@@ -1428,6 +1558,10 @@ export function WorkspaceNavigator() {
         options.historyMode ?? "push",
       ));
     }
+    if (options.openViewport !== false && node.viewStream?.embeddable) {
+      const selection = pushWorkspaceViewportUrl(node, node.viewStream.controllable ? "control" : "view");
+      if (selection) setUrlSelection(selection);
+    }
   }, [dispatchSwitchTab, sessions, setActivePort]);
 
   useEffect(() => {
@@ -1445,6 +1579,7 @@ export function WorkspaceNavigator() {
       selectNode(bestNode, {
         focusDaemon: false,
         persistUrl: false,
+        openViewport: false,
       });
       if (bestNode.id !== urlSelection.workspaceId) {
         setUrlSelection(updateDashboardWorkspaceUrlSelection({ workspaceId: bestNode.id }, "replace"));
@@ -1465,8 +1600,8 @@ export function WorkspaceNavigator() {
     lastScrolledSelectionRef.current = selectedNodeId;
   }, [selectedNodeId]);
 
-  const performPrimaryAction = useCallback((node: WorkspaceNode) => {
-    const action = primaryAction(node);
+  const performNodeAction = useCallback((node: WorkspaceNode, actionId: WorkspaceNodeActionId) => {
+    const action = node.actions.find((candidate) => candidate.id === actionId);
     if (!action?.enabled) return;
     if (action.id === "add-tab" && node.port) {
       dispatchAddTab(node.port);
@@ -1488,6 +1623,12 @@ export function WorkspaceNavigator() {
     }
     selectNode(node);
   }, [dispatchAddTab, selectNode]);
+
+  const performPrimaryAction = useCallback((node: WorkspaceNode) => {
+    const action = primaryAction(node);
+    if (!action) return;
+    performNodeAction(node, action.id);
+  }, [performNodeAction]);
 
   const dismissAttentionNode = useCallback((node: WorkspaceNode) => {
     if (node.group !== "needs-attention") return;
@@ -1638,6 +1779,12 @@ export function WorkspaceNavigator() {
           </button>
         )}
       </div>
+      {selectedNode && (
+        <WorkspaceNodeDetail
+          node={selectedNode}
+          onAction={performNodeAction}
+        />
+      )}
       <div className="workspace-nav-scroll min-h-0 flex-1" role="region" aria-label="Workspace list">
         <div className="workspace-nav-body">
           {serviceError && !loadedOnceRef.current && (

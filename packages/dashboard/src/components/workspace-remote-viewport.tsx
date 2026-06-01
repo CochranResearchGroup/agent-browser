@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from "react";
 import { createPortal } from "react-dom";
 import { useAtomValue } from "jotai/react";
 import { AlertTriangle, ExternalLink, LogIn, Maximize2, Minimize2, MousePointer2, PlugZap, RefreshCw, Settings2, SquareArrowOutUpRight, Unplug } from "lucide-react";
@@ -24,7 +24,9 @@ import {
   readDashboardWorkspaceUrlSelection,
   type DashboardWorkspaceUrlSelection,
 } from "@/lib/workspace-url-selection";
-import { activePortAtom, activeSessionNameAtom } from "@/store/sessions";
+import type { SelectedWorkspaceContext } from "@/lib/selected-workspace-context";
+import { activePortAtom, activeSessionNameAtom, sessionsAtom } from "@/store/sessions";
+import type { SessionInfo } from "@/types";
 import { cn } from "@/lib/utils";
 import { SERVICE_API_BASE } from "@/lib/dashboard-api";
 import {
@@ -35,6 +37,7 @@ import {
 } from "@/lib/workspace-viewport-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import type { StreamMessage } from "@/types";
 
 type WorkspaceViewportMode = "view" | "control" | "tile";
 
@@ -104,6 +107,17 @@ type WorkspaceFrameIssue = {
   message: string;
 } | null;
 
+type CdpStreamState = {
+  connected: boolean;
+  browserConnected: boolean;
+  screencasting: boolean;
+  viewportWidth: number;
+  viewportHeight: number;
+  frameReceived: boolean;
+  httpFallback: boolean;
+  message: string;
+};
+
 type GuacamoleMouseState = {
   x?: number;
   y?: number;
@@ -153,9 +167,86 @@ type GuacamoleFrameWindow = Window & typeof globalThis & {
 
 const GUACAMOLE_TOUCH_BRIDGE_STYLE = "agent-browser-touch-click-bridge";
 const GUACAMOLE_TOUCH_BRIDGE_TAP_MS = 700;
+const WORKSPACE_VIEWPORT_TERMINAL_BROWSER_HEALTH = new Set([
+  "cdp_disconnected",
+  "closed",
+  "disconnected",
+  "faulted",
+  "not_started",
+  "process_exited",
+  "unreachable",
+]);
+
+const SCREENCAST_ENGINES = new Set(["chrome"]);
+
+const KEY_INFO: Record<string, { text?: string; keyCode: number }> = {
+  Enter: { text: "\r", keyCode: 13 },
+  Tab: { text: "\t", keyCode: 9 },
+  Backspace: { text: "\b", keyCode: 8 },
+  Escape: { keyCode: 27 },
+  ArrowLeft: { keyCode: 37 },
+  ArrowUp: { keyCode: 38 },
+  ArrowRight: { keyCode: 39 },
+  ArrowDown: { keyCode: 40 },
+  Delete: { keyCode: 46 },
+  Home: { keyCode: 36 },
+  End: { keyCode: 35 },
+  PageUp: { keyCode: 33 },
+  PageDown: { keyCode: 34 },
+};
 
 function serviceBase(_activePort: number): string {
   return SERVICE_API_BASE;
+}
+
+function cdpModifiers(e: ReactMouseEvent | ReactWheelEvent | KeyboardEvent): number {
+  let m = 0;
+  if (e.altKey) m |= 1;
+  if (e.ctrlKey) m |= 2;
+  if (e.metaKey) m |= 4;
+  if (e.shiftKey) m |= 8;
+  return m;
+}
+
+function cdpButton(btn: number): string {
+  switch (btn) {
+    case 0: return "left";
+    case 1: return "middle";
+    case 2: return "right";
+    default: return "none";
+  }
+}
+
+function isCdpScreencastStream(stream?: ServiceViewStream | null): boolean {
+  return stream?.provider?.trim().toLowerCase() === "cdp_screencast";
+}
+
+function workspaceCdpWebSocketUrl(streamUrl: string | null): string | null {
+  if (!streamUrl || typeof window === "undefined") return null;
+  try {
+    const resolved = new URL(streamUrl, window.location.href);
+    if (window.location.protocol === "https:" && resolved.port) {
+      const proxied = new URL(`/api/stream/${encodeURIComponent(resolved.port)}`, window.location.href);
+      proxied.protocol = "wss:";
+      return proxied.toString();
+    }
+    resolved.protocol = resolved.protocol === "https:" ? "wss:" : "ws:";
+    resolved.pathname = "/";
+    resolved.search = "";
+    resolved.hash = "";
+    return resolved.toString();
+  } catch {
+    return null;
+  }
+}
+
+function workspaceCdpStreamPort(streamUrl: string | null): string | null {
+  if (!streamUrl || typeof window === "undefined") return null;
+  try {
+    return new URL(streamUrl, window.location.href).port || null;
+  } catch {
+    return null;
+  }
 }
 
 function touchByIdentifier(touches: TouchList, identifier: number): Touch | null {
@@ -427,10 +518,70 @@ function browserIdFromSelection(selection: DashboardWorkspaceUrlSelection): stri
   return null;
 }
 
+function daemonSessionFromSelection(
+  sessions: SessionInfo[],
+  selection?: DashboardWorkspaceUrlSelection | null,
+): SessionInfo | null {
+  const selectedSession = stripSessionBrowserPrefix(selection?.sessionId);
+  const workspaceSession = selection?.workspaceId?.startsWith("daemon-session:")
+    ? selection.workspaceId.slice("daemon-session:".length)
+    : null;
+  const selected = selectedSession || workspaceSession;
+  if (!selected) return null;
+  return sessions.find((session) => session.session === selected) ?? null;
+}
+
+function daemonBrowserFromSession(session: SessionInfo | null): WorkspaceViewportBrowser | null {
+  if (!session || session.pending || session.closing || session.port <= 0) return null;
+  const streamUrl = `http://127.0.0.1:${session.port}/`;
+  return {
+    id: `daemon:${session.session}`,
+    displayName: session.session,
+    host: "daemon-session",
+    health: "ready",
+    browserBuild: session.provider ?? session.engine ?? null,
+    viewStreams: [
+      {
+        id: `daemon-stream:${session.session}`,
+        provider: "cdp_screencast",
+        controlInput: "cdp_input",
+        url: streamUrl,
+        frameUrl: streamUrl,
+        externalUrl: streamUrl,
+        routeId: `daemon:${session.session}`,
+        connectionName: session.session,
+        routeSource: "daemon-session",
+        providerMode: "single_controller",
+        readOnly: false,
+        readiness: { state: "ready", reason: `daemon stream ${session.port}` },
+      },
+    ],
+    activeSessionIds: [session.session],
+  };
+}
+
 function primaryViewStream(browser?: WorkspaceViewportBrowser | null): ServiceViewStream | null {
   const streams = browser?.viewStreams ?? [];
   if (streams.length === 0) return null;
   return [...streams].sort((left, right) => workspaceViewportStreamScore(right) - workspaceViewportStreamScore(left))[0] ?? null;
+}
+
+function hasOpenWorkspaceViewportStream(browser?: WorkspaceViewportBrowser | null): boolean {
+  return canOpenViewStream(primaryViewStream(browser));
+}
+
+function chooseWorkspaceViewportBrowser(
+  serviceBrowser: WorkspaceViewportBrowser | null,
+  daemonBrowser: WorkspaceViewportBrowser | null,
+): WorkspaceViewportBrowser | null {
+  if (hasOpenWorkspaceViewportStream(serviceBrowser)) return serviceBrowser;
+  if (hasOpenWorkspaceViewportStream(daemonBrowser)) return daemonBrowser;
+  return serviceBrowser ?? daemonBrowser;
+}
+
+function browserCanRenderWorkspaceViewport(browser?: WorkspaceViewportBrowser | null): boolean {
+  const health = browser?.health?.trim().toLowerCase() ?? "";
+  return Boolean(browser) && !WORKSPACE_VIEWPORT_TERMINAL_BROWSER_HEALTH.has(health);
 }
 
 function workspaceViewportStreamScore(stream: ServiceViewStream): number {
@@ -460,6 +611,7 @@ function workspaceViewportTiles(serviceStatus: ServiceStatusData | null): Worksp
   const browsers = Object.values(serviceStatus?.service_state?.browsers ?? {});
   const candidates = browsers
     .map((browser) => {
+      if (!browserCanRenderWorkspaceViewport(browser)) return null;
       const stream = primaryViewStream(browser);
       const frameUrl = resolveWorkspaceStreamUrl(stream);
       if (!stream || !frameUrl || !canOpenViewStream(stream)) return null;
@@ -637,9 +789,363 @@ function detectWorkspaceFrameFailure(frame: HTMLIFrameElement | null): Workspace
   return null;
 }
 
-export function WorkspaceRemoteViewport({ fallback }: { fallback: ReactNode }) {
+function WorkspaceCdpStreamCanvas({
+  streamUrl,
+  canControl,
+  refreshNonce,
+}: {
+  streamUrl: string;
+  canControl: boolean;
+  refreshNonce: number;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryCountRef = useRef(0);
+  const frameSizeRef = useRef({ width: 1280, height: 720 });
+  const [state, setState] = useState<CdpStreamState>({
+    connected: false,
+    browserConnected: false,
+    screencasting: false,
+    viewportWidth: 1280,
+    viewportHeight: 720,
+    frameReceived: false,
+    httpFallback: false,
+    message: "Connecting to CDP stream.",
+  });
+  const websocketUrl = useMemo(() => workspaceCdpWebSocketUrl(streamUrl), [streamUrl]);
+  const streamPort = useMemo(() => workspaceCdpStreamPort(streamUrl), [streamUrl]);
+
+  const sendInput = useCallback((msg: Record<string, unknown>) => {
+    const ws = wsRef.current;
+    if (!canControl) return;
+    if (state.httpFallback && streamPort) {
+      void fetch(`/api/stream/${encodeURIComponent(streamPort)}/input`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(msg),
+      });
+      return;
+    }
+    if (ws?.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify(msg));
+  }, [canControl, state.httpFallback, streamPort]);
+
+  const drawFrame = useCallback((base64: string) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const bin = atob(base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+
+    createImageBitmap(new Blob([bytes], { type: "image/jpeg" })).then((bmp) => {
+      canvas.width = bmp.width;
+      canvas.height = bmp.height;
+      frameSizeRef.current = { width: bmp.width, height: bmp.height };
+      const ctx = canvas.getContext("2d");
+      if (ctx) ctx.drawImage(bmp, 0, 0);
+      bmp.close();
+    }).catch(() => {
+      setState((current) => ({
+        ...current,
+        message: "The CDP stream sent a frame that could not be decoded.",
+      }));
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!websocketUrl) {
+      setState((current) => ({
+        ...current,
+        connected: false,
+        browserConnected: false,
+        screencasting: false,
+        message: "The CDP stream did not include a usable WebSocket port.",
+      }));
+      return;
+    }
+
+    let disposed = false;
+
+    const connect = () => {
+      if (disposed || wsRef.current?.readyState === WebSocket.OPEN) return;
+      const ws = new WebSocket(websocketUrl);
+      wsRef.current = ws;
+      setState((current) => ({
+        ...current,
+        message: "Connecting to CDP stream.",
+      }));
+
+      ws.onopen = () => {
+        if (disposed) return;
+        retryCountRef.current = 0;
+        setState((current) => ({
+          ...current,
+          connected: true,
+          message: "Waiting for CDP frames.",
+        }));
+      };
+
+      ws.onclose = () => {
+        if (disposed) return;
+        setState((current) => ({
+          ...current,
+          connected: false,
+          browserConnected: false,
+          screencasting: false,
+          message: "CDP stream disconnected; reconnecting.",
+        }));
+        const delay = Math.min(1000 * 2 ** retryCountRef.current, 10000);
+        retryCountRef.current += 1;
+        reconnectTimerRef.current = setTimeout(connect, delay);
+      };
+
+      ws.onerror = () => {
+        if (window.location.protocol === "https:") {
+          setState((current) => ({
+            ...current,
+            connected: false,
+            httpFallback: true,
+            message: "WebSocket stream unavailable; using HTTPS frame polling.",
+          }));
+        }
+        ws.close();
+      };
+
+      ws.onmessage = (event) => {
+        let msg: StreamMessage;
+        try {
+          msg = JSON.parse(event.data) as StreamMessage;
+        } catch {
+          return;
+        }
+
+        switch (msg.type) {
+          case "frame":
+            drawFrame(msg.data);
+            setState((current) => ({
+              ...current,
+              frameReceived: true,
+              message: "",
+            }));
+            break;
+          case "status": {
+            const supported = !msg.engine || SCREENCAST_ENGINES.has(msg.engine);
+            frameSizeRef.current = {
+              width: msg.viewportWidth || frameSizeRef.current.width,
+              height: msg.viewportHeight || frameSizeRef.current.height,
+            };
+            setState((current) => ({
+              ...current,
+              browserConnected: msg.connected,
+              screencasting: msg.screencasting,
+              viewportWidth: msg.viewportWidth || current.viewportWidth,
+              viewportHeight: msg.viewportHeight || current.viewportHeight,
+              message: msg.connected
+                ? supported
+                  ? msg.screencasting
+                    ? current.message
+                    : "CDP stream connected; waiting for screencast frames."
+                  : `CDP screencast is not available for ${msg.engine}.`
+                : "CDP stream is connected, but the browser is not ready.",
+            }));
+            break;
+          }
+          case "error":
+            setState((current) => ({ ...current, message: msg.message }));
+            break;
+          default:
+            break;
+        }
+      };
+    };
+
+    connect();
+
+    return () => {
+      disposed = true;
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      wsRef.current?.close();
+      wsRef.current = null;
+    };
+  }, [drawFrame, websocketUrl, refreshNonce]);
+
+  useEffect(() => {
+    if (!state.httpFallback || !streamPort) return;
+    let disposed = false;
+
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/stream/${encodeURIComponent(streamPort)}/frame`, {
+          cache: "no-store",
+          credentials: "include",
+        });
+        const json = await response.json() as {
+          success?: boolean;
+          frame?: string | null;
+          status?: {
+            connected?: boolean;
+            screencasting?: boolean;
+            viewportWidth?: number;
+            viewportHeight?: number;
+          } | null;
+          error?: string | null;
+        };
+        if (disposed) return;
+        if (json.frame) {
+          drawFrame(json.frame);
+        }
+        setState((current) => ({
+          ...current,
+          connected: Boolean(json.success),
+          browserConnected: Boolean(json.status?.connected),
+          screencasting: Boolean(json.status?.screencasting),
+          viewportWidth: json.status?.viewportWidth || current.viewportWidth,
+          viewportHeight: json.status?.viewportHeight || current.viewportHeight,
+          frameReceived: Boolean(json.frame) || current.frameReceived,
+          message: json.frame ? "" : json.error || "Waiting for CDP frames through HTTPS polling.",
+        }));
+      } catch (err) {
+        if (disposed) return;
+        setState((current) => ({
+          ...current,
+          connected: false,
+          message: err instanceof Error ? err.message : "HTTPS frame polling failed.",
+        }));
+      }
+    };
+
+    void poll();
+    const timer = window.setInterval(poll, 900);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [drawFrame, state.httpFallback, streamPort]);
+
+  const toViewport = useCallback((e: ReactMouseEvent): { x: number; y: number } | null => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const width = canvas.width || frameSizeRef.current.width || state.viewportWidth;
+    const height = canvas.height || frameSizeRef.current.height || state.viewportHeight;
+    const scaleX = width / Math.max(rect.width, 1);
+    const scaleY = height / Math.max(rect.height, 1);
+    return {
+      x: Math.round((e.clientX - rect.left) * scaleX),
+      y: Math.round((e.clientY - rect.top) * scaleY),
+    };
+  }, [state.viewportHeight, state.viewportWidth]);
+
+  const handleMouseEvent = useCallback((e: ReactMouseEvent, eventType: string) => {
+    const pos = toViewport(e);
+    if (!pos) return;
+    sendInput({
+      type: "input_mouse",
+      eventType,
+      x: pos.x,
+      y: pos.y,
+      button: cdpButton(e.button),
+      clickCount: eventType === "mousePressed" ? 1 : 0,
+      modifiers: cdpModifiers(e),
+    });
+  }, [sendInput, toViewport]);
+
+  const handleWheel = useCallback((e: ReactWheelEvent) => {
+    const pos = toViewport(e);
+    if (!pos) return;
+    sendInput({
+      type: "input_mouse",
+      eventType: "mouseWheel",
+      x: pos.x,
+      y: pos.y,
+      button: "none",
+      clickCount: 0,
+      deltaX: e.deltaX,
+      deltaY: e.deltaY,
+      modifiers: cdpModifiers(e),
+    });
+  }, [sendInput, toViewport]);
+
+  const dispatchKey = useCallback((e: KeyboardEvent, eventType: string) => {
+    const info = KEY_INFO[e.key];
+    const text = eventType === "keyDown"
+      ? (info?.text ?? (e.key.length === 1 ? e.key : undefined))
+      : undefined;
+    const keyCode = info?.keyCode ?? (e.key.length === 1 ? e.key.charCodeAt(0) : 0);
+    sendInput({
+      type: "input_keyboard",
+      eventType,
+      key: e.key,
+      code: e.code,
+      text,
+      windowsVirtualKeyCode: keyCode,
+      modifiers: cdpModifiers(e),
+    });
+  }, [sendInput]);
+
+  useEffect(() => {
+    if (!canControl) return;
+    const handler = (event: KeyboardEvent) => {
+      if (document.activeElement !== canvasRef.current) return;
+      event.preventDefault();
+      event.stopPropagation();
+      dispatchKey(event, event.type === "keydown" ? "keyDown" : "keyUp");
+    };
+    window.addEventListener("keydown", handler, true);
+    window.addEventListener("keyup", handler, true);
+    return () => {
+      window.removeEventListener("keydown", handler, true);
+      window.removeEventListener("keyup", handler, true);
+    };
+  }, [canControl, dispatchKey]);
+
+  const hasFrame = state.frameReceived;
+
+  return (
+    <div className="workspace-cdp-stream" data-provider="cdp_screencast" data-websocket-url={websocketUrl ?? ""}>
+      <canvas
+        ref={canvasRef}
+        tabIndex={canControl ? 0 : -1}
+        className="workspace-cdp-stream-canvas"
+        aria-label={canControl ? "Interactive CDP workspace stream" : "CDP workspace stream"}
+        onMouseMove={(event) => handleMouseEvent(event, "mouseMoved")}
+        onMouseDown={(event) => {
+          if (canControl) canvasRef.current?.focus();
+          handleMouseEvent(event, "mousePressed");
+        }}
+        onMouseUp={(event) => handleMouseEvent(event, "mouseReleased")}
+        onWheel={handleWheel}
+        onContextMenu={(event) => event.preventDefault()}
+      />
+      {!hasFrame && (
+        <div className="workspace-cdp-stream-status">
+          <RefreshCw className={cn("size-4", state.connected && "animate-spin")} />
+          <span>
+            {state.message || "Waiting for CDP frames."}
+          </span>
+        </div>
+      )}
+      <div className="workspace-cdp-stream-footer">
+        <span className={cn("workspace-cdp-stream-dot", state.connected && "workspace-cdp-stream-dot-ready")} />
+        <span>{state.browserConnected ? state.screencasting || state.frameReceived ? "CDP stream live" : "CDP stream waiting" : "CDP browser idle"}</span>
+        <span className="workspace-cdp-stream-port">{websocketUrl ?? streamUrl}</span>
+      </div>
+    </div>
+  );
+}
+
+export function WorkspaceRemoteViewport({
+  fallback,
+  selectedWorkspaceContext,
+}: {
+  fallback: ReactNode;
+  selectedWorkspaceContext?: SelectedWorkspaceContext | null;
+}) {
   const activePort = useAtomValue(activePortAtom);
   const activeSessionName = useAtomValue(activeSessionNameAtom);
+  const sessions = useAtomValue(sessionsAtom);
   const [viewportSelection, setViewportSelection] = useState<WorkspaceViewportSelection | null>(() => readWorkspaceViewportSelection());
   const [serviceStatus, setServiceStatus] = useState<ServiceStatusData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -717,7 +1223,9 @@ export function WorkspaceRemoteViewport({ fallback }: { fallback: ReactNode }) {
   }, [fetchServiceStatus, viewportSelection]);
 
   const browserId = viewportSelection ? browserIdFromSelection(viewportSelection.selection) : null;
-  const browser = browserId ? serviceStatus?.service_state?.browsers?.[browserId] ?? null : null;
+  const serviceBrowser = browserId ? serviceStatus?.service_state?.browsers?.[browserId] ?? null : null;
+  const daemonBrowser = daemonBrowserFromSession(daemonSessionFromSelection(sessions, viewportSelection?.selection));
+  const browser = chooseWorkspaceViewportBrowser(serviceBrowser, daemonBrowser);
   const tabs = useMemo(() => Object.values(serviceStatus?.service_state?.tabs ?? {}), [serviceStatus]);
   const tabSelection = browser?.id && viewportSelection
     ? selectedTabForBrowser(tabs, browser.id, viewportSelection.selection)
@@ -729,7 +1237,9 @@ export function WorkspaceRemoteViewport({ fallback }: { fallback: ReactNode }) {
   const frameUrl = buildWorkspaceFrameUrl(streamUrl, streamRefreshNonce);
   const canEmbed = stream ? canEmbedViewStream(stream) : false;
   const canControl = stream ? canOpenControlViewStream(stream) : false;
-  const canRenderFrame = canEmbed && streamPreflight.status === "ready";
+  const canRenderSelectedBrowser = browserCanRenderWorkspaceViewport(browser);
+  const canRenderCdpStream = canRenderSelectedBrowser && isCdpScreencastStream(stream) && Boolean(streamUrl) && streamPreflight.status === "ready";
+  const canRenderFrame = canRenderSelectedBrowser && !isCdpScreencastStream(stream) && canEmbed && streamPreflight.status === "ready";
   const singleWorkspaceMode = viewportSelection?.mode === "control" ? "control" : "view";
   const viewportUxState = deriveWorkspaceViewportUxState({
     hasBrowser: Boolean(browser),
@@ -1361,6 +1871,8 @@ export function WorkspaceRemoteViewport({ fallback }: { fallback: ReactNode }) {
       data-ux-state={viewportUxState}
       data-readiness-status={viewportReadiness.status}
       data-readiness-action={viewportReadiness.nextAction}
+      data-selected-workspace-id={selectedWorkspaceContext?.node?.id ?? ""}
+      data-selected-workspace-state={selectedWorkspaceContext?.state ?? ""}
       aria-label="Workspace remote viewport"
     >
       <header className="workspace-remote-viewport-header">
@@ -1607,7 +2119,14 @@ export function WorkspaceRemoteViewport({ fallback }: { fallback: ReactNode }) {
       )}
 
       <div className="workspace-remote-viewport-stage">
-        {stream && canRenderFrame ? (
+        {stream && canRenderCdpStream && streamUrl ? (
+          <WorkspaceCdpStreamCanvas
+            key={`${streamUrl}:${streamRefreshNonce}`}
+            streamUrl={streamUrl}
+            canControl={canControl}
+            refreshNonce={streamRefreshNonce}
+          />
+        ) : stream && canRenderFrame ? (
           <iframe
             key={`${streamUrl ?? ""}:${streamRefreshNonce}`}
             ref={viewportFrameRef}

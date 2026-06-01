@@ -5,6 +5,7 @@ import { useAtomValue, useSetAtom } from "jotai/react";
 import type { ConsoleEntry } from "@/types";
 import { consoleLogsAtom, clearConsoleLogsAtom } from "@/store/stream";
 import { activeSessionNameAtom } from "@/store/sessions";
+import type { SelectedWorkspaceContext } from "@/lib/selected-workspace-context";
 import { execCommand, sessionArgs } from "@/lib/exec";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -69,7 +70,11 @@ interface EvalEntry {
 
 let evalIdCounter = 0;
 
-export function ConsolePanel() {
+export function ConsolePanel({
+  selectedWorkspaceContext,
+}: {
+  selectedWorkspaceContext?: SelectedWorkspaceContext | null;
+} = {}) {
   const entries = useAtomValue(consoleLogsAtom);
   const clearConsoleLogs = useSetAtom(clearConsoleLogsAtom);
   const sessionName = useAtomValue(activeSessionNameAtom);
@@ -154,7 +159,11 @@ export function ConsolePanel() {
   ];
 
   return (
-    <div className="flex h-full flex-col">
+    <div
+      className="flex h-full flex-col"
+      data-selected-workspace-id={selectedWorkspaceContext?.node?.id ?? ""}
+      data-selected-workspace-state={selectedWorkspaceContext?.state ?? ""}
+    >
       <div className="flex shrink-0 items-center gap-1.5 px-3 py-2">
         {filters.map((f) => (
           <button

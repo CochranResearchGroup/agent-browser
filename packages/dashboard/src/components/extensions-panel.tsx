@@ -2,20 +2,29 @@
 
 import { useAtomValue } from "jotai/react";
 import { activeExtensionsAtom, activeSessionNameAtom } from "@/store/sessions";
+import type { SelectedWorkspaceContext } from "@/lib/selected-workspace-context";
 import { cn } from "@/lib/utils";
 import { Puzzle } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
 
-export function ExtensionsPanel() {
+export function ExtensionsPanel({
+  selectedWorkspaceContext,
+}: {
+  selectedWorkspaceContext?: SelectedWorkspaceContext | null;
+} = {}) {
   const extensions = useAtomValue(activeExtensionsAtom);
   const sessionName = useAtomValue(activeSessionNameAtom);
   const [expanded, setExpanded] = useState<string | null>(null);
 
   if (!sessionName) {
     return (
-      <div className="flex h-full flex-col">
+      <div
+        className="flex h-full flex-col"
+        data-selected-workspace-id={selectedWorkspaceContext?.node?.id ?? ""}
+        data-selected-workspace-state={selectedWorkspaceContext?.state ?? ""}
+      >
         <Header count={0} />
         <Separator />
         <div className="py-8 text-center text-xs text-muted-foreground">
@@ -26,7 +35,11 @@ export function ExtensionsPanel() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div
+      className="flex h-full flex-col"
+      data-selected-workspace-id={selectedWorkspaceContext?.node?.id ?? ""}
+      data-selected-workspace-state={selectedWorkspaceContext?.state ?? ""}
+    >
       <Header count={extensions.length} />
       <Separator />
       <div className="min-h-0 flex-1 overflow-y-auto">

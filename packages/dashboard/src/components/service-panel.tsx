@@ -379,12 +379,14 @@ type ServiceRetentionPruneData = {
     closedTabs?: number;
     browsers?: number;
     sessions?: number;
+    orphanedProfiles?: number;
     total?: number;
   };
   removed?: {
     closedTabs?: number;
     browsers?: number;
     sessions?: number;
+    orphanedProfiles?: number;
     sessionTabRefs?: number;
     sessionBrowserRefs?: number;
   };
@@ -879,6 +881,10 @@ function isBlankServiceTab(tab: ServiceTab): boolean {
   const blankUrl = !url || url === "about:blank" || url === "chrome://newtab/";
   const blankTitle = !title || title === "about:blank" || title === "new tab";
   return blankUrl && blankTitle;
+}
+
+function isInspectableServiceTab(tab: ServiceTab): boolean {
+  return isActiveServiceTab(tab) || !isBlankServiceTab(tab);
 }
 
 function remoteControlTabScore(tab: ServiceTab): number {
@@ -2911,11 +2917,11 @@ function retainedPruneSummary(result: ServiceRetentionPruneData | null): string 
   const counts = result.candidateCounts;
   const removed = result.removed;
   const total = counts?.total ?? 0;
-  const removedTotal = (removed?.closedTabs ?? 0) + (removed?.browsers ?? 0) + (removed?.sessions ?? 0);
+  const removedTotal = (removed?.closedTabs ?? 0) + (removed?.browsers ?? 0) + (removed?.sessions ?? 0) + (removed?.orphanedProfiles ?? 0);
   if (result.pruned) {
-    return `Pruned ${removedTotal} retained records: ${removed?.closedTabs ?? 0} closed tabs, ${removed?.browsers ?? 0} browsers, ${removed?.sessions ?? 0} sessions.`;
+    return `Pruned ${removedTotal} retained records: ${removed?.closedTabs ?? 0} closed tabs, ${removed?.browsers ?? 0} browsers, ${removed?.sessions ?? 0} sessions, ${removed?.orphanedProfiles ?? 0} orphaned profiles.`;
   }
-  return `Dry-run found ${total} prune candidates: ${counts?.closedTabs ?? 0} closed tabs, ${counts?.browsers ?? 0} browsers, ${counts?.sessions ?? 0} sessions.`;
+  return `Dry-run found ${total} prune candidates: ${counts?.closedTabs ?? 0} closed tabs, ${counts?.browsers ?? 0} browsers, ${counts?.sessions ?? 0} sessions, ${counts?.orphanedProfiles ?? 0} orphaned profiles.`;
 }
 
 function browserExecutableSource({
@@ -7121,8 +7127,12 @@ export function ServicePanel({
     () =>
       sessionTabQueryText
         ? tabRecords.filter((tab) => includesQuery(tabSearchText(tab), sessionTabQueryText))
-        : tabRecords,
+        : tabRecords.filter(isInspectableServiceTab),
     [tabRecords, sessionTabQueryText],
+  );
+  const hiddenPlaceholderTabCount = useMemo(
+    () => sessionTabQueryText ? 0 : tabRecords.length - filteredTabRecords.length,
+    [filteredTabRecords.length, sessionTabQueryText, tabRecords.length],
   );
   const visibleSessionRecords = useMemo(
     () => filteredSessionRecords.slice(0, sessionLimit),
@@ -7489,6 +7499,7 @@ export function ServicePanel({
             processExitedBrowsers: false,
             releasedSessions: false,
             abandonedSessions: false,
+            orphanedProfiles: true,
             abandonedSessionMinAgeMinutes: 1440,
             ...(apply ? {} : { serviceState }),
           },
@@ -8337,10 +8348,15 @@ export function ServicePanel({
                 <p className="service-record-list-heading">
                   Tabs: {sessionActivitySummary.activeTabs} active / {sessionActivitySummary.retainedTabs} retained; {visibleTabRecords.length} shown
                   {hiddenTabCount > 0 ? ` / ${hiddenTabCount} hidden` : ""}
+                  {hiddenPlaceholderTabCount > 0 ? ` / ${hiddenPlaceholderTabCount} placeholder tabs suppressed` : ""}
                 </p>
                 {filteredTabRecords.length === 0 ? (
                   <p className="rounded-2xl bg-foreground/[0.04] px-3 py-5 text-center text-xs text-muted-foreground">
-                    {tabRecords.length === 0 ? "No service tabs yet." : "No tabs match the current filter."}
+                    {tabRecords.length === 0
+                      ? "No service tabs yet."
+                      : sessionTabQueryText
+                        ? "No tabs match the current filter."
+                        : "Only closed blank placeholder tabs are retained. Use search to inspect them."}
                   </p>
                 ) : (
                   visibleTabRecords.map((tab, index) => (

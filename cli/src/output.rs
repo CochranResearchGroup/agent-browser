@@ -1595,10 +1595,14 @@ fn format_service_prune_retained_text(data: &serde_json::Value) -> Option<String
         .get("sessions")
         .and_then(|value| value.as_u64())
         .unwrap_or(0);
+    let orphaned_profiles = counts
+        .get("orphanedProfiles")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
     let total = counts
         .get("total")
         .and_then(|value| value.as_u64())
-        .unwrap_or(closed_tabs + browsers + sessions);
+        .unwrap_or(closed_tabs + browsers + sessions + orphaned_profiles);
     let skipped_abandoned_missing_age = skipped_counts
         .get("abandonedSessionsMissingAgeTimestamp")
         .and_then(|value| value.as_u64())
@@ -1619,6 +1623,14 @@ fn format_service_prune_retained_text(data: &serde_json::Value) -> Option<String
         .get("sessions")
         .and_then(|value| value.as_u64())
         .unwrap_or(0);
+    let removed_orphaned_profiles = removed
+        .get("orphanedProfiles")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let before_profiles = before
+        .get("profileCount")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
     let before_browsers = before
         .get("browserCount")
         .and_then(|value| value.as_u64())
@@ -1631,6 +1643,10 @@ fn format_service_prune_retained_text(data: &serde_json::Value) -> Option<String
         .get("browserCount")
         .and_then(|value| value.as_u64())
         .unwrap_or(before_browsers);
+    let after_profiles = after
+        .get("profileCount")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(before_profiles);
     let after_tabs = after
         .get("tabCount")
         .and_then(|value| value.as_u64())
@@ -1642,9 +1658,9 @@ fn format_service_prune_retained_text(data: &serde_json::Value) -> Option<String
 
     let mut lines = vec![
         format!(
-            "Retained service prune {mode}: candidates={total} closed_tabs={closed_tabs} browsers={browsers} sessions={sessions}"
+            "Retained service prune {mode}: candidates={total} closed_tabs={closed_tabs} browsers={browsers} sessions={sessions} orphaned_profiles={orphaned_profiles}"
         ),
-        format!("Before: browsers={before_browsers} tabs={before_tabs}"),
+        format!("Before: profiles={before_profiles} browsers={before_browsers} tabs={before_tabs}"),
     ];
     if skipped_abandoned_missing_age > 0 || skipped_abandoned_too_fresh > 0 {
         lines.push(format!(
@@ -1672,9 +1688,9 @@ fn format_service_prune_retained_text(data: &serde_json::Value) -> Option<String
     }
     lines.extend([
         format!(
-            "Removed: browsers={removed_browsers} closed_tabs={removed_tabs} sessions={removed_sessions}"
+            "Removed: profiles={removed_orphaned_profiles} browsers={removed_browsers} closed_tabs={removed_tabs} sessions={removed_sessions}"
         ),
-        format!("After: browsers={after_browsers} tabs={after_tabs}"),
+        format!("After: profiles={after_profiles} browsers={after_browsers} tabs={after_tabs}"),
         format!("Next: {next}"),
     ]);
     Some(lines.join("\n"))
@@ -4761,10 +4777,14 @@ Dashboard sections are URL-addressable at /service, /browsers, and /activity.
 Service record tabs persist as ?view=service:<name>; selected workspace,
 browser, session, tab, profile, and job IDs persist as query parameters. The
 left workspace navigator groups Active, Attention, and Retained browser work,
-shows service-sourced disabled action reasons, and opens supported launches or
-controllable view streams through the service queue. Blocked and human-takeover
-rows remain in Attention, but Control or View stays primary when a related
-browser still has a controllable service-owned stream. The launcher defaults to
+shows service-sourced disabled action reasons, selected-row PID, memory, CPU,
+CDP, and stream-port indicators when available, and opens a dense right-pane
+Workspace inspector with action reasons, page identity, ownership, viewport
+readiness, and collapsed diagnostic evidence. Selecting a row with an
+embeddable stream opens the workspace viewport, including CDP screencast streams.
+Blocked and human-takeover rows remain in Attention, but Control or View stays
+primary when a related browser still has a controllable service-owned stream.
+The launcher defaults to
 private remote display plus RDP gateway control; selecting RDP gateway forces a
 remote_headed request so configured Guac stream metadata can open in the
 embedded workspace viewport. Launch responses with browser or tab identity open
@@ -4988,7 +5008,7 @@ Usage:
   agent-browser service status --watch [--interval <ms>] [--count <n>]
   agent-browser service watch [--interval <ms>] [--count <n>]
   agent-browser service reconcile
-  agent-browser service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers] [--released-sessions] [--abandoned-sessions] [--abandoned-session-min-age-minutes <n>]
+  agent-browser service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers] [--released-sessions] [--abandoned-sessions] [--orphaned-profiles] [--abandoned-session-min-age-minutes <n>]
   agent-browser service repair-retained [--dry-run|--apply] [--missing-lease-observed-at|--no-missing-lease-observed-at]
   agent-browser service access-plan [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--site-policy-id <id>] [--challenge-id <id>] [--readiness-profile-id <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--browser-host <local_headless|local_headed|docker_headed|remote_headed|cloud_provider|attached_existing>] [--view-stream-provider <cdp_screencast|chrome_tab_webrtc|virtual_display_webrtc|novnc|rdp_gateway|external_url>] [--control-input-provider <cdp_input|webrtc_input|vnc_input|manual_attached_desktop>] [--display-isolation <private_virtual_display|shared_display|ambient_display>]
   agent-browser service browser-capability preflight --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--runtime-profile <id>] [--profile <path>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--headed|--headless] [--cdp-free]
@@ -5025,7 +5045,7 @@ Commands:
   status                Show worker state, browser health, queue depth, profile lease wait count, configured site policies, and providers
   watch                 Poll service status until interrupted
   reconcile             Probe persisted browser records and update service state
-  prune-retained        Dry-run or apply removal of inert retained browser and closed-tab records
+  prune-retained        Dry-run or apply removal of inert retained browser, closed-tab, and orphaned custom profile records
   repair-retained       Dry-run or apply safe repair of legacy inert retained session evidence
   access-plan           Show the no-launch profile, readiness, site-policy, provider, challenge, and browser-build routing recommendation
   browser-capability    Preflight guarded executable routing for one requested browser build without launching
@@ -5068,6 +5088,7 @@ Notes:
   - service prune-retained removes closed tabs and inert not_started browser records by default; process_exited browser records require --process-exited-browsers because they may carry failure evidence.
   - service prune-retained --released-sessions removes released or expired session records only when all linked browsers are inert not_started placeholders and the session has no retained tabs.
   - service prune-retained --abandoned-sessions extends that explicit session cleanup to shared or exclusive session records with a parseable lastLeaseObservedAt or createdAt older than --abandoned-session-min-age-minutes, which defaults to 1440; dry-runs also report skipped abandoned sessions that are too fresh or missing age evidence, plus grouped skippedSummary rows for triage.
+  - service prune-retained --orphaned-profiles removes only custom:* profile records that have no retained service references and point at missing ephemeral user-data directories.
   - service repair-retained defaults to dry-run and stamps current observation time onto legacy shared or exclusive inert session placeholders only when --apply is present; repaired sessions become too fresh for abandoned-session pruning until the minimum age guard elapses.
   - service access-plan prints the service-owned profile, browser-build, browser-host, view-stream, control-input, and display-isolation recommendation that HTTP GET /api/service/access-plan and MCP service_access_plan return.
   - Text access-plan output includes the compact browser_build_summary field for routing audit logs and agent handoffs.
@@ -5134,7 +5155,7 @@ Notes:
   - pnpm test:service-shutdown-health-live validates the polite-shutdown failure remedy against live service state.
   - Runtime profile and custom profile launches populate linked service profile and session records, including profileSelectionReason, profileLeaseDisposition, profileLeaseConflictSessionIds, and browserCapabilityLaunch diagnostics when known.
   - Service-scoped launches reject active exclusive profile conflicts by default before browser start; set profileLeasePolicy=wait and profileLeaseWaitTimeoutMs to keep the job queued while polling for release, leaving the worker available for other commands. Same-session retained browser reuse remains allowed.
-  - service status includes launchConfig, a no-launch diagnostic for service.defaultBrowserBuild and the resolved executablePath from config, AGENT_BROWSER_EXECUTABLE_PATH, or service.browserBuildManifests.<build>.manifestPath. launchConfig.profileSmoke tells API, MCP, and CLI clients whether the WSL Windows chromium-stealthcdp profile-write smoke is applicable. If stealthcdp_chromium is selected but no executable path or ready manifest exists, status reports a warning. When no explicit default is configured and a ready stealthcdp_chromium manifest is available, fresh installs prefer that build automatically.
+  - service status includes launchConfig, a no-launch diagnostic for service.defaultBrowserBuild and the resolved executablePath from config, AGENT_BROWSER_EXECUTABLE_PATH, or service.browserBuildManifests.<build>.manifestPath. launchConfig.profileSmoke tells API, MCP, and CLI clients whether the WSL Windows chromium-stealthcdp profile-write smoke is applicable. If stealthcdp_chromium is selected but no executable path or ready manifest exists, status reports a warning. Ordinary launch and queued tab paths consume service.defaultBrowserBuild through the service access-plan resolver unless the caller explicitly supplies a profile, browser host, headless mode, executable, or browser build. When no explicit default is configured and a ready stealthcdp_chromium manifest is available, fresh installs prefer that build automatically.
   - Service profiles can set browserBuild to stock_chrome, stealthcdp_chromium, or cdp_free_headed. Exact authenticated target, account, and target-site matches win first; browserBuild then breaks ties and can select a generic default profile for new identities.
   - service.browserCapabilityRegistry carries draft browser host, executable, capability, profile compatibility, preference binding, and validation evidence arrays into service_state.browserCapabilityRegistry for no-launch status consumers. Access-plan recommendations can use preference bindings for browserBuild selection, and populated target, account, service, and task filters are conjunctive. Guarded launches record browserCapabilityLaunch diagnostics explaining whether a local executable binding was applied or skipped. A matching failed, stale, incompatible, or operator-override row blocks launch routing even if another matching row passed.
   - service browser-capability preflight is the operator no-launch gate check for that same guarded launch path. It accepts the requested build, site/login/account hints, caller labels, profile hint, headed or headless posture, and CDP-free posture, evaluates effective configured service state, and returns browserCapabilityLaunch plus selected evidence IDs when the route passes. Manifest-derived default executables do not count as explicit operator overrides.
@@ -5218,7 +5239,7 @@ Notes:
   - HTTP GET /api/service/profiles/<id>/readiness and MCP agent-browser://profiles/{profile_id}/readiness return one profile's no-launch targetReadiness rows for software clients and agents that do not need allocation details.
   - HTTP GET /api/service/profiles/<id>/allocation and MCP agent-browser://profiles/{profile_id}/allocation return one profile's lease, holder, conflict, recommended-action, and readiness state without fetching the full profile collection.
   - HTTP GET /api/service/profiles/<id>/seeding-handoff and MCP agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId} return the exact detached runtime-login command, setup URL, operator steps, and warnings derived from one profile's targetReadiness rows. HTTP POST /api/service/profiles/<id>/seeding-handoff and MCP service_profile_seeding_handoff_update persist lifecycle changes through the same service worker.
-  - HTTP GET /api/service/access-plan, MCP service_access_plan, and MCP agent-browser://access-plan accept serviceName, agentName, taskName, targetServiceId, siteId, loginId, accountId, url, browserBuild, browserHost, viewStreamProvider, controlInputProvider, displayIsolation, or their array aliases, then return the no-launch service-owned profile, policy, provider, challenge, readiness, seedingHandoff, monitorFindings, advisory browserCapabilityEvidence, caller-label warning, and recommendation payload. decision.attention summarizes whether intervention is required, who owns it, severity, reason, message, and suggested actions while leaving popup or dashboard presentation to clients. browserCapabilityEvidence is filtered by the planned browser build and request identity. Preference bindings can set the access-plan browser build recommendation when no explicit request, site policy, or profile browser build has already won; that case reports routingApplied=true with routingScope=access_plan_recommendation. The queued launch path may apply the matching local executable only when the host is local, reachable, and agent-browser owned, the executable exists, selected-profile compatibility rows are all acceptable, and matching validation evidence includes a passed row with no failed or stale row. decision.launchPosture includes browserBuild, browserBuildSelection, requiresCdpFree, cdpAttachmentAllowed, browserHost, viewStreamProvider, controlInputProvider, and displayIsolation so agents and software clients can choose stock Chrome, stealth CDP Chromium, CDP-free headed, or remote viewport posture before opening a browser. Headed access plans include params.headless=false and params.browserHost in the queued tab request so clients do not accidentally launch true headless Chrome or drop the host selected by site policy. Copied remote_headed requests are executable: on Linux agent-browser starts a hidden Xvfb-backed headed browser when no display is supplied, keeps CDP control available, and records a view stream entry for operator or dashboard surfaces. Shipped site policies include UPS, which prefers stealthcdp_chromium with a remote-view-capable headed host because true headless stealth Chromium failed UPS tracking navigation during live 2026-05-17 testing. Matching active profile_readiness monitors that are due or never checked set monitorFindings.profileReadinessProbeDue and decision.monitorProbeDue, fill decision.monitorRunDue with HTTP, MCP, CLI, and service-client instructions, and recommend run_due_profile_readiness_monitor before relying on retained freshness. Access-plan-backed tab requests marked blockedByManualAction and manualSeedingRequired are refused by the service request client, HTTP POST /api/service/request, and MCP service_request unless allowManualAction is explicitly true. Raw requests carrying monitorRunDueSummary are refused when the summary reports expired, unverified, or missing target freshness evidence unless allowMonitorFreshnessRisk is explicitly true. Copied tab requests marked requiresCdpFree with cdpAttachmentAllowed=false are refused by those same request paths; decision.serviceRequest.cdpFreeAvailability names the no-launch lifecycle-only alternative. Use action=cdp_free_launch only when process lifecycle and service-state tracking are sufficient, then read unsupportedCommands before offering follow-up automation controls.
+  - HTTP GET /api/service/access-plan, MCP service_access_plan, and MCP agent-browser://access-plan accept serviceName, agentName, taskName, targetServiceId, siteId, loginId, accountId, url, browserBuild, browserHost, viewStreamProvider, controlInputProvider, displayIsolation, or their array aliases, then return the no-launch service-owned profile, policy, provider, challenge, readiness, seedingHandoff, monitorFindings, advisory browserCapabilityEvidence, caller-label warning, and recommendation payload. decision.attention summarizes whether intervention is required, who owns it, severity, reason, message, and suggested actions while leaving popup or dashboard presentation to clients. browserCapabilityEvidence is filtered by the planned browser build and request identity. Preference bindings can set the access-plan browser build recommendation when no explicit request, site policy, or profile browser build has already won; that case reports routingApplied=true with routingScope=access_plan_recommendation. The queued launch path may apply the matching local executable only when the host is local, reachable, and agent-browser owned, the executable exists, selected-profile compatibility rows are all acceptable, and matching validation evidence includes a passed row with no failed or stale row. decision.launchPosture includes browserBuild, browserBuildSelection, requiresCdpFree, cdpAttachmentAllowed, browserHost, viewStreamProvider, controlInputProvider, and displayIsolation so agents and software clients can choose stock Chrome, stealth CDP Chromium, CDP-free headed, or remote viewport posture before opening a browser. Headed access plans include params.headless=false and params.browserHost in the queued tab request so clients do not accidentally launch true headless Chrome or drop the host selected by site policy. Copied remote_headed requests are executable: on Linux agent-browser starts a hidden Xvfb-backed headed browser when no display is supplied, keeps CDP control available, and records a view stream entry for operator or dashboard surfaces. Shipped site policies include UPS and Google Sheets, which prefer stealthcdp_chromium with a remote-view-capable headed host; UPS uses that posture because true headless stealth Chromium failed tracking navigation during live 2026-05-17 testing. Matching active profile_readiness monitors that are due or never checked set monitorFindings.profileReadinessProbeDue and decision.monitorProbeDue, fill decision.monitorRunDue with HTTP, MCP, CLI, and service-client instructions, and recommend run_due_profile_readiness_monitor before relying on retained freshness. Access-plan-backed tab requests marked blockedByManualAction and manualSeedingRequired are refused by the service request client, HTTP POST /api/service/request, and MCP service_request unless allowManualAction is explicitly true. Raw requests carrying monitorRunDueSummary are refused when the summary reports expired, unverified, or missing target freshness evidence unless allowMonitorFreshnessRisk is explicitly true. Copied tab requests marked requiresCdpFree with cdpAttachmentAllowed=false are refused by those same request paths; decision.serviceRequest.cdpFreeAvailability names the no-launch lifecycle-only alternative. Use action=cdp_free_launch only when process lifecycle and service-state tracking are sufficient, then read unsupportedCommands before offering follow-up automation controls.
   - HTTP POST /api/service/browser-capability-registry/<collection>/<id>, MCP service_browser_capability_registry_upsert, service browser-capability prefer, and upsertServiceBrowserPreferenceBinding persist advisory browser capability registry records through the service worker queue. service browser-capability guide is the read-only CLI discovery step for executable IDs and copyable prefer commands. Path collection and ID are authoritative, and returned upsert records report routingApplied=false because an upsert does not itself route browser work.
   - The guarded service read surface has MCP resource parity; agents should usually start with agent-browser://access-plan{?...} and use narrower profile lookup, readiness, allocation, seeding-handoff, display-allocation, remote-view-route, route-pool, or viewer-lease resources only when the full recommendation is not needed.
   - browser_navigate, browser_back, browser_forward, browser_reload, browser_tab_*, browser_set_content, browser_requests, browser_request_detail, browser_headers, browser_offline, browser_cookies_*, browser_storage_*, browser_user_agent, browser_viewport, browser_geolocation, browser_permissions, browser_timezone, browser_locale, browser_media, browser_dialog, browser_upload, browser_download, browser_wait_for_download, browser_har_*, browser_route, browser_unroute, browser_console, browser_errors, browser_pdf, browser_response_body, and browser_clipboard provide typed schemas for common navigation, tab, page-content, request-inspection, session-shaping, observability, artifact, file-transfer, HAR, routing, cookie, and storage workflows.
@@ -5658,7 +5679,7 @@ Service:
   service status             Show service worker health, profile lease waits, and configured service state
   service watch              Poll service worker health and reconciliation state
   service reconcile          Probe persisted browser records and update service state
-  service prune-retained     Dry-run or apply retained closed-tab and inert-browser cleanup
+  service prune-retained     Dry-run or apply retained closed-tab, inert-browser, and orphaned-profile cleanup
   service repair-retained    Dry-run or apply retained session evidence repair
   service access-plan        Show no-launch profile and browser-build routing recommendation
   service profiles           Show retained profile records and allocation state
@@ -5993,6 +6014,7 @@ Examples:
   agent-browser service watch            # Watch service health until interrupted
   agent-browser service reconcile        # Refresh persisted service browser health
   agent-browser service prune-retained   # Preview retained closed-tab and inert-browser cleanup
+  agent-browser service prune-retained --orphaned-profiles # Preview orphaned custom profile cleanup
   agent-browser service repair-retained  # Preview safe retained session evidence repair
   agent-browser service access-plan --login-id canva # Inspect broker routing before browser work
   agent-browser service profiles         # Inspect retained service profiles and allocation state
@@ -6575,7 +6597,8 @@ mod tests {
                 "closedTabs": 3,
                 "browsers": 2,
                 "sessions": 1,
-                "total": 6
+                "orphanedProfiles": 4,
+                "total": 10
             },
             "skippedCounts": {
                 "abandonedSessionsMissingAgeTimestamp": 4,
@@ -6601,13 +6624,16 @@ mod tests {
             "removed": {
                 "closedTabs": 0,
                 "browsers": 0,
-                "sessions": 0
+                "sessions": 0,
+                "orphanedProfiles": 0
             },
             "before": {
+                "profileCount": 20,
                 "browserCount": 10,
                 "tabCount": 30
             },
             "after": {
+                "profileCount": 20,
                 "browserCount": 10,
                 "tabCount": 30
             },
@@ -6617,12 +6643,13 @@ mod tests {
         let rendered = format_service_prune_retained_text(&data).unwrap();
 
         assert!(rendered.contains(
-            "Retained service prune dry-run: candidates=6 closed_tabs=3 browsers=2 sessions=1"
+            "Retained service prune dry-run: candidates=10 closed_tabs=3 browsers=2 sessions=1 orphaned_profiles=4"
         ));
-        assert!(rendered.contains("Before: browsers=10 tabs=30"));
+        assert!(rendered.contains("Before: profiles=20 browsers=10 tabs=30"));
         assert!(rendered.contains("Skipped: abandoned_missing_age=4 abandoned_too_fresh=5"));
         assert!(rendered.contains("abandoned_missing_age_groups: receipts-live:3,auracall:1"));
         assert!(rendered.contains("abandoned_too_fresh_groups: canva:5"));
+        assert!(rendered.contains("Removed: profiles=0 browsers=0 closed_tabs=0 sessions=0"));
         assert!(rendered.contains("Next: Review candidates."));
     }
 

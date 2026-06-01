@@ -6,6 +6,10 @@ use tokio::net::TcpListener;
 
 use crate::connection::get_socket_dir;
 
+use super::app_intelligence::{
+    app_intelligence_status_json, inspect_workspace_response, APP_INTELLIGENCE_INSPECT_HTTP_ROUTE,
+    APP_INTELLIGENCE_STATUS_HTTP_ROUTE,
+};
 use super::chat::{chat_status_json, handle_chat_request, handle_models_request};
 use super::dashboard_auth;
 use super::discovery::discover_sessions;
@@ -108,9 +112,43 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
         }
     }
 
+    if path.starts_with("/api/stream/") {
+        let body_str = if matches!(method, "POST" | "PUT" | "PATCH" | "DELETE") {
+            read_post_body(&mut stream, &buf, n).await
+        } else {
+            String::new()
+        };
+        if let Some(port) = stream_api_port(path) {
+            match proxy_local_http_api_request(port, method, raw_path, &body_str).await {
+                Ok(response) => {
+                    let _ = stream.write_all(&response).await;
+                    return;
+                }
+                Err(err) => {
+                    write_json_error(
+                        &mut stream,
+                        "502 Bad Gateway",
+                        &format!("Stream API proxy failed: {}", err),
+                    )
+                    .await;
+                    return;
+                }
+            }
+        }
+        write_json_error(&mut stream, "400 Bad Request", "Invalid stream API port").await;
+        return;
+    }
+
     if method == "POST" && path == "/api/chat" {
         let body_str = read_post_body(&mut stream, &buf, n).await;
         handle_chat_request(&mut stream, &body_str, origin.as_deref()).await;
+        return;
+    }
+
+    if method == "POST" && path == APP_INTELLIGENCE_INSPECT_HTTP_ROUTE {
+        let body_str = read_post_body(&mut stream, &buf, n).await;
+        let (status, value) = inspect_workspace_response(&body_str);
+        write_json_value(&mut stream, status, value).await;
         return;
     }
 
@@ -174,6 +212,12 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
             "application/json; charset=utf-8",
             chat_status_json().into_bytes(),
         )
+    } else if path == APP_INTELLIGENCE_STATUS_HTTP_ROUTE {
+        (
+            "200 OK",
+            "application/json; charset=utf-8",
+            app_intelligence_status_json().to_string().into_bytes(),
+        )
     } else {
         serve_embedded_file(path)
     };
@@ -186,6 +230,17 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
     );
     let _ = stream.write_all(response.as_bytes()).await;
     let _ = stream.write_all(&body).await;
+}
+
+fn stream_api_port(path: &str) -> Option<u16> {
+    let rest = path.strip_prefix("/api/stream/")?;
+    let raw_port = rest.split('/').next()?;
+    let port = raw_port.parse::<u16>().ok()?;
+    if port > 0 {
+        Some(port)
+    } else {
+        None
+    }
 }
 
 async fn handle_service_api_request(
@@ -667,6 +722,18 @@ async fn write_json_error(stream: &mut tokio::net::TcpStream, status: &str, erro
         "error": error,
     })
     .to_string();
+    let response = format!(
+        "HTTP/1.1 {status}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n{CORS_HEADERS}\r\n",
+        body.len()
+    );
+    let _ = stream.write_all(response.as_bytes()).await;
+    let _ = stream.write_all(body.as_bytes()).await;
+}
+
+async fn write_json_value(stream: &mut tokio::net::TcpStream, status: &str, value: Value) {
+    let body = serde_json::to_string(&value).unwrap_or_else(|_| {
+        r#"{"success":false,"error":"Failed to serialize JSON response"}"#.to_string()
+    });
     let response = format!(
         "HTTP/1.1 {status}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n{CORS_HEADERS}\r\n",
         body.len()
