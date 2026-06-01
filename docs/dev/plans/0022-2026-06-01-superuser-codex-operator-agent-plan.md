@@ -686,3 +686,37 @@ Remaining work:
   workspace actions now that confirmation execution exists
 - prove a confirmed screenshot action against a live selected browser
 - add launch and workspace-switching service tools for new-browser workflows
+
+### 2026-06-01 | J5 Launch Browser Workspace Proposal
+
+Added the first launch/workspace-management action:
+
+- detect new-browser, launch-browser, new-workspace, and new-session intent in
+  the superuser prompt
+- add an audited `propose_launch_browser` tool call that does not require a
+  currently controllable selected session
+- expose a service-mediated `tab_new` request with launch posture fields:
+  `browserBuild=stealthcdp_chromium`, private virtual display isolation,
+  profile lease wait, CDP stream provider, and CDP input provider
+- preserve optional target URL from the prompt and route it through the service
+  request payload
+- avoid also proposing navigation against the currently selected browser when
+  the prompt clearly asks for a new browser/workspace
+
+Validation:
+
+```bash
+pnpm test:dashboard-superuser-operator-agent
+pnpm test:dashboard-contextual-chat
+cargo fmt --manifest-path cli/Cargo.toml -- --check
+cargo test --manifest-path cli/Cargo.toml app_intelligence -- --nocapture
+pnpm build:dashboard
+```
+
+Remaining work:
+
+- use service job results to offer a follow-up viewport switch to the newly
+  launched browser/workspace
+- add live launch smoke once display capacity is available
+- add destructive service action proposals for close, prune, storage, and broad
+  workspace actions

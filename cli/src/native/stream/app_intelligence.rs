@@ -477,7 +477,7 @@ fn operator_tool_manifest() -> Value {
             "label": "Browser tools",
             "enabled": true,
             "reason": "Read selected browser identity and prepare scoped navigation actions for the human superuser to apply",
-            "tools": ["describe_selected_browser", "propose_focus", "propose_navigate", "propose_new_tab", "propose_wait"]
+            "tools": ["describe_selected_browser", "propose_launch_browser", "propose_focus", "propose_navigate", "propose_new_tab", "propose_wait"]
         },
         {
             "id": "dom",
@@ -627,11 +627,8 @@ fn operator_action_tool_calls(
         .map(str::to_string);
     let mut calls = Vec::new();
     for action in operator_prompt_actions(prompt) {
-        let status = if controllable && session_id.is_some() {
-            "proposed"
-        } else {
-            "blocked"
-        };
+        let target_ready = !action.requires_target || (controllable && session_id.is_some());
+        let status = if target_ready { "proposed" } else { "blocked" };
         let summary = if status == "proposed" {
             format!(
                 "Prepared a scoped service-mediated {} action for the selected browser. The human superuser must apply it from the dashboard.",
@@ -747,16 +744,10 @@ fn operator_executable_actions(prompt: &str, packet: &Value, identity: &Operator
         .pointer("/workspace/controllable")
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    if !controllable {
-        return json!([]);
-    }
     let session_id = packet
         .pointer("/selection/sessionId")
         .and_then(Value::as_str)
         .or_else(|| packet.pointer("/workspace/id").and_then(Value::as_str));
-    let Some(session_id) = session_id else {
-        return json!([]);
-    };
     let browser_id = packet
         .pointer("/selection/browserId")
         .cloned()
@@ -767,13 +758,18 @@ fn operator_executable_actions(prompt: &str, packet: &Value, identity: &Operator
         .unwrap_or(Value::Null);
     let mut actions = Vec::new();
     for action in operator_prompt_actions(prompt) {
+        if action.requires_target && (!controllable || session_id.is_none()) {
+            continue;
+        }
         let mut params = json!({
-            "sessionName": session_id,
             "browserId": browser_id,
             "targetId": target_id,
             "by": identity.username,
             "reason": "superuser_operator_request"
         });
+        if let Some(session_id) = session_id {
+            params["sessionName"] = json!(session_id);
+        }
         if let Some(url) = action.url.as_deref() {
             params["url"] = json!(url);
         }
@@ -791,6 +787,12 @@ fn operator_executable_actions(prompt: &str, packet: &Value, identity: &Operator
             "params": params,
             "jobTimeoutMs": 30000
         });
+        let mut request = request;
+        if let Some(object) = request.as_object_mut() {
+            for (key, value) in action.request_fields {
+                object.insert(key.to_string(), value);
+            }
+        }
         if action.requires_confirmation {
             let confirmation_id = format!(
                 "confirm-{}-{}",
@@ -981,29 +983,70 @@ struct OperatorPromptAction {
     reason: &'static str,
     confirmation_risk: &'static str,
     requires_confirmation: bool,
+    requires_target: bool,
     url: Option<String>,
     selector: Option<String>,
+    request_fields: Vec<(&'static str, Value)>,
     extra_params: Vec<(&'static str, Value)>,
 }
 
 fn operator_prompt_actions(prompt: &str) -> Vec<OperatorPromptAction> {
     let lower = prompt.to_lowercase();
     let mut actions = Vec::new();
-    if let Some(url) = extract_navigation_url(prompt) {
+    let launch_intent = lower.contains("new browser")
+        || lower.contains("launch browser")
+        || lower.contains("open browser")
+        || lower.contains("new workspace")
+        || lower.contains("new session");
+    if launch_intent {
+        let url = extract_navigation_url(prompt);
         actions.push(OperatorPromptAction {
-            action_id: "navigate-selected-browser",
-            label: "Navigate selected browser",
+            action_id: "launch-browser-workspace",
+            label: "Launch browser workspace",
             group: "browser",
-            tool: "propose_navigate",
-            contract_action: "navigate",
-            task_name: "superuser-operator-navigate",
-            reason: "Submits the existing service request navigate contract for the audited selected browser target.",
-            confirmation_risk: "Navigation can change authenticated page state if the selected browser is signed in.",
+            tool: "propose_launch_browser",
+            contract_action: "tab_new",
+            task_name: "superuser-operator-launch-browser",
+            reason: "Submits the existing tab_new service request contract with launch posture fields so the service can create or reuse a browser workspace.",
+            confirmation_risk: "Launching a browser can allocate a profile lease and a private virtual display.",
             requires_confirmation: false,
-            url: Some(url),
+            requires_target: false,
+            url: url.clone(),
             selector: None,
-            extra_params: vec![("waitUntil", json!("load"))],
+            request_fields: vec![
+                ("browserBuild", json!("stealthcdp_chromium")),
+                ("displayIsolation", json!("private_virtual_display")),
+                ("profileLeasePolicy", json!("wait")),
+                ("profileLeaseWaitTimeoutMs", json!(30_000)),
+            ],
+            extra_params: vec![
+                ("headless", json!(false)),
+                ("browserBuild", json!("stealthcdp_chromium")),
+                ("displayIsolation", json!("private_virtual_display")),
+                ("viewStreamProvider", json!("cdp")),
+                ("controlInputProvider", json!("cdp")),
+            ],
         });
+    }
+    if !launch_intent {
+        if let Some(url) = extract_navigation_url(prompt) {
+            actions.push(OperatorPromptAction {
+                action_id: "navigate-selected-browser",
+                label: "Navigate selected browser",
+                group: "browser",
+                tool: "propose_navigate",
+                contract_action: "navigate",
+                task_name: "superuser-operator-navigate",
+                reason: "Submits the existing service request navigate contract for the audited selected browser target.",
+                confirmation_risk: "Navigation can change authenticated page state if the selected browser is signed in.",
+                requires_confirmation: false,
+                requires_target: true,
+                url: Some(url),
+                selector: None,
+                request_fields: Vec::new(),
+                extra_params: vec![("waitUntil", json!("load"))],
+            });
+        }
     }
     if lower.contains("focus")
         || lower.contains("bring to front")
@@ -1019,8 +1062,10 @@ fn operator_prompt_actions(prompt: &str) -> Vec<OperatorPromptAction> {
             reason: "Submits the existing view_focus service request contract for the audited selected browser target.",
             confirmation_risk: "Focusing changes the visible service-owned browser window only.",
             requires_confirmation: false,
+            requires_target: true,
             url: None,
             selector: None,
+            request_fields: Vec::new(),
             extra_params: vec![("maximize", json!(true))],
         });
     }
@@ -1035,8 +1080,10 @@ fn operator_prompt_actions(prompt: &str) -> Vec<OperatorPromptAction> {
             reason: "Submits the existing tab_new service request contract for the audited selected browser target.",
             confirmation_risk: "Opening a new tab changes selected browser tab state.",
             requires_confirmation: false,
+            requires_target: true,
             url: extract_navigation_url(prompt).or_else(|| Some("about:blank".to_string())),
             selector: None,
+            request_fields: Vec::new(),
             extra_params: Vec::new(),
         });
     }
@@ -1051,8 +1098,10 @@ fn operator_prompt_actions(prompt: &str) -> Vec<OperatorPromptAction> {
             reason: "Submits the existing snapshot service request contract for read-only DOM discovery on the audited selected browser target.",
             confirmation_risk: "DOM snapshots can expose visible page text but omit raw browser secrets by default.",
             requires_confirmation: false,
+            requires_target: true,
             url: None,
             selector: None,
+            request_fields: Vec::new(),
             extra_params: vec![("interactive", json!(true))],
         });
     }
@@ -1071,10 +1120,12 @@ fn operator_prompt_actions(prompt: &str) -> Vec<OperatorPromptAction> {
             reason: "Submits the existing count service request contract for scoped selector discovery on the audited selected browser target.",
             confirmation_risk: "Selector count is read-only and returns aggregate DOM match count.",
             requires_confirmation: false,
+            requires_target: true,
             url: None,
             selector: extract_selector_after(prompt, "query")
                 .or_else(|| extract_selector(prompt))
                 .or_else(|| Some("body".to_string())),
+            request_fields: Vec::new(),
             extra_params: Vec::new(),
         });
     }
@@ -1089,10 +1140,12 @@ fn operator_prompt_actions(prompt: &str) -> Vec<OperatorPromptAction> {
             reason: "Submits the existing click service request contract for the audited selected browser target and selector.",
             confirmation_risk: "Click can activate page controls in the selected browser.",
             requires_confirmation: false,
+            requires_target: true,
             url: None,
             selector: extract_selector_after(prompt, "click")
                 .or_else(|| extract_selector(prompt))
                 .or_else(|| Some("body".to_string())),
+            request_fields: Vec::new(),
             extra_params: Vec::new(),
         });
     }
@@ -1107,11 +1160,13 @@ fn operator_prompt_actions(prompt: &str) -> Vec<OperatorPromptAction> {
             reason: "Submits the existing type service request contract for the audited selected browser target and selector.",
             confirmation_risk: "Typing inserts the provided text into the selected browser.",
             requires_confirmation: false,
+            requires_target: true,
             url: None,
             selector: extract_selector_after(prompt, "into")
                 .or_else(|| extract_selector_after(prompt, "in"))
                 .or_else(|| extract_selector(prompt))
                 .or_else(|| Some("body".to_string())),
+            request_fields: Vec::new(),
             extra_params: vec![(
                 "text",
                 json!(extract_quoted_text(prompt).unwrap_or_default()),
@@ -1129,8 +1184,10 @@ fn operator_prompt_actions(prompt: &str) -> Vec<OperatorPromptAction> {
             reason: "Submits the existing press service request contract for the audited selected browser target.",
             confirmation_risk: "Key press can submit forms or activate focused controls.",
             requires_confirmation: false,
+            requires_target: true,
             url: None,
             selector: extract_selector_after(prompt, "in").or_else(|| extract_selector_after(prompt, "on")),
+            request_fields: Vec::new(),
             extra_params: vec![("key", json!(extract_key(prompt)))],
         });
     }
@@ -1145,8 +1202,10 @@ fn operator_prompt_actions(prompt: &str) -> Vec<OperatorPromptAction> {
             reason: "Submits the existing scroll service request contract for the audited selected browser target.",
             confirmation_risk: "Scroll changes viewport position only.",
             requires_confirmation: false,
+            requires_target: true,
             url: None,
             selector: extract_selector_after(prompt, "scroll").or_else(|| extract_selector(prompt)),
+            request_fields: Vec::new(),
             extra_params: vec![
                 ("direction", json!(extract_scroll_direction(prompt))),
                 ("amount", json!(600)),
@@ -1164,8 +1223,10 @@ fn operator_prompt_actions(prompt: &str) -> Vec<OperatorPromptAction> {
             reason: "Prepares the existing screenshot service request contract, but confirmation execution must collect privacy intent before capture.",
             confirmation_risk: "Screenshots can capture private visible page content and require explicit superuser confirmation before execution.",
             requires_confirmation: true,
+            requires_target: true,
             url: None,
             selector: extract_selector(prompt),
+            request_fields: Vec::new(),
             extra_params: vec![("fullPage", json!(lower.contains("full page")))],
         });
     }
@@ -1180,8 +1241,10 @@ fn operator_prompt_actions(prompt: &str) -> Vec<OperatorPromptAction> {
             reason: "Submits the existing wait service request contract for the audited selected browser target.",
             confirmation_risk: "Wait observes page state without mutating it.",
             requires_confirmation: false,
+            requires_target: true,
             url: None,
             selector: extract_selector(prompt),
+            request_fields: Vec::new(),
             extra_params: vec![("state", json!("visible")), ("timeout", json!(10_000))],
         });
     }
@@ -1623,6 +1686,77 @@ mod tests {
         assert_eq!(
             body["data"]["dashboardActions"][1]["request"]["params"]["sessionName"],
             "default"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn operator_turn_prepares_launch_browser_action_without_selected_target() {
+        let _guard = APP_INTELLIGENCE_ENV_LOCK.lock().unwrap();
+        let root = env::temp_dir().join(format!(
+            "agent-browser-operator-launch-{}",
+            uuid::Uuid::new_v4()
+        ));
+        env::set_var("AGENT_BROWSER_APP_INTELLIGENCE_RUN_ROOT", &root);
+        env::set_var(
+            "AGENT_BROWSER_APP_INTELLIGENCE_OPERATOR_MODE",
+            "deterministic",
+        );
+        let identity = OperatorIdentity {
+            username: "admin".to_string(),
+            display_name: "Default superuser".to_string(),
+            role: "superuser".to_string(),
+        };
+        let mut packet = fixture_packet();
+        packet["workspace"]["controllable"] = json!(false);
+        packet["selection"]["sessionId"] = Value::Null;
+        let request = json!({
+            "prompt": "Open a new browser to https://example.com",
+            "packet": packet,
+        });
+        let (status, body) = operator_turn_response(&request.to_string(), &identity);
+        env::remove_var("AGENT_BROWSER_APP_INTELLIGENCE_RUN_ROOT");
+        env::remove_var("AGENT_BROWSER_APP_INTELLIGENCE_OPERATOR_MODE");
+
+        assert_eq!(status, "200 OK");
+        assert_eq!(body["success"], true);
+        let tools = body["data"]["toolCalls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|call| call.get("tool").and_then(Value::as_str))
+            .collect::<Vec<_>>();
+        assert!(tools.contains(&"propose_launch_browser"));
+        assert!(!tools.contains(&"propose_navigate"));
+        let launch_action = body["data"]["dashboardActions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|action| {
+                action.pointer("/request/action").and_then(Value::as_str) == Some("tab_new")
+            })
+            .unwrap();
+        assert_eq!(launch_action["kind"], "service_request");
+        assert_eq!(
+            launch_action["request"]["browserBuild"],
+            "stealthcdp_chromium"
+        );
+        assert_eq!(
+            launch_action["request"]["displayIsolation"],
+            "private_virtual_display"
+        );
+        assert_eq!(launch_action["request"]["profileLeasePolicy"], "wait");
+        assert_eq!(
+            launch_action["request"]["params"]["viewStreamProvider"],
+            "cdp"
+        );
+        assert_eq!(
+            launch_action["request"]["params"]["controlInputProvider"],
+            "cdp"
+        );
+        assert_eq!(
+            launch_action["request"]["params"]["url"],
+            "https://example.com"
         );
         let _ = fs::remove_dir_all(root);
     }
