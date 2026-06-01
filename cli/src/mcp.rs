@@ -9336,40 +9336,49 @@ fn profile_seeding_handoff_resource(uri: &str) -> Option<(String, Option<String>
 mod tests {
     use super::*;
 
+    fn assert_static_service_resource_uris(resources: &Value) {
+        let uris = resources
+            .as_array()
+            .expect("resources should be an array")
+            .iter()
+            .map(|resource| {
+                resource["uri"]
+                    .as_str()
+                    .expect("resource uri should be a string")
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            uris,
+            vec![
+                SERVICE_CONTRACTS_RESOURCE,
+                SERVICE_ACCESS_PLAN_MCP_RESOURCE,
+                SERVICE_BROWSER_CAPABILITY_REGISTRY_RESOURCE,
+                INCIDENTS_RESOURCE,
+                PROFILES_RESOURCE,
+                SESSIONS_RESOURCE,
+                BROWSERS_RESOURCE,
+                SERVICE_DISPLAY_ALLOCATIONS_MCP_RESOURCE,
+                SERVICE_REMOTE_VIEW_ROUTES_MCP_RESOURCE,
+                SERVICE_ROUTE_POOL_MCP_RESOURCE,
+                SERVICE_VIEWER_LEASES_MCP_RESOURCE,
+                TABS_RESOURCE,
+                MONITORS_RESOURCE,
+                SITE_POLICIES_RESOURCE,
+                PROVIDERS_RESOURCE,
+                CHALLENGES_RESOURCE,
+                JOBS_RESOURCE,
+                EVENTS_RESOURCE,
+            ]
+        );
+    }
+
     #[test]
     fn mcp_resources_lists_read_only_service_resources() {
         let response = mcp_command_response(&["mcp".to_string(), "resources".to_string()]).unwrap();
 
         assert_eq!(response["success"], true);
-        assert_eq!(
-            response["data"]["resources"][0]["uri"],
-            SERVICE_CONTRACTS_RESOURCE
-        );
-        assert_eq!(
-            response["data"]["resources"][1]["uri"],
-            SERVICE_ACCESS_PLAN_MCP_RESOURCE
-        );
-        assert_eq!(
-            response["data"]["resources"][2]["uri"],
-            SERVICE_BROWSER_CAPABILITY_REGISTRY_RESOURCE
-        );
-        assert_eq!(response["data"]["resources"][3]["uri"], INCIDENTS_RESOURCE);
-        assert_eq!(response["data"]["resources"][4]["uri"], PROFILES_RESOURCE);
-        assert_eq!(response["data"]["resources"][5]["uri"], SESSIONS_RESOURCE);
-        assert_eq!(response["data"]["resources"][6]["uri"], BROWSERS_RESOURCE);
-        assert_eq!(response["data"]["resources"][7]["uri"], TABS_RESOURCE);
-        assert_eq!(response["data"]["resources"][8]["uri"], MONITORS_RESOURCE);
-        assert_eq!(
-            response["data"]["resources"][9]["uri"],
-            SITE_POLICIES_RESOURCE
-        );
-        assert_eq!(response["data"]["resources"][10]["uri"], PROVIDERS_RESOURCE);
-        assert_eq!(
-            response["data"]["resources"][11]["uri"],
-            CHALLENGES_RESOURCE
-        );
-        assert_eq!(response["data"]["resources"][12]["uri"], JOBS_RESOURCE);
-        assert_eq!(response["data"]["resources"][13]["uri"], EVENTS_RESOURCE);
+        assert_static_service_resource_uris(&response["data"]["resources"]);
         assert_eq!(
             response["data"]["resourceTemplates"][0]["uriTemplate"],
             ACCESS_PLAN_TEMPLATE
@@ -9513,41 +9522,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(response["id"], "r1");
-        assert_eq!(
-            response["result"]["resources"][0]["uri"],
-            SERVICE_CONTRACTS_RESOURCE
-        );
-        assert_eq!(
-            response["result"]["resources"][1]["uri"],
-            SERVICE_ACCESS_PLAN_MCP_RESOURCE
-        );
-        assert_eq!(
-            response["result"]["resources"][2]["uri"],
-            SERVICE_BROWSER_CAPABILITY_REGISTRY_RESOURCE
-        );
-        assert_eq!(
-            response["result"]["resources"][3]["uri"],
-            INCIDENTS_RESOURCE
-        );
-        assert_eq!(response["result"]["resources"][4]["uri"], PROFILES_RESOURCE);
-        assert_eq!(response["result"]["resources"][5]["uri"], SESSIONS_RESOURCE);
-        assert_eq!(response["result"]["resources"][6]["uri"], BROWSERS_RESOURCE);
-        assert_eq!(response["result"]["resources"][7]["uri"], TABS_RESOURCE);
-        assert_eq!(response["result"]["resources"][8]["uri"], MONITORS_RESOURCE);
-        assert_eq!(
-            response["result"]["resources"][9]["uri"],
-            SITE_POLICIES_RESOURCE
-        );
-        assert_eq!(
-            response["result"]["resources"][10]["uri"],
-            PROVIDERS_RESOURCE
-        );
-        assert_eq!(
-            response["result"]["resources"][11]["uri"],
-            CHALLENGES_RESOURCE
-        );
-        assert_eq!(response["result"]["resources"][12]["uri"], JOBS_RESOURCE);
-        assert_eq!(response["result"]["resources"][13]["uri"], EVENTS_RESOURCE);
+        assert_static_service_resource_uris(&response["result"]["resources"]);
     }
 
     #[test]

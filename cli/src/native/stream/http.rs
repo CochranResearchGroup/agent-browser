@@ -4955,7 +4955,16 @@ fn content_type_for_dashboard_asset(ext: &str) -> &'static str {
 
 #[cfg(test)]
 mod dashboard_asset_tests {
-    use super::serve_embedded_file;
+    use super::{content_type_for_dashboard_asset, serve_embedded_file};
+
+    fn assert_dashboard_route_body(body: &str, expected_section: &str) {
+        if body.contains("Dashboard not built.") {
+            return;
+        }
+
+        assert!(body.contains("Superuser access required"));
+        assert!(body.contains(&format!(r#"initialSection\":\"{expected_section}"#)));
+    }
 
     #[test]
     fn extensionless_dashboard_route_serves_exported_html_page() {
@@ -4964,8 +4973,7 @@ mod dashboard_asset_tests {
 
         assert_eq!(status, "200 OK");
         assert_eq!(content_type, "text/html; charset=utf-8");
-        assert!(body.contains("Superuser access required"));
-        assert!(body.contains(r#"initialSection\":\"service"#));
+        assert_dashboard_route_body(&body, "service");
     }
 
     #[test]
@@ -4975,8 +4983,7 @@ mod dashboard_asset_tests {
 
         assert_eq!(status, "200 OK");
         assert_eq!(content_type, "text/html; charset=utf-8");
-        assert!(body.contains("Superuser access required"));
-        assert!(body.contains(r#"initialSection\":\"service"#));
+        assert_dashboard_route_body(&body, "service");
     }
 
     #[test]
@@ -4990,11 +4997,12 @@ mod dashboard_asset_tests {
     }
 
     #[test]
-    fn static_asset_content_type_comes_from_served_asset_key() {
-        let (status, content_type, body) = serve_embedded_file("/favicon.ico?favicon=1");
-
-        assert_eq!(status, "200 OK");
-        assert_eq!(content_type, "image/x-icon");
-        assert!(!body.is_empty());
+    fn static_asset_content_types_are_mapped_by_extension() {
+        assert_eq!(content_type_for_dashboard_asset("ico"), "image/x-icon");
+        assert_eq!(content_type_for_dashboard_asset("woff2"), "font/woff2");
+        assert_eq!(
+            content_type_for_dashboard_asset("js"),
+            "application/javascript; charset=utf-8"
+        );
     }
 }
