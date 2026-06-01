@@ -848,3 +848,43 @@ Remaining work:
 
 - add hosted admin/observer and live browser-operation smokes for the full
   Plan 0022 completion criteria
+
+### 2026-06-01 | J6 Hosted Operator Smoke
+
+Added a dedicated hosted/runtime smoke for Plan 0022:
+
+- add `scripts/smoke-dashboard-operator-plan0022-live.js`
+- add `pnpm smoke:dashboard-operator-plan0022-live`
+- verify unauthenticated operator status returns `401` without tool leakage
+- verify observer operator status and turn return `403` without tool leakage
+- verify admin superuser can read operator status and receive tool groups
+- verify admin operator turns return confirmation-gated storage and cookie
+  cleanup actions with scoped params
+- optionally run a live operation path that launches/navigates a browser through
+  the operator `tab_new` proposal, then applies operator-proposed `wait`,
+  `type`, `click`, and `snapshot` service requests
+
+Hosted validation:
+
+```bash
+pnpm smoke:dashboard-operator-plan0022-live -- --dashboard-url https://agent-browser.ecochran.dyndns.org/ --json
+pnpm smoke:dashboard-operator-plan0022-live -- --dashboard-url https://agent-browser.ecochran.dyndns.org/ --run-live-operation --json
+pnpm smoke:dashboard-operator-plan0022-live -- --dashboard-url https://agent-browser.ecochran.dyndns.org/ --require-live-operation --json
+```
+
+Observed hosted live-operation proof:
+
+- unauthenticated status: `401`
+- observer status: `403`
+- observer turn: `403`
+- admin status: `200`, role `superuser`
+- cleanup confirmations: `storage_clear` and `cookies_clear`
+- browser operation: launch/navigate, wait, type, click, snapshot
+- snapshot proof: clicked button accessible name changed to `Applied Plan 0022`
+- returned service identity was sufficient to derive a dashboard viewport
+  selection target
+
+Remaining work:
+
+- prove the visible dashboard UI applies the “View launched browser” follow-up
+  and switches the actual viewport route after a launch result

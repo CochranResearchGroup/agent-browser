@@ -26,6 +26,7 @@
     "postinstall": "node scripts/postinstall.js",
     "build:dashboard": "cd packages/dashboard && pnpm build",
     "smoke:local-dashboard-runtime": "node scripts/smoke-local-dashboard-runtime.js",
+    "smoke:dashboard-operator-plan0022-live": "node scripts/smoke-dashboard-operator-plan0022-live.js",
     "publish:local-dashboard": "node scripts/publish-local-dashboard-runtime.js",
     "test:dashboard-trace": "node --no-warnings --experimental-strip-types scripts/test-dashboard-service-trace.js",
     "test:dashboard-view-streams": "node --no-warnings --experimental-strip-types scripts/test-dashboard-view-streams.js",
