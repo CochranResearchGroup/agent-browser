@@ -221,11 +221,20 @@ fn operator_turn_response_inner(
     }
     let run_id = format!("codex-operator-{}", uuid::Uuid::new_v4());
     let created_at = Utc::now().to_rfc3339();
-    let workspace_id = request
-        .pointer("/packet/workspace/id")
+    let packet = request.get("packet").cloned().unwrap_or(Value::Null);
+    let packet_hash = if packet.is_null() {
+        None
+    } else {
+        Some(sha256_json(&packet))
+    };
+    let workspace_id = packet
+        .pointer("/workspace/id")
         .and_then(Value::as_str)
         .map(str::to_string);
     let tool_groups = operator_tool_manifest();
+    let target = operator_target_summary(&packet);
+    let tool_calls = operator_read_tool_calls(&run_id, &created_at, prompt, &packet);
+    let dashboard_actions = operator_dashboard_actions(&packet);
     let response = json!({
         "version": "codex-operator-turn.v1",
         "provider": CONTEXTUAL_CHAT_PROVIDER_ID,
@@ -233,35 +242,28 @@ fn operator_turn_response_inner(
         "runId": run_id,
         "createdAt": created_at,
         "workspaceId": workspace_id,
+        "contextPacketHash": packet_hash,
         "authenticatedUser": {
             "username": identity.username,
             "displayName": identity.display_name,
             "role": identity.role,
         },
-        "summary": "Operator mode is authenticated and staged. Browser and service mutation tools are not enabled until tool contracts and confirmation handling are wired.",
+        "target": target,
+        "summary": operator_turn_summary(&packet, &tool_calls),
         "toolGroups": tool_groups,
-        "proposedNextSteps": [
-            {
-                "label": "Inspect selected workspace",
-                "reason": "Use read tools first so the operator can identify the exact browser, tab, profile, stream, and service state before mutating."
-            },
-            {
-                "label": "Wire dashboard selection tools",
-                "reason": "Switching the viewed workspace is the first safe operator control because it mutates only dashboard selection state."
-            },
-            {
-                "label": "Enable browser and DOM tools behind confirmations",
-                "reason": "Navigation, click, type, close, storage, and profile actions require scoped service/CDP contracts and audit records."
-            }
-        ],
+        "proposedNextSteps": operator_next_steps(&packet),
+        "dashboardActions": dashboard_actions,
         "requiresConfirmation": false,
-        "toolCalls": [],
+        "toolCalls": tool_calls,
         "ledger": {
             "runId": run_id,
             "createdAt": created_at,
             "mode": "superuser-operator",
-            "status": "planned",
+            "status": "read-tools-completed",
             "workspaceId": workspace_id,
+            "contextPacketHash": packet_hash,
+            "target": target,
+            "toolCallCount": tool_calls.as_array().map(|items| items.len()).unwrap_or(0),
             "authenticatedUser": {
                 "username": identity.username,
                 "role": identity.role,
@@ -376,16 +378,16 @@ fn operator_tool_manifest() -> Value {
         {
             "id": "dashboard",
             "label": "Dashboard tools",
-            "enabled": false,
-            "reason": "Tool contract pending",
-            "tools": ["get_selected_workspace", "set_selected_workspace", "switch_inspector_tab", "switch_viewport_mode"]
+            "enabled": true,
+            "reason": "Read selected workspace and return superuser-applied dashboard selection actions",
+            "tools": ["get_selected_workspace", "propose_view_selected_workspace"]
         },
         {
             "id": "browser",
             "label": "Browser tools",
-            "enabled": false,
-            "reason": "Tool contract pending",
-            "tools": ["list_browsers", "focus_tab", "navigate", "new_tab", "wait"]
+            "enabled": true,
+            "reason": "Read selected browser, session, tab, profile, process, and stream identity from the redacted packet",
+            "tools": ["describe_selected_browser"]
         },
         {
             "id": "dom",
@@ -397,9 +399,9 @@ fn operator_tool_manifest() -> Value {
         {
             "id": "debug",
             "label": "Debug evidence tools",
-            "enabled": false,
-            "reason": "Evidence providers pending",
-            "tools": ["console_summary", "network_summary", "storage_summary", "extension_summary", "stream_readiness"]
+            "enabled": true,
+            "reason": "Read stream and runtime readiness from selected workspace evidence",
+            "tools": ["stream_readiness", "runtime_readiness"]
         },
         {
             "id": "service",
@@ -409,6 +411,257 @@ fn operator_tool_manifest() -> Value {
             "tools": ["service_request", "launch_workspace", "repair_stream", "close_browser"]
         }
     ])
+}
+
+fn operator_target_summary(packet: &Value) -> Value {
+    if packet.is_null() {
+        return json!({
+            "workspaceId": Value::Null,
+            "browserId": Value::Null,
+            "sessionId": Value::Null,
+            "tabId": Value::Null,
+            "profileId": Value::Null,
+            "jobId": Value::Null,
+            "label": "No workspace selected",
+            "state": "none",
+            "url": Value::Null,
+        });
+    }
+    json!({
+        "workspaceId": packet.pointer("/workspace/id").cloned().unwrap_or(Value::Null),
+        "browserId": packet.pointer("/selection/browserId").cloned().unwrap_or(Value::Null),
+        "sessionId": packet.pointer("/selection/sessionId").cloned().unwrap_or(Value::Null),
+        "tabId": packet.pointer("/selection/tabId").cloned().unwrap_or(Value::Null),
+        "profileId": packet.pointer("/selection/profileId").cloned().unwrap_or(Value::Null),
+        "jobId": packet.pointer("/selection/jobId").cloned().unwrap_or(Value::Null),
+        "label": packet.pointer("/workspace/label").cloned().unwrap_or(Value::Null),
+        "state": packet.pointer("/workspace/state").cloned().unwrap_or(Value::Null),
+        "url": packet.pointer("/page/url").cloned().unwrap_or(Value::Null),
+    })
+}
+
+fn operator_read_tool_calls(run_id: &str, created_at: &str, prompt: &str, packet: &Value) -> Value {
+    let target = operator_target_summary(packet);
+    let workspace = packet.get("workspace").cloned().unwrap_or(Value::Null);
+    let runtime = packet.get("runtime").cloned().unwrap_or(Value::Null);
+    let stream = packet.get("stream").cloned().unwrap_or(Value::Null);
+    let page = packet.get("page").cloned().unwrap_or(Value::Null);
+    let selection = packet.get("selection").cloned().unwrap_or(Value::Null);
+    let evidence_ids: Vec<Value> = packet
+        .get("evidence")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter(|item| {
+                    item.get("included")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false)
+                })
+                .filter_map(|item| item.get("id").and_then(Value::as_str))
+                .map(|id| Value::String(id.to_string()))
+                .collect()
+        })
+        .unwrap_or_default();
+    json!([
+        {
+            "id": format!("{run_id}:get-selected-workspace"),
+            "group": "dashboard",
+            "tool": "get_selected_workspace",
+            "status": "succeeded",
+            "createdAt": created_at,
+            "target": target,
+            "input": {
+                "promptHash": sha256_text(prompt),
+                "source": "selected-workspace-chat-packet"
+            },
+            "output": {
+                "selection": selection,
+                "workspace": workspace,
+                "page": page,
+                "includedEvidenceIds": evidence_ids,
+            },
+            "summary": "Read the selected workspace identity from the redacted dashboard packet."
+        },
+        {
+            "id": format!("{run_id}:describe-selected-browser"),
+            "group": "browser",
+            "tool": "describe_selected_browser",
+            "status": "succeeded",
+            "createdAt": created_at,
+            "target": target,
+            "input": {
+                "source": "selected-workspace-chat-packet"
+            },
+            "output": {
+                "runtime": runtime,
+                "stream": stream,
+                "page": page,
+                "controllable": packet.pointer("/workspace/controllable").cloned().unwrap_or(Value::Bool(false)),
+                "viewable": packet.pointer("/workspace/viewable").cloned().unwrap_or(Value::Bool(false)),
+                "live": packet.pointer("/workspace/live").cloned().unwrap_or(Value::Bool(false)),
+            },
+            "summary": "Read selected browser runtime, stream, and page readiness from service-owned dashboard evidence."
+        },
+        {
+            "id": format!("{run_id}:stream-readiness"),
+            "group": "debug",
+            "tool": "stream_readiness",
+            "status": "succeeded",
+            "createdAt": created_at,
+            "target": target,
+            "input": {
+                "source": "selected-workspace-chat-packet"
+            },
+            "output": operator_stream_readiness(packet),
+            "summary": "Evaluated embeddable stream, control input, CDP port, stream port, and recent frame evidence."
+        }
+    ])
+}
+
+fn operator_stream_readiness(packet: &Value) -> Value {
+    let embeddable = packet
+        .pointer("/stream/embeddable")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let controllable = packet
+        .pointer("/stream/controllable")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let live = packet
+        .pointer("/workspace/live")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let stream_port = packet
+        .pointer("/runtime/streamPort")
+        .cloned()
+        .unwrap_or(Value::Null);
+    let cdp_port = packet
+        .pointer("/runtime/cdpPort")
+        .cloned()
+        .unwrap_or(Value::Null);
+    let last_frame_at = packet
+        .pointer("/runtime/lastFrameAt")
+        .cloned()
+        .unwrap_or(Value::Null);
+    let ready = live && embeddable && !stream_port.is_null();
+    json!({
+        "ready": ready,
+        "live": live,
+        "embeddable": embeddable,
+        "controllable": controllable,
+        "provider": packet.pointer("/stream/provider").cloned().unwrap_or(Value::Null),
+        "routeSummary": packet.pointer("/stream/routeSummary").cloned().unwrap_or(Value::Null),
+        "controlInput": packet.pointer("/stream/controlInput").cloned().unwrap_or(Value::Null),
+        "cdpPort": cdp_port,
+        "streamPort": stream_port,
+        "lastFrameAt": last_frame_at,
+        "diagnosis": if ready {
+            "Selected workspace reports a live embeddable stream."
+        } else if !live {
+            "Selected workspace is not reporting a live browser."
+        } else if !embeddable {
+            "Selected workspace does not report an embeddable stream."
+        } else {
+            "Selected workspace is missing a stream port."
+        }
+    })
+}
+
+fn operator_dashboard_actions(packet: &Value) -> Value {
+    let workspace_id = packet.pointer("/workspace/id").and_then(Value::as_str);
+    if workspace_id.is_none() {
+        return json!([]);
+    }
+    json!([
+        {
+            "id": "view-selected-workspace",
+            "label": "View selected workspace",
+            "kind": "set_selected_workspace",
+            "requiresConfirmation": false,
+            "selection": {
+                "workspaceId": packet.pointer("/workspace/id").cloned().unwrap_or(Value::Null),
+                "browserId": packet.pointer("/selection/browserId").cloned().unwrap_or(Value::Null),
+                "sessionId": packet.pointer("/selection/sessionId").cloned().unwrap_or(Value::Null),
+                "tabId": packet.pointer("/selection/tabId").cloned().unwrap_or(Value::Null),
+                "profileId": packet.pointer("/selection/profileId").cloned().unwrap_or(Value::Null),
+                "jobId": packet.pointer("/selection/jobId").cloned().unwrap_or(Value::Null),
+            },
+            "reason": "This changes only the dashboard URL selection so the viewport and inspector follow the audited target."
+        }
+    ])
+}
+
+fn operator_turn_summary(packet: &Value, tool_calls: &Value) -> String {
+    if packet.is_null() {
+        return "Operator mode is authenticated, but no workspace packet was supplied. Select a workspace before requesting browser operation.".to_string();
+    }
+    let label = packet
+        .pointer("/workspace/label")
+        .and_then(Value::as_str)
+        .unwrap_or("selected workspace");
+    let state = packet
+        .pointer("/workspace/state")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let stream = operator_stream_readiness(packet);
+    let diagnosis = stream
+        .get("diagnosis")
+        .and_then(Value::as_str)
+        .unwrap_or("Readiness diagnosis unavailable.");
+    let count = tool_calls.as_array().map(|items| items.len()).unwrap_or(0);
+    format!(
+        "Ran {count} audited read tools for {label}: state={state}. {diagnosis} Mutation tools remain disabled until service and DOM contracts are wired."
+    )
+}
+
+fn operator_next_steps(packet: &Value) -> Value {
+    if packet.is_null() {
+        return json!([
+            {
+                "label": "Select a workspace",
+                "reason": "Operator tools need an explicit selected workspace before they can identify browser, tab, profile, stream, and service targets."
+            }
+        ]);
+    }
+    let stream = operator_stream_readiness(packet);
+    let ready = stream
+        .get("ready")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let controllable = packet
+        .pointer("/workspace/controllable")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let mut steps = Vec::new();
+    steps.push(json!({
+        "label": "View audited target",
+        "reason": "Apply the dashboard selection action to align the viewport and inspector with the workspace the operator just inspected."
+    }));
+    if !ready {
+        steps.push(json!({
+            "label": "Inspect stream readiness",
+            "reason": stream.get("diagnosis").and_then(Value::as_str).unwrap_or("Stream readiness needs more evidence.")
+        }));
+    }
+    if controllable {
+        steps.push(json!({
+            "label": "Enable DOM and navigation tools",
+            "reason": "The selected workspace reports control input; the next implementation slice should route click, type, navigate, and wait through audited service/CDP contracts."
+        }));
+    } else {
+        steps.push(json!({
+            "label": "Resolve control path",
+            "reason": "The selected workspace is not marked controllable, so mutation tools should stay disabled until a service-owned control path exists."
+        }));
+    }
+    Value::Array(steps)
+}
+
+fn sha256_text(value: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(value.as_bytes());
+    format!("{:x}", hasher.finalize())
 }
 
 fn write_operator_ledger(run_id: &str, value: &Value) -> Result<(), String> {
@@ -625,7 +878,7 @@ mod tests {
     }
 
     #[test]
-    fn operator_turn_writes_staged_ledger() {
+    fn operator_turn_writes_read_tool_ledger() {
         let _guard = APP_INTELLIGENCE_ENV_LOCK.lock().unwrap();
         let root = env::temp_dir().join(format!(
             "agent-browser-operator-intelligence-{}",
@@ -648,7 +901,12 @@ mod tests {
         assert_eq!(body["success"], true);
         assert_eq!(body["data"]["mode"], "superuser-operator");
         assert_eq!(body["data"]["authenticatedUser"]["username"], "admin");
-        assert_eq!(body["data"]["toolCalls"].as_array().unwrap().len(), 0);
+        assert_eq!(body["data"]["toolCalls"].as_array().unwrap().len(), 3);
+        assert_eq!(body["data"]["ledger"]["status"], "read-tools-completed");
+        assert_eq!(
+            body["data"]["dashboardActions"][0]["kind"],
+            "set_selected_workspace"
+        );
         let run_id = body["data"]["runId"].as_str().unwrap();
         assert!(root.join(run_id).join("operator-turn.json").exists());
         let _ = fs::remove_dir_all(root);

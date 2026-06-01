@@ -66,9 +66,11 @@ assert(
   appIntelligence.includes('superuser-operator') &&
     appIntelligence.includes('operator_tool_manifest') &&
     appIntelligence.includes('write_operator_ledger') &&
-    appIntelligence.includes('Tool contract pending') &&
+    appIntelligence.includes('operator_read_tool_calls') &&
+    appIntelligence.includes('operator_dashboard_actions') &&
+    appIntelligence.includes('read-tools-completed') &&
     appIntelligence.includes('Service-mediated operator contracts pending'),
-  'Operator skeleton must expose staged tool groups and write a ledger before mutation tools are enabled.',
+  'Operator surface must expose audited read tools, dashboard actions, and a ledger before mutation tools are enabled.',
 );
 
 assert(
@@ -77,7 +79,10 @@ assert(
     chatPanel.includes('data-superuser-operator-agent="ready"') &&
     chatPanel.includes('chatMode === "operate"') &&
     chatPanel.includes('isSuperuser') &&
-    chatPanel.includes('Plan operator action'),
+    chatPanel.includes('Plan operator action') &&
+    chatPanel.includes('updateDashboardWorkspaceUrlSelection') &&
+    chatPanel.includes('Tool calls') &&
+    chatPanel.includes('Dashboard actions'),
   'Chat panel must expose Operate only from authenticated superuser context.',
 );
 

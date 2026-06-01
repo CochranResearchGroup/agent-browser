@@ -22,6 +22,10 @@ import {
   APP_INTELLIGENCE_OPERATOR_STATUS_API_URL,
   APP_INTELLIGENCE_OPERATOR_TURN_API_URL,
 } from "@/lib/dashboard-api";
+import {
+  updateDashboardWorkspaceUrlSelection,
+  type DashboardWorkspaceUrlSelection,
+} from "@/lib/workspace-url-selection";
 import { shikiTheme } from "@/lib/shiki-theme";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -380,16 +384,36 @@ type OperatorStatusResponse = {
   };
 };
 
+type OperatorDashboardAction = {
+  id: string;
+  label: string;
+  kind: string;
+  requiresConfirmation?: boolean;
+  selection?: DashboardWorkspaceUrlSelection;
+  reason?: string;
+};
+
+type OperatorToolCall = {
+  id: string;
+  group: string;
+  tool: string;
+  status: string;
+  summary?: string;
+  output?: Record<string, unknown>;
+};
+
 type OperatorTurnResponse = {
   success?: boolean;
   error?: string;
   data?: {
     runId?: string;
     mode?: string;
+    target?: Record<string, unknown>;
     summary?: string;
     proposedNextSteps?: Array<{ label: string; reason: string }>;
     toolGroups?: OperatorToolGroup[];
-    toolCalls?: unknown[];
+    dashboardActions?: OperatorDashboardAction[];
+    toolCalls?: OperatorToolCall[];
     ledger?: unknown;
   };
 };
@@ -607,13 +631,28 @@ function OperatorStatusBlock({
   status,
   latestTurn,
   error,
+  onDashboardAction,
+  appliedActionId,
 }: {
   user: DashboardAuthUser;
   status: OperatorStatusResponse["data"] | null;
   latestTurn: OperatorTurnResponse["data"] | null;
   error: string | null;
+  onDashboardAction: (action: OperatorDashboardAction) => void;
+  appliedActionId: string | null;
 }) {
   const groups = latestTurn?.toolGroups ?? status?.toolGroups ?? [];
+  const toolCalls = latestTurn?.toolCalls ?? [];
+  const dashboardActions = latestTurn?.dashboardActions ?? [];
+  const target = latestTurn?.target ?? {};
+  const targetFacts = [
+    ["Workspace", target.workspaceId],
+    ["Browser", target.browserId],
+    ["Session", target.sessionId],
+    ["Tab", target.tabId],
+    ["Profile", target.profileId],
+    ["State", target.state],
+  ].filter(([, value]) => typeof value === "string" && value.length > 0) as Array<[string, string]>;
   return (
     <div
       className="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-2 text-xs"
@@ -661,6 +700,52 @@ function OperatorStatusBlock({
             {latestTurn.runId && <span className="font-mono">{latestTurn.runId.slice(0, 18)}</span>}
           </div>
           <div className="text-[11px] text-foreground">{latestTurn.summary}</div>
+          {targetFacts.length ? (
+            <div className="grid grid-cols-2 gap-1 text-[10px] sm:grid-cols-3">
+              {targetFacts.map(([label, value]) => (
+                <div key={label} className="min-w-0 rounded border border-border/50 px-1.5 py-0.5">
+                  <span className="text-muted-foreground">{label}</span>{" "}
+                  <span className="font-mono text-foreground break-all">{value}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {toolCalls.length ? (
+            <div className="space-y-1">
+              <div className="text-[10px] uppercase text-muted-foreground">Tool calls</div>
+              <div className="grid gap-1">
+                {toolCalls.map((call) => (
+                  <div key={call.id} className="rounded border border-border/50 px-2 py-1 text-[10px]">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="truncate font-mono text-foreground">{call.tool}</span>
+                      <span className="ml-auto shrink-0 rounded border border-border/50 px-1 py-0.5 text-[9px] text-muted-foreground">
+                        {call.status}
+                      </span>
+                    </div>
+                    {call.summary && <div className="mt-0.5 text-muted-foreground">{call.summary}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {dashboardActions.length ? (
+            <div className="space-y-1">
+              <div className="text-[10px] uppercase text-muted-foreground">Dashboard actions</div>
+              <div className="flex flex-wrap gap-1">
+                {dashboardActions.map((action) => (
+                  <button
+                    key={action.id}
+                    type="button"
+                    onClick={() => onDashboardAction(action)}
+                    className="rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-[10px] text-primary transition-colors hover:bg-primary/15"
+                    title={action.reason}
+                  >
+                    {appliedActionId === action.id ? "Applied" : action.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
           {latestTurn.proposedNextSteps?.length ? (
             <div className="space-y-1">
               {latestTurn.proposedNextSteps.map((step) => (
@@ -698,6 +783,7 @@ export function ChatPanel({
   const [operatorTurn, setOperatorTurn] = useState<OperatorTurnResponse["data"] | null>(null);
   const [operatorError, setOperatorError] = useState<string | null>(null);
   const [operatorSubmitting, setOperatorSubmitting] = useState(false);
+  const [appliedOperatorActionId, setAppliedOperatorActionId] = useState<string | null>(null);
   const [evidenceInclude, setEvidenceInclude] = useState<Partial<Record<SelectedWorkspaceChatEvidenceSource, boolean>>>(DEFAULT_EVIDENCE_INCLUDE);
   const [copiedArtifact, setCopiedArtifact] = useState<"observation" | "packet" | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -938,6 +1024,7 @@ export function ChatPanel({
         throw new Error(payload.error || `Operator turn failed with HTTP ${response.status}`);
       }
       setOperatorTurn(payload.data);
+      setAppliedOperatorActionId(null);
       if (payload.data.toolGroups) {
         setOperatorStatus((prev) => prev ? { ...prev, toolGroups: payload.data?.toolGroups } : prev);
       }
@@ -947,6 +1034,15 @@ export function ChatPanel({
       setOperatorSubmitting(false);
     }
   }, [isSuperuser, selectedWorkspacePacket]);
+
+  const applyOperatorDashboardAction = useCallback((action: OperatorDashboardAction) => {
+    if (action.kind === "set_selected_workspace" && action.selection) {
+      updateDashboardWorkspaceUrlSelection(action.selection, "push");
+      setAppliedOperatorActionId(action.id);
+      return;
+    }
+    setOperatorError(`Unsupported dashboard action: ${action.kind}`);
+  }, []);
 
   const copyArtifact = useCallback(async (artifact: "observation" | "packet") => {
     const payload = artifact === "packet"
@@ -1146,6 +1242,8 @@ export function ChatPanel({
                 status={operatorStatus}
                 latestTurn={operatorTurn}
                 error={operatorError}
+                onDashboardAction={applyOperatorDashboardAction}
+                appliedActionId={appliedOperatorActionId}
               />
             )}
             <CodexEvidenceSelector packet={selectedWorkspacePacket} onToggle={toggleEvidence} />

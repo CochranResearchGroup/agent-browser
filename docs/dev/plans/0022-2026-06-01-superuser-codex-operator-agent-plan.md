@@ -473,3 +473,41 @@ Remaining work:
 - add confirmation execution
 - add hosted browser-operation smokes for active browser operation and
   workspace switching
+
+### 2026-06-01 | J3 Read Tools And Dashboard Action Surface
+
+Moved Operate from a zero-tool placeholder to the first audited operator tool
+surface:
+
+- added host-side read tool calls for selected workspace identity, selected
+  browser/runtime identity, and stream readiness
+- changed the operator ledger status to `read-tools-completed`
+- added `contextPacketHash`, target identity, tool call count, and target facts
+  to the run ledger
+- enabled the dashboard, browser-read, and debug-read tool groups while keeping
+  DOM and service mutation tools disabled
+- added a superuser-applied dashboard action for aligning the viewport and
+  inspector with the audited selected workspace
+- exposed target facts, tool calls, and dashboard actions in the Operate panel
+  without exposing Operate to non-superusers
+
+Validation:
+
+```bash
+pnpm test:dashboard-superuser-operator-agent
+pnpm test:dashboard-contextual-chat
+pnpm build:dashboard
+cargo fmt --manifest-path cli/Cargo.toml -- --check
+cargo test --manifest-path cli/Cargo.toml app_intelligence -- --nocapture
+cargo test --manifest-path cli/Cargo.toml operator_turn_writes_read_tool_ledger -- --nocapture
+cargo clippy --manifest-path cli/Cargo.toml -- -D warnings
+```
+
+Remaining work:
+
+- start Codex app-server with the full superuser operator prompt
+- route real dashboard selection changes that target a different workspace
+  through explicit user intent instead of only applying the current audited
+  selection
+- wire browser, DOM, debug provider, and service action tools
+- add confirmation execution and hosted operation smokes
