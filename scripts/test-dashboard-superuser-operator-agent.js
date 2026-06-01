@@ -15,6 +15,8 @@ function assert(condition, message) {
 
 const auth = read('cli/src/native/stream/dashboard_auth.rs');
 const appIntelligence = read('cli/src/native/stream/app_intelligence.rs');
+const appIntelligenceSupervisor = read('cli/src/native/stream/app_intelligence_supervisor.rs');
+const appIntelligenceSchema = read('cli/src/native/stream/app_intelligence_schema.rs');
 const dashboard = read('cli/src/native/stream/dashboard.rs');
 const http = read('cli/src/native/stream/http.rs');
 const api = read('packages/dashboard/src/lib/dashboard-api.ts');
@@ -66,11 +68,23 @@ assert(
   appIntelligence.includes('superuser-operator') &&
     appIntelligence.includes('operator_tool_manifest') &&
     appIntelligence.includes('write_operator_ledger') &&
+    appIntelligence.includes('operator_guidance_with_supervisor') &&
     appIntelligence.includes('operator_read_tool_calls') &&
     appIntelligence.includes('operator_dashboard_actions') &&
+    appIntelligence.includes('operatorGuidance') &&
     appIntelligence.includes('read-tools-completed') &&
     appIntelligence.includes('Service-mediated operator contracts pending'),
   'Operator surface must expose audited read tools, dashboard actions, and a ledger before mutation tools are enabled.',
+);
+
+assert(
+  appIntelligenceSupervisor.includes('operator_guidance_with_supervisor') &&
+    appIntelligenceSupervisor.includes('agent-browser-superuser-operator') &&
+    appIntelligenceSupervisor.includes('Agent Browser Operator') &&
+    appIntelligenceSupervisor.includes('operator_base_instructions') &&
+    appIntelligenceSchema.includes('operator_guidance_output_schema') &&
+    appIntelligenceSchema.includes('validate_operator_guidance'),
+  'Operator mode must start Codex app-server with operator-specific instructions and a structured guidance schema.',
 );
 
 assert(
@@ -81,6 +95,7 @@ assert(
     chatPanel.includes('isSuperuser') &&
     chatPanel.includes('Plan operator action') &&
     chatPanel.includes('updateDashboardWorkspaceUrlSelection') &&
+    chatPanel.includes('Codex operator guidance') &&
     chatPanel.includes('Tool calls') &&
     chatPanel.includes('Dashboard actions'),
   'Chat panel must expose Operate only from authenticated superuser context.',

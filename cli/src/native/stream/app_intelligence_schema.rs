@@ -191,6 +191,74 @@ pub(crate) fn observation_output_schema() -> Value {
     })
 }
 
+pub(crate) fn operator_guidance_output_schema() -> Value {
+    serde_json::json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+            "summary",
+            "targetAssessment",
+            "recommendedActions",
+            "risks",
+            "confirmationRequired",
+            "confidence"
+        ],
+        "properties": {
+            "summary": { "type": "string" },
+            "targetAssessment": { "type": "string" },
+            "recommendedActions": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["label", "reason", "toolGroup", "requiresConfirmation"],
+                    "properties": {
+                        "label": { "type": "string" },
+                        "reason": { "type": "string" },
+                        "toolGroup": { "type": "string" },
+                        "requiresConfirmation": { "type": "boolean" }
+                    }
+                }
+            },
+            "risks": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["summary", "severity"],
+                    "properties": {
+                        "summary": { "type": "string" },
+                        "severity": { "type": "string", "enum": ["info", "warning", "blocked"] }
+                    }
+                }
+            },
+            "confirmationRequired": { "type": "boolean" },
+            "confidence": { "type": "string", "enum": ["low", "medium", "high"] }
+        }
+    })
+}
+
+pub(crate) fn validate_operator_guidance(guidance: &Value) -> Result<(), String> {
+    for key in ["summary", "targetAssessment", "confidence"] {
+        if !guidance.get(key).is_some_and(Value::is_string) {
+            return Err(format!("Operator guidance `{key}` must be a string."));
+        }
+    }
+    for key in ["recommendedActions", "risks"] {
+        if !guidance.get(key).is_some_and(Value::is_array) {
+            return Err(format!("Operator guidance `{key}` must be an array."));
+        }
+    }
+    if !guidance
+        .get("confirmationRequired")
+        .is_some_and(Value::is_boolean)
+    {
+        return Err("Operator guidance `confirmationRequired` must be a boolean.".to_string());
+    }
+    reject_sensitive_markers(guidance, "Operator guidance")?;
+    Ok(())
+}
+
 fn validate_evidence_references(observation: &Value, packet: &Value) -> Result<(), String> {
     let evidence_ids = packet
         .get("evidence")

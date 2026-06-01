@@ -1,6 +1,7 @@
 use super::app_intelligence_schema::{validate_packet, CONTEXTUAL_CHAT_PROVIDER_ID};
 use super::app_intelligence_supervisor::{
-    inspect_with_supervisor, resolve_codex_bin, InspectionFailure, InspectionInput,
+    inspect_with_supervisor, operator_guidance_with_supervisor, resolve_codex_bin,
+    InspectionFailure, InspectionInput, OperatorGuidanceInput,
 };
 use chrono::Utc;
 use serde_json::{json, Value};
@@ -235,6 +236,35 @@ fn operator_turn_response_inner(
     let target = operator_target_summary(&packet);
     let tool_calls = operator_read_tool_calls(&run_id, &created_at, prompt, &packet);
     let dashboard_actions = operator_dashboard_actions(&packet);
+    let guidance_result = operator_guidance_with_supervisor(OperatorGuidanceInput {
+        run_id: run_id.clone(),
+        created_at: created_at.clone(),
+        prompt: prompt.to_string(),
+        packet: packet.clone(),
+        packet_hash: packet_hash.clone(),
+        workspace_id: workspace_id.clone(),
+        username: identity.username.clone(),
+        tool_manifest: tool_groups.clone(),
+        read_tool_calls: tool_calls.clone(),
+        dashboard_actions: dashboard_actions.clone(),
+    });
+    let (operator_guidance, operator_guidance_ledger, operator_guidance_failure) =
+        match guidance_result {
+            Ok(success) => (success.guidance, success.ledger, Value::Null),
+            Err(failure) => (
+                deterministic_operator_guidance_fallback(&packet, &tool_calls),
+                failure.ledger.unwrap_or(Value::Null),
+                json!({
+                    "code": failure.code,
+                    "message": failure.message,
+                }),
+            ),
+        };
+    let summary = operator_guidance
+        .get("summary")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| operator_turn_summary(&packet, &tool_calls));
     let response = json!({
         "version": "codex-operator-turn.v1",
         "provider": CONTEXTUAL_CHAT_PROVIDER_ID,
@@ -249,7 +279,9 @@ fn operator_turn_response_inner(
             "role": identity.role,
         },
         "target": target,
-        "summary": operator_turn_summary(&packet, &tool_calls),
+        "summary": summary,
+        "operatorGuidance": operator_guidance,
+        "operatorGuidanceFailure": operator_guidance_failure,
         "toolGroups": tool_groups,
         "proposedNextSteps": operator_next_steps(&packet),
         "dashboardActions": dashboard_actions,
@@ -264,6 +296,7 @@ fn operator_turn_response_inner(
             "contextPacketHash": packet_hash,
             "target": target,
             "toolCallCount": tool_calls.as_array().map(|items| items.len()).unwrap_or(0),
+            "codex": operator_guidance_ledger,
             "authenticatedUser": {
                 "username": identity.username,
                 "role": identity.role,
@@ -615,6 +648,60 @@ fn operator_turn_summary(packet: &Value, tool_calls: &Value) -> String {
     )
 }
 
+fn deterministic_operator_guidance_fallback(packet: &Value, tool_calls: &Value) -> Value {
+    let label = packet
+        .pointer("/workspace/label")
+        .and_then(Value::as_str)
+        .unwrap_or("selected workspace");
+    let state = packet
+        .pointer("/workspace/state")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let stream = operator_stream_readiness(packet);
+    let diagnosis = stream
+        .get("diagnosis")
+        .and_then(Value::as_str)
+        .unwrap_or("Stream readiness diagnosis unavailable.");
+    let count = tool_calls.as_array().map(|items| items.len()).unwrap_or(0);
+    let controllable = packet
+        .pointer("/workspace/controllable")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    json!({
+        "summary": format!("Agent Browser Operator reviewed {count} audited read tools for {label}: state={state}. {diagnosis}"),
+        "targetAssessment": format!(
+            "Target scope is workspace={}, browser={}, session={}, tab={}, profile={}.",
+            packet.pointer("/workspace/id").and_then(Value::as_str).unwrap_or("null"),
+            packet.pointer("/selection/browserId").and_then(Value::as_str).unwrap_or("null"),
+            packet.pointer("/selection/sessionId").and_then(Value::as_str).unwrap_or("null"),
+            packet.pointer("/selection/tabId").and_then(Value::as_str).unwrap_or("null"),
+            packet.pointer("/selection/profileId").and_then(Value::as_str).unwrap_or("null"),
+        ),
+        "recommendedActions": [
+            {
+                "label": "Apply audited dashboard selection",
+                "reason": "Align the viewport and inspector with the audited target before mutating browser or service state.",
+                "toolGroup": "dashboard",
+                "requiresConfirmation": false,
+            },
+            {
+                "label": if controllable { "Enable scoped browser and DOM tools next" } else { "Resolve control path before mutation tools" },
+                "reason": if controllable { "The selected workspace reports control input; the next slice should route navigation and DOM operations through audited service/CDP contracts." } else { "The selected workspace is not marked controllable, so mutation tools should remain disabled until the service reports a control path." },
+                "toolGroup": if controllable { "browser" } else { "debug" },
+                "requiresConfirmation": false,
+            }
+        ],
+        "risks": [
+            {
+                "summary": "Codex operator guidance was unavailable, so this fallback uses host-side read tools only.",
+                "severity": "warning",
+            }
+        ],
+        "confirmationRequired": false,
+        "confidence": if stream.get("ready").and_then(Value::as_bool).unwrap_or(false) { "medium" } else { "low" },
+    })
+}
+
 fn operator_next_steps(packet: &Value) -> Value {
     if packet.is_null() {
         return json!([
@@ -885,6 +972,10 @@ mod tests {
             uuid::Uuid::new_v4()
         ));
         env::set_var("AGENT_BROWSER_APP_INTELLIGENCE_RUN_ROOT", &root);
+        env::set_var(
+            "AGENT_BROWSER_APP_INTELLIGENCE_OPERATOR_MODE",
+            "deterministic",
+        );
         let identity = OperatorIdentity {
             username: "admin".to_string(),
             display_name: "Default superuser".to_string(),
@@ -896,6 +987,7 @@ mod tests {
         });
         let (status, body) = operator_turn_response(&request.to_string(), &identity);
         env::remove_var("AGENT_BROWSER_APP_INTELLIGENCE_RUN_ROOT");
+        env::remove_var("AGENT_BROWSER_APP_INTELLIGENCE_OPERATOR_MODE");
 
         assert_eq!(status, "200 OK");
         assert_eq!(body["success"], true);
@@ -903,6 +995,14 @@ mod tests {
         assert_eq!(body["data"]["authenticatedUser"]["username"], "admin");
         assert_eq!(body["data"]["toolCalls"].as_array().unwrap().len(), 3);
         assert_eq!(body["data"]["ledger"]["status"], "read-tools-completed");
+        assert_eq!(
+            body["data"]["operatorGuidance"]["recommendedActions"][0]["toolGroup"],
+            "dashboard"
+        );
+        assert_eq!(
+            body["data"]["ledger"]["codex"]["codex"]["transport"],
+            "deterministic-test"
+        );
         assert_eq!(
             body["data"]["dashboardActions"][0]["kind"],
             "set_selected_workspace"

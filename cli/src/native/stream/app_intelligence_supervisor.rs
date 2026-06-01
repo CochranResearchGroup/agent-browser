@@ -1,6 +1,7 @@
 use super::app_intelligence_schema::{
-    observation_output_schema, reject_sensitive_markers, validate_observation,
-    CODEX_WORKSPACE_OBSERVATION_VERSION, CONTEXTUAL_CHAT_PROVIDER_ID,
+    observation_output_schema, operator_guidance_output_schema, reject_sensitive_markers,
+    validate_observation, validate_operator_guidance, CODEX_WORKSPACE_OBSERVATION_VERSION,
+    CONTEXTUAL_CHAT_PROVIDER_ID,
 };
 use chrono::Utc;
 use serde_json::{json, Value};
@@ -38,6 +39,33 @@ pub(crate) struct InspectionFailure {
     pub(crate) ledger: Option<Value>,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct OperatorGuidanceInput {
+    pub(crate) run_id: String,
+    pub(crate) created_at: String,
+    pub(crate) prompt: String,
+    pub(crate) packet: Value,
+    pub(crate) packet_hash: Option<String>,
+    pub(crate) workspace_id: Option<String>,
+    pub(crate) username: String,
+    pub(crate) tool_manifest: Value,
+    pub(crate) read_tool_calls: Value,
+    pub(crate) dashboard_actions: Value,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct OperatorGuidanceSuccess {
+    pub(crate) guidance: Value,
+    pub(crate) ledger: Value,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct OperatorGuidanceFailure {
+    pub(crate) code: &'static str,
+    pub(crate) message: String,
+    pub(crate) ledger: Option<Value>,
+}
+
 pub(crate) fn inspect_with_supervisor(
     input: InspectionInput,
 ) -> Result<InspectionSuccess, InspectionFailure> {
@@ -65,6 +93,52 @@ pub(crate) fn inspect_with_supervisor(
     match result {
         Ok(mut success) => {
             if let Err(message) = run.write_observation(&success.observation) {
+                return Err(run.failure("ledger_write_failed", message));
+            }
+            if let Ok(ledger) = run.finalize("succeeded", &success.ledger) {
+                success.ledger = ledger;
+            }
+            Ok(success)
+        }
+        Err(mut failure) => {
+            if failure.ledger.is_none() {
+                failure.ledger = run.finalize("failed", &json!({})).ok();
+            }
+            Err(failure)
+        }
+    }
+}
+
+pub(crate) fn operator_guidance_with_supervisor(
+    input: OperatorGuidanceInput,
+) -> Result<OperatorGuidanceSuccess, OperatorGuidanceFailure> {
+    let mut run =
+        OperatorGuidanceRun::create(&input).map_err(|message| OperatorGuidanceFailure {
+            code: "ledger_write_failed",
+            message,
+            ledger: None,
+        })?;
+    run.write_request(&input)
+        .map_err(|message| run.failure("ledger_write_failed", message))?;
+
+    let mode = env::var("AGENT_BROWSER_APP_INTELLIGENCE_OPERATOR_MODE")
+        .or_else(|_| env::var("AGENT_BROWSER_APP_INTELLIGENCE_MODE"))
+        .unwrap_or_else(|_| {
+            if cfg!(test) {
+                "deterministic".to_string()
+            } else {
+                "codex".to_string()
+            }
+        });
+    let result = if mode == "deterministic" {
+        deterministic_operator_guidance(&input, &mut run)
+    } else {
+        run_codex_operator_guidance(&input, &mut run)
+    };
+
+    match result {
+        Ok(mut success) => {
+            if let Err(message) = run.write_guidance(&success.guidance) {
                 return Err(run.failure("ledger_write_failed", message));
             }
             if let Ok(ledger) = run.finalize("succeeded", &success.ledger) {
@@ -197,6 +271,121 @@ fn run_codex_inspection(
     })
 }
 
+fn run_codex_operator_guidance(
+    input: &OperatorGuidanceInput,
+    run: &mut OperatorGuidanceRun,
+) -> Result<OperatorGuidanceSuccess, OperatorGuidanceFailure> {
+    let codex_bin = resolve_codex_bin();
+    let cli_version = codex_cli_version(&codex_bin);
+    let mut client = CodexAppServerClient::start(&codex_bin, run)
+        .map_err(|message| run.failure("codex_unavailable", message))?;
+
+    let initialize = client
+        .request(
+            "initialize",
+            json!({
+                "clientInfo": {
+                    "name": "agent-browser",
+                    "title": "Agent Browser",
+                    "version": env!("CARGO_PKG_VERSION"),
+                },
+                "capabilities": {
+                    "experimentalApi": true,
+                    "requestAttestation": false,
+                    "optOutNotificationMethods": [],
+                },
+            }),
+            Duration::from_secs(10),
+        )
+        .map_err(|message| run.failure("protocol_error", message))?;
+    client
+        .notify("initialized", json!(null))
+        .map_err(|message| run.failure("protocol_error", message))?;
+
+    let thread = client
+        .request(
+            "thread/start",
+            json!({
+                "cwd": env::current_dir().ok().and_then(|path| path.to_str().map(str::to_string)),
+                "approvalPolicy": "never",
+                "sandbox": "read-only",
+                "serviceName": "agent-browser-superuser-operator",
+                "baseInstructions": operator_base_instructions(),
+                "developerInstructions": "Return only the requested JSON object. Do not include markdown fences or prose outside JSON. Use only the supplied redacted packet, audited tool outputs, and manifest.",
+                "ephemeral": true,
+            }),
+            Duration::from_secs(20),
+        )
+        .map_err(|message| run.failure("protocol_error", message))?;
+    let thread_id = thread
+        .pointer("/thread/id")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let thread_id_value = thread_id.clone().ok_or_else(|| {
+        run.failure(
+            "protocol_error",
+            "thread/start did not return a thread id".to_string(),
+        )
+    })?;
+
+    let turn = client
+        .request(
+            "turn/start",
+            json!({
+                "threadId": thread_id_value,
+                "input": [
+                    {
+                        "type": "text",
+                        "text": build_operator_prompt(input),
+                        "text_elements": [],
+                    }
+                ],
+                "approvalPolicy": "never",
+                "sandboxPolicy": {
+                    "type": "readOnly",
+                    "networkAccess": false,
+                },
+                "outputSchema": operator_guidance_output_schema(),
+            }),
+            Duration::from_secs(20),
+        )
+        .map_err(|message| run.failure("protocol_error", message))?;
+    let turn_id = turn
+        .pointer("/turn/id")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+
+    let timeout = Duration::from_secs(
+        env::var("AGENT_BROWSER_APP_INTELLIGENCE_OPERATOR_TURN_TIMEOUT_SECONDS")
+            .or_else(|_| env::var("AGENT_BROWSER_APP_INTELLIGENCE_TURN_TIMEOUT_SECONDS"))
+            .ok()
+            .and_then(|value| value.parse::<u64>().ok())
+            .unwrap_or(DEFAULT_TURN_TIMEOUT_SECONDS),
+    );
+    let output = client
+        .collect_turn_output(thread_id.as_deref(), turn_id.as_deref(), timeout, run)
+        .map_err(|failure| run.failure(failure.0, failure.1))?;
+    let guidance = parse_json_output(&output, "Operator guidance").map_err(|message| {
+        run.write_rejected_output(&output).ok();
+        run.failure("invalid_operator_guidance", message)
+    })?;
+    validate_operator_guidance(&guidance).map_err(|message| {
+        run.write_rejected_output(&output).ok();
+        run.failure("invalid_operator_guidance", message)
+    })?;
+
+    Ok(OperatorGuidanceSuccess {
+        guidance,
+        ledger: json!({
+            "threadId": thread_id,
+            "turnId": turn_id,
+            "transport": "stdio-jsonl",
+            "cliVersion": cli_version,
+            "initialize": initialize,
+        }),
+    })
+}
+
 fn deterministic_inspection(
     input: &InspectionInput,
     run: &mut InspectionRun,
@@ -216,6 +405,25 @@ fn deterministic_inspection(
     })
 }
 
+fn deterministic_operator_guidance(
+    input: &OperatorGuidanceInput,
+    _run: &mut OperatorGuidanceRun,
+) -> Result<OperatorGuidanceSuccess, OperatorGuidanceFailure> {
+    let guidance = build_deterministic_operator_guidance(input);
+    validate_operator_guidance(&guidance).map_err(|message| OperatorGuidanceFailure {
+        code: "invalid_operator_guidance",
+        message,
+        ledger: None,
+    })?;
+    let ledger = json!({
+        "threadId": Value::Null,
+        "turnId": Value::Null,
+        "transport": "deterministic-test",
+        "cliVersion": codex_cli_version(&resolve_codex_bin()),
+    });
+    Ok(OperatorGuidanceSuccess { guidance, ledger })
+}
+
 struct InspectionRun {
     root: PathBuf,
     run_json: PathBuf,
@@ -223,6 +431,17 @@ struct InspectionRun {
     codex_events_jsonl: PathBuf,
     events_jsonl: PathBuf,
     observation_json: PathBuf,
+    rejected_output_json: PathBuf,
+    input_summary: Value,
+}
+
+struct OperatorGuidanceRun {
+    root: PathBuf,
+    run_json: PathBuf,
+    request_json: PathBuf,
+    codex_events_jsonl: PathBuf,
+    events_jsonl: PathBuf,
+    guidance_json: PathBuf,
     rejected_output_json: PathBuf,
     input_summary: Value,
 }
@@ -332,6 +551,149 @@ impl InspectionRun {
     }
 }
 
+impl OperatorGuidanceRun {
+    fn create(input: &OperatorGuidanceInput) -> Result<Self, String> {
+        let root = app_intelligence_run_root()
+            .ok_or_else(|| "Cannot resolve app intelligence run root.".to_string())?
+            .join(&input.run_id);
+        fs::create_dir_all(&root)
+            .map_err(|err| format!("Failed to create operator run directory: {err}"))?;
+        let run = Self {
+            run_json: root.join("operator-run.json"),
+            request_json: root.join("operator-request.json"),
+            codex_events_jsonl: root.join("operator-codex-events.jsonl"),
+            events_jsonl: root.join("operator-events.jsonl"),
+            guidance_json: root.join("operator-guidance.json"),
+            rejected_output_json: root.join("operator-rejected-output.json"),
+            input_summary: json!({
+                "runId": input.run_id,
+                "provider": CONTEXTUAL_CHAT_PROVIDER_ID,
+                "mode": "superuser-operator",
+                "createdAt": input.created_at,
+                "workspaceId": input.workspace_id,
+                "contextPacketHash": input.packet_hash,
+                "authenticatedUser": {
+                    "username": input.username,
+                    "role": "superuser",
+                },
+            }),
+            root,
+        };
+        run.write_event("operator_run_created", json!({}))?;
+        atomic_write_json(&run.run_json, &run.ledger("created", json!({})))?;
+        Ok(run)
+    }
+
+    fn write_request(&self, input: &OperatorGuidanceInput) -> Result<(), String> {
+        let request = json!({
+            "prompt": input.prompt,
+            "packet": input.packet,
+            "packetHash": input.packet_hash,
+            "toolManifest": input.tool_manifest,
+            "readToolCalls": input.read_tool_calls,
+            "dashboardActions": input.dashboard_actions,
+            "authenticatedUser": {
+                "username": input.username,
+                "role": "superuser",
+            },
+        });
+        reject_sensitive_markers(&request, "Operator guidance request artifact")?;
+        atomic_write_json(&self.request_json, &request)
+    }
+
+    fn write_guidance(&self, guidance: &Value) -> Result<(), String> {
+        atomic_write_json(&self.guidance_json, guidance)
+    }
+
+    fn write_rejected_output(&self, output: &str) -> Result<(), String> {
+        atomic_write_json(&self.rejected_output_json, &json!({ "output": output }))
+    }
+
+    fn append_codex_event(&self, value: &Value) -> Result<(), String> {
+        append_jsonl(&self.codex_events_jsonl, value)
+    }
+
+    fn write_event(&self, event: &str, data: Value) -> Result<(), String> {
+        append_jsonl(
+            &self.events_jsonl,
+            &json!({
+                "timestamp": Utc::now().to_rfc3339(),
+                "event": event,
+                "data": data,
+            }),
+        )
+    }
+
+    fn ledger(&self, status: &str, codex: Value) -> Value {
+        json!({
+            "runId": self.input_summary["runId"],
+            "provider": CONTEXTUAL_CHAT_PROVIDER_ID,
+            "mode": "superuser-operator",
+            "createdAt": self.input_summary["createdAt"],
+            "workspaceId": self.input_summary["workspaceId"],
+            "contextPacketHash": self.input_summary["contextPacketHash"],
+            "authenticatedUser": self.input_summary["authenticatedUser"],
+            "status": status,
+            "codex": codex,
+            "policy": {
+                "superuserOnly": true,
+                "sandbox": "read-only",
+                "allowedActions": ["inspect_supplied_context", "explain_operator_plan", "recommend_dashboard_actions"],
+                "forbiddenActions": ["shell_command", "file_write", "secret_access", "unaudited_browser_mutation", "unaudited_service_mutation"],
+            },
+            "artifacts": {
+                "runPath": self.run_json,
+                "requestPath": self.request_json,
+                "eventLogPath": self.codex_events_jsonl,
+                "normalizedEventLogPath": self.events_jsonl,
+                "guidancePath": self.guidance_json,
+            },
+        })
+    }
+
+    fn finalize(&self, status: &str, codex: &Value) -> Result<Value, String> {
+        let ledger = self.ledger(status, codex.clone());
+        atomic_write_json(&self.run_json, &ledger)?;
+        self.write_event("operator_run_finished", json!({ "status": status }))?;
+        Ok(ledger)
+    }
+
+    fn failure(&self, code: &'static str, message: String) -> OperatorGuidanceFailure {
+        self.write_event("failure", json!({ "code": code, "message": message }))
+            .ok();
+        OperatorGuidanceFailure {
+            code,
+            message,
+            ledger: self.finalize("failed", &json!({})).ok(),
+        }
+    }
+}
+
+trait CodexRunEvents {
+    fn write_event(&self, event: &str, data: Value) -> Result<(), String>;
+    fn append_codex_event(&self, value: &Value) -> Result<(), String>;
+}
+
+impl CodexRunEvents for InspectionRun {
+    fn write_event(&self, event: &str, data: Value) -> Result<(), String> {
+        InspectionRun::write_event(self, event, data)
+    }
+
+    fn append_codex_event(&self, value: &Value) -> Result<(), String> {
+        InspectionRun::append_codex_event(self, value)
+    }
+}
+
+impl CodexRunEvents for OperatorGuidanceRun {
+    fn write_event(&self, event: &str, data: Value) -> Result<(), String> {
+        OperatorGuidanceRun::write_event(self, event, data)
+    }
+
+    fn append_codex_event(&self, value: &Value) -> Result<(), String> {
+        OperatorGuidanceRun::append_codex_event(self, value)
+    }
+}
+
 struct CodexAppServerClient {
     child: Child,
     stdin: ChildStdin,
@@ -345,7 +707,7 @@ enum LineEvent {
 }
 
 impl CodexAppServerClient {
-    fn start(bin: &str, run: &InspectionRun) -> Result<Self, String> {
+    fn start(bin: &str, run: &impl CodexRunEvents) -> Result<Self, String> {
         let mut child = Command::new(bin)
             .args(["app-server", "--listen", "stdio://"])
             .stdin(Stdio::piped())
@@ -445,7 +807,7 @@ impl CodexAppServerClient {
         thread_id: Option<&str>,
         turn_id: Option<&str>,
         timeout: Duration,
-        run: &InspectionRun,
+        run: &impl CodexRunEvents,
     ) -> Result<String, (&'static str, String)> {
         let deadline = Instant::now() + timeout;
         let mut output = String::new();
@@ -527,6 +889,41 @@ fn build_prompt(input: &InspectionInput) -> String {
     )
 }
 
+fn operator_base_instructions() -> &'static str {
+    "You are Agent Browser Operator, a superuser-only browser operations agent embedded in the agent-browser dashboard. \
+     You are agent-browser smart: you understand service-owned browser/session/profile/tab state, CDP, streams, Guacamole/RDP readiness, dashboard workspace selection, inspector tabs, and service request contracts. \
+     In this slice you have no direct mutation tools, shell, filesystem, network, private profile access, cookies, storage secrets, or screenshot access. \
+     Use only the supplied redacted selected-workspace packet, audited read-tool outputs, dashboard action manifest, and tool manifest. \
+     Before recommending mutation, identify the target workspace, browser, tab, profile, stream, and service contract. \
+     Require explicit confirmation for destructive, broad, authenticated-profile, storage, cookie, profile-data, close, kill, prune, or ambiguous-target actions. \
+     Prefer service-owned state over frontend guesses. Report concise operator guidance backed by the provided tool-call evidence."
+}
+
+fn build_operator_prompt(input: &OperatorGuidanceInput) -> String {
+    let schema = operator_guidance_output_schema();
+    format!(
+        "Produce superuser operator guidance for the selected browser workspace.\n\
+         Return exactly one JSON object matching the operator guidance schema. No markdown.\n\
+         Do not invent tool results. Do not claim to mutate browser or service state. Do not expose secrets.\n\
+         runId: {}\ncreatedAt: {}\nworkspaceId: {}\nauthenticatedSuperuser: {}\noperatorRequest: {}\n\
+         Operator guidance schema:\n{}\n\
+         Tool manifest:\n{}\n\
+         Audited read tool calls:\n{}\n\
+         Dashboard actions available for the human superuser to apply:\n{}\n\
+         Selected workspace packet:\n{}",
+        input.run_id,
+        input.created_at,
+        input.workspace_id.as_deref().unwrap_or("null"),
+        input.username,
+        input.prompt,
+        serde_json::to_string_pretty(&schema).unwrap_or_else(|_| "{}".to_string()),
+        serde_json::to_string_pretty(&input.tool_manifest).unwrap_or_else(|_| "{}".to_string()),
+        serde_json::to_string_pretty(&input.read_tool_calls).unwrap_or_else(|_| "[]".to_string()),
+        serde_json::to_string_pretty(&input.dashboard_actions).unwrap_or_else(|_| "[]".to_string()),
+        serde_json::to_string_pretty(&input.packet).unwrap_or_else(|_| "{}".to_string()),
+    )
+}
+
 fn response_item_output_text(
     value: &Value,
     thread_id: Option<&str>,
@@ -597,19 +994,23 @@ fn is_policy_event(value: &Value) -> bool {
 }
 
 fn parse_observation_output(output: &str) -> Result<Value, String> {
+    parse_json_output(output, "Codex observation")
+}
+
+fn parse_json_output(output: &str, label: &str) -> Result<Value, String> {
     let trimmed = output.trim();
     if trimmed.is_empty() {
-        return Err("Codex returned an empty observation.".to_string());
+        return Err(format!("{label} output was empty."));
     }
     serde_json::from_str(trimmed).or_else(|_| {
         let start = trimmed
             .find('{')
-            .ok_or_else(|| "Codex output did not contain JSON.".to_string())?;
+            .ok_or_else(|| format!("{label} output did not contain JSON."))?;
         let end = trimmed
             .rfind('}')
-            .ok_or_else(|| "Codex output did not contain a complete JSON object.".to_string())?;
+            .ok_or_else(|| format!("{label} output did not contain a complete JSON object."))?;
         serde_json::from_str(&trimmed[start..=end])
-            .map_err(|err| format!("Codex observation JSON was invalid: {err}"))
+            .map_err(|err| format!("{label} JSON was invalid: {err}"))
     })
 }
 
@@ -700,6 +1101,70 @@ fn build_deterministic_observation(input: &InspectionInput) -> Value {
             "reason": "This App Intelligence supervisor is read-only.",
         }],
         "confidence": if live { "medium" } else { "low" },
+    })
+}
+
+fn build_deterministic_operator_guidance(input: &OperatorGuidanceInput) -> Value {
+    let workspace = input.packet.get("workspace").unwrap_or(&Value::Null);
+    let label = workspace
+        .get("label")
+        .and_then(Value::as_str)
+        .unwrap_or("selected workspace");
+    let state = workspace
+        .get("state")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let live = workspace
+        .get("live")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let viewable = workspace
+        .get("viewable")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let controllable = workspace
+        .get("controllable")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let tool_count = input
+        .read_tool_calls
+        .as_array()
+        .map(|items| items.len())
+        .unwrap_or(0);
+    json!({
+        "summary": format!(
+            "Agent Browser Operator reviewed {tool_count} audited read tools for {label}. The selected workspace is state={state}, live={live}, viewable={viewable}, controllable={controllable}."
+        ),
+        "targetAssessment": format!(
+            "Target scope is workspace={}, browser={}, session={}, tab={}, profile={}.",
+            input.workspace_id.as_deref().unwrap_or("null"),
+            input.packet.pointer("/selection/browserId").and_then(Value::as_str).unwrap_or("null"),
+            input.packet.pointer("/selection/sessionId").and_then(Value::as_str).unwrap_or("null"),
+            input.packet.pointer("/selection/tabId").and_then(Value::as_str).unwrap_or("null"),
+            input.packet.pointer("/selection/profileId").and_then(Value::as_str).unwrap_or("null"),
+        ),
+        "recommendedActions": [
+            {
+                "label": "Apply audited dashboard selection",
+                "reason": "This aligns the viewport and inspector with the selected workspace without mutating browser or service state.",
+                "toolGroup": "dashboard",
+                "requiresConfirmation": false,
+            },
+            {
+                "label": if controllable { "Enable scoped browser and DOM tools next" } else { "Resolve control path before mutation tools" },
+                "reason": if controllable { "The packet reports a controllable stream, so the next slice can route navigation and DOM operations through explicit audited contracts." } else { "The packet does not report control input, so mutation tools should remain disabled until the service reports a control path." },
+                "toolGroup": if controllable { "browser" } else { "debug" },
+                "requiresConfirmation": false,
+            }
+        ],
+        "risks": [
+            {
+                "summary": "Operator guidance is based on the redacted selected-workspace packet and host-side read tools only; DOM and service mutation tools are not enabled yet.",
+                "severity": "info",
+            }
+        ],
+        "confirmationRequired": false,
+        "confidence": if live && viewable { "medium" } else { "low" },
     })
 }
 

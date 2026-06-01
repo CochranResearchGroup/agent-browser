@@ -511,3 +511,42 @@ Remaining work:
   selection
 - wire browser, DOM, debug provider, and service action tools
 - add confirmation execution and hosted operation smokes
+
+### 2026-06-01 | J2/J3 Codex Operator Guidance
+
+Moved Operate from host-only read-tool output to a Codex app-server-backed
+operator guidance path:
+
+- added an operator-specific Codex app-server thread with Agent Browser
+  Operator instructions
+- added a structured operator guidance schema and validator
+- passed selected workspace context, authenticated superuser identity, tool
+  manifest, audited read-tool calls, and dashboard actions into the Codex
+  prompt
+- wrote operator guidance artifacts and Codex event logs under the operator run
+  directory
+- merged Codex guidance into `operator/turn` alongside host-side audited read
+  tools and dashboard actions
+- added a deterministic fallback for guidance failures so read tools still
+  produce an auditable result
+- exposed Codex operator guidance, recommended actions, risk labels, and
+  confidence in the Operate panel
+
+Validation:
+
+```bash
+pnpm test:dashboard-superuser-operator-agent
+pnpm test:dashboard-contextual-chat
+pnpm build:dashboard
+cargo fmt --manifest-path cli/Cargo.toml -- --check
+cargo test --manifest-path cli/Cargo.toml app_intelligence -- --nocapture
+cargo clippy --manifest-path cli/Cargo.toml -- -D warnings
+```
+
+Remaining work:
+
+- provide real browser, DOM, debug-provider, and service action tools to the
+  operator runtime
+- add confirmation execution for destructive or broad actions
+- add hosted browser-operation smokes that prove navigation, DOM discovery, and
+  workspace switching

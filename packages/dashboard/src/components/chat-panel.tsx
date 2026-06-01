@@ -402,6 +402,23 @@ type OperatorToolCall = {
   output?: Record<string, unknown>;
 };
 
+type OperatorGuidance = {
+  summary?: string;
+  targetAssessment?: string;
+  recommendedActions?: Array<{
+    label: string;
+    reason: string;
+    toolGroup: string;
+    requiresConfirmation: boolean;
+  }>;
+  risks?: Array<{
+    summary: string;
+    severity: string;
+  }>;
+  confirmationRequired?: boolean;
+  confidence?: string;
+};
+
 type OperatorTurnResponse = {
   success?: boolean;
   error?: string;
@@ -410,6 +427,8 @@ type OperatorTurnResponse = {
     mode?: string;
     target?: Record<string, unknown>;
     summary?: string;
+    operatorGuidance?: OperatorGuidance;
+    operatorGuidanceFailure?: { code?: string; message?: string } | null;
     proposedNextSteps?: Array<{ label: string; reason: string }>;
     toolGroups?: OperatorToolGroup[];
     dashboardActions?: OperatorDashboardAction[];
@@ -644,6 +663,8 @@ function OperatorStatusBlock({
   const groups = latestTurn?.toolGroups ?? status?.toolGroups ?? [];
   const toolCalls = latestTurn?.toolCalls ?? [];
   const dashboardActions = latestTurn?.dashboardActions ?? [];
+  const guidance = latestTurn?.operatorGuidance;
+  const guidanceFailure = latestTurn?.operatorGuidanceFailure;
   const target = latestTurn?.target ?? {};
   const targetFacts = [
     ["Workspace", target.workspaceId],
@@ -700,6 +721,50 @@ function OperatorStatusBlock({
             {latestTurn.runId && <span className="font-mono">{latestTurn.runId.slice(0, 18)}</span>}
           </div>
           <div className="text-[11px] text-foreground">{latestTurn.summary}</div>
+          {guidance && (
+            <div className="space-y-1 rounded border border-primary/20 bg-primary/5 px-2 py-1 text-[10px]">
+              <div className="flex items-center gap-2">
+                <span className="uppercase text-muted-foreground">Codex operator guidance</span>
+                {guidance.confidence && (
+                  <span className="ml-auto rounded border border-border/50 px-1 py-0.5 text-[9px] text-muted-foreground">
+                    {guidance.confidence}
+                  </span>
+                )}
+              </div>
+              {guidance.targetAssessment && (
+                <div className="text-foreground">{guidance.targetAssessment}</div>
+              )}
+              {guidance.recommendedActions?.length ? (
+                <div className="grid gap-1">
+                  {guidance.recommendedActions.map((action) => (
+                    <div key={`${action.toolGroup}-${action.label}`} className="rounded border border-border/50 px-1.5 py-1">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <span className="truncate font-medium text-foreground">{action.label}</span>
+                        <span className="ml-auto shrink-0 font-mono text-[9px] text-muted-foreground">
+                          {action.toolGroup}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 text-muted-foreground">{action.reason}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {guidance.risks?.length ? (
+                <div className="flex flex-wrap gap-1">
+                  {guidance.risks.map((risk) => (
+                    <span key={risk.summary} className="rounded border border-border/50 px-1.5 py-0.5 text-muted-foreground">
+                      {risk.severity}: {risk.summary}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          )}
+          {guidanceFailure?.message && (
+            <div className="rounded border border-destructive/40 bg-destructive/10 px-2 py-1 text-[10px] text-destructive/90">
+              {guidanceFailure.code ? `${guidanceFailure.code}: ` : ""}{guidanceFailure.message}
+            </div>
+          )}
           {targetFacts.length ? (
             <div className="grid grid-cols-2 gap-1 text-[10px] sm:grid-cols-3">
               {targetFacts.map(([label, value]) => (
