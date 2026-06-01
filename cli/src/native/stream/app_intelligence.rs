@@ -498,7 +498,7 @@ fn operator_tool_manifest() -> Value {
             "label": "Service tools",
             "enabled": true,
             "reason": "Superuser-applied service request actions are available for scoped browser operation and confirmation-gated service management",
-            "tools": ["service_request:navigate", "service_request:view_focus", "service_request:tab_new", "service_request:wait", "service_request:snapshot", "service_request:count", "service_request:click", "service_request:type", "service_request:press", "service_request:scroll", "service_request:service_browser_close", "service_request:service_browser_repair", "service_request:service_prune_retained", "service_request:service_repair_retained"]
+            "tools": ["propose_clear_storage", "propose_clear_cookies", "service_request:navigate", "service_request:view_focus", "service_request:tab_new", "service_request:wait", "service_request:snapshot", "service_request:count", "service_request:click", "service_request:type", "service_request:press", "service_request:scroll", "service_request:storage_clear", "service_request:cookies_clear", "service_request:service_browser_close", "service_request:service_browser_repair", "service_request:service_prune_retained", "service_request:service_repair_retained"]
         }
     ])
 }
@@ -756,6 +756,10 @@ fn operator_executable_actions(prompt: &str, packet: &Value, identity: &Operator
         .pointer("/page/targetId")
         .cloned()
         .unwrap_or(Value::Null);
+    let page_url = packet.pointer("/page/url").and_then(Value::as_str);
+    let profile_id = packet
+        .pointer("/selection/profileId")
+        .and_then(Value::as_str);
     let mut actions = Vec::new();
     for action in operator_prompt_actions(prompt) {
         if action.requires_target && (!controllable || session_id.is_none()) {
@@ -775,6 +779,22 @@ fn operator_executable_actions(prompt: &str, packet: &Value, identity: &Operator
         }
         if let Some(selector) = action.selector.as_deref() {
             params["selector"] = json!(selector);
+        }
+        if matches!(action.contract_action, "storage_clear" | "cookies_clear") {
+            params["scope"] = if action.contract_action == "storage_clear" {
+                json!("selected-tab-origin")
+            } else {
+                json!("selected-browser-profile")
+            };
+            if let Some(page_url) = page_url {
+                params["currentUrl"] = json!(page_url);
+                if let Some(origin) = origin_from_url(page_url) {
+                    params["origin"] = json!(origin);
+                }
+            }
+            if let Some(profile_id) = profile_id {
+                params["profileId"] = json!(profile_id);
+            }
         }
         for (key, value) in action.extra_params {
             params[key] = value;
@@ -1230,6 +1250,53 @@ fn operator_prompt_actions(prompt: &str) -> Vec<OperatorPromptAction> {
             extra_params: vec![("fullPage", json!(lower.contains("full page")))],
         });
     }
+    if lower.contains("clear storage")
+        || lower.contains("clear local storage")
+        || lower.contains("clear localstorage")
+        || lower.contains("clear session storage")
+        || lower.contains("clear sessionstorage")
+    {
+        let storage_type = if lower.contains("session storage") || lower.contains("sessionstorage")
+        {
+            "session"
+        } else {
+            "local"
+        };
+        actions.push(OperatorPromptAction {
+            action_id: "clear-selected-origin-storage",
+            label: "Clear selected origin storage",
+            group: "service",
+            tool: "propose_clear_storage",
+            contract_action: "storage_clear",
+            task_name: "superuser-operator-clear-storage",
+            reason: "Prepares the existing storage_clear contract for the selected browser tab origin and records the active URL, origin, profile, and storage type before execution.",
+            confirmation_risk: "Clearing storage can sign the selected origin out, erase local application state, or remove pending form/session data.",
+            requires_confirmation: true,
+            requires_target: true,
+            url: None,
+            selector: None,
+            request_fields: Vec::new(),
+            extra_params: vec![("type", json!(storage_type))],
+        });
+    }
+    if lower.contains("clear cookies") || lower.contains("clear cookie") {
+        actions.push(OperatorPromptAction {
+            action_id: "clear-selected-profile-cookies",
+            label: "Clear selected profile cookies",
+            group: "service",
+            tool: "propose_clear_cookies",
+            contract_action: "cookies_clear",
+            task_name: "superuser-operator-clear-cookies",
+            reason: "Prepares the existing cookies_clear contract for the selected browser profile and records the active URL, origin, and profile before execution.",
+            confirmation_risk: "Clearing cookies affects the selected browser profile cookie jar and can sign sites out beyond the currently visible origin.",
+            requires_confirmation: true,
+            requires_target: true,
+            url: None,
+            selector: None,
+            request_fields: Vec::new(),
+            extra_params: Vec::new(),
+        });
+    }
     if lower.contains("wait") {
         actions.push(OperatorPromptAction {
             action_id: "wait-selected-browser",
@@ -1366,6 +1433,12 @@ fn extract_navigation_url(prompt: &str) -> Option<String> {
             part.starts_with("https://") || part.starts_with("http://") || *part == "about:blank"
         })
         .map(str::to_string)
+}
+
+fn origin_from_url(value: &str) -> Option<String> {
+    let parsed = url::Url::parse(value).ok()?;
+    let origin = parsed.origin().ascii_serialization();
+    (origin != "null").then_some(origin)
 }
 
 fn extract_selector(prompt: &str) -> Option<String> {
@@ -2090,6 +2163,86 @@ mod tests {
                 .unwrap()
                 .starts_with(confirmation_prefix.as_str()));
         }
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn operator_turn_prepares_scoped_storage_and_cookie_confirmations() {
+        let _guard = APP_INTELLIGENCE_ENV_LOCK.lock().unwrap();
+        let root = env::temp_dir().join(format!(
+            "agent-browser-operator-storage-cookies-{}",
+            uuid::Uuid::new_v4()
+        ));
+        env::set_var("AGENT_BROWSER_APP_INTELLIGENCE_RUN_ROOT", &root);
+        env::set_var(
+            "AGENT_BROWSER_APP_INTELLIGENCE_OPERATOR_MODE",
+            "deterministic",
+        );
+        let identity = OperatorIdentity {
+            username: "admin".to_string(),
+            display_name: "Default superuser".to_string(),
+            role: "superuser".to_string(),
+        };
+        let request = json!({
+            "prompt": "Clear session storage and clear cookies for the selected browser",
+            "packet": fixture_packet(),
+        });
+        let (status, body) = operator_turn_response(&request.to_string(), &identity);
+        env::remove_var("AGENT_BROWSER_APP_INTELLIGENCE_RUN_ROOT");
+        env::remove_var("AGENT_BROWSER_APP_INTELLIGENCE_OPERATOR_MODE");
+
+        assert_eq!(status, "200 OK");
+        assert_eq!(body["success"], true);
+        let tools = body["data"]["toolCalls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|call| call.get("tool").and_then(Value::as_str))
+            .collect::<Vec<_>>();
+        assert!(tools.contains(&"propose_clear_storage"));
+        assert!(tools.contains(&"propose_clear_cookies"));
+
+        let dashboard_actions = body["data"]["dashboardActions"].as_array().unwrap();
+        let storage_action = dashboard_actions
+            .iter()
+            .find(|action| {
+                action.pointer("/request/action").and_then(Value::as_str) == Some("storage_clear")
+            })
+            .unwrap();
+        assert_eq!(storage_action["kind"], "operator_confirmation");
+        assert_eq!(storage_action["requiresConfirmation"], true);
+        assert_eq!(
+            storage_action["request"]["params"]["scope"],
+            "selected-tab-origin"
+        );
+        assert_eq!(storage_action["request"]["params"]["type"], "session");
+        assert_eq!(
+            storage_action["request"]["params"]["origin"],
+            "http://127.0.0.1:38409"
+        );
+        assert_eq!(storage_action["request"]["params"]["profileId"], "default");
+
+        let cookies_action = dashboard_actions
+            .iter()
+            .find(|action| {
+                action.pointer("/request/action").and_then(Value::as_str) == Some("cookies_clear")
+            })
+            .unwrap();
+        assert_eq!(cookies_action["kind"], "operator_confirmation");
+        assert_eq!(cookies_action["requiresConfirmation"], true);
+        assert_eq!(
+            cookies_action["request"]["params"]["scope"],
+            "selected-browser-profile"
+        );
+        assert_eq!(
+            cookies_action["request"]["params"]["origin"],
+            "http://127.0.0.1:38409"
+        );
+        assert_eq!(cookies_action["request"]["params"]["profileId"], "default");
+        assert!(cookies_action["risk"]
+            .as_str()
+            .unwrap()
+            .contains("beyond the currently visible origin"));
         let _ = fs::remove_dir_all(root);
     }
 

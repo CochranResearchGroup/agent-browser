@@ -87,6 +87,8 @@ assert(
     appIntelligence.includes('propose_repair_browser') &&
     appIntelligence.includes('propose_prune_retained') &&
     appIntelligence.includes('propose_repair_retained') &&
+    appIntelligence.includes('propose_clear_storage') &&
+    appIntelligence.includes('propose_clear_cookies') &&
     appIntelligence.includes('service_request:navigate') &&
     appIntelligence.includes('service_request:tab_new') &&
     appIntelligence.includes('service_request:view_focus') &&
@@ -99,6 +101,8 @@ assert(
     appIntelligence.includes('service_request:service_browser_repair') &&
     appIntelligence.includes('service_request:service_prune_retained') &&
     appIntelligence.includes('service_request:service_repair_retained') &&
+    appIntelligence.includes('service_request:storage_clear') &&
+    appIntelligence.includes('service_request:cookies_clear') &&
     appIntelligence.includes('operator_confirmation') &&
     appIntelligence.includes('confirmationId') &&
     appIntelligence.includes('stealthcdp_chromium') &&

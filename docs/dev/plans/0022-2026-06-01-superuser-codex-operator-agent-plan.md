@@ -813,3 +813,38 @@ Remaining work:
 - add storage/cookie clearing proposals with explicit origin/profile scoping
 - add hosted admin/observer and live browser-operation smokes for the full
   Plan 0022 completion criteria
+
+### 2026-06-01 | J5 Scoped Storage And Cookie Proposals
+
+Added confirmation-gated storage and cookie cleanup proposals:
+
+- detect clear-storage, localStorage, sessionStorage, and clear-cookie intent
+  in the operator prompt
+- expose `propose_clear_storage` and `propose_clear_cookies` in the service
+  tool manifest
+- route cleanup through existing `storage_clear` and `cookies_clear` service
+  request contracts
+- require explicit `operator_confirmation` before either cleanup action can
+  execute
+- record active URL, parsed origin, selected profile id, and scope in the
+  service request params so the superuser can inspect the target before
+  confirming
+- label storage cleanup as `selected-tab-origin` scoped and cookie cleanup as
+  `selected-browser-profile` scoped because the current cookie service
+  contract clears the selected browser profile cookie jar, not only the visible
+  origin
+
+Validation:
+
+```bash
+pnpm test:dashboard-superuser-operator-agent
+cargo fmt --manifest-path cli/Cargo.toml -- --check
+cargo test --manifest-path cli/Cargo.toml app_intelligence -- --nocapture --test-threads=1
+cargo clippy --manifest-path cli/Cargo.toml -- -D warnings
+pnpm publish:local-dashboard -- --expect-marker data-superuser-operator-agent --skip-browser --json
+```
+
+Remaining work:
+
+- add hosted admin/observer and live browser-operation smokes for the full
+  Plan 0022 completion criteria
