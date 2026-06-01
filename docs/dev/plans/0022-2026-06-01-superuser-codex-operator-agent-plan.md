@@ -652,3 +652,37 @@ Remaining work:
 - prove selector DOM workflow operation against a live hosted selected browser
 - add launch and workspace-switching service tools so the operator can create a
   fresh browser, navigate it, and move the dashboard viewport there
+
+### 2026-06-01 | Confirmation-Gated Operator Actions
+
+Made confirmation-gated operator actions executable through an audited
+two-step path:
+
+- return `operator_confirmation` dashboard actions for gated service requests
+  instead of omitting them from the action list
+- include confirmation id, target, prompt hash, service request payload, and
+  risk summary with each confirmation action
+- make the Chat Operate UI call
+  `/api/app-intelligence/operator/confirm` before applying a gated action
+- record confirmation artifacts under the App Intelligence run root before
+  returning the confirmed service request action
+- return a normal `service_request` action only after the superuser
+  confirmation is recorded
+- keep service execution routed through `/api/service/request`
+
+Validation:
+
+```bash
+pnpm test:dashboard-superuser-operator-agent
+pnpm test:dashboard-contextual-chat
+cargo fmt --manifest-path cli/Cargo.toml -- --check
+cargo test --manifest-path cli/Cargo.toml app_intelligence -- --nocapture
+pnpm build:dashboard
+```
+
+Remaining work:
+
+- add destructive service action proposals for close, prune, storage, and broad
+  workspace actions now that confirmation execution exists
+- prove a confirmed screenshot action against a live selected browser
+- add launch and workspace-switching service tools for new-browser workflows

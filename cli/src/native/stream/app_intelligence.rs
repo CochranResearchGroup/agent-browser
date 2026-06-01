@@ -107,20 +107,71 @@ pub(crate) fn operator_confirm_response(
             json!({"success": false, "error": "Missing confirmationId."}),
         );
     }
+    let action = match parsed.get("action") {
+        Some(value) if value.is_object() => value.clone(),
+        _ => {
+            return (
+                "400 Bad Request",
+                json!({"success": false, "error": "Missing confirmation action."}),
+            )
+        }
+    };
+    if action.get("kind").and_then(Value::as_str) != Some("operator_confirmation") {
+        return (
+            "400 Bad Request",
+            json!({"success": false, "error": "Confirmation action must be an operator_confirmation action."}),
+        );
+    }
+    if action.get("confirmationId").and_then(Value::as_str) != Some(confirmation_id) {
+        return (
+            "400 Bad Request",
+            json!({"success": false, "error": "Confirmation id does not match action."}),
+        );
+    }
+    let Some(request) = action.get("request").filter(|value| value.is_object()) else {
+        return (
+            "400 Bad Request",
+            json!({"success": false, "error": "Confirmation action is missing a service request."}),
+        );
+    };
+    let confirmed_at = Utc::now().to_rfc3339();
+    let confirmed_action = json!({
+        "id": format!("confirmed-{confirmation_id}"),
+        "label": action.get("label").cloned().unwrap_or_else(|| json!("Apply confirmed action")),
+        "kind": "service_request",
+        "requiresConfirmation": false,
+        "request": request,
+        "reason": action.get("reason").cloned().unwrap_or_else(|| json!("Confirmed by superuser.")),
+        "confirmation": {
+            "confirmationId": confirmation_id,
+            "confirmedAt": confirmed_at,
+            "confirmedBy": identity.username,
+        }
+    });
+    let record = json!({
+        "version": "codex-operator-confirmation.v1",
+        "confirmationId": confirmation_id,
+        "status": "confirmed",
+        "confirmedAt": confirmed_at,
+        "authenticatedUser": {
+            "username": identity.username,
+            "displayName": identity.display_name,
+            "role": identity.role,
+        },
+        "action": action,
+        "confirmedAction": confirmed_action,
+    });
+    if let Err(message) = write_operator_confirmation_ledger(confirmation_id, &record) {
+        return (
+            "500 Internal Server Error",
+            json!({"success": false, "error": format!("Failed to write operator confirmation: {message}")}),
+        );
+    }
     (
         "200 OK",
         json!({
             "success": true,
-            "data": {
-                "confirmationId": confirmation_id,
-                "status": "recorded",
-                "authenticatedUser": {
-                    "username": identity.username,
-                    "role": identity.role,
-                },
-                "execution": "not-implemented",
-                "reason": "Confirmation recording is staged before mutating operator tools are enabled.",
-            }
+            "data": record
         }),
     )
 }
@@ -716,9 +767,6 @@ fn operator_executable_actions(prompt: &str, packet: &Value, identity: &Operator
         .unwrap_or(Value::Null);
     let mut actions = Vec::new();
     for action in operator_prompt_actions(prompt) {
-        if action.requires_confirmation {
-            continue;
-        }
         let mut params = json!({
             "sessionName": session_id,
             "browserId": browser_id,
@@ -735,19 +783,40 @@ fn operator_executable_actions(prompt: &str, packet: &Value, identity: &Operator
         for (key, value) in action.extra_params {
             params[key] = value;
         }
+        let request = json!({
+            "action": action.contract_action,
+            "serviceName": "agent-browser-dashboard",
+            "agentName": identity.username,
+            "taskName": action.task_name,
+            "params": params,
+            "jobTimeoutMs": 30000
+        });
+        if action.requires_confirmation {
+            let confirmation_id = format!(
+                "confirm-{}-{}",
+                action.contract_action,
+                uuid::Uuid::new_v4()
+            );
+            actions.push(json!({
+                "id": action.action_id,
+                "label": format!("Confirm {}", action.label),
+                "kind": "operator_confirmation",
+                "requiresConfirmation": true,
+                "confirmationId": confirmation_id,
+                "request": request,
+                "risk": action.confirmation_risk,
+                "target": operator_target_summary(packet),
+                "promptHash": sha256_text(prompt),
+                "reason": action.reason
+            }));
+            continue;
+        }
         actions.push(json!({
             "id": action.action_id,
             "label": action.label,
             "kind": "service_request",
             "requiresConfirmation": action.requires_confirmation,
-            "request": {
-                "action": action.contract_action,
-                "serviceName": "agent-browser-dashboard",
-                "agentName": identity.username,
-                "taskName": action.task_name,
-                "params": params,
-                "jobTimeoutMs": 30000
-            },
+            "request": request,
             "reason": action.reason
         }));
     }
@@ -910,6 +979,7 @@ struct OperatorPromptAction {
     contract_action: &'static str,
     task_name: &'static str,
     reason: &'static str,
+    confirmation_risk: &'static str,
     requires_confirmation: bool,
     url: Option<String>,
     selector: Option<String>,
@@ -928,6 +998,7 @@ fn operator_prompt_actions(prompt: &str) -> Vec<OperatorPromptAction> {
             contract_action: "navigate",
             task_name: "superuser-operator-navigate",
             reason: "Submits the existing service request navigate contract for the audited selected browser target.",
+            confirmation_risk: "Navigation can change authenticated page state if the selected browser is signed in.",
             requires_confirmation: false,
             url: Some(url),
             selector: None,
@@ -946,6 +1017,7 @@ fn operator_prompt_actions(prompt: &str) -> Vec<OperatorPromptAction> {
             contract_action: "view_focus",
             task_name: "superuser-operator-focus",
             reason: "Submits the existing view_focus service request contract for the audited selected browser target.",
+            confirmation_risk: "Focusing changes the visible service-owned browser window only.",
             requires_confirmation: false,
             url: None,
             selector: None,
@@ -961,6 +1033,7 @@ fn operator_prompt_actions(prompt: &str) -> Vec<OperatorPromptAction> {
             contract_action: "tab_new",
             task_name: "superuser-operator-new-tab",
             reason: "Submits the existing tab_new service request contract for the audited selected browser target.",
+            confirmation_risk: "Opening a new tab changes selected browser tab state.",
             requires_confirmation: false,
             url: extract_navigation_url(prompt).or_else(|| Some("about:blank".to_string())),
             selector: None,
@@ -976,6 +1049,7 @@ fn operator_prompt_actions(prompt: &str) -> Vec<OperatorPromptAction> {
             contract_action: "snapshot",
             task_name: "superuser-operator-snapshot",
             reason: "Submits the existing snapshot service request contract for read-only DOM discovery on the audited selected browser target.",
+            confirmation_risk: "DOM snapshots can expose visible page text but omit raw browser secrets by default.",
             requires_confirmation: false,
             url: None,
             selector: None,
@@ -995,6 +1069,7 @@ fn operator_prompt_actions(prompt: &str) -> Vec<OperatorPromptAction> {
             contract_action: "count",
             task_name: "superuser-operator-query",
             reason: "Submits the existing count service request contract for scoped selector discovery on the audited selected browser target.",
+            confirmation_risk: "Selector count is read-only and returns aggregate DOM match count.",
             requires_confirmation: false,
             url: None,
             selector: extract_selector_after(prompt, "query")
@@ -1012,6 +1087,7 @@ fn operator_prompt_actions(prompt: &str) -> Vec<OperatorPromptAction> {
             contract_action: "click",
             task_name: "superuser-operator-click",
             reason: "Submits the existing click service request contract for the audited selected browser target and selector.",
+            confirmation_risk: "Click can activate page controls in the selected browser.",
             requires_confirmation: false,
             url: None,
             selector: extract_selector_after(prompt, "click")
@@ -1029,6 +1105,7 @@ fn operator_prompt_actions(prompt: &str) -> Vec<OperatorPromptAction> {
             contract_action: "type",
             task_name: "superuser-operator-type",
             reason: "Submits the existing type service request contract for the audited selected browser target and selector.",
+            confirmation_risk: "Typing inserts the provided text into the selected browser.",
             requires_confirmation: false,
             url: None,
             selector: extract_selector_after(prompt, "into")
@@ -1050,6 +1127,7 @@ fn operator_prompt_actions(prompt: &str) -> Vec<OperatorPromptAction> {
             contract_action: "press",
             task_name: "superuser-operator-press",
             reason: "Submits the existing press service request contract for the audited selected browser target.",
+            confirmation_risk: "Key press can submit forms or activate focused controls.",
             requires_confirmation: false,
             url: None,
             selector: extract_selector_after(prompt, "in").or_else(|| extract_selector_after(prompt, "on")),
@@ -1065,6 +1143,7 @@ fn operator_prompt_actions(prompt: &str) -> Vec<OperatorPromptAction> {
             contract_action: "scroll",
             task_name: "superuser-operator-scroll",
             reason: "Submits the existing scroll service request contract for the audited selected browser target.",
+            confirmation_risk: "Scroll changes viewport position only.",
             requires_confirmation: false,
             url: None,
             selector: extract_selector_after(prompt, "scroll").or_else(|| extract_selector(prompt)),
@@ -1083,6 +1162,7 @@ fn operator_prompt_actions(prompt: &str) -> Vec<OperatorPromptAction> {
             contract_action: "screenshot",
             task_name: "superuser-operator-screenshot",
             reason: "Prepares the existing screenshot service request contract, but confirmation execution must collect privacy intent before capture.",
+            confirmation_risk: "Screenshots can capture private visible page content and require explicit superuser confirmation before execution.",
             requires_confirmation: true,
             url: None,
             selector: extract_selector(prompt),
@@ -1098,6 +1178,7 @@ fn operator_prompt_actions(prompt: &str) -> Vec<OperatorPromptAction> {
             contract_action: "wait",
             task_name: "superuser-operator-wait",
             reason: "Submits the existing wait service request contract for the audited selected browser target.",
+            confirmation_risk: "Wait observes page state without mutating it.",
             requires_confirmation: false,
             url: None,
             selector: extract_selector(prompt),
@@ -1222,6 +1303,27 @@ fn write_operator_ledger(run_id: &str, value: &Value) -> Result<(), String> {
     fs::create_dir_all(&root)
         .map_err(|err| format!("Failed to create {}: {err}", root.display()))?;
     let path = root.join("operator-turn.json");
+    let bytes = serde_json::to_vec_pretty(value).map_err(|err| err.to_string())?;
+    fs::write(&path, bytes).map_err(|err| format!("Failed to write {}: {err}", path.display()))
+}
+
+fn write_operator_confirmation_ledger(confirmation_id: &str, value: &Value) -> Result<(), String> {
+    let root = app_intelligence_run_root()
+        .ok_or_else(|| "Cannot resolve app intelligence run root.".to_string())?
+        .join("operator-confirmations");
+    fs::create_dir_all(&root)
+        .map_err(|err| format!("Failed to create {}: {err}", root.display()))?;
+    let safe_id = confirmation_id
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_') {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    let path = root.join(format!("{safe_id}.json"));
     let bytes = serde_json::to_vec_pretty(value).map_err(|err| err.to_string())?;
     fs::write(&path, bytes).map_err(|err| format!("Failed to write {}: {err}", path.display()))
 }
@@ -1632,7 +1734,19 @@ mod tests {
         assert!(service_actions.contains(&"type"));
         assert!(service_actions.contains(&"press"));
         assert!(service_actions.contains(&"scroll"));
-        assert!(!service_actions.contains(&"screenshot"));
+        assert!(service_actions.contains(&"screenshot"));
+        let screenshot_action = dashboard_actions
+            .iter()
+            .find(|action| {
+                action.pointer("/request/action").and_then(Value::as_str) == Some("screenshot")
+            })
+            .unwrap();
+        assert_eq!(screenshot_action["kind"], "operator_confirmation");
+        assert_eq!(screenshot_action["requiresConfirmation"], true);
+        assert!(screenshot_action["confirmationId"]
+            .as_str()
+            .unwrap()
+            .starts_with("confirm-screenshot-"));
 
         let type_action = dashboard_actions
             .iter()
@@ -1666,6 +1780,67 @@ mod tests {
             screenshot_call["output"]["requiresConfirmation"], true,
             "screenshot capture should remain confirmation-gated"
         );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn operator_confirm_records_and_returns_confirmed_service_action() {
+        let _guard = APP_INTELLIGENCE_ENV_LOCK.lock().unwrap();
+        let root = env::temp_dir().join(format!(
+            "agent-browser-operator-confirm-{}",
+            uuid::Uuid::new_v4()
+        ));
+        env::set_var("AGENT_BROWSER_APP_INTELLIGENCE_RUN_ROOT", &root);
+        let identity = OperatorIdentity {
+            username: "admin".to_string(),
+            display_name: "Default superuser".to_string(),
+            role: "superuser".to_string(),
+        };
+        let action = json!({
+            "id": "screenshot-selected-browser",
+            "label": "Confirm Screenshot selected browser",
+            "kind": "operator_confirmation",
+            "requiresConfirmation": true,
+            "confirmationId": "confirm-screenshot-test",
+            "request": {
+                "action": "screenshot",
+                "serviceName": "agent-browser-dashboard",
+                "agentName": "admin",
+                "taskName": "superuser-operator-screenshot",
+                "params": {
+                    "sessionName": "default",
+                    "fullPage": true,
+                    "by": "admin",
+                    "reason": "superuser_operator_request"
+                },
+                "jobTimeoutMs": 30000
+            },
+            "risk": "Screenshots can capture private visible page content.",
+            "reason": "Confirmed screenshot capture."
+        });
+        let request = json!({
+            "confirmationId": "confirm-screenshot-test",
+            "action": action,
+        });
+        let (status, body) = operator_confirm_response(&request.to_string(), &identity);
+        env::remove_var("AGENT_BROWSER_APP_INTELLIGENCE_RUN_ROOT");
+
+        assert_eq!(status, "200 OK");
+        assert_eq!(body["success"], true);
+        assert_eq!(body["data"]["status"], "confirmed");
+        assert_eq!(body["data"]["confirmedAction"]["kind"], "service_request");
+        assert_eq!(
+            body["data"]["confirmedAction"]["request"]["action"],
+            "screenshot"
+        );
+        assert_eq!(
+            body["data"]["confirmedAction"]["confirmation"]["confirmedBy"],
+            "admin"
+        );
+        assert!(root
+            .join("operator-confirmations")
+            .join("confirm-screenshot-test.json")
+            .exists());
         let _ = fs::remove_dir_all(root);
     }
 }

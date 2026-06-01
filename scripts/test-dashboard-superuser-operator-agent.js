@@ -71,6 +71,7 @@ assert(
     appIntelligence.includes('operator_guidance_with_supervisor') &&
     appIntelligence.includes('operator_read_tool_calls') &&
     appIntelligence.includes('operator_executable_actions') &&
+    appIntelligence.includes('write_operator_confirmation_ledger') &&
     appIntelligence.includes('propose_navigate') &&
     appIntelligence.includes('propose_focus') &&
     appIntelligence.includes('propose_snapshot') &&
@@ -88,6 +89,8 @@ assert(
     appIntelligence.includes('service_request:type') &&
     appIntelligence.includes('service_request:press') &&
     appIntelligence.includes('service_request:scroll') &&
+    appIntelligence.includes('operator_confirmation') &&
+    appIntelligence.includes('confirmationId') &&
     appIntelligence.includes('operator_dashboard_actions') &&
     appIntelligence.includes('operatorGuidance') &&
     appIntelligence.includes('read-tools-completed') &&
@@ -113,6 +116,9 @@ assert(
     chatPanel.includes('isSuperuser') &&
     chatPanel.includes('Plan operator action') &&
     chatPanel.includes('updateDashboardWorkspaceUrlSelection') &&
+    chatPanel.includes('APP_INTELLIGENCE_OPERATOR_CONFIRM_API_URL') &&
+    chatPanel.includes('OperatorConfirmResponse') &&
+    chatPanel.includes('operator_confirmation') &&
     chatPanel.includes('SERVICE_API_BASE') &&
     chatPanel.includes('service_request') &&
     chatPanel.includes('Codex operator guidance') &&

@@ -19,6 +19,7 @@ import {
 } from "@/lib/selected-workspace-chat-packet";
 import {
   APP_INTELLIGENCE_INSPECT_API_URL,
+  APP_INTELLIGENCE_OPERATOR_CONFIRM_API_URL,
   APP_INTELLIGENCE_OPERATOR_STATUS_API_URL,
   APP_INTELLIGENCE_OPERATOR_TURN_API_URL,
   SERVICE_API_BASE,
@@ -390,9 +391,21 @@ type OperatorDashboardAction = {
   label: string;
   kind: string;
   requiresConfirmation?: boolean;
+  confirmationId?: string;
   selection?: DashboardWorkspaceUrlSelection;
   request?: Record<string, unknown>;
+  risk?: string;
   reason?: string;
+};
+
+type OperatorConfirmResponse = {
+  success?: boolean;
+  error?: string;
+  data?: {
+    confirmationId?: string;
+    status?: string;
+    confirmedAction?: OperatorDashboardAction;
+  };
 };
 
 type OperatorToolCall = {
@@ -798,17 +811,38 @@ function OperatorStatusBlock({
           {dashboardActions.length ? (
             <div className="space-y-1">
               <div className="text-[10px] uppercase text-muted-foreground">Dashboard actions</div>
-              <div className="flex flex-wrap gap-1">
+              <div className="grid gap-1">
                 {dashboardActions.map((action) => (
-                  <button
-                    key={action.id}
-                    type="button"
-                    onClick={() => onDashboardAction(action)}
-                    className="rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-[10px] text-primary transition-colors hover:bg-primary/15"
-                    title={action.reason}
-                  >
-                    {appliedActionId === action.id ? "Applied" : action.label}
-                  </button>
+                  <div key={action.id} className="rounded border border-border/50 px-2 py-1">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onDashboardAction(action)}
+                        className={cn(
+                          "rounded-md border px-2 py-1 text-[10px] transition-colors",
+                          action.requiresConfirmation
+                            ? "border-amber-400/50 bg-amber-400/10 text-amber-200 hover:bg-amber-400/15"
+                            : "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15",
+                        )}
+                        title={action.reason}
+                      >
+                        {appliedActionId === action.id ? "Applied" : action.label}
+                      </button>
+                      <span className="min-w-0 truncate text-[10px] text-muted-foreground">
+                        {action.request && typeof action.request.action === "string" ? action.request.action : action.kind}
+                      </span>
+                      {action.requiresConfirmation && (
+                        <span className="ml-auto shrink-0 rounded border border-amber-400/40 px-1 py-0.5 text-[9px] text-amber-200">
+                          confirm
+                        </span>
+                      )}
+                    </div>
+                    {(action.risk || action.reason) && (
+                      <div className="mt-1 text-[10px] text-muted-foreground">
+                        {action.risk || action.reason}
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
             </div>
@@ -1106,6 +1140,49 @@ export function ChatPanel({
     if (action.kind === "set_selected_workspace" && action.selection) {
       updateDashboardWorkspaceUrlSelection(action.selection, "push");
       setAppliedOperatorActionId(action.id);
+      return;
+    }
+    if (action.kind === "operator_confirmation") {
+      if (!action.confirmationId) {
+        setOperatorError("Confirmation action is missing confirmation id.");
+        return;
+      }
+      setOperatorSubmitting(true);
+      setOperatorError(null);
+      try {
+        const confirmResponse = await fetch(APP_INTELLIGENCE_OPERATOR_CONFIRM_API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            confirmationId: action.confirmationId,
+            action,
+          }),
+        });
+        const confirmPayload = (await confirmResponse.json().catch(() => ({}))) as OperatorConfirmResponse;
+        if (!confirmResponse.ok || !confirmPayload.success || !confirmPayload.data?.confirmedAction) {
+          throw new Error(confirmPayload.error || `Operator confirmation failed with HTTP ${confirmResponse.status}`);
+        }
+        const confirmedAction = confirmPayload.data.confirmedAction;
+        if (confirmedAction.kind !== "service_request" || !confirmedAction.request) {
+          throw new Error("Confirmed operator action did not return a service request.");
+        }
+        const response = await fetch(`${SERVICE_API_BASE}/request`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify(confirmedAction.request),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload?.success === false) {
+          throw new Error(payload?.error || `Service request failed with HTTP ${response.status}`);
+        }
+        setAppliedOperatorActionId(action.id);
+      } catch (err) {
+        setOperatorError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setOperatorSubmitting(false);
+      }
       return;
     }
     if (action.kind === "service_request" && action.request) {
