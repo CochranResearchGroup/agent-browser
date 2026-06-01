@@ -13,6 +13,7 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 const DEFAULT_TURN_TIMEOUT_SECONDS: u64 = 75;
+pub(crate) static APP_INTELLIGENCE_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[derive(Debug, Clone)]
 pub(crate) struct InspectionInput {
@@ -820,6 +821,7 @@ mod tests {
 
     #[test]
     fn deterministic_mode_writes_run_directory() {
+        let _guard = APP_INTELLIGENCE_ENV_LOCK.lock().unwrap();
         let root = env::temp_dir().join(format!(
             "agent-browser-app-intel-supervisor-{}",
             uuid::Uuid::new_v4()

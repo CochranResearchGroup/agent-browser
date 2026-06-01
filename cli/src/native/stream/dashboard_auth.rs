@@ -14,6 +14,8 @@ const BOOTSTRAP_CREDENTIAL_FILE_NAME: &str = "dashboard-auth.env";
 const PBKDF2_ITERATIONS: u32 = 120_000;
 const SESSION_COOKIE: &str = "agent_browser_dashboard_session";
 const SESSION_TTL_SECONDS: u64 = 7 * 24 * 60 * 60;
+pub(super) const DASHBOARD_ROLE_SUPERUSER: &str = "superuser";
+pub(super) const DASHBOARD_ROLE_OBSERVER: &str = "observer";
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -101,8 +103,20 @@ pub(super) fn ensure_dashboard_auth_config() -> Result<DashboardAuthPaths, Strin
             created_at: now.clone(),
             session_secret: generate_secret(32)?,
             users: vec![
-                build_user("admin", "Default superuser", &admin_password, &now)?,
-                build_user("codex", "Codex observer", &codex_password, &now)?,
+                build_user(
+                    "admin",
+                    "Default superuser",
+                    DASHBOARD_ROLE_SUPERUSER,
+                    &admin_password,
+                    &now,
+                )?,
+                build_user(
+                    "codex",
+                    "Codex observer",
+                    DASHBOARD_ROLE_OBSERVER,
+                    &codex_password,
+                    &now,
+                )?,
             ],
         }
     };
@@ -110,19 +124,31 @@ pub(super) fn ensure_dashboard_auth_config() -> Result<DashboardAuthPaths, Strin
     if !store.users.iter().any(|user| user.username == "admin") {
         let password = generate_secret(24)?;
         generated_credentials.insert("admin".to_string(), password.clone());
-        store
-            .users
-            .push(build_user("admin", "Default superuser", &password, &now)?);
+        store.users.push(build_user(
+            "admin",
+            "Default superuser",
+            DASHBOARD_ROLE_SUPERUSER,
+            &password,
+            &now,
+        )?);
     }
 
     if !store.users.iter().any(|user| user.username == "codex") {
         let password = generate_secret(24)?;
         generated_credentials.insert("codex".to_string(), password.clone());
-        store
-            .users
-            .push(build_user("codex", "Codex observer", &password, &now)?);
+        store.users.push(build_user(
+            "codex",
+            "Codex observer",
+            DASHBOARD_ROLE_OBSERVER,
+            &password,
+            &now,
+        )?);
     }
 
+    let migrated_roles = normalize_bootstrap_roles(&mut store);
+    if migrated_roles && auth_file.exists() {
+        backup_auth_store(&auth_file)?;
+    }
     write_auth_store(&auth_file, &store)?;
     upsert_default_env_file(&auth_dir, &auth_file)?;
     if !generated_credentials.is_empty() || !bootstrap_credential_file.exists() {
@@ -301,6 +327,28 @@ pub(super) fn unauthorized_api_response(secure_cookie: bool) -> DashboardAuthRes
     response
 }
 
+pub(super) fn forbidden_api_response(message: &str) -> DashboardAuthResponse {
+    json_response(
+        "403 Forbidden",
+        json!({"success": false, "authenticated": true, "authorized": false, "error": message}),
+    )
+}
+
+pub(super) fn require_superuser(
+    headers: &[(String, String)],
+    secure_cookie: bool,
+) -> Result<DashboardAuthIdentity, DashboardAuthResponse> {
+    match authenticate_headers(headers) {
+        Ok(Some(identity)) if identity.role == DASHBOARD_ROLE_SUPERUSER => Ok(identity),
+        Ok(Some(_)) => Err(forbidden_api_response("Superuser role required")),
+        Ok(None) => Err(unauthorized_api_response(secure_cookie)),
+        Err(err) => Err(json_response(
+            "500 Internal Server Error",
+            json!({"success": false, "error": err}),
+        )),
+    }
+}
+
 pub(super) fn authenticate_headers(
     headers: &[(String, String)],
 ) -> Result<Option<DashboardAuthIdentity>, String> {
@@ -389,17 +437,52 @@ fn write_auth_store(path: &Path, store: &DashboardAuthStore) -> Result<(), Strin
 fn build_user(
     username: &str,
     display_name: &str,
+    role: &str,
     password: &str,
     created_at: &str,
 ) -> Result<DashboardAuthUser, String> {
     Ok(DashboardAuthUser {
         username: username.to_string(),
         display_name: display_name.to_string(),
-        role: "superuser".to_string(),
+        role: role.to_string(),
         password_hash: hash_password(password)?,
         created_at: created_at.to_string(),
         bootstrap: true,
     })
+}
+
+fn normalize_bootstrap_roles(store: &mut DashboardAuthStore) -> bool {
+    let mut changed = false;
+    for user in &mut store.users {
+        if user.username == "admin" && user.bootstrap && user.role != DASHBOARD_ROLE_SUPERUSER {
+            user.role = DASHBOARD_ROLE_SUPERUSER.to_string();
+            changed = true;
+        }
+        if user.username == "codex"
+            && user.bootstrap
+            && user.display_name == "Codex observer"
+            && user.role == DASHBOARD_ROLE_SUPERUSER
+        {
+            user.role = DASHBOARD_ROLE_OBSERVER.to_string();
+            changed = true;
+        }
+    }
+    changed
+}
+
+fn backup_auth_store(path: &Path) -> Result<(), String> {
+    let timestamp = now_epoch_seconds();
+    let backup = path.with_extension(format!("json.pre-role-migration-{timestamp}"));
+    fs::copy(path, &backup).map_err(|err| {
+        format!(
+            "Failed to back up dashboard auth store {} to {}: {}",
+            path.display(),
+            backup.display(),
+            err
+        )
+    })?;
+    set_private_file(&backup)?;
+    Ok(())
 }
 
 fn upsert_default_env_file(auth_dir: &Path, auth_file: &Path) -> Result<(), String> {
@@ -773,6 +856,7 @@ mod tests {
         let user = build_user(
             "admin",
             "Default superuser",
+            DASHBOARD_ROLE_SUPERUSER,
             password,
             "2026-01-01T00:00:00Z",
         )
@@ -808,6 +892,69 @@ mod tests {
     }
 
     #[test]
+    fn generated_users_have_distinct_roles() {
+        let admin = build_user(
+            "admin",
+            "Default superuser",
+            DASHBOARD_ROLE_SUPERUSER,
+            "admin-secret",
+            "2026-01-01T00:00:00Z",
+        )
+        .unwrap();
+        let codex = build_user(
+            "codex",
+            "Codex observer",
+            DASHBOARD_ROLE_OBSERVER,
+            "codex-secret",
+            "2026-01-01T00:00:00Z",
+        )
+        .unwrap();
+
+        assert_eq!(admin.role, DASHBOARD_ROLE_SUPERUSER);
+        assert_eq!(codex.role, DASHBOARD_ROLE_OBSERVER);
+    }
+
+    #[test]
+    fn normalize_bootstrap_roles_downgrades_generated_codex_observer() {
+        let mut store = DashboardAuthStore {
+            version: 1,
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            session_secret: URL_SAFE_NO_PAD.encode([8u8; 32]),
+            users: vec![DashboardAuthUser {
+                username: "codex".to_string(),
+                display_name: "Codex observer".to_string(),
+                role: DASHBOARD_ROLE_SUPERUSER.to_string(),
+                password_hash: "hash".to_string(),
+                created_at: "2026-01-01T00:00:00Z".to_string(),
+                bootstrap: true,
+            }],
+        };
+
+        assert!(normalize_bootstrap_roles(&mut store));
+        assert_eq!(store.users[0].role, DASHBOARD_ROLE_OBSERVER);
+    }
+
+    #[test]
+    fn normalize_bootstrap_roles_preserves_non_bootstrap_codex_superuser() {
+        let mut store = DashboardAuthStore {
+            version: 1,
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            session_secret: URL_SAFE_NO_PAD.encode([8u8; 32]),
+            users: vec![DashboardAuthUser {
+                username: "codex".to_string(),
+                display_name: "Codex operator".to_string(),
+                role: DASHBOARD_ROLE_SUPERUSER.to_string(),
+                password_hash: "hash".to_string(),
+                created_at: "2026-01-01T00:00:00Z".to_string(),
+                bootstrap: false,
+            }],
+        };
+
+        assert!(!normalize_bootstrap_roles(&mut store));
+        assert_eq!(store.users[0].role, DASHBOARD_ROLE_SUPERUSER);
+    }
+
+    #[test]
     fn forwarded_verify_redirects_to_login_when_missing_cookie() {
         let headers = vec![("x-forwarded-uri".to_string(), "/guacamole/".to_string())];
         let response = verify_forward_auth_response(&headers, false);
@@ -839,5 +986,55 @@ mod tests {
             name == "Location"
                 && value == "http://agent-browser.localhost/login?next=%2Fguacamole%2F"
         }));
+    }
+
+    #[test]
+    fn require_superuser_accepts_admin_and_rejects_observer() {
+        let admin = build_user(
+            "admin",
+            "Default superuser",
+            DASHBOARD_ROLE_SUPERUSER,
+            "admin-secret",
+            "2026-01-01T00:00:00Z",
+        )
+        .unwrap();
+        let codex = build_user(
+            "codex",
+            "Codex observer",
+            DASHBOARD_ROLE_OBSERVER,
+            "codex-secret",
+            "2026-01-01T00:00:00Z",
+        )
+        .unwrap();
+        let store = DashboardAuthStore {
+            version: 1,
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            session_secret: URL_SAFE_NO_PAD.encode([9u8; 32]),
+            users: vec![admin, codex],
+        };
+        let admin_identity = DashboardAuthIdentity {
+            username: "admin".to_string(),
+            display_name: "Default superuser".to_string(),
+            role: DASHBOARD_ROLE_SUPERUSER.to_string(),
+        };
+        let observer_identity = DashboardAuthIdentity {
+            username: "codex".to_string(),
+            display_name: "Codex observer".to_string(),
+            role: DASHBOARD_ROLE_OBSERVER.to_string(),
+        };
+        let admin_token = create_session_token(&store, &admin_identity).unwrap();
+        let observer_token = create_session_token(&store, &observer_identity).unwrap();
+
+        let admin_verified = verify_session_token(&store, &admin_token).unwrap().unwrap();
+        let observer_verified = verify_session_token(&store, &observer_token)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(admin_verified.role, DASHBOARD_ROLE_SUPERUSER);
+        assert_eq!(observer_verified.role, DASHBOARD_ROLE_OBSERVER);
+        assert_eq!(
+            forbidden_api_response("Superuser role required").status,
+            "403 Forbidden"
+        );
     }
 }

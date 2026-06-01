@@ -424,3 +424,52 @@ Add dedicated smokes for:
 - Hosted runtime proves a superuser can operate the active browser and switch
   the viewed workspace.
 - Hosted runtime proves non-superusers cannot access operator capabilities.
+
+## Progress
+
+### 2026-06-01 | J1/J2 Gate And Skeleton
+
+Implemented the first safe execution slice:
+
+- added explicit `superuser` and `observer` dashboard roles
+- hardened bootstrap role semantics so generated `admin` remains superuser and
+  generated `codex` becomes observer
+- added a backup-backed migration for existing bootstrap `codex` observer
+  accounts that were previously stored as superuser
+- added a `require_superuser` auth helper
+- added superuser-gated operator status, turn, and confirm routes
+- added a staged operator turn ledger before enabling mutation tools
+- added a superuser-only Operate shell in Chat
+- preserved the existing read-only Inspect route and UI behavior
+
+Validation:
+
+```bash
+pnpm test:dashboard-superuser-operator-agent
+pnpm test:dashboard-contextual-chat
+pnpm build:dashboard
+cargo fmt --manifest-path cli/Cargo.toml -- --check
+cargo test --manifest-path cli/Cargo.toml dashboard_auth -- --nocapture
+cargo test --manifest-path cli/Cargo.toml app_intelligence -- --nocapture
+cargo clippy --manifest-path cli/Cargo.toml -- -D warnings
+git diff --check
+```
+
+Runtime proof:
+
+- published the local dashboard with `data-superuser-operator-agent`
+- verified the installed auth store has `admin` as `superuser` and bootstrap
+  `codex` as `observer`
+- verified admin can read `/api/app-intelligence/operator/status`
+- verified codex observer receives `403 Superuser role required`
+- verified admin can create a staged operator turn with five disabled tool
+  groups and zero mutation tool calls
+
+Remaining work:
+
+- start Codex app-server with the full operator prompt
+- wire read tools and dashboard selection tools
+- wire browser, DOM, debug evidence, and service tools
+- add confirmation execution
+- add hosted browser-operation smokes for active browser operation and
+  workspace switching

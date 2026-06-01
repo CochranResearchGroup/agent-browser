@@ -5,11 +5,26 @@ use super::app_intelligence_supervisor::{
 use chrono::Utc;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use std::fs;
+use std::path::PathBuf;
 use std::process::Command;
 
 pub(crate) const APP_INTELLIGENCE_INSPECT_HTTP_ROUTE: &str =
     "/api/app-intelligence/inspect-workspace";
 pub(crate) const APP_INTELLIGENCE_STATUS_HTTP_ROUTE: &str = "/api/app-intelligence/status";
+pub(crate) const APP_INTELLIGENCE_OPERATOR_STATUS_HTTP_ROUTE: &str =
+    "/api/app-intelligence/operator/status";
+pub(crate) const APP_INTELLIGENCE_OPERATOR_TURN_HTTP_ROUTE: &str =
+    "/api/app-intelligence/operator/turn";
+pub(crate) const APP_INTELLIGENCE_OPERATOR_CONFIRM_HTTP_ROUTE: &str =
+    "/api/app-intelligence/operator/confirm";
+
+#[derive(Debug, Clone)]
+pub(crate) struct OperatorIdentity {
+    pub username: String,
+    pub display_name: String,
+    pub role: String,
+}
 
 pub(crate) fn app_intelligence_status_json() -> Value {
     let readiness = codex_app_server_readiness();
@@ -30,6 +45,83 @@ pub(crate) fn app_intelligence_status_json() -> Value {
             "exposedProviderCount": 1,
         }
     })
+}
+
+pub(crate) fn operator_status_json(identity: &OperatorIdentity) -> Value {
+    json!({
+        "success": true,
+        "data": {
+            "mode": "superuser-operator",
+            "provider": CONTEXTUAL_CHAT_PROVIDER_ID,
+            "ready": true,
+            "authenticatedUser": {
+                "username": identity.username,
+                "displayName": identity.display_name,
+                "role": identity.role,
+            },
+            "toolGroups": operator_tool_manifest(),
+            "destructiveActionsRequireConfirmation": true,
+        }
+    })
+}
+
+pub(crate) fn operator_turn_response(
+    body: &str,
+    identity: &OperatorIdentity,
+) -> (&'static str, Value) {
+    match operator_turn_response_inner(body, identity) {
+        Ok(value) => ("200 OK", value),
+        Err((status, message)) => (
+            status,
+            json!({
+                "success": false,
+                "error": message,
+                "provider": CONTEXTUAL_CHAT_PROVIDER_ID,
+            }),
+        ),
+    }
+}
+
+pub(crate) fn operator_confirm_response(
+    body: &str,
+    identity: &OperatorIdentity,
+) -> (&'static str, Value) {
+    let parsed: Value = match serde_json::from_str(body) {
+        Ok(value) => value,
+        Err(err) => {
+            return (
+                "400 Bad Request",
+                json!({"success": false, "error": format!("Invalid operator confirmation JSON: {err}")}),
+            )
+        }
+    };
+    let confirmation_id = parsed
+        .get("confirmationId")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim();
+    if confirmation_id.is_empty() {
+        return (
+            "400 Bad Request",
+            json!({"success": false, "error": "Missing confirmationId."}),
+        );
+    }
+    (
+        "200 OK",
+        json!({
+            "success": true,
+            "data": {
+                "confirmationId": confirmation_id,
+                "status": "recorded",
+                "authenticatedUser": {
+                    "username": identity.username,
+                    "role": identity.role,
+                },
+                "execution": "not-implemented",
+                "reason": "Confirmation recording is staged before mutating operator tools are enabled.",
+            }
+        }),
+    )
 }
 
 pub(crate) fn inspect_workspace_response(body: &str) -> (&'static str, Value) {
@@ -104,6 +196,89 @@ fn inspect_workspace_response_inner(body: &str) -> Result<Value, (&'static str, 
         })),
         Err(failure) => Ok(failure_response(failure)),
     }
+}
+
+fn operator_turn_response_inner(
+    body: &str,
+    identity: &OperatorIdentity,
+) -> Result<Value, (&'static str, String)> {
+    let request: Value = serde_json::from_str(body).map_err(|err| {
+        (
+            "400 Bad Request",
+            format!("Invalid operator request JSON: {err}"),
+        )
+    })?;
+    let prompt = request
+        .get("prompt")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim();
+    if prompt.is_empty() {
+        return Err(("400 Bad Request", "Missing operator prompt.".to_string()));
+    }
+    if let Some(packet) = request.get("packet") {
+        validate_packet(packet).map_err(|message| ("400 Bad Request", message))?;
+    }
+    let run_id = format!("codex-operator-{}", uuid::Uuid::new_v4());
+    let created_at = Utc::now().to_rfc3339();
+    let workspace_id = request
+        .pointer("/packet/workspace/id")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let tool_groups = operator_tool_manifest();
+    let response = json!({
+        "version": "codex-operator-turn.v1",
+        "provider": CONTEXTUAL_CHAT_PROVIDER_ID,
+        "mode": "superuser-operator",
+        "runId": run_id,
+        "createdAt": created_at,
+        "workspaceId": workspace_id,
+        "authenticatedUser": {
+            "username": identity.username,
+            "displayName": identity.display_name,
+            "role": identity.role,
+        },
+        "summary": "Operator mode is authenticated and staged. Browser and service mutation tools are not enabled until tool contracts and confirmation handling are wired.",
+        "toolGroups": tool_groups,
+        "proposedNextSteps": [
+            {
+                "label": "Inspect selected workspace",
+                "reason": "Use read tools first so the operator can identify the exact browser, tab, profile, stream, and service state before mutating."
+            },
+            {
+                "label": "Wire dashboard selection tools",
+                "reason": "Switching the viewed workspace is the first safe operator control because it mutates only dashboard selection state."
+            },
+            {
+                "label": "Enable browser and DOM tools behind confirmations",
+                "reason": "Navigation, click, type, close, storage, and profile actions require scoped service/CDP contracts and audit records."
+            }
+        ],
+        "requiresConfirmation": false,
+        "toolCalls": [],
+        "ledger": {
+            "runId": run_id,
+            "createdAt": created_at,
+            "mode": "superuser-operator",
+            "status": "planned",
+            "workspaceId": workspace_id,
+            "authenticatedUser": {
+                "username": identity.username,
+                "role": identity.role,
+            }
+        }
+    });
+    write_operator_ledger(&run_id, &response).map_err(|message| {
+        (
+            "500 Internal Server Error",
+            format!("Failed to write operator ledger: {message}"),
+        )
+    })?;
+    Ok(json!({
+        "success": true,
+        "provider": CONTEXTUAL_CHAT_PROVIDER_ID,
+        "data": response,
+    }))
 }
 
 fn reject_mutating_request(value: &Value) -> Result<(), (&'static str, String)> {
@@ -196,11 +371,73 @@ fn failure_response(failure: InspectionFailure) -> Value {
     })
 }
 
+fn operator_tool_manifest() -> Value {
+    json!([
+        {
+            "id": "dashboard",
+            "label": "Dashboard tools",
+            "enabled": false,
+            "reason": "Tool contract pending",
+            "tools": ["get_selected_workspace", "set_selected_workspace", "switch_inspector_tab", "switch_viewport_mode"]
+        },
+        {
+            "id": "browser",
+            "label": "Browser tools",
+            "enabled": false,
+            "reason": "Tool contract pending",
+            "tools": ["list_browsers", "focus_tab", "navigate", "new_tab", "wait"]
+        },
+        {
+            "id": "dom",
+            "label": "DOM tools",
+            "enabled": false,
+            "reason": "Tool contract pending",
+            "tools": ["snapshot", "query", "click", "type", "press", "scroll", "screenshot"]
+        },
+        {
+            "id": "debug",
+            "label": "Debug evidence tools",
+            "enabled": false,
+            "reason": "Evidence providers pending",
+            "tools": ["console_summary", "network_summary", "storage_summary", "extension_summary", "stream_readiness"]
+        },
+        {
+            "id": "service",
+            "label": "Service tools",
+            "enabled": false,
+            "reason": "Service-mediated operator contracts pending",
+            "tools": ["service_request", "launch_workspace", "repair_stream", "close_browser"]
+        }
+    ])
+}
+
+fn write_operator_ledger(run_id: &str, value: &Value) -> Result<(), String> {
+    let root = app_intelligence_run_root()
+        .ok_or_else(|| "Cannot resolve app intelligence run root.".to_string())?
+        .join(run_id);
+    fs::create_dir_all(&root)
+        .map_err(|err| format!("Failed to create {}: {err}", root.display()))?;
+    let path = root.join("operator-turn.json");
+    let bytes = serde_json::to_vec_pretty(value).map_err(|err| err.to_string())?;
+    fs::write(&path, bytes).map_err(|err| format!("Failed to write {}: {err}", path.display()))
+}
+
+fn app_intelligence_run_root() -> Option<PathBuf> {
+    if let Ok(path) = std::env::var("AGENT_BROWSER_APP_INTELLIGENCE_RUN_ROOT") {
+        let trimmed = path.trim();
+        if !trimmed.is_empty() {
+            return Some(PathBuf::from(trimmed));
+        }
+    }
+    dirs::home_dir().map(|home| home.join(".agent-browser/app-intelligence/runs"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::app_intelligence_schema::{
         CODEX_WORKSPACE_OBSERVATION_VERSION, SELECTED_WORKSPACE_CHAT_PACKET_VERSION,
     };
+    use super::super::app_intelligence_supervisor::APP_INTELLIGENCE_ENV_LOCK;
     use super::*;
     use std::{env, fs};
 
@@ -342,6 +579,7 @@ mod tests {
 
     #[test]
     fn accepts_selected_workspace_packet() {
+        let _guard = APP_INTELLIGENCE_ENV_LOCK.lock().unwrap();
         let root = env::temp_dir().join(format!(
             "agent-browser-app-intelligence-{}",
             uuid::Uuid::new_v4()
@@ -368,6 +606,51 @@ mod tests {
             CODEX_WORKSPACE_OBSERVATION_VERSION
         );
         assert!(body["data"]["ledger"]["eventLogPath"].as_str().is_some());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn operator_status_exposes_superuser_tool_groups() {
+        let identity = OperatorIdentity {
+            username: "admin".to_string(),
+            display_name: "Default superuser".to_string(),
+            role: "superuser".to_string(),
+        };
+        let body = operator_status_json(&identity);
+
+        assert_eq!(body["success"], true);
+        assert_eq!(body["data"]["mode"], "superuser-operator");
+        assert_eq!(body["data"]["authenticatedUser"]["role"], "superuser");
+        assert!(body["data"]["toolGroups"].as_array().unwrap().len() >= 5);
+    }
+
+    #[test]
+    fn operator_turn_writes_staged_ledger() {
+        let _guard = APP_INTELLIGENCE_ENV_LOCK.lock().unwrap();
+        let root = env::temp_dir().join(format!(
+            "agent-browser-operator-intelligence-{}",
+            uuid::Uuid::new_v4()
+        ));
+        env::set_var("AGENT_BROWSER_APP_INTELLIGENCE_RUN_ROOT", &root);
+        let identity = OperatorIdentity {
+            username: "admin".to_string(),
+            display_name: "Default superuser".to_string(),
+            role: "superuser".to_string(),
+        };
+        let request = json!({
+            "prompt": "Plan how to switch the viewed browser",
+            "packet": fixture_packet(),
+        });
+        let (status, body) = operator_turn_response(&request.to_string(), &identity);
+        env::remove_var("AGENT_BROWSER_APP_INTELLIGENCE_RUN_ROOT");
+
+        assert_eq!(status, "200 OK");
+        assert_eq!(body["success"], true);
+        assert_eq!(body["data"]["mode"], "superuser-operator");
+        assert_eq!(body["data"]["authenticatedUser"]["username"], "admin");
+        assert_eq!(body["data"]["toolCalls"].as_array().unwrap().len(), 0);
+        let run_id = body["data"]["runId"].as_str().unwrap();
+        assert!(root.join(run_id).join("operator-turn.json").exists());
         let _ = fs::remove_dir_all(root);
     }
 }

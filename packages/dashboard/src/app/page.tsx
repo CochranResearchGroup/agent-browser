@@ -453,7 +453,7 @@ function DashboardExperience({
         <ExtensionsPanel selectedWorkspaceContext={selectedWorkspace.context} />
       </TabsContent>
       <TabsContent value="chat" className="min-h-0 flex-1 overflow-hidden">
-        <ChatPanel selectedWorkspaceContext={selectedWorkspace.context} />
+        <ChatPanel selectedWorkspaceContext={selectedWorkspace.context} authenticatedUser={user} />
       </TabsContent>
     </Tabs>
   );

@@ -34,7 +34,10 @@ use crate::native::service_monitors::{
 };
 
 use super::app_intelligence::{
-    app_intelligence_status_json, inspect_workspace_response, APP_INTELLIGENCE_INSPECT_HTTP_ROUTE,
+    app_intelligence_status_json, inspect_workspace_response, operator_confirm_response,
+    operator_status_json, operator_turn_response, OperatorIdentity,
+    APP_INTELLIGENCE_INSPECT_HTTP_ROUTE, APP_INTELLIGENCE_OPERATOR_CONFIRM_HTTP_ROUTE,
+    APP_INTELLIGENCE_OPERATOR_STATUS_HTTP_ROUTE, APP_INTELLIGENCE_OPERATOR_TURN_HTTP_ROUTE,
     APP_INTELLIGENCE_STATUS_HTTP_ROUTE,
 };
 use super::chat::{chat_status_json, handle_chat_request, handle_models_request};
@@ -127,6 +130,8 @@ pub(super) async fn handle_http_request(
         if full_body.is_none()
             && (path == "/api/chat"
                 || path == APP_INTELLIGENCE_INSPECT_HTTP_ROUTE
+                || path == APP_INTELLIGENCE_OPERATOR_TURN_HTTP_ROUTE
+                || path == APP_INTELLIGENCE_OPERATOR_CONFIRM_HTTP_ROUTE
                 || path == "/api/sessions"
                 || path == "/api/command"
                 || path.starts_with("/api/browser/"))
@@ -215,6 +220,42 @@ pub(super) async fn handle_http_request(
 
         if path == APP_INTELLIGENCE_INSPECT_HTTP_ROUTE {
             let (status, value) = inspect_workspace_response(body_str);
+            write_json_value(&mut stream, status, value).await;
+            return;
+        }
+
+        if path == APP_INTELLIGENCE_OPERATOR_TURN_HTTP_ROUTE {
+            let identity = match dashboard_auth::require_superuser(&headers, secure_cookie) {
+                Ok(identity) => identity,
+                Err(response) => {
+                    let _ = stream.write_all(&response.into_http_bytes()).await;
+                    return;
+                }
+            };
+            let operator_identity = OperatorIdentity {
+                username: identity.username,
+                display_name: identity.display_name,
+                role: identity.role,
+            };
+            let (status, value) = operator_turn_response(body_str, &operator_identity);
+            write_json_value(&mut stream, status, value).await;
+            return;
+        }
+
+        if path == APP_INTELLIGENCE_OPERATOR_CONFIRM_HTTP_ROUTE {
+            let identity = match dashboard_auth::require_superuser(&headers, secure_cookie) {
+                Ok(identity) => identity,
+                Err(response) => {
+                    let _ = stream.write_all(&response.into_http_bytes()).await;
+                    return;
+                }
+            };
+            let operator_identity = OperatorIdentity {
+                username: identity.username,
+                display_name: identity.display_name,
+                role: identity.role,
+            };
+            let (status, value) = operator_confirm_response(body_str, &operator_identity);
             write_json_value(&mut stream, status, value).await;
             return;
         }
@@ -846,6 +887,28 @@ pub(super) async fn handle_http_request(
 
     if method == "GET" && path == APP_INTELLIGENCE_STATUS_HTTP_ROUTE {
         write_json_value(&mut stream, "200 OK", app_intelligence_status_json()).await;
+        return;
+    }
+
+    if method == "GET" && path == APP_INTELLIGENCE_OPERATOR_STATUS_HTTP_ROUTE {
+        let identity = match dashboard_auth::require_superuser(&headers, secure_cookie) {
+            Ok(identity) => identity,
+            Err(response) => {
+                let _ = stream.write_all(&response.into_http_bytes()).await;
+                return;
+            }
+        };
+        let operator_identity = OperatorIdentity {
+            username: identity.username,
+            display_name: identity.display_name,
+            role: identity.role,
+        };
+        write_json_value(
+            &mut stream,
+            "200 OK",
+            operator_status_json(&operator_identity),
+        )
+        .await;
         return;
     }
 

@@ -17,7 +17,11 @@ import {
   type SelectedWorkspaceChatEvidenceSource,
   type SelectedWorkspaceChatPacket,
 } from "@/lib/selected-workspace-chat-packet";
-import { APP_INTELLIGENCE_INSPECT_API_URL } from "@/lib/dashboard-api";
+import {
+  APP_INTELLIGENCE_INSPECT_API_URL,
+  APP_INTELLIGENCE_OPERATOR_STATUS_API_URL,
+  APP_INTELLIGENCE_OPERATOR_TURN_API_URL,
+} from "@/lib/dashboard-api";
 import { shikiTheme } from "@/lib/shiki-theme";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -350,6 +354,46 @@ interface CodexInspectResponse {
   };
 }
 
+type DashboardAuthUser = {
+  username: string;
+  displayName?: string;
+  role?: string;
+};
+
+type OperatorToolGroup = {
+  id: string;
+  label: string;
+  enabled: boolean;
+  reason?: string;
+  tools?: string[];
+};
+
+type OperatorStatusResponse = {
+  success?: boolean;
+  error?: string;
+  data?: {
+    mode?: string;
+    provider?: string;
+    ready?: boolean;
+    authenticatedUser?: DashboardAuthUser;
+    toolGroups?: OperatorToolGroup[];
+  };
+};
+
+type OperatorTurnResponse = {
+  success?: boolean;
+  error?: string;
+  data?: {
+    runId?: string;
+    mode?: string;
+    summary?: string;
+    proposedNextSteps?: Array<{ label: string; reason: string }>;
+    toolGroups?: OperatorToolGroup[];
+    toolCalls?: unknown[];
+    ledger?: unknown;
+  };
+};
+
 function CodexProviderSummary({
   packet,
   packetSummary,
@@ -558,16 +602,102 @@ function CodexObservationList({ title, items }: { title: string; items: string[]
   );
 }
 
+function OperatorStatusBlock({
+  user,
+  status,
+  latestTurn,
+  error,
+}: {
+  user: DashboardAuthUser;
+  status: OperatorStatusResponse["data"] | null;
+  latestTurn: OperatorTurnResponse["data"] | null;
+  error: string | null;
+}) {
+  const groups = latestTurn?.toolGroups ?? status?.toolGroups ?? [];
+  return (
+    <div
+      className="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-2 text-xs"
+      data-superuser-operator-agent="ready"
+    >
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+        <div className="min-w-0">
+          <div className="text-[10px] uppercase text-muted-foreground">Operate</div>
+          <div className="truncate font-medium text-foreground">Superuser operator</div>
+          <div className="truncate text-[10px] text-muted-foreground">
+            {user.displayName || user.username} · {user.role}
+          </div>
+        </div>
+        <div className="flex flex-wrap justify-end gap-1 text-[10px]">
+          <span className="rounded border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-primary">
+            Codex app server
+          </span>
+          <span className="rounded border border-border/60 px-1.5 py-0.5 text-muted-foreground">
+            {status?.ready ? "ready" : "starting"}
+          </span>
+          <span className="rounded border border-border/60 px-1.5 py-0.5 text-muted-foreground">
+            audited
+          </span>
+        </div>
+      </div>
+      <div className="grid gap-1 sm:grid-cols-2">
+        {groups.map((group) => (
+          <div key={group.id} className="rounded border border-border/60 px-2 py-1">
+            <div className="flex items-center gap-2">
+              <span className="truncate text-[11px] font-medium">{group.label}</span>
+              <span className="ml-auto shrink-0 rounded border border-border/50 px-1 py-0.5 text-[9px] text-muted-foreground">
+                {group.enabled ? "enabled" : "disabled"}
+              </span>
+            </div>
+            <div className="mt-0.5 truncate text-[10px] text-muted-foreground">
+              {group.reason ?? `${group.tools?.length ?? 0} tools`}
+            </div>
+          </div>
+        ))}
+      </div>
+      {latestTurn && (
+        <div className="space-y-1 rounded border border-border/60 px-2 py-1">
+          <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+            <span className="uppercase">Operator turn</span>
+            {latestTurn.runId && <span className="font-mono">{latestTurn.runId.slice(0, 18)}</span>}
+          </div>
+          <div className="text-[11px] text-foreground">{latestTurn.summary}</div>
+          {latestTurn.proposedNextSteps?.length ? (
+            <div className="space-y-1">
+              {latestTurn.proposedNextSteps.map((step) => (
+                <div key={step.label} className="text-[10px] text-muted-foreground">
+                  <span className="font-medium text-foreground">{step.label}</span>: {step.reason}
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      )}
+      {error && (
+        <div className="rounded border border-destructive/40 bg-destructive/10 px-2 py-1 text-[10px] text-destructive/90">
+          {error}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ChatPanel({
   selectedWorkspaceContext,
+  authenticatedUser,
 }: {
   selectedWorkspaceContext?: SelectedWorkspaceContext | null;
+  authenticatedUser?: DashboardAuthUser | null;
 } = {}) {
   const [input, setInput] = useState("");
+  const [chatMode, setChatMode] = useState<"inspect" | "operate">("inspect");
   const [errorDismissed, setErrorDismissed] = useState(false);
   const [codexInspections, setCodexInspections] = useState<CodexInspectionEntry[]>([]);
   const [codexError, setCodexError] = useState<string | null>(null);
   const [codexSubmitting, setCodexSubmitting] = useState(false);
+  const [operatorStatus, setOperatorStatus] = useState<OperatorStatusResponse["data"] | null>(null);
+  const [operatorTurn, setOperatorTurn] = useState<OperatorTurnResponse["data"] | null>(null);
+  const [operatorError, setOperatorError] = useState<string | null>(null);
+  const [operatorSubmitting, setOperatorSubmitting] = useState(false);
   const [evidenceInclude, setEvidenceInclude] = useState<Partial<Record<SelectedWorkspaceChatEvidenceSource, boolean>>>(DEFAULT_EVIDENCE_INCLUDE);
   const [copiedArtifact, setCopiedArtifact] = useState<"observation" | "packet" | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -596,8 +726,9 @@ export function ChatPanel({
   });
 
   const visibleError = error && !errorDismissed ? error : undefined;
-  const isLoading = status === "streaming" || status === "submitted" || codexSubmitting;
-  const hasMessages = messages.length > 0 || codexInspections.length > 0 || !!visibleError || !!codexError;
+  const isSuperuser = authenticatedUser?.role === "superuser";
+  const isLoading = status === "streaming" || status === "submitted" || codexSubmitting || operatorSubmitting;
+  const hasMessages = messages.length > 0 || codexInspections.length > 0 || !!visibleError || !!codexError || !!operatorTurn || !!operatorError;
   const selectedWorkspacePacket = useMemo(() => {
     if (!selectedWorkspaceContext) return null;
     return buildSelectedWorkspaceChatPacket(selectedWorkspaceContext, { include: evidenceInclude });
@@ -613,13 +744,49 @@ export function ChatPanel({
   const latestCodexInspection = codexInspections[codexInspections.length - 1] ?? null;
   const latestRunStatus = codexSubmitting
     ? "running"
+    : operatorSubmitting
+      ? "operator running"
     : latestCodexInspection?.observation
       ? "succeeded"
+      : operatorTurn
+        ? "operator staged"
       : latestCodexInspection?.failure
         ? "failed"
-        : codexError
+        : codexError || operatorError
           ? "failed"
           : "idle";
+
+  useEffect(() => {
+    if (!isSuperuser && chatMode === "operate") {
+      setChatMode("inspect");
+    }
+  }, [chatMode, isSuperuser]);
+
+  useEffect(() => {
+    if (!isSuperuser || chatMode !== "operate" || operatorStatus) return;
+    let cancelled = false;
+    async function loadOperatorStatus() {
+      try {
+        const response = await fetch(APP_INTELLIGENCE_OPERATOR_STATUS_API_URL, {
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+        const payload = (await response.json()) as OperatorStatusResponse;
+        if (cancelled) return;
+        if (!response.ok || !payload.success || !payload.data) {
+          setOperatorError(payload.error || `Operator status failed with HTTP ${response.status}`);
+          return;
+        }
+        setOperatorStatus(payload.data);
+      } catch (err) {
+        if (!cancelled) setOperatorError(err instanceof Error ? err.message : String(err));
+      }
+    }
+    void loadOperatorStatus();
+    return () => {
+      cancelled = true;
+    };
+  }, [chatMode, isSuperuser, operatorStatus]);
 
   useEffect(() => {
     for (const msg of messages) {
@@ -749,6 +916,38 @@ export function ChatPanel({
     void inspectWithCodex(prompt, selectedWorkspacePacket);
   }, [inspectWithCodex, selectedWorkspacePacket, selectedWorkspacePacketErrors]);
 
+  const runOperatorTurn = useCallback(async (prompt: string) => {
+    if (!isSuperuser) {
+      setOperatorError("Superuser role required.");
+      return;
+    }
+    setOperatorSubmitting(true);
+    setOperatorError(null);
+    try {
+      const response = await fetch(APP_INTELLIGENCE_OPERATOR_TURN_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          prompt,
+          packet: selectedWorkspacePacket,
+        }),
+      });
+      const payload = (await response.json()) as OperatorTurnResponse;
+      if (!response.ok || !payload.success || !payload.data) {
+        throw new Error(payload.error || `Operator turn failed with HTTP ${response.status}`);
+      }
+      setOperatorTurn(payload.data);
+      if (payload.data.toolGroups) {
+        setOperatorStatus((prev) => prev ? { ...prev, toolGroups: payload.data?.toolGroups } : prev);
+      }
+    } catch (err) {
+      setOperatorError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setOperatorSubmitting(false);
+    }
+  }, [isSuperuser, selectedWorkspacePacket]);
+
   const copyArtifact = useCallback(async (artifact: "observation" | "packet") => {
     const payload = artifact === "packet"
       ? selectedWorkspacePacket
@@ -769,6 +968,11 @@ export function ChatPanel({
     (e: React.FormEvent) => {
       e.preventDefault();
       if (!input.trim() || isLoading) return;
+      if (chatMode === "operate") {
+        void runOperatorTurn(input.trim());
+        setInput("");
+        return;
+      }
       if (!selectedWorkspacePacket) {
         setCodexError("Select a workspace before using contextual Chat.");
         return;
@@ -780,7 +984,7 @@ export function ChatPanel({
       void inspectWithCodex(input.trim(), selectedWorkspacePacket);
       setInput("");
     },
-    [input, isLoading, selectedWorkspacePacket, selectedWorkspacePacketErrors, inspectWithCodex],
+    [chatMode, input, isLoading, selectedWorkspacePacket, selectedWorkspacePacketErrors, inspectWithCodex, runOperatorTurn],
   );
 
   const lastCompactedId = useRef<string | null>(null);
@@ -817,6 +1021,8 @@ export function ChatPanel({
     setMessages([]);
     setCodexInspections([]);
     setCodexError(null);
+    setOperatorTurn(null);
+    setOperatorError(null);
     setErrorDismissed(true);
     localStorage.removeItem(storageKey);
     requestAnimationFrame(() => inputRef.current?.focus());
@@ -895,23 +1101,75 @@ export function ChatPanel({
       <ScrollArea className="flex-1 min-h-0">
         <div className="p-3 space-y-3">
           <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-1 text-[10px]" data-chat-mode-selector="ready">
+              <button
+                type="button"
+                onClick={() => setChatMode("inspect")}
+                className={cn(
+                  "rounded-md border px-2 py-1 transition-colors",
+                  chatMode === "inspect"
+                    ? "border-primary/40 bg-primary/10 text-primary"
+                    : "border-border/60 bg-secondary/20 text-muted-foreground hover:text-foreground",
+                )}
+              >
+                Inspect
+              </button>
+              {isSuperuser && (
+                <button
+                  type="button"
+                  onClick={() => setChatMode("operate")}
+                  className={cn(
+                    "rounded-md border px-2 py-1 transition-colors",
+                    chatMode === "operate"
+                      ? "border-primary/40 bg-primary/10 text-primary"
+                      : "border-border/60 bg-secondary/20 text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  Operate
+                </button>
+              )}
+              {isSuperuser && (
+                <span className="rounded border border-border/60 px-1.5 py-0.5 text-muted-foreground">
+                  superuser
+                </span>
+              )}
+            </div>
             <CodexProviderSummary
               packet={selectedWorkspacePacket}
               packetSummary={packetSummary}
               packetErrors={selectedWorkspacePacketErrors}
               runStatus={latestRunStatus}
             />
+            {chatMode === "operate" && isSuperuser && authenticatedUser && (
+              <OperatorStatusBlock
+                user={authenticatedUser}
+                status={operatorStatus}
+                latestTurn={operatorTurn}
+                error={operatorError}
+              />
+            )}
             <CodexEvidenceSelector packet={selectedWorkspacePacket} onToggle={toggleEvidence} />
             <div className="flex flex-wrap gap-1.5" data-chat-prompt-actions="ready">
               <button
                 type="button"
                 onClick={runDefaultInspection}
-                disabled={isLoading || !selectedWorkspacePacket || selectedWorkspacePacketErrors.length > 0}
+                disabled={chatMode !== "inspect" || isLoading || !selectedWorkspacePacket || selectedWorkspacePacketErrors.length > 0}
                 className="inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-[10px] text-primary transition-colors hover:bg-primary/15 disabled:opacity-40"
               >
                 <Search className="size-3" />
                 Inspect selected workspace
               </button>
+              {chatMode === "operate" && isSuperuser && (
+                <button
+                  type="button"
+                  onClick={() => void runOperatorTurn(input.trim() || "Plan the next safe operator action for the selected workspace.")}
+                  disabled={operatorSubmitting}
+                  className="inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-[10px] text-primary transition-colors hover:bg-primary/15 disabled:opacity-40"
+                >
+                  <Search className="size-3" />
+                  Plan operator action
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => inputRef.current?.focus()}
@@ -1115,7 +1373,7 @@ export function ChatPanel({
                 e.target.style.height = `${e.target.scrollHeight}px`;
               }}
               rows={1}
-              placeholder="Ask follow-up about selected workspace evidence..."
+              placeholder={chatMode === "operate" ? "Ask the superuser operator what to do..." : "Ask follow-up about selected workspace evidence..."}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();

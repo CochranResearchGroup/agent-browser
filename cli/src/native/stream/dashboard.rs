@@ -7,7 +7,10 @@ use tokio::net::TcpListener;
 use crate::connection::get_socket_dir;
 
 use super::app_intelligence::{
-    app_intelligence_status_json, inspect_workspace_response, APP_INTELLIGENCE_INSPECT_HTTP_ROUTE,
+    app_intelligence_status_json, inspect_workspace_response, operator_confirm_response,
+    operator_status_json, operator_turn_response, OperatorIdentity,
+    APP_INTELLIGENCE_INSPECT_HTTP_ROUTE, APP_INTELLIGENCE_OPERATOR_CONFIRM_HTTP_ROUTE,
+    APP_INTELLIGENCE_OPERATOR_STATUS_HTTP_ROUTE, APP_INTELLIGENCE_OPERATOR_TURN_HTTP_ROUTE,
     APP_INTELLIGENCE_STATUS_HTTP_ROUTE,
 };
 use super::chat::{chat_status_json, handle_chat_request, handle_models_request};
@@ -152,6 +155,44 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
         return;
     }
 
+    if method == "POST" && path == APP_INTELLIGENCE_OPERATOR_TURN_HTTP_ROUTE {
+        let identity = match dashboard_auth::require_superuser(&headers, secure_cookie) {
+            Ok(identity) => identity,
+            Err(response) => {
+                let _ = stream.write_all(&response.into_http_bytes()).await;
+                return;
+            }
+        };
+        let body_str = read_post_body(&mut stream, &buf, n).await;
+        let operator_identity = OperatorIdentity {
+            username: identity.username,
+            display_name: identity.display_name,
+            role: identity.role,
+        };
+        let (status, value) = operator_turn_response(&body_str, &operator_identity);
+        write_json_value(&mut stream, status, value).await;
+        return;
+    }
+
+    if method == "POST" && path == APP_INTELLIGENCE_OPERATOR_CONFIRM_HTTP_ROUTE {
+        let identity = match dashboard_auth::require_superuser(&headers, secure_cookie) {
+            Ok(identity) => identity,
+            Err(response) => {
+                let _ = stream.write_all(&response.into_http_bytes()).await;
+                return;
+            }
+        };
+        let body_str = read_post_body(&mut stream, &buf, n).await;
+        let operator_identity = OperatorIdentity {
+            username: identity.username,
+            display_name: identity.display_name,
+            role: identity.role,
+        };
+        let (status, value) = operator_confirm_response(&body_str, &operator_identity);
+        write_json_value(&mut stream, status, value).await;
+        return;
+    }
+
     if method == "GET" && path == "/api/models" {
         handle_models_request(&mut stream, origin.as_deref()).await;
         return;
@@ -218,6 +259,27 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
             "application/json; charset=utf-8",
             app_intelligence_status_json().to_string().into_bytes(),
         )
+    } else if path == APP_INTELLIGENCE_OPERATOR_STATUS_HTTP_ROUTE {
+        match dashboard_auth::require_superuser(&headers, secure_cookie) {
+            Ok(identity) => {
+                let operator_identity = OperatorIdentity {
+                    username: identity.username,
+                    display_name: identity.display_name,
+                    role: identity.role,
+                };
+                (
+                    "200 OK",
+                    "application/json; charset=utf-8",
+                    operator_status_json(&operator_identity)
+                        .to_string()
+                        .into_bytes(),
+                )
+            }
+            Err(response) => {
+                let _ = stream.write_all(&response.into_http_bytes()).await;
+                return;
+            }
+        }
     } else {
         serve_embedded_file(path)
     };
