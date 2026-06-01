@@ -45,6 +45,35 @@ assert(
   chatPanel.includes('Codex app server') && chatPanel.includes('read-only'),
   'Chat panel must identify the Codex app server read-only provider',
 );
+assert(
+  chatPanel.includes('data-chat-evidence-selector="ready"') &&
+    chatPanel.includes('item.sourceLabel') &&
+    packet.includes('sourceLabel: "Workspace"') &&
+    packet.includes('sourceLabel: "Activity summary"') &&
+    packet.includes('sourceLabel: "Stream readiness"') &&
+    packet.includes('"Console unavailable"') &&
+    packet.includes('"Network unavailable"') &&
+    packet.includes('"Storage unavailable"') &&
+    packet.includes('"Extensions unavailable"'),
+  'Chat panel must render selected-workspace evidence toggles and unavailable evidence groups',
+);
+assert(
+  chatPanel.includes('Inspect selected workspace') &&
+    chatPanel.includes('Ask follow-up') &&
+    chatPanel.includes('Copy observation') &&
+    chatPanel.includes('Copy evidence packet') &&
+    chatPanel.includes('Ask follow-up about selected workspace evidence'),
+  'Chat panel must expose compact read-only inspection, follow-up, and copy controls',
+);
+assert(
+  packet.includes('"stream"') &&
+    packet.includes('sourceLabel') &&
+    packet.includes('available: boolean') &&
+    packet.includes('unavailableReason') &&
+    packet.includes('buildActivityEvidence') &&
+    packet.includes('buildStreamEvidence'),
+  'Selected workspace packet must include source-labeled Activity and Stream evidence metadata',
+);
 assert(!chatPanel.includes('<ModelSelector'), 'Contextual Chat must not render the model selector');
 assert(!chatPanel.includes('MODELS_API_URL'), 'Contextual Chat must not use the models endpoint');
 assert(!chatPanel.includes('ImagePlus'), 'Contextual Chat must not expose screenshot/image attachment input');
@@ -85,9 +114,17 @@ assert(
   chatPanel.includes('Inspection failure') &&
     chatPanel.includes('event log') &&
     chatPanel.includes('thread {ledger.threadId.slice(0, 8)}') &&
-    chatPanel.includes('turn {ledger.turnId.slice(0, 8)}'),
+    chatPanel.includes('turn {ledger.turnId.slice(0, 8)}') &&
+    chatPanel.includes('Detected state') &&
+    chatPanel.includes('Evidence references') &&
+    chatPanel.includes('Run ledger') &&
+    chatPanel.includes('validation passed') &&
+    chatPanel.includes('validation failed'),
   'Chat panel must render structured app-server failures and ledger metadata',
 );
+for (const forbidden of ['AI Gateway', 'OpenAI', 'Codex exec', 'OpenClaw', 'AuraCall']) {
+  assert(!chatPanel.includes(forbidden), `Contextual Chat must not expose forbidden provider or action label: ${forbidden}`);
+}
 assert(
   http.includes('APP_INTELLIGENCE_INSPECT_HTTP_ROUTE') &&
     dashboard.includes('APP_INTELLIGENCE_INSPECT_HTTP_ROUTE'),

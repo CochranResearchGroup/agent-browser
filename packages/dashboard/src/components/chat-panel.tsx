@@ -14,13 +14,14 @@ import {
   selectedWorkspaceChatPacketSummary,
   validateSelectedWorkspaceChatPacket,
   type CodexWorkspaceObservation,
+  type SelectedWorkspaceChatEvidenceSource,
   type SelectedWorkspaceChatPacket,
 } from "@/lib/selected-workspace-chat-packet";
 import { APP_INTELLIGENCE_INSPECT_API_URL } from "@/lib/dashboard-api";
 import { shikiTheme } from "@/lib/shiki-theme";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { ArrowUp, Square, Trash2, ChevronRight, Loader, Copy, Check, Download, ShieldCheck } from "lucide-react";
+import { ArrowUp, Square, Trash2, ChevronRight, Loader, Copy, Check, Download, ShieldCheck, Search } from "lucide-react";
 
 type ExtraProps = { node?: unknown };
 type MdImgProps = React.ImgHTMLAttributes<HTMLImageElement> & ExtraProps;
@@ -88,6 +89,12 @@ const SUGGESTIONS = [
   "Summarize the selected workspace state",
   "List the next read-only checks",
 ];
+
+const DEFAULT_EVIDENCE_INCLUDE: Partial<Record<SelectedWorkspaceChatEvidenceSource, boolean>> = {
+  workspace: true,
+  activity: true,
+  stream: true,
+};
 
 interface ToolInvocationPart {
   type: string;
@@ -347,20 +354,47 @@ function CodexProviderSummary({
   packet,
   packetSummary,
   packetErrors,
+  runStatus,
 }: {
   packet: SelectedWorkspaceChatPacket | null;
   packetSummary: string;
   packetErrors: string[];
+  runStatus: string;
 }) {
   return (
-    <div className="rounded-md border border-border/60 bg-secondary/20 px-2 py-1.5 text-[10px]">
-      <div className="flex items-center gap-1.5 text-foreground">
-        <ShieldCheck className="size-3 shrink-0 text-primary" />
-        <span className="font-medium">Codex app server</span>
-        <span className="ml-auto text-muted-foreground">read-only</span>
-      </div>
-      <div className="mt-1 text-muted-foreground break-words">
-        {packet ? packetSummary || packet.workspace.label : "No workspace selected"}
+    <div className="rounded-md border border-border/60 bg-secondary/15 px-2 py-1.5 text-[10px]">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-1.5 text-foreground">
+            <ShieldCheck className="size-3 shrink-0 text-primary" />
+            <span className="truncate font-medium">{packet?.workspace.label ?? "No workspace selected"}</span>
+            {packet?.workspace.state && (
+              <span className="rounded border border-border/60 px-1 py-0.5 font-mono text-[9px] text-muted-foreground">
+                {packet.workspace.state}
+              </span>
+            )}
+          </div>
+          <div className="mt-1 truncate text-muted-foreground">
+            {packet ? packetSummary || packet.workspace.label : "Select a workspace to inspect with Chat"}
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-wrap justify-end gap-1">
+          <span className="rounded border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-primary">
+            Codex app server
+          </span>
+          <span className="rounded border border-border/60 px-1.5 py-0.5 text-muted-foreground">
+            read-only
+          </span>
+          <span className="rounded border border-border/60 px-1.5 py-0.5 text-muted-foreground">
+            {packetErrors.length ? "failed" : packet ? "ready" : "unavailable"}
+          </span>
+          <span className="rounded border border-border/60 px-1.5 py-0.5 text-muted-foreground">
+            {packet?.evidence[0]?.freshness ?? "no evidence"}
+          </span>
+          <span className="rounded border border-border/60 px-1.5 py-0.5 text-muted-foreground">
+            {runStatus}
+          </span>
+        </div>
       </div>
       {packetErrors.length > 0 && (
         <div className="mt-1 text-destructive/80">
@@ -371,8 +405,56 @@ function CodexProviderSummary({
   );
 }
 
+function CodexEvidenceSelector({
+  packet,
+  onToggle,
+}: {
+  packet: SelectedWorkspaceChatPacket | null;
+  onToggle: (source: SelectedWorkspaceChatEvidenceSource, included: boolean) => void;
+}) {
+  if (!packet) {
+    return (
+      <div className="rounded-md border border-border/60 px-2 py-1.5 text-[10px] text-muted-foreground">
+        Evidence selector unavailable until a workspace is selected.
+      </div>
+    );
+  }
+  return (
+    <div
+      className="grid grid-cols-2 gap-1 text-[10px] sm:grid-cols-3"
+      data-chat-evidence-selector="ready"
+    >
+      {packet.evidence.map((item) => (
+        <label
+          key={item.id}
+          title={item.unavailableReason ?? item.summary}
+          className={cn(
+            "flex min-w-0 items-center gap-1 rounded border px-1.5 py-1",
+            item.available
+              ? "border-border/60 bg-secondary/20 text-foreground"
+              : "border-border/40 bg-background/30 text-muted-foreground/60",
+          )}
+        >
+          <input
+            type="checkbox"
+            checked={item.included}
+            disabled={!item.available}
+            onChange={(event) => onToggle(item.source, event.target.checked)}
+            className="size-3 shrink-0 accent-primary"
+          />
+          <span className="min-w-0 truncate">{item.sourceLabel}</span>
+          <span className="ml-auto shrink-0 font-mono text-[9px] text-muted-foreground">
+            {item.available ? item.freshness : "unavailable"}
+          </span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
 function CodexInspectionBlock({ entry }: { entry: CodexInspectionEntry }) {
   const { observation, failure, ledger } = entry;
+  const evidenceRefs = observation ? observationEvidenceRefs(observation) : [];
   return (
     <div className="space-y-2 rounded-md border border-border/60 bg-background/40 p-2 text-xs">
       <div className="space-y-1">
@@ -380,9 +462,29 @@ function CodexInspectionBlock({ entry }: { entry: CodexInspectionEntry }) {
         <div className="text-muted-foreground whitespace-pre-wrap">{entry.prompt}</div>
       </div>
       {observation ? (
-        <div className="space-y-1">
-          <div className="text-[10px] uppercase text-muted-foreground">Observation</div>
-          <div className="text-foreground leading-relaxed">{observation.summary}</div>
+        <div className="grid gap-2 md:grid-cols-2">
+          <div className="space-y-1 md:col-span-2">
+            <div className="text-[10px] uppercase text-muted-foreground">Summary</div>
+            <div className="text-foreground leading-relaxed">{observation.summary}</div>
+          </div>
+          <div className="space-y-1">
+            <div className="text-[10px] uppercase text-muted-foreground">Detected state</div>
+            <div className="rounded border border-border/50 px-2 py-1 text-[11px] text-muted-foreground">
+              {observation.detectedState}
+            </div>
+          </div>
+          <div className="space-y-1">
+            <div className="text-[10px] uppercase text-muted-foreground">Evidence references</div>
+            <div className="flex flex-wrap gap-1">
+              {evidenceRefs.length ? evidenceRefs.map((ref) => (
+                <span key={ref} className="rounded border border-border/50 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                  {ref}
+                </span>
+              )) : (
+                <span className="text-[11px] text-destructive/80">No evidence references returned</span>
+              )}
+            </div>
+          </div>
         </div>
       ) : (
         <div className="space-y-1">
@@ -403,45 +505,42 @@ function CodexInspectionBlock({ entry }: { entry: CodexInspectionEntry }) {
       )}
       {observation && observation.suggestedNextInspections.length > 0 && (
         <CodexObservationList
-          title="Next"
+          title="Suggested next read-only inspections"
           items={observation.suggestedNextInspections.map((item) => `${item.label}: ${item.reason}`)}
         />
       )}
-      <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
-        <span>{observation?.provider ?? CONTEXTUAL_CHAT_PROVIDER_ID}</span>
-        {observation && (
-          <>
-            <span>·</span>
-            <span>{observation.confidence} confidence</span>
-          </>
-        )}
-        {ledger?.threadId && (
-          <>
-            <span>·</span>
-            <span className="font-mono">thread {ledger.threadId.slice(0, 8)}</span>
-          </>
-        )}
-        {ledger?.turnId && (
-          <>
-            <span>·</span>
-            <span className="font-mono">turn {ledger.turnId.slice(0, 8)}</span>
-          </>
-        )}
-        {ledger?.contextPacketHash && (
-          <>
-            <span>·</span>
-            <span className="font-mono">{ledger.contextPacketHash.slice(0, 12)}</span>
-          </>
-        )}
-        {ledger?.eventLogPath && (
-          <>
-            <span>·</span>
-            <span>event log</span>
-          </>
+      <div className="space-y-1">
+        <div className="text-[10px] uppercase text-muted-foreground">Run ledger</div>
+        <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+          <span>{observation?.provider ?? CONTEXTUAL_CHAT_PROVIDER_ID}</span>
+          {ledger?.runId && <span className="font-mono">run {ledger.runId.slice(0, 8)}</span>}
+          {observation && <span>{observation.confidence} confidence</span>}
+          {ledger?.threadId && <span className="font-mono">thread {ledger.threadId.slice(0, 8)}</span>}
+          {ledger?.turnId && <span className="font-mono">turn {ledger.turnId.slice(0, 8)}</span>}
+          {ledger?.contextPacketHash && <span className="font-mono">packet {ledger.contextPacketHash.slice(0, 12)}</span>}
+          <span>{observation ? "validation passed" : "validation failed"}</span>
+        </div>
+        {(ledger?.eventLogPath || ledger?.normalizedEventLogPath || ledger?.observationPath) && (
+          <details className="rounded border border-border/50 px-2 py-1 text-[10px] text-muted-foreground">
+            <summary className="cursor-pointer">event log</summary>
+            <div className="mt-1 space-y-0.5 font-mono break-all">
+              {ledger.eventLogPath && <div>raw {ledger.eventLogPath}</div>}
+              {ledger.normalizedEventLogPath && <div>normalized {ledger.normalizedEventLogPath}</div>}
+              {ledger.observationPath && <div>observation {ledger.observationPath}</div>}
+            </div>
+          </details>
         )}
       </div>
     </div>
   );
+}
+
+function observationEvidenceRefs(observation: CodexWorkspaceObservation): string[] {
+  return Array.from(new Set([
+    ...observation.blockers.flatMap((item) => item.evidenceIds),
+    ...observation.risks.flatMap((item) => item.evidenceIds),
+    ...observation.suggestedNextInspections.flatMap((item) => item.evidenceIds),
+  ].filter(Boolean)));
 }
 
 function CodexObservationList({ title, items }: { title: string; items: string[] }) {
@@ -469,6 +568,8 @@ export function ChatPanel({
   const [codexInspections, setCodexInspections] = useState<CodexInspectionEntry[]>([]);
   const [codexError, setCodexError] = useState<string | null>(null);
   const [codexSubmitting, setCodexSubmitting] = useState(false);
+  const [evidenceInclude, setEvidenceInclude] = useState<Partial<Record<SelectedWorkspaceChatEvidenceSource, boolean>>>(DEFAULT_EVIDENCE_INCLUDE);
+  const [copiedArtifact, setCopiedArtifact] = useState<"observation" | "packet" | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const sessionName = useAtomValue(activeSessionNameAtom);
@@ -499,8 +600,8 @@ export function ChatPanel({
   const hasMessages = messages.length > 0 || codexInspections.length > 0 || !!visibleError || !!codexError;
   const selectedWorkspacePacket = useMemo(() => {
     if (!selectedWorkspaceContext) return null;
-    return buildSelectedWorkspaceChatPacket(selectedWorkspaceContext);
-  }, [selectedWorkspaceContext]);
+    return buildSelectedWorkspaceChatPacket(selectedWorkspaceContext, { include: evidenceInclude });
+  }, [selectedWorkspaceContext, evidenceInclude]);
   const selectedWorkspacePacketErrors = useMemo(
     () => (selectedWorkspacePacket ? validateSelectedWorkspaceChatPacket(selectedWorkspacePacket) : []),
     [selectedWorkspacePacket],
@@ -509,6 +610,16 @@ export function ChatPanel({
     () => (selectedWorkspacePacket ? selectedWorkspaceChatPacketSummary(selectedWorkspacePacket) : ""),
     [selectedWorkspacePacket],
   );
+  const latestCodexInspection = codexInspections[codexInspections.length - 1] ?? null;
+  const latestRunStatus = codexSubmitting
+    ? "running"
+    : latestCodexInspection?.observation
+      ? "succeeded"
+      : latestCodexInspection?.failure
+        ? "failed"
+        : codexError
+          ? "failed"
+          : "idle";
 
   useEffect(() => {
     for (const msg of messages) {
@@ -620,6 +731,39 @@ export function ChatPanel({
       setCodexSubmitting(false);
     }
   }, []);
+
+  const toggleEvidence = useCallback((source: SelectedWorkspaceChatEvidenceSource, included: boolean) => {
+    setEvidenceInclude((prev) => ({ ...prev, [source]: included }));
+  }, []);
+
+  const runDefaultInspection = useCallback(() => {
+    const prompt = "Inspect selected workspace";
+    if (!selectedWorkspacePacket) {
+      setCodexError("Select a workspace before using contextual Chat.");
+      return;
+    }
+    if (selectedWorkspacePacketErrors.length > 0) {
+      setCodexError(selectedWorkspacePacketErrors.join(" "));
+      return;
+    }
+    void inspectWithCodex(prompt, selectedWorkspacePacket);
+  }, [inspectWithCodex, selectedWorkspacePacket, selectedWorkspacePacketErrors]);
+
+  const copyArtifact = useCallback(async (artifact: "observation" | "packet") => {
+    const payload = artifact === "packet"
+      ? selectedWorkspacePacket
+      : latestCodexInspection
+        ? {
+            observation: latestCodexInspection.observation ?? null,
+            failure: latestCodexInspection.failure ?? null,
+            ledger: latestCodexInspection.ledger ?? null,
+          }
+        : null;
+    if (!payload) return;
+    await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+    setCopiedArtifact(artifact);
+    setTimeout(() => setCopiedArtifact(null), 2000);
+  }, [latestCodexInspection, selectedWorkspacePacket]);
 
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
@@ -750,13 +894,51 @@ export function ChatPanel({
 
       <ScrollArea className="flex-1 min-h-0">
         <div className="p-3 space-y-3">
-          {!hasMessages && !isLoading && (
-            <div className="space-y-2 pt-2">
-              <CodexProviderSummary
-                packet={selectedWorkspacePacket}
-                packetSummary={packetSummary}
-                packetErrors={selectedWorkspacePacketErrors}
-              />
+          <div className="space-y-2">
+            <CodexProviderSummary
+              packet={selectedWorkspacePacket}
+              packetSummary={packetSummary}
+              packetErrors={selectedWorkspacePacketErrors}
+              runStatus={latestRunStatus}
+            />
+            <CodexEvidenceSelector packet={selectedWorkspacePacket} onToggle={toggleEvidence} />
+            <div className="flex flex-wrap gap-1.5" data-chat-prompt-actions="ready">
+              <button
+                type="button"
+                onClick={runDefaultInspection}
+                disabled={isLoading || !selectedWorkspacePacket || selectedWorkspacePacketErrors.length > 0}
+                className="inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-[10px] text-primary transition-colors hover:bg-primary/15 disabled:opacity-40"
+              >
+                <Search className="size-3" />
+                Inspect selected workspace
+              </button>
+              <button
+                type="button"
+                onClick={() => inputRef.current?.focus()}
+                className="rounded-md border border-border/60 bg-secondary/30 px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Ask follow-up
+              </button>
+              <button
+                type="button"
+                onClick={() => void copyArtifact("observation")}
+                disabled={!latestCodexInspection}
+                className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-secondary/30 px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
+              >
+                {copiedArtifact === "observation" ? <Check className="size-3" /> : <Copy className="size-3" />}
+                Copy observation
+              </button>
+              <button
+                type="button"
+                onClick={() => void copyArtifact("packet")}
+                disabled={!selectedWorkspacePacket}
+                className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-secondary/30 px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
+              >
+                {copiedArtifact === "packet" ? <Check className="size-3" /> : <Copy className="size-3" />}
+                Copy evidence packet
+              </button>
+            </div>
+            {!hasMessages && !isLoading && (
               <div className="flex flex-wrap gap-1.5">
                 {SUGGESTIONS.map((s) => (
                   <button
@@ -774,16 +956,8 @@ export function ChatPanel({
                   </button>
                 ))}
               </div>
-            </div>
-          )}
-
-          {hasMessages && (
-            <CodexProviderSummary
-              packet={selectedWorkspacePacket}
-              packetSummary={packetSummary}
-              packetErrors={selectedWorkspacePacketErrors}
-            />
-          )}
+            )}
+          </div>
 
           {codexInspections.map((entry) => (
             <CodexInspectionBlock key={entry.id} entry={entry} />
@@ -941,7 +1115,7 @@ export function ChatPanel({
                 e.target.style.height = `${e.target.scrollHeight}px`;
               }}
               rows={1}
-              placeholder="Ask something..."
+              placeholder="Ask follow-up about selected workspace evidence..."
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();

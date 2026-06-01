@@ -128,7 +128,7 @@ async function runBrowserSmoke(baseUrl) {
   }
 
   try {
-    await runAgent([...baseAgentArgs(), 'open', smokeUrl.href], { timeoutMs: 90000 });
+    await openDashboardUrl(smokeUrl.href);
     await runAgent(['--json', '--session', options.session, 'wait', '1000'], { timeoutMs: 30000 });
     const first = await evalAgent(`
 JSON.stringify({
@@ -276,6 +276,17 @@ return JSON.stringify({
   } finally {
     if (!options.keepBrowser) {
       await runAgent([...baseAgentArgs(), 'close'], { timeoutMs: 30000 }).catch(() => undefined);
+    }
+  }
+}
+
+async function openDashboardUrl(url) {
+  try {
+    await runAgent([...baseAgentArgs(), 'open', url], { timeoutMs: 90000 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes('Operation timed out. The page may still be loading')) {
+      throw error;
     }
   }
 }

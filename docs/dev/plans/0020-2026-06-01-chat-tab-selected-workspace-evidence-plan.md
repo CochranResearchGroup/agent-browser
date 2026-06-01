@@ -1,7 +1,7 @@
 # Chat Tab Selected Workspace Evidence Plan
 
 Date: 2026-06-01
-State: OPEN
+State: COMPLETE
 Lane: P12-H
 Parent Roadmap: `docs/dev/plans/0012-2026-05-31-workspace-inspection-pane-app-intelligence-roadmap.md`
 Depends On:
@@ -280,3 +280,42 @@ node scripts/smoke-local-dashboard-runtime.js \
 - Source checks pass.
 - The installed dashboard is republished.
 - Hosted smoke proves the Chat tab works against a live selected workspace.
+
+## Completion Evidence
+
+Completed on 2026-06-01.
+
+Source checks:
+
+```bash
+pnpm test:dashboard-selected-workspace-chat-packet
+pnpm test:dashboard-contextual-chat
+pnpm test:dashboard-workspace-inspector-tab
+pnpm test:dashboard-selected-workspace-context
+pnpm build:dashboard
+git diff --check
+```
+
+Runtime checks:
+
+```bash
+pnpm publish:local-dashboard -- \
+  --expect-marker data-codex-app-server-contextual-chat \
+  --expect-marker Workspace \
+  --browser-profile /tmp/agent-browser-chat-tab-publish-smoke \
+  --json
+
+node scripts/smoke-local-dashboard-runtime.js \
+  --dashboard-url https://agent-browser.ecochran.dyndns.org/ \
+  --workspace-session default-posture-smoke \
+  --browser-profile /tmp/agent-browser-chat-tab-hosted-smoke-2 \
+  --expect-marker data-codex-app-server-contextual-chat \
+  --expect-marker Workspace \
+  --json
+```
+
+The hosted smoke proved the selected `default-posture-smoke` workspace rendered
+a live viewport, dense Workspace facts, Codex app server read-only Chat, the
+Workspace, Activity summary, Stream readiness, and unavailable evidence groups,
+plus a structured Codex observation with event-log and thread/turn ledger
+metadata.

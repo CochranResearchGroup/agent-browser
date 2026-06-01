@@ -94,10 +94,47 @@ assert.equal(live.runtime.pid, 1234);
 assert.equal(live.page.targetId, 'target-live');
 assert.equal(live.stream.provider, 'cdp_screencast');
 assert.equal(live.ownership.serviceName, 'svc');
-assert.ok(live.evidence.some((item) => item.id === 'workspace.summary' && item.included));
-assert.ok(live.evidence.some((item) => item.source === 'network' && item.id === 'network.unavailable' && !item.included));
+const workspaceEvidence = live.evidence.find((item) => item.id === 'workspace.summary');
+const activityEvidence = live.evidence.find((item) => item.id === 'activity.summary');
+const streamEvidence = live.evidence.find((item) => item.id === 'stream.readiness');
+const networkUnavailable = live.evidence.find((item) => item.source === 'network');
+assert.ok(workspaceEvidence?.included);
+assert.equal(workspaceEvidence.sourceLabel, 'Workspace');
+assert.equal(workspaceEvidence.available, true);
+assert.equal(workspaceEvidence.unavailableReason, null);
+assert.ok(activityEvidence?.included);
+assert.equal(activityEvidence.sourceLabel, 'Activity summary');
+assert.equal(activityEvidence.available, true);
+assert.equal(activityEvidence.facts.jobCount, 1);
+assert.deepEqual(activityEvidence.facts.jobStates, { running: 1 });
+assert.equal(activityEvidence.facts.incidentCount, 1);
+assert.ok(streamEvidence?.included);
+assert.equal(streamEvidence.sourceLabel, 'Stream readiness');
+assert.equal(streamEvidence.available, true);
+assert.equal(streamEvidence.facts.provider, 'cdp_screencast');
+assert.equal(streamEvidence.facts.controlInput, 'cdp_input');
+assert.equal(streamEvidence.facts.cdpPort, live.runtime.cdpPort);
+assert.equal(streamEvidence.facts.streamPort, live.runtime.streamPort);
+assert.equal(streamEvidence.facts.embeddable, true);
+assert.equal(streamEvidence.facts.controllable, true);
+assert.equal(networkUnavailable?.id, 'network.unavailable');
+assert.equal(networkUnavailable?.available, false);
+assert.equal(networkUnavailable?.included, false);
+assert.match(networkUnavailable?.unavailableReason ?? '', /not implemented/);
 assert.ok(selectedWorkspaceChatPacketSummary(live).includes('browser:browser-live'));
 assert.deepEqual(validateSelectedWorkspaceChatPacket(live), []);
+
+const streamExcluded = buildSelectedWorkspaceChatPacket(
+  buildSelectedWorkspaceContext({
+    ...fixture,
+    selection: { ...emptySelection, browserId: 'browser-live' },
+    refreshedAt: Date.now(),
+  }),
+  { createdAt: '2026-05-31T14:00:00.000Z', include: { stream: false } },
+);
+const excludedStreamEvidence = streamExcluded.evidence.find((item) => item.id === 'stream.readiness');
+assert.equal(excludedStreamEvidence?.available, true);
+assert.equal(excludedStreamEvidence?.included, false);
 
 const retained = packet({ browserId: 'browser-retained' });
 assert.equal(retained.workspace.id, 'browser:browser-retained');

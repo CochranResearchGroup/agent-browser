@@ -9,6 +9,7 @@ export type ContextualChatProviderId = typeof CONTEXTUAL_CHAT_PROVIDER_ID;
 export type SelectedWorkspaceChatEvidenceSource =
   | "workspace"
   | "activity"
+  | "stream"
   | "console"
   | "network"
   | "storage"
@@ -78,8 +79,11 @@ export type SelectedWorkspaceChatPacket = {
 export type SelectedWorkspaceChatEvidence = {
   id: string;
   source: SelectedWorkspaceChatEvidenceSource;
+  sourceLabel: string;
   summary: string;
   facts: Record<string, unknown>;
+  available: boolean;
+  unavailableReason: string | null;
   freshness: string;
   included: boolean;
 };
@@ -128,6 +132,8 @@ export function buildSelectedWorkspaceChatPacket(
   const include = options.include ?? {};
   const createdAt = options.createdAt ?? new Date().toISOString();
   const workspaceEvidence = buildWorkspaceEvidence(context, include.workspace !== false);
+  const activityEvidence = buildActivityEvidence(context, include.activity !== false);
+  const streamEvidence = buildStreamEvidence(context, include.stream !== false);
   return {
     version: SELECTED_WORKSPACE_CHAT_PACKET_VERSION,
     createdAt,
@@ -175,11 +181,12 @@ export function buildSelectedWorkspaceChatPacket(
     },
     evidence: [
       workspaceEvidence,
-      unavailableEvidence("activity", include.activity === true),
-      unavailableEvidence("console", include.console === true),
-      unavailableEvidence("network", include.network === true),
-      unavailableEvidence("storage", include.storage === true),
-      unavailableEvidence("extensions", include.extensions === true),
+      activityEvidence,
+      streamEvidence,
+      unavailableEvidence("console"),
+      unavailableEvidence("network"),
+      unavailableEvidence("storage"),
+      unavailableEvidence("extensions"),
     ],
     redaction: {
       secretsOmitted: true,
@@ -222,6 +229,7 @@ function buildWorkspaceEvidence(
   return {
     id: "workspace.summary",
     source: "workspace",
+    sourceLabel: "Workspace",
     summary: context.evidence.summary,
     facts: redactFacts({
       workspaceId: context.node?.id ?? null,
@@ -254,32 +262,144 @@ function buildWorkspaceEvidence(
       evidenceRows: context.evidence.rows,
     }),
     freshness: freshnessLabel(context.refreshedAt),
+    available: true,
+    unavailableReason: null,
+    included,
+  };
+}
+
+function buildActivityEvidence(
+  context: SelectedWorkspaceContext,
+  included: boolean,
+): SelectedWorkspaceChatEvidence {
+  const jobStates = countBy(context.jobs.map((job) => typeof job.state === "string" ? job.state : "unknown"));
+  const incidentSeverities = countBy(context.incidents.map((incident) => typeof incident.severity === "string" ? incident.severity : "unknown"));
+  const enabledActions = context.actions.filter((action) => action.enabled).map((action) => action.label);
+  const unavailableActions = context.actions
+    .filter((action) => !action.enabled)
+    .map((action) => ({
+      label: action.label,
+      reason: action.reason ?? "No service contract or runtime support is currently reported.",
+    }));
+  const diagnostics = context.diagnostics.map((diagnostic) => ({
+    kind: diagnostic.kind,
+    severity: diagnostic.severity,
+    message: diagnostic.message,
+    relatedIds: diagnostic.relatedIds,
+  }));
+  const summary = [
+    `${context.jobs.length} related job${context.jobs.length === 1 ? "" : "s"}`,
+    `${context.incidents.length} incident${context.incidents.length === 1 ? "" : "s"}`,
+    `${context.diagnostics.length} diagnostic${context.diagnostics.length === 1 ? "" : "s"}`,
+  ].join(", ");
+  return {
+    id: "activity.summary",
+    source: "activity",
+    sourceLabel: "Activity summary",
+    summary: `Selected workspace activity summary: ${summary}.`,
+    facts: redactFacts({
+      jobCount: context.jobs.length,
+      jobIds: context.jobs.map((job) => job.id),
+      jobStates,
+      incidentCount: context.incidents.length,
+      incidentIds: context.incidents.map((incident) => incident.id),
+      incidentSeverities,
+      diagnostics,
+      enabledActions,
+      unavailableActions,
+    }),
+    available: true,
+    unavailableReason: null,
+    freshness: freshnessLabel(context.refreshedAt),
+    included,
+  };
+}
+
+function buildStreamEvidence(
+  context: SelectedWorkspaceContext,
+  included: boolean,
+): SelectedWorkspaceChatEvidence {
+  const stream = context.stream;
+  const facts = {
+    provider: stream?.provider ?? null,
+    routeSummary: stream?.routeSummary ?? null,
+    routeId: stream?.routeId ?? null,
+    routeSource: stream?.routeSource ?? null,
+    controlInput: stream?.controlInput ?? null,
+    cdpPort: context.runtime.cdpPort ?? null,
+    streamPort: context.runtime.streamPort ?? null,
+    lastFrameAt: context.runtime.lastFrameAt ?? null,
+    embeddable: stream?.embeddable ?? false,
+    controllable: stream?.controllable ?? false,
+    readOnly: stream?.readOnly ?? null,
+    viewable: context.viewable,
+    workspaceControllable: context.controllable,
+    unavailableReasons: context.actions
+      .filter((action) => (action.id === "view" || action.id === "control") && !action.enabled)
+      .map((action) => ({ action: action.id, reason: action.reason ?? "No stream readiness reason is reported." })),
+  };
+  const summary = stream
+    ? `Stream readiness: ${stream.provider ?? "unknown provider"} via ${stream.routeSummary ?? "unknown route"}.`
+    : "Stream readiness: no service-owned view stream is reported for the selected workspace.";
+  return {
+    id: "stream.readiness",
+    source: "stream",
+    sourceLabel: "Stream readiness",
+    summary,
+    facts: redactFacts(facts),
+    available: true,
+    unavailableReason: null,
+    freshness: freshnessLabel(context.refreshedAt),
     included,
   };
 }
 
 function unavailableEvidence(
-  source: Exclude<SelectedWorkspaceChatEvidenceSource, "workspace">,
-  requested: boolean,
+  source: Exclude<SelectedWorkspaceChatEvidenceSource, "workspace" | "activity" | "stream">,
 ): SelectedWorkspaceChatEvidence {
+  const label = evidenceSourceLabel(source);
+  const reason = `${label} evidence is not implemented for selected-workspace Chat in this slice.`;
   return {
     id: `${source}.unavailable`,
     source,
-    summary: `${source} evidence provider is not implemented in this slice.`,
+    sourceLabel: label,
+    summary: reason,
     facts: {
       status: "unavailable",
+      reason,
       plannedProviderSlice: plannedProviderSlice(source),
     },
     freshness: "unavailable",
+    available: false,
+    unavailableReason: reason,
     included: false,
   };
 }
 
 function plannedProviderSlice(source: SelectedWorkspaceChatEvidenceSource): string {
   if (source === "activity" || source === "console") return "P12-B";
+  if (source === "stream") return "P12-A";
   if (source === "network" || source === "storage") return "P12-C";
   if (source === "extensions") return "P12-D";
   return "P12-E";
+}
+
+function evidenceSourceLabel(source: SelectedWorkspaceChatEvidenceSource): string {
+  if (source === "workspace") return "Workspace";
+  if (source === "activity") return "Activity summary";
+  if (source === "stream") return "Stream readiness";
+  if (source === "console") return "Console unavailable";
+  if (source === "network") return "Network unavailable";
+  if (source === "storage") return "Storage unavailable";
+  return "Extensions unavailable";
+}
+
+function countBy(values: string[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const value of values) {
+    counts[value] = (counts[value] ?? 0) + 1;
+  }
+  return counts;
 }
 
 function redactFacts(value: unknown): Record<string, unknown> {
