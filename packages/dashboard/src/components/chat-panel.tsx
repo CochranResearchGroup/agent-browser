@@ -6,7 +6,9 @@ import { DefaultChatTransport } from "ai";
 import { Streamdown } from "streamdown";
 import { getChatApiUrl } from "@/store/chat";
 import { activeSessionNameAtom } from "@/store/sessions";
-import { useAtomValue } from "jotai/react";
+import { streamEventsAtom } from "@/store/stream";
+import { useAtomValue, useSetAtom } from "jotai/react";
+import type { ActivityEvent } from "@/types";
 import type { SelectedWorkspaceContext } from "@/lib/selected-workspace-context";
 import {
   CONTEXTUAL_CHAT_PROVIDER_ID,
@@ -87,6 +89,7 @@ const chatComponents = {
 
 const STORAGE_PREFIX = "dashboard-chat-";
 const IMAGE_DATA_URL_RE = /data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g;
+const MAX_OPERATOR_ACTIVITY_EVENTS = 500;
 
 function stripImagesForStorage(messages: unknown[]): unknown[] {
   const json = JSON.stringify(messages);
@@ -470,6 +473,19 @@ function firstOperatorStringCandidate(...values: unknown[]): string | null {
 
 function operatorServiceRequestAction(request: Record<string, unknown> | undefined): string | null {
   return firstOperatorStringCandidate(request?.action);
+}
+
+function operatorActivityDataFromAction(action: OperatorDashboardAction): Record<string, unknown> {
+  return {
+    actionId: action.id,
+    actionKind: action.kind,
+    label: action.label,
+    requestAction: operatorServiceRequestAction(action.request) ?? null,
+    requiresConfirmation: Boolean(action.requiresConfirmation),
+    confirmationId: action.confirmationId ?? null,
+    reason: action.reason ?? null,
+    risk: action.risk ?? null,
+  };
 }
 
 function deriveOperatorServiceSelection(
@@ -987,11 +1003,16 @@ export function ChatPanel({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const sessionName = useAtomValue(activeSessionNameAtom);
+  const setActivityEvents = useSetAtom(streamEventsAtom);
   const chatId = sessionName || "default";
   const storageKey = `${STORAGE_PREFIX}${chatId}`;
   const sessionRef = useRef(chatId);
   sessionRef.current = chatId;
   const messageTimestamps = useRef<Record<string, number>>({});
+
+  const appendOperatorActivity = useCallback((event: ActivityEvent) => {
+    setActivityEvents((prev) => [...prev, event].slice(-MAX_OPERATOR_ACTIVITY_EVENTS));
+  }, [setActivityEvents]);
 
   const transport = useRef(
     new DefaultChatTransport({
@@ -1223,6 +1244,21 @@ export function ChatPanel({
       }
       setOperatorTurn(payload.data);
       setAppliedOperatorActionId(null);
+      appendOperatorActivity({
+        type: "result",
+        id: payload.data.runId ?? `operator-turn-${Date.now()}`,
+        action: "operator.turn",
+        success: true,
+        data: {
+          runId: payload.data.runId ?? null,
+          summary: payload.data.summary ?? null,
+          toolCalls: payload.data.toolCalls?.length ?? 0,
+          dashboardActions: payload.data.dashboardActions?.length ?? 0,
+          confirmations: (payload.data.dashboardActions ?? []).filter((action) => action.kind === "operator_confirmation").length,
+        },
+        duration_ms: 0,
+        timestamp: Date.now(),
+      });
       if (payload.data.toolGroups) {
         setOperatorStatus((prev) => prev ? { ...prev, toolGroups: payload.data?.toolGroups } : prev);
       }
@@ -1231,9 +1267,10 @@ export function ChatPanel({
     } finally {
       setOperatorSubmitting(false);
     }
-  }, [isSuperuser, selectedWorkspacePacket]);
+  }, [appendOperatorActivity, isSuperuser, selectedWorkspacePacket]);
 
   const applyOperatorDashboardAction = useCallback(async (action: OperatorDashboardAction) => {
+    const startedAt = performance.now();
     const appendOperatorDashboardAction = (nextAction: OperatorDashboardAction | null) => {
       if (!nextAction) return;
       setOperatorTurn((prev) => {
@@ -1245,10 +1282,31 @@ export function ChatPanel({
           dashboardActions: [...existing, nextAction],
         };
       });
+      appendOperatorActivity({
+        type: "result",
+        id: `${nextAction.id}-activity`,
+        action: "operator.dashboard_followup",
+        success: true,
+        data: operatorActivityDataFromAction(nextAction),
+        duration_ms: Math.round(performance.now() - startedAt),
+        timestamp: Date.now(),
+      });
     };
     if (action.kind === "set_selected_workspace" && action.selection) {
       updateDashboardWorkspaceUrlSelection(action.selection, "push");
       setAppliedOperatorActionId(action.id);
+      appendOperatorActivity({
+        type: "result",
+        id: `${action.id}-activity`,
+        action: "operator.dashboard_selection",
+        success: true,
+        data: {
+          ...operatorActivityDataFromAction(action),
+          selection: action.selection,
+        },
+        duration_ms: Math.round(performance.now() - startedAt),
+        timestamp: Date.now(),
+      });
       return;
     }
     if (action.kind === "operator_confirmation") {
@@ -1258,6 +1316,13 @@ export function ChatPanel({
       }
       setOperatorSubmitting(true);
       setOperatorError(null);
+      appendOperatorActivity({
+        type: "command",
+        id: `${action.confirmationId}-requested`,
+        action: "operator.confirmation.requested",
+        params: operatorActivityDataFromAction(action),
+        timestamp: Date.now(),
+      });
       try {
         const confirmResponse = await fetch(APP_INTELLIGENCE_OPERATOR_CONFIRM_API_URL, {
           method: "POST",
@@ -1276,6 +1341,18 @@ export function ChatPanel({
         if (confirmedAction.kind !== "service_request" || !confirmedAction.request) {
           throw new Error("Confirmed operator action did not return a service request.");
         }
+        appendOperatorActivity({
+          type: "result",
+          id: `${action.confirmationId}-confirmed`,
+          action: "operator.confirmation.confirmed",
+          success: true,
+          data: {
+            ...operatorActivityDataFromAction(action),
+            confirmedRequestAction: operatorServiceRequestAction(confirmedAction.request),
+          },
+          duration_ms: Math.round(performance.now() - startedAt),
+          timestamp: Date.now(),
+        });
         const response = await fetch(`${SERVICE_API_BASE}/request`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1286,6 +1363,18 @@ export function ChatPanel({
         if (!response.ok || payload?.success === false) {
           throw new Error(payload?.error || `Service request failed with HTTP ${response.status}`);
         }
+        appendOperatorActivity({
+          type: "result",
+          id: `${action.confirmationId}-service-result`,
+          action: "operator.service_request",
+          success: true,
+          data: {
+            ...operatorActivityDataFromAction(confirmedAction),
+            result: payload,
+          },
+          duration_ms: Math.round(performance.now() - startedAt),
+          timestamp: Date.now(),
+        });
         appendOperatorDashboardAction(operatorSelectionActionFromServiceResult(confirmedAction, payload));
         setAppliedOperatorActionId(action.id);
       } catch (err) {
@@ -1298,6 +1387,13 @@ export function ChatPanel({
     if (action.kind === "service_request" && action.request) {
       setOperatorSubmitting(true);
       setOperatorError(null);
+      appendOperatorActivity({
+        type: "command",
+        id: `${action.id}-requested`,
+        action: "operator.service_request.requested",
+        params: operatorActivityDataFromAction(action),
+        timestamp: Date.now(),
+      });
       try {
         const response = await fetch(`${SERVICE_API_BASE}/request`, {
           method: "POST",
@@ -1309,6 +1405,18 @@ export function ChatPanel({
         if (!response.ok || payload?.success === false) {
           throw new Error(payload?.error || `Service request failed with HTTP ${response.status}`);
         }
+        appendOperatorActivity({
+          type: "result",
+          id: `${action.id}-service-result`,
+          action: "operator.service_request",
+          success: true,
+          data: {
+            ...operatorActivityDataFromAction(action),
+            result: payload,
+          },
+          duration_ms: Math.round(performance.now() - startedAt),
+          timestamp: Date.now(),
+        });
         appendOperatorDashboardAction(operatorSelectionActionFromServiceResult(action, payload));
         setAppliedOperatorActionId(action.id);
       } catch (err) {
@@ -1319,7 +1427,7 @@ export function ChatPanel({
       return;
     }
     setOperatorError(`Unsupported dashboard action: ${action.kind}`);
-  }, []);
+  }, [appendOperatorActivity]);
 
   const copyArtifact = useCallback(async (artifact: "observation" | "packet") => {
     const payload = artifact === "packet"

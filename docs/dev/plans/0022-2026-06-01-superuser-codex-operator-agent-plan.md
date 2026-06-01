@@ -783,3 +783,33 @@ Remaining work:
   it without confirming destructive actions
 - add storage/cookie clearing proposals with explicit origin/profile scoping
 - emit Activity rows for operator confirmations and service-result follow-ups
+
+### 2026-06-01 | J6 Operator Activity Rows
+
+Made Operate actions visible in the existing Activity pane:
+
+- append an `operator.turn` result row after each successful operator turn with
+  run id, tool count, action count, and confirmation count
+- append `operator.confirmation.requested` and
+  `operator.confirmation.confirmed` rows around confirmation-gated actions
+- append `operator.service_request` result rows after service-backed actions
+  return from `/api/service/request`
+- append `operator.dashboard_selection` and `operator.dashboard_followup`
+  rows when Operate changes or offers to change the dashboard viewport target
+- reuse the existing Activity event store so persisted Activity behavior and
+  the inspector Activity tab stay consistent with stream events
+
+Validation:
+
+```bash
+pnpm test:dashboard-superuser-operator-agent
+pnpm test:dashboard-contextual-chat
+pnpm build:dashboard
+pnpm publish:local-dashboard -- --expect-marker data-superuser-operator-agent --expect-marker operator.confirmation.requested --expect-marker operator.dashboard_followup --skip-browser --json
+```
+
+Remaining work:
+
+- add storage/cookie clearing proposals with explicit origin/profile scoping
+- add hosted admin/observer and live browser-operation smokes for the full
+  Plan 0022 completion criteria

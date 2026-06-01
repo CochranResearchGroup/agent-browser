@@ -131,6 +131,11 @@ assert(
     chatPanel.includes('APP_INTELLIGENCE_OPERATOR_CONFIRM_API_URL') &&
     chatPanel.includes('OperatorConfirmResponse') &&
     chatPanel.includes('operator_confirmation') &&
+    chatPanel.includes('streamEventsAtom') &&
+    chatPanel.includes('operator.confirmation.requested') &&
+    chatPanel.includes('operator.confirmation.confirmed') &&
+    chatPanel.includes('operator.service_request') &&
+    chatPanel.includes('operator.dashboard_followup') &&
     chatPanel.includes('deriveOperatorServiceSelection') &&
     chatPanel.includes('operatorSelectionActionFromServiceResult') &&
     chatPanel.includes('View launched browser') &&
