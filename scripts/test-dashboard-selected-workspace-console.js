@@ -13,6 +13,8 @@ const consolePanel = readFileSync('packages/dashboard/src/components/console-pan
 const chatPanel = readFileSync('packages/dashboard/src/components/chat-panel.tsx', 'utf8');
 const page = readFileSync('packages/dashboard/src/app/page.tsx', 'utf8');
 const streamStore = readFileSync('packages/dashboard/src/store/stream.ts', 'utf8');
+const workspaceViewport = readFileSync('packages/dashboard/src/components/workspace-remote-viewport.tsx', 'utf8');
+const runtimeSmoke = readFileSync('scripts/smoke-local-dashboard-runtime.js', 'utf8');
 const packageJson = JSON.parse(readFileSync('package.json', 'utf8'));
 
 assert.match(
@@ -37,8 +39,23 @@ assert.match(
 );
 assert.match(
   streamStore,
-  /case "console"[\s\S]*streamPort: port[\s\S]*case "page_error"[\s\S]*streamPort: port/s,
-  'Stream sync must stamp Console and page-error messages with their source stream port.',
+  /appendConsoleLogsAtom[\s\S]*case "console"[\s\S]*streamPort: port[\s\S]*case "page_error"[\s\S]*streamPort: port/s,
+  'Stream sync must expose a shared append path and stamp Console and page-error messages with their source stream port.',
+);
+assert.match(
+  workspaceViewport,
+  /appendConsoleLogsAtom[\s\S]*case "console"[\s\S]*streamPort[\s\S]*case "page_error"[\s\S]*streamPort/s,
+  'Workspace CDP streams must forward selected-browser Console and page-error messages into Console evidence.',
+);
+assert.match(
+  page,
+  /data-selected-workspace-context=\{selectedWorkspace\.context\.node \? "ready"/s,
+  'The right pane must expose selected-workspace context readiness independent of the active tab.',
+);
+assert.match(
+  runtimeSmoke,
+  /--console-probe[\s\S]*__agent_browser_console_visual_probe__[\s\S]*data-console-evidence-attribution[\s\S]*headerOverlapCount/s,
+  'Runtime smoke must include the Console visual probe and layout overlap checks.',
 );
 assert.equal(
   packageJson.scripts['test:dashboard-selected-workspace-console'],

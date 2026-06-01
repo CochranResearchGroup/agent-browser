@@ -129,6 +129,10 @@ assert.equal(byDaemon.source, 'daemon-session');
 assert.equal(byDaemon.runtime.streamPort, 38409);
 assert.equal(byDaemon.stream.provider, 'cdp_screencast');
 
+const byExplicitDaemonWithConflictingSessionParam = context({ workspaceId: 'daemon-session:daemon-a', sessionId: 'session-live' });
+assert.equal(byExplicitDaemonWithConflictingSessionParam.node.id, 'daemon-session:daemon-a');
+assert.equal(byExplicitDaemonWithConflictingSessionParam.source, 'daemon-session');
+
 const byProfileOnly = context({ workspaceId: 'profile:profile-retained' });
 assert.equal(byProfileOnly.node.id, 'profile:profile-retained');
 assert.equal(byProfileOnly.source, 'profile');

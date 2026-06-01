@@ -46,6 +46,8 @@ export interface ConsoleMessage {
   text: string;
   timestamp: number;
   streamPort?: number | null;
+  source?: "live-stream" | "retained-console" | "global-fallback";
+  retainedKey?: string;
   args?: unknown[];
 }
 
@@ -62,6 +64,8 @@ export interface PageErrorMessage {
   column: number | null;
   timestamp: number;
   streamPort?: number | null;
+  source?: "live-stream" | "retained-console" | "global-fallback";
+  retainedKey?: string;
 }
 
 export interface ErrorMessage {

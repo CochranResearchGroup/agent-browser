@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from "react";
 import { createPortal } from "react-dom";
-import { useAtomValue } from "jotai/react";
+import { useAtomValue, useSetAtom } from "jotai/react";
 import { AlertTriangle, ExternalLink, LogIn, Maximize2, Minimize2, MousePointer2, PlugZap, RefreshCw, Settings2, SquareArrowOutUpRight, Unplug } from "lucide-react";
 import {
   canEmbedViewStream,
@@ -26,6 +26,7 @@ import {
 } from "@/lib/workspace-url-selection";
 import type { SelectedWorkspaceContext } from "@/lib/selected-workspace-context";
 import { activePortAtom, activeSessionNameAtom, sessionsAtom } from "@/store/sessions";
+import { appendConsoleLogsAtom } from "@/store/stream";
 import type { SessionInfo } from "@/types";
 import { cn } from "@/lib/utils";
 import { SERVICE_API_BASE } from "@/lib/dashboard-api";
@@ -240,10 +241,11 @@ function workspaceCdpWebSocketUrl(streamUrl: string | null): string | null {
   }
 }
 
-function workspaceCdpStreamPort(streamUrl: string | null): string | null {
+function workspaceCdpStreamPort(streamUrl: string | null): number | null {
   if (!streamUrl || typeof window === "undefined") return null;
   try {
-    return new URL(streamUrl, window.location.href).port || null;
+    const port = new URL(streamUrl, window.location.href).port;
+    return port ? Number(port) : null;
   } catch {
     return null;
   }
@@ -813,6 +815,7 @@ function WorkspaceCdpStreamCanvas({
     httpFallback: false,
     message: "Connecting to CDP stream.",
   });
+  const appendConsoleLogs = useSetAtom(appendConsoleLogsAtom);
   const websocketUrl = useMemo(() => workspaceCdpWebSocketUrl(streamUrl), [streamUrl]);
   const streamPort = useMemo(() => workspaceCdpStreamPort(streamUrl), [streamUrl]);
 
@@ -952,6 +955,12 @@ function WorkspaceCdpStreamCanvas({
             }));
             break;
           }
+          case "console":
+            appendConsoleLogs({ ...msg, streamPort });
+            break;
+          case "page_error":
+            appendConsoleLogs({ ...msg, streamPort });
+            break;
           case "error":
             setState((current) => ({ ...current, message: msg.message }));
             break;
@@ -969,7 +978,7 @@ function WorkspaceCdpStreamCanvas({
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, [drawFrame, websocketUrl, refreshNonce]);
+  }, [appendConsoleLogs, drawFrame, streamPort, websocketUrl, refreshNonce]);
 
   useEffect(() => {
     if (!state.httpFallback || !streamPort) return;

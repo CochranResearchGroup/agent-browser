@@ -395,7 +395,13 @@ function workspaceUrlSelectionForNode(node: WorkspaceNode): DashboardWorkspaceUr
 
 function workspaceUrlSelectionScore(node: WorkspaceNode, selection: DashboardWorkspaceUrlSelection): number {
   let score = 0;
-  if (selection.workspaceId && selection.workspaceId === node.id) score += 100;
+  if (selection.workspaceId) {
+    if (selection.workspaceId === node.id) {
+      score += 100;
+    } else if (/^(browser|service-session|daemon-session|profile):/.test(selection.workspaceId)) {
+      return 0;
+    }
+  }
   if (
     selection.browserId &&
     (selection.browserId === node.browserId || node.relatedIds.browserIds.includes(selection.browserId))

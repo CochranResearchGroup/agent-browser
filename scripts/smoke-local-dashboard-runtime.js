@@ -11,9 +11,11 @@ const options = {
   expectMarkers: [],
   json: false,
   keepBrowser: false,
+  browserHost: '',
   browserProfile: '',
   skipBrowser: false,
   skipChat: false,
+  consoleProbe: false,
   session: `local-dashboard-runtime-smoke-${process.pid}`,
   workspaceSession: '',
 };
@@ -34,12 +36,16 @@ for (let index = 0; index < args.length; index += 1) {
     options.keepBrowser = true;
   } else if (arg === '--browser-profile') {
     options.browserProfile = requiredValue(args, ++index, arg);
+  } else if (arg === '--browser-host') {
+    options.browserHost = requiredValue(args, ++index, arg);
   } else if (arg === '--session') {
     options.session = requiredValue(args, ++index, arg);
   } else if (arg === '--skip-browser') {
     options.skipBrowser = true;
   } else if (arg === '--skip-chat') {
     options.skipChat = true;
+  } else if (arg === '--console-probe') {
+    options.consoleProbe = true;
   } else if (arg === '--workspace-session') {
     options.workspaceSession = requiredValue(args, ++index, arg);
   } else if (arg === '--help' || arg === '-h') {
@@ -187,6 +193,19 @@ JSON.stringify({
       throw new Error(`Workspace route did not render an embedded viewport: ${JSON.stringify(finalState)}`);
     }
     if (options.workspaceSession) {
+      await openDashboardRightPane();
+      await evalAgent(`
+(async () => {
+const workspaceButton = Array.from(document.querySelectorAll('[role=tab],button'))
+  .find((element) => element.textContent?.trim() === 'Workspace');
+for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+  workspaceButton?.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+}
+await new Promise((resolve) => setTimeout(resolve, 300));
+return JSON.stringify({ clickedWorkspace: Boolean(workspaceButton) });
+})()
+`);
+      await waitForSelectedWorkspaceContext();
       const workspaceState = parseEvalJson(await evalAgent(`
 JSON.stringify({
   hasWorkspaceDetail: Boolean(document.querySelector('[data-selected-workspace-context="ready"]')),
@@ -207,6 +226,81 @@ JSON.stringify({
       finalState.workspaceState = workspaceState;
     }
     let chatState = null;
+    let consoleState = null;
+    if (options.workspaceSession && options.consoleProbe) {
+      consoleState = parseEvalJson(await evalAgent(`
+(async () => {
+const tab = Array.from(document.querySelectorAll('[role=tab],button'))
+  .find((element) => element.textContent?.trim() === 'Console');
+for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+  tab?.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+}
+await new Promise((resolve) => setTimeout(resolve, 500));
+return JSON.stringify({
+  clickedConsole: Boolean(tab),
+  selectedContext: document.querySelector('[data-selected-workspace-context]')?.getAttribute('data-selected-workspace-context') || null,
+  selectedWorkspaceId: document.querySelector('[data-selected-workspace-id]')?.getAttribute('data-selected-workspace-id') || null,
+  attribution: document.querySelector('[data-console-evidence-attribution]')?.getAttribute('data-console-evidence-attribution') || null,
+  scopedCount: Number(document.querySelector('[data-console-scoped-count]')?.getAttribute('data-console-scoped-count') || 0),
+  rightPaneText: document.querySelector('.dashboard-pane-right')?.innerText.slice(0, 500) || ''
+});
+})()
+`), 'workspace Console initial state');
+      if (!consoleState.clickedConsole || consoleState.selectedContext !== 'ready') {
+        throw new Error(`Workspace Console did not expose a ready selected context: ${JSON.stringify(consoleState)}`);
+      }
+
+      await evalAgent(`
+(() => {
+const script = document.createElement('script');
+script.textContent = 'console.warn("__agent_browser_console_visual_probe__ token=secret");';
+document.documentElement.appendChild(script);
+script.remove();
+return JSON.stringify({ emitted: true });
+})()
+`);
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        const pollState = parseEvalJson(await evalAgent(`
+(() => {
+const text = document.querySelector('.dashboard-pane-right')?.innerText || document.body.innerText;
+const headerRects = Array.from(document.querySelectorAll('.console-inspector-header [data-console-metric]'))
+  .map((element) => {
+    const rect = element.getBoundingClientRect();
+    return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+  });
+let overlaps = 0;
+for (let i = 0; i < headerRects.length; i += 1) {
+  for (let j = i + 1; j < headerRects.length; j += 1) {
+    const a = headerRects[i];
+    const b = headerRects[j];
+    if (a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top) overlaps += 1;
+  }
+}
+return JSON.stringify({
+  selectedContext: document.querySelector('[data-selected-workspace-context]')?.getAttribute('data-selected-workspace-context') || null,
+  attribution: document.querySelector('[data-console-evidence-attribution]')?.getAttribute('data-console-evidence-attribution') || null,
+  scopedCount: Number(document.querySelector('[data-console-scoped-count]')?.getAttribute('data-console-scoped-count') || 0),
+  hasProbe: text.includes('__agent_browser_console_visual_probe__'),
+  leaksSecret: text.includes('token=secret'),
+  headerOverlapCount: overlaps,
+  rightPaneText: text.slice(0, 700)
+});
+})()
+`), 'workspace Console probe poll state');
+        consoleState = { ...consoleState, ...pollState };
+        if (pollState.hasProbe && pollState.scopedCount > 0) break;
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+      if (!consoleState.hasProbe || consoleState.scopedCount < 1 || consoleState.attribution !== 'scoped') {
+        throw new Error(`Workspace Console did not render the scoped probe row: ${JSON.stringify(consoleState)}`);
+      }
+      if (consoleState.leaksSecret) {
+        throw new Error(`Workspace Console leaked an unredacted probe secret: ${JSON.stringify(consoleState)}`);
+      }
+      if (consoleState.headerOverlapCount > 0) {
+        throw new Error(`Workspace Console header metrics overlap: ${JSON.stringify(consoleState)}`);
+      }
+    }
     if (options.workspaceSession && !options.skipChat) {
       chatState = parseEvalJson(await evalAgent(`
 (async () => {
@@ -271,6 +365,7 @@ return JSON.stringify({
       session: options.session,
       smokeUrl: smokeUrl.href,
       ...finalState,
+      consoleState,
       chatState,
     };
   } finally {
@@ -291,10 +386,44 @@ async function openDashboardUrl(url) {
   }
 }
 
+async function openDashboardRightPane() {
+  await evalAgent(`
+(async () => {
+const toggle = Array.from(document.querySelectorAll('button'))
+  .find((element) => /show detail pane/i.test(element.getAttribute('aria-label') || element.getAttribute('title') || ''));
+for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+  toggle?.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+}
+await new Promise((resolve) => setTimeout(resolve, 300));
+return JSON.stringify({ opened: Boolean(toggle), rightPane: Boolean(document.querySelector('.dashboard-pane-right')) });
+})()
+`);
+}
+
+async function waitForSelectedWorkspaceContext() {
+  let lastState = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const state = parseEvalJson(await evalAgent(`
+JSON.stringify({
+  selectedContext: document.querySelector('[data-selected-workspace-context]')?.getAttribute('data-selected-workspace-context') || null,
+  selectedWorkspaceId: document.querySelector('[data-selected-workspace-id]')?.getAttribute('data-selected-workspace-id') || null,
+  rightPaneText: document.querySelector('.dashboard-pane-right')?.innerText.slice(0, 300) || ''
+})
+`), 'selected workspace readiness');
+    lastState = state;
+    if (state.selectedContext === 'ready' && state.selectedWorkspaceId) return state;
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  throw new Error(`Selected workspace context did not become ready: ${JSON.stringify(lastState)}`);
+}
+
 function baseAgentArgs() {
   const command = ['--json', '--session', options.session];
   if (options.browserProfile) {
     command.push('--profile', options.browserProfile);
+  }
+  if (options.browserHost) {
+    command.push('--browser-host', options.browserHost);
   }
   return command;
 }
@@ -429,7 +558,9 @@ Options:
   --expect-marker <text>      Require a served HTML or JS bundle to contain text. Repeatable.
   --agent-browser-bin <path>  agent-browser binary used for browser smoke.
   --browser-profile <path>    Use an isolated runtime profile for the smoke browser.
+  --browser-host <host>       Pass a browser host to agent-browser for the smoke browser.
   --workspace-session <name>  Open a workspace viewport route for a daemon session.
+  --console-probe             On a workspace route, select Console and require a scoped redacted probe row.
   --skip-browser              Only run HTTP and bundle marker checks.
   --skip-chat                 Do not run contextual Chat checks on workspace route smoke.
   --json                      Print structured JSON.

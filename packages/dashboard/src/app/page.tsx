@@ -415,7 +415,14 @@ function DashboardExperience({
   );
 
   const sidePanel = (
-    <Tabs value={sidePanelTab} onValueChange={(value) => setSidePanelTab(value as RightPaneTab)} className="flex h-full flex-col">
+    <Tabs value={sidePanelTab}
+      onValueChange={(value) => setSidePanelTab(value as RightPaneTab)}
+      className="flex h-full flex-col"
+      data-selected-workspace-context={selectedWorkspace.context.node ? "ready" : selectedWorkspace.context.state}
+      data-selected-workspace-id={selectedWorkspace.context.node?.id ?? ""}
+      data-selected-workspace-state={selectedWorkspace.context.state}
+      data-selected-workspace-source={selectedWorkspace.context.source}
+    >
       <div className="shrink-0 px-2 pt-1">
         <TabsList variant="line" className="dashboard-right-tabs h-7 w-full">
           <TabsTrigger value="workspace" className="text-[11px]">Workspace</TabsTrigger>

@@ -16,7 +16,7 @@ use super::app_intelligence::{
 use super::chat::{chat_status_json, handle_chat_request, handle_models_request};
 use super::dashboard_auth;
 use super::discovery::discover_sessions;
-use super::http::{serve_embedded_file, CORS_HEADERS};
+use super::http::{relay_command_to_daemon, serve_embedded_file, CORS_HEADERS};
 
 const DASHBOARD_SERVICE_BACKEND_SESSION: &str = "dashboard-service-backend";
 
@@ -210,6 +210,12 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
 
     if method == "GET" && path == "/api/session-tabs" {
         handle_session_tabs_api_request(&mut stream, query).await;
+        return;
+    }
+
+    if method == "POST" && path == "/api/session-console" {
+        let body_str = read_post_body(&mut stream, &buf, n).await;
+        handle_session_console_api_request(&mut stream, query, &body_str).await;
         return;
     }
 
@@ -638,6 +644,67 @@ async fn handle_session_tabs_api_request(stream: &mut tokio::net::TcpStream, que
             .await;
         }
     }
+}
+
+async fn handle_session_console_api_request(
+    stream: &mut tokio::net::TcpStream,
+    query: Option<&str>,
+    body: &str,
+) {
+    let Some(port) = query_value(query, "port").and_then(|value| value.parse::<u16>().ok()) else {
+        write_json_error(stream, "400 Bad Request", "Missing or invalid session port").await;
+        return;
+    };
+    let request_body = if body.trim().is_empty() { "{}" } else { body };
+    if let Some(session_name) = query_value(query, "session")
+        .and_then(|value| normalize_service_request_session_name(&value))
+    {
+        let mut command = serde_json::from_str::<Value>(request_body).unwrap_or_else(|_| json!({}));
+        command["action"] = json!("console");
+        if command.get("id").is_none() {
+            command["id"] = json!(format!(
+                "dashboard-session-console-{}",
+                uuid::Uuid::new_v4()
+            ));
+        }
+        match relay_command_to_daemon(&session_name, &command.to_string()).await {
+            Ok(response) => {
+                write_json_body(stream, "200 OK", &response).await;
+            }
+            Err(err) => {
+                write_json_error(
+                    stream,
+                    "502 Bad Gateway",
+                    &format!("Session console daemon relay failed: {}", err),
+                )
+                .await;
+            }
+        }
+        return;
+    }
+
+    match proxy_local_http_api_request(port, "POST", "/api/browser/console", request_body).await {
+        Ok(response) => {
+            let _ = stream.write_all(&response).await;
+        }
+        Err(err) => {
+            write_json_error(
+                stream,
+                "502 Bad Gateway",
+                &format!("Session console proxy failed: {}", err),
+            )
+            .await;
+        }
+    }
+}
+
+async fn write_json_body(stream: &mut tokio::net::TcpStream, status: &str, body: &str) {
+    let response = format!(
+        "HTTP/1.1 {status}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n{CORS_HEADERS}\r\n",
+        body.len()
+    );
+    let _ = stream.write_all(response.as_bytes()).await;
+    let _ = stream.write_all(body.as_bytes()).await;
 }
 
 async fn service_api_cli_fallback(method: &str, path: &str) -> Option<String> {

@@ -180,8 +180,17 @@ export function selectWorkspaceNode(
     if (node) return node;
   }
 
+  const workspaceDaemonSessionId = prefixedId(selection.workspaceId, "daemon-session");
+  if (workspaceDaemonSessionId) {
+    const node = nodes.find((candidate) =>
+      candidate.daemonSession === workspaceDaemonSessionId ||
+      candidate.relatedIds.daemonSessionNames.includes(workspaceDaemonSessionId),
+    );
+    if (node) return node;
+  }
+
   const directSessionId = bareId(selection.sessionId, "session");
-  const workspaceSessionId = prefixedId(selection.workspaceId, "session") || prefixedId(selection.workspaceId, "daemon-session");
+  const workspaceSessionId = prefixedId(selection.workspaceId, "session");
   const sessionId = directSessionId || workspaceSessionId;
   if (sessionId) {
     const node = nodes.find((candidate) =>

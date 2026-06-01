@@ -93,10 +93,17 @@ export function buildSelectedWorkspaceConsoleEvidence(
     (latest, row) => latest == null || row.timestamp > latest ? row.timestamp : latest,
     null,
   );
+  const hasScopedSource = selectedStreamPort != null &&
+    entries.some((entry) => {
+      const entryRecord = entry as ConsoleEntry & { streamPort?: number | null; source?: ConsoleEvidenceSource };
+      return entryRecord.streamPort === selectedStreamPort;
+    });
   const unavailableReason = !hasSelection
     ? "Select a workspace to scope Console evidence."
     : selectedStreamPort == null
       ? "The selected workspace does not report a stream port, so live Console attribution is unavailable."
+      : !hasScopedSource
+        ? `Listening on stream ${selectedStreamPort}, but no Console events from that stream have arrived.`
       : null;
 
   return {
@@ -186,11 +193,15 @@ function buildConsoleRow(
   index: number,
   context: SelectedWorkspaceContext | null,
 ): SelectedWorkspaceConsoleRow {
-  const entryRecord = entry as ConsoleEntry & { streamPort?: number | null };
+  const entryRecord = entry as ConsoleEntry & { streamPort?: number | null; source?: ConsoleEvidenceSource };
   const streamPort = typeof entryRecord.streamPort === "number" ? entryRecord.streamPort : null;
   const selectedStreamPort = context?.runtime.streamPort ?? null;
+  const source = entryRecord.source === "retained-console"
+    ? "retained-console"
+    : streamPort == null
+      ? "global-fallback"
+      : "live-stream";
   const scoped = selectedStreamPort != null && streamPort === selectedStreamPort;
-  const source = streamPort == null ? "global-fallback" : "live-stream";
   const type = entry.type === "page_error" ? "page_error" : "console";
   const text = redactConsoleText(entry.type === "page_error" ? entry.text : entry.text);
   return {
@@ -200,7 +211,11 @@ function buildConsoleRow(
     text,
     timestamp: entry.timestamp,
     source,
-    sourceLabel: source === "live-stream" ? "Live stream" : "Global fallback",
+    sourceLabel: source === "live-stream"
+      ? "Live stream"
+      : source === "retained-console"
+        ? "Retained console"
+        : "Global fallback",
     attribution: scoped ? "scoped" : streamPort == null ? "unscoped" : "missing",
     line: entry.type === "page_error" ? entry.line : null,
     column: entry.type === "page_error" ? entry.column : null,
@@ -237,6 +252,9 @@ function buildSourceReadiness(
   const liveEntryCount = selectedStreamPort == null
     ? 0
     : entries.filter((entry) => (entry as ConsoleEntry & { streamPort?: number | null }).streamPort === selectedStreamPort).length;
+  const retainedEntryCount = entries.filter((entry) =>
+    (entry as ConsoleEntry & { source?: ConsoleEvidenceSource }).source === "retained-console"
+  ).length;
   return [
     {
       source: "live-stream",
@@ -251,8 +269,12 @@ function buildSourceReadiness(
     {
       source: "retained-console",
       label: "Retained console",
-      available: false,
-      reason: "Retained browser console reads are not wired into the selected-workspace Console tab yet.",
+      available: selectedStreamPort != null,
+      reason: selectedStreamPort == null
+        ? "Retained console reads need a selected workspace stream port."
+        : retainedEntryCount > 0
+          ? null
+          : "Retained console polling is active, but no retained rows are available yet.",
     },
     {
       source: "page-errors",
@@ -303,4 +325,3 @@ function redactConsoleText(text: string): string {
 function isSecurityConsoleText(text: string): boolean {
   return /(content security policy|csp|mixed content|certificate|permission|cors|blocked by client|extension)/i.test(text);
 }
-

@@ -64,6 +64,10 @@ pub(super) async fn cdp_event_loop(
                 let eng = last_engine.read().await.clone();
                 let supports_screencast = eng == "chrome";
 
+                let _ = client_arc
+                    .send_command_no_params("Runtime.enable", session_id.as_deref())
+                    .await;
+
                 if supports_screencast {
                     broadcast_initial_screenshot(
                         &frame_tx,

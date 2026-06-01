@@ -13,3 +13,9 @@ export const APP_INTELLIGENCE_OPERATOR_CONFIRM_API_URL = "/api/app-intelligence/
 export function sessionTabsApiUrl(port: number): string {
   return `/api/session-tabs?port=${encodeURIComponent(String(port))}`;
 }
+
+export function sessionConsoleApiUrl(port: number, session?: string | null): string {
+  const params = new URLSearchParams({ port: String(port) });
+  if (session) params.set("session", session);
+  return `/api/session-console?${params.toString()}`;
+}

@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { useAtomValue } from "jotai/react";
-import { consoleLogsAtom } from "@/store/stream";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useAtomValue, useSetAtom } from "jotai/react";
+import { appendConsoleLogsAtom, consoleLogsAtom } from "@/store/stream";
 import type { SelectedWorkspaceContext } from "@/lib/selected-workspace-context";
+import { sessionConsoleApiUrl } from "@/lib/dashboard-api";
 import {
   buildSelectedWorkspaceConsoleEvidence,
   redactedConsoleEvidenceBundle,
@@ -14,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Check, Copy, MessageSquare, RotateCcw, Search } from "lucide-react";
+import type { ConsoleEntry } from "@/types";
 
 type LevelFilter = "all" | ConsoleEvidenceLevel | "page_error" | "security" | "unscoped";
 
@@ -92,10 +94,49 @@ export function ConsolePanel({
   selectedWorkspaceContext?: SelectedWorkspaceContext | null;
 } = {}) {
   const entries = useAtomValue(consoleLogsAtom);
+  const appendConsoleLogs = useSetAtom(appendConsoleLogsAtom);
   const [filter, setFilter] = useState<LevelFilter>("all");
   const [search, setSearch] = useState("");
   const [includeUnscoped, setIncludeUnscoped] = useState(false);
   const [copied, setCopied] = useState<"bundle" | string | null>(null);
+  const selectedStreamPort = selectedWorkspaceContext?.runtime.streamPort ?? null;
+  const selectedDaemonSession = selectedWorkspaceContext?.daemonSession?.session
+    ?? selectedWorkspaceContext?.node?.daemonSession
+    ?? selectedWorkspaceContext?.node?.serviceSessionId
+    ?? null;
+  const selectedWorkspaceId = selectedWorkspaceContext?.node?.id ?? null;
+
+  useEffect(() => {
+    if (selectedStreamPort == null || !selectedWorkspaceId) return;
+    let cancelled = false;
+    let timer: number | null = null;
+
+    const pollRetainedConsole = async () => {
+      try {
+        const response = await fetch(sessionConsoleApiUrl(selectedStreamPort, selectedDaemonSession), {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: "{}",
+        });
+        if (!response.ok) return;
+        const payload = await response.json();
+        if (cancelled) return;
+        const retainedEntries = retainedConsoleEntriesFromPayload(payload, selectedStreamPort);
+        if (retainedEntries.length > 0) appendConsoleLogs(retainedEntries);
+      } catch {
+        // Source readiness already communicates absence of retained rows.
+      } finally {
+        if (!cancelled) timer = window.setTimeout(pollRetainedConsole, 2000);
+      }
+    };
+
+    void pollRetainedConsole();
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [appendConsoleLogs, selectedDaemonSession, selectedStreamPort, selectedWorkspaceId]);
+
 
   const evidence = useMemo(
     () => buildSelectedWorkspaceConsoleEvidence(selectedWorkspaceContext, entries, { includeUnscoped }),
@@ -154,28 +195,25 @@ export function ConsolePanel({
       className="console-inspector flex h-full flex-col text-xs"
       data-selected-workspace-id={selectedWorkspaceContext?.node?.id ?? ""}
       data-selected-workspace-state={selectedWorkspaceContext?.state ?? ""}
+      data-selected-workspace-context={selectedWorkspaceContext?.node ? "ready" : selectedWorkspaceContext?.state ?? "none"}
       data-console-evidence-attribution={evidence.attributionQuality}
+      data-console-scoped-count={evidence.counts.scoped}
     >
       <div className="console-inspector-header shrink-0 border-b border-border/60 px-2 py-1.5">
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+        <div className="grid gap-1.5">
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-1.5">
               <span className="truncate font-medium text-foreground">
                 {evidence.label}
-              </span>
-              <span className="rounded border border-border/60 px-1 py-0.5 font-mono text-[9px] text-muted-foreground">
-                {evidence.state}
-              </span>
-              <span className="rounded border border-border/60 px-1 py-0.5 font-mono text-[9px] text-muted-foreground">
-                {evidence.attributionQuality}
               </span>
             </div>
             <div className="mt-1 truncate text-[10px] text-muted-foreground">
               {evidence.summary}
             </div>
           </div>
-          <div className="grid grid-cols-4 gap-1 text-[10px]">
-            <Metric label="scoped" value={evidence.counts.scoped} />
+          <div className="grid grid-cols-5 gap-1 text-[10px]">
+            <Metric label="state" value={evidence.state} />
+            <Metric label="scope" value={evidence.attributionQuality} />
             <Metric label="errors" value={evidence.counts.errors} tone={evidence.counts.errors > 0 ? "error" : undefined} />
             <Metric label="warn" value={evidence.counts.warnings} tone={evidence.counts.warnings > 0 ? "warning" : undefined} />
             <Metric label="latest" value={formatAge(evidence.latestTimestamp)} />
@@ -278,8 +316,13 @@ export function ConsolePanel({
 
       <div className="min-h-0 flex-1 overflow-y-auto font-mono">
         {visibleRows.length === 0 ? (
-          <div className="px-3 py-8 text-center text-xs text-muted-foreground">
-            {evidence.unavailableReason ?? "No scoped Console entries for this workspace."}
+          <div className="grid gap-1 px-3 py-8 text-center text-xs text-muted-foreground">
+            <span>{evidence.unavailableReason ?? "No scoped Console entries for this workspace."}</span>
+            <span className="text-[10px]">
+              {selectedWorkspaceContext?.node
+                ? "Emit a selected-browser console probe or inspect source readiness."
+                : "Select a live workspace before using Console evidence."}
+            </span>
           </div>
         ) : (
           visibleRows.map((row) => (
@@ -296,6 +339,31 @@ export function ConsolePanel({
   );
 }
 
+function retainedConsoleEntriesFromPayload(payload: unknown, streamPort: number): ConsoleEntry[] {
+  if (!payload || typeof payload !== "object") return [];
+  const envelope = payload as { data?: unknown; messages?: unknown };
+  const data = envelope.data && typeof envelope.data === "object" ? envelope.data as { messages?: unknown } : null;
+  const messages = Array.isArray(envelope.messages) ? envelope.messages : data?.messages;
+  if (!Array.isArray(messages)) return [];
+  const timestampBase = Date.now() - messages.length;
+  return messages.flatMap((message, index) => {
+    if (!message || typeof message !== "object") return [];
+    const record = message as { type?: unknown; text?: unknown; args?: unknown };
+    if (typeof record.text !== "string") return [];
+    const level = typeof record.type === "string" ? record.type : "log";
+    return [{
+      type: "console" as const,
+      level,
+      text: record.text,
+      args: Array.isArray(record.args) ? record.args : undefined,
+      streamPort,
+      source: "retained-console" as const,
+      retainedKey: `retained-console:${streamPort}:${index}:${level}:${record.text}`,
+      timestamp: timestampBase + index,
+    }];
+  });
+}
+
 function Metric({
   label,
   value,
@@ -307,12 +375,12 @@ function Metric({
 }) {
   return (
     <div className={cn(
-      "rounded border border-border/60 px-1.5 py-0.5 text-right tabular-nums",
+      "min-w-0 rounded border border-border/60 px-1 py-0.5 text-right tabular-nums",
       tone === "error" && "border-destructive/40 bg-destructive/10 text-destructive",
       tone === "warning" && "border-warning/40 bg-warning/10 text-warning",
-    )}>
-      <div className="text-[8px] uppercase text-muted-foreground">{label}</div>
-      <div className="text-[10px] font-medium">{value}</div>
+    )} data-console-metric={label}>
+      <div className="truncate text-[8px] uppercase text-muted-foreground">{label}</div>
+      <div className="truncate text-[10px] font-medium" title={String(value)}>{value}</div>
     </div>
   );
 }

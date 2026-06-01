@@ -69,6 +69,28 @@ export const clearConsoleLogsAtom = atom(null, (_get, set) => {
   set(consoleLogsAtom, []);
 });
 
+export const appendConsoleLogsAtom = atom(
+  null,
+  (get, set, incoming: ConsoleEntry | ConsoleEntry[]) => {
+    const entries = Array.isArray(incoming) ? incoming : [incoming];
+    if (entries.length === 0) return;
+    const byKey = new Map<string, ConsoleEntry>();
+    for (const entry of [...get(consoleLogsAtom), ...entries]) {
+      byKey.set(consoleEntryKey(entry), entry);
+    }
+    set(consoleLogsAtom, [...byKey.values()].slice(-MAX_EVENTS));
+  },
+);
+
+function consoleEntryKey(entry: ConsoleEntry): string {
+  if ("retainedKey" in entry && entry.retainedKey) return entry.retainedKey;
+  const streamPort = "streamPort" in entry ? entry.streamPort ?? "global" : "global";
+  if (entry.type === "page_error") {
+    return `page_error:${streamPort}:${entry.timestamp}:${entry.text}:${entry.line ?? ""}:${entry.column ?? ""}`;
+  }
+  return `console:${streamPort}:${entry.timestamp}:${entry.level}:${entry.text}`;
+}
+
 // ---------------------------------------------------------------------------
 // Sync hook
 // ---------------------------------------------------------------------------
