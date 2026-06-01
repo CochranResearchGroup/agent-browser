@@ -35,6 +35,7 @@
     "test:dashboard-browser-table": "node scripts/test-dashboard-browser-table.js",
     "test:dashboard-selected-workspace-context": "node --no-warnings --experimental-strip-types scripts/test-dashboard-selected-workspace-context.js",
     "test:dashboard-selected-workspace-chat-packet": "node --no-warnings --experimental-strip-types scripts/test-dashboard-selected-workspace-chat-packet.js",
+    "test:dashboard-selected-workspace-console": "node --no-warnings --experimental-strip-types scripts/test-dashboard-selected-workspace-console.js",
     "test:dashboard-contextual-chat": "node scripts/test-dashboard-contextual-chat.js",
     "test:dashboard-superuser-operator-agent": "node scripts/test-dashboard-superuser-operator-agent.js",
     "test:dashboard-workspace-inspector-tab": "node --no-warnings --experimental-strip-types scripts/test-dashboard-workspace-inspector-tab.js",

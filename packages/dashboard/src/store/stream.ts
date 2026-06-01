@@ -172,14 +172,16 @@ export function useStreamSync(port: number) {
         }
 
         case "console": {
-          const conUpdated = [...consoleRef.current, msg].slice(-MAX_EVENTS);
+          const scopedMessage = { ...msg, streamPort: port };
+          const conUpdated = [...consoleRef.current, scopedMessage].slice(-MAX_EVENTS);
           consoleRef.current = conUpdated;
           setConsoleLogs(conUpdated);
           break;
         }
 
         case "page_error": {
-          const conUpdated = [...consoleRef.current, msg].slice(-MAX_EVENTS);
+          const scopedMessage = { ...msg, streamPort: port };
+          const conUpdated = [...consoleRef.current, scopedMessage].slice(-MAX_EVENTS);
           consoleRef.current = conUpdated;
           setConsoleLogs(conUpdated);
           break;

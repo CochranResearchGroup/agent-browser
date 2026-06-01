@@ -141,18 +141,23 @@ function selectRecommendations(files, base) {
       file === 'packages/dashboard/src/lib/service-workspaces.ts' ||
       file === 'packages/dashboard/src/lib/selected-workspace-context.ts' ||
       file === 'packages/dashboard/src/lib/selected-workspace-chat-packet.ts' ||
+      file === 'packages/dashboard/src/lib/selected-workspace-console.ts' ||
       file === 'scripts/test-dashboard-workspace-nodes.js' ||
       file === 'scripts/test-dashboard-selected-workspace-context.js' ||
-      file === 'scripts/test-dashboard-selected-workspace-chat-packet.js'
+      file === 'scripts/test-dashboard-selected-workspace-chat-packet.js' ||
+      file === 'scripts/test-dashboard-selected-workspace-console.js'
     )) {
       add('pnpm test:dashboard-workspace-nodes', 'dashboard workspace navigator model changed');
       add('pnpm test:dashboard-selected-workspace-context', 'selected workspace context matching changed');
       add('pnpm test:dashboard-selected-workspace-chat-packet', 'selected workspace contextual chat packet changed');
+      add('pnpm test:dashboard-selected-workspace-console', 'selected workspace Console evidence changed');
     }
     if (files.some((file) =>
       file === 'packages/dashboard/src/components/chat-panel.tsx' ||
+      file === 'packages/dashboard/src/components/console-panel.tsx' ||
       file === 'packages/dashboard/src/lib/dashboard-api.ts' ||
       file === 'packages/dashboard/src/lib/selected-workspace-chat-packet.ts' ||
+      file === 'packages/dashboard/src/lib/selected-workspace-console.ts' ||
       file === 'scripts/test-dashboard-contextual-chat.js'
     )) {
       add('pnpm test:dashboard-contextual-chat', 'dashboard contextual Chat Codex app-server surface changed');

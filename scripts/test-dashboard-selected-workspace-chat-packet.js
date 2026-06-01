@@ -9,6 +9,7 @@ import {
   validateSelectedWorkspaceChatPacket,
 } from '../packages/dashboard/src/lib/selected-workspace-chat-packet.ts';
 import { buildSelectedWorkspaceContext } from '../packages/dashboard/src/lib/selected-workspace-context.ts';
+import { buildSelectedWorkspaceConsoleEvidence } from '../packages/dashboard/src/lib/selected-workspace-console.ts';
 
 const emptySelection = {
   workspaceId: null,
@@ -98,6 +99,7 @@ const workspaceEvidence = live.evidence.find((item) => item.id === 'workspace.su
 const activityEvidence = live.evidence.find((item) => item.id === 'activity.summary');
 const streamEvidence = live.evidence.find((item) => item.id === 'stream.readiness');
 const networkUnavailable = live.evidence.find((item) => item.source === 'network');
+const consoleUnavailable = live.evidence.find((item) => item.source === 'console');
 assert.ok(workspaceEvidence?.included);
 assert.equal(workspaceEvidence.sourceLabel, 'Workspace');
 assert.equal(workspaceEvidence.available, true);
@@ -121,8 +123,34 @@ assert.equal(networkUnavailable?.id, 'network.unavailable');
 assert.equal(networkUnavailable?.available, false);
 assert.equal(networkUnavailable?.included, false);
 assert.match(networkUnavailable?.unavailableReason ?? '', /not implemented/);
+assert.equal(consoleUnavailable?.id, 'console.unavailable');
+assert.equal(consoleUnavailable?.available, false);
 assert.ok(selectedWorkspaceChatPacketSummary(live).includes('browser:browser-live'));
 assert.deepEqual(validateSelectedWorkspaceChatPacket(live), []);
+
+const liveContext = buildSelectedWorkspaceContext({
+  ...fixture,
+  selection: { ...emptySelection, browserId: 'browser-live' },
+  refreshedAt: Date.now(),
+});
+const liveConsoleEvidence = buildSelectedWorkspaceConsoleEvidence(liveContext, [
+  { type: 'console', level: 'error', text: 'console failure token=secret', timestamp: Date.now(), streamPort: 38395 },
+]);
+const withConsole = buildSelectedWorkspaceChatPacket(
+  liveContext,
+  {
+    createdAt: '2026-05-31T14:00:00.000Z',
+    include: { console: true },
+    consoleEvidence: liveConsoleEvidence,
+  },
+);
+const consoleEvidence = withConsole.evidence.find((item) => item.source === 'console');
+assert.equal(consoleEvidence?.id, 'console.summary');
+assert.equal(consoleEvidence?.sourceLabel, 'Console');
+assert.equal(consoleEvidence?.available, true);
+assert.equal(consoleEvidence?.included, true);
+assert.equal(consoleEvidence?.facts.counts.scoped, 1);
+assert.doesNotMatch(JSON.stringify(withConsole), /token=secret/);
 
 const streamExcluded = buildSelectedWorkspaceChatPacket(
   buildSelectedWorkspaceContext({

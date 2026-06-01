@@ -6,10 +6,11 @@ import { DefaultChatTransport } from "ai";
 import { Streamdown } from "streamdown";
 import { getChatApiUrl } from "@/store/chat";
 import { activeSessionNameAtom } from "@/store/sessions";
-import { streamEventsAtom } from "@/store/stream";
+import { consoleLogsAtom, streamEventsAtom } from "@/store/stream";
 import { useAtomValue, useSetAtom } from "jotai/react";
 import type { ActivityEvent } from "@/types";
 import type { SelectedWorkspaceContext } from "@/lib/selected-workspace-context";
+import { buildSelectedWorkspaceConsoleEvidence } from "@/lib/selected-workspace-console";
 import {
   CONTEXTUAL_CHAT_PROVIDER_ID,
   buildSelectedWorkspaceChatPacket,
@@ -107,6 +108,7 @@ const DEFAULT_EVIDENCE_INCLUDE: Partial<Record<SelectedWorkspaceChatEvidenceSour
   workspace: true,
   activity: true,
   stream: true,
+  console: true,
 };
 
 interface ToolInvocationPart {
@@ -1003,6 +1005,7 @@ export function ChatPanel({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const sessionName = useAtomValue(activeSessionNameAtom);
+  const consoleLogs = useAtomValue(consoleLogsAtom);
   const setActivityEvents = useSetAtom(streamEventsAtom);
   const chatId = sessionName || "default";
   const storageKey = `${STORAGE_PREFIX}${chatId}`;
@@ -1036,8 +1039,12 @@ export function ChatPanel({
   const hasMessages = messages.length > 0 || codexInspections.length > 0 || !!visibleError || !!codexError || !!operatorTurn || !!operatorError;
   const selectedWorkspacePacket = useMemo(() => {
     if (!selectedWorkspaceContext) return null;
-    return buildSelectedWorkspaceChatPacket(selectedWorkspaceContext, { include: evidenceInclude });
-  }, [selectedWorkspaceContext, evidenceInclude]);
+    const consoleEvidence = buildSelectedWorkspaceConsoleEvidence(selectedWorkspaceContext, consoleLogs);
+    return buildSelectedWorkspaceChatPacket(selectedWorkspaceContext, {
+      include: evidenceInclude,
+      consoleEvidence,
+    });
+  }, [selectedWorkspaceContext, consoleLogs, evidenceInclude]);
   const selectedWorkspacePacketErrors = useMemo(
     () => (selectedWorkspacePacket ? validateSelectedWorkspaceChatPacket(selectedWorkspacePacket) : []),
     [selectedWorkspacePacket],

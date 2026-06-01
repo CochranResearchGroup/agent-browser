@@ -352,6 +352,14 @@ function DashboardExperience({
     window.addEventListener(DASHBOARD_WORKSPACE_SELECTION_EVENT, onWorkspaceSelection);
     return () => window.removeEventListener(DASHBOARD_WORKSPACE_SELECTION_EVENT, onWorkspaceSelection);
   }, [openRightPane]);
+  useEffect(() => {
+    const onConsoleSendToChat = () => {
+      setSidePanelTab("chat");
+      openRightPane();
+    };
+    window.addEventListener("agent-browser-dashboard-console-send-to-chat", onConsoleSendToChat);
+    return () => window.removeEventListener("agent-browser-dashboard-console-send-to-chat", onConsoleSendToChat);
+  }, [openRightPane]);
   const inspectServiceSelection = useCallback((selection: ServiceInspectorSelection) => {
     setServiceInspectorSelection(selection);
     openRightPane();

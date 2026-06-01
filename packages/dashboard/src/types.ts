@@ -45,6 +45,8 @@ export interface ConsoleMessage {
   level: string;
   text: string;
   timestamp: number;
+  streamPort?: number | null;
+  args?: unknown[];
 }
 
 export interface UrlMessage {
@@ -59,6 +61,7 @@ export interface PageErrorMessage {
   line: number | null;
   column: number | null;
   timestamp: number;
+  streamPort?: number | null;
 }
 
 export interface ErrorMessage {

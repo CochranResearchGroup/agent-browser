@@ -1,4 +1,8 @@
 import type { SelectedWorkspaceContext } from "./selected-workspace-context.ts";
+import {
+  consoleEvidenceForChat,
+  type SelectedWorkspaceConsoleEvidence,
+} from "./selected-workspace-console.ts";
 
 export const CONTEXTUAL_CHAT_PROVIDER_ID = "codex-app-server" as const;
 export const SELECTED_WORKSPACE_CHAT_PACKET_VERSION = "selected-workspace-chat.v1" as const;
@@ -91,6 +95,7 @@ export type SelectedWorkspaceChatEvidence = {
 export type SelectedWorkspaceChatPacketOptions = {
   createdAt?: string;
   include?: Partial<Record<SelectedWorkspaceChatEvidenceSource, boolean>>;
+  consoleEvidence?: SelectedWorkspaceConsoleEvidence | null;
 };
 
 export type CodexWorkspaceObservation = {
@@ -134,6 +139,7 @@ export function buildSelectedWorkspaceChatPacket(
   const workspaceEvidence = buildWorkspaceEvidence(context, include.workspace !== false);
   const activityEvidence = buildActivityEvidence(context, include.activity !== false);
   const streamEvidence = buildStreamEvidence(context, include.stream !== false);
+  const consoleEvidence = buildConsoleEvidence(options.consoleEvidence ?? null, include.console === true);
   return {
     version: SELECTED_WORKSPACE_CHAT_PACKET_VERSION,
     createdAt,
@@ -183,7 +189,7 @@ export function buildSelectedWorkspaceChatPacket(
       workspaceEvidence,
       activityEvidence,
       streamEvidence,
-      unavailableEvidence("console"),
+      consoleEvidence,
       unavailableEvidence("network"),
       unavailableEvidence("storage"),
       unavailableEvidence("extensions"),
@@ -351,6 +357,29 @@ function buildStreamEvidence(
     unavailableReason: null,
     freshness: freshnessLabel(context.refreshedAt),
     included,
+  };
+}
+
+function buildConsoleEvidence(
+  evidence: SelectedWorkspaceConsoleEvidence | null,
+  included: boolean,
+): SelectedWorkspaceChatEvidence {
+  if (!evidence) return unavailableEvidence("console");
+  const chatEvidence = consoleEvidenceForChat(evidence);
+  return {
+    id: chatEvidence.available ? "console.summary" : "console.unavailable",
+    source: "console",
+    sourceLabel: chatEvidence.available ? "Console" : "Console unavailable",
+    summary: chatEvidence.summary,
+    facts: redactFacts(chatEvidence.facts),
+    available: chatEvidence.available,
+    unavailableReason: chatEvidence.available ? null : chatEvidence.summary,
+    freshness: chatEvidence.available && evidence.latestTimestamp
+      ? freshnessLabel(evidence.latestTimestamp)
+      : chatEvidence.available
+        ? "fresh"
+        : "unavailable",
+    included: chatEvidence.available ? included : false,
   };
 }
 
