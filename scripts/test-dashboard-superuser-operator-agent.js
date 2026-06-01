@@ -74,10 +74,20 @@ assert(
     appIntelligence.includes('propose_navigate') &&
     appIntelligence.includes('propose_focus') &&
     appIntelligence.includes('propose_snapshot') &&
+    appIntelligence.includes('propose_query') &&
+    appIntelligence.includes('propose_click') &&
+    appIntelligence.includes('propose_type') &&
+    appIntelligence.includes('propose_press') &&
+    appIntelligence.includes('propose_scroll') &&
+    appIntelligence.includes('propose_screenshot') &&
     appIntelligence.includes('propose_wait') &&
     appIntelligence.includes('service_request:navigate') &&
     appIntelligence.includes('service_request:view_focus') &&
     appIntelligence.includes('service_request:snapshot') &&
+    appIntelligence.includes('service_request:click') &&
+    appIntelligence.includes('service_request:type') &&
+    appIntelligence.includes('service_request:press') &&
+    appIntelligence.includes('service_request:scroll') &&
     appIntelligence.includes('operator_dashboard_actions') &&
     appIntelligence.includes('operatorGuidance') &&
     appIntelligence.includes('read-tools-completed') &&

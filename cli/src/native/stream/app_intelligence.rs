@@ -432,8 +432,8 @@ fn operator_tool_manifest() -> Value {
             "id": "dom",
             "label": "DOM tools",
             "enabled": true,
-            "reason": "Read-only DOM snapshot proposal is available; mutating DOM tools remain pending",
-            "tools": ["propose_snapshot"]
+            "reason": "Scoped DOM discovery and interaction proposals are available through service request contracts",
+            "tools": ["propose_snapshot", "propose_query", "propose_click", "propose_type", "propose_press", "propose_scroll", "propose_screenshot"]
         },
         {
             "id": "debug",
@@ -447,7 +447,7 @@ fn operator_tool_manifest() -> Value {
             "label": "Service tools",
             "enabled": true,
             "reason": "Superuser-applied service request actions are available for scoped non-destructive browser operations",
-            "tools": ["service_request:navigate", "service_request:view_focus", "service_request:tab_new", "service_request:wait", "service_request:snapshot"]
+            "tools": ["service_request:navigate", "service_request:view_focus", "service_request:tab_new", "service_request:wait", "service_request:snapshot", "service_request:count", "service_request:click", "service_request:type", "service_request:press", "service_request:scroll"]
         }
     ])
 }
@@ -982,6 +982,113 @@ fn operator_prompt_actions(prompt: &str) -> Vec<OperatorPromptAction> {
             extra_params: vec![("interactive", json!(true))],
         });
     }
+    if lower.contains("query")
+        || lower.contains("count ")
+        || lower.contains("find element")
+        || lower.contains("find selector")
+    {
+        actions.push(OperatorPromptAction {
+            action_id: "query-selected-browser",
+            label: "Query selected browser",
+            group: "dom",
+            tool: "propose_query",
+            contract_action: "count",
+            task_name: "superuser-operator-query",
+            reason: "Submits the existing count service request contract for scoped selector discovery on the audited selected browser target.",
+            requires_confirmation: false,
+            url: None,
+            selector: extract_selector_after(prompt, "query")
+                .or_else(|| extract_selector(prompt))
+                .or_else(|| Some("body".to_string())),
+            extra_params: Vec::new(),
+        });
+    }
+    if lower.contains("click") || lower.contains("press button") {
+        actions.push(OperatorPromptAction {
+            action_id: "click-selected-browser",
+            label: "Click selected browser",
+            group: "dom",
+            tool: "propose_click",
+            contract_action: "click",
+            task_name: "superuser-operator-click",
+            reason: "Submits the existing click service request contract for the audited selected browser target and selector.",
+            requires_confirmation: false,
+            url: None,
+            selector: extract_selector_after(prompt, "click")
+                .or_else(|| extract_selector(prompt))
+                .or_else(|| Some("body".to_string())),
+            extra_params: Vec::new(),
+        });
+    }
+    if lower.contains("type ") || lower.contains("enter text") {
+        actions.push(OperatorPromptAction {
+            action_id: "type-selected-browser",
+            label: "Type into selected browser",
+            group: "dom",
+            tool: "propose_type",
+            contract_action: "type",
+            task_name: "superuser-operator-type",
+            reason: "Submits the existing type service request contract for the audited selected browser target and selector.",
+            requires_confirmation: false,
+            url: None,
+            selector: extract_selector_after(prompt, "into")
+                .or_else(|| extract_selector_after(prompt, "in"))
+                .or_else(|| extract_selector(prompt))
+                .or_else(|| Some("body".to_string())),
+            extra_params: vec![(
+                "text",
+                json!(extract_quoted_text(prompt).unwrap_or_default()),
+            )],
+        });
+    }
+    if lower.contains("press ") || lower.contains("hit enter") {
+        actions.push(OperatorPromptAction {
+            action_id: "press-selected-browser",
+            label: "Press key in selected browser",
+            group: "dom",
+            tool: "propose_press",
+            contract_action: "press",
+            task_name: "superuser-operator-press",
+            reason: "Submits the existing press service request contract for the audited selected browser target.",
+            requires_confirmation: false,
+            url: None,
+            selector: extract_selector_after(prompt, "in").or_else(|| extract_selector_after(prompt, "on")),
+            extra_params: vec![("key", json!(extract_key(prompt)))],
+        });
+    }
+    if lower.contains("scroll") {
+        actions.push(OperatorPromptAction {
+            action_id: "scroll-selected-browser",
+            label: "Scroll selected browser",
+            group: "dom",
+            tool: "propose_scroll",
+            contract_action: "scroll",
+            task_name: "superuser-operator-scroll",
+            reason: "Submits the existing scroll service request contract for the audited selected browser target.",
+            requires_confirmation: false,
+            url: None,
+            selector: extract_selector_after(prompt, "scroll").or_else(|| extract_selector(prompt)),
+            extra_params: vec![
+                ("direction", json!(extract_scroll_direction(prompt))),
+                ("amount", json!(600)),
+            ],
+        });
+    }
+    if lower.contains("screenshot") {
+        actions.push(OperatorPromptAction {
+            action_id: "screenshot-selected-browser",
+            label: "Screenshot selected browser",
+            group: "dom",
+            tool: "propose_screenshot",
+            contract_action: "screenshot",
+            task_name: "superuser-operator-screenshot",
+            reason: "Prepares the existing screenshot service request contract, but confirmation execution must collect privacy intent before capture.",
+            requires_confirmation: true,
+            url: None,
+            selector: extract_selector(prompt),
+            extra_params: vec![("fullPage", json!(lower.contains("full page")))],
+        });
+    }
     if lower.contains("wait") {
         actions.push(OperatorPromptAction {
             action_id: "wait-selected-browser",
@@ -1043,12 +1150,69 @@ fn extract_selector(prompt: &str) -> Option<String> {
             part.trim_matches(|ch: char| {
                 matches!(
                     ch,
-                    '"' | '\'' | '`' | ',' | ';' | ')' | '(' | '[' | ']' | '{' | '}' | '<' | '>'
+                    '"' | '\'' | '`' | ',' | ';' | ')' | '(' | '{' | '}' | '<' | '>'
                 )
             })
         })
         .find(|part| part.starts_with('#') || part.starts_with('.') || part.starts_with('['))
         .map(str::to_string)
+}
+
+fn extract_selector_after(prompt: &str, anchor: &str) -> Option<String> {
+    let lower = prompt.to_lowercase();
+    let anchor = anchor.to_lowercase();
+    let index = lower.find(&anchor)?;
+    extract_selector(&prompt[index + anchor.len()..])
+}
+
+fn extract_quoted_text(prompt: &str) -> Option<String> {
+    for quote in ['"', '\''] {
+        let mut parts = prompt.split(quote);
+        let _ = parts.next();
+        if let Some(value) = parts.next() {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn extract_key(prompt: &str) -> String {
+    let lower = prompt.to_lowercase();
+    if lower.contains("enter") || lower.contains("return") {
+        return "Enter".to_string();
+    }
+    if lower.contains("escape") || lower.contains(" esc") {
+        return "Escape".to_string();
+    }
+    if lower.contains("tab") {
+        return "Tab".to_string();
+    }
+    prompt
+        .split_whitespace()
+        .skip_while(|part| part.to_lowercase() != "press")
+        .nth(1)
+        .map(|part| {
+            part.trim_matches(|ch: char| matches!(ch, '"' | '\'' | '`' | ',' | ';' | '.'))
+                .to_string()
+        })
+        .filter(|part| !part.is_empty())
+        .unwrap_or_else(|| "Enter".to_string())
+}
+
+fn extract_scroll_direction(prompt: &str) -> &'static str {
+    let lower = prompt.to_lowercase();
+    if lower.contains(" up") {
+        "up"
+    } else if lower.contains(" left") {
+        "left"
+    } else if lower.contains(" right") {
+        "right"
+    } else {
+        "down"
+    }
 }
 
 fn write_operator_ledger(run_id: &str, value: &Value) -> Result<(), String> {
@@ -1414,6 +1578,93 @@ mod tests {
         assert_eq!(
             body["data"]["dashboardActions"][3]["request"]["params"]["selector"],
             "#ready"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn operator_turn_prepares_selector_dom_workflow_actions() {
+        let _guard = APP_INTELLIGENCE_ENV_LOCK.lock().unwrap();
+        let root = env::temp_dir().join(format!(
+            "agent-browser-operator-dom-workflow-{}",
+            uuid::Uuid::new_v4()
+        ));
+        env::set_var("AGENT_BROWSER_APP_INTELLIGENCE_RUN_ROOT", &root);
+        env::set_var(
+            "AGENT_BROWSER_APP_INTELLIGENCE_OPERATOR_MODE",
+            "deterministic",
+        );
+        let identity = OperatorIdentity {
+            username: "admin".to_string(),
+            display_name: "Default superuser".to_string(),
+            role: "superuser".to_string(),
+        };
+        let request = json!({
+            "prompt": "Query #result, click #search, type \"Tempo\" into #search, press Enter, scroll down, and take a full page screenshot",
+            "packet": fixture_packet(),
+        });
+        let (status, body) = operator_turn_response(&request.to_string(), &identity);
+        env::remove_var("AGENT_BROWSER_APP_INTELLIGENCE_RUN_ROOT");
+        env::remove_var("AGENT_BROWSER_APP_INTELLIGENCE_OPERATOR_MODE");
+
+        assert_eq!(status, "200 OK");
+        assert_eq!(body["success"], true);
+        let tools = body["data"]["toolCalls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|call| call.get("tool").and_then(Value::as_str))
+            .collect::<Vec<_>>();
+        assert!(tools.contains(&"propose_query"));
+        assert!(tools.contains(&"propose_click"));
+        assert!(tools.contains(&"propose_type"));
+        assert!(tools.contains(&"propose_press"));
+        assert!(tools.contains(&"propose_scroll"));
+        assert!(tools.contains(&"propose_screenshot"));
+
+        let dashboard_actions = body["data"]["dashboardActions"].as_array().unwrap();
+        let service_actions = dashboard_actions
+            .iter()
+            .filter_map(|action| action.pointer("/request/action").and_then(Value::as_str))
+            .collect::<Vec<_>>();
+        assert!(service_actions.contains(&"count"));
+        assert!(service_actions.contains(&"click"));
+        assert!(service_actions.contains(&"type"));
+        assert!(service_actions.contains(&"press"));
+        assert!(service_actions.contains(&"scroll"));
+        assert!(!service_actions.contains(&"screenshot"));
+
+        let type_action = dashboard_actions
+            .iter()
+            .find(|action| {
+                action.pointer("/request/action").and_then(Value::as_str) == Some("type")
+            })
+            .unwrap();
+        assert_eq!(type_action["request"]["params"]["selector"], "#search");
+        assert_eq!(type_action["request"]["params"]["text"], "Tempo");
+        let press_action = dashboard_actions
+            .iter()
+            .find(|action| {
+                action.pointer("/request/action").and_then(Value::as_str) == Some("press")
+            })
+            .unwrap();
+        assert_eq!(press_action["request"]["params"]["key"], "Enter");
+        let scroll_action = dashboard_actions
+            .iter()
+            .find(|action| {
+                action.pointer("/request/action").and_then(Value::as_str) == Some("scroll")
+            })
+            .unwrap();
+        assert_eq!(scroll_action["request"]["params"]["direction"], "down");
+        let screenshot_call = body["data"]["toolCalls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|call| call.get("tool").and_then(Value::as_str) == Some("propose_screenshot"))
+            .unwrap();
+        assert_eq!(
+            screenshot_call["output"]["requiresConfirmation"], true,
+            "screenshot capture should remain confirmation-gated"
         );
         let _ = fs::remove_dir_all(root);
     }

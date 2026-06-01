@@ -618,3 +618,37 @@ Remaining work:
   controls
 - add confirmation execution for destructive or broad actions
 - prove operation against a live selected browser in hosted runtime
+
+### 2026-06-01 | J4 Selector DOM Workflow Proposals
+
+Added the first selector-based DOM workflow surface:
+
+- detect query, click, type, press, scroll, and screenshot intent in the
+  superuser prompt
+- add audited `propose_query`, `propose_click`, `propose_type`,
+  `propose_press`, `propose_scroll`, and `propose_screenshot` tool calls
+- route query through the existing `count` service request contract as a
+  read-only selector discovery action
+- route click, type, press, and scroll through existing scoped service request
+  contracts for the selected controllable browser target
+- extract selector, typed text, key, scroll direction, actor, target session,
+  and reason into redacted action parameters
+- keep screenshot capture confirmation-gated until the confirmation execution
+  path collects explicit privacy intent before image capture
+
+Validation:
+
+```bash
+pnpm test:dashboard-superuser-operator-agent
+pnpm test:dashboard-contextual-chat
+cargo fmt --manifest-path cli/Cargo.toml -- --check
+cargo test --manifest-path cli/Cargo.toml app_intelligence -- --nocapture
+```
+
+Remaining work:
+
+- add confirmation execution for screenshot, close, prune, storage, and broad
+  actions
+- prove selector DOM workflow operation against a live hosted selected browser
+- add launch and workspace-switching service tools so the operator can create a
+  fresh browser, navigate it, and move the dashboard viewport there
