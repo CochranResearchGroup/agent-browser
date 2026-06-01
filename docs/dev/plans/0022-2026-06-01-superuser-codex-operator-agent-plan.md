@@ -550,3 +550,37 @@ Remaining work:
 - add confirmation execution for destructive or broad actions
 - add hosted browser-operation smokes that prove navigation, DOM discovery, and
   workspace switching
+
+### 2026-06-01 | J4 Scoped Navigate Action Preparation
+
+Added the first non-destructive browser operation path:
+
+- detect explicit navigation intent and an HTTP(S) or `about:blank` target in
+  the superuser prompt
+- require a selected controllable workspace with a session target before
+  proposing navigation
+- add an audited `propose_navigate` browser tool call
+- expose a superuser-applied `service_request:navigate` dashboard action using
+  the existing service request contract
+- keep execution in the dashboard action path instead of inventing a hidden
+  App Intelligence mutation route
+- include service contract, target session, URL, actor, reason, and timeout in
+  the action request
+
+Validation:
+
+```bash
+pnpm test:dashboard-superuser-operator-agent
+pnpm test:dashboard-contextual-chat
+pnpm build:dashboard
+cargo fmt --manifest-path cli/Cargo.toml -- --check
+cargo test --manifest-path cli/Cargo.toml app_intelligence -- --nocapture
+cargo clippy --manifest-path cli/Cargo.toml -- -D warnings
+```
+
+Remaining work:
+
+- execute and audit more browser controls: focus, new tab, wait, DOM snapshot,
+  query, click, type, press, scroll, and screenshot
+- add confirmation execution for destructive or broad actions
+- prove the navigate action against a live selected browser in hosted runtime

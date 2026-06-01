@@ -21,6 +21,7 @@ import {
   APP_INTELLIGENCE_INSPECT_API_URL,
   APP_INTELLIGENCE_OPERATOR_STATUS_API_URL,
   APP_INTELLIGENCE_OPERATOR_TURN_API_URL,
+  SERVICE_API_BASE,
 } from "@/lib/dashboard-api";
 import {
   updateDashboardWorkspaceUrlSelection,
@@ -390,6 +391,7 @@ type OperatorDashboardAction = {
   kind: string;
   requiresConfirmation?: boolean;
   selection?: DashboardWorkspaceUrlSelection;
+  request?: Record<string, unknown>;
   reason?: string;
 };
 
@@ -1100,10 +1102,32 @@ export function ChatPanel({
     }
   }, [isSuperuser, selectedWorkspacePacket]);
 
-  const applyOperatorDashboardAction = useCallback((action: OperatorDashboardAction) => {
+  const applyOperatorDashboardAction = useCallback(async (action: OperatorDashboardAction) => {
     if (action.kind === "set_selected_workspace" && action.selection) {
       updateDashboardWorkspaceUrlSelection(action.selection, "push");
       setAppliedOperatorActionId(action.id);
+      return;
+    }
+    if (action.kind === "service_request" && action.request) {
+      setOperatorSubmitting(true);
+      setOperatorError(null);
+      try {
+        const response = await fetch(`${SERVICE_API_BASE}/request`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify(action.request),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload?.success === false) {
+          throw new Error(payload?.error || `Service request failed with HTTP ${response.status}`);
+        }
+        setAppliedOperatorActionId(action.id);
+      } catch (err) {
+        setOperatorError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setOperatorSubmitting(false);
+      }
       return;
     }
     setOperatorError(`Unsupported dashboard action: ${action.kind}`);

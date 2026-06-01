@@ -234,8 +234,14 @@ fn operator_turn_response_inner(
         .map(str::to_string);
     let tool_groups = operator_tool_manifest();
     let target = operator_target_summary(&packet);
-    let tool_calls = operator_read_tool_calls(&run_id, &created_at, prompt, &packet);
-    let dashboard_actions = operator_dashboard_actions(&packet);
+    let tool_calls = combine_tool_calls(
+        operator_read_tool_calls(&run_id, &created_at, prompt, &packet),
+        operator_action_tool_calls(&run_id, &created_at, prompt, &packet),
+    );
+    let dashboard_actions = combine_dashboard_actions(
+        operator_dashboard_actions(&packet),
+        operator_executable_actions(prompt, &packet, identity),
+    );
     let guidance_result = operator_guidance_with_supervisor(OperatorGuidanceInput {
         run_id: run_id.clone(),
         created_at: created_at.clone(),
@@ -419,8 +425,8 @@ fn operator_tool_manifest() -> Value {
             "id": "browser",
             "label": "Browser tools",
             "enabled": true,
-            "reason": "Read selected browser, session, tab, profile, process, and stream identity from the redacted packet",
-            "tools": ["describe_selected_browser"]
+            "reason": "Read selected browser identity and prepare scoped navigation actions for the human superuser to apply",
+            "tools": ["describe_selected_browser", "propose_navigate"]
         },
         {
             "id": "dom",
@@ -439,9 +445,9 @@ fn operator_tool_manifest() -> Value {
         {
             "id": "service",
             "label": "Service tools",
-            "enabled": false,
-            "reason": "Service-mediated operator contracts pending",
-            "tools": ["service_request", "launch_workspace", "repair_stream", "close_browser"]
+            "enabled": true,
+            "reason": "Superuser-applied service request actions are available for scoped non-destructive browser operations",
+            "tools": ["service_request:navigate"]
         }
     ])
 }
@@ -552,6 +558,59 @@ fn operator_read_tool_calls(run_id: &str, created_at: &str, prompt: &str, packet
     ])
 }
 
+fn operator_action_tool_calls(
+    run_id: &str,
+    created_at: &str,
+    prompt: &str,
+    packet: &Value,
+) -> Value {
+    let target = operator_target_summary(packet);
+    let Some(url) = extract_navigation_url(prompt) else {
+        return json!([]);
+    };
+    let controllable = packet
+        .pointer("/workspace/controllable")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let session_id = packet
+        .pointer("/selection/sessionId")
+        .and_then(Value::as_str)
+        .or_else(|| packet.pointer("/workspace/id").and_then(Value::as_str))
+        .map(str::to_string);
+    let status = if controllable && session_id.is_some() {
+        "proposed"
+    } else {
+        "blocked"
+    };
+    let summary = if status == "proposed" {
+        "Prepared a scoped service-mediated navigate action for the selected browser. The human superuser must apply it from the dashboard."
+    } else {
+        "Navigation intent was detected, but the selected workspace is not controllable or lacks a session target."
+    };
+    json!([
+        {
+            "id": format!("{run_id}:propose-navigate"),
+            "group": "browser",
+            "tool": "propose_navigate",
+            "status": status,
+            "createdAt": created_at,
+            "target": target,
+            "input": {
+                "promptHash": sha256_text(prompt),
+                "url": url,
+            },
+            "output": {
+                "url": url,
+                "controllable": controllable,
+                "sessionId": session_id,
+                "requiresConfirmation": false,
+                "serviceContract": "service_request:navigate",
+            },
+            "summary": summary,
+        }
+    ])
+}
+
 fn operator_stream_readiness(packet: &Value) -> Value {
     let embeddable = packet
         .pointer("/stream/embeddable")
@@ -623,6 +682,81 @@ fn operator_dashboard_actions(packet: &Value) -> Value {
             "reason": "This changes only the dashboard URL selection so the viewport and inspector follow the audited target."
         }
     ])
+}
+
+fn operator_executable_actions(prompt: &str, packet: &Value, identity: &OperatorIdentity) -> Value {
+    let Some(url) = extract_navigation_url(prompt) else {
+        return json!([]);
+    };
+    let controllable = packet
+        .pointer("/workspace/controllable")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if !controllable {
+        return json!([]);
+    }
+    let session_id = packet
+        .pointer("/selection/sessionId")
+        .and_then(Value::as_str)
+        .or_else(|| packet.pointer("/workspace/id").and_then(Value::as_str));
+    let Some(session_id) = session_id else {
+        return json!([]);
+    };
+    let browser_id = packet
+        .pointer("/selection/browserId")
+        .cloned()
+        .unwrap_or(Value::Null);
+    let target_id = packet
+        .pointer("/page/targetId")
+        .cloned()
+        .unwrap_or(Value::Null);
+    json!([
+        {
+            "id": "navigate-selected-browser",
+            "label": "Navigate selected browser",
+            "kind": "service_request",
+            "requiresConfirmation": false,
+            "request": {
+                "action": "navigate",
+                "serviceName": "agent-browser-dashboard",
+                "agentName": identity.username,
+                "taskName": "superuser-operator-navigate",
+                "params": {
+                    "sessionName": session_id,
+                    "browserId": browser_id,
+                    "targetId": target_id,
+                    "url": url,
+                    "waitUntil": "load",
+                    "by": identity.username,
+                    "reason": "superuser_operator_request"
+                },
+                "jobTimeoutMs": 30000
+            },
+            "reason": "Submits the existing service request navigate contract for the audited selected browser target."
+        }
+    ])
+}
+
+fn combine_tool_calls(first: Value, second: Value) -> Value {
+    let mut combined = Vec::new();
+    if let Some(items) = first.as_array() {
+        combined.extend(items.iter().cloned());
+    }
+    if let Some(items) = second.as_array() {
+        combined.extend(items.iter().cloned());
+    }
+    Value::Array(combined)
+}
+
+fn combine_dashboard_actions(first: Value, second: Value) -> Value {
+    let mut combined = Vec::new();
+    if let Some(items) = first.as_array() {
+        combined.extend(items.iter().cloned());
+    }
+    if let Some(items) = second.as_array() {
+        combined.extend(items.iter().cloned());
+    }
+    Value::Array(combined)
 }
 
 fn operator_turn_summary(packet: &Value, tool_calls: &Value) -> String {
@@ -749,6 +883,42 @@ fn sha256_text(value: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(value.as_bytes());
     format!("{:x}", hasher.finalize())
+}
+
+fn extract_navigation_url(prompt: &str) -> Option<String> {
+    let lower = prompt.to_lowercase();
+    if !["navigate", "open ", "go to", "visit"]
+        .iter()
+        .any(|needle| lower.contains(needle))
+    {
+        return None;
+    }
+    prompt
+        .split_whitespace()
+        .map(|part| {
+            part.trim_matches(|ch: char| {
+                matches!(
+                    ch,
+                    '"' | '\''
+                        | '`'
+                        | ','
+                        | ';'
+                        | ')'
+                        | '('
+                        | '['
+                        | ']'
+                        | '{'
+                        | '}'
+                        | '<'
+                        | '>'
+                        | '.'
+                )
+            })
+        })
+        .find(|part| {
+            part.starts_with("https://") || part.starts_with("http://") || *part == "about:blank"
+        })
+        .map(str::to_string)
 }
 
 fn write_operator_ledger(run_id: &str, value: &Value) -> Result<(), String> {
@@ -1009,6 +1179,55 @@ mod tests {
         );
         let run_id = body["data"]["runId"].as_str().unwrap();
         assert!(root.join(run_id).join("operator-turn.json").exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn operator_turn_prepares_scoped_navigate_action() {
+        let _guard = APP_INTELLIGENCE_ENV_LOCK.lock().unwrap();
+        let root = env::temp_dir().join(format!(
+            "agent-browser-operator-navigate-{}",
+            uuid::Uuid::new_v4()
+        ));
+        env::set_var("AGENT_BROWSER_APP_INTELLIGENCE_RUN_ROOT", &root);
+        env::set_var(
+            "AGENT_BROWSER_APP_INTELLIGENCE_OPERATOR_MODE",
+            "deterministic",
+        );
+        let identity = OperatorIdentity {
+            username: "admin".to_string(),
+            display_name: "Default superuser".to_string(),
+            role: "superuser".to_string(),
+        };
+        let request = json!({
+            "prompt": "Navigate the selected browser to https://example.com",
+            "packet": fixture_packet(),
+        });
+        let (status, body) = operator_turn_response(&request.to_string(), &identity);
+        env::remove_var("AGENT_BROWSER_APP_INTELLIGENCE_RUN_ROOT");
+        env::remove_var("AGENT_BROWSER_APP_INTELLIGENCE_OPERATOR_MODE");
+
+        assert_eq!(status, "200 OK");
+        assert_eq!(body["success"], true);
+        assert_eq!(body["data"]["toolCalls"].as_array().unwrap().len(), 4);
+        assert_eq!(body["data"]["toolCalls"][3]["tool"], "propose_navigate");
+        assert_eq!(body["data"]["toolCalls"][3]["status"], "proposed");
+        assert_eq!(
+            body["data"]["dashboardActions"][1]["kind"],
+            "service_request"
+        );
+        assert_eq!(
+            body["data"]["dashboardActions"][1]["request"]["action"],
+            "navigate"
+        );
+        assert_eq!(
+            body["data"]["dashboardActions"][1]["request"]["params"]["url"],
+            "https://example.com"
+        );
+        assert_eq!(
+            body["data"]["dashboardActions"][1]["request"]["params"]["sessionName"],
+            "default"
+        );
         let _ = fs::remove_dir_all(root);
     }
 }

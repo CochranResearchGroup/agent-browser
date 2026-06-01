@@ -70,10 +70,13 @@ assert(
     appIntelligence.includes('write_operator_ledger') &&
     appIntelligence.includes('operator_guidance_with_supervisor') &&
     appIntelligence.includes('operator_read_tool_calls') &&
+    appIntelligence.includes('operator_executable_actions') &&
+    appIntelligence.includes('propose_navigate') &&
+    appIntelligence.includes('service_request:navigate') &&
     appIntelligence.includes('operator_dashboard_actions') &&
     appIntelligence.includes('operatorGuidance') &&
     appIntelligence.includes('read-tools-completed') &&
-    appIntelligence.includes('Service-mediated operator contracts pending'),
+    appIntelligence.includes('Superuser-applied service request actions'),
   'Operator surface must expose audited read tools, dashboard actions, and a ledger before mutation tools are enabled.',
 );
 
@@ -95,6 +98,8 @@ assert(
     chatPanel.includes('isSuperuser') &&
     chatPanel.includes('Plan operator action') &&
     chatPanel.includes('updateDashboardWorkspaceUrlSelection') &&
+    chatPanel.includes('SERVICE_API_BASE') &&
+    chatPanel.includes('service_request') &&
     chatPanel.includes('Codex operator guidance') &&
     chatPanel.includes('Tool calls') &&
     chatPanel.includes('Dashboard actions'),
