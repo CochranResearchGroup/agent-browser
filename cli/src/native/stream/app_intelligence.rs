@@ -426,14 +426,14 @@ fn operator_tool_manifest() -> Value {
             "label": "Browser tools",
             "enabled": true,
             "reason": "Read selected browser identity and prepare scoped navigation actions for the human superuser to apply",
-            "tools": ["describe_selected_browser", "propose_navigate"]
+            "tools": ["describe_selected_browser", "propose_focus", "propose_navigate", "propose_new_tab", "propose_wait"]
         },
         {
             "id": "dom",
             "label": "DOM tools",
-            "enabled": false,
-            "reason": "Tool contract pending",
-            "tools": ["snapshot", "query", "click", "type", "press", "scroll", "screenshot"]
+            "enabled": true,
+            "reason": "Read-only DOM snapshot proposal is available; mutating DOM tools remain pending",
+            "tools": ["propose_snapshot"]
         },
         {
             "id": "debug",
@@ -447,7 +447,7 @@ fn operator_tool_manifest() -> Value {
             "label": "Service tools",
             "enabled": true,
             "reason": "Superuser-applied service request actions are available for scoped non-destructive browser operations",
-            "tools": ["service_request:navigate"]
+            "tools": ["service_request:navigate", "service_request:view_focus", "service_request:tab_new", "service_request:wait", "service_request:snapshot"]
         }
     ])
 }
@@ -565,9 +565,6 @@ fn operator_action_tool_calls(
     packet: &Value,
 ) -> Value {
     let target = operator_target_summary(packet);
-    let Some(url) = extract_navigation_url(prompt) else {
-        return json!([]);
-    };
     let controllable = packet
         .pointer("/workspace/controllable")
         .and_then(Value::as_bool)
@@ -577,38 +574,48 @@ fn operator_action_tool_calls(
         .and_then(Value::as_str)
         .or_else(|| packet.pointer("/workspace/id").and_then(Value::as_str))
         .map(str::to_string);
-    let status = if controllable && session_id.is_some() {
-        "proposed"
-    } else {
-        "blocked"
-    };
-    let summary = if status == "proposed" {
-        "Prepared a scoped service-mediated navigate action for the selected browser. The human superuser must apply it from the dashboard."
-    } else {
-        "Navigation intent was detected, but the selected workspace is not controllable or lacks a session target."
-    };
-    json!([
-        {
-            "id": format!("{run_id}:propose-navigate"),
-            "group": "browser",
-            "tool": "propose_navigate",
+    let mut calls = Vec::new();
+    for action in operator_prompt_actions(prompt) {
+        let status = if controllable && session_id.is_some() {
+            "proposed"
+        } else {
+            "blocked"
+        };
+        let summary = if status == "proposed" {
+            format!(
+                "Prepared a scoped service-mediated {} action for the selected browser. The human superuser must apply it from the dashboard.",
+                action.contract_action
+            )
+        } else {
+            format!(
+                "{} intent was detected, but the selected workspace is not controllable or lacks a session target.",
+                action.label
+            )
+        };
+        calls.push(json!({
+            "id": format!("{run_id}:{}", action.tool),
+            "group": action.group,
+            "tool": action.tool,
             "status": status,
             "createdAt": created_at,
             "target": target,
             "input": {
                 "promptHash": sha256_text(prompt),
-                "url": url,
+                "url": action.url,
+                "selector": action.selector,
             },
             "output": {
-                "url": url,
+                "url": action.url,
+                "selector": action.selector,
                 "controllable": controllable,
                 "sessionId": session_id,
-                "requiresConfirmation": false,
-                "serviceContract": "service_request:navigate",
+                "requiresConfirmation": action.requires_confirmation,
+                "serviceContract": format!("service_request:{}", action.contract_action),
             },
             "summary": summary,
-        }
-    ])
+        }));
+    }
+    Value::Array(calls)
 }
 
 fn operator_stream_readiness(packet: &Value) -> Value {
@@ -685,9 +692,6 @@ fn operator_dashboard_actions(packet: &Value) -> Value {
 }
 
 fn operator_executable_actions(prompt: &str, packet: &Value, identity: &OperatorIdentity) -> Value {
-    let Some(url) = extract_navigation_url(prompt) else {
-        return json!([]);
-    };
     let controllable = packet
         .pointer("/workspace/controllable")
         .and_then(Value::as_bool)
@@ -710,31 +714,44 @@ fn operator_executable_actions(prompt: &str, packet: &Value, identity: &Operator
         .pointer("/page/targetId")
         .cloned()
         .unwrap_or(Value::Null);
-    json!([
-        {
-            "id": "navigate-selected-browser",
-            "label": "Navigate selected browser",
+    let mut actions = Vec::new();
+    for action in operator_prompt_actions(prompt) {
+        if action.requires_confirmation {
+            continue;
+        }
+        let mut params = json!({
+            "sessionName": session_id,
+            "browserId": browser_id,
+            "targetId": target_id,
+            "by": identity.username,
+            "reason": "superuser_operator_request"
+        });
+        if let Some(url) = action.url.as_deref() {
+            params["url"] = json!(url);
+        }
+        if let Some(selector) = action.selector.as_deref() {
+            params["selector"] = json!(selector);
+        }
+        for (key, value) in action.extra_params {
+            params[key] = value;
+        }
+        actions.push(json!({
+            "id": action.action_id,
+            "label": action.label,
             "kind": "service_request",
-            "requiresConfirmation": false,
+            "requiresConfirmation": action.requires_confirmation,
             "request": {
-                "action": "navigate",
+                "action": action.contract_action,
                 "serviceName": "agent-browser-dashboard",
                 "agentName": identity.username,
-                "taskName": "superuser-operator-navigate",
-                "params": {
-                    "sessionName": session_id,
-                    "browserId": browser_id,
-                    "targetId": target_id,
-                    "url": url,
-                    "waitUntil": "load",
-                    "by": identity.username,
-                    "reason": "superuser_operator_request"
-                },
+                "taskName": action.task_name,
+                "params": params,
                 "jobTimeoutMs": 30000
             },
-            "reason": "Submits the existing service request navigate contract for the audited selected browser target."
-        }
-    ])
+            "reason": action.reason
+        }));
+    }
+    Value::Array(actions)
 }
 
 fn combine_tool_calls(first: Value, second: Value) -> Value {
@@ -885,6 +902,104 @@ fn sha256_text(value: &str) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+struct OperatorPromptAction {
+    action_id: &'static str,
+    label: &'static str,
+    group: &'static str,
+    tool: &'static str,
+    contract_action: &'static str,
+    task_name: &'static str,
+    reason: &'static str,
+    requires_confirmation: bool,
+    url: Option<String>,
+    selector: Option<String>,
+    extra_params: Vec<(&'static str, Value)>,
+}
+
+fn operator_prompt_actions(prompt: &str) -> Vec<OperatorPromptAction> {
+    let lower = prompt.to_lowercase();
+    let mut actions = Vec::new();
+    if let Some(url) = extract_navigation_url(prompt) {
+        actions.push(OperatorPromptAction {
+            action_id: "navigate-selected-browser",
+            label: "Navigate selected browser",
+            group: "browser",
+            tool: "propose_navigate",
+            contract_action: "navigate",
+            task_name: "superuser-operator-navigate",
+            reason: "Submits the existing service request navigate contract for the audited selected browser target.",
+            requires_confirmation: false,
+            url: Some(url),
+            selector: None,
+            extra_params: vec![("waitUntil", json!("load"))],
+        });
+    }
+    if lower.contains("focus")
+        || lower.contains("bring to front")
+        || lower.contains("view selected")
+    {
+        actions.push(OperatorPromptAction {
+            action_id: "focus-selected-browser",
+            label: "Focus selected browser",
+            group: "browser",
+            tool: "propose_focus",
+            contract_action: "view_focus",
+            task_name: "superuser-operator-focus",
+            reason: "Submits the existing view_focus service request contract for the audited selected browser target.",
+            requires_confirmation: false,
+            url: None,
+            selector: None,
+            extra_params: vec![("maximize", json!(true))],
+        });
+    }
+    if lower.contains("new tab") || lower.contains("open tab") {
+        actions.push(OperatorPromptAction {
+            action_id: "new-tab-selected-browser",
+            label: "Open new tab",
+            group: "browser",
+            tool: "propose_new_tab",
+            contract_action: "tab_new",
+            task_name: "superuser-operator-new-tab",
+            reason: "Submits the existing tab_new service request contract for the audited selected browser target.",
+            requires_confirmation: false,
+            url: extract_navigation_url(prompt).or_else(|| Some("about:blank".to_string())),
+            selector: None,
+            extra_params: Vec::new(),
+        });
+    }
+    if lower.contains("snapshot") || lower.contains("dom") || lower.contains("accessible tree") {
+        actions.push(OperatorPromptAction {
+            action_id: "snapshot-selected-browser",
+            label: "Snapshot selected browser",
+            group: "dom",
+            tool: "propose_snapshot",
+            contract_action: "snapshot",
+            task_name: "superuser-operator-snapshot",
+            reason: "Submits the existing snapshot service request contract for read-only DOM discovery on the audited selected browser target.",
+            requires_confirmation: false,
+            url: None,
+            selector: None,
+            extra_params: vec![("interactive", json!(true))],
+        });
+    }
+    if lower.contains("wait") {
+        actions.push(OperatorPromptAction {
+            action_id: "wait-selected-browser",
+            label: "Wait on selected browser",
+            group: "browser",
+            tool: "propose_wait",
+            contract_action: "wait",
+            task_name: "superuser-operator-wait",
+            reason: "Submits the existing wait service request contract for the audited selected browser target.",
+            requires_confirmation: false,
+            url: None,
+            selector: extract_selector(prompt),
+            extra_params: vec![("state", json!("visible")), ("timeout", json!(10_000))],
+        });
+    }
+    actions
+}
+
 fn extract_navigation_url(prompt: &str) -> Option<String> {
     let lower = prompt.to_lowercase();
     if !["navigate", "open ", "go to", "visit"]
@@ -918,6 +1033,21 @@ fn extract_navigation_url(prompt: &str) -> Option<String> {
         .find(|part| {
             part.starts_with("https://") || part.starts_with("http://") || *part == "about:blank"
         })
+        .map(str::to_string)
+}
+
+fn extract_selector(prompt: &str) -> Option<String> {
+    prompt
+        .split_whitespace()
+        .map(|part| {
+            part.trim_matches(|ch: char| {
+                matches!(
+                    ch,
+                    '"' | '\'' | '`' | ',' | ';' | ')' | '(' | '[' | ']' | '{' | '}' | '<' | '>'
+                )
+            })
+        })
+        .find(|part| part.starts_with('#') || part.starts_with('.') || part.starts_with('['))
         .map(str::to_string)
 }
 
@@ -1227,6 +1357,63 @@ mod tests {
         assert_eq!(
             body["data"]["dashboardActions"][1]["request"]["params"]["sessionName"],
             "default"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn operator_turn_prepares_focus_wait_and_snapshot_actions() {
+        let _guard = APP_INTELLIGENCE_ENV_LOCK.lock().unwrap();
+        let root = env::temp_dir().join(format!(
+            "agent-browser-operator-controls-{}",
+            uuid::Uuid::new_v4()
+        ));
+        env::set_var("AGENT_BROWSER_APP_INTELLIGENCE_RUN_ROOT", &root);
+        env::set_var(
+            "AGENT_BROWSER_APP_INTELLIGENCE_OPERATOR_MODE",
+            "deterministic",
+        );
+        let identity = OperatorIdentity {
+            username: "admin".to_string(),
+            display_name: "Default superuser".to_string(),
+            role: "superuser".to_string(),
+        };
+        let request = json!({
+            "prompt": "Focus the selected browser, snapshot the DOM, and wait for #ready",
+            "packet": fixture_packet(),
+        });
+        let (status, body) = operator_turn_response(&request.to_string(), &identity);
+        env::remove_var("AGENT_BROWSER_APP_INTELLIGENCE_RUN_ROOT");
+        env::remove_var("AGENT_BROWSER_APP_INTELLIGENCE_OPERATOR_MODE");
+
+        assert_eq!(status, "200 OK");
+        assert_eq!(body["success"], true);
+        let tools = body["data"]["toolCalls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|call| call.get("tool").and_then(Value::as_str))
+            .collect::<Vec<_>>();
+        assert!(tools.contains(&"propose_focus"));
+        assert!(tools.contains(&"propose_snapshot"));
+        assert!(tools.contains(&"propose_wait"));
+        let actions = body["data"]["dashboardActions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|action| {
+                action
+                    .pointer("/request/action")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            })
+            .collect::<Vec<_>>();
+        assert!(actions.contains(&"view_focus".to_string()));
+        assert!(actions.contains(&"snapshot".to_string()));
+        assert!(actions.contains(&"wait".to_string()));
+        assert_eq!(
+            body["data"]["dashboardActions"][3]["request"]["params"]["selector"],
+            "#ready"
         );
         let _ = fs::remove_dir_all(root);
     }

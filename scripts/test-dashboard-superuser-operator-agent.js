@@ -72,7 +72,12 @@ assert(
     appIntelligence.includes('operator_read_tool_calls') &&
     appIntelligence.includes('operator_executable_actions') &&
     appIntelligence.includes('propose_navigate') &&
+    appIntelligence.includes('propose_focus') &&
+    appIntelligence.includes('propose_snapshot') &&
+    appIntelligence.includes('propose_wait') &&
     appIntelligence.includes('service_request:navigate') &&
+    appIntelligence.includes('service_request:view_focus') &&
+    appIntelligence.includes('service_request:snapshot') &&
     appIntelligence.includes('operator_dashboard_actions') &&
     appIntelligence.includes('operatorGuidance') &&
     appIntelligence.includes('read-tools-completed') &&

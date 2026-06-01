@@ -584,3 +584,37 @@ Remaining work:
   query, click, type, press, scroll, and screenshot
 - add confirmation execution for destructive or broad actions
 - prove the navigate action against a live selected browser in hosted runtime
+
+### 2026-06-01 | J4 Focus, Wait, New Tab, And Snapshot Proposals
+
+Expanded the scoped non-destructive browser operation surface:
+
+- detect explicit focus, new-tab, wait, and DOM snapshot intent in the
+  superuser prompt
+- add audited `propose_focus`, `propose_new_tab`, `propose_wait`, and
+  `propose_snapshot` tool calls
+- require selected controllable workspace and session target before returning
+  service request actions
+- expose superuser-applied `view_focus`, `tab_new`, `wait`, and `snapshot`
+  service request actions through the existing dashboard action path
+- keep DOM mutation, click, type, scroll, screenshot, close, and storage tools
+  out of the enabled set until scoped contracts and confirmation handling are
+  wired
+
+Validation:
+
+```bash
+pnpm test:dashboard-superuser-operator-agent
+pnpm test:dashboard-contextual-chat
+pnpm build:dashboard
+cargo fmt --manifest-path cli/Cargo.toml -- --check
+cargo test --manifest-path cli/Cargo.toml app_intelligence -- --nocapture
+cargo clippy --manifest-path cli/Cargo.toml -- -D warnings
+```
+
+Remaining work:
+
+- add query/click/type/press/scroll/screenshot with selector and privacy
+  controls
+- add confirmation execution for destructive or broad actions
+- prove operation against a live selected browser in hosted runtime
