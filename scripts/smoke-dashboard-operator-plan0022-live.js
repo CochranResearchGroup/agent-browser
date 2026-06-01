@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 
+import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { existsSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const args = process.argv.slice(2);
 const options = {
@@ -10,7 +12,12 @@ const options = {
   authEnv: process.env.AGENT_BROWSER_DASHBOARD_AUTH_ENV || `${homedir()}/.agent-browser/dashboard-auth.env`,
   json: false,
   runLiveOperation: false,
+  runUiFollowup: false,
   requireLiveOperation: false,
+  requireUiFollowup: false,
+  agentBrowserBin: process.env.AGENT_BROWSER_BIN || 'agent-browser',
+  browserProfile: '',
+  uiSession: `plan0022-ui-followup-${process.pid}`,
 };
 
 for (let index = 0; index < args.length; index += 1) {
@@ -25,9 +32,20 @@ for (let index = 0; index < args.length; index += 1) {
     options.json = true;
   } else if (arg === '--run-live-operation') {
     options.runLiveOperation = true;
+  } else if (arg === '--run-ui-followup') {
+    options.runUiFollowup = true;
   } else if (arg === '--require-live-operation') {
     options.runLiveOperation = true;
     options.requireLiveOperation = true;
+  } else if (arg === '--require-ui-followup') {
+    options.runUiFollowup = true;
+    options.requireUiFollowup = true;
+  } else if (arg === '--agent-browser-bin') {
+    options.agentBrowserBin = requiredValue(args, ++index, arg);
+  } else if (arg === '--browser-profile') {
+    options.browserProfile = requiredValue(args, ++index, arg);
+  } else if (arg === '--ui-session') {
+    options.uiSession = requiredValue(args, ++index, arg);
   } else if (arg === '--help' || arg === '-h') {
     printHelp();
     process.exit(0);
@@ -42,6 +60,7 @@ const report = {
   operator: null,
   confirmation: null,
   liveOperation: null,
+  uiFollowup: null,
 };
 
 try {
@@ -143,6 +162,12 @@ async function run() {
     report.liveOperation = await runLiveBrowserOperation(base, admin.cookie);
     if (!report.liveOperation.success && options.requireLiveOperation) {
       throw new Error(`live browser operation did not complete: ${report.liveOperation.error || report.liveOperation.skippedReason}`);
+    }
+  }
+  if (options.runUiFollowup) {
+    report.uiFollowup = await runUiFollowup(base, credentials.admin);
+    if (!report.uiFollowup.success && options.requireUiFollowup) {
+      throw new Error(`UI follow-up smoke did not complete: ${report.uiFollowup.error || report.uiFollowup.skippedReason}`);
     }
   }
 }
@@ -370,6 +395,233 @@ async function startFixtureServer() {
   };
 }
 
+async function runUiFollowup(base, adminCredentials) {
+  const server = await startFixtureServer();
+  const generatedProfile = options.browserProfile ? '' : mkdtempSync(join(tmpdir(), 'ab-plan0022-ui-profile-'));
+  const profile = options.browserProfile || generatedProfile;
+  try {
+    const targetUrl = `http://127.0.0.1:${server.port}/`;
+    await openDashboardUrl(base.href, profile);
+    await runAgent(['--json', '--session', options.uiSession, 'wait', '1500'], { timeoutMs: 30000 });
+    await evalAgent(`
+(async () => {
+  await fetch('/api/dashboard-auth/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify(${JSON.stringify(adminCredentials)})
+  });
+  location.reload();
+  return JSON.stringify({ loginSubmitted: true });
+})()
+`, profile);
+    await runAgent(['--json', '--session', options.uiSession, 'wait', '2000'], { timeoutMs: 30000 });
+    const submitted = await evalJson(`
+(async () => {
+  const clickByText = (text) => {
+    const element = Array.from(document.querySelectorAll('button,[role=tab]'))
+      .find((candidate) => candidate.textContent?.trim() === text);
+    if (!element) return false;
+    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+      element.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+    }
+    return true;
+  };
+  clickByText('Chat');
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  const operated = clickByText('Operate');
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  const textarea = document.querySelector('textarea');
+  if (!textarea) return JSON.stringify({ operated, submitted: false, reason: 'missing textarea', text: document.body.innerText.slice(0, 500) });
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+  setter?.call(textarea, ${JSON.stringify(`Open a new browser to ${targetUrl}`)});
+  textarea.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: 'x' }));
+  const form = textarea.closest('form');
+  form?.requestSubmit();
+  return JSON.stringify({ operated, submitted: Boolean(form), url: location.href });
+})()
+`, profile, 'UI operator prompt submit');
+    assert(submitted.operated && submitted.submitted, `UI did not submit operator launch prompt: ${JSON.stringify(submitted)}`);
+
+    const actionReady = await pollEval(profile, `
+(() => {
+  const text = document.body.innerText;
+  const launchButton = Array.from(document.querySelectorAll('button'))
+    .find((button) => button.textContent?.includes('Launch browser workspace'));
+  return JSON.stringify({
+    hasLaunchButton: Boolean(launchButton),
+    hasOperator: text.includes('Superuser operator'),
+    hasToolCall: text.includes('propose_launch_browser'),
+    text: text.slice(0, 800)
+  });
+})()
+`, (state) => state.hasLaunchButton, 'UI launch action');
+    assert(actionReady.hasLaunchButton, `UI launch action did not appear: ${JSON.stringify(actionReady)}`);
+
+    const launched = await evalJson(`
+(async () => {
+  const launchButton = Array.from(document.querySelectorAll('button'))
+    .find((button) => button.textContent?.includes('Launch browser workspace'));
+  if (!launchButton) return JSON.stringify({ clicked: false, reason: 'missing launch button' });
+  for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+    launchButton.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+  }
+  return JSON.stringify({ clicked: true });
+})()
+`, profile, 'UI launch action click');
+    assert(launched.clicked, `UI did not click launch action: ${JSON.stringify(launched)}`);
+
+    const followupReady = await pollEval(profile, `
+(() => {
+  const text = document.body.innerText;
+  const followup = Array.from(document.querySelectorAll('button'))
+    .find((button) => button.textContent?.includes('View launched browser'));
+  return JSON.stringify({
+    hasFollowup: Boolean(followup),
+    hasServiceActivity: text.includes('operator.service_request') || text.includes('View launched browser'),
+    url: location.href,
+    text: text.slice(0, 1000)
+  });
+})()
+`, (state) => state.hasFollowup, 'UI View launched browser follow-up', 90);
+    assert(followupReady.hasFollowup, `UI follow-up did not appear: ${JSON.stringify(followupReady)}`);
+
+    const beforeUrl = followupReady.url;
+    const switched = await evalJson(`
+(async () => {
+  const followup = Array.from(document.querySelectorAll('button'))
+    .find((button) => button.textContent?.includes('View launched browser'));
+  if (!followup) return JSON.stringify({ clicked: false, reason: 'missing follow-up' });
+  for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+    followup.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+  }
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  return JSON.stringify({
+    clicked: true,
+    url: location.href,
+    search: location.search,
+    hasWorkspaceView: location.search.includes('view=workspace%3A') || location.search.includes('view=workspace:'),
+    hasBrowserSelection: location.search.includes('browser=') || location.search.includes('session=') || location.search.includes('workspace=')
+  });
+})()
+`, profile, 'UI View launched browser click');
+    assert(
+      switched.clicked && switched.hasBrowserSelection && switched.url !== beforeUrl,
+      `UI did not switch dashboard URL selection: before=${beforeUrl} after=${JSON.stringify(switched)}`,
+    );
+    return {
+      success: true,
+      targetUrl,
+      beforeUrl,
+      afterUrl: switched.url,
+      hasWorkspaceView: switched.hasWorkspaceView,
+      hasBrowserSelection: switched.hasBrowserSelection,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  } finally {
+    await runAgent(['--json', '--session', options.uiSession, 'close'], { timeoutMs: 30000 }).catch(() => undefined);
+    await server.close();
+    if (generatedProfile) {
+      rmSync(generatedProfile, { recursive: true, force: true });
+    }
+  }
+}
+
+async function openDashboardUrl(url, profile) {
+  const args = baseAgentArgs(profile);
+  args.push('open', url);
+  try {
+    await runAgent(args, { timeoutMs: 90000 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (!message.includes('Operation timed out. The page may still be loading')) {
+      throw err;
+    }
+  }
+}
+
+async function pollEval(profile, script, predicate, label, attempts = 75) {
+  let latest = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    latest = await evalJson(script, profile, `${label} poll`);
+    if (predicate(latest)) return latest;
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  throw new Error(`${label} did not become ready: ${JSON.stringify(latest)}`);
+}
+
+async function evalJson(script, profile, label) {
+  const value = await evalAgent(script, profile);
+  if (typeof value !== 'string') {
+    throw new Error(`${label} did not return a JSON string: ${JSON.stringify(value)}`);
+  }
+  try {
+    return JSON.parse(value);
+  } catch (err) {
+    throw new Error(`Failed to parse ${label} JSON: ${err instanceof Error ? err.message : String(err)}\n${value}`);
+  }
+}
+
+async function evalAgent(script, profile) {
+  const args = baseAgentArgs(profile);
+  args.push('eval', '--stdin');
+  const result = await runAgent(args, { input: script, timeoutMs: 60000 });
+  const parsed = JSON.parse(result.stdout.trim());
+  if (!parsed.success) {
+    throw new Error(`agent-browser eval failed: ${result.stdout}${result.stderr}`);
+  }
+  return parsed.data?.result;
+}
+
+function baseAgentArgs(profile) {
+  const args = ['--json', '--session', options.uiSession];
+  if (profile) {
+    args.push('--profile', profile);
+  }
+  return args;
+}
+
+function runAgent(commandArgs, { input = '', timeoutMs = 60000 } = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(options.agentBrowserBin, commandArgs, {
+      cwd: new URL('..', import.meta.url),
+      env: process.env,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    const timeout = setTimeout(() => {
+      child.kill('SIGTERM');
+      reject(new Error(`agent-browser command timed out: ${commandArgs.join(' ')}`));
+    }, timeoutMs);
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+    });
+    child.on('error', (err) => {
+      clearTimeout(timeout);
+      reject(err);
+    });
+    child.on('exit', (code, signal) => {
+      clearTimeout(timeout);
+      if (code === 0) {
+        resolve({ stdout, stderr });
+      } else {
+        reject(new Error(`agent-browser ${commandArgs.join(' ')} failed with code=${code} signal=${signal}\n${stdout}${stderr}`));
+      }
+    });
+    child.stdin.end(input);
+  });
+}
+
 async function login(base, credentials, label) {
   const response = await requestJson(base, '/api/dashboard-auth/login', {
     method: 'POST',
@@ -535,7 +787,12 @@ Options:
   --dashboard-url <url>       Dashboard URL to verify. Default: http://127.0.0.1:4848/
   --auth-env <path>           Dashboard auth env file. Default: ~/.agent-browser/dashboard-auth.env
   --run-live-operation        Attempt launch, DOM type/click, snapshot through Operate service actions.
+  --run-ui-followup           Drive the dashboard UI and click View launched browser after launch.
   --require-live-operation    Fail if the launch/DOM operation cannot complete.
+  --require-ui-followup       Fail if the dashboard UI follow-up cannot complete.
+  --agent-browser-bin <path>  agent-browser binary used for UI follow-up smoke.
+  --browser-profile <path>    Browser profile path used for UI follow-up smoke.
+  --ui-session <name>         agent-browser session name used for UI follow-up smoke.
   --json                      Print structured JSON.
 `);
 }

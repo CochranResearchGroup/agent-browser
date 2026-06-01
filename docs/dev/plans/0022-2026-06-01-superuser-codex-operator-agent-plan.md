@@ -888,3 +888,39 @@ Remaining work:
 
 - prove the visible dashboard UI applies the “View launched browser” follow-up
   and switches the actual viewport route after a launch result
+
+### 2026-06-01 | J6 UI Follow-Up Smoke Harness
+
+Extended the Plan 0022 hosted smoke with a browser-driven UI follow-up mode:
+
+- add `--run-ui-followup` to open the hosted dashboard in a real
+  `agent-browser` session
+- add `--require-ui-followup` to make that UI proof a hard gate
+- log in through the dashboard auth API from the browser page
+- switch to Chat, select Operate, submit a launch prompt, click the
+  `Launch browser workspace` action, wait for `View launched browser`, click
+  it, and verify the dashboard URL selection changes
+- keep the mode optional because it consumes a headed browser display
+
+Validation:
+
+```bash
+node --check scripts/smoke-dashboard-operator-plan0022-live.js
+pnpm smoke:dashboard-operator-plan0022-live -- --dashboard-url https://agent-browser.ecochran.dyndns.org/ --json
+pnpm smoke:dashboard-operator-plan0022-live -- --dashboard-url https://agent-browser.ecochran.dyndns.org/ --run-ui-followup --json
+```
+
+Runtime result:
+
+- hosted auth and confirmation checks passed
+- UI follow-up mode reached browser launch setup but could not allocate a
+  headed display: `No available X display number found for remote_headed
+  launch`
+
+Remaining work:
+
+- free or expand headed display capacity, then run:
+
+```bash
+pnpm smoke:dashboard-operator-plan0022-live -- --dashboard-url https://agent-browser.ecochran.dyndns.org/ --require-ui-followup --json
+```
