@@ -119,6 +119,10 @@ assert(
     appIntelligenceSupervisor.includes('agent-browser-superuser-operator') &&
     appIntelligenceSupervisor.includes('Agent Browser Operator') &&
     appIntelligenceSupervisor.includes('operator_base_instructions') &&
+    appIntelligenceSupervisor.includes('Operate like an expert interactive Codex session') &&
+    appIntelligenceSupervisor.includes('audited dashboard, browser, DOM, debug, and service tools') &&
+    appIntelligenceSupervisor.includes('Never silently switch target workspaces') &&
+    !appIntelligenceSupervisor.includes('In this slice you have no direct mutation tools') &&
     appIntelligenceSchema.includes('operator_guidance_output_schema') &&
     appIntelligenceSchema.includes('validate_operator_guidance'),
   'Operator mode must start Codex app-server with operator-specific instructions and a structured guidance schema.',

@@ -924,3 +924,29 @@ Remaining work:
 ```bash
 pnpm smoke:dashboard-operator-plan0022-live -- --dashboard-url https://agent-browser.ecochran.dyndns.org/ --require-ui-followup --json
 ```
+
+### 2026-06-01 | Operator Prompt Power-Parity Tightening
+
+Tightened the Codex app-server operator instructions to match the intended
+superuser-only product bar:
+
+- describe Operate as an expert interactive Codex-style agent for
+  agent-browser operations, agentic website operation, DOM discovery,
+  debugging, and dashboard control
+- explicitly list the audited dashboard, browser, DOM, debug, and service tool
+  surfaces the agent can choose from
+- preserve the hard boundary that execution flows only through host-provided
+  dashboard actions and service contracts
+- preserve denials for shell, filesystem, arbitrary network, private profile
+  data, auth artifacts, cookies, storage secrets, and unredacted screenshots
+  unless a listed tool and superuser confirmation allow scoped evidence
+- require explicit dashboard selection actions instead of silent workspace
+  switching
+- add a source-level test assertion so the prompt cannot regress to a
+  read-only planner posture while Plan 0022 expects a powerful operator
+
+Validation:
+
+```bash
+pnpm test:dashboard-superuser-operator-agent
+```
