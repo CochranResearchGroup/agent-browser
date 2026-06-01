@@ -477,7 +477,7 @@ fn operator_tool_manifest() -> Value {
             "label": "Browser tools",
             "enabled": true,
             "reason": "Read selected browser identity and prepare scoped navigation actions for the human superuser to apply",
-            "tools": ["describe_selected_browser", "propose_launch_browser", "propose_focus", "propose_navigate", "propose_new_tab", "propose_wait"]
+            "tools": ["describe_selected_browser", "propose_launch_browser", "propose_focus", "propose_navigate", "propose_new_tab", "propose_wait", "propose_close_browser", "propose_repair_browser"]
         },
         {
             "id": "dom",
@@ -497,8 +497,8 @@ fn operator_tool_manifest() -> Value {
             "id": "service",
             "label": "Service tools",
             "enabled": true,
-            "reason": "Superuser-applied service request actions are available for scoped non-destructive browser operations",
-            "tools": ["service_request:navigate", "service_request:view_focus", "service_request:tab_new", "service_request:wait", "service_request:snapshot", "service_request:count", "service_request:click", "service_request:type", "service_request:press", "service_request:scroll"]
+            "reason": "Superuser-applied service request actions are available for scoped browser operation and confirmation-gated service management",
+            "tools": ["service_request:navigate", "service_request:view_focus", "service_request:tab_new", "service_request:wait", "service_request:snapshot", "service_request:count", "service_request:click", "service_request:type", "service_request:press", "service_request:scroll", "service_request:service_browser_close", "service_request:service_browser_repair", "service_request:service_prune_retained", "service_request:service_repair_retained"]
         }
     ])
 }
@@ -1248,6 +1248,87 @@ fn operator_prompt_actions(prompt: &str) -> Vec<OperatorPromptAction> {
             extra_params: vec![("state", json!("visible")), ("timeout", json!(10_000))],
         });
     }
+    if lower.contains("close browser")
+        || lower.contains("close selected browser")
+        || lower.contains("close the selected browser")
+        || lower.contains("kill browser")
+        || lower.contains("terminate browser")
+    {
+        actions.push(OperatorPromptAction {
+            action_id: "close-selected-browser",
+            label: "Close selected browser",
+            group: "browser",
+            tool: "propose_close_browser",
+            contract_action: "service_browser_close",
+            task_name: "superuser-operator-close-browser",
+            reason: "Prepares the existing service_browser_close contract for the audited selected browser. Execution requires explicit superuser confirmation.",
+            confirmation_risk: "Closing a browser terminates its live session and can interrupt active work, unsaved form state, and visible service-owned streams.",
+            requires_confirmation: true,
+            requires_target: true,
+            url: None,
+            selector: None,
+            request_fields: Vec::new(),
+            extra_params: Vec::new(),
+        });
+    }
+    if lower.contains("repair browser")
+        || lower.contains("reconnect browser")
+        || lower.contains("repair stream")
+        || lower.contains("retry browser")
+    {
+        actions.push(OperatorPromptAction {
+            action_id: "repair-selected-browser",
+            label: "Repair selected browser",
+            group: "browser",
+            tool: "propose_repair_browser",
+            contract_action: "service_browser_repair",
+            task_name: "superuser-operator-repair-browser",
+            reason: "Submits the existing service_browser_repair contract for the audited selected browser to refresh service-owned stream and control readiness.",
+            confirmation_risk: "Repair can restart or reconnect service-owned browser stream resources for the selected target.",
+            requires_confirmation: false,
+            requires_target: true,
+            url: None,
+            selector: None,
+            request_fields: Vec::new(),
+            extra_params: Vec::new(),
+        });
+    }
+    if lower.contains("prune retained") || lower.contains("clear retained") {
+        actions.push(OperatorPromptAction {
+            action_id: "prune-retained-workspaces",
+            label: "Prune retained workspaces",
+            group: "service",
+            tool: "propose_prune_retained",
+            contract_action: "service_prune_retained",
+            task_name: "superuser-operator-prune-retained",
+            reason: "Prepares the existing service_prune_retained contract to remove retained workspace records. Execution requires explicit superuser confirmation.",
+            confirmation_risk: "Pruning retained workspaces removes retained browser/workspace records and may discard useful forensic or recovery context.",
+            requires_confirmation: true,
+            requires_target: false,
+            url: None,
+            selector: None,
+            request_fields: Vec::new(),
+            extra_params: Vec::new(),
+        });
+    }
+    if lower.contains("repair retained") || lower.contains("recover retained") {
+        actions.push(OperatorPromptAction {
+            action_id: "repair-retained-workspaces",
+            label: "Repair retained workspaces",
+            group: "service",
+            tool: "propose_repair_retained",
+            contract_action: "service_repair_retained",
+            task_name: "superuser-operator-repair-retained",
+            reason: "Prepares the existing service_repair_retained contract for retained workspace recovery. Execution requires explicit superuser confirmation.",
+            confirmation_risk: "Repairing retained workspaces can relink or restart retained service records and should be reviewed before execution.",
+            requires_confirmation: true,
+            requires_target: false,
+            url: None,
+            selector: None,
+            request_fields: Vec::new(),
+            extra_params: Vec::new(),
+        });
+    }
     actions
 }
 
@@ -1914,6 +1995,101 @@ mod tests {
             screenshot_call["output"]["requiresConfirmation"], true,
             "screenshot capture should remain confirmation-gated"
         );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn operator_turn_prepares_service_management_confirmations() {
+        let _guard = APP_INTELLIGENCE_ENV_LOCK.lock().unwrap();
+        let root = env::temp_dir().join(format!(
+            "agent-browser-operator-service-management-{}",
+            uuid::Uuid::new_v4()
+        ));
+        env::set_var("AGENT_BROWSER_APP_INTELLIGENCE_RUN_ROOT", &root);
+        env::set_var(
+            "AGENT_BROWSER_APP_INTELLIGENCE_OPERATOR_MODE",
+            "deterministic",
+        );
+        let identity = OperatorIdentity {
+            username: "admin".to_string(),
+            display_name: "Default superuser".to_string(),
+            role: "superuser".to_string(),
+        };
+        let request = json!({
+            "prompt": "Close the selected browser, repair browser stream, prune retained workspaces, and repair retained workspaces",
+            "packet": fixture_packet(),
+        });
+        let (status, body) = operator_turn_response(&request.to_string(), &identity);
+        env::remove_var("AGENT_BROWSER_APP_INTELLIGENCE_RUN_ROOT");
+        env::remove_var("AGENT_BROWSER_APP_INTELLIGENCE_OPERATOR_MODE");
+
+        assert_eq!(status, "200 OK");
+        assert_eq!(body["success"], true);
+        let tools = body["data"]["toolCalls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|call| call.get("tool").and_then(Value::as_str))
+            .collect::<Vec<_>>();
+        assert!(tools.contains(&"propose_close_browser"));
+        assert!(tools.contains(&"propose_repair_browser"));
+        assert!(tools.contains(&"propose_prune_retained"));
+        assert!(tools.contains(&"propose_repair_retained"));
+
+        let dashboard_actions = body["data"]["dashboardActions"].as_array().unwrap();
+        let service_actions = dashboard_actions
+            .iter()
+            .filter_map(|action| action.pointer("/request/action").and_then(Value::as_str))
+            .collect::<Vec<_>>();
+        assert!(service_actions.contains(&"service_browser_close"));
+        assert!(service_actions.contains(&"service_browser_repair"));
+        assert!(service_actions.contains(&"service_prune_retained"));
+        assert!(service_actions.contains(&"service_repair_retained"));
+
+        let close_action = dashboard_actions
+            .iter()
+            .find(|action| {
+                action.pointer("/request/action").and_then(Value::as_str)
+                    == Some("service_browser_close")
+            })
+            .unwrap();
+        assert_eq!(close_action["kind"], "operator_confirmation");
+        assert_eq!(close_action["requiresConfirmation"], true);
+        assert!(close_action["confirmationId"]
+            .as_str()
+            .unwrap()
+            .starts_with("confirm-service_browser_close-"));
+        assert_eq!(
+            close_action["request"]["params"]["browserId"],
+            "session:default"
+        );
+
+        let repair_action = dashboard_actions
+            .iter()
+            .find(|action| {
+                action.pointer("/request/action").and_then(Value::as_str)
+                    == Some("service_browser_repair")
+            })
+            .unwrap();
+        assert_eq!(repair_action["kind"], "service_request");
+        assert_eq!(repair_action["requiresConfirmation"], false);
+
+        for contract_action in ["service_prune_retained", "service_repair_retained"] {
+            let action = dashboard_actions
+                .iter()
+                .find(|action| {
+                    action.pointer("/request/action").and_then(Value::as_str)
+                        == Some(contract_action)
+                })
+                .unwrap();
+            assert_eq!(action["kind"], "operator_confirmation");
+            assert_eq!(action["requiresConfirmation"], true);
+            let confirmation_prefix = format!("confirm-{contract_action}-");
+            assert!(action["confirmationId"]
+                .as_str()
+                .unwrap()
+                .starts_with(confirmation_prefix.as_str()));
+        }
         let _ = fs::remove_dir_all(root);
     }
 

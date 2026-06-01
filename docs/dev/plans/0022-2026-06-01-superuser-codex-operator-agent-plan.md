@@ -752,3 +752,34 @@ Remaining work:
 - add destructive service action proposals for close, prune, storage, and broad
   workspace actions
 - emit Activity rows for operator confirmations and service-result follow-ups
+
+### 2026-06-01 | J5 Service Management Proposals
+
+Added the first service-management actions to the superuser operator planner:
+
+- detect selected-browser close, browser repair, retained prune, and retained
+  repair intent from the operator prompt
+- expose `propose_close_browser`, `propose_repair_browser`,
+  `propose_prune_retained`, and `propose_repair_retained` in the operator tool
+  manifest
+- route proposals through existing service request contracts:
+  `service_browser_close`, `service_browser_repair`, `service_prune_retained`,
+  and `service_repair_retained`
+- require explicit `operator_confirmation` for browser close, retained prune,
+  and retained repair before any destructive or broad service action executes
+- keep selected-browser repair as a direct service request because it is a
+  recovery action scoped to the audited browser target
+
+Validation:
+
+```bash
+pnpm test:dashboard-superuser-operator-agent
+cargo test --manifest-path cli/Cargo.toml app_intelligence -- --nocapture
+```
+
+Remaining work:
+
+- publish the service-management proposal slice into the live runtime and smoke
+  it without confirming destructive actions
+- add storage/cookie clearing proposals with explicit origin/profile scoping
+- emit Activity rows for operator confirmations and service-result follow-ups
