@@ -720,3 +720,35 @@ Remaining work:
 - add live launch smoke once display capacity is available
 - add destructive service action proposals for close, prune, storage, and broad
   workspace actions
+
+### 2026-06-01 | J5 Service Result Viewport Follow-Up
+
+Made service-request results feed back into Operate actions:
+
+- derive workspace selection identity from service request responses, including
+  browser id, session id, tab id, profile id, and job id
+- use the original service request payload as fallback identity evidence when
+  the daemon response only returns partial fields
+- append a `set_selected_workspace` dashboard action after launch, CDP-free
+  launch, or focus service requests return a browser/workspace identity
+- label the follow-up action as “View launched browser” or “View focused
+  browser” so the superuser can explicitly move the dashboard viewport and
+  inspector to the returned service target
+- keep execution service-mediated; the follow-up only changes dashboard URL
+  selection after the service action succeeds
+
+Validation:
+
+```bash
+pnpm test:dashboard-superuser-operator-agent
+pnpm test:dashboard-contextual-chat
+pnpm build:dashboard
+```
+
+Remaining work:
+
+- prove the full launch and viewport-switch loop against a live browser once
+  display capacity is available
+- add destructive service action proposals for close, prune, storage, and broad
+  workspace actions
+- emit Activity rows for operator confirmations and service-result follow-ups

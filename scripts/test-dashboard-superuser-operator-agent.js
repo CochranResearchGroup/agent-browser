@@ -123,6 +123,9 @@ assert(
     chatPanel.includes('APP_INTELLIGENCE_OPERATOR_CONFIRM_API_URL') &&
     chatPanel.includes('OperatorConfirmResponse') &&
     chatPanel.includes('operator_confirmation') &&
+    chatPanel.includes('deriveOperatorServiceSelection') &&
+    chatPanel.includes('operatorSelectionActionFromServiceResult') &&
+    chatPanel.includes('View launched browser') &&
     chatPanel.includes('SERVICE_API_BASE') &&
     chatPanel.includes('service_request') &&
     chatPanel.includes('Codex operator guidance') &&

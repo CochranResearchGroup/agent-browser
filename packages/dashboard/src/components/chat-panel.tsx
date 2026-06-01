@@ -452,6 +452,103 @@ type OperatorTurnResponse = {
   };
 };
 
+function operatorRecordValue(source: unknown, key: string): unknown {
+  return source && typeof source === "object" ? (source as Record<string, unknown>)[key] : undefined;
+}
+
+function operatorStringCandidate(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function firstOperatorStringCandidate(...values: unknown[]): string | null {
+  for (const value of values) {
+    const candidate = operatorStringCandidate(value);
+    if (candidate) return candidate;
+  }
+  return null;
+}
+
+function operatorServiceRequestAction(request: Record<string, unknown> | undefined): string | null {
+  return firstOperatorStringCandidate(request?.action);
+}
+
+function deriveOperatorServiceSelection(
+  action: OperatorDashboardAction,
+  payload: unknown,
+): DashboardWorkspaceUrlSelection | null {
+  const request = action.request;
+  const requestParams = operatorRecordValue(request, "params");
+  const data = operatorRecordValue(payload, "data") ?? payload;
+  const browser = operatorRecordValue(data, "browser");
+  const session = operatorRecordValue(data, "session");
+  const tab = operatorRecordValue(data, "tab");
+  const profile = operatorRecordValue(data, "profile");
+  const browserId = firstOperatorStringCandidate(
+    operatorRecordValue(data, "browserId"),
+    operatorRecordValue(data, "browser_id"),
+    operatorRecordValue(browser, "id"),
+    operatorRecordValue(requestParams, "browserId"),
+    operatorRecordValue(request, "browserId"),
+  );
+  const sessionId = firstOperatorStringCandidate(
+    operatorRecordValue(data, "sessionId"),
+    operatorRecordValue(data, "session_id"),
+    operatorRecordValue(session, "id"),
+    operatorRecordValue(requestParams, "sessionName"),
+    operatorRecordValue(requestParams, "sessionId"),
+    operatorRecordValue(request, "sessionId"),
+  );
+  const tabId = firstOperatorStringCandidate(
+    operatorRecordValue(data, "tabId"),
+    operatorRecordValue(data, "tab_id"),
+    operatorRecordValue(data, "targetId"),
+    operatorRecordValue(tab, "id"),
+    operatorRecordValue(requestParams, "targetId"),
+  );
+  const profileId = firstOperatorStringCandidate(
+    operatorRecordValue(data, "profileId"),
+    operatorRecordValue(data, "profile_id"),
+    operatorRecordValue(data, "runtimeProfile"),
+    operatorRecordValue(profile, "id"),
+    operatorRecordValue(request, "runtimeProfile"),
+  );
+  const jobId = firstOperatorStringCandidate(
+    operatorRecordValue(data, "jobId"),
+    operatorRecordValue(data, "job_id"),
+    operatorRecordValue(data, "id"),
+    operatorRecordValue(request, "jobId"),
+  );
+  const requestAction = operatorServiceRequestAction(request);
+  if (requestAction !== "tab_new" && requestAction !== "cdp_free_launch" && requestAction !== "view_focus") {
+    return null;
+  }
+  if (!browserId && !sessionId && !tabId && !profileId && !jobId) return null;
+  return {
+    workspaceId: browserId ? `browser:${browserId}` : sessionId ? `browser:session:${sessionId}` : null,
+    browserId,
+    sessionId,
+    tabId,
+    profileId,
+    jobId,
+  };
+}
+
+function operatorSelectionActionFromServiceResult(
+  action: OperatorDashboardAction,
+  payload: unknown,
+): OperatorDashboardAction | null {
+  const selection = deriveOperatorServiceSelection(action, payload);
+  if (!selection) return null;
+  return {
+    id: `${action.id}-view-result`,
+    label: operatorServiceRequestAction(action.request) === "view_focus" ? "View focused browser" : "View launched browser",
+    kind: "set_selected_workspace",
+    requiresConfirmation: false,
+    selection,
+    reason: "Aligns the dashboard viewport and inspector with the browser identity returned by the service request.",
+  };
+}
+
 function CodexProviderSummary({
   packet,
   packetSummary,
@@ -1137,6 +1234,18 @@ export function ChatPanel({
   }, [isSuperuser, selectedWorkspacePacket]);
 
   const applyOperatorDashboardAction = useCallback(async (action: OperatorDashboardAction) => {
+    const appendOperatorDashboardAction = (nextAction: OperatorDashboardAction | null) => {
+      if (!nextAction) return;
+      setOperatorTurn((prev) => {
+        if (!prev) return prev;
+        const existing = prev.dashboardActions ?? [];
+        if (existing.some((item) => item.id === nextAction.id)) return prev;
+        return {
+          ...prev,
+          dashboardActions: [...existing, nextAction],
+        };
+      });
+    };
     if (action.kind === "set_selected_workspace" && action.selection) {
       updateDashboardWorkspaceUrlSelection(action.selection, "push");
       setAppliedOperatorActionId(action.id);
@@ -1177,6 +1286,7 @@ export function ChatPanel({
         if (!response.ok || payload?.success === false) {
           throw new Error(payload?.error || `Service request failed with HTTP ${response.status}`);
         }
+        appendOperatorDashboardAction(operatorSelectionActionFromServiceResult(confirmedAction, payload));
         setAppliedOperatorActionId(action.id);
       } catch (err) {
         setOperatorError(err instanceof Error ? err.message : String(err));
@@ -1199,6 +1309,7 @@ export function ChatPanel({
         if (!response.ok || payload?.success === false) {
           throw new Error(payload?.error || `Service request failed with HTTP ${response.status}`);
         }
+        appendOperatorDashboardAction(operatorSelectionActionFromServiceResult(action, payload));
         setAppliedOperatorActionId(action.id);
       } catch (err) {
         setOperatorError(err instanceof Error ? err.message : String(err));
