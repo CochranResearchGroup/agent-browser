@@ -17,6 +17,8 @@ export type WorkspaceNodeSource =
   | "daemon-session"
   | "profile";
 
+export type WorkspaceNodeRole = "target-browser" | "viewer-client";
+
 export type WorkspaceNodeActionId =
   | "focus"
   | "view"
@@ -76,7 +78,9 @@ export type WorkspaceOwnershipDiagnosticKind =
   | "duplicate-display"
   | "duplicate-guacamole-route"
   | "duplicate-target"
-  | "stale-retained-target";
+  | "stale-retained-target"
+  | "viewer-client-target"
+  | "idle-route-display";
 
 export type WorkspaceOwnershipDiagnostic = {
   kind: WorkspaceOwnershipDiagnosticKind;
@@ -104,6 +108,8 @@ export type WorkspaceNodeTakeover = {
 export type WorkspaceNode = {
   id: string;
   source: WorkspaceNodeSource;
+  role: WorkspaceNodeRole;
+  roleReason?: string | null;
   group: WorkspaceNodeGroup;
   state: WorkspaceNodeState;
   label: string;
@@ -189,6 +195,7 @@ export type WorkspaceServiceViewStream = {
   controllerLeaseId?: string | null;
   readiness?: unknown;
   remoteReadiness?: unknown;
+  displayContent?: unknown;
   readOnly?: boolean | null;
   controlInput?: string | null;
 };
@@ -591,22 +598,52 @@ function createBrowserWorkspaceNode({
 }): WorkspaceNode {
   const ownership = firstOwnership(sessions, allocation);
   const primaryTab = primaryServiceTab(tabs);
-  const viewStream = primaryViewStream(browser.viewStreams);
+  const rawViewStream = selectPrimaryWorkspaceViewStream(browser.viewStreams);
+  const viewStream = rawViewStream ? primaryViewStream([rawViewStream]) : null;
   const takeover = takeoverForSessions(sessions, allocation, jobs);
   const busy = jobs.some(isActiveJob);
   const terminal = isTerminalBrowser(browser);
+  const diagnosticRelatedIds = uniqueStrings([
+    relatedId("browser", browser.id),
+    ...sessions.map((session) => relatedId("session", session.id)),
+    ...tabs.map((tab) => relatedId("tab", tab.id)),
+  ]);
+  const viewerClient = classifyViewerClient({
+    ids: uniqueStrings([
+      browser.id,
+      browser.profileId,
+      allocation?.profileId,
+      ...(browser.activeSessionIds ?? []),
+      ...sessions.map((session) => session.id),
+    ]),
+    ownership,
+    tabs,
+  });
   const attentionReason = browserAttentionReason(browser, allocation, incidents, {
     includeTerminalHealth: !terminal || busy || incidents.some((incident) => !incident.resolvedAt) || Boolean(takeover),
   });
   const live = isLiveBrowser(browser);
   const blockedReason = takeover?.queueImpact ?? (terminal ? null : live && viewStream?.controllable ? null : profileBlockedReason(allocation));
-  const state = workspaceState({
+  const idleRouteDisplayDiagnostic = idleRouteDisplayDiagnosticFor({
+    stream: rawViewStream,
+    relatedIds: diagnosticRelatedIds,
+  });
+  const state = viewerClient.active || idleRouteDisplayDiagnostic ? "needs-attention" : workspaceState({
     busy,
     blockedReason,
     attentionReason,
     live,
     viewStream,
   });
+  const viewerClientDiagnostic = viewerClientDiagnosticFor({
+    reason: viewerClient.reason,
+    relatedIds: diagnosticRelatedIds,
+  });
+  const nodeDiagnostics = uniqueDiagnostics([
+    ...(viewerClientDiagnostic ? [viewerClientDiagnostic] : []),
+    ...(idleRouteDisplayDiagnostic ? [idleRouteDisplayDiagnostic] : []),
+    ...diagnostics,
+  ]);
   const label = browserWorkspaceLabel({
     browser,
     sessions,
@@ -624,20 +661,23 @@ function createBrowserWorkspaceNode({
     viewStream?.routeSummary,
     primaryTab?.title || primaryTab?.url,
     takeover ? `takeover by ${takeover.ownerLabel}` : null,
-    diagnostics[0]?.message,
+    viewerClient.active ? "viewer client" : null,
+    nodeDiagnostics[0]?.message,
     live ? "live" : "retained",
   ]).join(" / ");
 
   return {
     id: `browser:${browser.id}`,
     source: "service-browser",
+    role: viewerClient.active ? "viewer-client" : "target-browser",
+    roleReason: viewerClient.reason,
     group: groupForState(state),
     state,
     label,
     secondaryLabel,
     sortLabel: `${label} ${browser.id}`.toLowerCase(),
     health: browser.health ?? null,
-    attentionReason: blockedReason ?? attentionReason,
+    attentionReason: viewerClient.reason ?? idleRouteDisplayDiagnostic?.message ?? blockedReason ?? attentionReason,
     retained: !live,
     live,
     browserId: browser.id,
@@ -650,7 +690,7 @@ function createBrowserWorkspaceNode({
     primaryTab,
     viewStream,
     takeover,
-    diagnostics,
+    diagnostics: nodeDiagnostics,
     counts: {
       tabs: tabs.length,
       serviceSessions: sessions.length,
@@ -666,7 +706,9 @@ function createBrowserWorkspaceNode({
       jobIds: uniqueStrings(jobs.map((job) => job.id)),
       incidentIds: uniqueStrings(incidents.map((incident) => incident.id)),
     },
-    actions: browserActions(browser, live, viewStream, blockedReason ?? attentionReason, takeover),
+    actions: viewerClient.active
+      ? viewerClientActions(browserActions(browser, live, viewStream, blockedReason ?? attentionReason, takeover), viewerClient.reason)
+      : browserActions(browser, live, viewStream, blockedReason ?? attentionReason, takeover),
   };
 }
 
@@ -702,6 +744,8 @@ function createServiceSessionWorkspaceNode({
   return {
     id: `service-session:${session.id}`,
     source: "service-session",
+    role: "target-browser",
+    roleReason: null,
     group: groupForState(state),
     state,
     label,
@@ -758,12 +802,30 @@ function createDaemonWorkspaceNode({
   const live = !session.pending && !session.closing && session.port > 0;
   const attentionReason = session.closing ? "Session is closing." : null;
   const viewStream = daemonViewStream(session, live);
-  const state: WorkspaceNodeState = session.pending ? "busy" : attentionReason ? "needs-attention" : live ? "active" : "retained";
+  const viewerClient = classifyViewerClient({
+    ids: [session.session, session.provider, session.engine, engine],
+    tabs,
+  });
+  const state: WorkspaceNodeState = viewerClient.active
+    ? "needs-attention"
+    : session.pending
+      ? "busy"
+      : attentionReason
+        ? "needs-attention"
+        : live
+          ? "active"
+          : "retained";
   const label = activeTab?.title || session.session;
+  const viewerClientDiagnostic = viewerClientDiagnosticFor({
+    reason: viewerClient.reason,
+    relatedIds: [relatedId("session", session.session)],
+  });
 
   return {
     id: `daemon-session:${session.session}`,
     source: "daemon-session",
+    role: viewerClient.active ? "viewer-client" : "target-browser",
+    roleReason: viewerClient.reason,
     group: groupForState(state),
     state,
     label,
@@ -771,10 +833,12 @@ function createDaemonWorkspaceNode({
       session.session,
       session.provider ?? session.engine ?? engine,
       activeTab?.url,
+      viewerClient.active ? "viewer client" : null,
+      viewerClient.reason,
     ]).join(" / "),
     sortLabel: `${label} ${session.session}`.toLowerCase(),
     health: session.pending ? "pending" : session.closing ? "closing" : "live",
-    attentionReason,
+    attentionReason: viewerClient.reason ?? attentionReason,
     retained: !live,
     live,
     daemonSession: session.session,
@@ -791,7 +855,7 @@ function createDaemonWorkspaceNode({
       : null,
     viewStream,
     takeover: null,
-    diagnostics: [],
+    diagnostics: viewerClientDiagnostic ? [viewerClientDiagnostic] : [],
     counts: {
       tabs: tabs.length,
       serviceSessions: 0,
@@ -807,7 +871,9 @@ function createDaemonWorkspaceNode({
       jobIds: [],
       incidentIds: [],
     },
-    actions: daemonActions(session, live, viewStream),
+    actions: viewerClient.active
+      ? viewerClientActions(daemonActions(session, live, viewStream), viewerClient.reason)
+      : daemonActions(session, live, viewStream),
   };
 }
 
@@ -857,6 +923,8 @@ function createProfileWorkspaceNode({
   return {
     id: `profile:${allocation.profileId}`,
     source: "profile",
+    role: "target-browser",
+    roleReason: null,
     group: groupForState(state),
     state,
     label,
@@ -1183,6 +1251,137 @@ function isBlankServiceWorkspaceTab(tab: WorkspaceServiceTab): boolean {
   const blankUrl = !url || url === "about:blank" || url === "chrome://newtab/";
   const blankTitle = !title || title === "about:blank" || title === "new tab";
   return blankUrl && blankTitle;
+}
+
+type ViewerClientClassification = {
+  active: boolean;
+  reason: string | null;
+};
+
+function classifyViewerClient(input: {
+  ids?: Array<string | null | undefined>;
+  ownership?: WorkspaceNodeOwnership;
+  tabs?: Array<WorkspaceServiceTab | TabInfo>;
+}): ViewerClientClassification {
+  const haystack = [
+    ...(input.ids ?? []),
+    input.ownership?.serviceName,
+    input.ownership?.agentName,
+    input.ownership?.taskName,
+    ...(input.tabs ?? []).flatMap((tab) => [tab.title, tab.url]),
+  ]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .map((value) => value.toLowerCase());
+
+  if (haystack.some((value) => /(?:^|[^a-z0-9])dashboard-viewer(?:[^a-z0-9]|$)/.test(value))) {
+    return {
+      active: true,
+      reason: "This is an Agent Browser dashboard viewer client, not the browser target behind the remote display.",
+    };
+  }
+  if (haystack.some((value) => value.includes("/guacamole/#/client") || value.includes("guacamole client"))) {
+    return {
+      active: true,
+      reason: "This is a Guacamole viewer client; remote control must target the browser attached inside that route display.",
+    };
+  }
+  if (haystack.some((value) => value.includes("agent-browser") && value.includes("workspace") && value.includes("control"))) {
+    return {
+      active: true,
+      reason: "This browser is showing the Agent Browser control workspace, so it is a viewer client rather than an inspected target.",
+    };
+  }
+  return { active: false, reason: null };
+}
+
+function viewerClientDiagnosticFor(input: {
+  reason: string | null;
+  relatedIds: string[];
+}): WorkspaceOwnershipDiagnostic | null {
+  if (!input.reason) return null;
+  return {
+    kind: "viewer-client-target",
+    severity: "warning",
+    message: `${input.reason} Do not use this row as evidence that the target browser is visible in the remote route.`,
+    relatedIds: input.relatedIds,
+  };
+}
+
+function idleRouteDisplayDiagnosticFor(input: {
+  stream: WorkspaceServiceViewStream | null;
+  relatedIds: string[];
+}): WorkspaceOwnershipDiagnostic | null {
+  const reason = idleRouteDisplayReason(input.stream);
+  if (!reason) return null;
+  return {
+    kind: "idle-route-display",
+    severity: "warning",
+    message: reason,
+    relatedIds: input.relatedIds,
+  };
+}
+
+function idleRouteDisplayReason(stream?: WorkspaceServiceViewStream | null): string | null {
+  if (!stream || normalize(stream.provider) !== "rdp_gateway") return null;
+  const explicitState = readinessState(stream.remoteReadiness ?? stream.readiness);
+  const normalizedState = normalize(explicitState);
+  if (["idle_display", "terminal_only", "no_browser_window", "display_idle"].includes(normalizedState)) {
+    return "Remote route display is idle or terminal-only; launch or focus the target browser on this display before using the Guacamole stream.";
+  }
+
+  const values = deepStringValues([stream.remoteReadiness, stream.readiness, stream.displayContent])
+    .map((value) => value.toLowerCase());
+  if (values.length === 0) return null;
+  const hasTerminalWindow = values.some((value) =>
+    value.includes("xterm") ||
+    value.includes("linux terminal") ||
+    value.includes("terminal-only") ||
+    value.includes("terminal only") ||
+    value.includes("shell window"),
+  );
+  const hasBrowserWindow = values.some((value) =>
+    value.includes("chromium") ||
+    value.includes("google chrome") ||
+    value.includes("chrome browser") ||
+    value.includes("firefox") ||
+    value.includes("browser window"),
+  );
+  if (hasTerminalWindow && !hasBrowserWindow) {
+    return "Remote route display appears to contain only terminal windows; launch or focus the target browser on this display before using the Guacamole stream.";
+  }
+  return null;
+}
+
+function deepStringValues(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (typeof value === "number" || typeof value === "boolean" || value == null) return [];
+  if (Array.isArray(value)) return value.flatMap((item) => deepStringValues(item));
+  if (typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).flatMap((item) => deepStringValues(item));
+  }
+  return [];
+}
+
+function uniqueDiagnostics(diagnostics: WorkspaceOwnershipDiagnostic[]): WorkspaceOwnershipDiagnostic[] {
+  const seen = new Set<string>();
+  const result: WorkspaceOwnershipDiagnostic[] = [];
+  for (const diagnostic of diagnostics) {
+    const key = `${diagnostic.kind}\n${diagnostic.message}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(diagnostic);
+  }
+  return result;
+}
+
+function viewerClientActions(actions: WorkspaceNodeAction[], reason: string | null): WorkspaceNodeAction[] {
+  const disabledReason = reason ?? "This row is a viewer client, not a browser target.";
+  const targetActionIds = new Set<WorkspaceNodeActionId>(["focus", "view", "control", "add-tab", "repair", "external-open"]);
+  return actions.map((action) =>
+    targetActionIds.has(action.id)
+      ? { ...action, enabled: false, reason: disabledReason }
+      : action,
+  );
 }
 
 function serviceWorkspaceTabScore(tab: WorkspaceServiceTab): number {

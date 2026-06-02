@@ -96,17 +96,45 @@ const diagnosticFixture = {
       ],
       activeSessionIds: ['rdp-stale-session'],
     },
+    {
+      id: 'rdp-idle-display',
+      profileId: 'rdp-profile-idle',
+      host: 'remote_headed',
+      health: 'ready',
+      pid: 6104,
+      displayName: ':12',
+      viewStreams: [
+        {
+          provider: 'rdp_gateway',
+          url: 'https://agent-browser.example.test/guacamole/#/client/idle',
+          routeId: 'idle-route',
+          displayAllocationId: 'display-idle',
+          remoteReadiness: { state: 'ready' },
+          displayContent: {
+            state: 'terminal_only',
+            windows: [
+              { title: 'agent-browser-rdp-a@cooper: ~', className: 'XTerm' },
+            ],
+          },
+          controlInput: 'manual_attached_desktop',
+          readOnly: false,
+        },
+      ],
+      activeSessionIds: ['rdp-idle-session'],
+    },
   ],
   serviceSessions: [
     { id: 'rdp-a-session', browserIds: ['rdp-a'], tabIds: ['rdp-a-tab'], profileId: 'rdp-profile-a' },
     { id: 'rdp-b-session', browserIds: ['rdp-b'], tabIds: ['rdp-b-tab'], profileId: 'rdp-profile-b' },
     { id: 'rdp-stale-session', browserIds: ['rdp-stale-target'], tabIds: ['rdp-stale-old', 'rdp-stale-live'], profileId: 'rdp-profile-c' },
+    { id: 'rdp-idle-session', browserIds: ['rdp-idle-display'], tabIds: ['rdp-idle-tab'], profileId: 'rdp-profile-idle' },
   ],
   serviceTabs: [
     { id: 'rdp-a-tab', browserId: 'rdp-a', sessionId: 'rdp-a-session', targetId: 'target-shared', lifecycle: 'active', title: 'A', url: 'https://example.test/a' },
     { id: 'rdp-b-tab', browserId: 'rdp-b', sessionId: 'rdp-b-session', targetId: 'target-shared', lifecycle: 'active', title: 'B', url: 'https://example.test/b' },
     { id: 'rdp-stale-old', browserId: 'rdp-stale-target', sessionId: 'rdp-stale-session', targetId: 'target-stale-old', lifecycle: 'closed', title: 'about:blank', url: 'about:blank' },
     { id: 'rdp-stale-live', browserId: 'rdp-stale-target', sessionId: 'rdp-stale-session', targetId: 'target-stale-live', lifecycle: 'active', title: 'Live fallback', url: 'https://example.test/live' },
+    { id: 'rdp-idle-tab', browserId: 'rdp-idle-display', sessionId: 'rdp-idle-session', targetId: 'target-idle', lifecycle: 'active', title: 'Expected target', url: 'https://example.test/target' },
   ],
 };
 
@@ -124,12 +152,22 @@ assert.match(rdpA.secondaryLabel, /Duplicate CDP endpoint/);
 const staleDiagnosticNode = byId(diagnosticNodes, 'browser:rdp-stale-target');
 assert.ok(staleDiagnosticNode.diagnostics.some((diagnostic) => diagnostic.kind === 'stale-retained-target'));
 assert.equal(staleDiagnosticNode.primaryTab?.id, 'rdp-stale-live');
+const idleDisplayNode = byId(diagnosticNodes, 'browser:rdp-idle-display');
+assert.ok(idleDisplayNode.diagnostics.some((diagnostic) => diagnostic.kind === 'idle-route-display'));
+assert.equal(idleDisplayNode.group, 'needs-attention');
+assert.match(idleDisplayNode.attentionReason ?? '', /terminal/i);
+assert.equal(action(idleDisplayNode, 'control').enabled, true);
 
 const nodes = deriveWorkspaceNodes({
   daemonSessions: [
     {
       session: 'daemon-only',
       port: 4101,
+      engine: 'chrome',
+    },
+    {
+      session: 'dashboard-viewer-plan0025',
+      port: 37273,
       engine: 'chrome',
     },
   ],
@@ -139,6 +177,15 @@ const nodes = deriveWorkspaceNodes({
         index: 0,
         title: 'Standalone tab',
         url: 'https://example.test/standalone',
+        type: 'page',
+        active: true,
+      },
+    ],
+    37273: [
+      {
+        index: 0,
+        title: 'Agent Browser',
+        url: 'https://agent-browser.example.test/?workspace=browser%3Asession%3Adefault&view=workspace%3Acontrol',
         type: 'page',
         active: true,
       },
@@ -678,6 +725,7 @@ assert.equal(action(standaloneTakeover, 'resume').enabled, false);
 
 const daemon = byId(nodes, 'daemon-session:daemon-only');
 assert.equal(daemon.source, 'daemon-session');
+assert.equal(daemon.role, 'target-browser');
 assert.equal(daemon.group, 'active');
 assert.equal(daemon.label, 'Standalone tab');
 assert.equal(daemon.primaryTab?.url, 'https://example.test/standalone');
@@ -687,6 +735,20 @@ assert.equal(daemon.process?.streamPort, 4101);
 assert.equal(action(daemon, 'view').enabled, true);
 assert.equal(action(daemon, 'control').enabled, true);
 assert.equal(action(daemon, 'add-tab').enabled, true);
+
+const dashboardViewer = byId(nodes, 'daemon-session:dashboard-viewer-plan0025');
+assert.equal(dashboardViewer.source, 'daemon-session');
+assert.equal(dashboardViewer.role, 'viewer-client');
+assert.equal(dashboardViewer.group, 'needs-attention');
+assert.equal(dashboardViewer.state, 'needs-attention');
+assert.match(dashboardViewer.roleReason ?? '', /dashboard viewer client/);
+assert.match(dashboardViewer.secondaryLabel, /viewer client/);
+assert.ok(dashboardViewer.diagnostics.some((diagnostic) => diagnostic.kind === 'viewer-client-target'));
+assert.equal(action(dashboardViewer, 'view').enabled, false);
+assert.match(action(dashboardViewer, 'view').reason ?? '', /dashboard viewer client/);
+assert.equal(action(dashboardViewer, 'control').enabled, false);
+assert.equal(action(dashboardViewer, 'add-tab').enabled, false);
+assert.equal(action(dashboardViewer, 'kill').enabled, true);
 
 const conflict = byId(nodes, 'profile:profile-conflict');
 assert.equal(conflict.source, 'profile');

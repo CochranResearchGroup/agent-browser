@@ -8,6 +8,7 @@ const existingUser = process.env.AGENT_BROWSER_RDP_EXISTING_USERNAME ||
   process.env.XRDP_AGENT_BROWSER_USERNAME ||
   'agent-browser-rdp';
 const shellOutput = process.argv.includes('--shell');
+const includeWindows = process.argv.includes('--windows') || process.argv.includes('--display-content');
 
 function commandResult(command, args) {
   return spawnSync(command, args, {
@@ -63,6 +64,51 @@ function inspectUser(rows, user) {
   };
 }
 
+function inspectDisplayContent(displayName) {
+  if (!displayName) {
+    return {
+      state: 'display_missing',
+      windows: [],
+      error: 'display name is missing',
+    };
+  }
+  const result = commandResult('xwininfo', ['-display', displayName, '-root', '-tree']);
+  if (result.status !== 0) {
+    return {
+      state: 'probe_failed',
+      windows: [],
+      error: (result.stderr || result.stdout || 'xwininfo failed').trim(),
+    };
+  }
+  const windows = result.stdout
+    .split(/\r?\n/)
+    .map((line) => {
+      const match = line.match(/^\s*(0x[0-9a-f]+)\s+"([^"]*)"/i);
+      if (!match) return null;
+      return {
+        id: match[1],
+        title: match[2],
+        raw: line.trim(),
+      };
+    })
+    .filter(Boolean);
+  const rawText = windows.map((window) => `${window.title}\n${window.raw}`.toLowerCase()).join('\n');
+  const browserVisible = /\b(chromium|google chrome|chrome browser|firefox|agent browser)\b/i.test(rawText);
+  const terminalVisible = /\b(xterm|terminal|shell)\b/i.test(rawText);
+  return {
+    state: browserVisible ? 'browser_window_visible' : terminalVisible ? 'terminal_only' : windows.length ? 'non_browser_windows' : 'empty_display',
+    windows,
+  };
+}
+
+function attachDisplayContent(route) {
+  if (!includeWindows) return route;
+  return {
+    ...route,
+    displayContent: inspectDisplayContent(route.displayName),
+  };
+}
+
 const rows = processRows();
 const routeA = inspectUser(rows, userA);
 const routeB = inspectUser(rows, userB);
@@ -98,12 +144,12 @@ const result = {
   success,
   status: success ? 'ready' : 'blocked',
   routes: {
-    A: effectiveRouteA,
-    B: effectiveRouteB,
+    A: attachDisplayContent(effectiveRouteA),
+    B: attachDisplayContent(effectiveRouteB),
   },
   routeSpecificUsers: {
-    A: routeA,
-    B: routeB,
+    A: attachDisplayContent(routeA),
+    B: attachDisplayContent(routeB),
   },
   existingUserRoutes,
   env: success

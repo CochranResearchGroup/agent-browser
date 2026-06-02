@@ -8,6 +8,7 @@ import {
   type WorkspaceNodeOwnership,
   type WorkspaceNodePrimaryTab,
   type WorkspaceNodeProcess,
+  type WorkspaceNodeRole,
   type WorkspaceNodeState,
   type WorkspaceNodeViewStream,
   type WorkspaceOwnershipDiagnostic,
@@ -48,6 +49,8 @@ export type SelectedWorkspaceContext = {
   source: SelectedWorkspaceSource;
   label: string;
   state: SelectedWorkspaceState;
+  role: WorkspaceNodeRole | "none";
+  roleReason: string | null;
   missingReason: string | null;
   live: boolean;
   retained: boolean;
@@ -145,6 +148,8 @@ export function buildSelectedWorkspaceContext(input: SelectedWorkspaceContextInp
     source,
     label: node?.label ?? (missingReason ? "Workspace not found" : "No workspace selected"),
     state: node?.state ?? (missingReason ? "missing" : "none"),
+    role: node?.role ?? "none",
+    roleReason: node?.roleReason ?? null,
     missingReason,
     live: node?.live ?? false,
     retained: node?.retained ?? false,
@@ -236,6 +241,8 @@ export function selectedWorkspaceDiagnosticBundle(context: SelectedWorkspaceCont
       source: context.source,
       label: context.label,
       state: context.state,
+      role: context.role,
+      roleReason: context.roleReason,
       health: context.node?.health ?? null,
       missingReason: context.missingReason,
       live: context.live,
@@ -346,6 +353,8 @@ function selectedWorkspaceEvidence(input: {
     row("Selection", selectionLabel(input.selection)),
     row("Workspace", input.node?.id),
     row("Source", input.node?.source),
+    row("Role", input.node?.role),
+    row("Role reason", input.node?.roleReason),
     row("State", input.node?.state),
     row("Health", input.node?.health),
     row("Browser", input.browser?.id ?? input.node?.browserId),
