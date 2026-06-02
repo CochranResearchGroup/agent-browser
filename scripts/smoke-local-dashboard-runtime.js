@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 
@@ -62,28 +62,28 @@ const report = {
   markers: [],
   browser: null,
 };
+let currentPhase = 'startup';
+const globalTimeout = setTimeout(() => {
+  emitFailure(new Error(`Local dashboard runtime smoke timed out during phase: ${currentPhase}`));
+  process.exit(1);
+}, Number(process.env.AGENT_BROWSER_DASHBOARD_SMOKE_TIMEOUT_MS || 300000));
 
 try {
   await run();
+  clearTimeout(globalTimeout);
   if (options.json) {
     console.log(JSON.stringify({ success: true, ...report }, null, 2));
   } else {
     console.log(`Local dashboard runtime smoke passed: ${options.dashboardUrl}`);
   }
 } catch (error) {
-  if (options.json) {
-    console.log(JSON.stringify({
-      success: false,
-      error: error instanceof Error ? error.message : String(error),
-      ...report,
-    }, null, 2));
-  } else {
-    console.error(error instanceof Error ? error.message : String(error));
-  }
+  clearTimeout(globalTimeout);
+  emitFailure(error);
   process.exit(1);
 }
 
 async function run() {
+  currentPhase = 'fetch dashboard html';
   const dashboardUrl = new URL(options.dashboardUrl);
   const html = await getText(dashboardUrl);
   report.http = {
@@ -99,14 +99,17 @@ async function run() {
   report.http.chunks = chunks.slice(0, 20);
 
   const chunkTexts = [];
-  for (const chunk of chunks) {
-    const chunkUrl = chunk.startsWith('/')
-      ? new URL(chunk, dashboardUrl.origin)
-      : new URL(`/_next/${chunk}`, dashboardUrl.origin);
-    try {
-      chunkTexts.push(await getText(chunkUrl));
-    } catch (error) {
-      throw new Error(`Failed to read dashboard chunk ${chunkUrl.href}: ${error instanceof Error ? error.message : String(error)}`);
+  if (options.expectMarkers.length > 0) {
+    for (const chunk of chunks) {
+      currentPhase = `fetch dashboard chunk ${chunk}`;
+      const chunkUrl = chunk.startsWith('/')
+        ? new URL(chunk, dashboardUrl.origin)
+        : new URL(`/_next/${chunk}`, dashboardUrl.origin);
+      try {
+        chunkTexts.push(await getText(chunkUrl));
+      } catch (error) {
+        throw new Error(`Failed to read dashboard chunk ${chunkUrl.href}: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
   }
 
@@ -120,11 +123,13 @@ async function run() {
   }
 
   if (!options.skipBrowser) {
+    currentPhase = 'browser smoke';
     report.browser = await runBrowserSmoke(dashboardUrl);
   }
 }
 
 async function runBrowserSmoke(baseUrl) {
+  currentPhase = 'prepare browser smoke url';
   const smokeUrl = new URL(baseUrl.href);
   if (options.workspaceSession) {
     smokeUrl.searchParams.set('view', 'workspace:control');
@@ -134,17 +139,28 @@ async function runBrowserSmoke(baseUrl) {
   }
 
   try {
+    currentPhase = 'open dashboard url';
     await openDashboardUrl(smokeUrl.href);
+    currentPhase = 'wait after dashboard open';
     await runAgent(['--json', '--session', options.session, 'wait', '1000'], { timeoutMs: 30000 });
-    const first = await evalAgent(`
+    let firstState = null;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      currentPhase = `detect login or workspace pane ${attempt + 1}`;
+      const first = await evalAgent(`
 JSON.stringify({
-  needsLogin: Boolean(document.querySelector('input[type="password"]')),
+  needsLogin: Boolean(document.querySelector('input[type="password"]')) || /Superuser access required|Sign in/i.test(document.body.innerText || ''),
+  hasWorkspacePane: document.body.innerText.includes('Workspaces'),
   url: location.href,
-  title: document.title
+  title: document.title,
+  bodyText: document.body.innerText.slice(0, 300)
 })
 `);
-    let firstState = parseEvalJson(first, 'initial dashboard browser state');
+      firstState = parseEvalJson(first, 'initial dashboard browser state');
+      if (firstState.needsLogin || firstState.hasWorkspacePane) break;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
     if (firstState.needsLogin) {
+      currentPhase = 'dashboard login';
       const credentials = dashboardCredentials();
       await evalAgent(`
 (async () => {
@@ -159,6 +175,7 @@ JSON.stringify({
 })()
 `);
       await runAgent(['--json', '--session', options.session, 'wait', '1500'], { timeoutMs: 30000 });
+      currentPhase = 'verify dashboard login';
       firstState = parseEvalJson(await evalAgent(`
 JSON.stringify({
   needsLogin: Boolean(document.querySelector('input[type="password"]')),
@@ -171,7 +188,10 @@ JSON.stringify({
       }
     }
 
-    const finalState = parseEvalJson(await evalAgent(`
+    let finalState = null;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      currentPhase = `wait for app chrome ${attempt + 1}`;
+      finalState = parseEvalJson(await evalAgent(`
 JSON.stringify({
   url: location.href,
   hasAgentBrowserChrome: document.body.innerText.includes('Agent Browser'),
@@ -185,6 +205,9 @@ JSON.stringify({
   readinessStatus: document.querySelector('.workspace-remote-viewport')?.getAttribute('data-readiness-status') || null
 })
 `), 'final dashboard browser state');
+      if (finalState.hasAgentBrowserChrome && finalState.hasWorkspacePane) break;
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
 
     if (!finalState.hasAgentBrowserChrome || !finalState.hasWorkspacePane) {
       throw new Error(`Dashboard browser smoke did not see the expected app chrome: ${JSON.stringify(finalState)}`);
@@ -193,7 +216,9 @@ JSON.stringify({
       throw new Error(`Workspace route did not render an embedded viewport: ${JSON.stringify(finalState)}`);
     }
     if (options.workspaceSession) {
+      currentPhase = 'open workspace right pane';
       await openDashboardRightPane();
+      currentPhase = 'select workspace tab';
       await evalAgent(`
 (async () => {
 const workspaceButton = Array.from(document.querySelectorAll('[role=tab],button'))
@@ -206,6 +231,7 @@ return JSON.stringify({ clickedWorkspace: Boolean(workspaceButton) });
 })()
 `);
       await waitForSelectedWorkspaceContext();
+      currentPhase = 'read workspace detail';
       const workspaceState = parseEvalJson(await evalAgent(`
 JSON.stringify({
   hasWorkspaceDetail: Boolean(document.querySelector('[data-selected-workspace-context="ready"]')),
@@ -228,6 +254,7 @@ JSON.stringify({
     let chatState = null;
     let consoleState = null;
     if (options.workspaceSession && options.consoleProbe) {
+      currentPhase = 'select console tab';
       consoleState = parseEvalJson(await evalAgent(`
 (async () => {
 const tab = Array.from(document.querySelectorAll('[role=tab],button'))
@@ -260,6 +287,7 @@ return JSON.stringify({ emitted: true });
 })()
 `);
       for (let attempt = 0; attempt < 30; attempt += 1) {
+        currentPhase = `poll console probe ${attempt + 1}`;
         const pollState = parseEvalJson(await evalAgent(`
 (() => {
 const text = document.querySelector('.dashboard-pane-right')?.innerText || document.body.innerText;
@@ -302,6 +330,7 @@ return JSON.stringify({
       }
     }
     if (options.workspaceSession && !options.skipChat) {
+      currentPhase = 'select chat tab';
       chatState = parseEvalJson(await evalAgent(`
 (async () => {
 const chatButton = Array.from(document.querySelectorAll('[role=tab],button'))
@@ -330,6 +359,7 @@ return JSON.stringify({
         throw new Error(`Workspace Chat did not expose the viewport inspection action: ${JSON.stringify(chatState)}`);
       }
       for (let attempt = 0; attempt < 75; attempt += 1) {
+        currentPhase = `poll chat inspection ${attempt + 1}`;
         const pollState = parseEvalJson(await evalAgent(`
 (() => {
 const inspectedText = document.querySelector('.dashboard-pane-right')?.innerText || document.body.innerText;
@@ -380,7 +410,10 @@ async function openDashboardUrl(url) {
     await runAgent([...baseAgentArgs(), 'open', url], { timeoutMs: 90000 });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (!message.includes('Operation timed out. The page may still be loading')) {
+    if (
+      !message.includes('Operation timed out. The page may still be loading') &&
+      !/Page\.navigate|timed out|timeout/i.test(message)
+    ) {
       throw error;
     }
   }
@@ -429,11 +462,23 @@ function baseAgentArgs() {
 }
 
 async function getText(url) {
-  const response = await fetch(url, { redirect: 'follow' });
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status} from ${url.href}`);
+  let lastError = null;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    try {
+      const curl = spawnSync('curl', ['--max-time', '15', '-fsSL', url.href], {
+        encoding: 'utf8',
+        maxBuffer: 64 * 1024 * 1024,
+      });
+      if (!curl.error && curl.status === 0) {
+        return curl.stdout;
+      }
+      lastError = curl.error ?? new Error(`curl failed for ${url.href}: ${curl.stderr || `status ${curl.status}`}`);
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
   }
-  return response.text();
+  throw lastError ?? new Error(`Failed to read ${url.href}`);
 }
 
 function dashboardCredentials() {
@@ -443,11 +488,11 @@ function dashboardCredentials() {
     throw new Error(`Dashboard auth env file is missing: ${authPath}`);
   }
   const values = parseEnv(readFileSync(authPath, 'utf8'));
-  const username = values.AGENT_BROWSER_DASHBOARD_CODEX_USERNAME ||
-    values.AGENT_BROWSER_DASHBOARD_ADMIN_USERNAME ||
+  const username = values.AGENT_BROWSER_DASHBOARD_ADMIN_USERNAME ||
+    values.AGENT_BROWSER_DASHBOARD_CODEX_USERNAME ||
     'admin';
-  const password = values.AGENT_BROWSER_DASHBOARD_CODEX_PASSWORD ||
-    values.AGENT_BROWSER_DASHBOARD_ADMIN_PASSWORD;
+  const password = values.AGENT_BROWSER_DASHBOARD_ADMIN_PASSWORD ||
+    values.AGENT_BROWSER_DASHBOARD_CODEX_PASSWORD;
   if (!password) {
     throw new Error(`Dashboard auth env file does not contain a usable dashboard password: ${authPath}`);
   }
@@ -475,15 +520,26 @@ function parseEnv(text) {
 }
 
 async function evalAgent(script) {
-  const result = await runAgent(['--json', '--session', options.session, 'eval', '--stdin'], {
-    input: script,
-    timeoutMs: 60000,
-  });
-  const parsed = parseJson(result.stdout, 'agent-browser eval');
-  if (!parsed.success) {
-    throw new Error(`agent-browser eval failed: ${result.stdout}${result.stderr}`);
+  let lastError = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const encodedScript = Buffer.from(script, 'utf8').toString('base64');
+      const result = await runAgent([...baseAgentArgs(), 'eval', '--base64', encodedScript], {
+        timeoutMs: 60000,
+      });
+      const parsed = parseJson(result.stdout, 'agent-browser eval');
+      if (!parsed.success) {
+        throw new Error(`agent-browser eval failed: ${result.stdout}${result.stderr}`);
+      }
+      return parsed.data?.result;
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/Runtime\.evaluate|timed out|timeout/i.test(message)) break;
+      await new Promise((resolve) => setTimeout(resolve, 750 * (attempt + 1)));
+    }
   }
-  return parsed.data?.result;
+  throw lastError ?? new Error('agent-browser eval failed');
 }
 
 function parseEvalJson(value, label) {
@@ -491,6 +547,20 @@ function parseEvalJson(value, label) {
     throw new Error(`${label} did not return a JSON string: ${JSON.stringify(value)}`);
   }
   return parseJson(value, label);
+}
+
+function emitFailure(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  if (options.json) {
+    console.log(JSON.stringify({
+      success: false,
+      error: message,
+      phase: currentPhase,
+      ...report,
+    }, null, 2));
+  } else {
+    console.error(`${message} (${currentPhase})`);
+  }
 }
 
 function parseJson(text, label) {

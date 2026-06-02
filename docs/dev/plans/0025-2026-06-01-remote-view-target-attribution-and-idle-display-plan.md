@@ -1,7 +1,7 @@
 # Remote View Target Attribution And Idle Display Plan
 
 Date: 2026-06-01
-State: IN PROGRESS
+State: CLOSED
 Lane: P12-M
 Parent Plan: `docs/dev/plans/0018-2026-06-01-workspace-inspector-tabs-productization-plan.md`
 Depends On:
@@ -358,6 +358,90 @@ Live display evidence after the first diagnostic slice:
 - Hosted smoke passed for `https://agent-browser.ecochran.dyndns.org/` with
   `11870` HTML bytes, title `agent-browser`, and `12` static chunks. Browser
   launch was skipped to avoid the known locked `stealthcdp-default` profile.
+
+2026-06-02 follow-up:
+
+- Added dashboard proxy `displayContent` enrichment for remote-headed
+  `rdp_gateway` streams so the selected workspace can distinguish a real
+  browser window from an idle route desktop.
+- Initial publish exposed an important safety regression: `/api/service/status`
+  could dogpile `xwininfo` probes against stale high-number displays such as
+  `:106`, causing dashboard API requests to hang. The proxy now skips
+  implausible stale service displays, serializes cache misses, and runs
+  `xwininfo` through `timeout --kill-after=1 2`.
+- Added `pnpm test:remote-view-target-attribution-live`, a dedicated M6 live
+  smoke that launches a disposable remote-headed target into a terminal-only
+  RDP route, captures a screenshot, checks route display state, runs the
+  dashboard workspace smoke, closes the target, and verifies the route returns
+  to terminal-only.
+- Published the fixed runtime with `pnpm publish:local-dashboard -- --skip-browser`.
+  The dashboard service restarted as PID `93736`.
+- Local and public auth status endpoints responded immediately after the
+  fixed publish:
+  - `http://127.0.0.1:4848/api/dashboard-auth/status`
+  - `https://agent-browser.ecochran.dyndns.org/api/dashboard-auth/status`
+- The route-display portion of the M6 smoke passed twice after the dedicated
+  smoke was added:
+  - Route A display `:12` started as `terminal_only`.
+  - Launching the disposable `remote-view-target-attribution-*` session opened
+    `Example Domain - Chromium` in the route and produced
+    `browser_window_visible`.
+  - The smoke captured `target-visible.png` under
+    `/tmp/agent-browser-plan0025-m6-artifacts-*`.
+  - Closing the disposable target returned Route A to `terminal_only`.
+- The hosted dashboard browser-smoke blocker was traced to the smoke harness
+  invoking `agent-browser eval --stdin`, even though the CLI expects script
+  input as a positional argument, stdin mode, or base64 payload. The harness now
+  uses `eval --base64` and includes the intended smoke profile and
+  `browser-host` in eval calls.
+- A second publish exposed a stricter route-display probe bug: stale private
+  virtual displays such as `:90` could still pass the numeric display gate and
+  wedge the dashboard in `xwininfo`. The proxy now discovers actual route-pool
+  displays from route-user Xorg/Xvnc/Xvfb processes and env hints, then probes
+  only those display names.
+- Republished the fixed runtime with `pnpm publish:local-dashboard -- --skip-browser`.
+  The dashboard service restarted as PID `66896`.
+- Raw, local ingress, and public HTTPS dashboard routes returned HTML after the
+  tighter route-display gate:
+  - `http://127.0.0.1:4848/`
+  - `http://agent-browser.localhost/`
+  - `https://agent-browser.ecochran.dyndns.org/`
+- The dedicated M6 smoke passed end to end against the hosted URL:
+  - Session `remote-view-target-attribution-69314`.
+  - Route A display `:12` started as `terminal_only`.
+  - Launching the disposable target opened `Example Domain - Chromium` and
+    changed Route A to `browser_window_visible`.
+  - Hosted dashboard selected
+    `browser:session:remote-view-target-attribution-69314` with state
+    `controllable` and readiness `ready`.
+  - The target screenshot is
+    `/tmp/agent-browser-plan0025-m6-artifacts-owfwxx/target-visible.png`, a
+    `504 x 233` PNG.
+  - Closing the disposable target returned Route A to `terminal_only`.
+- `agent-browser install doctor --json` still reports local debug install drift:
+  `path_command_pnpm_binary_mismatch` and
+  `path_command_workspace_binary_mismatch`. Remote-view privileges are ready,
+  the stealthcdp Chromium build is ready, and the no-launch service probe is
+  ready. This remains an environment warning, not a remote-view failure.
+
+Additional validation completed in the follow-up:
+
+```bash
+node --check scripts/smoke-local-dashboard-runtime.js
+node --check scripts/smoke-remote-view-target-attribution-live.js
+cargo fmt --manifest-path cli/Cargo.toml -- --check
+cargo test --manifest-path cli/Cargo.toml dashboard_display_content -- --nocapture
+cargo clippy --manifest-path cli/Cargo.toml -- -D warnings
+pnpm test:dashboard-workspace-nodes
+pnpm test:dashboard-selected-workspace-context
+pnpm publish:local-dashboard -- --skip-browser
+curl --max-time 10 -fsS http://127.0.0.1:4848/api/dashboard-auth/status
+curl --max-time 15 -fsS https://agent-browser.ecochran.dyndns.org/api/dashboard-auth/status
+pnpm test:remote-view-target-attribution-live -- --json
+pnpm test:rdp-guac-route-pool-readiness
+agent-browser install doctor --json
+node scripts/dev/select-validation.js --base HEAD --json
+```
 
 ## Closeout Requirements
 
