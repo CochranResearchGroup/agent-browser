@@ -152,14 +152,19 @@ and applies no mutation unless <code>--apply</code> is present. The default
 cleanup candidates are closed tabs plus inert <code>not_started</code> browser
 records with no PID, CDP endpoint, active sessions, view streams, or non-closed
 tabs. Add <code>--process-exited-browsers</code> only after reviewing failure
-evidence because process-exited browser records may explain a crash, close
-failure, or host problem. Add <code>--orphaned-profiles</code> to include only
+evidence because process-exited and unreachable browser records may explain a
+crash, close failure, or host problem. With <code>--abandoned-sessions</code>,
+that explicit flag can also remove old failed retained session lanes that have
+no retained tabs. Add <code>--orphaned-profiles</code> to include only
 <code>custom:*</code> profile records with no retained service references and
 missing ephemeral user-data directories. Add <code>--released-sessions</code> to prune released
 or expired sessions with only inert linked browser placeholders. Add
 <code>--abandoned-sessions</code> only after operator review because it applies
 the same cleanup to shared or exclusive session leases that may otherwise
-affect profile allocation. Abandoned shared or exclusive sessions also need a
+affect profile allocation. When <code>--process-exited-browsers</code> is also
+present, abandoned-session cleanup can prune old linked failed browser records
+that have no retained tabs, even when stale failure or view-stream metadata is
+still attached. Abandoned shared or exclusive sessions also need a
 parseable <code>lastLeaseObservedAt</code> or <code>createdAt</code> older than
 <code>--abandoned-session-min-age-minutes</code>, which defaults to
 <code>1440</code>. Dry-runs report skipped abandoned sessions as

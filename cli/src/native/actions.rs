@@ -10927,7 +10927,12 @@ fn prune_retained_service_state(
             let session_shape_matches = session.tab_ids.is_empty()
                 && !session.browser_ids.is_empty()
                 && session.browser_ids.iter().all(|browser_id| {
-                    inert_session_browser_placeholder(state, browser_id, session.id.as_str())
+                    prunable_session_browser_placeholder(
+                        state,
+                        browser_id,
+                        session.id.as_str(),
+                        options.process_exited_browsers,
+                    )
                 });
 
             if options.abandoned_sessions
@@ -10960,8 +10965,8 @@ fn prune_retained_service_state(
                 && browser.health == ServiceBrowserHealth::NotStarted
                 && browser.pid.is_none()
                 && browser.cdp_endpoint.is_none();
-            let process_exited_matches = options.process_exited_browsers
-                && browser.health == ServiceBrowserHealth::ProcessExited;
+            let process_exited_matches =
+                options.process_exited_browsers && failed_retained_browser_health(browser.health);
             (not_started_matches || process_exited_matches)
                 && browser.active_session_ids.is_empty()
                 && browser.view_streams.is_empty()
@@ -11061,6 +11066,7 @@ fn prune_retained_service_state(
             "closedTabs": options.closed_tabs,
             "notStartedBrowsers": options.not_started_browsers,
             "processExitedBrowsers": options.process_exited_browsers,
+            "processExitedBrowsersIncludesUnreachable": true,
             "releasedSessions": options.released_sessions,
             "abandonedSessions": options.abandoned_sessions,
             "orphanedProfiles": options.orphaned_profiles,
@@ -11343,6 +11349,17 @@ fn legacy_inert_session_placeholder(state: &ServiceState, session: &BrowserSessi
         })
 }
 
+fn prunable_session_browser_placeholder(
+    state: &ServiceState,
+    browser_id: &str,
+    session_id: &str,
+    allow_failed_retained: bool,
+) -> bool {
+    inert_session_browser_placeholder(state, browser_id, session_id)
+        || (allow_failed_retained
+            && failed_retained_session_browser_placeholder(state, browser_id, session_id))
+}
+
 fn inert_session_browser_placeholder(
     state: &ServiceState,
     browser_id: &str,
@@ -11362,6 +11379,30 @@ fn inert_session_browser_placeholder(
             .tabs
             .values()
             .any(|tab| tab.browser_id == browser_id && tab.lifecycle != TabLifecycle::Closed)
+}
+
+fn failed_retained_session_browser_placeholder(
+    state: &ServiceState,
+    browser_id: &str,
+    session_id: &str,
+) -> bool {
+    let Some(browser) = state.browsers.get(browser_id) else {
+        return false;
+    };
+    failed_retained_browser_health(browser.health)
+        && (browser.active_session_ids.is_empty()
+            || browser.active_session_ids == vec![session_id.to_string()])
+        && !state
+            .tabs
+            .values()
+            .any(|tab| tab.browser_id == browser_id && tab.lifecycle != TabLifecycle::Closed)
+}
+
+fn failed_retained_browser_health(health: ServiceBrowserHealth) -> bool {
+    matches!(
+        health,
+        ServiceBrowserHealth::ProcessExited | ServiceBrowserHealth::Unreachable
+    )
 }
 
 async fn handle_service_job_cancel(cmd: &Value) -> Result<Value, String> {
@@ -15051,6 +15092,7 @@ mod tests {
         assert_service_trace_response_contract, assert_service_trace_summary_record_contract,
         service_job_naming_warning_values, BrowserCapabilityRegistry, BrowserProcess,
         BrowserProfile, BrowserSession, BrowserTab, ProfileSeedingHandoffState, RoutePoolEntry,
+        ViewStream,
     };
     use crate::native::service_model::{JobState, ServiceJob};
     use crate::native::service_model::{LeaseState, ProfileAllocationPolicy};
@@ -18768,6 +18810,168 @@ mod tests {
         assert_eq!(result["policy"]["abandonedSessionMinAgeMinutes"], 60);
         assert!(service_state.sessions.contains_key("fresh-session"));
         assert!(service_state.sessions.contains_key("unknown-session"));
+    }
+
+    #[test]
+    fn test_prune_retained_service_state_removes_old_failed_session_browser() {
+        let old_session_time = (chrono::Utc::now() - chrono::Duration::minutes(90)).to_rfc3339();
+        let mut service_state = ServiceState {
+            browsers: BTreeMap::from([
+                (
+                    "session:old-process-exited".to_string(),
+                    BrowserProcess {
+                        id: "session:old-process-exited".to_string(),
+                        health: ServiceBrowserHealth::ProcessExited,
+                        pid: Some(99),
+                        cdp_endpoint: Some(
+                            "ws://127.0.0.1:9999/devtools/browser/stale".to_string(),
+                        ),
+                        active_session_ids: vec!["old-process-exited".to_string()],
+                        view_streams: vec![ViewStream {
+                            id: "stale-stream".to_string(),
+                            ..ViewStream::default()
+                        }],
+                        ..BrowserProcess::default()
+                    },
+                ),
+                (
+                    "session:old-unreachable".to_string(),
+                    BrowserProcess {
+                        id: "session:old-unreachable".to_string(),
+                        health: ServiceBrowserHealth::Unreachable,
+                        cdp_endpoint: Some(
+                            "ws://127.0.0.1:9998/devtools/browser/unreachable".to_string(),
+                        ),
+                        active_session_ids: vec!["old-unreachable".to_string()],
+                        view_streams: vec![ViewStream {
+                            id: "stale-cdp-stream".to_string(),
+                            ..ViewStream::default()
+                        }],
+                        ..BrowserProcess::default()
+                    },
+                ),
+                (
+                    "session:fresh-process-exited".to_string(),
+                    BrowserProcess {
+                        id: "session:fresh-process-exited".to_string(),
+                        health: ServiceBrowserHealth::ProcessExited,
+                        active_session_ids: vec!["fresh-process-exited".to_string()],
+                        ..BrowserProcess::default()
+                    },
+                ),
+            ]),
+            sessions: BTreeMap::from([
+                (
+                    "old-process-exited".to_string(),
+                    BrowserSession {
+                        id: "old-process-exited".to_string(),
+                        lease: LeaseState::Exclusive,
+                        browser_ids: vec!["session:old-process-exited".to_string()],
+                        last_lease_observed_at: Some(old_session_time.clone()),
+                        ..BrowserSession::default()
+                    },
+                ),
+                (
+                    "old-unreachable".to_string(),
+                    BrowserSession {
+                        id: "old-unreachable".to_string(),
+                        lease: LeaseState::Exclusive,
+                        browser_ids: vec!["session:old-unreachable".to_string()],
+                        last_lease_observed_at: Some(old_session_time),
+                        ..BrowserSession::default()
+                    },
+                ),
+                (
+                    "fresh-process-exited".to_string(),
+                    BrowserSession {
+                        id: "fresh-process-exited".to_string(),
+                        lease: LeaseState::Exclusive,
+                        browser_ids: vec!["session:fresh-process-exited".to_string()],
+                        last_lease_observed_at: Some(
+                            (chrono::Utc::now() - chrono::Duration::minutes(5)).to_rfc3339(),
+                        ),
+                        ..BrowserSession::default()
+                    },
+                ),
+            ]),
+            ..ServiceState::default()
+        };
+        let result = prune_retained_service_state(
+            &mut service_state,
+            ServiceRetentionPruneOptions {
+                apply: true,
+                closed_tabs: true,
+                not_started_browsers: true,
+                process_exited_browsers: true,
+                released_sessions: false,
+                abandoned_sessions: true,
+                orphaned_profiles: false,
+                abandoned_session_min_age_minutes: 60,
+            },
+        );
+
+        assert_eq!(result["removed"]["sessions"], 2);
+        assert_eq!(result["removed"]["browsers"], 2);
+        assert_eq!(result["skippedCounts"]["abandonedSessionsTooFresh"], 1);
+        assert!(!service_state.sessions.contains_key("old-process-exited"));
+        assert!(!service_state.sessions.contains_key("old-unreachable"));
+        assert!(!service_state
+            .browsers
+            .contains_key("session:old-process-exited"));
+        assert!(!service_state
+            .browsers
+            .contains_key("session:old-unreachable"));
+        assert!(service_state.sessions.contains_key("fresh-process-exited"));
+        assert!(service_state
+            .browsers
+            .contains_key("session:fresh-process-exited"));
+    }
+
+    #[test]
+    fn test_prune_retained_service_state_keeps_failed_session_without_explicit_flag() {
+        let old_session_time = (chrono::Utc::now() - chrono::Duration::minutes(90)).to_rfc3339();
+        let mut service_state = ServiceState {
+            browsers: BTreeMap::from([(
+                "session:old-process-exited".to_string(),
+                BrowserProcess {
+                    id: "session:old-process-exited".to_string(),
+                    health: ServiceBrowserHealth::ProcessExited,
+                    active_session_ids: vec!["old-process-exited".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "old-process-exited".to_string(),
+                BrowserSession {
+                    id: "old-process-exited".to_string(),
+                    lease: LeaseState::Exclusive,
+                    browser_ids: vec!["session:old-process-exited".to_string()],
+                    last_lease_observed_at: Some(old_session_time),
+                    ..BrowserSession::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let result = prune_retained_service_state(
+            &mut service_state,
+            ServiceRetentionPruneOptions {
+                apply: true,
+                closed_tabs: true,
+                not_started_browsers: true,
+                process_exited_browsers: false,
+                released_sessions: false,
+                abandoned_sessions: true,
+                orphaned_profiles: false,
+                abandoned_session_min_age_minutes: 60,
+            },
+        );
+
+        assert_eq!(result["removed"]["sessions"], 0);
+        assert_eq!(result["removed"]["browsers"], 0);
+        assert!(service_state.sessions.contains_key("old-process-exited"));
+        assert!(service_state
+            .browsers
+            .contains_key("session:old-process-exited"));
     }
 
     #[test]

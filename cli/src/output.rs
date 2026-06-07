@@ -5262,7 +5262,7 @@ Commands:
 Notes:
   - It does not launch a browser.
   - service prune-retained defaults to dry-run and removes nothing unless --apply is present.
-  - service prune-retained removes closed tabs and inert not_started browser records by default; process_exited browser records require --process-exited-browsers because they may carry failure evidence.
+  - service prune-retained removes closed tabs and inert not_started browser records by default; process_exited and unreachable browser records require --process-exited-browsers because they may carry failure evidence. With --abandoned-sessions, that explicit flag can also remove old failed retained session lanes that have no retained tabs.
   - service prune-retained --released-sessions removes released or expired session records only when all linked browsers are inert not_started placeholders and the session has no retained tabs.
   - service prune-retained --abandoned-sessions extends that explicit session cleanup to shared or exclusive session records with a parseable lastLeaseObservedAt or createdAt older than --abandoned-session-min-age-minutes, which defaults to 1440; dry-runs also report skipped abandoned sessions that are too fresh or missing age evidence, plus grouped skippedSummary rows for triage.
   - service prune-retained --orphaned-profiles removes only custom:* profile records that have no retained service references and point at missing ephemeral user-data directories.
