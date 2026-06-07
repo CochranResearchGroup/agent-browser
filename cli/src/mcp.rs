@@ -822,6 +822,14 @@ fn service_mcp_tools() -> Vec<Value> {
                         "minimum": 1,
                         "description": "Maximum time to wait for profileLeasePolicy=wait before failing the request."
                     },
+                    "browserId": {
+                        "type": "string",
+                        "description": "Optional retained browser route hint copied from access-plan profileReuse reuse recommendations. Top-level hints route ordinary commands to an existing daemon lane."
+                    },
+                    "sessionName": {
+                        "type": "string",
+                        "description": "Optional daemon session route hint copied from access-plan profileReuse reuse recommendations. Top-level hints route ordinary commands to an existing daemon lane."
+                    },
                     "blockedByManualAction": {
                         "type": "boolean",
                         "description": "Access-plan marker indicating this request should wait for a manual operator step before it is queued."
@@ -833,6 +841,10 @@ fn service_mcp_tools() -> Vec<Value> {
                     "allowManualAction": {
                         "type": "boolean",
                         "description": "Explicit override allowing a request marked blockedByManualAction and manualSeedingRequired to be submitted anyway."
+                    },
+                    "allowDuplicateProfileLane": {
+                        "type": "boolean",
+                        "description": "Explicit reviewed override allowing a launch to create another live browser/profile lane even when access-plan profileReuse could route to an existing lane."
                     },
                     "requiresCdpFree": {
                         "type": "boolean",
@@ -2674,6 +2686,13 @@ fn with_browser_target_profile_hint_properties(mut tool: Value) -> Value {
             "type": "integer",
             "minimum": 1,
             "description": "Maximum time to wait for profileLeasePolicy=wait before failing the request."
+        }),
+    );
+    properties.insert(
+        "allowDuplicateProfileLane".to_string(),
+        json!({
+            "type": "boolean",
+            "description": "Explicit reviewed override allowing another browser/profile lane when an existing live lane could be reused."
         }),
     );
     properties.insert(
@@ -6907,6 +6926,7 @@ fn service_browser_capability_preflight_command(
         "cdpFree",
         "requiresCdpFree",
         "cdpAttachmentAllowed",
+        "allowDuplicateProfileLane",
     ] {
         if let Some(value) = optional_bool_argument(arguments, name)? {
             command[name] = json!(value);
@@ -9017,6 +9037,9 @@ struct ServiceToolContext<'a> {
     login_id: Option<&'a str>,
     site_ids: Option<&'a [Value]>,
     login_ids: Option<&'a [Value]>,
+    browser_id: Option<&'a str>,
+    session_name: Option<&'a str>,
+    allow_duplicate_profile_lane: Option<bool>,
 }
 
 impl<'a> ServiceToolContext<'a> {
@@ -9042,6 +9065,12 @@ impl<'a> ServiceToolContext<'a> {
             login_id: optional_string_argument(arguments, "loginId")?,
             site_ids: optional_string_value_array_argument(arguments, "siteIds")?,
             login_ids: optional_string_value_array_argument(arguments, "loginIds")?,
+            browser_id: optional_string_argument(arguments, "browserId")?,
+            session_name: optional_string_argument(arguments, "sessionName")?,
+            allow_duplicate_profile_lane: optional_bool_argument(
+                arguments,
+                "allowDuplicateProfileLane",
+            )?,
         })
     }
 
@@ -9081,6 +9110,15 @@ impl<'a> ServiceToolContext<'a> {
         }
         if let Some(login_ids) = self.login_ids {
             command["loginIds"] = json!(login_ids);
+        }
+        if let Some(browser_id) = self.browser_id {
+            command["browserId"] = json!(browser_id);
+        }
+        if let Some(session_name) = self.session_name {
+            command["sessionName"] = json!(session_name);
+        }
+        if let Some(allow_duplicate_profile_lane) = self.allow_duplicate_profile_lane {
+            command["allowDuplicateProfileLane"] = json!(allow_duplicate_profile_lane);
         }
     }
 }
@@ -9134,6 +9172,7 @@ fn copy_target_profile_hints(source: &Value, command: &mut Value) {
     for key in [
         "profileLeasePolicy",
         "profileLeaseWaitTimeoutMs",
+        "allowDuplicateProfileLane",
         "targetServiceId",
         "targetService",
         "targetServiceIds",
@@ -11473,8 +11512,13 @@ mod tests {
         assert!(service_request["inputSchema"]["properties"]["blockedByManualAction"].is_object());
         assert!(service_request["inputSchema"]["properties"]["manualSeedingRequired"].is_object());
         assert!(service_request["inputSchema"]["properties"]["allowManualAction"].is_object());
+        assert!(
+            service_request["inputSchema"]["properties"]["allowDuplicateProfileLane"].is_object()
+        );
         assert!(service_request["inputSchema"]["properties"]["requiresCdpFree"].is_object());
         assert!(service_request["inputSchema"]["properties"]["cdpAttachmentAllowed"].is_object());
+        assert!(service_request["inputSchema"]["properties"]["browserId"].is_object());
+        assert!(service_request["inputSchema"]["properties"]["sessionName"].is_object());
 
         for action in SERVICE_REQUEST_ACTIONS {
             let (_, command) = service_request_command(&json!({
@@ -11579,6 +11623,9 @@ mod tests {
             "taskName": "probeACSwebsite",
             "siteId": "acs",
             "loginIds": ["orcid"],
+            "browserId": "session:acs-browser",
+            "sessionName": "acs-browser",
+            "allowDuplicateProfileLane": true,
             "jobTimeoutMs": 1000,
             "profileLeasePolicy": "wait",
             "profileLeaseWaitTimeoutMs": 2500
@@ -11597,6 +11644,9 @@ mod tests {
         assert_eq!(command["taskName"], "probeACSwebsite");
         assert_eq!(command["siteId"], "acs");
         assert_eq!(command["loginIds"][0], "orcid");
+        assert_eq!(command["browserId"], "session:acs-browser");
+        assert_eq!(command["sessionName"], "acs-browser");
+        assert_eq!(command["allowDuplicateProfileLane"], true);
         assert_eq!(command["jobTimeoutMs"], 1000);
         assert_eq!(command["profileLeasePolicy"], "wait");
         assert_eq!(command["profileLeaseWaitTimeoutMs"], 2500);

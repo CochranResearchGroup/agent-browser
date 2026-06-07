@@ -623,13 +623,17 @@ async function testIdentityFirstGuidanceDrift() {
   assert.equal(plan.tabRequest.helper, 'requestServiceTab or requestServiceCdpFreeLaunch');
   assert.equal(plan.tabRequest.accessPlan, 'getServiceAccessPlan response');
   assert.deepEqual(plan.tabRequest.overrides, ['url', 'jobTimeoutMs']);
-  assert.deepEqual(plan.decisionOrder.slice(0, 4), [
+  assert.deepEqual(plan.decisionOrder.slice(0, 5), [
     'ask agent-browser for the no-launch access plan',
     'inspect the service-owned profile, readiness, policy, provider, challenge, and decision fields',
     'inspect decision.attention before choosing a client prompt, log, or popup',
+    'inspect decision.profileReuse and reuse route hints before creating another equivalent runtime profile',
     'register a managed profile only when agent-browser has no suitable one',
   ]);
   assert(plan.profileInspection.includes.includes('decision.attention'));
+  assert(plan.profileInspection.includes.includes('decision.profileReuse'));
+  assert(plan.profileInspection.includes.includes('decision.serviceRequest.request.browserId'));
+  assert(plan.profileInspection.includes.includes('decision.serviceRequest.request.sessionName'));
   assert(plan.profileInspection.includes.includes('decision.launchPosture.browserBuildSelection'));
 
   const [readme, serviceModeDocs, commandsDocs, skill] = await Promise.all([

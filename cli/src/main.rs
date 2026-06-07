@@ -1796,19 +1796,7 @@ fn main() {
         cmd["serviceState"] = json!(flags.service_state.clone());
     }
 
-    if cmd
-        .get("action")
-        .and_then(|value| value.as_str())
-        .is_some_and(|action| {
-            matches!(
-                action,
-                "service_browser_close"
-                    | "service_browser_repair"
-                    | "service_prune_retained"
-                    | "service_repair_retained"
-            )
-        })
-    {
+    if command_executes_locally_before_daemon(&cmd) {
         let action = cmd.get("action").and_then(|value| value.as_str());
         let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
         let mut state = native::actions::DaemonState::new();
@@ -2734,6 +2722,25 @@ fn command_skips_browser_launch_for_prestart(cmd: &serde_json::Value) -> bool {
     )
 }
 
+fn command_executes_locally_before_daemon(cmd: &serde_json::Value) -> bool {
+    cmd.get("action")
+        .and_then(|value| value.as_str())
+        .is_some_and(|action| {
+            matches!(
+                action,
+                "service_browser_close"
+                    | "service_browser_repair"
+                    | "service_resources"
+                    | "service_resources_monitor_summary"
+                    | "service_resources_write_monitor_summary"
+                    | "service_gc"
+                    | "service_prune_retained"
+                    | "service_repair_retained"
+                    | "service_access_plan"
+            )
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2812,6 +2819,28 @@ mod tests {
     fn test_command_skips_browser_launch_for_service_status() {
         assert!(command_skips_browser_launch_for_prestart(&json!({
             "action": "service_status"
+        })));
+    }
+
+    #[test]
+    fn test_command_skips_browser_launch_for_service_resource_maintenance() {
+        for action in [
+            "service_resources",
+            "service_resources_monitor_summary",
+            "service_resources_write_monitor_summary",
+            "service_gc",
+            "service_access_plan",
+        ] {
+            assert!(command_skips_browser_launch_for_prestart(&json!({
+                "action": action
+            })));
+        }
+    }
+
+    #[test]
+    fn test_command_executes_service_access_plan_locally_before_daemon() {
+        assert!(command_executes_locally_before_daemon(&json!({
+            "action": "service_access_plan"
         })));
     }
 

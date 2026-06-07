@@ -181,6 +181,19 @@ const accessPlans = [
         controlInputProvider: 'manual_attached_desktop',
         displayIsolation: 'private_virtual_display',
       },
+      profileReuse: {
+        recommendedAction: 'reuse_existing_browser',
+        selectedProfileId: 'profile-ready',
+        reusableBrowserId: 'browser-ready',
+        reusableBrowserIds: ['browser-ready'],
+        compatibleLiveBrowserCount: 1,
+        sameProfileLiveBrowserIds: ['browser-ready'],
+        activeLeaseSessionIds: [],
+        activeLeaseCount: 0,
+        duplicatePressure: false,
+        profileLeasePolicy: 'wait',
+        reasons: ['compatible_live_browser_available'],
+      },
       serviceRequest: {
         available: true,
         route: '/api/service/request',
@@ -281,6 +294,38 @@ assert.equal(ready.launchAction, 'tab_new');
 assert.equal(ready.remoteView, 'controllable');
 assert.equal(ready.browserHost, 'remote_headed');
 assert.equal(ready.accessPlanFetched, true);
+assert.match(ready.reason, /Reuse compatible live browser browser-ready/);
+assert.equal(ready.serviceReason, 'reuse_existing_browser');
+
+const leaseWaitPreview = deriveLauncherEligibilityPreview({
+  profiles: [profiles[0]],
+  allocations: [allocations[0]],
+  browserCapabilityRegistry: registry,
+  accessPlans: [{
+    ...accessPlans[0],
+    decision: {
+      ...accessPlans[0].decision,
+      profileReuse: {
+        recommendedAction: 'wait_for_profile_lease',
+        selectedProfileId: 'profile-ready',
+        reusableBrowserId: null,
+        reusableBrowserIds: [],
+        compatibleLiveBrowserCount: 0,
+        sameProfileLiveBrowserIds: ['browser-ready'],
+        activeLeaseSessionIds: ['session-a'],
+        activeLeaseCount: 1,
+        duplicatePressure: false,
+        profileLeasePolicy: 'wait',
+        reasons: ['profile_lease_active'],
+      },
+    },
+  }],
+  serviceRequestActions: ['tab_new'],
+});
+const leaseWaitReady = rowBy(leaseWaitPreview, 'profile-ready', 'stealth-exe');
+assert.equal(leaseWaitReady.status, 'eligible');
+assert.match(leaseWaitReady.reason, /Queue through the profile lease held by session-a/);
+assert.equal(leaseWaitReady.serviceReason, 'wait_for_profile_lease');
 
 const noNativeRemoteRegistry = {
   ...registry,

@@ -100,6 +100,8 @@ export interface ServiceRequest {
   url?: string;
   profile?: string;
   runtimeProfile?: string;
+  browserId?: string;
+  sessionName?: string;
   targetServiceIds?: string[];
   targetServices?: string[];
   siteIds?: string[];
@@ -113,6 +115,7 @@ export interface ServiceRequest {
   allowMonitorFreshnessRisk?: boolean;
   requiresCdpFree?: boolean;
   cdpAttachmentAllowed?: boolean;
+  allowDuplicateProfileLane?: boolean;
   monitorRunDueSummary?: Record<string, unknown>;
 }
 

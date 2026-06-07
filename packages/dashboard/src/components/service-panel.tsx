@@ -8,6 +8,7 @@ import {
 } from "@agent-browser/client/service-observability";
 import { useAtomValue } from "jotai/react";
 import {
+  Activity,
   AlertTriangle,
   CheckCircle2,
   Clock3,
@@ -423,6 +424,19 @@ type ServiceStatusData = {
   profileAllocations?: ServiceProfileAllocation[];
 };
 
+type ServiceResourcesData = {
+  summary?: {
+    totalProcesses?: number;
+    correlatedProcesses?: number;
+    candidateCount?: number;
+    protectedCount?: number;
+    observedCount?: number;
+    candidateRssBytes?: number;
+    totalRssBytes?: number;
+  };
+  warnings?: string[];
+};
+
 type ServiceContractsData = {
   contracts?: {
     serviceRequest?: {
@@ -633,6 +647,14 @@ function formatRelativeTime(value?: string | null): string {
   const hours = Math.round(minutes / 60);
   if (hours < 24) return `${hours}h ago`;
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function formatResourceBytes(bytes?: number | null): string {
+  const value = bytes ?? 0;
+  if (value >= 1024 * 1024 * 1024) return `${(value / (1024 * 1024 * 1024)).toFixed(1)} GiB`;
+  if (value >= 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(1)} MiB`;
+  if (value >= 1024) return `${(value / 1024).toFixed(1)} KiB`;
+  return `${value} B`;
 }
 
 function formatEventKind(kind: string): string {
@@ -6264,6 +6286,7 @@ export function ServicePanel({
   const [events, setEvents] = useState<ServiceEventsData | null>(null);
   const [jobs, setJobs] = useState<ServiceJobsData | null>(null);
   const [incidents, setIncidents] = useState<ServiceIncidentsData | null>(null);
+  const [resources, setResources] = useState<ServiceResourcesData | null>(null);
   const [contracts, setContracts] = useState<ServiceContractsData | null>(null);
   const [trace, setTrace] = useState<ServiceTraceData | null>(null);
   const [traceLoading, setTraceLoading] = useState(false);
@@ -6395,17 +6418,21 @@ export function ServicePanel({
         params.set("since", new Date(Date.now() - windowOption.milliseconds).toISOString());
       }
       const contractsPromise = fetch(`${serviceBase(activePort)}/contracts`).catch(() => null);
-      const [statusResp, jobsResp, eventsResp, incidentsResp, contractsResp] = await Promise.all([
+      const [statusResp, jobsResp, eventsResp, incidentsResp, resourcesResp, contractsResp] = await Promise.all([
         fetch(`${serviceBase(activePort)}/status`),
         fetch(`${serviceBase(activePort)}/jobs?limit=${jobLimit}`),
         fetch(`${serviceBase(activePort)}/events?${params.toString()}`),
         fetch(`${serviceBase(activePort)}/incidents?summary=true&limit=50`),
+        fetch(`${serviceBase(activePort)}/resources`).catch(() => null),
         contractsPromise,
       ]);
       const statusJson = (await statusResp.json()) as ApiResponse<ServiceStatusData>;
       const jobsJson = (await jobsResp.json()) as ApiResponse<ServiceJobsData>;
       const eventsJson = (await eventsResp.json()) as ApiResponse<ServiceEventsData>;
       const incidentsJson = (await incidentsResp.json()) as ApiResponse<ServiceIncidentsData>;
+      const resourcesJson = resourcesResp?.ok
+        ? ((await resourcesResp.json()) as ApiResponse<ServiceResourcesData>)
+        : null;
       const contractsJson = contractsResp?.ok
         ? ((await contractsResp.json()) as ApiResponse<ServiceContractsData>)
         : null;
@@ -6416,6 +6443,7 @@ export function ServicePanel({
       setJobs(jobsJson.data ?? null);
       setEvents(eventsJson.data ?? null);
       setIncidents(incidentsJson.success ? incidentsJson.data ?? null : null);
+      setResources(resourcesJson?.success ? resourcesJson.data ?? null : null);
       setContracts(contractsJson?.success ? contractsJson.data ?? null : null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Service API unavailable");
@@ -6429,6 +6457,7 @@ export function ServicePanel({
     setJobs(null);
     setEvents(null);
     setIncidents(null);
+    setResources(null);
     setTrace(null);
     setTraceError("");
     setError("");
@@ -7623,6 +7652,10 @@ export function ServicePanel({
     entityCounts.sessions > 100 ||
     entityCounts.tabs > 100 ||
     entityCounts.jobs > 100;
+  const resourceSummary = resources?.summary;
+  const resourceCandidateCount = resourceSummary?.candidateCount ?? 0;
+  const resourceCandidateRssBytes = resourceSummary?.candidateRssBytes ?? 0;
+  const resourceAttentionNeeded = resourceCandidateCount > 0;
   const managedRecordDetail = useMemo(() => [
     `${entityCounts.browsers} retained browser records`,
     `${entityCounts.profiles} managed profile records`,
@@ -7635,6 +7668,7 @@ export function ServicePanel({
   const managedAttentionCount = [
     reconciliation?.lastError,
     retainedStateCleanupNeeded,
+    resourceAttentionNeeded,
   ].filter(Boolean).length;
   const workspaceTabs = useMemo(() => [
     {
@@ -7865,6 +7899,13 @@ export function ServicePanel({
               onClick={() => selectWorkspaceTab("jobs")}
             />
             <ServiceStatusLight
+              label="Resources"
+              value={`${resourceCandidateCount} candidates`}
+              detail={`${resourceSummary?.totalProcesses ?? 0} processes; ${formatResourceBytes(resourceCandidateRssBytes)} candidate RSS`}
+              icon={Activity}
+              tone={resourceAttentionNeeded ? "warn" : "good"}
+            />
+            <ServiceStatusLight
               label="Records"
               value={`${entityCounts.browsers} browsers`}
               detail={`Retained service-state counts: ${managedRecordDetail}`}
@@ -7941,6 +7982,22 @@ export function ServicePanel({
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
+                  </div>
+                </div>
+              )}
+              {resourceAttentionNeeded && (
+                <div className="service-state-alert service-retained-state-hint">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-black text-foreground">Resource cleanup candidates detected</p>
+                    <p className="mt-1 leading-5">
+                      {resourceCandidateCount} process candidate{resourceCandidateCount === 1 ? "" : "s"} could reclaim about {formatResourceBytes(resourceCandidateRssBytes)} RSS. Review a dry-run before any apply.
+                    </p>
+                  </div>
+                  <div className="service-state-alert-actions">
+                    <Button size="sm" variant="outline" onClick={() => selectWorkspaceTab("events")}>
+                      Review events
+                    </Button>
                   </div>
                 </div>
               )}

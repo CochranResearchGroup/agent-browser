@@ -81,6 +81,11 @@ use super::service_monitors::{
     parse_monitor_state, run_due_persisted_monitors, service_monitors_response,
     MonitorCollectionFilters,
 };
+use super::service_resources::{
+    service_gc_apply_response, service_gc_dry_run_response,
+    service_resources_monitor_summary_response, service_resources_response,
+    service_resources_write_monitor_summary_response,
+};
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use super::service_trace::{service_trace_response, ServiceTraceFilters};
 use super::snapshot::{self, SnapshotOptions};
@@ -227,6 +232,10 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_reconcile"
             | "service_browser_close"
             | "service_browser_repair"
+            | "service_resources"
+            | "service_resources_monitor_summary"
+            | "service_resources_write_monitor_summary"
+            | "service_gc"
             | "service_prune_retained"
             | "service_repair_retained"
             | "service_access_plan"
@@ -2080,6 +2089,20 @@ pub(crate) fn service_profile_lease_gate(
     let Some(profile_id) = metadata.profile_id.as_deref() else {
         return Ok(ServiceProfileLeaseGate::Ready);
     };
+    let reusable_browser_ids = service_profile_live_reusable_browser_ids(session_id, profile_id);
+    if !reusable_browser_ids.is_empty()
+        && !allow_duplicate_profile_lane_from_command(command)
+        && command.get("browserId").is_none()
+        && command.get("sessionName").is_none()
+    {
+        return Ok(ServiceProfileLeaseGate::Reject {
+            error: service_duplicate_profile_lane_error(
+                &metadata,
+                profile_id,
+                &reusable_browser_ids,
+            ),
+        });
+    }
     let policy = profile_lease_policy_from_command(command)?;
     let wait_timeout_ms = profile_lease_wait_timeout_ms_from_command(command)?;
     let conflict_session_ids =
@@ -2206,6 +2229,44 @@ fn service_profile_lease_conflict_session_ids(
     )
 }
 
+fn service_profile_live_reusable_browser_ids(session_id: &str, profile_id: &str) -> Vec<String> {
+    let repository = match LockedServiceStateRepository::default_json() {
+        Ok(repository) => repository,
+        Err(_) => return Vec::new(),
+    };
+    let service_state = match repository.load_snapshot() {
+        Ok(service_state) => service_state,
+        Err(_) => return Vec::new(),
+    };
+    let mut browser_ids = service_state
+        .browsers
+        .iter()
+        .filter(|(browser_id, browser)| {
+            browser.profile_id.as_deref() == Some(profile_id)
+                && service_browser_health_counts_as_live(browser.health)
+                && browser_id.as_str() != service_browser_id(session_id)
+                && !browser
+                    .active_session_ids
+                    .iter()
+                    .any(|active_session_id| active_session_id == session_id)
+        })
+        .map(|(browser_id, _)| browser_id.clone())
+        .collect::<Vec<_>>();
+    browser_ids.sort();
+    browser_ids.dedup();
+    browser_ids
+}
+
+fn service_browser_health_counts_as_live(health: ServiceBrowserHealth) -> bool {
+    !matches!(
+        health,
+        ServiceBrowserHealth::NotStarted
+            | ServiceBrowserHealth::ProcessExited
+            | ServiceBrowserHealth::Closing
+            | ServiceBrowserHealth::Faulted
+    )
+}
+
 fn service_profile_lease_conflict_session_ids_in_state(
     service_state: &ServiceState,
     _metadata: &ServiceLaunchMetadata,
@@ -2240,6 +2301,30 @@ fn service_profile_lease_conflict_error(
         wait_detail,
         conflict_session_ids.join(", ")
     )
+}
+
+fn service_duplicate_profile_lane_error(
+    metadata: &ServiceLaunchMetadata,
+    profile_id: &str,
+    browser_ids: &[String],
+) -> String {
+    let service_label = metadata
+        .service_name
+        .as_deref()
+        .unwrap_or("unknown service");
+    format!(
+        "Duplicate service profile lane blocked for profile '{}': service '{}' selected a profile already backed by live browser(s) {}. Reuse the access-plan browserId/sessionName route hints, wait for the profile lane, request a different profile, or set allowDuplicateProfileLane=true for reviewed isolation or throwaway browser behavior.",
+        profile_id,
+        service_label,
+        browser_ids.join(", ")
+    )
+}
+
+fn allow_duplicate_profile_lane_from_command(command: &Value) -> bool {
+    command
+        .get("allowDuplicateProfileLane")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
 }
 
 fn profile_lease_policy_from_command(command: &Value) -> Result<ProfileLeasePolicy, String> {
@@ -3947,6 +4032,12 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "service_reconcile" => handle_service_reconcile(cmd).await,
         "service_browser_close" => handle_service_browser_close(cmd, state).await,
         "service_browser_repair" => handle_service_browser_repair(cmd).await,
+        "service_resources" => handle_service_resources(cmd).await,
+        "service_resources_monitor_summary" => handle_service_resources_monitor_summary().await,
+        "service_resources_write_monitor_summary" => {
+            handle_service_resources_write_monitor_summary(cmd).await
+        }
+        "service_gc" => handle_service_gc(cmd).await,
         "service_prune_retained" => handle_service_prune_retained(cmd).await,
         "service_repair_retained" => handle_service_repair_retained(cmd).await,
         "service_access_plan" => handle_service_access_plan(cmd).await,
@@ -9554,6 +9645,52 @@ async fn handle_service_status(cmd: &Value) -> Result<Value, String> {
         "profileAllocations": profile_allocations,
         "launchConfig": launch_config,
     }))
+}
+
+async fn handle_service_resources(cmd: &Value) -> Result<Value, String> {
+    let service_state = load_service_state_for_maintenance(cmd)?;
+    Ok(service_resources_response(&service_state))
+}
+
+async fn handle_service_resources_monitor_summary() -> Result<Value, String> {
+    service_resources_monitor_summary_response()
+}
+
+async fn handle_service_resources_write_monitor_summary(cmd: &Value) -> Result<Value, String> {
+    let service_state = load_service_state_for_maintenance(cmd)?;
+    service_resources_write_monitor_summary_response(&service_state)
+}
+
+async fn handle_service_gc(cmd: &Value) -> Result<Value, String> {
+    let apply = cmd.get("apply").and_then(Value::as_bool).unwrap_or(false);
+    if apply {
+        let review_token = cmd.get("reviewToken").and_then(Value::as_str);
+        let force_without_review = cmd
+            .get("forceWithoutReview")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let repository = LockedServiceStateRepository::default_json()?;
+        repository.mutate(|state| {
+            let response = service_gc_apply_response(state, review_token, force_without_review);
+            if let Some(error) = response.get("error").and_then(Value::as_str) {
+                Err(error.to_string())
+            } else {
+                Ok(response)
+            }
+        })
+    } else {
+        let service_state = load_service_state_for_maintenance(cmd)?;
+        Ok(service_gc_dry_run_response(&service_state))
+    }
+}
+
+fn load_service_state_for_maintenance(cmd: &Value) -> Result<ServiceState, String> {
+    if let Some(service_state) = cmd.get("serviceState") {
+        serde_json::from_value::<ServiceState>(service_state.clone())
+            .map_err(|err| format!("Invalid serviceState: {}", err))
+    } else {
+        LockedServiceStateRepository::default_json()?.load_snapshot()
+    }
 }
 
 fn inject_browser_process_stats(service_state: &mut Value) {
@@ -16065,6 +16202,10 @@ mod tests {
         assert!(response["decision"].is_object());
         assert_eq!(response["decision"]["launchPosture"]["source"], "request");
         assert_eq!(
+            response["decision"]["profileReuse"]["recommendedAction"],
+            "register_or_select_profile"
+        );
+        assert_eq!(
             response["browserBuildSelectionSummary"]["browserBuild"],
             "stealthcdp_chromium"
         );
@@ -16557,6 +16698,139 @@ mod tests {
             }
             other => panic!("expected wait decision, got {other:?}"),
         }
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_service_profile_lease_gate_blocks_duplicate_live_profile_lane() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_socket_dir("profile-lane-duplicate-home");
+        fs::create_dir_all(&home).expect("test home should be created");
+        guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                browsers: BTreeMap::from([(
+                    "browser-existing".to_string(),
+                    BrowserProcess {
+                        id: "browser-existing".to_string(),
+                        profile_id: Some("acs-profile".to_string()),
+                        health: ServiceBrowserHealth::Ready,
+                        active_session_ids: vec!["existing-session".to_string()],
+                        ..BrowserProcess::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .expect("service state should be persisted");
+
+        let decision = service_profile_lease_gate(
+            &json!({
+                "serviceName": "JournalDownloader",
+                "runtimeProfile": "acs-profile",
+                "profileLeasePolicy": "wait",
+                "profileLeaseWaitTimeoutMs": 2_000
+            }),
+            "new-session",
+            Some(0),
+        )
+        .expect("lane gate should evaluate");
+
+        match decision {
+            ServiceProfileLeaseGate::Reject { error } => {
+                assert!(error.contains("Duplicate service profile lane blocked"));
+                assert!(error.contains("browser-existing"));
+                assert!(error.contains("allowDuplicateProfileLane=true"));
+            }
+            other => panic!("expected duplicate lane rejection, got {other:?}"),
+        }
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_service_profile_lease_gate_allows_duplicate_lane_route_hints() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_socket_dir("profile-lane-route-hint-home");
+        fs::create_dir_all(&home).expect("test home should be created");
+        guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                browsers: BTreeMap::from([(
+                    "browser-existing".to_string(),
+                    BrowserProcess {
+                        id: "browser-existing".to_string(),
+                        profile_id: Some("acs-profile".to_string()),
+                        health: ServiceBrowserHealth::Ready,
+                        active_session_ids: vec!["existing-session".to_string()],
+                        ..BrowserProcess::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .expect("service state should be persisted");
+
+        let decision = service_profile_lease_gate(
+            &json!({
+                "serviceName": "JournalDownloader",
+                "runtimeProfile": "acs-profile",
+                "browserId": "browser-existing",
+                "sessionName": "existing-session",
+                "profileLeasePolicy": "wait",
+                "profileLeaseWaitTimeoutMs": 2_000
+            }),
+            "new-session",
+            Some(0),
+        )
+        .expect("lane gate should evaluate");
+
+        assert!(matches!(decision, ServiceProfileLeaseGate::Ready));
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_service_profile_lease_gate_allows_duplicate_lane_override() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_socket_dir("profile-lane-override-home");
+        fs::create_dir_all(&home).expect("test home should be created");
+        guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                browsers: BTreeMap::from([(
+                    "browser-existing".to_string(),
+                    BrowserProcess {
+                        id: "browser-existing".to_string(),
+                        profile_id: Some("acs-profile".to_string()),
+                        health: ServiceBrowserHealth::Ready,
+                        active_session_ids: vec!["existing-session".to_string()],
+                        ..BrowserProcess::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .expect("service state should be persisted");
+
+        let decision = service_profile_lease_gate(
+            &json!({
+                "serviceName": "JournalDownloader",
+                "runtimeProfile": "acs-profile",
+                "allowDuplicateProfileLane": true,
+                "profileLeasePolicy": "wait",
+                "profileLeaseWaitTimeoutMs": 2_000
+            }),
+            "new-session",
+            Some(0),
+        )
+        .expect("lane gate should evaluate");
+
+        assert!(matches!(decision, ServiceProfileLeaseGate::Ready));
 
         let _ = fs::remove_dir_all(&home);
     }

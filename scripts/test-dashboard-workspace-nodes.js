@@ -122,12 +122,30 @@ const diagnosticFixture = {
       ],
       activeSessionIds: ['rdp-idle-session'],
     },
+    {
+      id: 'rdp-unbound-display',
+      profileId: 'rdp-profile-unbound',
+      host: 'remote_headed',
+      health: 'ready',
+      pid: 6105,
+      displayName: ':109',
+      viewStreams: [
+        {
+          provider: 'rdp_gateway',
+          url: 'https://agent-browser.example.test/guacamole/',
+          controlInput: 'manual_attached_desktop',
+          readOnly: false,
+        },
+      ],
+      activeSessionIds: ['rdp-unbound-session'],
+    },
   ],
   serviceSessions: [
     { id: 'rdp-a-session', browserIds: ['rdp-a'], tabIds: ['rdp-a-tab'], profileId: 'rdp-profile-a' },
     { id: 'rdp-b-session', browserIds: ['rdp-b'], tabIds: ['rdp-b-tab'], profileId: 'rdp-profile-b' },
     { id: 'rdp-stale-session', browserIds: ['rdp-stale-target'], tabIds: ['rdp-stale-old', 'rdp-stale-live'], profileId: 'rdp-profile-c' },
     { id: 'rdp-idle-session', browserIds: ['rdp-idle-display'], tabIds: ['rdp-idle-tab'], profileId: 'rdp-profile-idle' },
+    { id: 'rdp-unbound-session', browserIds: ['rdp-unbound-display'], tabIds: ['rdp-unbound-tab'], profileId: 'rdp-profile-unbound' },
   ],
   serviceTabs: [
     { id: 'rdp-a-tab', browserId: 'rdp-a', sessionId: 'rdp-a-session', targetId: 'target-shared', lifecycle: 'active', title: 'A', url: 'https://example.test/a' },
@@ -135,6 +153,7 @@ const diagnosticFixture = {
     { id: 'rdp-stale-old', browserId: 'rdp-stale-target', sessionId: 'rdp-stale-session', targetId: 'target-stale-old', lifecycle: 'closed', title: 'about:blank', url: 'about:blank' },
     { id: 'rdp-stale-live', browserId: 'rdp-stale-target', sessionId: 'rdp-stale-session', targetId: 'target-stale-live', lifecycle: 'active', title: 'Live fallback', url: 'https://example.test/live' },
     { id: 'rdp-idle-tab', browserId: 'rdp-idle-display', sessionId: 'rdp-idle-session', targetId: 'target-idle', lifecycle: 'active', title: 'Expected target', url: 'https://example.test/target' },
+    { id: 'rdp-unbound-tab', browserId: 'rdp-unbound-display', sessionId: 'rdp-unbound-session', targetId: 'target-unbound', lifecycle: 'active', title: 'Expected target on :109', url: 'https://example.test/unbound' },
   ],
 };
 
@@ -156,7 +175,17 @@ const idleDisplayNode = byId(diagnosticNodes, 'browser:rdp-idle-display');
 assert.ok(idleDisplayNode.diagnostics.some((diagnostic) => diagnostic.kind === 'idle-route-display'));
 assert.equal(idleDisplayNode.group, 'needs-attention');
 assert.match(idleDisplayNode.attentionReason ?? '', /terminal/i);
-assert.equal(action(idleDisplayNode, 'control').enabled, true);
+assert.equal(idleDisplayNode.viewStream?.controllable, false);
+assert.equal(action(idleDisplayNode, 'control').enabled, false);
+
+const unboundDisplayNode = byId(diagnosticNodes, 'browser:rdp-unbound-display');
+assert.ok(unboundDisplayNode.diagnostics.some((diagnostic) => diagnostic.kind === 'idle-route-display'));
+assert.equal(unboundDisplayNode.group, 'needs-attention');
+assert.match(unboundDisplayNode.attentionReason ?? '', /no service-owned Guacamole route/);
+assert.match(unboundDisplayNode.attentionReason ?? '', /:109/);
+assert.equal(unboundDisplayNode.viewStream?.url, null);
+assert.equal(unboundDisplayNode.viewStream?.controllable, false);
+assert.equal(action(unboundDisplayNode, 'control').enabled, false);
 
 const nodes = deriveWorkspaceNodes({
   daemonSessions: [
@@ -351,6 +380,25 @@ const nodes = deriveWorkspaceNodes({
       ],
       activeSessionIds: ['session-2'],
     },
+    {
+      id: 'session:dashboard-local-viewer-plan0016',
+      profileId: 'profile-dashboard-viewer',
+      host: 'remote_headed',
+      health: 'ready',
+      browserBuild: 'stealthcdp_chromium',
+      displayName: ':109',
+      pid: 97113,
+      cdpEndpoint: 'ws://127.0.0.1:36877/devtools/browser/viewer',
+      viewStreams: [
+        {
+          provider: 'rdp_gateway',
+          url: 'https://agent-browser.example.test/guacamole/',
+          controlInput: 'manual_attached_desktop',
+          readOnly: false,
+        },
+      ],
+      activeSessionIds: ['dashboard-local-viewer-plan0016'],
+    },
   ],
   serviceSessions: [
     {
@@ -433,6 +481,12 @@ const nodes = deriveWorkspaceNodes({
       browserIds: ['session:session-2'],
       tabIds: ['tab-stale-session-2'],
     },
+    {
+      id: 'dashboard-local-viewer-plan0016',
+      profileId: 'profile-dashboard-viewer',
+      browserIds: ['session:dashboard-local-viewer-plan0016'],
+      tabIds: ['tab-dashboard-local-viewer-plan0016'],
+    },
   ],
   serviceTabs: [
     {
@@ -484,6 +538,15 @@ const nodes = deriveWorkspaceNodes({
       title: 'about:blank',
       url: 'about:blank',
     },
+    {
+      id: 'tab-dashboard-local-viewer-plan0016',
+      browserId: 'session:dashboard-local-viewer-plan0016',
+      ownerSessionId: 'dashboard-local-viewer-plan0016',
+      lifecycle: 'ready',
+      targetId: 'target-dashboard-local-viewer-plan0016',
+      title: 'agent-browser',
+      url: 'http://127.0.0.1:4848/?view=workspace%3Acontrol&workspace=daemon-session%3Adefault-posture-smoke&session=default-posture-smoke&tab=0',
+    },
   ],
   profileAllocations: [
     {
@@ -518,6 +581,11 @@ const nodes = deriveWorkspaceNodes({
       profileId: 'profile-control',
       profileName: 'Remote control profile',
       serviceNames: ['DashboardSmoke'],
+    },
+    {
+      profileId: 'profile-dashboard-viewer',
+      profileName: 'Dashboard viewer profile',
+      browserBuild: 'stealthcdp_chromium',
     },
     {
       profileId: 'profile-takeover',
@@ -673,6 +741,16 @@ const privatePreferred = byId(nodes, 'browser:browser-private-preferred');
 assert.equal(privatePreferred.viewStream?.routeId, 'route-private');
 assert.equal(privatePreferred.viewStream?.displayAllocationId, 'display-private-a');
 assert.equal(privatePreferred.viewStream?.routeSource, 'pool');
+
+const serviceDashboardViewer = byId(nodes, 'browser:session:dashboard-local-viewer-plan0016');
+assert.equal(serviceDashboardViewer.role, 'viewer-client');
+assert.equal(serviceDashboardViewer.group, 'needs-attention');
+assert.equal(serviceDashboardViewer.viewStream?.url, null);
+assert.equal(serviceDashboardViewer.viewStream?.controllable, false);
+assert.match(serviceDashboardViewer.attentionReason ?? '', /Agent Browser/);
+assert.ok(serviceDashboardViewer.diagnostics.some((diagnostic) => diagnostic.kind === 'viewer-client-target'));
+assert.ok(serviceDashboardViewer.diagnostics.some((diagnostic) => diagnostic.kind === 'idle-route-display'));
+assert.equal(action(serviceDashboardViewer, 'control').enabled, false);
 assert.equal(privatePreferred.viewStream?.providerMode, 'simultaneous_view');
 assert.deepEqual(privatePreferred.viewStream?.viewerLeaseIds, ['viewer-private-a', 'viewer-private-b']);
 assert.match(privatePreferred.viewStream?.routeSummary ?? '', /route-private \/ display display-private-a \/ simultaneous view \/ 2 viewers \/ ready/);
@@ -683,6 +761,7 @@ assert.equal(odolloUps.state, 'controllable');
 assert.equal(odolloUps.label, 'Odollo UPS: 1Z2G26X60300020412');
 assert.match(odolloUps.secondaryLabel, /Odollo UPS \/ remote_headed \/ stealthcdp_chromium/);
 assert.equal(odolloUps.attentionReason, null);
+assert.match(odolloUps.viewStream?.url ?? '', /\/guacamole\/#\/client\//);
 assert.equal(odolloUps.viewStream?.controllable, true);
 assert.equal(action(odolloUps, 'control').enabled, true);
 assert.equal(action(odolloUps, 'external-open').enabled, true);

@@ -931,11 +931,70 @@ function accessPlanDecisionCheck(accessPlan: LauncherAccessPlanPreview, option: 
       launchAction,
     };
   }
+  const profileReuse = accessPlanProfileReuseCheck(decision);
+  if (profileReuse) {
+    return {
+      status: "eligible",
+      reason: profileReuse.reason,
+      source: "access-plan",
+      serviceReason: profileReuse.serviceReason,
+      launchAction,
+    };
+  }
   return {
     status: "eligible",
     reason: stringField(decision, "recommendedAction") || "Access plan advertises a launchable service request.",
     source: "access-plan",
     launchAction,
+  };
+}
+
+function accessPlanProfileReuseCheck(decision: Record<string, unknown> | undefined): {
+  reason: string;
+  serviceReason: string;
+} | null {
+  const profileReuse = recordField(decision, "profileReuse");
+  const recommendedAction = stringField(profileReuse, "recommendedAction");
+  if (!recommendedAction) return null;
+  const duplicatePressure = booleanField(profileReuse, "duplicatePressure");
+  const browserId = stringField(profileReuse, "reusableBrowserId");
+  const selectedProfileId = stringField(profileReuse, "selectedProfileId");
+  const activeLeases = stringArrayField(profileReuse, "activeLeaseSessionIds");
+  const compatibleCount = numberField(profileReuse, "compatibleLiveBrowserCount");
+  const duplicatePrefix = duplicatePressure ? "Duplicate profile pressure detected. " : "";
+  if (recommendedAction === "reuse_existing_browser") {
+    return {
+      reason: `${duplicatePrefix}Reuse compatible live browser${browserId ? ` ${browserId}` : ""} for this profile.`,
+      serviceReason: recommendedAction,
+    };
+  }
+  if (recommendedAction === "wait_for_profile_lease") {
+    return {
+      reason: `${duplicatePrefix}Queue through the profile lease${activeLeases.length ? ` held by ${activeLeases.join(", ")}` : ""}.`,
+      serviceReason: recommendedAction,
+    };
+  }
+  if (recommendedAction === "launch_new_browser") {
+    return {
+      reason: `${duplicatePrefix}Launch a new browser because no compatible live lane exists${selectedProfileId ? ` for ${selectedProfileId}` : ""}.`,
+      serviceReason: recommendedAction,
+    };
+  }
+  if (recommendedAction === "seed_profile_before_reuse") {
+    return {
+      reason: `${duplicatePrefix}Seed the selected profile before browser reuse.`,
+      serviceReason: recommendedAction,
+    };
+  }
+  if (recommendedAction === "register_or_select_profile") {
+    return {
+      reason: `${duplicatePrefix}Register or select a managed runtime profile before launch.`,
+      serviceReason: recommendedAction,
+    };
+  }
+  return {
+    reason: `${duplicatePrefix}Access plan profile reuse action is ${recommendedAction}${compatibleCount > 0 ? ` with ${compatibleCount} compatible live browser lane(s)` : ""}.`,
+    serviceReason: recommendedAction,
   };
 }
 
@@ -1137,4 +1196,18 @@ function stringField(source: unknown, key: string): string {
 function booleanField(source: unknown, key: string): boolean {
   if (!source || typeof source !== "object") return false;
   return (source as Record<string, unknown>)[key] === true;
+}
+
+function numberField(source: unknown, key: string): number {
+  if (!source || typeof source !== "object") return 0;
+  const value = (source as Record<string, unknown>)[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function stringArrayField(source: unknown, key: string): string[] {
+  if (!source || typeof source !== "object") return [];
+  const value = (source as Record<string, unknown>)[key];
+  return Array.isArray(value)
+    ? value.map((item) => typeof item === "string" ? item.trim() : "").filter(Boolean)
+    : [];
 }

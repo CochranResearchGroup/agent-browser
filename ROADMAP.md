@@ -446,3 +446,45 @@ tab-focused `cdp_screencast` view streams.
 
 Start P08 Slice A with a contract and ownership audit before editing runtime
 streaming code.
+
+## P13 | Resource Monitor And Garbage Collector
+
+State: OPEN
+Current state: P13 has cleanup visibility in place and is moving to
+profile/browser sprawl prevention.
+
+### Current State
+
+- Plan
+  `docs/dev/plans/0026-2026-06-04-resource-monitor-and-garbage-collector-plan.md`
+  is closed with read-only resource inventory, guarded GC apply, dashboard
+  visibility, timer summary output, and install doctor resource warnings.
+- Plan
+  `docs/dev/plans/0027-2026-06-05-minimal-runtime-profile-reuse-plan.md`
+  is open to make access-plan and launch behavior promote the minimal necessary
+  number of runtime profiles for simultaneous account, website, browser-build,
+  and remote-view isolation sets.
+- The 2026-06-04 cleanup found stale multi-day `chromium-stealthcdp` process
+  groups, orphaned Xvfb displays, stale no-argument `agent-browser` daemon
+  siblings, and stale default runtime-state pointers.
+- The live dashboard service remained healthy, but stale resources outside the
+  service MainPID consumed high CPU and several GB of memory.
+- Existing retained-state cleanup covers stale service records and custom
+  profile metadata. P13 covers live OS resource inventory, stale process
+  classification, dry-run GC, guarded apply, dashboard resource-pressure
+  visibility, and prevention of avoidable duplicate runtime profile/browser
+  lanes.
+
+### Evidence
+
+- `docs/dev/plans/0026-2026-06-04-resource-monitor-and-garbage-collector-plan.md`
+- `docs/dev/plans/0027-2026-06-05-minimal-runtime-profile-reuse-plan.md`
+- `docs/dev/plans/0010-2026-05-30-retained-orphan-profile-cleanup-plan.md`
+- `docs/dev/plans/0025-2026-06-01-remote-view-target-attribution-and-idle-display-plan.md`
+
+### Next Recommendation
+
+Start Plan 0027 Slice A with a read-only access-plan `profileReuse` advisory.
+The broker should explain whether the minimal-profile path is to reuse an
+existing browser, wait for the selected profile lease, or launch a new browser
+because isolation actually requires it.

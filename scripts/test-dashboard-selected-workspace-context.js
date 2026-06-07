@@ -19,6 +19,7 @@ const emptySelection = {
 const fixture = {
   daemonSessions: [
     { session: 'daemon-a', port: 38409, engine: 'chrome' },
+    { session: 'daemon-stale', port: 38410, engine: 'chrome' },
   ],
   daemonTabsByPort: {
     38409: [
@@ -61,6 +62,38 @@ const fixture = {
   incidents: [
     { id: 'incident-live', browserId: 'browser-live', severity: 'warning', latestMessage: 'needs inspection' },
   ],
+  resources: [
+    {
+      pid: 95444,
+      kind: 'browser',
+      disposition: 'candidate',
+      reasons: ['old_temporary_profile_process'],
+      correlation: {
+        browserId: 'browser-live',
+        profileId: 'default',
+        sessionIds: ['session-live'],
+      },
+    },
+    {
+      pid: 95445,
+      kind: 'browser',
+      disposition: 'protected',
+      reasons: ['service_state_browser'],
+      correlation: {
+        browserId: 'browser-live',
+        profileId: 'default',
+      },
+    },
+    {
+      pid: 95555,
+      kind: 'browser',
+      disposition: 'candidate',
+      reasons: ['unrelated'],
+      correlation: {
+        browserId: 'browser-other',
+      },
+    },
+  ],
 };
 
 function context(selection) {
@@ -79,6 +112,18 @@ assert.equal(byBrowser.runtime.streamPort, 38395);
 assert.equal(byBrowser.primaryTab.targetId, 'target-live');
 assert.equal(byBrowser.controllable, true);
 assert.equal(byBrowser.profileAllocation.profileId, 'default');
+assert.equal(byBrowser.resources.length, 2);
+assert.deepEqual(
+  byBrowser.evidence.rows
+    .filter((row) => ['Resource candidates', 'Protected resources', 'Resource reasons'].includes(row.label))
+    .map((row) => [row.label, row.value]),
+  [
+    ['Resource candidates', '1'],
+    ['Protected resources', '1'],
+    ['Resource reasons', 'old_temporary_profile_process, service_state_browser'],
+  ],
+);
+assert.equal(selectedWorkspaceDiagnosticBundle(byBrowser).resources.length, 2);
 assert.ok(selectedWorkspaceChatSummary(byBrowser).includes('browser browser-live'));
 assert.equal(selectedWorkspaceDiagnosticBundle(byBrowser).ids.browserId, 'browser-live');
 
@@ -127,7 +172,18 @@ const byDaemon = context({ workspaceId: 'daemon-session:daemon-a' });
 assert.equal(byDaemon.node.id, 'daemon-session:daemon-a');
 assert.equal(byDaemon.source, 'daemon-session');
 assert.equal(byDaemon.runtime.streamPort, 38409);
+assert.equal(byDaemon.runtime.running, true);
 assert.equal(byDaemon.stream.provider, 'cdp_screencast');
+
+const byStaleDaemon = context({ workspaceId: 'daemon-session:daemon-stale' });
+assert.equal(byStaleDaemon.node.id, 'daemon-session:daemon-stale');
+assert.equal(byStaleDaemon.source, 'daemon-session');
+assert.equal(byStaleDaemon.state, 'needs-attention');
+assert.equal(byStaleDaemon.node.health, 'stale-stream');
+assert.equal(byStaleDaemon.runtime.streamPort, 38410);
+assert.equal(byStaleDaemon.runtime.running, false);
+assert.equal(byStaleDaemon.stream, null);
+assert.ok(byStaleDaemon.node.attentionReason.includes('no CDP tab evidence'));
 
 const byExplicitDaemonWithConflictingSessionParam = context({ workspaceId: 'daemon-session:daemon-a', sessionId: 'session-live' });
 assert.equal(byExplicitDaemonWithConflictingSessionParam.node.id, 'daemon-session:daemon-a');

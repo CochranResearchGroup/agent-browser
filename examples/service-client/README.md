@@ -178,12 +178,16 @@ profile-broker pattern:
 1. Ask agent-browser for a no-launch access plan with `getServiceAccessPlan()`.
 2. Inspect `decision.attention` to decide whether the client should log,
    prompt, invoke a provider, or show an operator-facing affordance.
-3. Register a managed profile only when agent-browser has no suitable profile.
-4. Add a `profile_readiness` monitor when registering a new recurring profile.
-5. Optionally run due profile-readiness monitors when access-plan recommends it.
-6. Refresh the access plan before passing it to `requestServiceTab({ accessPlan })`.
-7. Optionally run the browser-capability preflight before browser work.
-8. Ask the operator to seed the profile when readiness reports `needs_manual_seeding`.
+3. Inspect `decision.profileReuse` and reuse route hints such as
+   `decision.serviceRequest.request.browserId` and
+   `decision.serviceRequest.request.sessionName` before creating another
+   equivalent runtime profile or browser lane.
+4. Register a managed profile only when agent-browser has no suitable profile.
+5. Add a `profile_readiness` monitor when registering a new recurring profile.
+6. Optionally run due profile-readiness monitors when access-plan recommends it.
+7. Refresh the access plan before passing it to `requestServiceTab({ accessPlan })`.
+8. Optionally run the browser-capability preflight before browser work.
+9. Ask the operator to seed the profile when readiness reports `needs_manual_seeding`.
 
 The workflow output includes `accessAttention` plus
 `profileAcquisitionSummary.initialAttention`, `refreshedAttention`, and

@@ -576,6 +576,7 @@
         "attention",
         "browserHost",
         "launchPosture",
+        "profileReuse",
         "interactionMode",
         "interactionRisk",
         "pacing",
@@ -957,6 +958,101 @@
                 }
               },
               "additionalProperties": true
+            }
+          },
+          "additionalProperties": true
+        },
+        "profileReuse": {
+          "description": "No-launch minimal-profile advisory explaining whether the selected profile should reuse a compatible live browser, wait for an existing profile lease, or launch a new browser because no compatible lane exists.",
+          "type": "object",
+          "required": [
+            "recommendedAction",
+            "selectedProfileId",
+            "reusableBrowserId",
+            "reusableSessionName",
+            "reusableBrowserIds",
+            "compatibleLiveBrowserCount",
+            "sameProfileLiveBrowserIds",
+            "activeLeaseSessionIds",
+            "activeLeaseCount",
+            "duplicatePressure",
+            "profileLeasePolicy",
+            "browserHost",
+            "viewStreamProvider",
+            "controlInputProvider",
+            "displayIsolation",
+            "reasons"
+          ],
+          "properties": {
+            "recommendedAction": {
+              "type": "string",
+              "enum": [
+                "register_or_select_profile",
+                "seed_profile_before_reuse",
+                "reuse_existing_browser",
+                "wait_for_profile_lease",
+                "launch_new_browser"
+              ]
+            },
+            "selectedProfileId": {
+              "type": ["string", "null"]
+            },
+            "reusableBrowserId": {
+              "type": ["string", "null"]
+            },
+            "reusableSessionName": {
+              "type": ["string", "null"]
+            },
+            "reusableBrowserIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "compatibleLiveBrowserCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "sameProfileLiveBrowserIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "activeLeaseSessionIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "activeLeaseCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "duplicatePressure": {
+              "type": "boolean"
+            },
+            "profileLeasePolicy": {
+              "type": "string",
+              "enum": ["wait"]
+            },
+            "browserHost": {
+              "type": ["string", "null"]
+            },
+            "viewStreamProvider": {
+              "type": ["string", "null"]
+            },
+            "controlInputProvider": {
+              "type": ["string", "null"]
+            },
+            "displayIsolation": {
+              "type": ["string", "null"]
+            },
+            "reasons": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           "additionalProperties": true
@@ -1440,6 +1536,12 @@
                 "profileLeasePolicy": {
                   "type": "string",
                   "enum": ["wait"]
+                },
+                "browserId": {
+                  "type": "string"
+                },
+                "sessionName": {
+                  "type": "string"
                 },
                 "requiresCdpFree": {
                   "type": "boolean"

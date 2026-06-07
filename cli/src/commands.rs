@@ -1836,6 +1836,104 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 "action": "service_reconcile",
                 "serviceState": flags.service_state.clone(),
             })),
+            Some("resources") => {
+                let mut action = "service_resources";
+                let mut i = 1;
+                while i < rest.len() {
+                    match rest[i] {
+                        "--monitor-summary" => action = "service_resources_monitor_summary",
+                        "--write-monitor-summary" => {
+                            action = "service_resources_write_monitor_summary"
+                        }
+                        flag => {
+                            return Err(ParseError::InvalidValue {
+                                message: format!("Unknown flag for service resources: {}", flag),
+                                usage: "service resources [--monitor-summary|--write-monitor-summary]",
+                            });
+                        }
+                    }
+                    i += 1;
+                }
+                Ok(json!({
+                    "id": id,
+                    "action": action,
+                    "serviceState": flags.service_state.clone(),
+                }))
+            }
+            Some("gc") => {
+                let mut apply = false;
+                let mut dry_run = true;
+                let mut review_token: Option<&str> = None;
+                let mut force_without_review = false;
+                let mut saw_apply = false;
+                let mut saw_dry_run = false;
+                let mut i = 1;
+                while i < rest.len() {
+                    match rest[i] {
+                        "--apply" => {
+                            saw_apply = true;
+                            apply = true;
+                            dry_run = false;
+                        }
+                        "--dry-run" => {
+                            saw_dry_run = true;
+                            dry_run = true;
+                            apply = false;
+                        }
+                        "--review-token" => {
+                            let Some(raw) = rest.get(i + 1) else {
+                                return Err(ParseError::InvalidValue {
+                                    message: "--review-token requires a value".to_string(),
+                                    usage: "service gc [--dry-run|--apply --review-token <token>|--apply --force-without-review]",
+                                });
+                            };
+                            review_token = Some(raw);
+                            i += 1;
+                        }
+                        "--force-without-review" => {
+                            force_without_review = true;
+                        }
+                        flag => {
+                            return Err(ParseError::InvalidValue {
+                                message: format!("Unknown flag for service gc: {}", flag),
+                                usage: "service gc [--dry-run|--apply --review-token <token>|--apply --force-without-review]",
+                            });
+                        }
+                    }
+                    i += 1;
+                }
+                if saw_apply && saw_dry_run {
+                    return Err(ParseError::InvalidValue {
+                        message: "--apply and --dry-run cannot be used together".to_string(),
+                        usage: "service gc [--dry-run|--apply --review-token <token>|--apply --force-without-review]",
+                    });
+                }
+                if dry_run && (review_token.is_some() || force_without_review) {
+                    return Err(ParseError::InvalidValue {
+                        message: "--review-token and --force-without-review require --apply".to_string(),
+                        usage: "service gc [--dry-run|--apply --review-token <token>|--apply --force-without-review]",
+                    });
+                }
+                if review_token.is_some() && force_without_review {
+                    return Err(ParseError::InvalidValue {
+                        message: "--review-token and --force-without-review cannot be used together"
+                            .to_string(),
+                        usage: "service gc [--dry-run|--apply --review-token <token>|--apply --force-without-review]",
+                    });
+                }
+                let mut cmd = json!({
+                    "id": id,
+                    "action": "service_gc",
+                    "apply": apply,
+                    "dryRun": dry_run,
+                    "forceWithoutReview": force_without_review,
+                    "serviceState": flags.service_state.clone(),
+                });
+                if let Some(review_token) = review_token {
+                    cmd["reviewToken"] = json!(review_token);
+                }
+                Ok(cmd)
+            }
             Some("prune-retained") => {
                 let mut apply = false;
                 let mut dry_run = true;
@@ -3111,6 +3209,8 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                     "status",
                     "watch",
                     "reconcile",
+                    "resources",
+                    "gc",
                     "browser-capability",
                     "profiles",
                     "sessions",
@@ -3127,7 +3227,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
             }),
             None => Err(ParseError::MissingArguments {
                 context: "service".to_string(),
-                usage: "service <status|watch|reconcile|browser-capability|profiles|sessions|browsers|tabs|cancel|acknowledge|resolve|trace|jobs|incidents|events>",
+                usage: "service <status|watch|reconcile|resources|gc|browser-capability|profiles|sessions|browsers|tabs|cancel|acknowledge|resolve|trace|jobs|incidents|events>",
             }),
         },
 
@@ -6437,6 +6537,105 @@ mod tests {
 
         assert_eq!(cmd["action"], "service_browsers");
         assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_resources() {
+        let cmd = parse_command(&args("service resources"), &default_flags()).unwrap();
+
+        assert_eq!(cmd["action"], "service_resources");
+        assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_resources_monitor_summary() {
+        let cmd = parse_command(
+            &args("service resources --monitor-summary"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_resources_monitor_summary");
+    }
+
+    #[test]
+    fn test_service_resources_write_monitor_summary() {
+        let cmd = parse_command(
+            &args("service resources --write-monitor-summary"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_resources_write_monitor_summary");
+    }
+
+    #[test]
+    fn test_service_gc_defaults_to_dry_run() {
+        let cmd = parse_command(&args("service gc"), &default_flags()).unwrap();
+
+        assert_eq!(cmd["action"], "service_gc");
+        assert_eq!(cmd["dryRun"], true);
+        assert_eq!(cmd["apply"], false);
+        assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_gc_rejects_apply_with_dry_run() {
+        let err =
+            parse_command(&args("service gc --apply --dry-run"), &default_flags()).unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+    }
+
+    #[test]
+    fn test_service_gc_apply_accepts_review_token() {
+        let cmd = parse_command(
+            &args("service gc --apply --review-token abgc1:123:abc"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_gc");
+        assert_eq!(cmd["apply"], true);
+        assert_eq!(cmd["dryRun"], false);
+        assert_eq!(cmd["reviewToken"], "abgc1:123:abc");
+    }
+
+    #[test]
+    fn test_service_gc_apply_accepts_force_without_review() {
+        let cmd = parse_command(
+            &args("service gc --apply --force-without-review"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_gc");
+        assert_eq!(cmd["apply"], true);
+        assert_eq!(cmd["forceWithoutReview"], true);
+    }
+
+    #[test]
+    fn test_service_gc_rejects_review_token_without_apply() {
+        let err = parse_command(
+            &args("service gc --review-token abgc1:123:abc"),
+            &default_flags(),
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+    }
+
+    #[test]
+    fn test_service_unknown_subcommand_lists_resources_and_gc() {
+        let err = parse_command(&args("service missing"), &default_flags()).unwrap_err();
+
+        match err {
+            ParseError::UnknownSubcommand { valid_options, .. } => {
+                assert!(valid_options.contains(&"resources"));
+                assert!(valid_options.contains(&"gc"));
+            }
+            other => panic!("expected UnknownSubcommand, got {other:?}"),
+        }
     }
 
     #[test]

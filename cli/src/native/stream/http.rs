@@ -564,6 +564,12 @@ pub(super) async fn handle_http_request(
         return;
     }
 
+    if method == "GET" && path == "/api/service/resources" {
+        let result = relay_service_command(session_name, service_resources_command()).await;
+        write_json_result(&mut stream, result, "502 Bad Gateway").await;
+        return;
+    }
+
     if method == "GET" && path == SERVICE_BROWSER_CAPABILITY_PREFLIGHT_HTTP_ROUTE {
         match service_browser_capability_preflight_command(query) {
             Ok(cmd) => {
@@ -1098,6 +1104,15 @@ fn service_reconcile_command() -> Value {
     })
 }
 
+fn service_resources_command() -> Value {
+    let args = vec!["service".to_string(), "resources".to_string()];
+    let flags = parse_flags(&args);
+    json!({
+        "action": "service_resources",
+        "serviceState": flags.service_state.clone(),
+    })
+}
+
 fn browser_api_command(
     method: &str,
     path: &str,
@@ -1530,6 +1545,7 @@ fn service_request_command(body: &str) -> Result<Value, String> {
         "profileLeaseWaitTimeoutMs",
         "requiresCdpFree",
         "cdpAttachmentAllowed",
+        "allowDuplicateProfileLane",
         "browserBuild",
         "displayIsolation",
         "serviceName",
@@ -1548,6 +1564,8 @@ fn service_request_command(body: &str) -> Result<Value, String> {
         "url",
         "profile",
         "runtimeProfile",
+        "browserId",
+        "sessionName",
     ] {
         if let Some(value) = request.get(key) {
             command[key] = value.clone();
@@ -1557,18 +1575,30 @@ fn service_request_command(body: &str) -> Result<Value, String> {
 }
 
 fn service_request_relay_session(default_session: &str, body: &str, command: &Value) -> String {
-    if !matches!(
-        command.get("action").and_then(Value::as_str),
-        Some("view_focus" | "view_takeover")
-    ) {
-        return default_session.to_string();
-    }
-
     let request = if body.trim().is_empty() {
         Value::Null
     } else {
         serde_json::from_str::<Value>(body).unwrap_or(Value::Null)
     };
+
+    if !matches!(
+        command.get("action").and_then(Value::as_str),
+        Some("view_focus" | "view_takeover")
+    ) {
+        for value in [
+            request.pointer("/sessionName"),
+            request.pointer("/daemonSession"),
+            request.pointer("/targetSession"),
+            request.pointer("/targetSessionName"),
+            request.pointer("/sessionId"),
+            request.pointer("/browserId"),
+        ] {
+            if let Some(session_name) = service_request_relay_session_candidate(value) {
+                return session_name;
+            }
+        }
+        return default_session.to_string();
+    }
 
     for value in [
         request.pointer("/params/sessionName"),
@@ -3114,6 +3144,14 @@ mod tests {
     }
 
     #[test]
+    fn service_resources_command_maps_read_only_action() {
+        let cmd = service_resources_command();
+
+        assert_eq!(cmd["action"], "service_resources");
+        assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
     fn service_profile_lookup_response_prefers_authenticated_target_profile() {
         let mut service_state = ServiceState::default();
         service_state.profiles.insert(
@@ -4015,7 +4053,7 @@ mod tests {
     #[test]
     fn service_request_command_maps_request_object() {
         let command = service_request_command(
-            r##"{"action":"navigate","params":{"url":"https://example.com","action":"ignored","id":"ignored"},"serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","siteId":"acs","loginIds":["orcid"],"browserBuild":"stealthcdp_chromium","displayIsolation":"private_virtual_display","runtimeProfile":"acs-profile","profile":"/tmp/acs-profile","jobTimeoutMs":1000,"profileLeasePolicy":"wait","profileLeaseWaitTimeoutMs":2500}"##,
+            r##"{"action":"navigate","params":{"url":"https://example.com","action":"ignored","id":"ignored"},"serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","siteId":"acs","loginIds":["orcid"],"browserBuild":"stealthcdp_chromium","displayIsolation":"private_virtual_display","runtimeProfile":"acs-profile","profile":"/tmp/acs-profile","browserId":"session:acs-browser","sessionName":"acs-browser","allowDuplicateProfileLane":true,"jobTimeoutMs":1000,"profileLeasePolicy":"wait","profileLeaseWaitTimeoutMs":2500}"##,
         )
         .unwrap();
 
@@ -4033,6 +4071,9 @@ mod tests {
         assert_eq!(command["displayIsolation"], "private_virtual_display");
         assert_eq!(command["runtimeProfile"], "acs-profile");
         assert_eq!(command["profile"], "/tmp/acs-profile");
+        assert_eq!(command["browserId"], "session:acs-browser");
+        assert_eq!(command["sessionName"], "acs-browser");
+        assert_eq!(command["allowDuplicateProfileLane"], true);
         assert_eq!(command["jobTimeoutMs"], 1000);
         assert_eq!(command["profileLeasePolicy"], "wait");
         assert_eq!(command["profileLeaseWaitTimeoutMs"], 2500);
@@ -4082,6 +4123,17 @@ mod tests {
         assert_eq!(
             service_request_relay_session("AgentBrowserDashboard", body, &command),
             "AgentBrowserDashboard"
+        );
+    }
+
+    #[test]
+    fn service_request_relay_session_routes_non_focus_top_level_reuse_hint() {
+        let body = r##"{"action":"tab_new","browserId":"session:odollo-carrier-ups","sessionName":"odollo-carrier-ups","serviceName":"agent-browser-dashboard"}"##;
+        let command = service_request_command(body).unwrap();
+
+        assert_eq!(
+            service_request_relay_session("AgentBrowserDashboard", body, &command),
+            "odollo-carrier-ups"
         );
     }
 

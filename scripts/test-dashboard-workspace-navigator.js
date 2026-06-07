@@ -76,6 +76,18 @@ assert.match(
 );
 
 assert.match(
+  remoteViewport,
+  /function buildWorkspaceFrameUrl[\s\S]*if \(isGuacamoleClientFrameUrl\(resolved\)\) return resolved\.toString\(\);[\s\S]*resolved\.searchParams\.set\("agentBrowserViewport"/,
+  'Workspace viewport must preserve Guacamole hash-client iframe URLs instead of adding dashboard query params before the hash route',
+);
+
+assert.match(
+  remoteViewport,
+  /function isGuacamoleClientFrameUrl\(url: URL\)[\s\S]*url\.hash\.startsWith\("#\/client\/"\)/,
+  'Workspace viewport must recognize Guacamole client hash routes before applying iframe cache-busting query params',
+);
+
+assert.match(
   sessionsStore,
   /fetch\(sessionTabsApiUrl\(s\.port\)\)/,
   'Workspace tab polling must use the same-origin dashboard session-tabs proxy',
@@ -342,14 +354,14 @@ assert.match(
 
 assert.match(
   serviceWorkspaces,
-  /function daemonViewStream\(session: SessionInfo, live: boolean\)[\s\S]*provider: "cdp_screencast"[\s\S]*url: streamUrl[\s\S]*controlInput: "cdp_input"/,
-  'Daemon workspace rows must carry a CDP screencast stream so active rows are not blank selections',
+  /const hasBrowserEvidence = tabs\.length > 0[\s\S]*const live = portRegistered && hasBrowserEvidence[\s\S]*function daemonViewStream\(session: SessionInfo, live: boolean\)[\s\S]*provider: "cdp_screencast"[\s\S]*url: streamUrl[\s\S]*controlInput: "cdp_input"/,
+  'Daemon workspace rows must require CDP tab evidence before advertising a CDP screencast stream',
 );
 
 assert.match(
   serviceWorkspaces,
-  /process: live \? \{ streamPort: session\.port, running: true \}/,
-  'Daemon workspace rows must expose stream process indicators',
+  /process: portRegistered[\s\S]*streamPort: session\.port, running: live/,
+  'Daemon workspace rows must expose stream process indicators without marking stale port-only rows live',
 );
 
 assert.match(

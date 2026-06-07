@@ -487,3 +487,57 @@ Result:
 - `git diff --check` passed.
 - `pnpm validation:select -- --base HEAD` selected only `git diff --check` for
   the documentation-only planning slice.
+
+## Turn 14 | 2026-06-04
+
+Scope: open a resource monitor and garbage collector lane after live
+agent-browser resource pressure cleanup.
+
+Actions:
+
+- Ran Graphiti discovery against `agent_browser_main` for prior resource
+  cleanup and service lifecycle context.
+- Confirmed the related retained orphan profile cleanup plan exists, but it
+  covers service-state/profile metadata rather than live OS process pressure.
+- Added
+  `docs/dev/plans/0026-2026-06-04-resource-monitor-and-garbage-collector-plan.md`.
+- Added P13 to `ROADMAP.md` with the dry-run-first resource monitor and GC
+  recommendation.
+
+Validation run:
+
+- `git diff --check`
+- `pnpm validation:select -- --base HEAD`
+- `python /home/ecochran76/workspace.local/agent-policies/repo-policy-selector/scripts/audit_planning_contract.py --repo-root /home/ecochran76/workspace.local/agent-browser --json`
+
+Result:
+
+- P13 is open for Slice A and Slice B: read-only resource inventory plus
+  conservative stale classification before any apply-mode garbage collection.
+- `git diff --check` passed.
+- `pnpm validation:select -- --base HEAD` included the pre-existing dirty
+  dashboard files in its recommendation set, so it selected dashboard checks in
+  addition to the documentation-only change.
+- The planning audit still fails due to pre-existing roadmap/runbook drift for
+  older plans, but the new P13 plan is wired in both `ROADMAP.md` and
+  `RUNBOOK.md`.
+
+## Turn 15 | 2026-06-05
+
+Scope: open and start the minimal runtime-profile reuse lane after Plan 0026
+closed the resource-monitor and GC cleanup surface.
+
+Actions:
+
+- Ran Graphiti discovery against `agent_browser_main` for profile reuse,
+  service queue, lease, and access-plan context.
+- Added
+  `docs/dev/plans/0027-2026-06-05-minimal-runtime-profile-reuse-plan.md`.
+- Updated P13 in `ROADMAP.md` so Plan 0026 is the closed cleanup surface and
+  Plan 0027 is the prevention surface.
+
+Current target:
+
+- Plan 0027 Slice A: add a read-only access-plan `profileReuse` advisory that
+  recommends `reuse_existing_browser`, `wait_for_profile_lease`, or
+  `launch_new_browser` before any launch mutates runtime state.

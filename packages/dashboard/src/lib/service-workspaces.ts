@@ -289,6 +289,24 @@ export type WorkspaceServiceIncident = {
   jobIds?: string[];
 };
 
+export type WorkspaceResourceRecord = {
+  pid?: number | null;
+  kind?: string | null;
+  disposition?: string | null;
+  reasons?: string[];
+  rssBytes?: number | null;
+  gcAction?: string | null;
+  correlation?: {
+    browserId?: string | null;
+    profileId?: string | null;
+    sessionIds?: string[];
+    displayAllocationId?: string | null;
+    displayName?: string | null;
+    cdpPort?: number | null;
+    profilePath?: string | null;
+  };
+};
+
 export type WorkspaceNodeInput = {
   daemonSessions?: SessionInfo[];
   daemonTabsByPort?: Record<number, TabInfo[]>;
@@ -299,6 +317,7 @@ export type WorkspaceNodeInput = {
   profileAllocations?: WorkspaceServiceProfileAllocation[];
   jobs?: WorkspaceServiceJob[];
   incidents?: WorkspaceServiceIncident[];
+  resources?: WorkspaceResourceRecord[];
 };
 
 const TERMINAL_BROWSER_HEALTH = new Set([
@@ -599,7 +618,7 @@ function createBrowserWorkspaceNode({
   const ownership = firstOwnership(sessions, allocation);
   const primaryTab = primaryServiceTab(tabs);
   const rawViewStream = selectPrimaryWorkspaceViewStream(browser.viewStreams);
-  const viewStream = rawViewStream ? primaryViewStream([rawViewStream]) : null;
+  const rawPrimaryViewStream = rawViewStream ? primaryViewStream([rawViewStream]) : null;
   const takeover = takeoverForSessions(sessions, allocation, jobs);
   const busy = jobs.some(isActiveJob);
   const terminal = isTerminalBrowser(browser);
@@ -623,11 +642,20 @@ function createBrowserWorkspaceNode({
     includeTerminalHealth: !terminal || busy || incidents.some((incident) => !incident.resolvedAt) || Boolean(takeover),
   });
   const live = isLiveBrowser(browser);
+  const idleRouteDisplayDiagnostic = live
+    ? idleRouteDisplayDiagnosticFor({
+        browser,
+        stream: rawViewStream,
+        relatedIds: diagnosticRelatedIds,
+      })
+    : null;
+  const disabledStreamReason = !live
+    ? "Browser is retained, not live."
+    : viewerClient.reason ?? idleRouteDisplayDiagnostic?.message ?? null;
+  const viewStream = rawPrimaryViewStream && disabledStreamReason
+    ? disableViewStream(rawPrimaryViewStream, disabledStreamReason)
+    : rawPrimaryViewStream;
   const blockedReason = takeover?.queueImpact ?? (terminal ? null : live && viewStream?.controllable ? null : profileBlockedReason(allocation));
-  const idleRouteDisplayDiagnostic = idleRouteDisplayDiagnosticFor({
-    stream: rawViewStream,
-    relatedIds: diagnosticRelatedIds,
-  });
   const state = viewerClient.active || idleRouteDisplayDiagnostic ? "needs-attention" : workspaceState({
     busy,
     blockedReason,
@@ -799,8 +827,14 @@ function createDaemonWorkspaceNode({
   engine?: string | null;
 }): WorkspaceNode {
   const activeTab = tabs.find((tab) => tab.active) ?? tabs[0];
-  const live = !session.pending && !session.closing && session.port > 0;
-  const attentionReason = session.closing ? "Session is closing." : null;
+  const portRegistered = !session.pending && !session.closing && session.port > 0;
+  const hasBrowserEvidence = tabs.length > 0;
+  const live = portRegistered && hasBrowserEvidence;
+  const attentionReason = session.closing
+    ? "Session is closing."
+    : portRegistered && !hasBrowserEvidence
+      ? "Daemon stream port is registered but no CDP tab evidence is available."
+      : null;
   const viewStream = daemonViewStream(session, live);
   const viewerClient = classifyViewerClient({
     ids: [session.session, session.provider, session.engine, engine],
@@ -832,18 +866,29 @@ function createDaemonWorkspaceNode({
     secondaryLabel: compactLabels([
       session.session,
       session.provider ?? session.engine ?? engine,
+      portRegistered && !hasBrowserEvidence ? "no CDP tab evidence" : null,
       activeTab?.url,
       viewerClient.active ? "viewer client" : null,
       viewerClient.reason,
     ]).join(" / "),
     sortLabel: `${label} ${session.session}`.toLowerCase(),
-    health: session.pending ? "pending" : session.closing ? "closing" : "live",
+    health: session.pending
+      ? "pending"
+      : session.closing
+        ? "closing"
+        : portRegistered && !hasBrowserEvidence
+          ? "stale-stream"
+          : live
+            ? "live"
+            : "retained",
     attentionReason: viewerClient.reason ?? attentionReason,
     retained: !live,
     live,
     daemonSession: session.session,
     port: session.port,
-    process: live ? { streamPort: session.port, running: true } : null,
+    process: portRegistered
+      ? { streamPort: session.port, running: live }
+      : null,
     ownership: {},
     primaryTab: activeTab
       ? {
@@ -1285,7 +1330,16 @@ function classifyViewerClient(input: {
       reason: "This is a Guacamole viewer client; remote control must target the browser attached inside that route display.",
     };
   }
-  if (haystack.some((value) => value.includes("agent-browser") && value.includes("workspace") && value.includes("control"))) {
+  const hasAgentBrowserChrome = haystack.some((value) =>
+    value.includes("agent-browser") ||
+    value.includes("agent browser"),
+  );
+  const hasWorkspaceControlRoute = haystack.some((value) =>
+    value.includes("workspace%3acontrol") ||
+    value.includes("view=workspace") ||
+    (value.includes("workspace") && value.includes("control")),
+  );
+  if (hasAgentBrowserChrome && hasWorkspaceControlRoute) {
     return {
       active: true,
       reason: "This browser is showing the Agent Browser control workspace, so it is a viewer client rather than an inspected target.",
@@ -1308,10 +1362,11 @@ function viewerClientDiagnosticFor(input: {
 }
 
 function idleRouteDisplayDiagnosticFor(input: {
+  browser: WorkspaceServiceBrowser;
   stream: WorkspaceServiceViewStream | null;
   relatedIds: string[];
 }): WorkspaceOwnershipDiagnostic | null {
-  const reason = idleRouteDisplayReason(input.stream);
+  const reason = idleRouteDisplayReason(input.browser, input.stream);
   if (!reason) return null;
   return {
     kind: "idle-route-display",
@@ -1321,8 +1376,15 @@ function idleRouteDisplayDiagnosticFor(input: {
   };
 }
 
-function idleRouteDisplayReason(stream?: WorkspaceServiceViewStream | null): string | null {
+function idleRouteDisplayReason(browser: WorkspaceServiceBrowser, stream?: WorkspaceServiceViewStream | null): string | null {
   if (!stream || normalize(stream.provider) !== "rdp_gateway") return null;
+  if (browser.host === "remote_headed" && !hasRouteDisplayBinding(stream)) {
+    return compactLabels([
+      "Remote-headed browser has no service-owned Guacamole route or display binding.",
+      browser.displayName ? `Recorded browser display is ${browser.displayName}.` : null,
+      "The projected route may show a shared terminal desktop instead of this browser.",
+    ]).join(" ");
+  }
   const explicitState = readinessState(stream.remoteReadiness ?? stream.readiness);
   const normalizedState = normalize(explicitState);
   if (["idle_display", "terminal_only", "no_browser_window", "display_idle"].includes(normalizedState)) {
@@ -1350,6 +1412,37 @@ function idleRouteDisplayReason(stream?: WorkspaceServiceViewStream | null): str
     return "Remote route display appears to contain only terminal windows; launch or focus the target browser on this display before using the Guacamole stream.";
   }
   return null;
+}
+
+function hasRouteDisplayBinding(stream: WorkspaceServiceViewStream): boolean {
+  const streamUrl = stream.frameUrl || stream.url || stream.externalUrl;
+  return Boolean(
+    stream.routeId?.trim() ||
+    stream.displayAllocationId?.trim() ||
+    stream.connectionId?.trim() ||
+    stream.connectionName?.trim() ||
+    stream.routeSource?.trim() ||
+    isSpecificGuacamoleClientUrl(streamUrl),
+  );
+}
+
+function isSpecificGuacamoleClientUrl(value?: string | null): boolean {
+  return Boolean(value && /\/guacamole\/#\/client\/[^/?#]+/i.test(value));
+}
+
+function disableViewStream(
+  stream: WorkspaceNodeViewStream,
+  reason: string,
+): WorkspaceNodeViewStream {
+  return {
+    ...stream,
+    url: null,
+    embeddable: false,
+    controllable: false,
+    readOnly: true,
+    controlInput: null,
+    routeSummary: reason,
+  };
 }
 
 function deepStringValues(value: unknown): string[] {

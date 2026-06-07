@@ -748,6 +748,7 @@ function buildWorkspaceFrameUrl(streamUrl: string | null, refreshNonce: number):
   if (!streamUrl || typeof window === "undefined") return streamUrl;
   try {
     const resolved = new URL(streamUrl, window.location.href);
+    if (isGuacamoleClientFrameUrl(resolved)) return resolved.toString();
     if (resolved.origin === window.location.origin) {
       resolved.searchParams.set("agentBrowserViewport", "workspace");
       resolved.searchParams.set("agentBrowserRefresh", String(refreshNonce));
@@ -756,6 +757,10 @@ function buildWorkspaceFrameUrl(streamUrl: string | null, refreshNonce: number):
   } catch {
     return streamUrl;
   }
+}
+
+function isGuacamoleClientFrameUrl(url: URL): boolean {
+  return /\/guacamole\/?$/i.test(url.pathname) && url.hash.startsWith("#/client/");
 }
 
 function detectWorkspaceFrameFailure(frame: HTMLIFrameElement | null): WorkspaceFrameFailure | null {

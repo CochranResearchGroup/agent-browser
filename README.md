@@ -167,6 +167,9 @@ agent-browser stream disable          # Stop runtime WebSocket streaming
 agent-browser service status          # Show service control-plane and configured service state
 agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health records
+agent-browser service resources       # Inspect correlated daemon, browser, and display processes
+agent-browser service gc              # Dry-run conservative resource cleanup candidates
+agent-browser service gc --apply --review-token <token> # Apply reviewed resource cleanup
 agent-browser service prune-retained  # Preview retained closed-tab and inert-browser cleanup
 agent-browser service prune-retained --orphaned-profiles # Preview orphaned custom profile cleanup
 agent-browser service access-plan --login-id canva # Inspect broker routing before browser work
@@ -1467,7 +1470,10 @@ stable issue codes with remediation text, drift findings, and the next setup
 action. `agent-browser install doctor --json` also reports
 `remoteViewPrivileges` with helper, sudoers, group, membership, and
 `requiresInteractiveSudo` fields plus `service` readiness from a no-launch
-service-status probe. The remote-view doctor prefers reusing the existing
+service-status probe and `serviceResources` counts from a no-launch resource
+GC dry-run. Readiness-impacting stale display or temporary-profile candidates
+are reported as doctor issues before remote-view work proceeds. The remote-view
+doctor prefers reusing the existing
 `agent-browser-rdp` user and only points toward route-specific users when the
 current state shows they are actually needed.
 Run
@@ -1945,6 +1951,9 @@ agent-browser service status
 agent-browser service status --watch --interval 1000
 agent-browser service watch --interval 1000 --count 5
 agent-browser service reconcile
+agent-browser service resources
+agent-browser service gc --dry-run
+agent-browser service gc --apply --review-token <token>
 agent-browser service prune-retained
 agent-browser service prune-retained --orphaned-profiles
 agent-browser service prune-retained --apply
@@ -2010,6 +2019,27 @@ The persisted service state also includes bounded audit records for recent contr
 
 Use `service reconcile` to run the persisted browser health and target probes intentionally without requesting a control-plane status snapshot. This command updates the same `reconciliation` snapshot, refreshes live tab records for reachable browser CDP endpoints, and appends service events.
 
+Use `service resources` or HTTP `GET /api/service/resources` to inspect the
+read-only resource monitor summary without launching a browser. Use
+`service gc --dry-run` to receive a short-lived review token for conservative
+cleanup candidates, then use `service gc --apply --review-token <token>` only
+after reviewing that dry-run. Apply mode re-reads process identity before
+termination, sends SIGTERM first, uses SIGKILL only for a still-matching
+candidate, and appends compact service-event counts. The Service dashboard shows
+candidate count and estimated candidate RSS but does not expose one-click
+destructive cleanup. Resource warnings include
+`duplicate_live_browsers_for_profile` and `duplicate_active_profile_leases`
+when retained state shows avoidable duplicate pressure for one profile; install
+doctor reports those as `service_duplicate_profile_pressure`.
+
+To install the optional read-only resource monitor timer, run
+`AGENT_BROWSER_BIN=$(pwd)/cli/target/debug/agent-browser bash scripts/install-resource-monitor-user-timer.sh`
+after building the intended binary. The timer writes an aggregate-only summary
+to `~/.agent-browser/service/resource-monitor-summary.json`; read it with
+`agent-browser service resources --monitor-summary`. Remove the timer with
+`bash scripts/remove-resource-monitor-user-timer.sh`. The timer never applies
+cleanup.
+
 Use `service prune-retained` when the retained service inventory has accumulated closed tabs or inert browser records after many operator and agent sessions. It is dry-run by default and removes nothing unless `--apply` is present. The default candidate set is closed tabs plus `not_started` browser records that have no PID, CDP endpoint, active sessions, view streams, or non-closed tabs. Add `--process-exited-browsers` only after reviewing failure evidence, because `process_exited` records may still explain a crash or shutdown. Add `--orphaned-profiles` to include `custom:*` profile records that have no retained service references and point at missing ephemeral user-data directories. Applying the prune also removes matching browser, tab, session-link, and reviewed orphaned-profile records through the serialized service-state repository.
 
 Add `--released-sessions` when released or expired session records should be pruned with their inert linked `not_started` browser placeholders. The session must have no retained tabs and every linked browser must have no PID, CDP endpoint, view streams, profile binding, or non-self active sessions. Add `--abandoned-sessions` only after operator review; it applies the same inert-placeholder rule to shared or exclusive session leases that would otherwise continue to affect profile allocation. Abandoned shared or exclusive sessions must also have a parseable `lastLeaseObservedAt` or `createdAt` older than `--abandoned-session-min-age-minutes`, which defaults to `1440`. Dry-runs report skipped abandoned sessions as `abandonedSessionsMissingAgeTimestamp` or `abandonedSessionsTooFresh` so operators can distinguish unsafe stale-looking placeholders from actual prune candidates. The `skippedSummary` field reports the top skipped groups by stable prefix after trimming trailing numeric run suffixes, including total and omitted group counts, and text output shows the same top groups for triage.
@@ -2020,7 +2050,7 @@ The Service dashboard shows a retained-state cleanup workflow when persisted sta
 
 Browser row remedies also use `POST /api/service/request`. `service_browser_close` politely closes the active service browser identified by `params.browserId` and records the same shutdown health used by CLI close. `service_browser_repair` makes one degraded or faulted retained browser record retryable again after operator review. Dashboard row buttons enable these actions only when `GET /api/service/contracts` advertises support and the selected browser state matches the action.
 
-Use `service access-plan` before browser work when an operator, agent, or software client needs the same no-launch broker recommendation as HTTP `GET /api/service/access-plan` and MCP `service_access_plan`. Text output includes the selected profile, manual-seeding posture, monitor freshness recommendation, service request availability, and compact `browser_build_summary` explaining which browser build won.
+Use `service access-plan` before browser work when an operator, agent, or software client needs the same no-launch broker recommendation as HTTP `GET /api/service/access-plan` and MCP `service_access_plan`. Text output includes the selected profile, manual-seeding posture, monitor freshness recommendation, service request availability, and compact `browser_build_summary` explaining which browser build won. Access-plan JSON also includes `decision.profileReuse`, which reports whether the selected profile should reuse an existing compatible live browser, wait for the profile lease with `profileLeasePolicy: "wait"`, or launch a new browser because no compatible account, site, browser-build, host, view-stream, control-input, and display-isolation lane exists. When the recommendation is `reuse_existing_browser`, the copied `decision.serviceRequest.request` includes top-level `browserId` and `sessionName` route hints so HTTP `POST /api/service/request`, MCP `service_request`, and generated client helpers route ordinary tab and browser commands to the existing daemon lane instead of the service daemon. Duplicate live browsers or duplicate active leases for the selected profile are surfaced as `duplicatePressure` so clients can queue instead of cloning equivalent runtime profiles. Dashboard launcher eligibility rows use the same `decision.profileReuse` advisory as the row reason when access-plan data has been fetched.
 
 Use `service status --watch` or `service watch` for a polling operator view of worker health, browser health, queue depth, profile lease wait pressure, and reconciliation status. In JSON mode, each poll is emitted as one JSON response line.
 
@@ -2159,6 +2189,8 @@ The HTTP API loads the same persisted and configured service state as the CLI be
 
 Use `action: "view_takeover"` with `params.browserId`, `params.sessionName`, `params.streamId`, `params.provider`, and `params.openMode` when an RDP or Guacamole viewer should take over or reconnect without closing or relaunching the browser. Successful requests return `status`, `providerMode`, `viewerLeaseId`, `lastViewerEvent`, and `serviceEventId`, and they retain a `viewer_takeover_requested` service event for later dashboard, HTTP, MCP, and service trace inspection. For retained routes, use `service_viewer_lease_request`, `service_viewer_lease_heartbeat`, `service_viewer_lease_release`, and `service_controller_lease_takeover` to track observers, keep viewer leases fresh, release viewers, and make controller ownership auditable. Routes with `providerMode: "single_viewer"` reject additional active viewers; controller requests reject an existing controller unless the caller uses the explicit takeover action.
 
+Top-level `browserId` and `sessionName` on `POST /api/service/request` or MCP `service_request` are reuse route hints, not action parameters. Access-plan copied requests include them when `decision.profileReuse.recommendedAction` is `reuse_existing_browser`, and HTTP, MCP, and client helpers route ordinary tab and browser commands to that existing daemon lane. A direct launch that selects a profile already backed by a live retained browser is rejected unless the request uses those route hints or sets `allowDuplicateProfileLane: true` for reviewed isolation or throwaway browser behavior. Action-specific `params.browserId` and `params.sessionName` remain scoped to actions such as `view_takeover`.
+
 The guarded service read surface has MCP parity: contracts, access-plan, profile lookup, per-profile readiness, allocation, seeding handoff, service collections, incidents, events, jobs, and incident activity all have matching HTTP and MCP read paths. Agents should usually start with MCP `service_access_plan` or `agent-browser://access-plan{?...}` because it returns the service-owned profile decision, readiness, policy, providers, retained challenges, monitor findings, and copyable queued request before browser control is requested. Use narrower resources such as profile lookup, readiness, allocation, or seeding handoff only when the caller already knows it does not need the full recommendation.
 
 MCP `agent-browser://profiles/{profile_id}/allocation` mirrors `GET /api/service/profiles/<id>/allocation` for agents that need one profile's lease, holder, conflict, recommended-action, and readiness state without fetching the full profile collection.
@@ -2232,6 +2264,12 @@ underlying service request. `requestServiceTab`, `createServiceTabRequest`, and
 software clients can queue the planned tab request without manually unpacking
 `decision.serviceRequest.request`. Explicit call fields such as `url`,
 `params`, `jobTimeoutMs`, or caller labels override the planned defaults.
+When `decision.profileReuse.recommendedAction` is `reuse_existing_browser`, the
+planned request includes top-level `browserId` and `sessionName` route hints so
+the request drains through the compatible retained browser's daemon queue rather
+than creating another equivalent browser/profile lane. Use
+`allowDuplicateProfileLane: true` only when a caller intentionally needs a
+separate browser/profile lane for reviewed isolation or throwaway work.
 When an access plan reports `manualSeedingRequired` with `seedingHandoff`,
 these helpers throw before posting `/api/service/request` unless the caller
 explicitly passes `allowManualAction: true`; show the handoff to the operator

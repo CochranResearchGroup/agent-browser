@@ -21,6 +21,7 @@ import type {
   WorkspaceServiceIncident,
   WorkspaceServiceJob,
   WorkspaceServiceProfileAllocation,
+  WorkspaceResourceRecord,
   WorkspaceServiceSession,
   WorkspaceServiceTab,
 } from "@/lib/service-workspaces";
@@ -34,6 +35,10 @@ type ServiceStatusData = {
     incidents?: WorkspaceServiceIncident[];
   };
   profileAllocations?: WorkspaceServiceProfileAllocation[];
+};
+
+type ServiceResourcesData = {
+  resources?: WorkspaceResourceRecord[];
 };
 
 type ApiResponse<T> = {
@@ -55,6 +60,7 @@ export function useSelectedWorkspaceContext(enabled = true): UseSelectedWorkspac
   const getEngineForPort = useAtomValue(engineForPortAtom);
   const [selection, setSelection] = useState(() => readDashboardWorkspaceUrlSelection());
   const [serviceStatus, setServiceStatus] = useState<ServiceStatusData | null>(null);
+  const [serviceResources, setServiceResources] = useState<ServiceResourcesData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshedAt, setRefreshedAt] = useState(() => Date.now());
@@ -63,15 +69,23 @@ export function useSelectedWorkspaceContext(enabled = true): UseSelectedWorkspac
     if (!enabled) return;
     setLoading(true);
     try {
-      const response = await fetch(`${SERVICE_API_BASE}/status`, { cache: "no-store" });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const json = (await response.json()) as ApiResponse<ServiceStatusData>;
+      const [statusResponse, resourcesResponse] = await Promise.all([
+        fetch(`${SERVICE_API_BASE}/status`, { cache: "no-store" }),
+        fetch(`${SERVICE_API_BASE}/resources`, { cache: "no-store" }).catch(() => null),
+      ]);
+      if (!statusResponse.ok) throw new Error(`HTTP ${statusResponse.status}`);
+      const json = (await statusResponse.json()) as ApiResponse<ServiceStatusData>;
+      const resourcesJson = resourcesResponse?.ok
+        ? ((await resourcesResponse.json()) as ApiResponse<ServiceResourcesData>)
+        : null;
       if (!json.success) throw new Error(json.error || "Service status unavailable");
       setServiceStatus(json.data ?? null);
+      setServiceResources(resourcesJson?.success ? resourcesJson.data ?? null : null);
       setError(null);
       setRefreshedAt(Date.now());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Service status unavailable");
+      setServiceResources(null);
       setRefreshedAt(Date.now());
     } finally {
       setLoading(false);
@@ -126,6 +140,7 @@ export function useSelectedWorkspaceContext(enabled = true): UseSelectedWorkspac
     profileAllocations: serviceStatus?.profileAllocations ?? [],
     jobs: Object.values(serviceStatus?.service_state?.jobs ?? {}),
     incidents: serviceStatus?.service_state?.incidents ?? [],
+    resources: serviceResources?.resources ?? [],
     refreshedAt,
   }), [
     daemonEngineByPort,
@@ -133,6 +148,7 @@ export function useSelectedWorkspaceContext(enabled = true): UseSelectedWorkspac
     daemonTabsByPort,
     refreshedAt,
     selection,
+    serviceResources,
     serviceStatus,
   ]);
 

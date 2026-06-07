@@ -14,12 +14,12 @@ use super::service_contracts::SERVICE_REQUEST_ACTIONS;
 use super::service_lifecycle::{select_service_profile_for_request, ProfileSelectionRequest};
 use super::service_model::{
     builtin_site_policy, service_profile_seeding_handoff, service_site_policy_id_for_url,
-    BrowserBuild, BrowserHost, BrowserProfile, Challenge, ChallengeKind, ChallengePolicy,
-    ChallengeState, ControlInputProvider, InteractionMode, ProfileSelectionReason,
-    ProviderCapability, ServiceEntitySource, ServiceIncidentEscalation, ServiceIncidentState,
-    ServiceProvider, ServiceState, SitePolicy, ViewStreamProvider,
-    SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
-    SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
+    BrowserBuild, BrowserHealth, BrowserHost, BrowserProcess, BrowserProfile, BrowserSession,
+    Challenge, ChallengeKind, ChallengePolicy, ChallengeState, ControlInputProvider,
+    InteractionMode, LeaseState, ProfileSelectionReason, ProviderCapability, ServiceEntitySource,
+    ServiceIncidentEscalation, ServiceIncidentState, ServiceProvider, ServiceState, SitePolicy,
+    ViewStreamProvider, SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
+    SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
 };
 
 /// Parsed access-plan selector shared by HTTP and MCP resources.
@@ -829,6 +829,13 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         manual_seeding_required,
         browser_capability_evidence,
     );
+    let profile_reuse = profile_reuse_decision(
+        request,
+        selected_profile,
+        service_state,
+        &launch_posture.value,
+        manual_seeding_required,
+    );
     let manual_action_required = manual_seeding_required || waiting_for_human || failed_challenge;
     let freshness_update = freshness_update_decision(
         selected_profile,
@@ -918,6 +925,7 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         manual_seeding_required,
         manual_action_required,
         &launch_posture.value,
+        &profile_reuse,
     );
     let post_seeding_probe = post_seeding_probe_decision(
         input.request,
@@ -940,6 +948,7 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         "attention": attention,
         "browserHost": launch_posture.browser_host,
         "launchPosture": launch_posture.value,
+        "profileReuse": profile_reuse,
         "interactionMode": site_policy.map(|policy| policy.interaction_mode),
         "interactionRisk": interaction_decision.interaction_risk,
         "pacing": interaction_decision.pacing,
@@ -964,6 +973,225 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         "hasNamingWarning": !naming_warnings.is_empty(),
         "reasons": reasons,
     })
+}
+
+fn profile_reuse_decision(
+    request: &ServiceAccessPlanRequest,
+    selected_profile: Option<&BrowserProfile>,
+    service_state: &ServiceState,
+    launch_posture: &Value,
+    manual_seeding_required: bool,
+) -> Value {
+    let Some(profile) = selected_profile else {
+        return json!({
+            "recommendedAction": "register_or_select_profile",
+            "selectedProfileId": null,
+            "reusableBrowserId": null,
+            "reusableSessionName": null,
+            "reusableBrowserIds": [],
+            "compatibleLiveBrowserCount": 0,
+            "activeLeaseSessionIds": [],
+            "activeLeaseCount": 0,
+            "duplicatePressure": false,
+            "profileLeasePolicy": "wait",
+            "reasons": ["no_selected_profile"],
+        });
+    };
+
+    let browser_host = launch_posture
+        .get("browserHost")
+        .and_then(|value| serde_json::from_value::<BrowserHost>(value.clone()).ok());
+    let view_stream_provider = launch_posture
+        .get("viewStreamProvider")
+        .and_then(|value| serde_json::from_value(value.clone()).ok());
+    let control_input_provider = launch_posture
+        .get("controlInputProvider")
+        .and_then(|value| serde_json::from_value(value.clone()).ok());
+    let display_isolation = launch_posture
+        .get("displayIsolation")
+        .and_then(Value::as_str);
+
+    let mut reusable_browser_ids = service_state
+        .browsers
+        .iter()
+        .filter(|(_id, browser)| {
+            browser.profile_id.as_deref() == Some(profile.id.as_str())
+                && browser_is_reusable_for_posture(
+                    browser,
+                    browser_host,
+                    view_stream_provider,
+                    control_input_provider,
+                    display_isolation,
+                )
+        })
+        .map(|(id, _browser)| id.clone())
+        .collect::<Vec<_>>();
+    reusable_browser_ids.sort();
+    reusable_browser_ids.dedup();
+
+    let mut same_profile_live_browser_ids = service_state
+        .browsers
+        .iter()
+        .filter(|(_id, browser)| {
+            browser.profile_id.as_deref() == Some(profile.id.as_str())
+                && browser_has_live_health(browser)
+        })
+        .map(|(id, _browser)| id.clone())
+        .collect::<Vec<_>>();
+    same_profile_live_browser_ids.sort();
+    same_profile_live_browser_ids.dedup();
+
+    let mut active_lease_session_ids = service_state
+        .sessions
+        .iter()
+        .filter(|(_id, session)| session_blocks_profile_reuse(session, &profile.id))
+        .map(|(id, _session)| id.clone())
+        .collect::<Vec<_>>();
+    active_lease_session_ids.sort();
+    active_lease_session_ids.dedup();
+
+    let mut reasons = Vec::new();
+    if manual_seeding_required {
+        reasons.push("manual_seeding_required");
+    }
+    if reusable_browser_ids.is_empty() {
+        reasons.push("no_compatible_live_browser");
+    } else {
+        reasons.push("compatible_live_browser_available");
+    }
+    if active_lease_session_ids.is_empty() {
+        reasons.push("no_active_profile_lease_conflict");
+    } else {
+        reasons.push("active_profile_lease_conflict");
+    }
+    if same_profile_live_browser_ids.len() > 1 {
+        reasons.push("duplicate_live_browsers_for_profile");
+    }
+    if active_lease_session_ids.len() > 1 {
+        reasons.push("duplicate_active_leases_for_profile");
+    }
+    if request.browser_host.is_some() {
+        reasons.push("browser_host_constrained_by_request");
+    }
+    if request.view_stream_provider.is_some() {
+        reasons.push("view_stream_constrained_by_request");
+    }
+    if request.control_input_provider.is_some() {
+        reasons.push("control_input_constrained_by_request");
+    }
+    if request.display_isolation.is_some() {
+        reasons.push("display_isolation_constrained_by_request");
+    }
+    reasons.sort();
+    reasons.dedup();
+
+    let recommended_action = if manual_seeding_required {
+        "seed_profile_before_reuse"
+    } else if !reusable_browser_ids.is_empty() {
+        "reuse_existing_browser"
+    } else if !active_lease_session_ids.is_empty() {
+        "wait_for_profile_lease"
+    } else {
+        "launch_new_browser"
+    };
+    let reusable_browser_id = reusable_browser_ids.first().cloned();
+    let reusable_session_name = reusable_browser_id
+        .as_deref()
+        .and_then(|browser_id| reusable_session_name_for_browser(service_state, browser_id));
+
+    json!({
+        "recommendedAction": recommended_action,
+        "selectedProfileId": profile.id,
+        "reusableBrowserId": reusable_browser_id,
+        "reusableSessionName": reusable_session_name,
+        "reusableBrowserIds": reusable_browser_ids,
+        "compatibleLiveBrowserCount": same_profile_live_browser_ids.len(),
+        "sameProfileLiveBrowserIds": same_profile_live_browser_ids,
+        "activeLeaseSessionIds": active_lease_session_ids,
+        "activeLeaseCount": active_lease_session_ids.len(),
+        "duplicatePressure": same_profile_live_browser_ids.len() > 1 || active_lease_session_ids.len() > 1,
+        "profileLeasePolicy": "wait",
+        "browserHost": browser_host,
+        "viewStreamProvider": view_stream_provider,
+        "controlInputProvider": control_input_provider,
+        "displayIsolation": display_isolation,
+        "reasons": reasons,
+    })
+}
+
+fn reusable_session_name_for_browser(
+    service_state: &ServiceState,
+    browser_id: &str,
+) -> Option<String> {
+    service_state
+        .browsers
+        .get(browser_id)
+        .and_then(|browser| browser.active_session_ids.first().cloned())
+        .or_else(|| {
+            service_state
+                .sessions
+                .iter()
+                .find_map(|(session_id, session)| {
+                    session
+                        .browser_ids
+                        .iter()
+                        .any(|id| id == browser_id)
+                        .then_some(session_id.clone())
+                })
+        })
+        .or_else(|| browser_id.strip_prefix("session:").map(str::to_string))
+}
+
+fn browser_is_reusable_for_posture(
+    browser: &BrowserProcess,
+    browser_host: Option<BrowserHost>,
+    view_stream_provider: Option<ViewStreamProvider>,
+    control_input_provider: Option<ControlInputProvider>,
+    display_isolation: Option<&str>,
+) -> bool {
+    if !browser_has_live_health(browser) {
+        return false;
+    }
+    if browser_host.is_some_and(|expected| browser.host != expected) {
+        return false;
+    }
+    if display_isolation.is_some() && browser.display_isolation.as_deref() != display_isolation {
+        return false;
+    }
+    if let Some(expected_provider) = view_stream_provider {
+        if !browser
+            .view_streams
+            .iter()
+            .any(|stream| stream.provider == expected_provider)
+        {
+            return false;
+        }
+    }
+    if let Some(expected_input) = control_input_provider {
+        if !browser.view_streams.iter().any(|stream| {
+            stream
+                .control_input
+                .is_some_and(|control_input| control_input == expected_input)
+        }) {
+            return false;
+        }
+    }
+    true
+}
+
+fn browser_has_live_health(browser: &BrowserProcess) -> bool {
+    matches!(
+        browser.health,
+        BrowserHealth::Ready | BrowserHealth::Launching | BrowserHealth::Reconnecting
+    )
+}
+
+fn session_blocks_profile_reuse(session: &BrowserSession, profile_id: &str) -> bool {
+    session.profile_id.as_deref() == Some(profile_id)
+        && matches!(
+            session.lease,
+            LeaseState::Exclusive | LeaseState::HumanTakeover
+        )
 }
 
 /// Summarize who should act next without prescribing a UI presentation.
@@ -1423,6 +1651,7 @@ fn service_request_decision(
     manual_seeding_required: bool,
     manual_action_required: bool,
     launch_posture: &Value,
+    profile_reuse: &Value,
 ) -> Value {
     let selected_profile_id = selected_profile.map(|profile| profile.id.clone());
     let requires_cdp_free = launch_posture
@@ -1476,6 +1705,26 @@ fn service_request_decision(
             .filter(|value| !value.is_empty())
         {
             service_request.insert("profile".to_string(), json!(user_data_dir));
+        }
+    }
+    if profile_reuse
+        .get("recommendedAction")
+        .and_then(Value::as_str)
+        == Some("reuse_existing_browser")
+    {
+        if let Some(browser_id) = profile_reuse
+            .get("reusableBrowserId")
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+        {
+            service_request.insert("browserId".to_string(), json!(browser_id));
+        }
+        if let Some(session_name) = profile_reuse
+            .get("reusableSessionName")
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+        {
+            service_request.insert("sessionName".to_string(), json!(session_name));
         }
     }
     if manual_action_required {
@@ -1555,6 +1804,8 @@ fn service_request_decision(
             "accountIds",
             "browserBuild",
             "runtimeProfile",
+            "browserId",
+            "sessionName",
             "profile",
             "displayIsolation",
             "profileLeasePolicy",
@@ -2690,10 +2941,11 @@ mod tests {
 
     use super::*;
     use crate::native::service_model::{
-        BrowserCapabilityRegistry, BrowserHost, BrowserProfile, Challenge, ChallengeKind,
-        InteractionMode, MonitorState, MonitorTarget, ProfileKeyringPolicy, ProfileReadinessState,
-        ProfileSeedingMode, ProfileTargetReadiness, ProviderCapability, ProviderKind,
-        RateLimitPolicy, ServiceIncident, ServiceProvider, SiteMonitor, SitePolicy,
+        BrowserCapabilityRegistry, BrowserHealth, BrowserHost, BrowserProcess, BrowserProfile,
+        BrowserSession, Challenge, ChallengeKind, InteractionMode, LeaseState, MonitorState,
+        MonitorTarget, ProfileKeyringPolicy, ProfileReadinessState, ProfileSeedingMode,
+        ProfileTargetReadiness, ProviderCapability, ProviderKind, RateLimitPolicy, ServiceIncident,
+        ServiceProvider, SiteMonitor, SitePolicy, ViewStream,
     };
     use serde_json::json;
 
@@ -3382,6 +3634,211 @@ mod tests {
             plan["decision"]["serviceRequest"]["client"]["package"],
             "@agent-browser/client/service-request"
         );
+    }
+
+    #[test]
+    fn service_access_plan_recommends_reusing_compatible_live_browser() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "acs".to_string(),
+                BrowserProfile {
+                    id: "acs".to_string(),
+                    name: "ACS".to_string(),
+                    target_service_ids: vec!["acs".to_string()],
+                    authenticated_service_ids: vec!["acs".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            browsers: BTreeMap::from([
+                (
+                    "browser-primary".to_string(),
+                    BrowserProcess {
+                        id: "browser-primary".to_string(),
+                        profile_id: Some("acs".to_string()),
+                        host: BrowserHost::RemoteHeaded,
+                        health: BrowserHealth::Ready,
+                        display_isolation: Some("private_virtual_display".to_string()),
+                        view_streams: vec![ViewStream {
+                            provider: ViewStreamProvider::RdpGateway,
+                            control_input: Some(ControlInputProvider::ManualAttachedDesktop),
+                            ..ViewStream::default()
+                        }],
+                        active_session_ids: vec!["session-primary".to_string()],
+                        ..BrowserProcess::default()
+                    },
+                ),
+                (
+                    "browser-duplicate".to_string(),
+                    BrowserProcess {
+                        id: "browser-duplicate".to_string(),
+                        profile_id: Some("acs".to_string()),
+                        host: BrowserHost::RemoteHeaded,
+                        health: BrowserHealth::Ready,
+                        display_isolation: Some("private_virtual_display".to_string()),
+                        view_streams: vec![ViewStream {
+                            provider: ViewStreamProvider::RdpGateway,
+                            control_input: Some(ControlInputProvider::ManualAttachedDesktop),
+                            ..ViewStream::default()
+                        }],
+                        active_session_ids: vec!["session-duplicate".to_string()],
+                        ..BrowserProcess::default()
+                    },
+                ),
+            ]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                target_service_ids: vec!["acs".to_string()],
+                browser_host: Some(BrowserHost::RemoteHeaded),
+                view_stream_provider: Some(ViewStreamProvider::RdpGateway),
+                control_input_provider: Some(ControlInputProvider::ManualAttachedDesktop),
+                display_isolation: Some("private_virtual_display".to_string()),
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(
+            plan["decision"]["profileReuse"]["recommendedAction"],
+            "reuse_existing_browser"
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["reusableBrowserId"],
+            "browser-duplicate"
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["reusableSessionName"],
+            "session-duplicate"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["browserId"],
+            "browser-duplicate"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["sessionName"],
+            "session-duplicate"
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["compatibleLiveBrowserCount"],
+            2
+        );
+        assert_eq!(plan["decision"]["profileReuse"]["duplicatePressure"], true);
+        assert!(plan["decision"]["profileReuse"]["reasons"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("duplicate_live_browsers_for_profile")));
+    }
+
+    #[test]
+    fn service_access_plan_recommends_waiting_for_profile_lease() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "acs".to_string(),
+                BrowserProfile {
+                    id: "acs".to_string(),
+                    name: "ACS".to_string(),
+                    target_service_ids: vec!["acs".to_string()],
+                    authenticated_service_ids: vec!["acs".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "holder-session".to_string(),
+                BrowserSession {
+                    id: "holder-session".to_string(),
+                    profile_id: Some("acs".to_string()),
+                    lease: LeaseState::Exclusive,
+                    ..BrowserSession::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                target_service_ids: vec!["acs".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(
+            plan["decision"]["profileReuse"]["recommendedAction"],
+            "wait_for_profile_lease"
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["activeLeaseSessionIds"][0],
+            "holder-session"
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["profileLeasePolicy"],
+            "wait"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["profileLeasePolicy"],
+            "wait"
+        );
+    }
+
+    #[test]
+    fn service_access_plan_recommends_new_browser_when_no_reusable_lane_exists() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "acs".to_string(),
+                BrowserProfile {
+                    id: "acs".to_string(),
+                    name: "ACS".to_string(),
+                    target_service_ids: vec!["acs".to_string()],
+                    authenticated_service_ids: vec!["acs".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                "wrong-host".to_string(),
+                BrowserProcess {
+                    id: "wrong-host".to_string(),
+                    profile_id: Some("acs".to_string()),
+                    host: BrowserHost::LocalHeaded,
+                    health: BrowserHealth::Ready,
+                    ..BrowserProcess::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                target_service_ids: vec!["acs".to_string()],
+                browser_host: Some(BrowserHost::RemoteHeaded),
+                view_stream_provider: Some(ViewStreamProvider::RdpGateway),
+                control_input_provider: Some(ControlInputProvider::ManualAttachedDesktop),
+                display_isolation: Some("private_virtual_display".to_string()),
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(
+            plan["decision"]["profileReuse"]["recommendedAction"],
+            "launch_new_browser"
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["compatibleLiveBrowserCount"],
+            1
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["reusableBrowserIds"]
+                .as_array()
+                .unwrap()
+                .len(),
+            0
+        );
+        assert!(plan["decision"]["profileReuse"]["reasons"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("no_compatible_live_browser")));
     }
 
     #[test]

@@ -234,6 +234,18 @@
     "runtimeProfile": {
       "type": "string",
       "description": "Explicit managed runtime profile name when the caller knows where the needed login state lives."
+    },
+    "browserId": {
+      "type": "string",
+      "description": "Optional retained browser id copied from an access-plan reuse advisory. When present at the top level, service request relays may route the command to that browser's existing daemon session instead of the service daemon."
+    },
+    "sessionName": {
+      "type": "string",
+      "description": "Optional daemon session name copied from an access-plan reuse advisory. When present at the top level, service request relays may route the command to that existing daemon session instead of the service daemon."
+    },
+    "allowDuplicateProfileLane": {
+      "type": "boolean",
+      "description": "Explicit reviewed override allowing a launch to create another live browser/profile lane even when access-plan profileReuse could route to an existing lane."
     }
   },
   "additionalProperties": false

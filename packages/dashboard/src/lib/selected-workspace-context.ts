@@ -8,6 +8,7 @@ import {
   type WorkspaceNodeOwnership,
   type WorkspaceNodePrimaryTab,
   type WorkspaceNodeProcess,
+  type WorkspaceResourceRecord,
   type WorkspaceNodeRole,
   type WorkspaceNodeState,
   type WorkspaceNodeViewStream,
@@ -64,6 +65,7 @@ export type SelectedWorkspaceContext = {
   profileAllocation: WorkspaceServiceProfileAllocation | null;
   jobs: WorkspaceServiceJob[];
   incidents: WorkspaceServiceIncident[];
+  resources: WorkspaceResourceRecord[];
   stream: WorkspaceNodeViewStream | null;
   runtime: SelectedWorkspaceRuntime;
   ownership: WorkspaceNodeOwnership;
@@ -100,6 +102,7 @@ export function buildSelectedWorkspaceContext(input: SelectedWorkspaceContextInp
   const profileAllocations = input.profileAllocations ?? [];
   const jobs = input.jobs ?? [];
   const incidents = input.incidents ?? [];
+  const resources = input.resources ?? [];
   const daemonSessions = input.daemonSessions ?? [];
   const refreshedAt = input.refreshedAt ?? Date.now();
   const source: SelectedWorkspaceSource = node?.source ?? "none";
@@ -128,6 +131,15 @@ export function buildSelectedWorkspaceContext(input: SelectedWorkspaceContextInp
   const contextJobs = jobs.filter((job) => relatedJobIds.has(job.id));
   const contextIncidents = incidents.filter((incident) => relatedIncidentIds.has(incident.id));
   const runtime = selectedRuntime(node?.process ?? null, daemonSession, input.lastFrameAtByStreamPort);
+  const contextResources = resources.filter((resource) =>
+    resourceMatchesSelection(resource, {
+      node,
+      browser,
+      profileAllocation,
+      serviceSessions: contextSessions,
+      runtime,
+    }),
+  );
   const missingReason = node ? null : missingSelectionReason(selection);
   const evidence = selectedWorkspaceEvidence({
     selection,
@@ -139,6 +151,7 @@ export function buildSelectedWorkspaceContext(input: SelectedWorkspaceContextInp
     profileAllocation,
     jobs: contextJobs,
     incidents: contextIncidents,
+    resources: contextResources,
     runtime,
   });
 
@@ -163,6 +176,7 @@ export function buildSelectedWorkspaceContext(input: SelectedWorkspaceContextInp
     profileAllocation,
     jobs: contextJobs,
     incidents: contextIncidents,
+    resources: contextResources,
     stream: node?.viewStream ?? null,
     runtime,
     ownership: node?.ownership ?? {},
@@ -274,6 +288,7 @@ export function selectedWorkspaceDiagnosticBundle(context: SelectedWorkspaceCont
         }
       : null,
     primaryTab: context.primaryTab,
+    resources: context.resources,
     ownership: context.ownership,
     diagnostics: context.diagnostics,
     evidence: context.evidence.rows,
@@ -328,9 +343,6 @@ function selectedRuntime(
   if (!runtime.streamPort && daemonPort != null && daemonPort > 0) {
     runtime.streamPort = daemonPort;
   }
-  if (runtime.running == null && daemonPort != null && daemonPort > 0 && !daemonSession?.pending && !daemonSession?.closing) {
-    runtime.running = true;
-  }
   if (runtime.streamPort && lastFrameAtByStreamPort?.[runtime.streamPort]) {
     runtime.lastFrameAt = lastFrameAtByStreamPort[runtime.streamPort];
   }
@@ -347,6 +359,7 @@ function selectedWorkspaceEvidence(input: {
   profileAllocation: WorkspaceServiceProfileAllocation | null;
   jobs: WorkspaceServiceJob[];
   incidents: WorkspaceServiceIncident[];
+  resources: WorkspaceResourceRecord[];
   runtime: SelectedWorkspaceRuntime;
 }): SelectedWorkspaceEvidence {
   const rows: SelectedWorkspaceEvidenceRow[] = [
@@ -367,6 +380,9 @@ function selectedWorkspaceEvidence(input: {
     row("Stream port", input.runtime.streamPort == null ? null : String(input.runtime.streamPort)),
     row("Jobs", input.jobs.length ? String(input.jobs.length) : null),
     row("Incidents", input.incidents.length ? String(input.incidents.length) : null),
+    row("Resource candidates", resourceCount(input.resources, "candidate")),
+    row("Protected resources", resourceCount(input.resources, "protected")),
+    row("Resource reasons", resourceReasons(input.resources)),
   ].filter((candidate) => candidate.value !== "unknown");
   const summary = input.node
     ? `${input.node.label} is ${input.node.state}${input.node.attentionReason ? `: ${input.node.attentionReason}` : ""}`
@@ -374,6 +390,33 @@ function selectedWorkspaceEvidence(input: {
       ? "The selected workspace no longer maps to live service or daemon state."
       : "No workspace is selected.";
   return { summary, rows };
+}
+
+function resourceMatchesSelection(resource: WorkspaceResourceRecord, input: {
+  node: WorkspaceNode | null;
+  browser: WorkspaceServiceBrowser | null;
+  profileAllocation: WorkspaceServiceProfileAllocation | null;
+  serviceSessions: WorkspaceServiceSession[];
+  runtime: SelectedWorkspaceRuntime;
+}): boolean {
+  const correlation = resource.correlation ?? {};
+  if (input.runtime.pid != null && resource.pid === input.runtime.pid) return true;
+  if (input.node?.browserId && correlation.browserId === input.node.browserId) return true;
+  if (input.browser?.id && correlation.browserId === input.browser.id) return true;
+  if (input.node?.profileId && correlation.profileId === input.node.profileId) return true;
+  if (input.profileAllocation?.profileId && correlation.profileId === input.profileAllocation.profileId) return true;
+  const sessionIds = new Set(correlation.sessionIds ?? []);
+  return input.serviceSessions.some((session) => sessionIds.has(session.id));
+}
+
+function resourceCount(resources: WorkspaceResourceRecord[], disposition: string): string | null {
+  const count = resources.filter((resource) => resource.disposition === disposition).length;
+  return count > 0 ? String(count) : null;
+}
+
+function resourceReasons(resources: WorkspaceResourceRecord[]): string | null {
+  const reasons = Array.from(new Set(resources.flatMap((resource) => resource.reasons ?? [])));
+  return reasons.length > 0 ? reasons.slice(0, 4).join(", ") : null;
 }
 
 function row(label: string, value: unknown): SelectedWorkspaceEvidenceRow {

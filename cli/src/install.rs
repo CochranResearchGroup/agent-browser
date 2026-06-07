@@ -943,6 +943,14 @@ pub fn run_install_doctor(flags: &Flags) {
         report.pointer("/data/service/noLaunch"),
     );
     print_doctor_field(
+        "resource candidates",
+        report.pointer("/data/serviceResources/candidateCount"),
+    );
+    print_doctor_field(
+        "readiness resource candidates",
+        report.pointer("/data/serviceResources/readinessImpactingCandidates"),
+    );
+    print_doctor_field(
         "remote-view privileges ready",
         report.pointer("/data/remoteViewPrivileges/ready"),
     );
@@ -997,6 +1005,7 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
     let launch_config = launch_config_status(flags);
     let remote_view_privileges = remote_view_privilege_status();
     let service = service_status_probe();
+    let service_resources = service_resources_probe();
     let issues = install_doctor_issues(
         &current_executable,
         &path_command,
@@ -1004,6 +1013,7 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
         &workspace_binary,
         &launch_config,
         &service,
+        &service_resources,
     );
 
     json!({
@@ -1016,6 +1026,7 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
             "workspaceBinary": workspace_binary,
             "launchConfig": launch_config,
             "service": service,
+            "serviceResources": service_resources,
             "remoteViewPrivileges": remote_view_privileges,
             "issues": issues,
         }
@@ -1029,6 +1040,7 @@ fn install_doctor_issues(
     workspace_binary: &serde_json::Value,
     launch_config: &serde_json::Value,
     service: &serde_json::Value,
+    service_resources: &serde_json::Value,
 ) -> Vec<serde_json::Value> {
     let mut issues = Vec::new();
 
@@ -1108,6 +1120,28 @@ fn install_doctor_issues(
         issues.push(json!({
             "code": "service_status_not_ready",
             "message": "agent-browser service status no-launch probe did not report ready"
+        }));
+    }
+
+    let readiness_candidates = service_resources
+        .get("readinessImpactingCandidates")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    if readiness_candidates > 0 {
+        issues.push(json!({
+            "code": "service_resource_candidates_ready",
+            "message": "service resource monitor found readiness-impacting stale resource candidates"
+        }));
+    }
+
+    let duplicate_pressure_warnings = service_resources
+        .get("duplicateProfilePressureWarnings")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    if duplicate_pressure_warnings > 0 {
+        issues.push(json!({
+            "code": "service_duplicate_profile_pressure",
+            "message": "service resource monitor found duplicate live browser or profile lease pressure for the same retained profile"
         }));
     }
 
@@ -1201,6 +1235,98 @@ fn service_status_probe() -> serde_json::Value {
 
     let _ = fs::remove_dir_all(&temp_home);
     result
+}
+
+fn service_resources_probe() -> serde_json::Value {
+    let current_exe = std::env::current_exe().ok();
+    let Some(current_exe) = current_exe else {
+        return json!({
+            "available": false,
+            "success": false,
+            "candidateCount": 0,
+            "readinessImpactingCandidates": 0,
+            "duplicateProfilePressureWarnings": 0,
+            "stderr": "current executable path is unavailable",
+        });
+    };
+
+    let output = Command::new(&current_exe)
+        .args(["--json", "service", "gc", "--dry-run"])
+        .env("AGENT_BROWSER_ARGS", "--no-sandbox")
+        .output();
+
+    match output {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let data = serde_json::from_str::<serde_json::Value>(stdout.trim()).ok();
+            let candidates = data
+                .as_ref()
+                .and_then(|value| value.pointer("/data/actions/terminateProcess"))
+                .and_then(|value| value.as_array())
+                .cloned()
+                .unwrap_or_default();
+            let readiness_impacting = candidates
+                .iter()
+                .filter(|candidate| service_resource_candidate_is_readiness_impacting(candidate))
+                .count();
+            let warnings = data
+                .as_ref()
+                .and_then(|value| value.pointer("/data/warnings"))
+                .and_then(|value| value.as_array())
+                .cloned()
+                .unwrap_or_default();
+            let duplicate_profile_pressure_warnings = warnings
+                .iter()
+                .filter(|warning| {
+                    matches!(
+                        warning.get("code").and_then(|value| value.as_str()),
+                        Some(
+                            "duplicate_live_browsers_for_profile"
+                                | "duplicate_active_profile_leases"
+                        )
+                    )
+                })
+                .count();
+            json!({
+                "available": true,
+                "success": output.status.success()
+                    && data
+                        .as_ref()
+                        .and_then(|value| value.get("success"))
+                        .and_then(|value| value.as_bool())
+                        .unwrap_or(false),
+                "candidateCount": candidates.len(),
+                "readinessImpactingCandidates": readiness_impacting,
+                "duplicateProfilePressureWarnings": duplicate_profile_pressure_warnings,
+                "stderr": redact_doctor_text(stderr.trim()),
+            })
+        }
+        Err(error) => json!({
+            "available": false,
+            "success": false,
+            "candidateCount": 0,
+            "readinessImpactingCandidates": 0,
+            "duplicateProfilePressureWarnings": 0,
+            "stderr": redact_doctor_text(error.to_string()),
+        }),
+    }
+}
+
+fn service_resource_candidate_is_readiness_impacting(candidate: &serde_json::Value) -> bool {
+    let kind = candidate.get("kind").and_then(|value| value.as_str());
+    let has_display_reason = candidate
+        .get("reasons")
+        .and_then(|value| value.as_array())
+        .is_some_and(|reasons| {
+            reasons.iter().any(|reason| {
+                matches!(
+                    reason.as_str(),
+                    Some("orphaned_remote_display_process" | "old_temporary_profile_process")
+                )
+            })
+        });
+    kind == Some("remote_display") || has_display_reason
 }
 
 fn remote_view_privilege_status() -> serde_json::Value {
@@ -1911,6 +2037,7 @@ mod tests {
             &fingerprint(None, None),
             &launch_config,
             &json!({"ready": true}),
+            &json!({"readinessImpactingCandidates": 0}),
         );
 
         assert_eq!(
@@ -1936,6 +2063,7 @@ mod tests {
             &fingerprint(Some("/workspace/agent-browser"), Some("aaa")),
             &launch_config,
             &json!({"ready": true}),
+            &json!({"readinessImpactingCandidates": 0}),
         );
 
         assert_eq!(issue_codes(issues), vec!["launch_config_not_ready"]);
@@ -1955,9 +2083,59 @@ mod tests {
             &fingerprint(Some("/workspace/agent-browser"), Some("aaa")),
             &launch_config,
             &json!({"ready": false}),
+            &json!({"readinessImpactingCandidates": 0}),
         );
 
         assert_eq!(issue_codes(issues), vec!["service_status_not_ready"]);
+    }
+
+    #[test]
+    fn install_doctor_flags_readiness_impacting_resource_candidates() {
+        let launch_config = json!({
+            "stealthCdpChromiumRequired": false,
+            "stealthCdpChromiumReady": true,
+        });
+
+        let issues = install_doctor_issues(
+            &fingerprint(Some("/same/agent-browser"), Some("aaa")),
+            &fingerprint(Some("/same/agent-browser"), Some("aaa")),
+            &fingerprint(Some("/pnpm/agent-browser"), Some("aaa")),
+            &fingerprint(Some("/workspace/agent-browser"), Some("aaa")),
+            &launch_config,
+            &json!({"ready": true}),
+            &json!({"readinessImpactingCandidates": 1}),
+        );
+
+        assert_eq!(
+            issue_codes(issues),
+            vec!["service_resource_candidates_ready"]
+        );
+    }
+
+    #[test]
+    fn install_doctor_flags_duplicate_profile_pressure() {
+        let launch_config = json!({
+            "stealthCdpChromiumRequired": false,
+            "stealthCdpChromiumReady": true,
+        });
+
+        let issues = install_doctor_issues(
+            &fingerprint(Some("/same/agent-browser"), Some("aaa")),
+            &fingerprint(Some("/same/agent-browser"), Some("aaa")),
+            &fingerprint(Some("/pnpm/agent-browser"), Some("aaa")),
+            &fingerprint(Some("/workspace/agent-browser"), Some("aaa")),
+            &launch_config,
+            &json!({"ready": true}),
+            &json!({
+                "readinessImpactingCandidates": 0,
+                "duplicateProfilePressureWarnings": 1
+            }),
+        );
+
+        assert_eq!(
+            issue_codes(issues),
+            vec!["service_duplicate_profile_pressure"]
+        );
     }
 
     #[test]

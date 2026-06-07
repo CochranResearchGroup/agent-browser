@@ -1427,6 +1427,8 @@ export interface ServiceAccessPlanServiceRequest {
     taskName?: string;
     targetServiceIds?: string[];
     profileLeasePolicy: 'wait';
+    browserId?: string;
+    sessionName?: string;
     [key: string]: unknown;
   };
   http: {
@@ -1664,6 +1666,7 @@ export interface ServiceAccessPlanDecision {
   attention: ServiceAccessPlanAttention;
   browserHost: string | null;
   launchPosture: ServiceAccessPlanLaunchPosture;
+  profileReuse: ServiceAccessPlanProfileReuse;
   interactionMode: string | null;
   challengePolicy: string | null;
   profileId: string | null;
@@ -1680,6 +1683,32 @@ export interface ServiceAccessPlanDecision {
   serviceRequest: ServiceAccessPlanServiceRequest;
   namingWarnings: ServiceNamingWarning[];
   hasNamingWarning: boolean;
+  reasons: string[];
+  [key: string]: unknown;
+}
+
+export interface ServiceAccessPlanProfileReuse {
+  recommendedAction:
+    | 'register_or_select_profile'
+    | 'seed_profile_before_reuse'
+    | 'reuse_existing_browser'
+    | 'wait_for_profile_lease'
+    | 'launch_new_browser'
+    | string;
+  selectedProfileId: string | null;
+  reusableBrowserId: string | null;
+  reusableSessionName: string | null;
+  reusableBrowserIds: string[];
+  compatibleLiveBrowserCount: number;
+  sameProfileLiveBrowserIds: string[];
+  activeLeaseSessionIds: string[];
+  activeLeaseCount: number;
+  duplicatePressure: boolean;
+  profileLeasePolicy: 'wait' | string;
+  browserHost: string | null;
+  viewStreamProvider: string | null;
+  controlInputProvider: string | null;
+  displayIsolation: string | null;
   reasons: string[];
   [key: string]: unknown;
 }

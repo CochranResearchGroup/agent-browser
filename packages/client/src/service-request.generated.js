@@ -103,7 +103,9 @@ export const SERVICE_REQUEST_STRING_FIELDS = [
   "accountId",
   "url",
   "profile",
-  "runtimeProfile"
+  "runtimeProfile",
+  "browserId",
+  "sessionName"
 ];
 
 export const SERVICE_REQUEST_STRING_ARRAY_FIELDS = [
@@ -125,7 +127,8 @@ export const SERVICE_REQUEST_BOOLEAN_FIELDS = [
   "allowManualAction",
   "allowMonitorFreshnessRisk",
   "requiresCdpFree",
-  "cdpAttachmentAllowed"
+  "cdpAttachmentAllowed",
+  "allowDuplicateProfileLane"
 ];
 
 export const SERVICE_REQUEST_OBJECT_FIELDS = [
