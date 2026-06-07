@@ -231,8 +231,14 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /const TERMINAL_BROWSER_HEALTH = new Set\(\["closed", "faulted", "not_started", "process_exited"\]\);[\s\S]*function isLiveBrowserRecord\(browser: ServiceBrowser\): boolean \{[\s\S]*TERMINAL_BROWSER_HEALTH\.has\(\(browser\.health \?\? ""\)\.toLowerCase\(\)\)[\s\S]*return false[\s\S]*browser\.pid/,
+  /const TERMINAL_BROWSER_HEALTH = new Set\(\["closed", "faulted", "not_started", "process_exited", "unreachable"\]\);[\s\S]*function isLiveBrowserRecord\(browser: ServiceBrowser\): boolean \{[\s\S]*TERMINAL_BROWSER_HEALTH\.has\(\(browser\.health \?\? ""\)\.toLowerCase\(\)\)[\s\S]*return false[\s\S]*browser\.pid/,
   'Browser table must not classify terminal health records as live just because stale PID evidence exists',
+);
+
+assert.match(
+  servicePanel,
+  /const POST_TERMINATION_BROWSER_HEALTH = new Set\(\["closed", "not_started", "process_exited", "unreachable"\]\);[\s\S]*function isPostTerminationBrowserRecord\(browser: ServiceBrowser\): boolean \{[\s\S]*POST_TERMINATION_BROWSER_HEALTH\.has/,
+  'Browser table must identify post-termination browser history separately from recoverable browser attention',
 );
 
 assert.match(
@@ -573,8 +579,14 @@ assert.doesNotMatch(
 
 assert.match(
   servicePanel,
+  /if \(isPostTerminationBrowserRecord\(browser\)\) return false;[\s\S]*return !isInertRetainedBrowserRecord\(browser\);/,
+  'Browser table actionable lifecycle filter must hide post-termination browser history by default',
+);
+
+assert.match(
+  servicePanel,
   /browserDefaultRank\(left\) - browserDefaultRank\(right\)/,
-  'Browser table sorting must keep non-ready or live records ahead of inert retained records',
+  'Browser table sorting must keep recoverable or live records ahead of retained history',
 );
 
 assert.match(

@@ -2796,7 +2796,8 @@ const BROWSER_TABLE_MIN_COLUMN_WIDTH = 72;
 const BROWSER_TABLE_MAX_COLUMN_WIDTH = 420;
 const BROWSER_TABLE_INITIAL_ROW_LIMIT = 50;
 const BROWSER_TABLE_ROW_LIMIT_STEP = 50;
-const TERMINAL_BROWSER_HEALTH = new Set(["closed", "faulted", "not_started", "process_exited"]);
+const TERMINAL_BROWSER_HEALTH = new Set(["closed", "faulted", "not_started", "process_exited", "unreachable"]);
+const POST_TERMINATION_BROWSER_HEALTH = new Set(["closed", "not_started", "process_exited", "unreachable"]);
 const DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS: Record<BrowserTableColumnId, number> = {
   health: 132,
   id: 220,
@@ -3106,6 +3107,10 @@ function isLiveBrowserRecord(browser: ServiceBrowser): boolean {
   );
 }
 
+function isPostTerminationBrowserRecord(browser: ServiceBrowser): boolean {
+  return POST_TERMINATION_BROWSER_HEALTH.has((browser.health ?? "").toLowerCase());
+}
+
 function isInertRetainedBrowserRecord(browser: ServiceBrowser): boolean {
   return (
     !browser.pid &&
@@ -3121,15 +3126,17 @@ function browserMatchesLifecycleFilter(browser: ServiceBrowser, filter: BrowserL
   if (filter === "all") return true;
   if (filter === "live") return isLiveBrowserRecord(browser);
   if (filter === "retained") return !isLiveBrowserRecord(browser);
+  if (isPostTerminationBrowserRecord(browser)) return false;
   return !isInertRetainedBrowserRecord(browser);
 }
 
 function browserDefaultRank(browser: ServiceBrowser): number {
   if ((browser.health ?? "") === "faulted") return 0;
-  if (["degraded", "cdp_disconnected", "unreachable", "process_exited"].includes(browser.health ?? "")) return 1;
+  if (["degraded", "cdp_disconnected"].includes(browser.health ?? "")) return 1;
   if (isLiveBrowserRecord(browser)) return 2;
-  if (!isInertRetainedBrowserRecord(browser)) return 3;
-  return 4;
+  if (!isInertRetainedBrowserRecord(browser) && !isPostTerminationBrowserRecord(browser)) return 3;
+  if (isPostTerminationBrowserRecord(browser)) return 4;
+  return 5;
 }
 
 function BrowserSortButton({

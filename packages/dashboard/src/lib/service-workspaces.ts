@@ -330,6 +330,13 @@ const TERMINAL_BROWSER_HEALTH = new Set([
   "unreachable",
 ]);
 
+const POST_TERMINATION_BROWSER_HEALTH = new Set([
+  "closed",
+  "not_started",
+  "process_exited",
+  "unreachable",
+]);
+
 const ATTENTION_BROWSER_HEALTH = new Set([
   "cdp_disconnected",
   "degraded",
@@ -417,6 +424,11 @@ export function deriveWorkspaceNodes(input: WorkspaceNodeInput): WorkspaceNode[]
         .filter(isDefined),
       ...(serviceSessionsByBrowserId.get(browser.id) ?? []),
     ]);
+    if (isPostTerminationBrowserHistory(browser)) {
+      browserIdsWithNodes.add(browser.id);
+      for (const session of linkedSessions) serviceSessionIdsWithNodes.add(session.id);
+      continue;
+    }
     const tabs = serviceTabsByBrowserId.get(browser.id) ?? [];
     const allocation = browser.profileId
       ? profileAllocationById.get(browser.profileId)
@@ -1048,6 +1060,10 @@ function isLiveBrowser(browser: WorkspaceServiceBrowser): boolean {
 
 function isTerminalBrowser(browser: WorkspaceServiceBrowser): boolean {
   return TERMINAL_BROWSER_HEALTH.has(normalize(browser.health));
+}
+
+function isPostTerminationBrowserHistory(browser: WorkspaceServiceBrowser): boolean {
+  return POST_TERMINATION_BROWSER_HEALTH.has(normalize(browser.health));
 }
 
 function browserAttentionReason(

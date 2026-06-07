@@ -24,6 +24,10 @@ function byId(nodes, id) {
   return node;
 }
 
+function missingId(nodes, id) {
+  assert.equal(nodes.some((item) => item.id === id), false, `Unexpected workspace node ${id}`);
+}
+
 function action(node, id) {
   const found = node.actions.find((item) => item.id === id);
   assert.ok(found, `Missing action ${id} on ${node.id}`);
@@ -700,11 +704,11 @@ assert.equal(action(live, 'focus').enabled, true);
 assert.equal(action(live, 'control').enabled, true);
 assert.equal(action(live, 'close').enabled, true);
 
-const retained = byId(nodes, 'browser:browser-retained');
-assert.equal(retained.group, 'retained');
-assert.equal(retained.state, 'retained');
-assert.equal(retained.live, false);
-assert.equal(action(retained, 'focus').enabled, false);
+missingId(nodes, 'browser:browser-retained');
+const retainedProfile = byId(nodes, 'profile:profile-retained');
+assert.equal(retainedProfile.group, 'retained');
+assert.equal(retainedProfile.state, 'retained');
+assert.equal(action(retainedProfile, 'launch').enabled, true);
 
 const disconnected = byId(nodes, 'browser:browser-disconnected');
 assert.equal(disconnected.group, 'needs-attention');
@@ -766,14 +770,8 @@ assert.equal(odolloUps.viewStream?.controllable, true);
 assert.equal(action(odolloUps, 'control').enabled, true);
 assert.equal(action(odolloUps, 'external-open').enabled, true);
 
-const staleRemote = byId(nodes, 'browser:session:session-2');
-assert.equal(staleRemote.group, 'retained');
-assert.equal(staleRemote.state, 'retained');
-assert.equal(staleRemote.label, 'session-2');
-assert.equal(staleRemote.live, false);
-assert.equal(staleRemote.attentionReason, null);
-assert.equal(action(staleRemote, 'control').enabled, false);
-assert.equal(action(staleRemote, 'external-open').enabled, false);
+missingId(nodes, 'browser:session:session-2');
+missingId(nodes, 'service-session:session-2');
 
 const takeover = byId(nodes, 'browser:browser-takeover');
 assert.equal(takeover.source, 'service-browser');

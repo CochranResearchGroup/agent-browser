@@ -165,9 +165,9 @@ assert.equal(excludedStreamEvidence?.available, true);
 assert.equal(excludedStreamEvidence?.included, false);
 
 const retained = packet({ browserId: 'browser-retained' });
-assert.equal(retained.workspace.id, 'browser:browser-retained');
-assert.equal(retained.workspace.retained, true);
-assert.equal(retained.workspace.live, false);
+assert.equal(retained.workspace.id, null);
+assert.equal(retained.workspace.state, 'missing');
+assert.ok(retained.workspace.missingReason.includes('stale'));
 
 const profileOnly = packet({ workspaceId: 'profile:profile-only' });
 assert.equal(profileOnly.workspace.id, 'profile:profile-only');
