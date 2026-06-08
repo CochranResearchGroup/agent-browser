@@ -14,6 +14,7 @@ use super::service_health::{
     apply_browser_health_observation, browser_health_observation_details,
     persist_reconciled_service_state_in_repository, reconcile_persisted_service_state,
     reconcile_service_state, record_browser_health_changed_event,
+    remove_browser_operational_record,
 };
 use super::service_jobs::{
     cancel_persisted_service_job, load_service_job_in_repository, mutate_persisted_service_jobs,
@@ -528,7 +529,7 @@ fn persist_process_exited_browser_health_in_repository(
                 }));
             }
         }
-        service_state.browsers.insert(id, browser);
+        remove_browser_operational_record(service_state, &id, Some(&state.session_id));
         Ok(())
     })
 }
@@ -2038,26 +2039,12 @@ mod tests {
             response
                 .pointer("/data/profileAllocations/0/recommendedAction")
                 .and_then(|v| v.as_str()),
-            Some("release_holder_or_redirect_waiting_jobs")
+            Some("inspect_waiting_jobs")
         );
-        assert_eq!(
-            response
-                .pointer("/data/profileAllocations/0/browserSummaries/0/browserId")
-                .and_then(|v| v.as_str()),
-            Some("browser-work")
-        );
-        assert_eq!(
-            response
-                .pointer("/data/profileAllocations/0/browserSummaries/0/health")
-                .and_then(|v| v.as_str()),
-            Some("process_exited")
-        );
-        assert_eq!(
-            response
-                .pointer("/data/profileAllocations/0/browserSummaries/0/hasCdpEndpoint")
-                .and_then(|v| v.as_bool()),
-            Some(true)
-        );
+        assert!(response
+            .pointer("/data/profileAllocations/0/browserSummaries")
+            .and_then(|v| v.as_array())
+            .is_some_and(|summaries| summaries.is_empty()));
         assert_eq!(
             response
                 .pointer("/data/service_state/sitePolicies/google/id")
@@ -2080,7 +2067,7 @@ mod tests {
             response
                 .pointer("/data/service_state/reconciliation/browserCount")
                 .and_then(|v| v.as_u64()),
-            Some(1)
+            Some(0)
         );
         assert!(response["data"]["service_state"]["events"]
             .as_array()
@@ -2108,7 +2095,7 @@ mod tests {
                 .reconciliation
                 .as_ref()
                 .map(|snapshot| snapshot.browser_count),
-            Some(1)
+            Some(0)
         );
         assert!(persisted.events.iter().any(|event| {
             event.kind == crate::native::service_model::ServiceEventKind::Reconciliation
@@ -2316,7 +2303,7 @@ mod tests {
     }
 
     #[test]
-    fn process_exited_browser_health_persists_through_repository() {
+    fn process_exited_browser_health_records_event_and_removes_operational_browser() {
         let home = temp_home("control-plane-process-exited-repository");
         let store = JsonServiceStateStore::new(home.join("state.json"));
         let repository = LockedServiceStateRepository::new(store.clone());
@@ -2334,6 +2321,24 @@ mod tests {
                         ..BrowserProcess::default()
                     },
                 )]),
+                sessions: std::collections::BTreeMap::from([(
+                    "session-1".to_string(),
+                    crate::native::service_model::BrowserSession {
+                        id: "session-1".to_string(),
+                        browser_ids: vec![browser_id.clone()],
+                        tab_ids: vec!["target:old".to_string()],
+                        ..crate::native::service_model::BrowserSession::default()
+                    },
+                )]),
+                tabs: std::collections::BTreeMap::from([(
+                    "target:old".to_string(),
+                    crate::native::service_model::BrowserTab {
+                        id: "target:old".to_string(),
+                        browser_id: browser_id.clone(),
+                        session_id: Some("session-1".to_string()),
+                        ..crate::native::service_model::BrowserTab::default()
+                    },
+                )]),
                 ..ServiceState::default()
             })
             .unwrap();
@@ -2343,15 +2348,16 @@ mod tests {
         persist_process_exited_browser_health_in_repository(&repository, &state).unwrap();
 
         let persisted = store.load().unwrap();
-        let browser = &persisted.browsers[&browser_id];
-        assert_eq!(browser.profile_id.as_deref(), Some("work"));
-        assert_eq!(browser.host, ServiceBrowserHost::AttachedExisting);
-        assert_eq!(browser.health, ServiceBrowserHealth::ProcessExited);
-        assert!(browser.last_health_observation.is_some());
+        assert!(!persisted.browsers.contains_key(&browser_id));
+        assert!(!persisted.sessions.contains_key("session-1"));
+        assert!(!persisted.tabs.contains_key("target:old"));
         assert!(persisted
             .events
             .iter()
-            .any(|event| event.browser_id.as_deref() == Some(browser_id.as_str())));
+            .any(
+                |event| event.browser_id.as_deref() == Some(browser_id.as_str())
+                    && event.current_health == Some(ServiceBrowserHealth::ProcessExited)
+            ));
         let _ = std::fs::remove_dir_all(&home);
     }
 
@@ -2399,12 +2405,7 @@ mod tests {
         persist_process_exited_browser_health_in_repository(&repository, &state).unwrap();
 
         let persisted = store.load().unwrap();
-        let browser = &persisted.browsers[&browser_id];
-        assert_eq!(browser.health, ServiceBrowserHealth::ProcessExited);
-        assert_eq!(
-            browser.display_allocation_id.as_deref(),
-            Some(allocation_id.as_str())
-        );
+        assert!(!persisted.browsers.contains_key(&browser_id));
         let allocation = &persisted.display_allocations[&allocation_id];
         assert_eq!(allocation.state, "orphaned");
         assert_eq!(

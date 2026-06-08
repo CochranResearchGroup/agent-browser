@@ -361,20 +361,10 @@ pub async fn reconcile_service_state(state: &mut ServiceState) -> ServiceReconci
     refresh_persisted_browser_health(state).await;
     reconcile_live_browser_targets(state).await;
     let remote_view_repair = reconcile_remote_view_state(state);
-
-    let changed_browsers = state
-        .browsers
-        .iter()
-        .filter(|(id, browser)| {
-            before
-                .browsers
-                .get(*id)
-                .map(|previous| {
-                    previous.health != browser.health || previous.last_error != browser.last_error
-                })
-                .unwrap_or(true)
-        })
-        .count();
+    record_health_transition_events(state, &before);
+    record_tab_lifecycle_events(state, &before);
+    let removed_terminated_browsers = remove_post_termination_browser_history(state);
+    let changed_browsers = changed_browser_count(state, &before);
 
     let summary = ServiceReconcileSummary {
         browser_count: state.browsers.len(),
@@ -386,8 +376,6 @@ pub async fn reconcile_service_state(state: &mut ServiceState) -> ServiceReconci
         browser_count: summary.browser_count,
         changed_browsers: summary.changed_browsers,
     });
-    record_health_transition_events(state, &before);
-    record_tab_lifecycle_events(state, &before);
     push_service_event(
         state,
         ServiceEvent {
@@ -399,6 +387,7 @@ pub async fn reconcile_service_state(state: &mut ServiceState) -> ServiceReconci
             details: Some(serde_json::json!({
                 "browserCount": summary.browser_count,
                 "changedBrowsers": summary.changed_browsers,
+                "removedTerminatedBrowsers": removed_terminated_browsers,
                 "tabCount": state.tabs.len(),
                 "changedTabs": changed_tab_count(state, &before),
                 "remoteView": {
@@ -541,6 +530,61 @@ pub fn persist_service_browser_record_in_repository(
         service_state.browsers.insert(id, browser);
         Ok(())
     })
+}
+
+pub(crate) fn remove_browser_operational_record(
+    service_state: &mut ServiceState,
+    browser_id: &str,
+    explicit_session_id: Option<&str>,
+) -> usize {
+    let removed_browser = service_state.browsers.remove(browser_id);
+    let mut related_session_ids = BTreeSet::new();
+    if let Some(session_id) = explicit_session_id {
+        related_session_ids.insert(session_id.to_string());
+    }
+    if let Some(browser) = removed_browser.as_ref() {
+        related_session_ids.extend(browser.active_session_ids.iter().cloned());
+    }
+    for (session_id, session) in &service_state.sessions {
+        if session.browser_ids.iter().any(|id| id == browser_id) {
+            related_session_ids.insert(session_id.clone());
+        }
+    }
+
+    let tab_ids = service_state
+        .tabs
+        .iter()
+        .filter(|(_, tab)| tab.browser_id == browser_id)
+        .map(|(id, _)| id.clone())
+        .collect::<BTreeSet<_>>();
+    for tab_id in &tab_ids {
+        service_state.tabs.remove(tab_id);
+    }
+
+    for session in service_state.sessions.values_mut() {
+        session.tab_ids.retain(|tab_id| !tab_ids.contains(tab_id));
+        session.browser_ids.retain(|id| id != browser_id);
+    }
+
+    let removable_session_ids = related_session_ids
+        .into_iter()
+        .filter(|session_id| {
+            service_state
+                .sessions
+                .get(session_id)
+                .is_some_and(|session| session.browser_ids.is_empty() && session.tab_ids.is_empty())
+        })
+        .collect::<Vec<_>>();
+    for session_id in &removable_session_ids {
+        service_state.sessions.remove(session_id);
+    }
+    for browser in service_state.browsers.values_mut() {
+        browser
+            .active_session_ids
+            .retain(|session_id| !removable_session_ids.contains(session_id));
+    }
+    service_state.refresh_derived_views();
+    usize::from(removed_browser.is_some())
 }
 
 fn upsert_browser_display_allocation(
@@ -959,7 +1003,11 @@ pub(crate) fn persist_closed_browser_health_in_repository(
             session.last_lease_observed_at = Some(current_timestamp());
             session.profile_lease_conflict_session_ids.clear();
         }
-        service_state.browsers.insert(id, browser);
+        if health == BrowserHealth::NotStarted {
+            remove_browser_operational_record(service_state, &id, Some(session_id));
+        } else {
+            service_state.browsers.insert(id, browser);
+        }
         Ok(())
     })
 }
@@ -1142,9 +1190,35 @@ pub fn merge_reconciled_service_state(
             }
         }
     }
+    for id in before.browsers.keys() {
+        if reconciled.browsers.contains_key(id) {
+            continue;
+        }
+        let should_remove = target
+            .browsers
+            .get(id)
+            .zip(before.browsers.get(id))
+            .is_some_and(|(target_browser, before_browser)| target_browser == before_browser);
+        if should_remove {
+            target.browsers.remove(id);
+        }
+    }
 
     for (id, reconciled_tab) in &reconciled.tabs {
         target.tabs.insert(id.clone(), reconciled_tab.clone());
+    }
+    for id in before.tabs.keys() {
+        if reconciled.tabs.contains_key(id) {
+            continue;
+        }
+        let should_remove = target
+            .tabs
+            .get(id)
+            .zip(before.tabs.get(id))
+            .is_some_and(|(target_tab, before_tab)| target_tab == before_tab);
+        if should_remove {
+            target.tabs.remove(id);
+        }
     }
 
     for (id, reconciled_session) in &reconciled.sessions {
@@ -1154,6 +1228,19 @@ pub fn merge_reconciled_service_state(
             .or_insert_with(|| reconciled_session.clone());
         target_session.browser_ids = reconciled_session.browser_ids.clone();
         target_session.tab_ids = reconciled_session.tab_ids.clone();
+    }
+    for id in before.sessions.keys() {
+        if reconciled.sessions.contains_key(id) {
+            continue;
+        }
+        let should_remove = target
+            .sessions
+            .get(id)
+            .zip(before.sessions.get(id))
+            .is_some_and(|(target_session, before_session)| target_session == before_session);
+        if should_remove {
+            target.sessions.remove(id);
+        }
     }
 
     for (id, reconciled_allocation) in &reconciled.display_allocations {
@@ -2121,6 +2208,41 @@ fn changed_tab_count(state: &ServiceState, before: &ServiceState) -> usize {
         .count()
 }
 
+fn changed_browser_count(state: &ServiceState, before: &ServiceState) -> usize {
+    let changed_or_new = state
+        .browsers
+        .iter()
+        .filter(|(id, browser)| {
+            before
+                .browsers
+                .get(*id)
+                .map(|previous| {
+                    previous.health != browser.health || previous.last_error != browser.last_error
+                })
+                .unwrap_or(true)
+        })
+        .count();
+    let removed = before
+        .browsers
+        .keys()
+        .filter(|id| !state.browsers.contains_key(*id))
+        .count();
+    changed_or_new + removed
+}
+
+fn remove_post_termination_browser_history(state: &mut ServiceState) -> usize {
+    let browser_ids = state
+        .browsers
+        .iter()
+        .filter(|(_, browser)| browser.health == BrowserHealth::ProcessExited)
+        .map(|(id, _)| id.clone())
+        .collect::<Vec<_>>();
+    browser_ids
+        .iter()
+        .map(|id| remove_browser_operational_record(state, id, None))
+        .sum()
+}
+
 fn empty_to_none(value: String) -> Option<String> {
     if value.is_empty() {
         None
@@ -2376,6 +2498,50 @@ mod tests {
         );
     }
 
+    #[test]
+    fn merge_reconciled_service_state_removes_unchanged_terminated_records() {
+        let before = ServiceState {
+            browsers: BTreeMap::from([(
+                "browser-1".to_string(),
+                BrowserProcess {
+                    id: "browser-1".to_string(),
+                    health: BrowserHealth::Ready,
+                    active_session_ids: vec!["session-1".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "session-1".to_string(),
+                BrowserSession {
+                    id: "session-1".to_string(),
+                    browser_ids: vec!["browser-1".to_string()],
+                    tab_ids: vec!["target:old".to_string()],
+                    ..BrowserSession::default()
+                },
+            )]),
+            tabs: BTreeMap::from([(
+                "target:old".to_string(),
+                BrowserTab {
+                    id: "target:old".to_string(),
+                    browser_id: "browser-1".to_string(),
+                    session_id: Some("session-1".to_string()),
+                    lifecycle: TabLifecycle::Ready,
+                    ..BrowserTab::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let mut target = before.clone();
+        let mut reconciled = before.clone();
+        remove_browser_operational_record(&mut reconciled, "browser-1", Some("session-1"));
+
+        merge_reconciled_service_state(&mut target, &before, &reconciled);
+
+        assert!(!target.browsers.contains_key("browser-1"));
+        assert!(!target.sessions.contains_key("session-1"));
+        assert!(!target.tabs.contains_key("target:old"));
+    }
+
     #[tokio::test]
     async fn reconcile_service_state_in_repository_persists_summary() {
         let home = temp_home("service-health-reconcile-repository");
@@ -2490,7 +2656,7 @@ mod tests {
 
         let summary = reconcile_service_state(&mut state).await;
 
-        assert_eq!(summary.browser_count, 1);
+        assert_eq!(summary.browser_count, 0);
         assert_eq!(state.display_allocations["display-1"].state, "orphaned");
         assert_eq!(state.remote_view_routes["route-1"].state, "orphaned");
         assert_eq!(state.viewer_leases["lease-1"].state, "disconnected");
@@ -2500,12 +2666,7 @@ mod tests {
         assert!(state.remote_view_routes["route-1"]
             .controller_lease_id
             .is_none());
-        assert!(state.browsers["browser-1"].view_streams[0]
-            .viewer_lease_ids
-            .is_empty());
-        assert!(state.browsers["browser-1"].view_streams[0]
-            .controller_lease_id
-            .is_none());
+        assert!(!state.browsers.contains_key("browser-1"));
         let remote_view = &state.events.last().unwrap().details.as_ref().unwrap()["remoteView"];
         assert_eq!(remote_view["orphanedDisplayAllocations"], 1);
         assert_eq!(remote_view["orphanedRoutes"], 1);
@@ -2930,12 +3091,7 @@ mod tests {
         .unwrap();
 
         let state = store.load().unwrap();
-        let closed_browser = &state.browsers[&browser_a];
-        assert_eq!(closed_browser.health, BrowserHealth::NotStarted);
-        assert_eq!(
-            closed_browser.display_allocation_id.as_deref(),
-            Some(allocation_a.as_str())
-        );
+        assert!(!state.browsers.contains_key(&browser_a));
         let released = &state.display_allocations[&allocation_a];
         assert_eq!(released.state, "released");
         assert_eq!(
@@ -3817,8 +3973,9 @@ mod tests {
 
         reconcile_service_state(&mut state).await;
 
-        assert_eq!(state.tabs["target:page-1"].lifecycle, TabLifecycle::Closed);
-        assert!(state.sessions["session-1"].tab_ids.is_empty());
+        assert!(!state.browsers.contains_key("browser-1"));
+        assert!(!state.tabs.contains_key("target:page-1"));
+        assert!(!state.sessions.contains_key("session-1"));
         let tab_event = state
             .events
             .iter()
@@ -3959,6 +4116,62 @@ mod tests {
             Some(BrowserHealth::Unreachable)
         );
         assert_eq!(state.events[1].kind, ServiceEventKind::Reconciliation);
+    }
+
+    #[tokio::test]
+    async fn reconcile_removes_process_exited_browser_operational_state_after_event() {
+        let mut state = service_state_with_browser(BrowserProcess {
+            id: "browser-1".to_string(),
+            health: BrowserHealth::Ready,
+            pid: Some(i32::MAX as u32),
+            cdp_endpoint: Some("ws://127.0.0.1:9/devtools/browser/abc".to_string()),
+            active_session_ids: vec!["session-1".to_string()],
+            ..BrowserProcess::default()
+        });
+        state.sessions.insert(
+            "session-1".to_string(),
+            BrowserSession {
+                id: "session-1".to_string(),
+                browser_ids: vec!["browser-1".to_string()],
+                tab_ids: vec!["target:old".to_string()],
+                ..BrowserSession::default()
+            },
+        );
+        state.tabs.insert(
+            "target:old".to_string(),
+            BrowserTab {
+                id: "target:old".to_string(),
+                browser_id: "browser-1".to_string(),
+                session_id: Some("session-1".to_string()),
+                lifecycle: TabLifecycle::Ready,
+                ..BrowserTab::default()
+            },
+        );
+
+        let summary = reconcile_service_state(&mut state).await;
+
+        assert_eq!(summary.browser_count, 0);
+        assert_eq!(summary.changed_browsers, 1);
+        assert!(!state.browsers.contains_key("browser-1"));
+        assert!(!state.sessions.contains_key("session-1"));
+        assert!(!state.tabs.contains_key("target:old"));
+        let health_event = state
+            .events
+            .iter()
+            .find(|event| event.kind == ServiceEventKind::BrowserHealthChanged)
+            .unwrap();
+        assert_eq!(health_event.browser_id.as_deref(), Some("browser-1"));
+        assert_eq!(health_event.previous_health, Some(BrowserHealth::Ready));
+        assert_eq!(
+            health_event.current_health,
+            Some(BrowserHealth::ProcessExited)
+        );
+        let reconciliation = state.events.last().unwrap();
+        assert_eq!(reconciliation.kind, ServiceEventKind::Reconciliation);
+        assert_eq!(
+            reconciliation.details.as_ref().unwrap()["removedTerminatedBrowsers"],
+            1
+        );
     }
 
     #[tokio::test]
