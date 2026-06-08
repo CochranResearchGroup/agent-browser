@@ -5144,9 +5144,10 @@ Notes:
   - Streaming is always enabled. Set AGENT_BROWSER_STREAM_PORT to bind to a
     specific port instead of the default OS-assigned port.
   - Service requests with params.browserHost=remote_headed launch headed Chrome
-    through CDP while using a hidden Xvfb display on Linux when DISPLAY is
-    unset. Set AGENT_BROWSER_REMOTE_HEADED_DISPLAY to reuse an existing display
-    and AGENT_BROWSER_REMOTE_VIEW_URL to record an external operator view URL.
+    through CDP while using a hidden Xvfb display on Linux by default. Set
+    displayIsolation=shared_display with AGENT_BROWSER_REMOTE_HEADED_DISPLAY to
+    reuse an existing display, and AGENT_BROWSER_REMOTE_VIEW_URL to record an
+    external operator view URL.
     Use AGENT_BROWSER_REMOTE_VIEW_FRAME_URL, AGENT_BROWSER_REMOTE_VIEW_EXTERNAL_URL,
     AGENT_BROWSER_REMOTE_VIEW_ROUTE_ID, AGENT_BROWSER_GUACAMOLE_CONNECTION_ID, and
     AGENT_BROWSER_GUACAMOLE_CONNECTION_NAME when a Guacamole or RDP gateway stream
@@ -6129,7 +6130,7 @@ Environment:
   AGENT_BROWSER_STATE_EXPIRE_DAYS Auto-delete saved states older than N days (default: 30)
   AGENT_BROWSER_ENCRYPTION_KEY   64-char hex key for AES-256-GCM session encryption
   AGENT_BROWSER_STREAM_PORT      Override WebSocket streaming port (default: OS-assigned)
-  AGENT_BROWSER_REMOTE_HEADED_DISPLAY Display for remote_headed service launches (default: private Xvfb on Linux when DISPLAY is unset)
+  AGENT_BROWSER_REMOTE_HEADED_DISPLAY Shared display for explicit remote_headed shared_display launches (default: private Xvfb on Linux)
   AGENT_BROWSER_REMOTE_VIEW_URL  External operator view URL recorded on remote_headed browser records
   AGENT_BROWSER_REMOTE_VIEW_FRAME_URL Embeddable route URL recorded on remote_headed browser records
   AGENT_BROWSER_REMOTE_VIEW_EXTERNAL_URL External route URL recorded on remote_headed browser records

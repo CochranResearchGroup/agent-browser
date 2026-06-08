@@ -3987,7 +3987,7 @@ mod tests {
     #[test]
     fn test_remote_view_launch_flags() {
         let input = args(
-            "--browser-host remote_headed --view-stream-provider rdp_gateway --control-input-provider manual_attached_desktop --display-isolation shared_display open example.com",
+            "--browser-host remote_headed --view-stream-provider rdp_gateway --control-input-provider manual_attached_desktop --display-isolation private_virtual_display open example.com",
         );
         let flags = parse_flags(&input);
         let clean = clean_args(&input);
@@ -3998,7 +3998,10 @@ mod tests {
             flags.control_input_provider.as_deref(),
             Some("manual_attached_desktop")
         );
-        assert_eq!(flags.display_isolation.as_deref(), Some("shared_display"));
+        assert_eq!(
+            flags.display_isolation.as_deref(),
+            Some("private_virtual_display")
+        );
         assert!(flags.cli_browser_host);
         assert!(flags.cli_view_stream_provider);
         assert!(flags.cli_control_input_provider);

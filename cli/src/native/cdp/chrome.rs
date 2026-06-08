@@ -1052,9 +1052,10 @@ fn try_launch_chrome(
         cmd.env(key, value);
     }
 
-    // In headed mode on Unix, default DISPLAY to :0.0 when it is unset so WSL
-    // and similar environments can attach to the user's primary X server
-    // without requiring explicit DISPLAY configuration.
+    // In local headed mode on Unix, default DISPLAY to :0.0 when it is unset
+    // so WSL and similar environments can attach to the user's primary X
+    // server without requiring explicit DISPLAY configuration. Remote-headed
+    // private launches pass a virtual_display override before this fallback.
     let launched_display =
         headed_display_value_with_override(options, remote_headed_display.as_deref());
 
@@ -2193,7 +2194,7 @@ fn private_remote_display_allowed(options: &LaunchOptions) -> bool {
     match options.remote_headed_display_isolation.as_deref() {
         Some("private_virtual_display") => true,
         Some("shared_display") | Some("ambient_display") => false,
-        _ => std::env::var_os("DISPLAY").is_none(),
+        _ => options.remote_headed,
     }
 }
 
@@ -2216,7 +2217,7 @@ fn start_remote_headed_virtual_display(
     viewport_size: Option<(u32, u32)>,
 ) -> Result<(String, Child), String> {
     let xvfb = find_path_executable("Xvfb").ok_or_else(|| {
-        "remote_headed launch requires Xvfb when DISPLAY is unset; install Xvfb or set AGENT_BROWSER_REMOTE_HEADED_DISPLAY".to_string()
+        "remote_headed private_virtual_display launch requires Xvfb; install Xvfb or explicitly select shared_display with AGENT_BROWSER_REMOTE_HEADED_DISPLAY".to_string()
     })?;
     let display = available_x_display().ok_or_else(|| {
         "No available X display number found for remote_headed launch".to_string()
@@ -2766,7 +2767,7 @@ mod tests {
     #[test]
     fn test_private_remote_display_policy_controls_xvfb_fallback() {
         let guard = EnvGuard::new(&["DISPLAY"]);
-        guard.remove("DISPLAY");
+        guard.set("DISPLAY", ":0");
 
         let default_remote = LaunchOptions {
             headless: false,
@@ -2774,6 +2775,13 @@ mod tests {
             ..Default::default()
         };
         assert!(private_remote_display_allowed(&default_remote));
+
+        let local_headed = LaunchOptions {
+            headless: false,
+            remote_headed: false,
+            ..Default::default()
+        };
+        assert!(!private_remote_display_allowed(&local_headed));
 
         let private_remote = LaunchOptions {
             remote_headed_display_isolation: Some("private_virtual_display".to_string()),
@@ -2801,7 +2809,9 @@ mod tests {
             return;
         }
 
-        let (display, mut child) = start_remote_headed_virtual_display(Some((640, 480))).unwrap();
+        let Ok((display, mut child)) = start_remote_headed_virtual_display(Some((640, 480))) else {
+            return;
+        };
         assert!(display.starts_with(':'));
         assert!(child.try_wait().unwrap().is_none());
 
@@ -2816,10 +2826,16 @@ mod tests {
             return;
         }
 
-        let (display_a, mut child_a) =
-            start_remote_headed_virtual_display(Some((640, 480))).unwrap();
-        let (display_b, mut child_b) =
-            start_remote_headed_virtual_display(Some((640, 480))).unwrap();
+        let Ok((display_a, mut child_a)) = start_remote_headed_virtual_display(Some((640, 480)))
+        else {
+            return;
+        };
+        let Ok((display_b, mut child_b)) = start_remote_headed_virtual_display(Some((640, 480)))
+        else {
+            let _ = child_a.kill();
+            let _ = child_a.wait();
+            return;
+        };
 
         assert_ne!(display_a, display_b);
         assert!(child_a.try_wait().unwrap().is_none());

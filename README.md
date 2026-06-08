@@ -1684,13 +1684,13 @@ AGENT_BROWSER_STREAM_PORT=9223 agent-browser open example.com
 ```
 
 Service requests that use `params.browserHost=remote_headed` launch a headed
-browser for CDP control while keeping it off the operator desktop on Linux when
-`DISPLAY` is unset. In that case agent-browser starts a private Xvfb display
-for that browser process. This per-browser display isolation is the preferred
-service mode because focus, window geometry, input injection, streaming,
-recording, crash recovery, and repair are scoped to one managed browser instead
-of one shared desktop. A shared display is available only as an explicit
-operator optimization.
+browser for CDP control while keeping it off the operator desktop on Linux by
+default. Unless the caller explicitly selects a shared or ambient display,
+agent-browser starts a private Xvfb display for that browser process. This
+per-browser display isolation is the preferred service mode because focus,
+window geometry, input injection, streaming, recording, crash recovery, and
+repair are scoped to one managed browser instead of one shared desktop. A
+shared display is available only as an explicit operator optimization.
 Access-plan `decision.launchPosture` now reports the service-selected
 `viewStreamProvider` and `controlInputProvider`, and copied service requests
 carry those hints in `params` so dashboards and software clients do not infer
@@ -1738,9 +1738,10 @@ available through HTTP `GET /api/service/display-allocations`,
 route pool is configured, the existing shared Guacamole route remains an
 explicit fallback and should be treated as focus switching rather than
 simultaneous multi-browser viewing.
-Set `AGENT_BROWSER_REMOTE_HEADED_DISPLAY` to reuse an existing virtual display,
-and set `AGENT_BROWSER_REMOTE_VIEW_URL` when an external noVNC, RDP gateway,
-WebRTC, or dashboard view URL should be recorded on the service browser record.
+Set `AGENT_BROWSER_REMOTE_HEADED_DISPLAY` with `displayIsolation=shared_display`
+to reuse an existing virtual display, and set `AGENT_BROWSER_REMOTE_VIEW_URL`
+when an external noVNC, RDP gateway, WebRTC, or dashboard view URL should be
+recorded on the service browser record.
 For Guacamole and RDP gateway routing, prefer service-owned route fields:
 `AGENT_BROWSER_REMOTE_VIEW_FRAME_URL` for the embeddable iframe URL,
 `AGENT_BROWSER_REMOTE_VIEW_EXTERNAL_URL` for popout or external windows,
@@ -2477,7 +2478,7 @@ before opening a browser. Access-plan tab requests for headed site policies
 include `params.headless=false` and `params.browserHost` so service clients do
 not accidentally launch true headless Chrome or discard the host selected by a
 site policy. A copied `remote_headed` request is actionable in the daemon: on
-Linux it starts a hidden Xvfb-backed headed browser when no display is supplied,
+Linux it starts a hidden Xvfb-backed headed browser by default,
 keeps CDP control available, and records a view stream entry for dashboard or
 operator surfaces. Treat that private display as the default browser isolation
 boundary. Supplying `AGENT_BROWSER_REMOTE_HEADED_DISPLAY` intentionally moves

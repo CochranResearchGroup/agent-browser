@@ -1357,9 +1357,6 @@ fn remote_headed_display_isolation(options: &LaunchOptions) -> Option<String> {
     if options.display.is_some() {
         return Some("shared_display".to_string());
     }
-    if env::var_os("DISPLAY").is_some() {
-        return Some("ambient_display".to_string());
-    }
     Some("private_virtual_display".to_string())
 }
 
@@ -15912,6 +15909,37 @@ mod tests {
         );
 
         assert_eq!(host, ServiceBrowserHost::RemoteHeaded);
+        assert_eq!(
+            metadata.display_isolation.as_deref(),
+            Some("private_virtual_display")
+        );
+        assert_eq!(metadata.display_name, None);
+    }
+
+    #[test]
+    fn test_remote_headed_defaults_to_private_display_when_display_is_inherited() {
+        let guard = EnvGuard::new(&["DISPLAY"]);
+        guard.set("DISPLAY", ":0");
+        let command = json!({
+            "action": "navigate",
+            "browserHost": "remote_headed",
+            "headless": false
+        });
+        let mut options = LaunchOptions::default();
+
+        let (host, selection_reason, _, effective_command) =
+            apply_auto_launch_command_hints(&mut options, &command, None);
+        let metadata = ServiceLaunchMetadata::from_launch_options(
+            &options,
+            Some(&effective_command),
+            selection_reason,
+        );
+
+        assert_eq!(host, ServiceBrowserHost::RemoteHeaded);
+        assert_eq!(
+            options.remote_headed_display_isolation.as_deref(),
+            Some("private_virtual_display")
+        );
         assert_eq!(
             metadata.display_isolation.as_deref(),
             Some("private_virtual_display")
