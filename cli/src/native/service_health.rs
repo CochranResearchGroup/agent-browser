@@ -2234,13 +2234,42 @@ fn remove_post_termination_browser_history(state: &mut ServiceState) -> usize {
     let browser_ids = state
         .browsers
         .iter()
-        .filter(|(_, browser)| browser.health == BrowserHealth::ProcessExited)
+        .filter(|(id, browser)| historical_browser_placeholder(state, id, browser))
         .map(|(id, _)| id.clone())
         .collect::<Vec<_>>();
     browser_ids
         .iter()
         .map(|id| remove_browser_operational_record(state, id, None))
         .sum()
+}
+
+fn historical_browser_placeholder(
+    state: &ServiceState,
+    browser_id: &str,
+    browser: &BrowserProcess,
+) -> bool {
+    if !matches!(
+        browser.health,
+        BrowserHealth::NotStarted
+            | BrowserHealth::ProcessExited
+            | BrowserHealth::Faulted
+            | BrowserHealth::Unreachable
+    ) {
+        return false;
+    }
+    if browser.pid.is_some() {
+        return browser.health == BrowserHealth::ProcessExited;
+    }
+    if browser.cdp_endpoint.is_some() {
+        return matches!(
+            browser.health,
+            BrowserHealth::ProcessExited | BrowserHealth::Unreachable
+        );
+    }
+    !state
+        .tabs
+        .values()
+        .any(|tab| tab.browser_id == browser_id && tab.lifecycle != TabLifecycle::Closed)
 }
 
 fn empty_to_none(value: String) -> Option<String> {
@@ -4100,10 +4129,10 @@ mod tests {
 
         let summary = reconcile_service_state(&mut state).await;
 
-        assert_eq!(summary.browser_count, 1);
+        assert_eq!(summary.browser_count, 0);
         assert_eq!(summary.changed_browsers, 1);
         let reconciliation = state.reconciliation.as_ref().unwrap();
-        assert_eq!(reconciliation.browser_count, 1);
+        assert_eq!(reconciliation.browser_count, 0);
         assert_eq!(reconciliation.changed_browsers, 1);
         assert!(reconciliation.last_reconciled_at.is_some());
         assert_eq!(reconciliation.last_error, None);
@@ -4115,6 +4144,7 @@ mod tests {
             state.events[0].current_health,
             Some(BrowserHealth::Unreachable)
         );
+        assert!(!state.browsers.contains_key("browser-1"));
         assert_eq!(state.events[1].kind, ServiceEventKind::Reconciliation);
     }
 
@@ -4171,6 +4201,58 @@ mod tests {
         assert_eq!(
             reconciliation.details.as_ref().unwrap()["removedTerminatedBrowsers"],
             1
+        );
+    }
+
+    #[tokio::test]
+    async fn reconcile_removes_empty_historical_browser_placeholders() {
+        let mut state = ServiceState {
+            browsers: BTreeMap::from([
+                (
+                    "session:missing-session".to_string(),
+                    BrowserProcess {
+                        id: "session:missing-session".to_string(),
+                        health: BrowserHealth::NotStarted,
+                        active_session_ids: vec!["missing-session".to_string()],
+                        profile_id: Some("default".to_string()),
+                        ..BrowserProcess::default()
+                    },
+                ),
+                (
+                    "session:released-faulted".to_string(),
+                    BrowserProcess {
+                        id: "session:released-faulted".to_string(),
+                        health: BrowserHealth::Faulted,
+                        active_session_ids: vec!["released-faulted".to_string()],
+                        view_streams: vec![ViewStream {
+                            id: "stale-stream".to_string(),
+                            ..ViewStream::default()
+                        }],
+                        ..BrowserProcess::default()
+                    },
+                ),
+            ]),
+            sessions: BTreeMap::from([(
+                "released-faulted".to_string(),
+                BrowserSession {
+                    id: "released-faulted".to_string(),
+                    lease: LeaseState::Released,
+                    browser_ids: vec!["session:released-faulted".to_string()],
+                    ..BrowserSession::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let summary = reconcile_service_state(&mut state).await;
+
+        assert_eq!(summary.browser_count, 0);
+        assert_eq!(summary.changed_browsers, 2);
+        assert!(state.browsers.is_empty());
+        assert!(state.sessions.is_empty());
+        assert_eq!(
+            state.events.last().unwrap().details.as_ref().unwrap()["removedTerminatedBrowsers"],
+            2
         );
     }
 

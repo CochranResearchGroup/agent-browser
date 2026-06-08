@@ -10962,18 +10962,14 @@ fn prune_retained_service_state(
         .iter()
         .filter(|(id, browser)| {
             let not_started_matches = options.not_started_browsers
-                && browser.health == ServiceBrowserHealth::NotStarted
-                && browser.pid.is_none()
-                && browser.cdp_endpoint.is_none();
-            let process_exited_matches =
-                options.process_exited_browsers && failed_retained_browser_health(browser.health);
+                && retained_not_started_browser_placeholder(state, id, browser);
+            let process_exited_matches = options.process_exited_browsers
+                && retained_failed_browser_placeholder(state, id, browser);
             (not_started_matches || process_exited_matches)
-                && browser.active_session_ids.is_empty()
-                && browser.view_streams.is_empty()
-                && !state.tabs.values().any(|tab| {
-                    tab.browser_id == **id
-                        && !(options.closed_tabs && tab.lifecycle == TabLifecycle::Closed)
-                })
+                && browser
+                    .active_session_ids
+                    .iter()
+                    .all(|session_id| !state.sessions.contains_key(session_id))
         })
         .map(|(id, _)| id.clone())
         .chain(session_ids.iter().flat_map(|session_id| {
@@ -11067,6 +11063,8 @@ fn prune_retained_service_state(
             "notStartedBrowsers": options.not_started_browsers,
             "processExitedBrowsers": options.process_exited_browsers,
             "processExitedBrowsersIncludesUnreachable": true,
+            "processExitedBrowsersIncludesFaultedPlaceholders": true,
+            "releasedSessionPruneRemovesRetainedViewStreams": true,
             "releasedSessions": options.released_sessions,
             "abandonedSessions": options.abandoned_sessions,
             "orphanedProfiles": options.orphaned_profiles,
@@ -11368,17 +11366,9 @@ fn inert_session_browser_placeholder(
     let Some(browser) = state.browsers.get(browser_id) else {
         return false;
     };
-    browser.health == ServiceBrowserHealth::NotStarted
-        && browser.pid.is_none()
-        && browser.cdp_endpoint.is_none()
-        && browser.view_streams.is_empty()
-        && browser.profile_id.is_none()
+    retained_not_started_browser_placeholder(state, browser_id, browser)
         && (browser.active_session_ids.is_empty()
             || browser.active_session_ids == vec![session_id.to_string()])
-        && !state
-            .tabs
-            .values()
-            .any(|tab| tab.browser_id == browser_id && tab.lifecycle != TabLifecycle::Closed)
 }
 
 fn failed_retained_session_browser_placeholder(
@@ -11389,20 +11379,49 @@ fn failed_retained_session_browser_placeholder(
     let Some(browser) = state.browsers.get(browser_id) else {
         return false;
     };
-    failed_retained_browser_health(browser.health)
+    retained_failed_browser_placeholder(state, browser_id, browser)
         && (browser.active_session_ids.is_empty()
             || browser.active_session_ids == vec![session_id.to_string()])
-        && !state
-            .tabs
-            .values()
-            .any(|tab| tab.browser_id == browser_id && tab.lifecycle != TabLifecycle::Closed)
 }
 
 fn failed_retained_browser_health(health: ServiceBrowserHealth) -> bool {
     matches!(
         health,
-        ServiceBrowserHealth::ProcessExited | ServiceBrowserHealth::Unreachable
+        ServiceBrowserHealth::ProcessExited
+            | ServiceBrowserHealth::Unreachable
+            | ServiceBrowserHealth::Faulted
     )
+}
+
+fn retained_not_started_browser_placeholder(
+    state: &ServiceState,
+    browser_id: &str,
+    browser: &BrowserProcess,
+) -> bool {
+    browser.health == ServiceBrowserHealth::NotStarted
+        && browser.pid.is_none()
+        && browser.cdp_endpoint.is_none()
+        && !browser_has_live_tabs(state, browser_id)
+}
+
+fn retained_failed_browser_placeholder(
+    state: &ServiceState,
+    browser_id: &str,
+    browser: &BrowserProcess,
+) -> bool {
+    failed_retained_browser_health(browser.health)
+        && (matches!(
+            browser.health,
+            ServiceBrowserHealth::ProcessExited | ServiceBrowserHealth::Unreachable
+        ) || (browser.pid.is_none() && browser.cdp_endpoint.is_none()))
+        && !browser_has_live_tabs(state, browser_id)
+}
+
+fn browser_has_live_tabs(state: &ServiceState, browser_id: &str) -> bool {
+    state
+        .tabs
+        .values()
+        .any(|tab| tab.browser_id == browser_id && tab.lifecycle != TabLifecycle::Closed)
 }
 
 async fn handle_service_job_cancel(cmd: &Value) -> Result<Value, String> {
@@ -18646,6 +18665,117 @@ mod tests {
         assert_eq!(result["removed"]["browsers"], 1);
         assert!(service_state.sessions.is_empty());
         assert!(service_state.browsers.is_empty());
+    }
+
+    #[test]
+    fn test_prune_retained_service_state_removes_released_session_with_retained_view_stream() {
+        let mut service_state = ServiceState {
+            browsers: BTreeMap::from([(
+                "session:released-session".to_string(),
+                BrowserProcess {
+                    id: "session:released-session".to_string(),
+                    health: ServiceBrowserHealth::NotStarted,
+                    active_session_ids: vec!["released-session".to_string()],
+                    view_streams: vec![ViewStream {
+                        id: "stale-left-rail-stream".to_string(),
+                        ..ViewStream::default()
+                    }],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "released-session".to_string(),
+                BrowserSession {
+                    id: "released-session".to_string(),
+                    lease: LeaseState::Released,
+                    browser_ids: vec!["session:released-session".to_string()],
+                    ..BrowserSession::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let result = prune_retained_service_state(
+            &mut service_state,
+            ServiceRetentionPruneOptions {
+                apply: true,
+                closed_tabs: true,
+                not_started_browsers: true,
+                process_exited_browsers: false,
+                released_sessions: true,
+                abandoned_sessions: false,
+                orphaned_profiles: false,
+                abandoned_session_min_age_minutes: 1440,
+            },
+        );
+
+        assert_eq!(result["removed"]["sessions"], 1);
+        assert_eq!(result["removed"]["browsers"], 1);
+        assert_eq!(
+            result["policy"]["releasedSessionPruneRemovesRetainedViewStreams"],
+            true
+        );
+        assert!(service_state.sessions.is_empty());
+        assert!(service_state.browsers.is_empty());
+    }
+
+    #[test]
+    fn test_prune_retained_service_state_removes_historical_browser_placeholders() {
+        let mut service_state = ServiceState {
+            browsers: BTreeMap::from([
+                (
+                    "session:missing-session".to_string(),
+                    BrowserProcess {
+                        id: "session:missing-session".to_string(),
+                        health: ServiceBrowserHealth::NotStarted,
+                        active_session_ids: vec!["missing-session".to_string()],
+                        profile_id: Some("default".to_string()),
+                        ..BrowserProcess::default()
+                    },
+                ),
+                (
+                    "session:released-faulted".to_string(),
+                    BrowserProcess {
+                        id: "session:released-faulted".to_string(),
+                        health: ServiceBrowserHealth::Faulted,
+                        active_session_ids: vec!["released-faulted".to_string()],
+                        view_streams: vec![ViewStream {
+                            id: "stale-stream".to_string(),
+                            ..ViewStream::default()
+                        }],
+                        last_error: Some("Force kill failed; OS may be degraded.".to_string()),
+                        ..BrowserProcess::default()
+                    },
+                ),
+            ]),
+            sessions: BTreeMap::from([(
+                "released-faulted".to_string(),
+                BrowserSession {
+                    id: "released-faulted".to_string(),
+                    lease: LeaseState::Released,
+                    browser_ids: vec!["session:released-faulted".to_string()],
+                    ..BrowserSession::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let result = prune_retained_service_state(
+            &mut service_state,
+            ServiceRetentionPruneOptions {
+                apply: true,
+                closed_tabs: true,
+                not_started_browsers: true,
+                process_exited_browsers: true,
+                released_sessions: true,
+                abandoned_sessions: false,
+                orphaned_profiles: false,
+                abandoned_session_min_age_minutes: 1440,
+            },
+        );
+
+        assert_eq!(result["removed"]["browsers"], 2);
+        assert_eq!(result["removed"]["sessions"], 1);
+        assert!(service_state.browsers.is_empty());
+        assert!(service_state.sessions.is_empty());
     }
 
     #[test]
