@@ -359,6 +359,7 @@ pub struct ServiceReconcileSummary {
 pub async fn reconcile_service_state(state: &mut ServiceState) -> ServiceReconcileSummary {
     let before = state.clone();
     refresh_persisted_browser_health(state).await;
+    let merged_duplicate_browsers = merge_duplicate_live_browser_records(state);
     reconcile_live_browser_targets(state).await;
     let remote_view_repair = reconcile_remote_view_state(state);
     record_health_transition_events(state, &before);
@@ -388,6 +389,7 @@ pub async fn reconcile_service_state(state: &mut ServiceState) -> ServiceReconci
                 "browserCount": summary.browser_count,
                 "changedBrowsers": summary.changed_browsers,
                 "removedTerminatedBrowsers": removed_terminated_browsers,
+                "mergedDuplicateBrowsers": merged_duplicate_browsers,
                 "tabCount": state.tabs.len(),
                 "changedTabs": changed_tab_count(state, &before),
                 "remoteView": {
@@ -402,6 +404,192 @@ pub async fn reconcile_service_state(state: &mut ServiceState) -> ServiceReconci
         },
     );
     summary
+}
+
+fn merge_duplicate_live_browser_records(state: &mut ServiceState) -> usize {
+    let mut endpoint_groups: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for (browser_id, browser) in &state.browsers {
+        if browser.health != BrowserHealth::Ready {
+            continue;
+        }
+        let Some(endpoint) = browser.cdp_endpoint.as_deref().map(str::trim) else {
+            continue;
+        };
+        if endpoint.is_empty() {
+            continue;
+        }
+        endpoint_groups
+            .entry(endpoint.to_string())
+            .or_default()
+            .push(browser_id.clone());
+    }
+
+    let mut merged = 0;
+    for mut browser_ids in endpoint_groups.into_values() {
+        browser_ids.sort_by(|left, right| {
+            let left_browser = state.browsers.get(left);
+            let right_browser = state.browsers.get(right);
+            duplicate_browser_canonical_score(right_browser)
+                .cmp(&duplicate_browser_canonical_score(left_browser))
+                .then_with(|| left.cmp(right))
+        });
+        let Some(canonical_browser_id) = browser_ids.first().cloned() else {
+            continue;
+        };
+        for duplicate_browser_id in browser_ids.into_iter().skip(1) {
+            if duplicate_browser_id == canonical_browser_id {
+                continue;
+            }
+            if merge_duplicate_browser_record(state, &canonical_browser_id, &duplicate_browser_id) {
+                merged += 1;
+            }
+        }
+    }
+    merged
+}
+
+fn duplicate_browser_canonical_score(browser: Option<&BrowserProcess>) -> (u8, u8, usize, usize) {
+    let Some(browser) = browser else {
+        return (0, 0, 0, 0);
+    };
+    (
+        u8::from(browser.pid.is_some()),
+        u8::from(browser.display_name.is_some()),
+        browser.active_session_ids.len(),
+        browser.view_streams.len(),
+    )
+}
+
+fn merge_duplicate_browser_record(
+    state: &mut ServiceState,
+    canonical_browser_id: &str,
+    duplicate_browser_id: &str,
+) -> bool {
+    let Some(duplicate_browser) = state.browsers.remove(duplicate_browser_id) else {
+        return false;
+    };
+    let Some(canonical_browser) = state.browsers.get_mut(canonical_browser_id) else {
+        state
+            .browsers
+            .insert(duplicate_browser_id.to_string(), duplicate_browser);
+        return false;
+    };
+
+    for session_id in &duplicate_browser.active_session_ids {
+        merge_unique(
+            &mut canonical_browser.active_session_ids,
+            session_id.clone(),
+        );
+    }
+    for stream in duplicate_browser.view_streams {
+        if !canonical_browser
+            .view_streams
+            .iter()
+            .any(|candidate| candidate.id == stream.id)
+        {
+            canonical_browser.view_streams.push(stream);
+        }
+    }
+    if canonical_browser.display_allocation_id.is_none() {
+        canonical_browser.display_allocation_id = duplicate_browser.display_allocation_id.clone();
+    }
+
+    for session in state.sessions.values_mut() {
+        let referenced_duplicate = session
+            .browser_ids
+            .iter()
+            .any(|browser_id| browser_id == duplicate_browser_id);
+        if referenced_duplicate {
+            session
+                .browser_ids
+                .retain(|browser_id| browser_id != duplicate_browser_id);
+            merge_unique(&mut session.browser_ids, canonical_browser_id.to_string());
+        }
+    }
+    clear_same_browser_profile_lease_conflicts(state, canonical_browser_id);
+
+    for tab in state.tabs.values_mut() {
+        if tab.browser_id == duplicate_browser_id {
+            tab.browser_id = canonical_browser_id.to_string();
+        }
+    }
+    for allocation in state.display_allocations.values_mut() {
+        if allocation.owner_browser_id.as_deref() == Some(duplicate_browser_id) {
+            allocation.owner_browser_id = Some(canonical_browser_id.to_string());
+            if duplicate_browser.display_allocation_id.as_deref() == Some(allocation.id.as_str())
+                && state
+                    .browsers
+                    .get(canonical_browser_id)
+                    .and_then(|browser| browser.display_allocation_id.as_deref())
+                    != Some(allocation.id.as_str())
+            {
+                allocation.state = "released".to_string();
+                allocation.updated_at = Some(current_timestamp());
+                allocation.readiness = Some(json!({
+                    "state": "released",
+                    "reason": "duplicate_browser_record_merged",
+                    "canonicalBrowserId": canonical_browser_id,
+                    "duplicateBrowserId": duplicate_browser_id,
+                    "updatedAt": allocation.updated_at,
+                }));
+            }
+        }
+    }
+    for route in state.remote_view_routes.values_mut() {
+        if route.browser_id.as_deref() == Some(duplicate_browser_id) {
+            route.browser_id = Some(canonical_browser_id.to_string());
+        }
+    }
+    for lease in state.viewer_leases.values_mut() {
+        if lease.browser_id.as_deref() == Some(duplicate_browser_id) {
+            lease.browser_id = Some(canonical_browser_id.to_string());
+        }
+    }
+
+    push_service_event(
+        state,
+        ServiceEvent {
+            kind: ServiceEventKind::Reconciliation,
+            message: format!(
+                "Merged duplicate browser record {} into {}",
+                duplicate_browser_id, canonical_browser_id
+            ),
+            browser_id: Some(canonical_browser_id.to_string()),
+            details: Some(json!({
+                "action": "duplicate_browser_record_merged",
+                "canonicalBrowserId": canonical_browser_id,
+                "duplicateBrowserId": duplicate_browser_id,
+                "cdpEndpoint": duplicate_browser.cdp_endpoint,
+                "activeSessionIds": duplicate_browser.active_session_ids,
+            })),
+            ..new_service_event()
+        },
+    );
+    true
+}
+
+fn clear_same_browser_profile_lease_conflicts(state: &mut ServiceState, browser_id: &str) {
+    let session_ids = state
+        .sessions
+        .iter()
+        .filter_map(|(session_id, session)| {
+            session
+                .browser_ids
+                .iter()
+                .any(|candidate| candidate == browser_id)
+                .then_some(session_id.clone())
+        })
+        .collect::<BTreeSet<_>>();
+    if session_ids.len() <= 1 {
+        return;
+    }
+    for session_id in &session_ids {
+        if let Some(session) = state.sessions.get_mut(session_id) {
+            session
+                .profile_lease_conflict_session_ids
+                .retain(|conflict_id| !session_ids.contains(conflict_id));
+        }
+    }
 }
 
 pub async fn reconcile_persisted_service_state() -> Result<ServiceReconcileSummary, String> {
@@ -4059,6 +4247,105 @@ mod tests {
         assert_eq!(
             tab_event.details.as_ref().unwrap()["currentLifecycle"],
             "closed"
+        );
+    }
+
+    #[test]
+    fn reconcile_merges_duplicate_ready_browsers_with_same_cdp_endpoint() {
+        let mut state = ServiceState::default();
+        state.browsers.insert(
+            "session:odollo-carrier-ups".to_string(),
+            BrowserProcess {
+                id: "session:odollo-carrier-ups".to_string(),
+                profile_id: Some("stealthcdp-default".to_string()),
+                health: BrowserHealth::Ready,
+                cdp_endpoint: Some("ws://127.0.0.1:37173/devtools/browser/shared".to_string()),
+                active_session_ids: vec!["odollo-carrier-ups".to_string()],
+                display_allocation_id: Some(
+                    "display:private_virtual_display:session-odollo-carrier-ups".to_string(),
+                ),
+                ..BrowserProcess::default()
+            },
+        );
+        state.browsers.insert(
+            "session:odollo-carrier-usps".to_string(),
+            BrowserProcess {
+                id: "session:odollo-carrier-usps".to_string(),
+                profile_id: Some("stealthcdp-default".to_string()),
+                health: BrowserHealth::Ready,
+                pid: Some(14983),
+                display_name: Some(":115".to_string()),
+                cdp_endpoint: Some("ws://127.0.0.1:37173/devtools/browser/shared".to_string()),
+                active_session_ids: vec!["odollo-carrier-usps".to_string()],
+                display_allocation_id: Some(
+                    "display:private_virtual_display:session-odollo-carrier-usps".to_string(),
+                ),
+                ..BrowserProcess::default()
+            },
+        );
+        for (session_id, browser_id, tab_ids, conflicts) in [
+            (
+                "odollo-carrier-ups",
+                "session:odollo-carrier-ups",
+                Vec::<String>::new(),
+                vec!["odollo-carrier-usps".to_string()],
+            ),
+            (
+                "odollo-carrier-usps",
+                "session:odollo-carrier-usps",
+                vec!["target:usps".to_string()],
+                vec!["odollo-carrier-ups".to_string()],
+            ),
+        ] {
+            state.sessions.insert(
+                session_id.to_string(),
+                BrowserSession {
+                    id: session_id.to_string(),
+                    profile_id: Some("stealthcdp-default".to_string()),
+                    lease: LeaseState::Exclusive,
+                    browser_ids: vec![browser_id.to_string()],
+                    tab_ids,
+                    profile_lease_conflict_session_ids: conflicts,
+                    ..BrowserSession::default()
+                },
+            );
+        }
+        state.tabs.insert(
+            "target:usps".to_string(),
+            BrowserTab {
+                id: "target:usps".to_string(),
+                browser_id: "session:odollo-carrier-usps".to_string(),
+                lifecycle: TabLifecycle::Ready,
+                ..BrowserTab::default()
+            },
+        );
+
+        assert_eq!(merge_duplicate_live_browser_records(&mut state), 1);
+
+        assert!(!state.browsers.contains_key("session:odollo-carrier-ups"));
+        let canonical = &state.browsers["session:odollo-carrier-usps"];
+        assert_eq!(canonical.pid, Some(14983));
+        assert_eq!(
+            canonical.active_session_ids,
+            vec!["odollo-carrier-usps", "odollo-carrier-ups"]
+        );
+        assert_eq!(
+            state.sessions["odollo-carrier-ups"].browser_ids,
+            vec!["session:odollo-carrier-usps"]
+        );
+        assert_eq!(
+            state.sessions["odollo-carrier-usps"].browser_ids,
+            vec!["session:odollo-carrier-usps"]
+        );
+        assert!(state.sessions["odollo-carrier-ups"]
+            .profile_lease_conflict_session_ids
+            .is_empty());
+        assert!(state.sessions["odollo-carrier-usps"]
+            .profile_lease_conflict_session_ids
+            .is_empty());
+        assert_eq!(
+            state.events.last().unwrap().details.as_ref().unwrap()["action"],
+            "duplicate_browser_record_merged"
         );
     }
 

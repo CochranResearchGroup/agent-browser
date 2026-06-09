@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::thread;
@@ -339,6 +339,9 @@ fn duplicate_profile_pressure_warnings(state: &ServiceState) -> Vec<Value> {
         if session_ids.len() <= 1 {
             continue;
         }
+        if sessions_share_any_live_browser(state, &session_ids) {
+            continue;
+        }
         let count = session_ids.len();
         warnings.push(json!({
             "code": "duplicate_active_profile_leases",
@@ -350,6 +353,40 @@ fn duplicate_profile_pressure_warnings(state: &ServiceState) -> Vec<Value> {
     }
 
     warnings
+}
+
+fn sessions_share_any_live_browser(state: &ServiceState, session_ids: &[String]) -> bool {
+    let mut shared_browser_ids: Option<BTreeSet<String>> = None;
+    for session_id in session_ids {
+        let Some(session) = state.sessions.get(session_id) else {
+            return false;
+        };
+        let live_browser_ids = session
+            .browser_ids
+            .iter()
+            .filter(|browser_id| {
+                state
+                    .browsers
+                    .get(*browser_id)
+                    .is_some_and(|browser| browser_health_counts_as_live(browser.health))
+            })
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        if live_browser_ids.is_empty() {
+            return false;
+        }
+        shared_browser_ids = Some(match shared_browser_ids {
+            Some(existing) => existing
+                .intersection(&live_browser_ids)
+                .cloned()
+                .collect::<BTreeSet<_>>(),
+            None => live_browser_ids,
+        });
+        if shared_browser_ids.as_ref().is_some_and(BTreeSet::is_empty) {
+            return false;
+        }
+    }
+    shared_browser_ids.is_some_and(|browser_ids| !browser_ids.is_empty())
 }
 
 fn browser_health_counts_as_live(health: BrowserHealth) -> bool {
@@ -1396,6 +1433,38 @@ mod tests {
         assert_eq!(warning["count"], 2);
         assert_eq!(warning["sessionIds"][0], "session-a");
         assert_eq!(warning["sessionIds"][1], "session-b");
+    }
+
+    #[test]
+    fn resources_allow_multiple_active_sessions_on_same_live_browser() {
+        let mut state = ServiceState::default();
+        state.browsers.insert(
+            "browser-shared".to_string(),
+            BrowserProcess {
+                id: "browser-shared".to_string(),
+                profile_id: Some("work".to_string()),
+                health: BrowserHealth::Ready,
+                ..BrowserProcess::default()
+            },
+        );
+        for id in ["session-a", "session-b"] {
+            state.sessions.insert(
+                id.to_string(),
+                BrowserSession {
+                    id: id.to_string(),
+                    profile_id: Some("work".to_string()),
+                    lease: LeaseState::Exclusive,
+                    browser_ids: vec!["browser-shared".to_string()],
+                    ..BrowserSession::default()
+                },
+            );
+        }
+
+        let response = service_resources_response_from_samples(&state, Vec::new(), Vec::new());
+        let warnings = response["warnings"].as_array().unwrap();
+        assert!(!warnings
+            .iter()
+            .any(|warning| warning["code"] == "duplicate_active_profile_leases"));
     }
 
     #[test]

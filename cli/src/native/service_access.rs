@@ -1044,7 +1044,13 @@ fn profile_reuse_decision(
     let mut active_lease_session_ids = service_state
         .sessions
         .iter()
-        .filter(|(_id, session)| session_blocks_profile_reuse(session, &profile.id))
+        .filter(|(_id, session)| {
+            session_blocks_profile_reuse(session, &profile.id)
+                && !session
+                    .browser_ids
+                    .iter()
+                    .any(|browser_id| reusable_browser_ids.contains(browser_id))
+        })
         .map(|(id, _session)| id.clone())
         .collect::<Vec<_>>();
     active_lease_session_ids.sort();
