@@ -541,3 +541,67 @@ Current target:
 - Plan 0027 Slice A: add a read-only access-plan `profileReuse` advisory that
   recommends `reuse_existing_browser`, `wait_for_profile_lease`, or
   `launch_new_browser` before any launch mutates runtime state.
+
+## Turn 16 | 2026-06-13
+
+Scope: write an implementation handoff note for AuraCall-driven browser
+service feature requests.
+
+Actions:
+
+- Ran Graphiti discovery against `agent_browser_main` and verified the local
+  Graphiti runtime was healthy.
+- Reviewed the existing access-plan service-request handoff note and the
+  service request/client contract surfaces.
+- Added
+  `docs/dev/notes/2026-06-13-auracall-cdp-feature-requests.md`.
+- Patched the note so AuraCall source paths are explicitly relative to the
+  sibling `../auracall` repository.
+
+Validation run:
+
+- `git diff --check`
+- Verified the listed agent-browser source surfaces exist in this repository.
+- Verified the listed AuraCall source surfaces exist under the sibling
+  `../auracall` repository.
+- Ran Graphiti discovery against `agent_browser_main` for AuraCall CDP
+  migration, BYOP, controlled CDP attach, bounded evaluate, and service tab
+  handle context.
+
+Result:
+
+- The handoff note requests profile-origin and BYOP registration, a
+  lease-backed service tab handle, controlled CDP attach, bounded evaluate
+  jobs, readiness and identity probe recipes, tab reuse repair, diagnostic
+  evidence bundles, and service-client ergonomics.
+- The note keeps provider-specific ChatGPT, Gemini, Grok, and AuraCall
+  semantics out of agent-browser and frames the work as service-owned browser
+  primitives for a future implementation agent.
+
+## Turn 17 | 2026-06-13
+
+Scope: open a high-level upgrade plan suitable for subagents and goal-driven
+execution.
+
+Actions:
+
+- Added
+  `docs/dev/plans/0033-2026-06-13-auracall-service-cdp-upgrade-plan.md`.
+- Added P14 to `ROADMAP.md`.
+- Structured the plan as a parent goal with slice-level subagent prompts,
+  acceptance criteria, coordination rules, validation matrix, and open
+  questions.
+
+Validation run:
+
+- `git diff --check`
+- `python /home/ecochran76/workspace.local/agent-policies/repo-policy-selector/scripts/audit_planning_contract.py --repo-root /home/ecochran76/workspace.local/agent-browser --json`
+- `pnpm validation:select -- --base HEAD`
+
+Result:
+
+- P14 is open for profile origin/BYOP, lease-backed service tab handles,
+  controlled CDP attach, bounded evaluate, diagnostics/readiness evidence, and
+  client ergonomics.
+- The first recommended implementation slice is P14 Slice A: profile-origin
+  schema plus explicit BYOP registration/readback.

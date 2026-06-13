@@ -488,3 +488,39 @@ Start Plan 0027 Slice A with a read-only access-plan `profileReuse` advisory.
 The broker should explain whether the minimal-profile path is to reuse an
 existing browser, wait for the selected profile lease, or launch a new browser
 because isolation actually requires it.
+
+## P14 | AuraCall Service CDP Upgrade
+
+State: OPEN
+Current state: P14 is a high-level migration-support lane for service-owned
+profile origin, tab handles, controlled CDP attach, bounded evaluate,
+diagnostics, readiness evidence, and client ergonomics.
+
+### Current State
+
+- Plan
+  `docs/dev/plans/0033-2026-06-13-auracall-service-cdp-upgrade-plan.md`
+  is open.
+- The motivating downstream user is AuraCall, but the lane is intentionally
+  framed as generic agent-browser service primitives rather than
+  provider-specific AuraCall scraping logic.
+- The handoff note
+  `docs/dev/notes/2026-06-13-auracall-cdp-feature-requests.md` records the
+  requested feature set and links the relevant sibling AuraCall source paths.
+- Existing access-plan and service-request contracts provide the foundation,
+  but software clients still need lease-backed tab handles, controlled CDP
+  attach, bounded evaluate, diagnostic bundles, and explicit profile-origin
+  semantics before migrating raw CDP provider code safely.
+
+### Evidence
+
+- `docs/dev/notes/2026-05-09-access-plan-service-request-handoff.md`
+- `docs/dev/notes/2026-06-13-auracall-cdp-feature-requests.md`
+- `docs/dev/plans/0033-2026-06-13-auracall-service-cdp-upgrade-plan.md`
+- `docs/dev/plans/0027-2026-06-05-minimal-runtime-profile-reuse-plan.md`
+
+### Next Recommendation
+
+Start P14 Slice A with profile-origin schema and explicit BYOP
+registration/readback. Do not expose controlled CDP attach or bounded evaluate
+until profile ownership and lease-backed tab handles are contractually stable.
