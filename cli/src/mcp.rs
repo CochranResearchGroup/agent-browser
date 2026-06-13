@@ -854,6 +854,15 @@ fn service_mcp_tools() -> Vec<Value> {
                         "type": "boolean",
                         "description": "Access-plan marker indicating whether the current request may use CDP-backed execution."
                     },
+                    "serviceTabHandle": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "description": "Lease-backed service tab handle returned by requestServiceTab and required by cdp_attach and cdp_detach."
+                    },
+                    "targetId": {
+                        "type": "string",
+                        "description": "Optional CDP target id override when the service tab handle already authorizes the tab."
+                    },
                     "browserBuild": {
                         "type": "string",
                         "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"],
@@ -5150,6 +5159,7 @@ fn service_request_command(arguments: &Value) -> Result<(Value, Value), JsonRpcE
     }
     reject_blocked_manual_service_request(arguments)?;
     reject_cdp_free_service_request(action, arguments)?;
+    reject_cdp_attach_service_request(action, arguments)?;
     let params = optional_object_argument(arguments, "params")?;
     let context = ServiceToolContext::from_arguments(arguments)?;
     let trace = context.trace();
@@ -5199,6 +5209,46 @@ fn reject_cdp_free_service_request(action: &str, arguments: &Value) -> Result<()
     {
         return Err(JsonRpcError::invalid_params(
             "service_request requires CDP-free browser operation; non-CDP service request execution is not implemented yet",
+        ));
+    }
+    Ok(())
+}
+
+fn reject_cdp_attach_service_request(action: &str, arguments: &Value) -> Result<(), JsonRpcError> {
+    if action != "cdp_attach" {
+        return Ok(());
+    }
+    if arguments
+        .get("cdpAttachmentAllowed")
+        .and_then(Value::as_bool)
+        != Some(true)
+    {
+        return Err(JsonRpcError::invalid_params(
+            "cdp_attach requires cdpAttachmentAllowed=true from the access-plan decision",
+        ));
+    }
+    let Some(handle) = arguments.get("serviceTabHandle").and_then(Value::as_object) else {
+        return Err(JsonRpcError::invalid_params(
+            "cdp_attach requires serviceTabHandle",
+        ));
+    };
+    if handle.get("valid").and_then(Value::as_bool) != Some(true) {
+        let stale_reason = handle
+            .get("staleReason")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        return Err(JsonRpcError::invalid_params(&format!(
+            "service tab handle is stale: {stale_reason}"
+        )));
+    }
+    if handle.get("tabId").and_then(Value::as_str).is_none() {
+        return Err(JsonRpcError::invalid_params(
+            "serviceTabHandle.tabId is required",
+        ));
+    }
+    if handle.get("targetId").and_then(Value::as_str).is_none() {
+        return Err(JsonRpcError::invalid_params(
+            "cdp_attach requires serviceTabHandle.targetId",
         ));
     }
     Ok(())
@@ -9039,6 +9089,10 @@ struct ServiceToolContext<'a> {
     login_ids: Option<&'a [Value]>,
     browser_id: Option<&'a str>,
     session_name: Option<&'a str>,
+    target_id: Option<&'a str>,
+    requires_cdp_free: Option<bool>,
+    cdp_attachment_allowed: Option<bool>,
+    service_tab_handle: Option<&'a Value>,
     allow_duplicate_profile_lane: Option<bool>,
 }
 
@@ -9067,6 +9121,10 @@ impl<'a> ServiceToolContext<'a> {
             login_ids: optional_string_value_array_argument(arguments, "loginIds")?,
             browser_id: optional_string_argument(arguments, "browserId")?,
             session_name: optional_string_argument(arguments, "sessionName")?,
+            target_id: optional_string_argument(arguments, "targetId")?,
+            requires_cdp_free: optional_bool_argument(arguments, "requiresCdpFree")?,
+            cdp_attachment_allowed: optional_bool_argument(arguments, "cdpAttachmentAllowed")?,
+            service_tab_handle: arguments.get("serviceTabHandle"),
             allow_duplicate_profile_lane: optional_bool_argument(
                 arguments,
                 "allowDuplicateProfileLane",
@@ -9116,6 +9174,18 @@ impl<'a> ServiceToolContext<'a> {
         }
         if let Some(session_name) = self.session_name {
             command["sessionName"] = json!(session_name);
+        }
+        if let Some(target_id) = self.target_id {
+            command["targetId"] = json!(target_id);
+        }
+        if let Some(requires_cdp_free) = self.requires_cdp_free {
+            command["requiresCdpFree"] = json!(requires_cdp_free);
+        }
+        if let Some(cdp_attachment_allowed) = self.cdp_attachment_allowed {
+            command["cdpAttachmentAllowed"] = json!(cdp_attachment_allowed);
+        }
+        if let Some(service_tab_handle) = self.service_tab_handle {
+            command["serviceTabHandle"] = service_tab_handle.clone();
         }
         if let Some(allow_duplicate_profile_lane) = self.allow_duplicate_profile_lane {
             command["allowDuplicateProfileLane"] = json!(allow_duplicate_profile_lane);
@@ -11517,17 +11587,37 @@ mod tests {
         );
         assert!(service_request["inputSchema"]["properties"]["requiresCdpFree"].is_object());
         assert!(service_request["inputSchema"]["properties"]["cdpAttachmentAllowed"].is_object());
+        assert!(service_request["inputSchema"]["properties"]["serviceTabHandle"].is_object());
+        assert!(service_request["inputSchema"]["properties"]["targetId"].is_object());
         assert!(service_request["inputSchema"]["properties"]["browserId"].is_object());
         assert!(service_request["inputSchema"]["properties"]["sessionName"].is_object());
 
         for action in SERVICE_REQUEST_ACTIONS {
-            let (_, command) = service_request_command(&json!({
+            let mut arguments = json!({
                 "action": action,
                 "serviceName": "JournalDownloader",
                 "agentName": "agent-a",
                 "taskName": "probeACSwebsite"
-            }))
-            .unwrap_or_else(|err| panic!("service_request should accept {action}: {err:?}"));
+            });
+            if matches!(*action, "cdp_attach" | "cdp_detach") {
+                arguments["cdpAttachmentAllowed"] = json!(true);
+                arguments["serviceTabHandle"] = json!({
+                    "browserId": "session:default",
+                    "sessionName": "default",
+                    "tabId": "target:target-1",
+                    "targetId": "target-1",
+                    "profileOrigin": "agent_browser_owned",
+                    "leaseHeartbeatExpected": true,
+                    "traceFilter": {
+                        "browserId": "session:default",
+                        "profileId": null,
+                        "sessionId": "default"
+                    },
+                    "valid": true
+                });
+            }
+            let (_, command) = service_request_command(&arguments)
+                .unwrap_or_else(|err| panic!("service_request should accept {action}: {err:?}"));
 
             assert_eq!(command["action"], *action);
             assert!(command["id"]
@@ -11607,6 +11697,54 @@ mod tests {
         assert_eq!(command["serviceName"], "CanvaCLI");
         assert_eq!(command["targetServiceId"], "canva");
         assert_eq!(command["url"], "https://www.canva.com/");
+    }
+
+    fn service_request_test_tab_handle(valid: bool) -> Value {
+        json!({
+            "browserId": "session:default",
+            "sessionName": "default",
+            "tabId": "target:target-1",
+            "targetId": "target-1",
+            "profileOrigin": "agent_browser_owned",
+            "leaseHeartbeatExpected": true,
+            "traceFilter": {
+                "browserId": "session:default",
+                "profileId": null,
+                "sessionId": "default"
+            },
+            "valid": valid,
+            "staleReason": if valid { Value::Null } else { json!("tab_closed") }
+        })
+    }
+
+    #[test]
+    fn service_request_command_rejects_cdp_attach_without_policy_allowance() {
+        let err = service_request_command(&json!({
+            "action": "cdp_attach",
+            "serviceName": "JournalDownloader",
+            "agentName": "agent-a",
+            "taskName": "probeACSwebsite",
+            "cdpAttachmentAllowed": false,
+            "serviceTabHandle": service_request_test_tab_handle(true),
+        }))
+        .expect_err("cdp_attach without policy allowance should fail");
+
+        assert!(format!("{err:?}").contains("cdpAttachmentAllowed=true"));
+    }
+
+    #[test]
+    fn service_request_command_rejects_stale_cdp_attach_handle() {
+        let err = service_request_command(&json!({
+            "action": "cdp_attach",
+            "serviceName": "JournalDownloader",
+            "agentName": "agent-a",
+            "taskName": "probeACSwebsite",
+            "cdpAttachmentAllowed": true,
+            "serviceTabHandle": service_request_test_tab_handle(false),
+        }))
+        .expect_err("stale cdp_attach handle should fail");
+
+        assert!(format!("{err:?}").contains("service tab handle is stale"));
     }
 
     #[test]

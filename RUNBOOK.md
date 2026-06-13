@@ -702,3 +702,51 @@ Result:
   live proof is requested before controlled CDP attach work starts.
 - The next recommended P14 slice is Slice C: controlled CDP attach for leased
   service tab handles.
+
+## Turn 20 | 2026-06-13
+
+Scope: implement P14 Slice C controlled CDP attach for leased service tab
+handles.
+
+Actions:
+
+- Added `cdp_attach` and `cdp_detach` to the service request action metadata,
+  HTTP relay, MCP service request surface, Rust daemon dispatcher, JSON schema,
+  generated client types, and `@agent-browser/client/service-request` helpers.
+- Gated attach on a valid `serviceTabHandle`, `cdpAttachmentAllowed: true`,
+  non-CDP-free posture, matching service session, handle freshness, and target
+  identity.
+- Returned a service-owned attach descriptor with browser, session, tab,
+  target, profile, lease, cleanup, trace, websocket, and detach metadata.
+- Made detach preserve the browser process by default and return explicit
+  detach metadata.
+- Updated README, docs site, repo skill, and installed agent-browser skill for
+  the new attach/detach helper path.
+- Updated P14 plan and ROADMAP so Slice D bounded evaluate is the next
+  implementation target.
+
+Validation run:
+
+- `git diff --check`
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `cargo test --manifest-path cli/Cargo.toml service_request_command -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml cdp_screencast_view_stream -- --nocapture`
+- `cargo test --manifest-path cli/Cargo.toml service_contracts -- --test-threads=1`
+- `pnpm test:service-client`
+- `pnpm test:service-api-mcp-parity`
+- `pnpm --dir docs build`
+- `pnpm validation:select -- --base HEAD`
+- `node scripts/dev/select-validation.js --base HEAD --json`
+- `diff -q skills/agent-browser/SKILL.md /home/ecochran76/.codex/shared/skills/agent-browser/SKILL.md`
+- `pnpm test:service-cdp-tab-streaming-live`
+
+Result:
+
+- Slice C is implemented with no-launch policy and stale-handle coverage.
+- Live CDP tab-streaming smoke passed for `session:cdp-tab-stream-98925`,
+  stream `37669`.
+- A dedicated attach-read-detach live smoke remains as the validation gap before
+  treating controlled attach as AuraCall migration proof.
+- The next recommended P14 slice is Slice D: bounded evaluate against leased
+  service tab handles.

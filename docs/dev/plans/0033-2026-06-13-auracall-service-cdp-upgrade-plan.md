@@ -47,8 +47,11 @@ expectations so work can proceed in parallel only where the sequence permits.
   contract.
 - Slice B has implemented lease-backed service tab handles on `tab_new`
   responses, service tab records, service browser records, and trace event/job
-  evidence. The next recommended implementation target is Slice C: controlled
-  CDP attach.
+  evidence.
+- Slice C has implemented policy-gated `cdp_attach` and `cdp_detach` service
+  request actions, generated client helpers, HTTP/MCP rejection guards, and
+  no-launch stale-handle and policy-denial coverage. The next recommended
+  implementation target is Slice D: bounded evaluate.
 
 ## Operating Invariant
 
@@ -281,6 +284,34 @@ Acceptance:
   and allowed only when policy permits CDP.
 - A focused live smoke proves a software client can request a tab, attach,
   perform a bounded read, detach, and find trace evidence.
+
+Status: IMPLEMENTED in the 2026-06-13 Slice C checkpoint, with one validation
+gap retained for a dedicated attach-read-detach live smoke.
+
+Validation evidence:
+
+- `git diff --check`
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `cargo test --manifest-path cli/Cargo.toml service_request_command -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml cdp_screencast_view_stream -- --nocapture`
+- `cargo test --manifest-path cli/Cargo.toml service_contracts -- --test-threads=1`
+- `pnpm test:service-client`
+- `pnpm test:service-api-mcp-parity`
+- `pnpm --dir docs build`
+- `pnpm validation:select -- --base HEAD`
+- `node scripts/dev/select-validation.js --base HEAD --json`
+- `diff -q skills/agent-browser/SKILL.md /home/ecochran76/.codex/shared/skills/agent-browser/SKILL.md`
+
+Live smoke:
+
+- `pnpm test:service-cdp-tab-streaming-live` passed for
+  `session:cdp-tab-stream-98925`, stream `37669`.
+- A dedicated attach-read-detach live smoke was not added in this slice. The
+  no-launch tests prove policy gating and stale-handle rejection, while the
+  existing live smoke proves the local CDP browser and streaming environment is
+  viable. Add the narrower attach-read-detach live smoke before relying on
+  Slice C as migration proof for AuraCall provider adapters.
 
 Suggested subagent prompt:
 

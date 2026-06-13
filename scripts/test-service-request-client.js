@@ -5,6 +5,8 @@ import { readFileSync } from 'node:fs';
 
 import {
   createServiceControllerLeaseTakeoverRequest,
+  createServiceCdpAttachRequest,
+  createServiceCdpDetachRequest,
   createServiceCdpFreeLaunchRequest,
   createServiceRemoteViewRouteCheckoutRequest,
   createServiceRemoteViewRouteReleaseRequest,
@@ -22,6 +24,8 @@ import {
   postServiceRequest,
   releaseServiceViewerLease,
   requireServiceTabHandle,
+  requestServiceCdpAttach,
+  requestServiceCdpDetach,
   requestServiceCdpFreeLaunch,
   requestServiceRemoteViewRouteCheckout,
   requestServiceRoutePoolRepair,
@@ -791,6 +795,96 @@ async function main() {
       }),
     /service tab handle is stale: tab_closed/,
   );
+  assert.deepEqual(
+    createServiceCdpAttachRequest({
+      serviceName: 'JournalDownloader',
+      agentName: 'article-probe-agent',
+      taskName: 'probeACSwebsite',
+      serviceTabHandle: tabHandle,
+      cdpAttachmentAllowed: true,
+    }),
+    {
+      serviceName: 'JournalDownloader',
+      agentName: 'article-probe-agent',
+      taskName: 'probeACSwebsite',
+      action: 'cdp_attach',
+      browserId: 'session:acs',
+      sessionName: 'acs',
+      targetId: 'target-1',
+      cdpAttachmentAllowed: true,
+      serviceTabHandle: tabHandle,
+    },
+  );
+  assert.throws(
+    () =>
+      createServiceCdpAttachRequest({
+        serviceTabHandle: tabHandle,
+        cdpAttachmentAllowed: false,
+      }),
+    /requires cdpAttachmentAllowed=true/,
+  );
+  assert.throws(
+    () =>
+      createServiceCdpAttachRequest({
+        serviceTabHandle: {
+          ...tabHandle,
+          valid: false,
+          staleReason: 'tab_closed',
+        },
+        cdpAttachmentAllowed: true,
+      }),
+    /service tab handle is stale: tab_closed/,
+  );
+  assert.deepEqual(
+    createServiceCdpDetachRequest({
+      serviceName: 'JournalDownloader',
+      serviceTabHandle: tabHandle,
+    }),
+    {
+      serviceName: 'JournalDownloader',
+      action: 'cdp_detach',
+      browserId: 'session:acs',
+      sessionName: 'acs',
+      targetId: 'target-1',
+      serviceTabHandle: tabHandle,
+    },
+  );
+  const cdpAttachRecorder = createFetchRecorder({
+    success: true,
+    data: {
+      attached: true,
+      browserId: 'session:acs',
+      tabId: 'target:target-1',
+      targetId: 'target-1',
+      browserWebSocketUrl: 'ws://127.0.0.1:9222/devtools/browser/test',
+      detachAction: 'cdp_detach',
+      browserProcessPreserved: true,
+    },
+  });
+  await requestServiceCdpAttach({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: cdpAttachRecorder.fetch,
+    serviceName: 'JournalDownloader',
+    serviceTabHandle: tabHandle,
+    cdpAttachmentAllowed: true,
+  });
+  assert.equal(cdpAttachRecorder.calls[0].body.action, 'cdp_attach');
+  assert.deepEqual(cdpAttachRecorder.calls[0].body.serviceTabHandle, tabHandle);
+  const cdpDetachRecorder = createFetchRecorder({
+    success: true,
+    data: {
+      detached: true,
+      browserProcessPreserved: true,
+      closeBrowserOnDetach: false,
+    },
+  });
+  await requestServiceCdpDetach({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: cdpDetachRecorder.fetch,
+    serviceTabHandle: tabHandle,
+  });
+  assert.equal(cdpDetachRecorder.calls[0].body.action, 'cdp_detach');
+  assert.equal(cdpDetachRecorder.calls[0].body.browserId, 'session:acs');
   assert.deepEqual(tabRecorder.calls[0].body, {
     serviceName: 'JournalDownloader',
     agentName: 'article-probe-agent',

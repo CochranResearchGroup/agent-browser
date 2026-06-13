@@ -24,6 +24,10 @@ const displayIsolationSet = new Set([
  * @typedef {import('./service-request.generated.js').ServiceRequestResponse} ServiceRequestResponse
  * @typedef {import('./service-request.generated.js').ServiceCdpFreeLaunchAvailability} ServiceCdpFreeLaunchAvailability
  * @typedef {import('./service-request.generated.js').ServiceCdpFreeLaunchData} ServiceCdpFreeLaunchData
+ * @typedef {import('./service-request.generated.js').ServiceCdpAttachRequestHttpOptions} ServiceCdpAttachRequestHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceCdpAttachRequestOptions} ServiceCdpAttachRequestOptions
+ * @typedef {import('./service-request.generated.js').ServiceCdpDetachRequestHttpOptions} ServiceCdpDetachRequestHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceCdpDetachRequestOptions} ServiceCdpDetachRequestOptions
  * @typedef {import('./service-request.generated.js').ServiceTabAccessPlan} ServiceTabAccessPlan
  * @typedef {import('./service-request.generated.js').ServiceCdpFreeLaunchRequestHttpOptions} ServiceCdpFreeLaunchRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceCdpFreeLaunchRequestOptions} ServiceCdpFreeLaunchRequestOptions
@@ -275,6 +279,68 @@ export function createServiceCdpFreeLaunchRequest(input) {
 }
 
 /**
+ * Builds a policy-gated CDP attach descriptor request for a leased service tab.
+ *
+ * @param {ServiceCdpAttachRequestOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceCdpAttachRequest(input) {
+  assertPlainObject(input, 'service CDP attach request');
+  const { serviceTabHandle, params, ...request } = input;
+  const handle = requireServiceTabHandle({ serviceTabHandle });
+  if (params !== undefined) {
+    assertPlainObject(params, 'service CDP attach request params');
+  }
+  if (request.cdpAttachmentAllowed !== true) {
+    throw new TypeError('service CDP attach request requires cdpAttachmentAllowed=true');
+  }
+  if (request.requiresCdpFree === true) {
+    throw new TypeError('service CDP attach request cannot run when requiresCdpFree=true');
+  }
+  if (!handle.targetId) {
+    throw new TypeError('service CDP attach request requires serviceTabHandle.targetId');
+  }
+  const sessionName = request.sessionName ?? handle.sessionName ?? handle.ownerSessionId;
+  const targetId = request.targetId ?? handle.targetId;
+  return createServiceRequest({
+    ...request,
+    action: 'cdp_attach',
+    browserId: request.browserId ?? handle.browserId,
+    ...(sessionName !== undefined && sessionName !== null ? { sessionName } : {}),
+    ...(targetId !== undefined && targetId !== null ? { targetId } : {}),
+    cdpAttachmentAllowed: true,
+    serviceTabHandle: handle,
+    ...(params !== undefined ? { params } : {}),
+  });
+}
+
+/**
+ * Builds a CDP detach marker request without closing the browser.
+ *
+ * @param {ServiceCdpDetachRequestOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceCdpDetachRequest(input) {
+  assertPlainObject(input, 'service CDP detach request');
+  const { serviceTabHandle, params, ...request } = input;
+  const handle = requireServiceTabHandle({ serviceTabHandle });
+  if (params !== undefined) {
+    assertPlainObject(params, 'service CDP detach request params');
+  }
+  const sessionName = request.sessionName ?? handle.sessionName ?? handle.ownerSessionId;
+  const targetId = request.targetId ?? handle.targetId;
+  return createServiceRequest({
+    ...request,
+    action: 'cdp_detach',
+    browserId: request.browserId ?? handle.browserId,
+    ...(sessionName !== undefined && sessionName !== null ? { sessionName } : {}),
+    ...(targetId !== undefined && targetId !== null ? { targetId } : {}),
+    serviceTabHandle: handle,
+    ...(params !== undefined ? { params } : {}),
+  });
+}
+
+/**
  * @param {ServiceRemoteViewRouteCheckoutOptions} input
  * @returns {ServiceRequest}
  */
@@ -452,6 +518,32 @@ export async function requestServiceCdpFreeLaunch({ baseUrl, fetch = globalThis.
     fetch,
     signal,
     request: createServiceCdpFreeLaunchRequest(request),
+  });
+}
+
+/**
+ * @param {ServiceCdpAttachRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function requestServiceCdpAttach({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceCdpAttachRequest(request),
+  });
+}
+
+/**
+ * @param {ServiceCdpDetachRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function requestServiceCdpDetach({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceCdpDetachRequest(request),
   });
 }
 

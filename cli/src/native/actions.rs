@@ -201,6 +201,8 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
         action,
         "" | "launch"
             | "cdp_free_launch"
+            | "cdp_attach"
+            | "cdp_detach"
             | "close"
             | "har_stop"
             | "credentials_set"
@@ -3907,6 +3909,8 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
     let result = match action {
         "launch" => handle_launch(cmd, state).await,
         "cdp_free_launch" => handle_cdp_free_launch(cmd, state).await,
+        "cdp_attach" => handle_cdp_attach(cmd, state).await,
+        "cdp_detach" => handle_cdp_detach(cmd, state).await,
         "navigate" => handle_navigate(cmd, state).await,
         "url" => handle_url(state).await,
         "browser_pid" => handle_browser_pid(state),
@@ -5204,6 +5208,152 @@ fn cdp_free_launch_response(
         ],
         "unsupportedCommands": UNSUPPORTED_CDP_FREE_COMMANDS,
     })
+}
+
+async fn handle_cdp_attach(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+    validate_cdp_attach_request(cmd, &state.session_id)?;
+    let mgr = state.browser.as_mut().ok_or_else(|| {
+        "Cannot attach CDP: target browser session is not running; request a service tab first"
+            .to_string()
+    })?;
+    let handle = cmd
+        .get("serviceTabHandle")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "cdp_attach requires serviceTabHandle".to_string())?;
+    let target_id = handle
+        .get("targetId")
+        .and_then(Value::as_str)
+        .or_else(|| cmd.get("targetId").and_then(Value::as_str))
+        .ok_or_else(|| "cdp_attach requires serviceTabHandle.targetId".to_string())?;
+
+    if mgr.active_target_id().ok() != Some(target_id) {
+        let _ = mgr.tab_switch_target_id(target_id).await?;
+    }
+
+    let page_session_id = mgr.active_session_id()?.to_string();
+    let attached_at = OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string());
+    let browser_id = service_browser_id(&state.session_id);
+    let profile_id = handle.get("profileId").cloned().unwrap_or(Value::Null);
+    let tab_id = handle
+        .get("tabId")
+        .cloned()
+        .unwrap_or_else(|| json!(format!("target:{target_id}")));
+
+    Ok(json!({
+        "attached": true,
+        "controlPlaneMode": "cdp",
+        "attachKind": "service_tab_handle",
+        "browserId": browser_id,
+        "sessionName": state.session_id.clone(),
+        "tabId": tab_id,
+        "targetId": target_id,
+        "pageSessionId": page_session_id,
+        "profileId": profile_id.clone(),
+        "profileOrigin": handle.get("profileOrigin").cloned().unwrap_or(Value::Null),
+        "leaseId": handle.get("leaseId").cloned().unwrap_or(Value::Null),
+        "leaseState": handle.get("leaseState").cloned().unwrap_or(Value::Null),
+        "cleanupPolicy": handle.get("cleanupPolicy").cloned().unwrap_or(Value::Null),
+        "browserWebSocketUrl": mgr.get_cdp_url(),
+        "cdpAttachmentAllowed": true,
+        "detachAction": "cdp_detach",
+        "detachRequired": true,
+        "closeBrowserOnDetach": false,
+        "browserProcessPreserved": true,
+        "traceFilter": {
+            "browserId": browser_id,
+            "profileId": profile_id,
+            "sessionId": state.session_id.clone(),
+        },
+        "serviceTabHandle": cmd.get("serviceTabHandle").cloned().unwrap_or(Value::Null),
+        "attachedAt": attached_at,
+    }))
+}
+
+async fn handle_cdp_detach(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+    let handle = cmd
+        .get("serviceTabHandle")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "cdp_detach requires serviceTabHandle".to_string())?;
+    validate_service_tab_handle_for_current_session(handle, &state.session_id)?;
+    let detached_at = OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string());
+    Ok(json!({
+        "detached": true,
+        "controlPlaneMode": "cdp",
+        "detachKind": "service_tab_handle",
+        "browserId": service_browser_id(&state.session_id),
+        "sessionName": state.session_id.clone(),
+        "tabId": handle.get("tabId").cloned().unwrap_or(Value::Null),
+        "targetId": handle.get("targetId").cloned().unwrap_or(Value::Null),
+        "profileId": handle.get("profileId").cloned().unwrap_or(Value::Null),
+        "browserProcessPreserved": true,
+        "closeBrowserOnDetach": false,
+        "serviceTabHandle": cmd.get("serviceTabHandle").cloned().unwrap_or(Value::Null),
+        "detachedAt": detached_at,
+    }))
+}
+
+fn validate_cdp_attach_request(cmd: &Value, session_id: &str) -> Result<(), String> {
+    if cmd.get("requiresCdpFree").and_then(Value::as_bool) == Some(true) {
+        return Err(
+            "cdp_attach is blocked because the selected policy requires CDP-free browser operation"
+                .to_string(),
+        );
+    }
+    if cmd.get("cdpAttachmentAllowed").and_then(Value::as_bool) != Some(true) {
+        return Err(
+            "cdp_attach requires cdpAttachmentAllowed=true from the access-plan decision"
+                .to_string(),
+        );
+    }
+    let handle = cmd
+        .get("serviceTabHandle")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "cdp_attach requires serviceTabHandle".to_string())?;
+    validate_service_tab_handle_for_current_session(handle, session_id)?;
+    if handle.get("targetId").and_then(Value::as_str).is_none()
+        && cmd.get("targetId").and_then(Value::as_str).is_none()
+    {
+        return Err("cdp_attach requires a CDP target id on the service tab handle".to_string());
+    }
+    Ok(())
+}
+
+fn validate_service_tab_handle_for_current_session(
+    handle: &Map<String, Value>,
+    session_id: &str,
+) -> Result<(), String> {
+    if handle.get("valid").and_then(Value::as_bool) != Some(true) {
+        let stale_reason = handle
+            .get("staleReason")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        return Err(format!("service tab handle is stale: {stale_reason}"));
+    }
+    let browser_id = handle
+        .get("browserId")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "serviceTabHandle.browserId is required".to_string())?;
+    let expected_browser_id = service_browser_id(session_id);
+    if browser_id != expected_browser_id && browser_id != format!("session:{session_id}") {
+        return Err(format!(
+            "service tab handle browserId {browser_id} does not match routed session {session_id}"
+        ));
+    }
+    if let Some(handle_session_name) = handle.get("sessionName").and_then(Value::as_str) {
+        if handle_session_name != session_id {
+            return Err(format!(
+                "service tab handle sessionName {handle_session_name} does not match routed session {session_id}"
+            ));
+        }
+    }
+    if handle.get("tabId").and_then(Value::as_str).is_none() {
+        return Err("serviceTabHandle.tabId is required".to_string());
+    }
+    Ok(())
 }
 
 async fn launch_ios(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {

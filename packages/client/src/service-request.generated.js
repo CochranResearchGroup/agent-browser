@@ -4,6 +4,8 @@
 export const SERVICE_REQUEST_ACTIONS = [
   "navigate",
   "cdp_free_launch",
+  "cdp_attach",
+  "cdp_detach",
   "back",
   "forward",
   "reload",
@@ -91,6 +93,7 @@ export const SERVICE_REQUEST_REQUIRED_FIELDS = [
 export const SERVICE_REQUEST_STRING_FIELDS = [
   "action",
   "profileLeasePolicy",
+  "targetId",
   "browserBuild",
   "displayIsolation",
   "serviceName",
@@ -132,7 +135,8 @@ export const SERVICE_REQUEST_BOOLEAN_FIELDS = [
 ];
 
 export const SERVICE_REQUEST_OBJECT_FIELDS = [
-  "monitorRunDueSummary"
+  "monitorRunDueSummary",
+  "serviceTabHandle"
 ];
 
 export const SERVICE_REQUEST_MCP_TOOL_NAME = "service_request";

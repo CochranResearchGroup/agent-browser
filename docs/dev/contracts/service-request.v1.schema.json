@@ -13,6 +13,8 @@
       "enum": [
         "navigate",
         "cdp_free_launch",
+        "cdp_attach",
+        "cdp_detach",
         "back",
         "forward",
         "reload",
@@ -92,7 +94,7 @@
         "service_prune_retained",
         "service_repair_retained"
       ],
-      "description": "Underlying service or browser-control action to queue through the service worker. cdp_free_launch starts a headed browser without DevTools and records service-owned lifecycle metadata. view_focus brings a selected tab forward and asks the browser host to maximize the containing window for remote-view inspection; pass params.targetId when available, otherwise params.index is accepted as a fallback. view_takeover records a service-owned remote-view takeover or reconnect request for single-active-viewer providers such as RDP through Guacamole; pass params.browserId, params.sessionName, params.streamId, params.provider, and params.openMode when known. service_remote_view_route_checkout and service_remote_view_route_release mutate service-owned display allocation, route pool, and remote-view route records without launching a browser. service_route_pool_repair resets stale checked-out route-pool entries whose route allocation is missing or no longer active, and defaults to dry-run unless params.apply is true. service_viewer_lease_request, service_viewer_lease_heartbeat, service_viewer_lease_release, and service_controller_lease_takeover mutate viewer and controller leases for retained remote-view routes. service_browser_close politely closes the currently controlled service browser identified by params.browserId and records shutdown health. service_browser_repair makes one degraded or faulted retained browser record retryable again. service_prune_retained and service_repair_retained provide reviewed retained-state cleanup and default to dry-run unless params.apply is true; service_prune_retained can include orphanedProfiles to remove custom profile records only when they have no retained service references and missing ephemeral user-data directories."
+      "description": "Underlying service or browser-control action to queue through the service worker. cdp_free_launch starts a headed browser without DevTools and records service-owned lifecycle metadata. cdp_attach returns a policy-gated CDP descriptor for a valid serviceTabHandle, and cdp_detach records a detach without closing the browser. view_focus brings a selected tab forward and asks the browser host to maximize the containing window for remote-view inspection; pass params.targetId when available, otherwise params.index is accepted as a fallback. view_takeover records a service-owned remote-view takeover or reconnect request for single-active-viewer providers such as RDP through Guacamole; pass params.browserId, params.sessionName, params.streamId, params.provider, and params.openMode when known. service_remote_view_route_checkout and service_remote_view_route_release mutate service-owned display allocation, route pool, and remote-view route records without launching a browser. service_route_pool_repair resets stale checked-out route-pool entries whose route allocation is missing or no longer active, and defaults to dry-run unless params.apply is true. service_viewer_lease_request, service_viewer_lease_heartbeat, service_viewer_lease_release, and service_controller_lease_takeover mutate viewer and controller leases for retained remote-view routes. service_browser_close politely closes the currently controlled service browser identified by params.browserId and records shutdown health. service_browser_repair makes one degraded or faulted retained browser record retryable again. service_prune_retained and service_repair_retained provide reviewed retained-state cleanup and default to dry-run unless params.apply is true; service_prune_retained can include orphanedProfiles to remove custom profile records only when they have no retained service references and missing ephemeral user-data directories."
     },
     "params": {
       "type": "object",
@@ -145,6 +147,14 @@
     "cdpAttachmentAllowed": {
       "type": "boolean",
       "description": "Planner marker copied from an access-plan serviceRequest. False means the current service request surface must not queue a CDP-backed launch."
+    },
+    "serviceTabHandle": {
+      "$ref": "service-tab-record.v1.schema.json#/$defs/serviceTabHandle",
+      "description": "Lease-backed service tab handle returned by requestServiceTab and required by cdp_attach and cdp_detach."
+    },
+    "targetId": {
+      "type": "string",
+      "description": "Optional CDP target id override when serviceTabHandle already authorizes the tab."
     },
     "browserBuild": {
       "type": "string",

@@ -95,6 +95,8 @@ pub const SERVICE_REQUEST_CONTRACT_VERSION: &str = "v1";
 pub const SERVICE_REQUEST_ACTIONS: &[&str] = &[
     "navigate",
     "cdp_free_launch",
+    "cdp_attach",
+    "cdp_detach",
     "back",
     "forward",
     "reload",

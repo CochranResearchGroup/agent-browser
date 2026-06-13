@@ -507,11 +507,12 @@ diagnostics, readiness evidence, and client ergonomics.
 - The handoff note
   `docs/dev/notes/2026-06-13-auracall-cdp-feature-requests.md` records the
   requested feature set and links the relevant sibling AuraCall source paths.
-- Existing access-plan and service-request contracts provide the foundation,
-  and Slice A now provides explicit profile-origin and BYOP registration
-  semantics. Software clients still need lease-backed tab handles, controlled
-  CDP attach, bounded evaluate, diagnostic bundles, and client ergonomics
-  before migrating raw CDP provider code safely.
+- Existing access-plan and service-request contracts provide the foundation.
+  Slices A through C now provide explicit profile-origin and BYOP registration
+  semantics, lease-backed service tab handles, and policy-gated CDP
+  attach/detach helpers. Software clients still need bounded evaluate,
+  diagnostic bundles, readiness evidence, and migration ergonomics before
+  migrating raw CDP provider code safely.
 
 ### Evidence
 
@@ -522,6 +523,6 @@ diagnostics, readiness evidence, and client ergonomics.
 
 ### Next Recommendation
 
-Start P14 Slice B with lease-backed service tab handles. Do not expose
-controlled CDP attach or bounded evaluate until the tab handle contract is
-stable on top of the implemented profile ownership boundary.
+Start P14 Slice D with bounded evaluate tied to leased service tab handles.
+Keep the Slice C attach-read-detach live smoke as a focused validation
+follow-up before treating the AuraCall migration bridge as live-proven.

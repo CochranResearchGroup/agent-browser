@@ -1521,6 +1521,11 @@ fn service_request_command(body: &str) -> Result<Value, String> {
         request.get("requiresCdpFree"),
         request.get("cdpAttachmentAllowed"),
     )?;
+    reject_cdp_attach_service_request(
+        action,
+        request.get("serviceTabHandle"),
+        request.get("cdpAttachmentAllowed"),
+    )?;
     reject_stale_monitor_service_request(
         request.get("monitorRunDueSummary"),
         request.get("allowMonitorFreshnessRisk"),
@@ -1566,6 +1571,8 @@ fn service_request_command(body: &str) -> Result<Value, String> {
         "runtimeProfile",
         "browserId",
         "sessionName",
+        "targetId",
+        "serviceTabHandle",
     ] {
         if let Some(value) = request.get(key) {
             command[key] = value.clone();
@@ -1592,6 +1599,8 @@ fn service_request_relay_session(default_session: &str, body: &str, command: &Va
             request.pointer("/targetSessionName"),
             request.pointer("/sessionId"),
             request.pointer("/browserId"),
+            request.pointer("/serviceTabHandle/sessionName"),
+            request.pointer("/serviceTabHandle/browserId"),
         ] {
             if let Some(session_name) = service_request_relay_session_candidate(value) {
                 return session_name;
@@ -1751,6 +1760,39 @@ fn reject_cdp_free_service_request(
             "service request requires CDP-free browser operation; non-CDP service request execution is not implemented yet"
                 .to_string(),
         );
+    }
+    Ok(())
+}
+
+fn reject_cdp_attach_service_request(
+    action: &str,
+    service_tab_handle: Option<&Value>,
+    cdp_attachment_allowed: Option<&Value>,
+) -> Result<(), String> {
+    if action != "cdp_attach" {
+        return Ok(());
+    }
+    if cdp_attachment_allowed.and_then(Value::as_bool) != Some(true) {
+        return Err(
+            "cdp_attach requires cdpAttachmentAllowed=true from the access-plan decision"
+                .to_string(),
+        );
+    }
+    let Some(handle) = service_tab_handle.and_then(Value::as_object) else {
+        return Err("cdp_attach requires serviceTabHandle".to_string());
+    };
+    if handle.get("valid").and_then(Value::as_bool) != Some(true) {
+        let stale_reason = handle
+            .get("staleReason")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        return Err(format!("service tab handle is stale: {stale_reason}"));
+    }
+    if handle.get("tabId").and_then(Value::as_str).is_none() {
+        return Err("serviceTabHandle.tabId is required".to_string());
+    }
+    if handle.get("targetId").and_then(Value::as_str).is_none() {
+        return Err("cdp_attach requires serviceTabHandle.targetId".to_string());
     }
     Ok(())
 }
@@ -4230,13 +4272,41 @@ mod tests {
     }
 
     #[test]
+    fn service_request_command_rejects_cdp_attach_without_policy_allowance() {
+        let err = service_request_command(
+            r##"{"action":"cdp_attach","serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","cdpAttachmentAllowed":false,"serviceTabHandle":{"browserId":"session:default","sessionName":"default","tabId":"target:target-1","targetId":"target-1","profileOrigin":"agent_browser_owned","leaseHeartbeatExpected":true,"traceFilter":{"browserId":"session:default","profileId":null,"sessionId":"default"},"valid":true}}"##,
+        )
+        .expect_err("cdp_attach without policy allowance should fail");
+
+        assert!(err.contains("cdpAttachmentAllowed=true"));
+    }
+
+    #[test]
+    fn service_request_command_rejects_stale_cdp_attach_handle() {
+        let err = service_request_command(
+            r##"{"action":"cdp_attach","serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","cdpAttachmentAllowed":true,"serviceTabHandle":{"browserId":"session:default","sessionName":"default","tabId":"target:target-1","targetId":"target-1","profileOrigin":"agent_browser_owned","leaseHeartbeatExpected":true,"traceFilter":{"browserId":"session:default","profileId":null,"sessionId":"default"},"valid":false,"staleReason":"tab_closed"}}"##,
+        )
+        .expect_err("stale cdp_attach handle should fail");
+
+        assert!(err.contains("service tab handle is stale: tab_closed"));
+    }
+
+    #[test]
     fn service_request_command_accepts_contract_actions() {
         for action in SERVICE_REQUEST_ACTIONS {
-            let command = service_request_command(&format!(
-                r##"{{"action":"{}","params":{{"action":"ignored","id":"ignored"}},"serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite"}}"##,
-                action
-            ))
-            .unwrap_or_else(|err| panic!("service request should accept {action}: {err}"));
+            let body = if matches!(*action, "cdp_attach" | "cdp_detach") {
+                format!(
+                    r##"{{"action":"{}","params":{{"action":"ignored","id":"ignored"}},"serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","cdpAttachmentAllowed":true,"serviceTabHandle":{{"browserId":"session:default","sessionName":"default","tabId":"target:target-1","targetId":"target-1","profileOrigin":"agent_browser_owned","leaseHeartbeatExpected":true,"traceFilter":{{"browserId":"session:default","profileId":null,"sessionId":"default"}},"valid":true}}}}"##,
+                    action
+                )
+            } else {
+                format!(
+                    r##"{{"action":"{}","params":{{"action":"ignored","id":"ignored"}},"serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite"}}"##,
+                    action
+                )
+            };
+            let command = service_request_command(&body)
+                .unwrap_or_else(|err| panic!("service request should accept {action}: {err}"));
 
             assert_eq!(command["action"], *action);
             let expected_id_prefix = format!("http-service-request-{action}-");

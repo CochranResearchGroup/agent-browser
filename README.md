@@ -2234,6 +2234,8 @@ Software clients can use this TypeScript-shaped payload for `POST /api/service/r
 ```ts
 import {
   createServiceRequest,
+  requestServiceCdpAttach,
+  requestServiceCdpDetach,
   requireServiceTabHandle,
   postServiceRequest,
   requestServiceTab,
@@ -2269,6 +2271,20 @@ const tab = await requestServiceTab({
 });
 
 const handle = requireServiceTabHandle(tab);
+
+await requestServiceCdpAttach({
+  baseUrl: `http://127.0.0.1:${streamPort}`,
+  serviceName: 'JournalDownloader',
+  agentName: 'article-probe-agent',
+  taskName: 'probeACSwebsite',
+  serviceTabHandle: handle,
+  cdpAttachmentAllowed: true,
+});
+
+await requestServiceCdpDetach({
+  baseUrl: `http://127.0.0.1:${streamPort}`,
+  serviceTabHandle: handle,
+});
 ```
 
 The private workspace package `@agent-browser/client` is generated from the
@@ -2288,7 +2304,11 @@ service-owned tab. Use `getServiceTabHandle()` or `requireServiceTabHandle()`
 for follow-on work instead of reconstructing browser, session, profile, tab, or
 target identity from process lists or DevTools scans. The handle includes
 stale-state fields so clients can fail closed when the tab or browser has
-already gone away. Remote-view route and lease actions return typed route checkout, route
+already gone away. When site policy and the access plan allow CDP attachment,
+use `requestServiceCdpAttach()` with that valid handle to receive a
+service-owned attach descriptor, then call `requestServiceCdpDetach()` when the
+client is finished. Detach preserves the browser process by default, so browser
+lifecycle remains owned by agent-browser rather than the caller. Remote-view route and lease actions return typed route checkout, route
 release, viewer lease, and controller lease metadata. Use
 `requestServiceRemoteViewRouteCheckout()`,
 `requestServiceRemoteViewRouteRelease()`, `requestServiceViewerLease()`,

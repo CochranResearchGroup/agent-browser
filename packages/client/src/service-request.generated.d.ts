@@ -4,6 +4,8 @@
 export type ServiceRequestAction =
   | "navigate"
   | "cdp_free_launch"
+  | "cdp_attach"
+  | "cdp_detach"
   | "back"
   | "forward"
   | "reload"
@@ -87,6 +89,7 @@ export interface ServiceRequest {
   action: ServiceRequestAction;
   params?: Record<string, unknown>;
   profileLeasePolicy?: string;
+  targetId?: string;
   browserBuild?: string;
   displayIsolation?: string;
   serviceName?: string;
@@ -117,6 +120,7 @@ export interface ServiceRequest {
   cdpAttachmentAllowed?: boolean;
   allowDuplicateProfileLane?: boolean;
   monitorRunDueSummary?: Record<string, unknown>;
+  serviceTabHandle?: ServiceTabHandle;
 }
 
 export type ServiceRequestForAction<TAction extends ServiceRequestAction> =
@@ -163,6 +167,48 @@ export interface ServiceCdpFreeLaunchAvailability {
   unsupportedCommands: ServiceRequestAction[];
   availableCommands: ServiceRequestAction[];
   hasUnsupportedCommandList: boolean;
+}
+
+export interface ServiceCdpAttachDescriptor {
+  attached: true;
+  controlPlaneMode: "cdp";
+  attachKind: "service_tab_handle" | string;
+  browserId: string;
+  sessionName: string;
+  tabId: string;
+  targetId: string;
+  pageSessionId: string;
+  profileId?: string | null;
+  profileOrigin?: 'agent_browser_owned' | 'external_byop' | 'external_observed' | string | null;
+  leaseId?: string | null;
+  leaseState?: 'shared' | 'exclusive' | 'human_takeover' | 'released' | 'expired' | string | null;
+  cleanupPolicy?: 'detach' | 'close_tabs' | 'close_browser' | 'release_only' | string | null;
+  browserWebSocketUrl: string;
+  cdpAttachmentAllowed: true;
+  detachAction: "cdp_detach";
+  detachRequired: boolean;
+  closeBrowserOnDetach: false;
+  browserProcessPreserved: true;
+  traceFilter: ServiceTabHandleTraceFilter;
+  serviceTabHandle: ServiceTabHandle;
+  attachedAt?: string;
+  [key: string]: unknown;
+}
+
+export interface ServiceCdpDetachData {
+  detached: true;
+  controlPlaneMode: "cdp";
+  detachKind: "service_tab_handle" | string;
+  browserId: string;
+  sessionName: string;
+  tabId?: string | null;
+  targetId?: string | null;
+  profileId?: string | null;
+  browserProcessPreserved: true;
+  closeBrowserOnDetach: false;
+  serviceTabHandle: ServiceTabHandle;
+  detachedAt?: string;
+  [key: string]: unknown;
 }
 
 export interface ServiceTabHandleTraceFilter {
@@ -628,6 +674,8 @@ export interface ServiceBrowserRepairData {
 export interface ServiceRequestActionDataMap {
   navigate: ServiceNavigateData;
   cdp_free_launch: ServiceCdpFreeLaunchData;
+  cdp_attach: ServiceCdpAttachDescriptor;
+  cdp_detach: ServiceCdpDetachData;
   back: ServiceUrlData;
   forward: ServiceUrlData;
   reload: ServiceUrlData;
@@ -784,6 +832,28 @@ export interface ServiceCdpFreeLaunchRequestHttpOptions extends ServiceCdpFreeLa
   signal?: AbortSignal;
 }
 
+export interface ServiceCdpAttachRequestOptions extends Omit<ServiceRequest, "action" | "params"> {
+  serviceTabHandle: ServiceTabHandle;
+  params?: Record<string, unknown>;
+}
+
+export interface ServiceCdpAttachRequestHttpOptions extends ServiceCdpAttachRequestOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
+export interface ServiceCdpDetachRequestOptions extends Omit<ServiceRequest, "action" | "params"> {
+  serviceTabHandle: ServiceTabHandle;
+  params?: Record<string, unknown>;
+}
+
+export interface ServiceCdpDetachRequestHttpOptions extends ServiceCdpDetachRequestOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
 export interface ServiceRemoteViewRouteCheckoutOptions extends Omit<ServiceRequest, "action" | "params"> {
   displayAllocationId: string;
   routeId?: string;
@@ -905,6 +975,12 @@ export declare function requireServiceTabHandle(response: unknown): ServiceTabHa
 export declare function createServiceCdpFreeLaunchRequest(
   input: ServiceCdpFreeLaunchRequestOptions,
 ): ServiceRequestForAction<"cdp_free_launch">;
+export declare function createServiceCdpAttachRequest(
+  input: ServiceCdpAttachRequestOptions,
+): ServiceRequestForAction<"cdp_attach">;
+export declare function createServiceCdpDetachRequest(
+  input: ServiceCdpDetachRequestOptions,
+): ServiceRequestForAction<"cdp_detach">;
 export declare function createServiceRemoteViewRouteCheckoutRequest(
   input: ServiceRemoteViewRouteCheckoutOptions,
 ): ServiceRequestForAction<"service_remote_view_route_checkout">;
@@ -930,6 +1006,12 @@ export declare function requestServiceTab(options: ServiceTabRequestHttpOptions)
 export declare function requestServiceCdpFreeLaunch(
   options: ServiceCdpFreeLaunchRequestHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceCdpFreeLaunchData>>;
+export declare function requestServiceCdpAttach(
+  options: ServiceCdpAttachRequestHttpOptions,
+): Promise<ServiceRequestResponse<ServiceCdpAttachDescriptor>>;
+export declare function requestServiceCdpDetach(
+  options: ServiceCdpDetachRequestHttpOptions,
+): Promise<ServiceRequestResponse<ServiceCdpDetachData>>;
 export declare function requestServiceRemoteViewRouteCheckout(
   options: ServiceRemoteViewRouteCheckoutHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceRemoteViewRouteMutationData>>;
