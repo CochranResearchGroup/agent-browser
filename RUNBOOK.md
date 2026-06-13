@@ -799,3 +799,48 @@ Result:
   surface.
 - The next recommended P14 slice is Slice E: diagnostics and readiness
   evidence.
+
+## Turn 22 | 2026-06-13
+
+Scope: implement the P14 Slice E diagnostic bundle sub-slice for leased service
+tab handles.
+
+Actions:
+
+- Added `diagnostics` to service request action metadata, HTTP relay, MCP
+  service request validation, Rust daemon dispatch, JSON schema, generated
+  client types, and `@agent-browser/client/service-request` helpers.
+- Required a valid `serviceTabHandle` and reused the service-owned queue and
+  handle validation path rather than adding a caller-owned browser path.
+- Returned a compact evidence bundle with URL/title, browser/session/tab
+  identity, profile readiness, route/view metadata, browser health, console
+  entries, page errors, recent request summaries, snapshot summary, caller
+  context, trace filter, and optional screenshot path.
+- Added no-launch client helper coverage for request shape, stale handles, and
+  evidence count caps.
+- Updated README, docs site, repo skill, P14 plan, and ROADMAP for the new
+  diagnostic helper path.
+
+Validation run:
+
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `cargo test --manifest-path cli/Cargo.toml service_request_command -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml service_contracts -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml cdp_screencast_view_stream -- --nocapture`
+- `pnpm generate:service-client`
+- `pnpm test:service-client`
+- `pnpm test:service-api-mcp-parity`
+- `pnpm --dir docs build`
+- `pnpm validation:select -- --base HEAD`
+- `node scripts/dev/select-validation.js --base HEAD --json`
+- `diff -q skills/agent-browser/SKILL.md /home/ecochran76/.codex/shared/skills/agent-browser/SKILL.md`
+- `pnpm test:service-cdp-tab-streaming-live`
+
+Result:
+
+- Slice E diagnostic bundles are implemented with no-launch contract coverage.
+- Live CDP tab-streaming smoke passed for `session:cdp-tab-stream-95746`,
+  stream `36831`.
+- Slice E remains open for readiness/freshness lifecycle gating and any focused
+  live diagnostics smoke requested before AuraCall migration proof.

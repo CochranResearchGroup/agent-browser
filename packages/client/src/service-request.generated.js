@@ -7,6 +7,7 @@ export const SERVICE_REQUEST_ACTIONS = [
   "cdp_attach",
   "cdp_detach",
   "evaluate",
+  "diagnostics",
   "back",
   "forward",
   "reload",
@@ -97,6 +98,7 @@ export const SERVICE_REQUEST_STRING_FIELDS = [
   "targetId",
   "script",
   "expression",
+  "screenshotDir",
   "browserBuild",
   "displayIsolation",
   "serviceName",
@@ -126,7 +128,10 @@ export const SERVICE_REQUEST_INTEGER_FIELDS = [
   "jobTimeoutMs",
   "profileLeaseWaitTimeoutMs",
   "timeoutMs",
-  "maxReturnBytes"
+  "maxReturnBytes",
+  "maxConsoleEntries",
+  "maxErrorEntries",
+  "maxRequestEntries"
 ];
 
 export const SERVICE_REQUEST_BOOLEAN_FIELDS = [
@@ -137,6 +142,7 @@ export const SERVICE_REQUEST_BOOLEAN_FIELDS = [
   "requiresCdpFree",
   "cdpAttachmentAllowed",
   "returnByValue",
+  "includeScreenshot",
   "captureEvidenceOnFailure",
   "allowDuplicateProfileLane"
 ];

@@ -30,6 +30,8 @@ const displayIsolationSet = new Set([
  * @typedef {import('./service-request.generated.js').ServiceCdpDetachRequestOptions} ServiceCdpDetachRequestOptions
  * @typedef {import('./service-request.generated.js').ServiceEvaluateRequestHttpOptions} ServiceEvaluateRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceEvaluateRequestOptions} ServiceEvaluateRequestOptions
+ * @typedef {import('./service-request.generated.js').ServiceDiagnosticsRequestHttpOptions} ServiceDiagnosticsRequestHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceDiagnosticsRequestOptions} ServiceDiagnosticsRequestOptions
  * @typedef {import('./service-request.generated.js').ServiceTabAccessPlan} ServiceTabAccessPlan
  * @typedef {import('./service-request.generated.js').ServiceCdpFreeLaunchRequestHttpOptions} ServiceCdpFreeLaunchRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceCdpFreeLaunchRequestOptions} ServiceCdpFreeLaunchRequestOptions
@@ -389,6 +391,44 @@ export function createServiceEvaluateRequest(input) {
 }
 
 /**
+ * Builds a compact diagnostic bundle request for a leased service tab.
+ *
+ * @param {ServiceDiagnosticsRequestOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceDiagnosticsRequest(input) {
+  assertPlainObject(input, 'service diagnostics request');
+  const { serviceTabHandle, params, ...request } = input;
+  const handle = requireServiceTabHandle({ serviceTabHandle });
+  if (params !== undefined) {
+    assertPlainObject(params, 'service diagnostics request params');
+  }
+  for (const field of ['maxConsoleEntries', 'maxErrorEntries', 'maxRequestEntries']) {
+    const value = /** @type {Record<string, unknown>} */ (request)[field];
+    if (value !== undefined && (!Number.isInteger(value) || Number(value) < 1)) {
+      throw new TypeError(`service diagnostics request ${field} must be a positive integer`);
+    }
+  }
+  if (request.includeScreenshot !== undefined && typeof request.includeScreenshot !== 'boolean') {
+    throw new TypeError('service diagnostics request includeScreenshot must be a boolean');
+  }
+  if (request.screenshotDir !== undefined && typeof request.screenshotDir !== 'string') {
+    throw new TypeError('service diagnostics request screenshotDir must be a string');
+  }
+  const sessionName = request.sessionName ?? handle.sessionName ?? handle.ownerSessionId;
+  const targetId = request.targetId ?? handle.targetId;
+  return createServiceRequest({
+    ...request,
+    action: 'diagnostics',
+    browserId: request.browserId ?? handle.browserId,
+    ...(sessionName !== undefined && sessionName !== null ? { sessionName } : {}),
+    ...(targetId !== undefined && targetId !== null ? { targetId } : {}),
+    serviceTabHandle: handle,
+    ...(params !== undefined ? { params } : {}),
+  });
+}
+
+/**
  * @param {ServiceRemoteViewRouteCheckoutOptions} input
  * @returns {ServiceRequest}
  */
@@ -605,6 +645,19 @@ export async function requestServiceEvaluate({ baseUrl, fetch = globalThis.fetch
     fetch,
     signal,
     request: createServiceEvaluateRequest(request),
+  });
+}
+
+/**
+ * @param {ServiceDiagnosticsRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function requestServiceDiagnostics({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceDiagnosticsRequest(request),
   });
 }
 

@@ -5187,6 +5187,7 @@ fn service_request_command(arguments: &Value) -> Result<(Value, Value), JsonRpcE
     reject_cdp_free_service_request(action, arguments)?;
     reject_cdp_attach_service_request(action, arguments)?;
     reject_bounded_evaluate_service_request(action, arguments)?;
+    reject_service_diagnostics_request(action, arguments)?;
     let params = optional_object_argument(arguments, "params")?;
     let context = ServiceToolContext::from_arguments(arguments)?;
     let trace = context.trace();
@@ -5340,6 +5341,32 @@ fn reject_bounded_evaluate_service_request(
     {
         return Err(JsonRpcError::invalid_params(
             "evaluate requires positive maxReturnBytes",
+        ));
+    }
+    Ok(())
+}
+
+fn reject_service_diagnostics_request(action: &str, arguments: &Value) -> Result<(), JsonRpcError> {
+    if action != "diagnostics" {
+        return Ok(());
+    }
+    let Some(handle) = arguments.get("serviceTabHandle").and_then(Value::as_object) else {
+        return Err(JsonRpcError::invalid_params(
+            "diagnostics requires serviceTabHandle",
+        ));
+    };
+    if handle.get("valid").and_then(Value::as_bool) != Some(true) {
+        let stale_reason = handle
+            .get("staleReason")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        return Err(JsonRpcError::invalid_params(&format!(
+            "service tab handle is stale: {stale_reason}"
+        )));
+    }
+    if handle.get("tabId").and_then(Value::as_str).is_none() {
+        return Err(JsonRpcError::invalid_params(
+            "serviceTabHandle.tabId is required",
         ));
     }
     Ok(())
@@ -11723,7 +11750,10 @@ mod tests {
                 "agentName": "agent-a",
                 "taskName": "probeACSwebsite"
             });
-            if matches!(*action, "cdp_attach" | "cdp_detach" | "evaluate") {
+            if matches!(
+                *action,
+                "cdp_attach" | "cdp_detach" | "evaluate" | "diagnostics"
+            ) {
                 arguments["cdpAttachmentAllowed"] = json!(true);
                 arguments["serviceTabHandle"] = json!({
                     "browserId": "session:default",

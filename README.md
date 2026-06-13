@@ -2236,6 +2236,7 @@ import {
   createServiceRequest,
   requestServiceCdpAttach,
   requestServiceCdpDetach,
+  requestServiceDiagnostics,
   requestServiceEvaluate,
   requireServiceTabHandle,
   postServiceRequest,
@@ -2290,6 +2291,15 @@ await requestServiceEvaluate({
   maxReturnBytes: 4096,
 });
 
+await requestServiceDiagnostics({
+  baseUrl: `http://127.0.0.1:${streamPort}`,
+  serviceTabHandle: handle,
+  includeScreenshot: true,
+  maxConsoleEntries: 10,
+  maxErrorEntries: 10,
+  maxRequestEntries: 10,
+});
+
 await requestServiceCdpDetach({
   baseUrl: `http://127.0.0.1:${streamPort}`,
   serviceTabHandle: handle,
@@ -2321,7 +2331,11 @@ lifecycle remains owned by agent-browser rather than the caller. Use
 `requestServiceEvaluate()` for bounded JavaScript reads against the same valid
 handle; it requires `timeoutMs` and `maxReturnBytes`, returns URL/title and
 truncation metadata, and refuses missing or stale handles before posting the
-request. Remote-view route and lease actions return typed route checkout, route
+request. Use `requestServiceDiagnostics()` to collect a compact bundle for the
+same handle with URL/title, browser/session/tab/profile metadata, readiness
+rows, route/view metadata, console and page errors, recent request summaries,
+snapshot summary, caller context, trace filters, and an optional screenshot
+path. Remote-view route and lease actions return typed route checkout, route
 release, viewer lease, and controller lease metadata. Use
 `requestServiceRemoteViewRouteCheckout()`,
 `requestServiceRemoteViewRouteRelease()`, `requestServiceViewerLease()`,

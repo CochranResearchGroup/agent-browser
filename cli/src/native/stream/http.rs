@@ -1534,6 +1534,7 @@ fn service_request_command(body: &str) -> Result<Value, String> {
         request.get("timeoutMs"),
         request.get("maxReturnBytes"),
     )?;
+    reject_service_diagnostics_request(action, request.get("serviceTabHandle"))?;
     reject_stale_monitor_service_request(
         request.get("monitorRunDueSummary"),
         request.get("allowMonitorFreshnessRisk"),
@@ -1587,6 +1588,11 @@ fn service_request_command(body: &str) -> Result<Value, String> {
         "timeoutMs",
         "maxReturnBytes",
         "captureEvidenceOnFailure",
+        "includeScreenshot",
+        "screenshotDir",
+        "maxConsoleEntries",
+        "maxErrorEntries",
+        "maxRequestEntries",
     ] {
         if let Some(value) = request.get(key) {
             command[key] = value.clone();
@@ -1829,6 +1835,29 @@ fn reject_bounded_evaluate_service_request(
         timeout_ms,
         max_return_bytes,
     )
+}
+
+fn reject_service_diagnostics_request(
+    action: &str,
+    service_tab_handle: Option<&Value>,
+) -> Result<(), String> {
+    if action != "diagnostics" {
+        return Ok(());
+    }
+    let Some(handle) = service_tab_handle.and_then(Value::as_object) else {
+        return Err("diagnostics requires serviceTabHandle".to_string());
+    };
+    if handle.get("valid").and_then(Value::as_bool) != Some(true) {
+        let stale_reason = handle
+            .get("staleReason")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        return Err(format!("service tab handle is stale: {stale_reason}"));
+    }
+    if handle.get("tabId").and_then(Value::as_str).is_none() {
+        return Err("serviceTabHandle.tabId is required".to_string());
+    }
+    Ok(())
 }
 
 fn validate_bounded_evaluate_service_request(
@@ -4390,7 +4419,10 @@ mod tests {
     #[test]
     fn service_request_command_accepts_contract_actions() {
         for action in SERVICE_REQUEST_ACTIONS {
-            let body = if matches!(*action, "cdp_attach" | "cdp_detach" | "evaluate") {
+            let body = if matches!(
+                *action,
+                "cdp_attach" | "cdp_detach" | "evaluate" | "diagnostics"
+            ) {
                 format!(
                     r##"{{"action":"{}","params":{{"action":"ignored","id":"ignored"}},"serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","cdpAttachmentAllowed":true,"serviceTabHandle":{{"browserId":"session:default","sessionName":"default","tabId":"target:target-1","targetId":"target-1","profileOrigin":"agent_browser_owned","leaseHeartbeatExpected":true,"traceFilter":{{"browserId":"session:default","profileId":null,"sessionId":"default"}},"valid":true}},"script":"document.title","timeoutMs":1000,"maxReturnBytes":128}}"##,
                     action

@@ -98,6 +98,7 @@ pub const SERVICE_REQUEST_ACTIONS: &[&str] = &[
     "cdp_attach",
     "cdp_detach",
     "evaluate",
+    "diagnostics",
     "back",
     "forward",
     "reload",

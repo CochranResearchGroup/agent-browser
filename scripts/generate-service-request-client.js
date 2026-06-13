@@ -212,6 +212,36 @@ export interface ServiceEvaluateData {
   [key: string]: unknown;
 }
 
+export interface ServiceDiagnosticsData {
+  ok: boolean;
+  action: "diagnostics";
+  observedAt: string;
+  compact: boolean;
+  browserId: string;
+  sessionName: string;
+  tabId: string;
+  targetId?: string | null;
+  activeSessionId?: string | null;
+  profileId?: string | null;
+  profileOrigin?: string | null;
+  url?: string | null;
+  title?: string | null;
+  serviceTabHandle: ServiceTabHandle;
+  traceFilter?: ServiceTabHandleTraceFilter | null;
+  browser?: Record<string, unknown> | null;
+  session?: Record<string, unknown> | null;
+  tab?: Record<string, unknown> | null;
+  profile?: Record<string, unknown> | null;
+  remoteViewRoutes: Record<string, unknown>[];
+  snapshotSummary: Record<string, unknown>;
+  screenshot: Record<string, unknown>;
+  console: Record<string, unknown>;
+  errors: Record<string, unknown>;
+  requests: Record<string, unknown>;
+  caller: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
 export interface ServiceTabHandleTraceFilter {
   browserId?: string | null;
   profileId?: string | null;
@@ -678,6 +708,7 @@ export interface ServiceRequestActionDataMap {
   cdp_attach: ServiceCdpAttachDescriptor;
   cdp_detach: ServiceCdpDetachData;
   evaluate: ServiceEvaluateData;
+  diagnostics: ServiceDiagnosticsData;
   back: ServiceUrlData;
   forward: ServiceUrlData;
   reload: ServiceUrlData;
@@ -873,6 +904,22 @@ export interface ServiceEvaluateRequestHttpOptions extends ServiceEvaluateReques
   signal?: AbortSignal;
 }
 
+export interface ServiceDiagnosticsRequestOptions extends Omit<ServiceRequest, "action" | "params"> {
+  serviceTabHandle: ServiceTabHandle;
+  includeScreenshot?: boolean;
+  screenshotDir?: string;
+  maxConsoleEntries?: number;
+  maxErrorEntries?: number;
+  maxRequestEntries?: number;
+  params?: Record<string, unknown>;
+}
+
+export interface ServiceDiagnosticsRequestHttpOptions extends ServiceDiagnosticsRequestOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
 export interface ServiceRemoteViewRouteCheckoutOptions extends Omit<ServiceRequest, "action" | "params"> {
   displayAllocationId: string;
   routeId?: string;
@@ -1003,6 +1050,9 @@ export declare function createServiceCdpDetachRequest(
 export declare function createServiceEvaluateRequest(
   input: ServiceEvaluateRequestOptions,
 ): ServiceRequestForAction<"evaluate">;
+export declare function createServiceDiagnosticsRequest(
+  input: ServiceDiagnosticsRequestOptions,
+): ServiceRequestForAction<"diagnostics">;
 export declare function createServiceRemoteViewRouteCheckoutRequest(
   input: ServiceRemoteViewRouteCheckoutOptions,
 ): ServiceRequestForAction<"service_remote_view_route_checkout">;
@@ -1037,6 +1087,9 @@ export declare function requestServiceCdpDetach(
 export declare function requestServiceEvaluate(
   options: ServiceEvaluateRequestHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceEvaluateData>>;
+export declare function requestServiceDiagnostics(
+  options: ServiceDiagnosticsRequestHttpOptions,
+): Promise<ServiceRequestResponse<ServiceDiagnosticsData>>;
 export declare function requestServiceRemoteViewRouteCheckout(
   options: ServiceRemoteViewRouteCheckoutHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceRemoteViewRouteMutationData>>;

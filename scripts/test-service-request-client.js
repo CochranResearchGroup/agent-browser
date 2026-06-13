@@ -8,6 +8,7 @@ import {
   createServiceCdpAttachRequest,
   createServiceCdpDetachRequest,
   createServiceCdpFreeLaunchRequest,
+  createServiceDiagnosticsRequest,
   createServiceEvaluateRequest,
   createServiceRemoteViewRouteCheckoutRequest,
   createServiceRemoteViewRouteReleaseRequest,
@@ -28,6 +29,7 @@ import {
   requestServiceCdpAttach,
   requestServiceCdpDetach,
   requestServiceCdpFreeLaunch,
+  requestServiceDiagnostics,
   requestServiceEvaluate,
   requestServiceRemoteViewRouteCheckout,
   requestServiceRoutePoolRepair,
@@ -968,6 +970,68 @@ async function main() {
   assert.equal(evaluateRecorder.calls[0].body.script, 'document.title');
   assert.equal(evaluateRecorder.calls[0].body.returnByValue, true);
   assert.deepEqual(evaluateRecorder.calls[0].body.serviceTabHandle, tabHandle);
+  assert.deepEqual(
+    createServiceDiagnosticsRequest({
+      serviceName: 'JournalDownloader',
+      agentName: 'article-probe-agent',
+      taskName: 'probeACSwebsite',
+      serviceTabHandle: tabHandle,
+      includeScreenshot: true,
+      screenshotDir: '/tmp/agent-browser-diagnostics',
+      maxConsoleEntries: 5,
+      maxErrorEntries: 3,
+      maxRequestEntries: 4,
+    }),
+    {
+      serviceName: 'JournalDownloader',
+      agentName: 'article-probe-agent',
+      taskName: 'probeACSwebsite',
+      action: 'diagnostics',
+      browserId: 'session:acs',
+      sessionName: 'acs',
+      targetId: 'target-1',
+      serviceTabHandle: tabHandle,
+      includeScreenshot: true,
+      screenshotDir: '/tmp/agent-browser-diagnostics',
+      maxConsoleEntries: 5,
+      maxErrorEntries: 3,
+      maxRequestEntries: 4,
+    },
+  );
+  assert.throws(
+    () =>
+      createServiceDiagnosticsRequest({
+        serviceTabHandle: {
+          ...tabHandle,
+          valid: false,
+          staleReason: 'tab_closed',
+        },
+      }),
+    /service tab handle is stale: tab_closed/,
+  );
+  const diagnosticsRecorder = createFetchRecorder({
+    success: true,
+    data: {
+      ok: true,
+      action: 'diagnostics',
+      compact: true,
+      browserId: 'session:acs',
+      tabId: 'target:target-1',
+      serviceTabHandle: tabHandle,
+      console: { count: 0, returned: 0, messages: [] },
+      errors: { count: 0, returned: 0, errors: [] },
+      requests: { count: 0, returned: 0, items: [] },
+    },
+  });
+  await requestServiceDiagnostics({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: diagnosticsRecorder.fetch,
+    serviceTabHandle: tabHandle,
+    maxConsoleEntries: 5,
+  });
+  assert.equal(diagnosticsRecorder.calls[0].body.action, 'diagnostics');
+  assert.equal(diagnosticsRecorder.calls[0].body.maxConsoleEntries, 5);
+  assert.deepEqual(diagnosticsRecorder.calls[0].body.serviceTabHandle, tabHandle);
   assert.deepEqual(tabRecorder.calls[0].body, {
     serviceName: 'JournalDownloader',
     agentName: 'article-probe-agent',

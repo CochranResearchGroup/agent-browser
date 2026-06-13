@@ -56,6 +56,10 @@ expectations so work can proceed in parallel only where the sequence permits.
   service tab handles, with required `timeoutMs`, `maxReturnBytes`, and
   generated client helpers. The next recommended implementation target is Slice
   E: diagnostics and readiness evidence.
+- Slice E has started with a compact `diagnostics` service request action and
+  `requestServiceDiagnostics()` helper for leased service tab handles. The
+  remaining Slice E target is readiness/freshness lifecycle gating and any
+  focused live evidence-capture smoke requested for migration proof.
 
 ## Operating Invariant
 
@@ -413,6 +417,30 @@ Acceptance:
   timestamp, and evidence.
 - Access-plan gates authenticated work on wrong-account or expired freshness
   evidence where configured.
+
+Status: PARTIAL in the 2026-06-13 Slice E diagnostic bundle checkpoint.
+
+Implemented:
+
+- Added `diagnostics` as a service request action for valid `serviceTabHandle`
+  inputs.
+- Returned compact URL/title, browser, session, tab, profile readiness,
+  route/view, console, page-error, recent request, snapshot-summary, caller,
+  trace-filter, and optional screenshot evidence.
+- Added generated `createServiceDiagnosticsRequest()` and
+  `requestServiceDiagnostics()` helpers with stale-handle and evidence-count
+  validation.
+- Kept HTTP, MCP, Rust service request metadata, JSON schema, generated client
+  types, docs, and skill guidance aligned.
+
+Remaining:
+
+- Add readiness/freshness lifecycle improvements for wrong-account, expired,
+  unverified, and manual-action-required states.
+- Decide whether diagnostic bundles should also be retrievable by recent job
+  id, or whether handle plus trace filter is enough for the migration bridge.
+- Add a focused live diagnostics smoke if evidence capture needs live proof
+  before AuraCall migration work consumes it.
 
 Suggested subagent prompt:
 

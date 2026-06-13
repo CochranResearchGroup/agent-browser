@@ -510,9 +510,10 @@ diagnostics, readiness evidence, and client ergonomics.
 - Existing access-plan and service-request contracts provide the foundation.
   Slices A through D now provide explicit profile-origin and BYOP registration
   semantics, lease-backed service tab handles, policy-gated CDP attach/detach
-  helpers, and bounded evaluate service requests. Software clients still need
-  diagnostic bundles, readiness evidence, and migration ergonomics before
-  migrating raw CDP provider code safely.
+  helpers, and bounded evaluate service requests. Slice E has started with a
+  compact diagnostics service request and generated client helper for valid
+  service tab handles. Software clients still need readiness evidence and
+  migration ergonomics before migrating raw CDP provider code safely.
 
 ### Evidence
 
@@ -523,6 +524,7 @@ diagnostics, readiness evidence, and client ergonomics.
 
 ### Next Recommendation
 
-Start P14 Slice E with diagnostic bundles and readiness evidence. Keep focused
-live smokes for attach-read-detach and bounded evaluate as validation follow-up
-before treating the AuraCall migration bridge as live-proven.
+Continue P14 Slice E with readiness/freshness lifecycle gating. Keep focused
+live smokes for attach-read-detach, bounded evaluate, and diagnostics evidence
+capture as validation follow-up before treating the AuraCall migration bridge
+as live-proven.
