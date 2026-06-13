@@ -2945,6 +2945,8 @@ fn readiness_row_matches_target(row: &Value, target_service_ids: &[String]) -> b
 mod tests {
     use std::collections::BTreeMap;
 
+    use crate::native::service_model::ProfileOrigin;
+
     use super::*;
     use crate::native::service_model::{
         BrowserCapabilityRegistry, BrowserHealth, BrowserHost, BrowserProcess, BrowserProfile,
@@ -3575,6 +3577,7 @@ mod tests {
                 BrowserProfile {
                     id: "acs".to_string(),
                     name: "ACS".to_string(),
+                    profile_origin: ProfileOrigin::ExternalByop,
                     target_service_ids: vec!["acs".to_string()],
                     authenticated_service_ids: vec!["acs".to_string()],
                     shared_service_ids: vec!["JournalDownloader".to_string()],
@@ -3601,6 +3604,7 @@ mod tests {
         );
 
         assert_eq!(plan["selectedProfile"]["id"], "acs");
+        assert_eq!(plan["selectedProfile"]["profileOrigin"], "external_byop");
         assert_eq!(
             plan["selectedProfileMatch"]["reason"],
             "authenticated_target"

@@ -65,6 +65,7 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceIncidentHandoffOptions} ServiceIncidentHandoffOptions
  * @typedef {import('./service-observability.generated.js').ServiceIncidentHandoffSummary} ServiceIncidentHandoffSummary
  * @typedef {import('./service-observability.generated.js').ServiceLoginProfileRegistrationOptions} ServiceLoginProfileRegistrationOptions
+ * @typedef {import('./service-observability.generated.js').ServiceExternalProfileRegistrationOptions} ServiceExternalProfileRegistrationOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileDeleteResponse} ServiceProfileDeleteResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileAllocationResponse} ServiceProfileAllocationResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileAllocationBrowserHealthSummary} ServiceProfileAllocationBrowserHealthSummary
@@ -1310,6 +1311,102 @@ export function registerServiceLoginProfile({
       ...targetReadinessRecord,
       sharedServiceIds: sharedServices,
       ...userDataDirRecord,
+      ...profile,
+    },
+  });
+}
+
+/**
+ * Register a caller-supplied browser profile as an explicit external lane.
+ *
+ * @param {ServiceExternalProfileRegistrationOptions} options
+ * @returns {Promise<ServiceProfileUpsertResponse>}
+ */
+export function registerExternalProfile({
+  id,
+  serviceName,
+  agentName,
+  loginId,
+  siteId,
+  targetServiceId,
+  targetServiceIds = [],
+  accountId,
+  accountIds = [],
+  sharedServiceIds = [],
+  name,
+  profileOrigin = 'external_byop',
+  allocation = 'caller_supplied',
+  keyring = 'manual_login_profile',
+  browserBuild,
+  browserFamily,
+  browserVersion,
+  compatibilityEvidence,
+  compatibilityObservedAt,
+  compatibilitySource = 'client_registration',
+  browserCompatibilityEvidence = [],
+  persistent = true,
+  authenticated = true,
+  userDataDir,
+  profile = {},
+  ...options
+}) {
+  if (typeof id !== 'string' || id.length === 0) {
+    throw new TypeError('registerExternalProfile requires an id string');
+  }
+  if (typeof serviceName !== 'string' || serviceName.length === 0) {
+    throw new TypeError('registerExternalProfile requires a serviceName string');
+  }
+  if (typeof userDataDir !== 'string' || userDataDir.length === 0) {
+    throw new TypeError('registerExternalProfile requires a userDataDir string');
+  }
+  const targetId = loginId ?? siteId ?? targetServiceId;
+  if (!targetId && targetServiceIds.length === 0) {
+    throw new TypeError('registerExternalProfile requires loginId, siteId, targetServiceId, or targetServiceIds');
+  }
+
+  const targets = uniqueStrings([...targetServiceIds, targetId]);
+  const accounts = uniqueStrings([...accountIds, accountId]);
+  const sharedServices = uniqueStrings([...sharedServiceIds, serviceName]);
+  const compatibilityRows = [
+    ...browserCompatibilityEvidence,
+    ...(compatibilityEvidence === undefined
+      ? []
+      : [
+          {
+            browserFamily: browserFamily ?? null,
+            browserBuild: browserBuild ?? null,
+            browserVersion: browserVersion ?? null,
+            evidence: compatibilityEvidence,
+            observedAt: compatibilityObservedAt ?? null,
+            source: compatibilitySource,
+          },
+        ]),
+  ];
+
+  return upsertServiceProfile({
+    ...options,
+    id,
+    profile: {
+      name: name ?? id,
+      profileOrigin,
+      userDataDir,
+      allocation,
+      keyring,
+      ...(browserBuild === undefined ? {} : { browserBuild }),
+      persistent,
+      targetServiceIds: targets,
+      authenticatedServiceIds: authenticated ? targets : [],
+      accountIds: accounts,
+      sharedServiceIds: sharedServices,
+      registration: {
+        serviceName,
+        agentName: agentName ?? null,
+        targetServiceIds: targets,
+        accountIds: accounts,
+        registeredAt: new Date().toISOString(),
+        source: 'client_register_external_profile',
+      },
+      browserCompatibilityEvidence: compatibilityRows,
       ...profile,
     },
   });

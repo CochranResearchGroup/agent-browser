@@ -22,6 +22,7 @@ import {
   getServiceTrace,
   lookupServiceProfile,
   pauseServiceMonitor,
+  registerExternalProfile,
   registerServiceLoginProfile,
   resumeServiceMonitor,
   resetServiceMonitorFailures,
@@ -2442,6 +2443,62 @@ async function main() {
       setupScopes: [],
       lastVerifiedAt: '2026-05-06T12:00:00Z',
       freshnessExpiresAt: '2026-05-06T13:00:00Z',
+    },
+  ]);
+
+  assert.throws(
+    () =>
+      registerExternalProfile({
+        baseUrl: 'http://127.0.0.1:4849',
+        id: 'auracall-chatgpt',
+        serviceName: 'AuraCall',
+        loginId: 'chatgpt',
+      }),
+    /requires a userDataDir string/,
+  );
+
+  const external = createFetchRecorder();
+  await registerExternalProfile({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: external.fetch,
+    id: 'auracall-chatgpt',
+    serviceName: 'AuraCall',
+    agentName: 'auracall-api',
+    loginId: 'chatgpt',
+    accountId: 'consult@example.com',
+    userDataDir: '/home/me/.auracall/browser-profiles/chatgpt',
+    browserBuild: 'stealthcdp_chromium',
+    browserFamily: 'chromium',
+    browserVersion: '126.0.0.0',
+    compatibilityEvidence: 'validated_with_existing_provider_profile',
+  });
+  assert.equal(external.calls.length, 1);
+  assert.equal(
+    external.calls[0].url,
+    'http://127.0.0.1:4849/api/service/profiles/auracall-chatgpt',
+  );
+  assert.equal(external.calls[0].body.profileOrigin, 'external_byop');
+  assert.equal(external.calls[0].body.allocation, 'caller_supplied');
+  assert.equal(external.calls[0].body.keyring, 'manual_login_profile');
+  assert.equal(external.calls[0].body.userDataDir, '/home/me/.auracall/browser-profiles/chatgpt');
+  assert.deepEqual(external.calls[0].body.targetServiceIds, ['chatgpt']);
+  assert.deepEqual(external.calls[0].body.authenticatedServiceIds, ['chatgpt']);
+  assert.deepEqual(external.calls[0].body.accountIds, ['consult@example.com']);
+  assert.deepEqual(external.calls[0].body.sharedServiceIds, ['AuraCall']);
+  assert.deepEqual(external.calls[0].body.registration.targetServiceIds, ['chatgpt']);
+  assert.deepEqual(external.calls[0].body.registration.accountIds, ['consult@example.com']);
+  assert.equal(external.calls[0].body.registration.serviceName, 'AuraCall');
+  assert.equal(external.calls[0].body.registration.agentName, 'auracall-api');
+  assert.equal(external.calls[0].body.registration.source, 'client_register_external_profile');
+  assert.match(external.calls[0].body.registration.registeredAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.deepEqual(external.calls[0].body.browserCompatibilityEvidence, [
+    {
+      browserFamily: 'chromium',
+      browserBuild: 'stealthcdp_chromium',
+      browserVersion: '126.0.0.0',
+      evidence: 'validated_with_existing_provider_profile',
+      observedAt: null,
+      source: 'client_registration',
     },
   ]);
 

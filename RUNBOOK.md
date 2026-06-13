@@ -605,3 +605,52 @@ Result:
   client ergonomics.
 - The first recommended implementation slice is P14 Slice A: profile-origin
   schema plus explicit BYOP registration/readback.
+
+## Turn 18 | 2026-06-13
+
+Scope: implement P14 Slice A profile-origin and BYOP registration/readback.
+
+Actions:
+
+- Added durable service profile origin values:
+  `agent_browser_owned`, `external_byop`, and `external_observed`.
+- Added external profile registration metadata and browser compatibility
+  evidence to service profile records.
+- Added `registerExternalProfile()` to
+  `@agent-browser/client/service-observability` for explicit BYOP or observed
+  external profile registration.
+- Exposed `profileOrigin` through service profile allocation readback and
+  access-plan selected profiles.
+- Hardened retained-state orphan profile pruning so `external_byop` and
+  `external_observed` profiles are never pruned as owned profile data.
+- Preserved profile origin and external metadata through the dashboard profile
+  config save path.
+- Updated service schemas, generated client types, README, docs site, and the
+  installed agent-browser skill.
+
+Validation run:
+
+- `git diff --check`
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `cargo test --manifest-path cli/Cargo.toml service_model -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml service_access_plan -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml service_profiles -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml test_prune_retained_service_state_removes_orphaned_custom_profiles -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml cdp_screencast_view_stream -- --nocapture`
+- `pnpm test:service-client`
+- `pnpm test:service-api-mcp-parity`
+- `pnpm test:dashboard-profile-allocation`
+- `pnpm --dir docs build`
+- `pnpm build:dashboard`
+- `diff -q skills/agent-browser/SKILL.md /home/ecochran76/.codex/shared/skills/agent-browser/SKILL.md`
+
+Result:
+
+- Slice A is implemented as a no-launch contract slice.
+- Access-plan and profile readback can distinguish owned, BYOP, and observed
+  external profile lanes.
+- Explicit external profile registration records caller identity, target
+  identities, account ids, user-data directory, and browser compatibility
+  evidence.
+- The next recommended P14 slice is Slice B: lease-backed service tab handles.

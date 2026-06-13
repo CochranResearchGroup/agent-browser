@@ -68,6 +68,7 @@
       "required": [
         "profileId",
         "profileName",
+        "profileOrigin",
         "allocation",
         "keyring",
         "browserBuild",
@@ -97,6 +98,11 @@
         },
         "profileName": {
           "type": "string"
+        },
+        "profileOrigin": {
+          "description": "Ownership boundary for the profile user-data directory and cleanup policy.",
+          "type": "string",
+          "enum": ["agent_browser_owned", "external_byop", "external_observed"]
         },
         "allocation": {
           "type": "string"

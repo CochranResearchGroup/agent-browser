@@ -35,8 +35,9 @@ collect compact diagnostics when browser work fails.
   but software clients do not yet have a lease-backed service tab handle,
   controlled CDP attach contract, bounded evaluate service action, or
   profile-origin/BYOP contract.
-- No implementation has started in this lane. Slice A is the recommended first
-  implementation target.
+- Slice A has implemented the profile-origin and explicit BYOP registration
+  contract. The next recommended implementation target is Slice B:
+  lease-backed service tab handles.
 
 ## Operating Invariant
 
@@ -91,6 +92,25 @@ Acceptance:
   event evidence.
 - No-launch contract tests prove profile-origin serialization, access-plan
   selection, and cleanup-policy behavior.
+
+Status: IMPLEMENTED in the 2026-06-13 Slice A checkpoint.
+
+Validation evidence:
+
+- `git diff --check`
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `cargo test --manifest-path cli/Cargo.toml service_model -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml service_access_plan -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml service_profiles -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml test_prune_retained_service_state_removes_orphaned_custom_profiles -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml cdp_screencast_view_stream -- --nocapture`
+- `pnpm test:service-client`
+- `pnpm test:service-api-mcp-parity`
+- `pnpm test:dashboard-profile-allocation`
+- `pnpm --dir docs build`
+- `pnpm build:dashboard`
+- `diff -q skills/agent-browser/SKILL.md /home/ecochran76/.codex/shared/skills/agent-browser/SKILL.md`
 
 Suggested subagent prompt:
 

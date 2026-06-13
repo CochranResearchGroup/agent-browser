@@ -422,6 +422,7 @@ pub fn assert_service_profile_record_contract(value: &serde_json::Value) {
         &[
             "id",
             "name",
+            "profileOrigin",
             "userDataDir",
             "sitePolicyIds",
             "targetServiceIds",
@@ -435,10 +436,13 @@ pub fn assert_service_profile_record_contract(value: &serde_json::Value) {
             "credentialProviderIds",
             "manualLoginPreferred",
             "targetReadiness",
+            "registration",
+            "browserCompatibilityEvidence",
             "persistent",
             "tags",
         ],
         &[
+            "profile_origin",
             "user_data_dir",
             "site_policy_ids",
             "target_service_ids",
@@ -450,8 +454,13 @@ pub fn assert_service_profile_record_contract(value: &serde_json::Value) {
             "credential_provider_ids",
             "manual_login_preferred",
             "target_readiness",
+            "browser_compatibility_evidence",
         ],
     );
+    assert!(matches!(
+        value["profileOrigin"].as_str(),
+        Some("agent_browser_owned" | "external_byop" | "external_observed")
+    ));
     if let Some(host) = value["defaultBrowserHost"].as_str() {
         assert!(SERVICE_BROWSER_HOST_VALUES.contains(&host));
     }
@@ -467,6 +476,11 @@ pub fn assert_service_profile_record_contract(value: &serde_json::Value) {
     assert!(value["sharedServiceIds"].is_array());
     assert!(value["credentialProviderIds"].is_array());
     assert!(value["targetReadiness"].is_array());
+    assert!(
+        value["registration"].is_null() || value["registration"].is_object(),
+        "profile registration should be null or object"
+    );
+    assert!(value["browserCompatibilityEvidence"].is_array());
     for readiness in value["targetReadiness"].as_array().unwrap() {
         assert_service_profile_readiness_contract(readiness);
     }
@@ -1984,6 +1998,7 @@ pub fn assert_service_profile_allocation_contract(value: &serde_json::Value) {
         &[
             "profileId",
             "profileName",
+            "profileOrigin",
             "allocation",
             "keyring",
             "browserBuild",
@@ -2010,6 +2025,7 @@ pub fn assert_service_profile_allocation_contract(value: &serde_json::Value) {
         &[
             "profile_id",
             "profile_name",
+            "profile_origin",
             "browser_build",
             "target_service_ids",
             "authenticated_service_ids",
@@ -2370,6 +2386,7 @@ impl ServiceState {
 pub struct ServiceProfileAllocation {
     pub profile_id: String,
     pub profile_name: String,
+    pub profile_origin: ProfileOrigin,
     pub allocation: ProfileAllocationPolicy,
     pub keyring: ProfileKeyringPolicy,
     pub browser_build: Option<BrowserBuild>,
@@ -2567,6 +2584,9 @@ fn service_profile_allocation(
             .map(|profile| profile.name.clone())
             .filter(|name| !name.is_empty())
             .unwrap_or_else(|| profile_id.to_string()),
+        profile_origin: profile
+            .map(|profile| profile.profile_origin)
+            .unwrap_or_default(),
         allocation: profile
             .map(|profile| profile.allocation)
             .unwrap_or_default(),
@@ -4143,6 +4163,8 @@ pub struct ControlPlaneSnapshot {
 pub struct BrowserProfile {
     pub id: String,
     pub name: String,
+    /// Ownership boundary for this profile's user-data directory and cleanup.
+    pub profile_origin: ProfileOrigin,
     pub user_data_dir: Option<String>,
     pub site_policy_ids: Vec<String>,
     /// Target sites or identity providers this profile is intended to satisfy.
@@ -4173,8 +4195,46 @@ pub struct BrowserProfile {
     /// do not prove live authentication until a future probe records freshness
     /// evidence.
     pub target_readiness: Vec<ProfileTargetReadiness>,
+    /// Explicit registration metadata for externally supplied profile lanes.
+    pub registration: Option<BrowserProfileRegistration>,
+    /// Browser family/build evidence recorded when external profiles are registered.
+    pub browser_compatibility_evidence: Vec<BrowserProfileCompatibilityEvidence>,
     pub persistent: bool,
     pub tags: Vec<String>,
+}
+
+/// Ownership boundary for a service profile.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProfileOrigin {
+    #[default]
+    AgentBrowserOwned,
+    ExternalByop,
+    ExternalObserved,
+}
+
+/// Explicit registration metadata for BYOP or observed external profiles.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct BrowserProfileRegistration {
+    pub service_name: Option<String>,
+    pub agent_name: Option<String>,
+    pub target_service_ids: Vec<String>,
+    pub account_ids: Vec<String>,
+    pub registered_at: Option<String>,
+    pub source: Option<String>,
+}
+
+/// Browser compatibility evidence retained on externally registered profiles.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct BrowserProfileCompatibilityEvidence {
+    pub browser_family: Option<String>,
+    pub browser_build: Option<BrowserBuild>,
+    pub browser_version: Option<String>,
+    pub evidence: String,
+    pub observed_at: Option<String>,
+    pub source: Option<String>,
 }
 
 /// No-launch service view of whether a profile can satisfy a target identity.
@@ -6167,6 +6227,7 @@ mod tests {
         let profile = json!({
             "id": "journal-downloader",
             "name": "Journal Downloader",
+            "profileOrigin": "agent_browser_owned",
             "userDataDir": null,
             "sitePolicyIds": [],
             "targetServiceIds": ["acs"],
@@ -6180,6 +6241,8 @@ mod tests {
             "credentialProviderIds": [],
             "manualLoginPreferred": false,
             "targetReadiness": [],
+            "registration": null,
+            "browserCompatibilityEvidence": [],
             "persistent": true,
             "tags": [],
         });

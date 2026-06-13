@@ -121,6 +121,7 @@ export interface ServiceJobRecord {
 export interface ServiceProfileRecord {
   id: string;
   name: string;
+  profileOrigin: 'agent_browser_owned' | 'external_byop' | 'external_observed' | string;
   userDataDir: string | null;
   browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string | null;
   targetServiceIds: string[];
@@ -128,6 +129,28 @@ export interface ServiceProfileRecord {
   accountIds: string[];
   sharedServiceIds: string[];
   targetReadiness: ServiceProfileTargetReadiness[];
+  registration: ServiceProfileRegistration | null;
+  browserCompatibilityEvidence: ServiceProfileBrowserCompatibilityEvidence[];
+  [key: string]: unknown;
+}
+
+export interface ServiceProfileRegistration {
+  serviceName: string | null;
+  agentName: string | null;
+  targetServiceIds: string[];
+  accountIds: string[];
+  registeredAt: string | null;
+  source: string | null;
+  [key: string]: unknown;
+}
+
+export interface ServiceProfileBrowserCompatibilityEvidence {
+  browserFamily: string | null;
+  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string | null;
+  browserVersion: string | null;
+  evidence: string;
+  observedAt: string | null;
+  source: string | null;
   [key: string]: unknown;
 }
 
@@ -165,6 +188,7 @@ export interface ServiceProfileTargetReadiness {
 export interface ServiceProfileAllocation {
   profileId: string;
   profileName: string;
+  profileOrigin: 'agent_browser_owned' | 'external_byop' | 'external_observed' | string;
   allocation: string;
   keyring: string;
   browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string | null;
@@ -1333,6 +1357,34 @@ export interface ServiceLoginProfileRegistrationOptions extends ServiceObservabi
   profile?: Record<string, unknown>;
 }
 
+export interface ServiceExternalProfileRegistrationOptions extends ServiceObservabilityHttpOptions {
+  id: string;
+  serviceName: string;
+  agentName?: string;
+  loginId?: string;
+  siteId?: string;
+  targetServiceId?: string;
+  targetServiceIds?: string[];
+  accountId?: string;
+  accountIds?: string[];
+  sharedServiceIds?: string[];
+  name?: string;
+  profileOrigin?: 'external_byop' | 'external_observed' | string;
+  allocation?: string;
+  keyring?: string;
+  browserBuild?: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string;
+  browserFamily?: string;
+  browserVersion?: string;
+  compatibilityEvidence?: string;
+  compatibilityObservedAt?: string | null;
+  compatibilitySource?: string;
+  browserCompatibilityEvidence?: ServiceProfileBrowserCompatibilityEvidence[];
+  persistent?: boolean;
+  authenticated?: boolean;
+  userDataDir: string;
+  profile?: Record<string, unknown>;
+}
+
 export interface ServiceProfileReadinessMonitorRecipeOptions {
   id?: string;
   serviceName?: string;
@@ -2364,6 +2416,7 @@ export declare function getServiceChallenges(options: ServiceQueryOptions): Prom
 export declare function postServiceReconcile(options: ServiceObservabilityHttpOptions): Promise<ServiceReconcileResponse>;
 export declare function upsertServiceProfile(options: ServiceProfileMutationOptions): Promise<ServiceProfileUpsertResponse>;
 export declare function registerServiceLoginProfile(options: ServiceLoginProfileRegistrationOptions): Promise<ServiceProfileUpsertResponse>;
+export declare function registerExternalProfile(options: ServiceExternalProfileRegistrationOptions): Promise<ServiceProfileUpsertResponse>;
 /** Build the standard no-launch profile-readiness monitor record for one target identity. */
 export declare function createServiceProfileReadinessMonitor(options: ServiceProfileReadinessMonitorRecipeOptions): { id: string, monitor: Record<string, unknown> };
 /** Upsert the standard no-launch profile-readiness monitor for one target identity. */

@@ -7,6 +7,7 @@
   "required": [
     "id",
     "name",
+    "profileOrigin",
     "userDataDir",
     "sitePolicyIds",
     "targetServiceIds",
@@ -20,6 +21,8 @@
     "credentialProviderIds",
     "manualLoginPreferred",
     "targetReadiness",
+    "registration",
+    "browserCompatibilityEvidence",
     "persistent",
     "tags"
   ],
@@ -29,6 +32,11 @@
     },
     "name": {
       "type": "string"
+    },
+    "profileOrigin": {
+      "description": "Ownership boundary for the profile user-data directory and cleanup policy.",
+      "type": "string",
+      "enum": ["agent_browser_owned", "external_byop", "external_observed"]
     },
     "userDataDir": {
       "type": ["string", "null"]
@@ -129,6 +137,24 @@
         "$ref": "#/$defs/profileTargetReadiness"
       }
     },
+    "registration": {
+      "description": "Explicit BYOP or observed-profile registration metadata.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/profileRegistration"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "browserCompatibilityEvidence": {
+      "description": "Browser family/build evidence recorded when an external profile is registered.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/browserCompatibilityEvidence"
+      }
+    },
     "persistent": {
       "type": "boolean"
     },
@@ -140,6 +166,84 @@
     }
   },
   "$defs": {
+    "profileRegistration": {
+      "type": "object",
+      "required": [
+        "serviceName",
+        "agentName",
+        "targetServiceIds",
+        "accountIds",
+        "registeredAt",
+        "source"
+      ],
+      "properties": {
+        "serviceName": {
+          "type": ["string", "null"]
+        },
+        "agentName": {
+          "type": ["string", "null"]
+        },
+        "targetServiceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "accountIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "registeredAt": {
+          "type": ["string", "null"]
+        },
+        "source": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": true
+    },
+    "browserCompatibilityEvidence": {
+      "type": "object",
+      "required": [
+        "browserFamily",
+        "browserBuild",
+        "browserVersion",
+        "evidence",
+        "observedAt",
+        "source"
+      ],
+      "properties": {
+        "browserFamily": {
+          "type": ["string", "null"]
+        },
+        "browserBuild": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "browserVersion": {
+          "type": ["string", "null"]
+        },
+        "evidence": {
+          "type": "string"
+        },
+        "observedAt": {
+          "type": ["string", "null"]
+        },
+        "source": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": true
+    },
     "profileTargetReadiness": {
       "type": "object",
       "required": [

@@ -73,9 +73,9 @@ use super::service_model::{
     BrowserBuild, BrowserCapabilityRegistry, BrowserHealth as ServiceBrowserHealth,
     BrowserHost as ServiceBrowserHost, BrowserProcess, BrowserProfile, BrowserSession,
     ControlInputProvider, DisplayAllocation, JobState as ServiceJobState, LeaseState, MonitorState,
-    ProfileKeyringPolicy, ProfileLeaseDisposition, ProfileSelectionReason, RemoteViewRoute,
-    RoutePoolEntry, ServiceEvent, ServiceEventKind, ServiceState, SessionCleanupPolicy,
-    TabLifecycle, ViewStream, ViewStreamProvider, ViewerLease,
+    ProfileKeyringPolicy, ProfileLeaseDisposition, ProfileOrigin, ProfileSelectionReason,
+    RemoteViewRoute, RoutePoolEntry, ServiceEvent, ServiceEventKind, ServiceState,
+    SessionCleanupPolicy, TabLifecycle, ViewStream, ViewStreamProvider, ViewerLease,
 };
 use super::service_monitors::{
     parse_monitor_state, run_due_persisted_monitors, service_monitors_response,
@@ -11201,6 +11201,12 @@ fn orphaned_profile_prune_reason(
     profile: &BrowserProfile,
     referenced_profile_ids: &HashSet<String>,
 ) -> Option<&'static str> {
+    if matches!(
+        profile.profile_origin,
+        ProfileOrigin::ExternalByop | ProfileOrigin::ExternalObserved
+    ) {
+        return None;
+    }
     if !profile_id.starts_with("custom:") {
         return None;
     }
@@ -18120,6 +18126,7 @@ mod tests {
                     "work": {
                         "id": "work",
                         "name": "Work",
+                        "profileOrigin": "external_byop",
                         "allocation": "per_service",
                         "keyring": "basic_password_store",
                         "targetServiceIds": ["google"],
@@ -18182,6 +18189,10 @@ mod tests {
         assert_eq!(result["data"]["count"], 1);
         assert_eq!(result["data"]["profiles"][0]["id"], "work");
         assert_eq!(result["data"]["profiles"][0]["name"], "Work");
+        assert_eq!(
+            result["data"]["profiles"][0]["profileOrigin"],
+            "external_byop"
+        );
         assert_eq!(result["data"]["profileSources"][0]["id"], "work");
         assert_eq!(
             result["data"]["profileSources"][0]["source"],
@@ -18196,6 +18207,10 @@ mod tests {
             "launch_detached_runtime_login_complete_signin_close_then_relaunch_attachable"
         );
         assert_eq!(result["data"]["profileAllocations"][0]["profileId"], "work");
+        assert_eq!(
+            result["data"]["profileAllocations"][0]["profileOrigin"],
+            "external_byop"
+        );
         assert_eq!(
             result["data"]["profileAllocations"][0]["targetReadiness"][0]["state"],
             "needs_manual_seeding"
@@ -19155,6 +19170,26 @@ mod tests {
                     },
                 ),
                 (
+                    "custom:byop".to_string(),
+                    BrowserProfile {
+                        id: "custom:byop".to_string(),
+                        name: "/tmp/agent-browser-byop-profile".to_string(),
+                        profile_origin: ProfileOrigin::ExternalByop,
+                        user_data_dir: Some("/tmp/agent-browser-byop-profile".to_string()),
+                        ..BrowserProfile::default()
+                    },
+                ),
+                (
+                    "custom:observed".to_string(),
+                    BrowserProfile {
+                        id: "custom:observed".to_string(),
+                        name: "/tmp/agent-browser-observed-profile".to_string(),
+                        profile_origin: ProfileOrigin::ExternalObserved,
+                        user_data_dir: Some("/tmp/agent-browser-observed-profile".to_string()),
+                        ..BrowserProfile::default()
+                    },
+                ),
+                (
                     "default".to_string(),
                     BrowserProfile {
                         id: "default".to_string(),
@@ -19193,6 +19228,8 @@ mod tests {
         assert_eq!(result["removed"]["orphanedProfiles"], 1);
         assert!(!service_state.profiles.contains_key("custom:orphan"));
         assert!(service_state.profiles.contains_key("custom:referenced"));
+        assert!(service_state.profiles.contains_key("custom:byop"));
+        assert!(service_state.profiles.contains_key("custom:observed"));
         assert!(service_state.profiles.contains_key("default"));
     }
 

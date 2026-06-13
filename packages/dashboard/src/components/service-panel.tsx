@@ -238,6 +238,7 @@ export type ServiceProfileAllocation = {
 type ServiceProfileRecord = {
   id?: string;
   name?: string;
+  profileOrigin?: string;
   userDataDir?: string | null;
   sitePolicyIds?: string[];
   targetServiceIds?: string[];
@@ -251,6 +252,8 @@ type ServiceProfileRecord = {
   credentialProviderIds?: string[];
   manualLoginPreferred?: boolean;
   targetReadiness?: ServiceProfileTargetReadiness[];
+  registration?: Record<string, unknown> | null;
+  browserCompatibilityEvidence?: Record<string, unknown>[];
   persistent?: boolean;
   tags?: string[];
 };
@@ -1067,6 +1070,7 @@ function runtimeProfileConfigPayload(
   return {
     id: profileId,
     name: form.name.trim() || profileId,
+    profileOrigin: profile.profileOrigin ?? "agent_browser_owned",
     userDataDir: nullableFormValue(form.userDataDir),
     sitePolicyIds: parseCommaList(form.sitePolicyIds),
     targetServiceIds: parseCommaList(form.targetServiceIds),
@@ -1080,6 +1084,8 @@ function runtimeProfileConfigPayload(
     credentialProviderIds: parseCommaList(form.credentialProviderIds),
     manualLoginPreferred: form.manualLoginPreferred,
     targetReadiness: profile.targetReadiness ?? [],
+    registration: profile.registration ?? null,
+    browserCompatibilityEvidence: profile.browserCompatibilityEvidence ?? [],
     persistent: form.persistent,
     tags: parseCommaList(form.tags),
   };

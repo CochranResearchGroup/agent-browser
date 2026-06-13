@@ -731,6 +731,33 @@ await registerServiceLoginProfile({
 });
 ```
 
+When migrating an existing browser profile into agent-browser ownership, use
+`registerExternalProfile()` instead of relying on a default profile fallback.
+The registration records `profileOrigin: "external_byop"`, the caller service,
+target identity, account ids, user-data directory, and browser compatibility
+evidence so access plans and cleanup can treat it differently from an
+agent-browser-created profile:
+
+```ts
+await registerExternalProfile({
+  baseUrl: `http://127.0.0.1:${streamPort}`,
+  id: 'auracall-chatgpt',
+  serviceName: 'AuraCall',
+  agentName: 'auracall-api',
+  loginId: 'chatgpt',
+  accountId: 'consult@example.com',
+  userDataDir: '/home/me/.auracall/browser-profiles/chatgpt',
+  browserBuild: 'stealthcdp_chromium',
+  browserFamily: 'chromium',
+  compatibilityEvidence: 'validated_with_existing_provider_profile',
+});
+```
+
+External profile origins are explicit: `external_byop` is registered for
+service lease policy but kept conservative for cleanup, while
+`external_observed` is process/resource evidence only and is never treated as
+owned profile data.
+
 When a client has explicit auth evidence from a bounded probe, it can attach
 freshness metadata to the same registration call. `readinessState`,
 `readinessEvidence`, `lastVerifiedAt`, and `freshnessExpiresAt` generate
@@ -2332,6 +2359,8 @@ browsers, sessions, tabs, monitors, site policies, providers, and challenges,
 upsert and delete helpers for profiles, sessions, site policies, providers,
 and browser capability registry records,
 `registerServiceLoginProfile` for the common login-identity profile recipe,
+`registerExternalProfile` for explicit BYOP or observed external profile
+registration with profile-origin and browser-compatibility evidence,
 including optional freshness fields such as `readinessState`,
 `readinessEvidence`, `lastVerifiedAt`, and `freshnessExpiresAt`,
 `updateServiceProfileFreshness` for service-side bounded probe freshness updates through `POST /api/service/profiles/<id>/freshness`,
