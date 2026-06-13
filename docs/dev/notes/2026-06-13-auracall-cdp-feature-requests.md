@@ -82,6 +82,38 @@ Do not move AuraCall provider scraping logic into agent-browser. Instead, add
 service-owned primitives that let any software client do controlled CDP-backed
 work without bypassing profile leases, tab reuse, traceability, and cleanup.
 
+## Operational Constraints From Runtime Audit
+
+The migration work must also preserve the resource posture agreed during the
+agent-browser runtime audit.
+
+Ordinary browser work should use the minimal necessary number of runtime
+profiles for the user account and website combinations that are actively in
+use. A single compatible profile/browser lane should be able to serve multiple
+software clients because agent-browser owns CDP routing through the service
+request queue and lease drain system. Clients should not launch a new browser
+or create a new profile merely because another client is using the broker.
+
+Terminated browsers, closed sessions, and stale tab records should not remain
+as first-class runtime inventory. After termination, their durable home is logs,
+trace, incidents, and compact diagnostic evidence. They should not continue to
+occupy the dashboard left rail, service browser inventory, attention queues, or
+profile reuse candidates except as historical evidence surfaced through log or
+trace views.
+
+The default headed posture should be hidden and remotely viewable through the
+service-owned route, normally Guacamole or RDP, rather than appearing on the
+operator's local `:0.0` desktop. Direct local headed browsers are still useful
+for explicit local-human workflows, but they are not the default software-client
+path. A client requesting a headed browser should receive an access plan that
+explains the selected browser host, view stream provider, display isolation,
+control input provider, and CDP allowance.
+
+These constraints apply to every feature below. If a new CDP, evaluate, tab, or
+diagnostic contract would require clients to rediscover DevTools ports, retain
+dead browser objects, bypass lease ownership, or create duplicate profile lanes,
+the contract is incomplete.
+
 ## Feature Request 1: Profile Origin And BYOP Registration
 
 Priority: P0

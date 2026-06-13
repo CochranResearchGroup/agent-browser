@@ -22,6 +22,10 @@ broader than AuraCall: any software client should be able to request a managed
 profile/tab, attach or evaluate only through policy-gated service contracts, and
 collect compact diagnostics when browser work fails.
 
+This is a high-level upgrade plan intended to be used as a parent goal for
+subagents. Each slice has a narrow contract, explicit non-goals, and validation
+expectations so work can proceed in parallel only where the sequence permits.
+
 ## Current State
 
 - The prior access-plan to service-request handoff exists at
@@ -31,6 +35,11 @@ collect compact diagnostics when browser work fails.
   only when isolation or policy requires a new lane.
 - The AuraCall handoff note records the migration gap and source context at
   `docs/dev/notes/2026-06-13-auracall-cdp-feature-requests.md`.
+- The same handoff note records the runtime posture constraints discovered
+  during the browser-resource audit: minimal active profile lanes,
+  post-termination browser state belongs in logs and trace, and ordinary headed
+  browser work should use hidden remote-viewable sessions rather than the
+  operator's local desktop.
 - Existing service request actions cover many high-level browser operations,
   but software clients do not yet have a lease-backed service tab handle,
   controlled CDP attach contract, bounded evaluate service action, or
@@ -51,6 +60,39 @@ extend the existing access-plan to service-request handoff, keep HTTP, MCP,
 Rust contracts, and `@agent-browser/client` aligned, and preserve the minimal
 runtime-profile reuse invariant from P13.
 
+Runtime inventory must describe only active or reusable broker-owned state.
+Closed browsers, terminated sessions, stale tabs, and historical attention items
+belong in service trace, incidents, logs, and diagnostic bundles. They should
+not remain in service browser lists, left-rail active inventory, profile reuse
+candidates, or live attention queues after termination.
+
+Headed browser work should default to the service-owned hidden remote-headed
+lane when a remote view provider is configured. Showing a software-client
+browser on the operator's local `:0.0` desktop should require explicit caller
+intent or a site policy that selects local headed operation.
+
+## Parent Goal Definition
+
+Goal: make agent-browser the broker-first browser control plane for AuraCall
+and other software clients by adding profile-origin, tab-handle, controlled CDP,
+bounded evaluate, diagnostics, readiness, and client-helper contracts while
+preserving minimal profile reuse and hidden remote-headed operation.
+
+Done means:
+
+- software clients can request an access plan, acquire a service-owned tab, and
+  continue work through the returned handle without process scans or DevTools
+  port discovery;
+- policy-gated CDP attach and bounded evaluate are available only through valid
+  leased handles;
+- terminated browser/session/tab objects are historical evidence only;
+- dashboard and service inventory show active or reusable state, not retained
+  dead runtime objects;
+- generated clients, HTTP, MCP, schemas, Rust metadata, docs, and skill guidance
+  agree for every public contract;
+- no-launch contract tests pass for each slice, and live smokes are used only
+  where they prove behavior that cannot be validated from fixtures.
+
 ## Goal Shape For Subagents
 
 Use this plan as a parent goal. Assign one subagent per slice, with each
@@ -66,6 +108,41 @@ Subagents should report back with:
 Subagents should not implement provider-specific AuraCall selectors, copy
 private browser profiles into this repo, or touch live authenticated browser
 state unless a slice explicitly requires a live smoke.
+
+Each subagent should start by reading this plan, the AuraCall feature-request
+note, `AGENTS.md`, and the relevant policy files under `docs/dev/policies/`.
+Graphiti memory in group `agent_browser_main` is advisory and must be verified
+against repo files before changing code or runtime behavior.
+
+## Subagent Work Allocation
+
+Recommended sequencing:
+
+1. Ownership foundation: Slice A.
+2. Service tab binding foundation: Slice B.
+3. Policy-gated CDP surface: Slice C.
+4. Safer non-CDP escape hatch: Slice D.
+5. Runtime evidence and readiness: Slice E.
+6. Client migration polish: Slice F.
+
+Only Slice F should wait for all prior slices. Slice E can begin discovery
+after Slice B defines the handle shape, but it should not finalize diagnostics
+until Slice C and Slice D define their trace evidence. Slice C and Slice D can
+share handle fixtures after Slice B lands, but should not be implemented in one
+commit unless the same service-request metadata change makes separation unsafe.
+
+Subagent handoff format:
+
+```text
+Slice:
+Scope:
+Files changed:
+Public contract delta:
+Validation run:
+Live smoke:
+Residual risks:
+Next slice readiness:
+```
 
 ## Slice A: Profile Origin And BYOP Registration
 
