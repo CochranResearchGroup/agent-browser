@@ -362,9 +362,11 @@ pub async fn reconcile_service_state(state: &mut ServiceState) -> ServiceReconci
     let merged_duplicate_browsers = merge_duplicate_live_browser_records(state);
     reconcile_live_browser_targets(state).await;
     let remote_view_repair = reconcile_remote_view_state(state);
+    state.refresh_service_tab_handles();
     record_health_transition_events(state, &before);
     record_tab_lifecycle_events(state, &before);
     let removed_terminated_browsers = remove_post_termination_browser_history(state);
+    state.refresh_service_tab_handles();
     let changed_browsers = changed_browser_count(state, &before);
 
     let summary = ServiceReconcileSummary {
@@ -675,6 +677,10 @@ pub fn persist_service_browser_record_in_repository(
             cdp_endpoint,
             view_streams,
             active_session_ids: vec![session_id.to_string()],
+            tab_handles: previous
+                .as_ref()
+                .map(|browser| browser.tab_handles.clone())
+                .unwrap_or_default(),
             last_error,
             last_health_observation: None,
         };
@@ -1000,6 +1006,9 @@ pub(crate) fn stale_browser_process_record(
             .map(|browser| browser.view_streams.clone())
             .unwrap_or_default(),
         active_session_ids: vec![session_id.to_string()],
+        tab_handles: previous
+            .map(|browser| browser.tab_handles.clone())
+            .unwrap_or_default(),
         last_error: Some(last_error),
         last_health_observation: None,
     };
@@ -2379,6 +2388,7 @@ fn record_tab_lifecycle_events(state: &mut ServiceState, before: &ServiceState) 
                 "previousTitle": previous.and_then(|tab| tab.title.clone()),
                 "currentTitle": tab.title.clone(),
                 "ownerSessionId": tab.owner_session_id.clone(),
+                "serviceTabHandle": tab.service_tab_handle.clone(),
             })),
             ..new_service_event()
         });

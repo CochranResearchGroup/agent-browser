@@ -16,10 +16,12 @@ import {
   createServiceViewerLeaseHeartbeatRequest,
   createServiceViewerLeaseReleaseRequest,
   createServiceViewerLeaseRequest,
+  getServiceTabHandle,
   heartbeatServiceViewerLease,
   isServiceCdpFreeActionAvailable,
   postServiceRequest,
   releaseServiceViewerLease,
+  requireServiceTabHandle,
   requestServiceCdpFreeLaunch,
   requestServiceRemoteViewRouteCheckout,
   requestServiceRoutePoolRepair,
@@ -719,7 +721,33 @@ async function main() {
   assert.deepEqual(postRecorder.calls[0].init.headers, { 'content-type': 'application/json' });
   assert.deepEqual(postRecorder.calls[0].body, request);
 
-  const tabRecorder = createFetchRecorder({ success: true, data: { jobId: 'job-tab' } });
+  const tabHandle = {
+    browserId: 'session:acs',
+    sessionName: 'acs',
+    tabId: 'target:target-1',
+    targetId: 'target-1',
+    url: 'https://example.com/new',
+    title: 'Example',
+    profileId: 'acs-work',
+    profileOrigin: 'agent_browser_owned',
+    leaseId: 'acs',
+    leaseState: 'shared',
+    cleanupPolicy: 'close_tabs',
+    leaseHeartbeatExpected: true,
+    ownerSessionId: 'acs',
+    jobId: 'job-tab',
+    traceFilter: {
+      browserId: 'session:acs',
+      profileId: 'acs-work',
+      sessionId: 'acs',
+    },
+    valid: true,
+    staleReason: null,
+  };
+  const tabRecorder = createFetchRecorder({
+    success: true,
+    data: { jobId: 'job-tab', serviceTabHandle: tabHandle },
+  });
   const tabResponse = await requestServiceTab({
     baseUrl: 'http://127.0.0.1:4849',
     fetch: tabRecorder.fetch,
@@ -731,7 +759,38 @@ async function main() {
     targetServiceId: 'acs',
     url: 'https://example.com/new',
   });
-  assert.deepEqual(tabResponse, { success: true, data: { jobId: 'job-tab' } });
+  assert.deepEqual(tabResponse, { success: true, data: { jobId: 'job-tab', serviceTabHandle: tabHandle } });
+  assert.deepEqual(getServiceTabHandle(tabResponse), tabHandle);
+  assert.deepEqual(requireServiceTabHandle(tabResponse), tabHandle);
+  assert.deepEqual(getServiceTabHandle(tabResponse.data), tabHandle);
+  assert.deepEqual(
+    {
+      browserId: requireServiceTabHandle(tabResponse).browserId,
+      tabId: requireServiceTabHandle(tabResponse).tabId,
+      targetId: requireServiceTabHandle(tabResponse).targetId,
+      profileId: requireServiceTabHandle(tabResponse).profileId,
+    },
+    {
+      browserId: 'session:acs',
+      tabId: 'target:target-1',
+      targetId: 'target-1',
+      profileId: 'acs-work',
+    },
+  );
+  assert.throws(
+    () =>
+      requireServiceTabHandle({
+        success: true,
+        data: {
+          serviceTabHandle: {
+            ...tabHandle,
+            valid: false,
+            staleReason: 'tab_closed',
+          },
+        },
+      }),
+    /service tab handle is stale: tab_closed/,
+  );
   assert.deepEqual(tabRecorder.calls[0].body, {
     serviceName: 'JournalDownloader',
     agentName: 'article-probe-agent',

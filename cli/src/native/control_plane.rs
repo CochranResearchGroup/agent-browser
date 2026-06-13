@@ -508,6 +508,10 @@ fn persist_process_exited_browser_health_in_repository(
                 .map(|browser| browser.view_streams.clone())
                 .unwrap_or_default(),
             active_session_ids: vec![state.session_id.clone()],
+            tab_handles: previous
+                .as_ref()
+                .map(|browser| browser.tab_handles.clone())
+                .unwrap_or_default(),
             last_error,
             last_health_observation: None,
         };

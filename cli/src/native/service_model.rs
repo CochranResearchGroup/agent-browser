@@ -2335,6 +2335,7 @@ impl ServiceState {
     /// Refresh bounded derived collections before persistence or API exposure.
     pub fn refresh_derived_views(&mut self) {
         self.refresh_profile_readiness();
+        self.refresh_service_tab_handles();
         let preserved_metadata = self
             .incidents
             .iter()
@@ -2374,6 +2375,155 @@ impl ServiceState {
                 incident
             })
             .collect();
+    }
+
+    /// Refresh service-owned tab handles before API, MCP, CLI, or trace exposure.
+    pub fn refresh_service_tab_handles(&mut self) {
+        let tab_ids = self.tabs.keys().cloned().collect::<Vec<_>>();
+        let mut tab_handles = BTreeMap::<String, Vec<ServiceTabHandle>>::new();
+
+        for tab_id in tab_ids {
+            if let Some(handle) = self.service_tab_handle(&tab_id) {
+                if let Some(tab) = self.tabs.get_mut(&tab_id) {
+                    tab.service_tab_handle = Some(handle.clone());
+                }
+                tab_handles
+                    .entry(handle.browser_id.clone())
+                    .or_default()
+                    .push(handle);
+            }
+        }
+
+        for browser in self.browsers.values_mut() {
+            browser.tab_handles = tab_handles.remove(&browser.id).unwrap_or_default();
+            browser
+                .tab_handles
+                .sort_by(|left, right| left.tab_id.cmp(&right.tab_id));
+        }
+    }
+
+    pub fn service_tab_handle(&self, tab_id: &str) -> Option<ServiceTabHandle> {
+        let tab = self.tabs.get(tab_id)?;
+        let browser = self.browsers.get(&tab.browser_id);
+        let session_id = tab
+            .owner_session_id
+            .clone()
+            .or_else(|| tab.session_id.clone())
+            .or_else(|| {
+                browser
+                    .and_then(|browser| browser.active_session_ids.first())
+                    .cloned()
+            });
+        let session = session_id
+            .as_deref()
+            .and_then(|session_id| self.sessions.get(session_id));
+        let profile_id = session
+            .and_then(|session| session.profile_id.clone())
+            .or_else(|| browser.and_then(|browser| browser.profile_id.clone()));
+        let profile_origin = profile_id
+            .as_deref()
+            .and_then(|profile_id| self.profiles.get(profile_id))
+            .map(|profile| profile.profile_origin)
+            .unwrap_or_default();
+        let cleanup_policy = session.map(|session| session.cleanup);
+        let lease_state = session.map(|session| session.lease);
+        let job_id = self.latest_job_id_for_tab(tab_id);
+        let stale_reason = service_tab_handle_stale_reason(tab, browser);
+
+        Some(ServiceTabHandle {
+            browser_id: tab.browser_id.clone(),
+            session_name: session_id.clone(),
+            tab_id: tab.id.clone(),
+            target_id: tab.target_id.clone(),
+            url: tab.url.clone(),
+            title: tab.title.clone(),
+            profile_id,
+            profile_origin,
+            lease_id: session_id.clone(),
+            lease_state,
+            cleanup_policy,
+            lease_heartbeat_expected: lease_state.is_some(),
+            owner_session_id: tab.owner_session_id.clone(),
+            job_id,
+            trace_filter: ServiceTabHandleTraceFilter {
+                browser_id: Some(tab.browser_id.clone()),
+                profile_id: profile_id_from_tab_handle_context(self, tab, browser),
+                session_id: session_id.clone(),
+            },
+            valid: stale_reason.is_none(),
+            stale_reason,
+        })
+    }
+
+    fn latest_job_id_for_tab(&self, tab_id: &str) -> Option<String> {
+        self.jobs
+            .values()
+            .filter(|job| matches!(&job.target, JobTarget::Tab(id) if id == tab_id))
+            .max_by(|left, right| {
+                service_job_sort_key(left)
+                    .cmp(service_job_sort_key(right))
+                    .then_with(|| left.id.cmp(&right.id))
+            })
+            .map(|job| job.id.clone())
+    }
+}
+
+fn profile_id_from_tab_handle_context(
+    state: &ServiceState,
+    tab: &BrowserTab,
+    browser: Option<&BrowserProcess>,
+) -> Option<String> {
+    let session_id = tab
+        .owner_session_id
+        .as_deref()
+        .or(tab.session_id.as_deref())
+        .or_else(|| {
+            browser
+                .and_then(|browser| browser.active_session_ids.first())
+                .map(String::as_str)
+        });
+    session_id
+        .and_then(|session_id| state.sessions.get(session_id))
+        .and_then(|session| session.profile_id.clone())
+        .or_else(|| browser.and_then(|browser| browser.profile_id.clone()))
+}
+
+fn service_job_sort_key(job: &ServiceJob) -> &str {
+    job.completed_at
+        .as_deref()
+        .or(job.started_at.as_deref())
+        .or(job.submitted_at.as_deref())
+        .unwrap_or("")
+}
+
+fn service_tab_handle_stale_reason(
+    tab: &BrowserTab,
+    browser: Option<&BrowserProcess>,
+) -> Option<String> {
+    match tab.lifecycle {
+        TabLifecycle::Closed => return Some("tab_closed".to_string()),
+        TabLifecycle::Crashed => return Some("tab_crashed".to_string()),
+        TabLifecycle::Unknown
+        | TabLifecycle::Opening
+        | TabLifecycle::Loading
+        | TabLifecycle::Ready
+        | TabLifecycle::Closing => {}
+    }
+
+    let browser = match browser {
+        Some(browser) => browser,
+        None => return Some("browser_missing".to_string()),
+    };
+
+    match browser.health {
+        BrowserHealth::Ready | BrowserHealth::Launching | BrowserHealth::Reconnecting => None,
+        BrowserHealth::NotStarted => Some("browser_not_started".to_string()),
+        BrowserHealth::Degraded => Some("browser_degraded".to_string()),
+        BrowserHealth::Unreachable => Some("browser_unreachable".to_string()),
+        BrowserHealth::ProcessExited => Some("browser_process_exited".to_string()),
+        BrowserHealth::CdpDisconnected => Some("browser_cdp_disconnected".to_string()),
+        BrowserHealth::Closing => Some("browser_closing".to_string()),
+        BrowserHealth::Faulted => Some("browser_faulted".to_string()),
     }
 }
 
@@ -4385,6 +4535,7 @@ pub struct BrowserProcess {
     pub cdp_endpoint: Option<String>,
     pub view_streams: Vec<ViewStream>,
     pub active_session_ids: Vec<String>,
+    pub tab_handles: Vec<ServiceTabHandle>,
     pub last_error: Option<String>,
     pub last_health_observation: Option<BrowserHealthObservation>,
 }
@@ -4403,6 +4554,7 @@ impl Default for BrowserProcess {
             cdp_endpoint: None,
             view_streams: Vec::new(),
             active_session_ids: Vec::new(),
+            tab_handles: Vec::new(),
             last_error: None,
             last_health_observation: None,
         }
@@ -4705,6 +4857,7 @@ pub struct BrowserTab {
     pub url: Option<String>,
     pub title: Option<String>,
     pub owner_session_id: Option<String>,
+    pub service_tab_handle: Option<ServiceTabHandle>,
     pub latest_snapshot_id: Option<String>,
     pub latest_screenshot_id: Option<String>,
     pub challenge_id: Option<String>,
@@ -4721,11 +4874,44 @@ impl Default for BrowserTab {
             url: None,
             title: None,
             owner_session_id: None,
+            service_tab_handle: None,
             latest_snapshot_id: None,
             latest_screenshot_id: None,
             challenge_id: None,
         }
     }
+}
+
+/// Stable, service-owned binding for follow-on tab work.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ServiceTabHandle {
+    pub browser_id: String,
+    pub session_name: Option<String>,
+    pub tab_id: String,
+    pub target_id: Option<String>,
+    pub url: Option<String>,
+    pub title: Option<String>,
+    pub profile_id: Option<String>,
+    pub profile_origin: ProfileOrigin,
+    pub lease_id: Option<String>,
+    pub lease_state: Option<LeaseState>,
+    pub cleanup_policy: Option<SessionCleanupPolicy>,
+    pub lease_heartbeat_expected: bool,
+    pub owner_session_id: Option<String>,
+    pub job_id: Option<String>,
+    pub trace_filter: ServiceTabHandleTraceFilter,
+    pub valid: bool,
+    pub stale_reason: Option<String>,
+}
+
+/// Minimal trace query fields that identify a tab handle's evidence context.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ServiceTabHandleTraceFilter {
+    pub browser_id: Option<String>,
+    pub profile_id: Option<String>,
+    pub session_id: Option<String>,
 }
 
 /// Queued or completed service work item.
@@ -8032,6 +8218,104 @@ mod tests {
             readiness.freshness_expires_at.as_deref(),
             Some("2026-05-06T13:00:00Z")
         );
+    }
+
+    #[test]
+    fn refresh_service_tab_handles_derives_valid_and_stale_handles() {
+        let mut state = ServiceState {
+            profiles: BTreeMap::from([(
+                "profile-1".to_string(),
+                BrowserProfile {
+                    id: "profile-1".to_string(),
+                    name: "Profile 1".to_string(),
+                    profile_origin: ProfileOrigin::ExternalByop,
+                    ..BrowserProfile::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                "browser-1".to_string(),
+                BrowserProcess {
+                    id: "browser-1".to_string(),
+                    profile_id: Some("profile-1".to_string()),
+                    health: BrowserHealth::Ready,
+                    active_session_ids: vec!["session-1".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "session-1".to_string(),
+                BrowserSession {
+                    id: "session-1".to_string(),
+                    profile_id: Some("profile-1".to_string()),
+                    lease: LeaseState::Exclusive,
+                    cleanup: SessionCleanupPolicy::CloseTabs,
+                    browser_ids: vec!["browser-1".to_string()],
+                    tab_ids: vec!["tab-1".to_string()],
+                    ..BrowserSession::default()
+                },
+            )]),
+            tabs: BTreeMap::from([
+                (
+                    "tab-1".to_string(),
+                    BrowserTab {
+                        id: "tab-1".to_string(),
+                        browser_id: "browser-1".to_string(),
+                        target_id: Some("target-1".to_string()),
+                        lifecycle: TabLifecycle::Ready,
+                        url: Some("https://example.com".to_string()),
+                        title: Some("Example".to_string()),
+                        owner_session_id: Some("session-1".to_string()),
+                        ..BrowserTab::default()
+                    },
+                ),
+                (
+                    "tab-closed".to_string(),
+                    BrowserTab {
+                        id: "tab-closed".to_string(),
+                        browser_id: "browser-1".to_string(),
+                        lifecycle: TabLifecycle::Closed,
+                        owner_session_id: Some("session-1".to_string()),
+                        ..BrowserTab::default()
+                    },
+                ),
+            ]),
+            jobs: BTreeMap::from([(
+                "job-tab".to_string(),
+                ServiceJob {
+                    id: "job-tab".to_string(),
+                    target: JobTarget::Tab("tab-1".to_string()),
+                    completed_at: Some("2026-06-13T12:00:00Z".to_string()),
+                    ..ServiceJob::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        state.refresh_service_tab_handles();
+
+        let handle = state.tabs["tab-1"].service_tab_handle.as_ref().unwrap();
+        assert_eq!(handle.browser_id, "browser-1");
+        assert_eq!(handle.session_name.as_deref(), Some("session-1"));
+        assert_eq!(handle.tab_id, "tab-1");
+        assert_eq!(handle.target_id.as_deref(), Some("target-1"));
+        assert_eq!(handle.profile_id.as_deref(), Some("profile-1"));
+        assert_eq!(handle.profile_origin, ProfileOrigin::ExternalByop);
+        assert_eq!(handle.lease_state, Some(LeaseState::Exclusive));
+        assert_eq!(handle.cleanup_policy, Some(SessionCleanupPolicy::CloseTabs));
+        assert_eq!(handle.job_id.as_deref(), Some("job-tab"));
+        assert!(handle.valid);
+        assert_eq!(handle.stale_reason, None);
+        assert_eq!(
+            state.browsers["browser-1"].tab_handles[0],
+            state.tabs["tab-1"].service_tab_handle.clone().unwrap()
+        );
+
+        let stale = state.tabs["tab-closed"]
+            .service_tab_handle
+            .as_ref()
+            .unwrap();
+        assert!(!stale.valid);
+        assert_eq!(stale.stale_reason.as_deref(), Some("tab_closed"));
     }
 
     #[test]

@@ -13,6 +13,7 @@
     "url",
     "title",
     "ownerSessionId",
+    "serviceTabHandle",
     "latestSnapshotId",
     "latestScreenshotId",
     "challengeId"
@@ -51,6 +52,16 @@
     "ownerSessionId": {
       "type": ["string", "null"]
     },
+    "serviceTabHandle": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/serviceTabHandle"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "latestSnapshotId": {
       "type": ["string", "null"]
     },
@@ -59,6 +70,103 @@
     },
     "challengeId": {
       "type": ["string", "null"]
+    }
+  },
+  "$defs": {
+    "serviceTabHandleTraceFilter": {
+      "type": "object",
+      "required": ["browserId", "profileId", "sessionId"],
+      "properties": {
+        "browserId": {
+          "type": ["string", "null"]
+        },
+        "profileId": {
+          "type": ["string", "null"]
+        },
+        "sessionId": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": true
+    },
+    "serviceTabHandle": {
+      "type": "object",
+      "required": [
+        "browserId",
+        "sessionName",
+        "tabId",
+        "targetId",
+        "url",
+        "title",
+        "profileId",
+        "profileOrigin",
+        "leaseId",
+        "leaseState",
+        "cleanupPolicy",
+        "leaseHeartbeatExpected",
+        "ownerSessionId",
+        "jobId",
+        "traceFilter",
+        "valid",
+        "staleReason"
+      ],
+      "properties": {
+        "browserId": {
+          "type": "string"
+        },
+        "sessionName": {
+          "type": ["string", "null"]
+        },
+        "tabId": {
+          "type": "string"
+        },
+        "targetId": {
+          "type": ["string", "null"]
+        },
+        "url": {
+          "type": ["string", "null"]
+        },
+        "title": {
+          "type": ["string", "null"]
+        },
+        "profileId": {
+          "type": ["string", "null"]
+        },
+        "profileOrigin": {
+          "type": "string",
+          "enum": ["agent_browser_owned", "external_byop", "external_observed"]
+        },
+        "leaseId": {
+          "type": ["string", "null"]
+        },
+        "leaseState": {
+          "type": ["string", "null"],
+          "enum": ["shared", "exclusive", "human_takeover", "released", "expired", null]
+        },
+        "cleanupPolicy": {
+          "type": ["string", "null"],
+          "enum": ["detach", "close_tabs", "close_browser", "release_only", null]
+        },
+        "leaseHeartbeatExpected": {
+          "type": "boolean"
+        },
+        "ownerSessionId": {
+          "type": ["string", "null"]
+        },
+        "jobId": {
+          "type": ["string", "null"]
+        },
+        "traceFilter": {
+          "$ref": "#/$defs/serviceTabHandleTraceFilter"
+        },
+        "valid": {
+          "type": "boolean"
+        },
+        "staleReason": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": true
     }
   },
   "additionalProperties": true

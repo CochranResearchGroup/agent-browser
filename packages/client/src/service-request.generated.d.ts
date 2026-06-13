@@ -165,9 +165,42 @@ export interface ServiceCdpFreeLaunchAvailability {
   hasUnsupportedCommandList: boolean;
 }
 
+export interface ServiceTabHandleTraceFilter {
+  browserId?: string | null;
+  profileId?: string | null;
+  sessionId?: string | null;
+}
+
+export interface ServiceTabHandle {
+  browserId: string;
+  sessionName?: string | null;
+  tabId: string;
+  targetId?: string | null;
+  url?: string | null;
+  title?: string | null;
+  profileId?: string | null;
+  profileOrigin: 'agent_browser_owned' | 'external_byop' | 'external_observed' | string;
+  leaseId?: string | null;
+  leaseState?: 'shared' | 'exclusive' | 'human_takeover' | 'released' | 'expired' | string | null;
+  cleanupPolicy?: 'detach' | 'close_tabs' | 'close_browser' | 'release_only' | string | null;
+  leaseHeartbeatExpected: boolean;
+  ownerSessionId?: string | null;
+  jobId?: string | null;
+  traceFilter: ServiceTabHandleTraceFilter;
+  valid: boolean;
+  staleReason?: string | null;
+}
+
 export interface ServiceTabNewData {
   index: number;
   url: string;
+  targetId?: string;
+  pageSessionId?: string;
+  browserId?: string;
+  sessionId?: string;
+  runtimeProfile?: string;
+  profileId?: string;
+  serviceTabHandle?: ServiceTabHandle;
 }
 
 export interface ServiceTabSwitchData {
@@ -260,6 +293,7 @@ export interface ServiceTabRecord {
   active: boolean;
   targetId?: string;
   sessionId?: string;
+  serviceTabHandle?: ServiceTabHandle;
   [key: string]: unknown;
 }
 
@@ -866,6 +900,8 @@ export declare function createServiceTabRequestFromAccessPlan(
   accessPlan: ServiceTabAccessPlan,
   input?: Omit<ServiceTabRequestOptions, "accessPlan">,
 ): ServiceRequestForAction<"tab_new">;
+export declare function getServiceTabHandle(response: unknown): ServiceTabHandle | null;
+export declare function requireServiceTabHandle(response: unknown): ServiceTabHandle;
 export declare function createServiceCdpFreeLaunchRequest(
   input: ServiceCdpFreeLaunchRequestOptions,
 ): ServiceRequestForAction<"cdp_free_launch">;

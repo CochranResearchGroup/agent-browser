@@ -13,6 +13,7 @@
     "cdpEndpoint",
     "viewStreams",
     "activeSessionIds",
+    "tabHandles",
     "lastError",
     "lastHealthObservation"
   ],
@@ -222,6 +223,13 @@
       "type": "array",
       "items": {
         "type": "string"
+      }
+    },
+    "tabHandles": {
+      "description": "Derived service-owned tab handles currently associated with this browser.",
+      "type": "array",
+      "items": {
+        "$ref": "service-tab-record.v1.schema.json#/$defs/serviceTabHandle"
       }
     },
     "lastError": {

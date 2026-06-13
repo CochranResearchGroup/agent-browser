@@ -35,6 +35,7 @@ const displayIsolationSet = new Set([
  * @typedef {import('./service-request.generated.js').ServiceRemoteViewRouteReleaseOptions} ServiceRemoteViewRouteReleaseOptions
  * @typedef {import('./service-request.generated.js').ServiceRoutePoolRepairHttpOptions} ServiceRoutePoolRepairHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceRoutePoolRepairOptions} ServiceRoutePoolRepairOptions
+ * @typedef {import('./service-request.generated.js').ServiceTabHandle} ServiceTabHandle
  * @typedef {import('./service-request.generated.js').ServiceTabRequestHttpOptions} ServiceTabRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceTabRequestOptions} ServiceTabRequestOptions
  * @typedef {import('./service-request.generated.js').ServiceViewerLeaseHeartbeatHttpOptions} ServiceViewerLeaseHeartbeatHttpOptions
@@ -180,6 +181,48 @@ export function createServiceTabRequest(input) {
 export function createServiceTabRequestFromAccessPlan(accessPlan, input = {}) {
   assertPlainObject(input, 'service tab request override');
   return createServiceTabRequest({ ...input, accessPlan });
+}
+
+/**
+ * Extract the service-owned tab handle from a tab response or data object.
+ *
+ * @param {unknown} response
+ * @returns {ServiceTabHandle | null}
+ */
+export function getServiceTabHandle(response) {
+  if (!response || typeof response !== 'object') {
+    return null;
+  }
+  const record = /** @type {Record<string, unknown>} */ (response);
+  if (isServiceTabHandle(record.serviceTabHandle)) {
+    return /** @type {ServiceTabHandle} */ (record.serviceTabHandle);
+  }
+  const data = record.data;
+  if (data && typeof data === 'object') {
+    const dataRecord = /** @type {Record<string, unknown>} */ (data);
+    if (isServiceTabHandle(dataRecord.serviceTabHandle)) {
+      return /** @type {ServiceTabHandle} */ (dataRecord.serviceTabHandle);
+    }
+  }
+  return null;
+}
+
+/**
+ * Extract a usable service-owned tab handle or throw with the stale reason.
+ *
+ * @param {unknown} response
+ * @returns {ServiceTabHandle}
+ */
+export function requireServiceTabHandle(response) {
+  const handle = getServiceTabHandle(response);
+  if (!handle) {
+    throw new TypeError('service tab response did not include serviceTabHandle');
+  }
+  if (handle.valid === false) {
+    const reason = typeof handle.staleReason === 'string' ? `: ${handle.staleReason}` : '';
+    throw new TypeError(`service tab handle is stale${reason}`);
+  }
+  return handle;
 }
 
 /**
@@ -700,6 +743,21 @@ function serviceRequestActionArray(value) {
   return stringArray(value)
     .filter((action) => actionSet.has(/** @type {ServiceRequestAction} */ (action)))
     .map((action) => /** @type {ServiceRequestAction} */ (action));
+}
+
+/**
+ * @param {unknown} value
+ */
+function isServiceTabHandle(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const record = /** @type {Record<string, unknown>} */ (value);
+  return (
+    typeof record.browserId === 'string' &&
+    typeof record.tabId === 'string' &&
+    typeof record.valid === 'boolean'
+  );
 }
 
 /**

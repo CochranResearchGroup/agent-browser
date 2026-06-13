@@ -41,12 +41,14 @@ expectations so work can proceed in parallel only where the sequence permits.
   browser work should use hidden remote-viewable sessions rather than the
   operator's local desktop.
 - Existing service request actions cover many high-level browser operations,
-  but software clients do not yet have a lease-backed service tab handle,
-  controlled CDP attach contract, bounded evaluate service action, or
-  profile-origin/BYOP contract.
+  but software clients do not yet have a controlled CDP attach contract,
+  bounded evaluate service action, or diagnostic bundle contract.
 - Slice A has implemented the profile-origin and explicit BYOP registration
-  contract. The next recommended implementation target is Slice B:
-  lease-backed service tab handles.
+  contract.
+- Slice B has implemented lease-backed service tab handles on `tab_new`
+  responses, service tab records, service browser records, and trace event/job
+  evidence. The next recommended implementation target is Slice C: controlled
+  CDP attach.
 
 ## Operating Invariant
 
@@ -222,6 +224,30 @@ Acceptance:
 - Tab reuse and stale-handle rejection do not launch duplicate browser/profile
   lanes.
 - Existing service request contract tests continue to pass.
+
+Status: IMPLEMENTED in the 2026-06-13 Slice B checkpoint.
+
+Validation evidence:
+
+- `git diff --check`
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `cargo test --manifest-path cli/Cargo.toml service_model -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml service_health -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml cdp_screencast_view_stream -- --nocapture`
+- `pnpm test:service-client`
+- `pnpm test:service-api-mcp-parity`
+- `pnpm --dir docs build`
+- `pnpm validation:select -- --base HEAD`
+- `node scripts/dev/select-validation.js --base HEAD --json`
+- `diff -q skills/agent-browser/SKILL.md /home/ecochran76/.codex/shared/skills/agent-browser/SKILL.md`
+
+Live smoke:
+
+- Not run for this no-launch contract slice. The selector recommended
+  `pnpm test:service-cdp-tab-streaming-live` because browser/tab surfaces
+  changed; defer that live smoke to Slice C unless a maintainer asks for live
+  tab-handle proof before controlled CDP attach work starts.
 
 Suggested subagent prompt:
 

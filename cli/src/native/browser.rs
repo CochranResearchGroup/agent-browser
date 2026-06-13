@@ -1131,7 +1131,12 @@ impl BrowserManager {
         });
         self.active_page_index = index;
 
-        Ok(json!({ "index": index, "url": target_url }))
+        Ok(json!({
+            "index": index,
+            "url": target_url,
+            "targetId": self.pages[index].target_id.clone(),
+            "pageSessionId": self.pages[index].session_id.clone(),
+        }))
     }
 
     pub async fn tab_switch(&mut self, index: usize) -> Result<Value, String> {

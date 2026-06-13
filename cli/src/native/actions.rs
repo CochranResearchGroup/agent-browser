@@ -7195,10 +7195,51 @@ async fn handle_tab_new(cmd: &Value, state: &mut DaemonState) -> Result<Value, S
             json!(service_browser_id(&state.session_id)),
         );
         object.insert("sessionId".to_string(), json!(state.session_id.clone()));
+        let tab_id = object
+            .get("targetId")
+            .and_then(|value| value.as_str())
+            .map(|target_id| format!("target:{target_id}"))
+            .or_else(|| {
+                object
+                    .get("index")
+                    .and_then(|value| value.as_u64())
+                    .map(|index| format!("tab-index:{index}"))
+            })
+            .unwrap_or_else(|| format!("session:{}:active-tab", state.session_id));
+        let target_id = object.get("targetId").cloned().unwrap_or(Value::Null);
+        let current_url = object.get("url").cloned().unwrap_or(Value::Null);
+        let title = object.get("title").cloned().unwrap_or(Value::Null);
         if let Some(runtime_profile) = mgr.runtime_profile_name() {
             object.insert("runtimeProfile".to_string(), json!(runtime_profile));
             object.insert("profileId".to_string(), json!(runtime_profile));
         }
+        let profile_id = object.get("profileId").cloned().unwrap_or(Value::Null);
+        object.insert(
+            "serviceTabHandle".to_string(),
+            json!({
+                "browserId": service_browser_id(&state.session_id),
+                "sessionName": state.session_id.clone(),
+                "tabId": tab_id,
+                "targetId": target_id,
+                "url": current_url,
+                "title": title,
+                "profileId": profile_id.clone(),
+                "profileOrigin": "agent_browser_owned",
+                "leaseId": state.session_id.clone(),
+                "leaseState": "shared",
+                "cleanupPolicy": "detach",
+                "leaseHeartbeatExpected": true,
+                "ownerSessionId": state.session_id.clone(),
+                "jobId": Value::Null,
+                "traceFilter": {
+                    "browserId": service_browser_id(&state.session_id),
+                    "profileId": profile_id.clone(),
+                    "sessionId": state.session_id.clone(),
+                },
+                "valid": true,
+                "staleReason": Value::Null,
+            }),
+        );
     }
     Ok(result)
 }
@@ -10258,13 +10299,14 @@ async fn handle_service_sessions(cmd: &Value) -> Result<Value, String> {
 
 /// Return the service-owned browser collection without the full status payload.
 async fn handle_service_browsers(cmd: &Value) -> Result<Value, String> {
-    let service_state = cmd
+    let mut service_state = cmd
         .get("serviceState")
         .cloned()
         .map(serde_json::from_value::<ServiceState>)
         .transpose()
         .map_err(|err| format!("Invalid serviceState: {}", err))?
         .unwrap_or_default();
+    service_state.refresh_service_tab_handles();
     let mut browsers = service_state.browsers.into_values().collect::<Vec<_>>();
     browsers.sort_by(|left, right| left.id.cmp(&right.id));
     let count = browsers.len();
@@ -10277,13 +10319,14 @@ async fn handle_service_browsers(cmd: &Value) -> Result<Value, String> {
 
 /// Return the service-owned tab collection without the full status payload.
 async fn handle_service_tabs(cmd: &Value) -> Result<Value, String> {
-    let service_state = cmd
+    let mut service_state = cmd
         .get("serviceState")
         .cloned()
         .map(serde_json::from_value::<ServiceState>)
         .transpose()
         .map_err(|err| format!("Invalid serviceState: {}", err))?
         .unwrap_or_default();
+    service_state.refresh_service_tab_handles();
     let mut tabs = service_state.tabs.into_values().collect::<Vec<_>>();
     tabs.sort_by(|left, right| left.id.cmp(&right.id));
     let count = tabs.len();

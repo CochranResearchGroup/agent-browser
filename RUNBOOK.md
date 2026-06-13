@@ -654,3 +654,51 @@ Result:
   identities, account ids, user-data directory, and browser compatibility
   evidence.
 - The next recommended P14 slice is Slice B: lease-backed service tab handles.
+
+## Turn 19 | 2026-06-13
+
+Scope: implement P14 Slice B lease-backed service tab handles.
+
+Actions:
+
+- Added `ServiceTabHandle` and `ServiceTabHandleTraceFilter` to the service
+  model.
+- Derived tab handles from service state for `service tabs`, grouped browser
+  `tabHandles`, and tab lifecycle trace event details.
+- Extended direct `tab_new` responses with CDP target/session IDs and a
+  conservative immediate `serviceTabHandle`.
+- Added `getServiceTabHandle()` and `requireServiceTabHandle()` to
+  `@agent-browser/client/service-request`.
+- Updated service tab/browser schemas, generated client declarations, README,
+  docs site, and the installed agent-browser skill.
+- Added no-launch Rust and service-client fixtures for valid handles, binding
+  fields, and stale-handle rejection.
+
+Validation run:
+
+- `git diff --check`
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `cargo test --manifest-path cli/Cargo.toml service_model -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml service_health -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml cdp_screencast_view_stream -- --nocapture`
+- `pnpm test:service-client`
+- `pnpm test:service-api-mcp-parity`
+- `pnpm --dir docs build`
+- `pnpm validation:select -- --base HEAD`
+- `node scripts/dev/select-validation.js --base HEAD --json`
+- `diff -q skills/agent-browser/SKILL.md /home/ecochran76/.codex/shared/skills/agent-browser/SKILL.md`
+
+Result:
+
+- Slice B is implemented as a no-launch contract slice.
+- Software clients can use the returned service tab handle instead of
+  rediscovering browser, session, profile, tab, target, lease, or trace
+  identity.
+- Stale handles fail closed through the client helper and expose explicit
+  stale reasons in service readbacks.
+- The selector recommended `pnpm test:service-cdp-tab-streaming-live` because
+  browser/tab surfaces changed; that live smoke was deferred to Slice C unless
+  live proof is requested before controlled CDP attach work starts.
+- The next recommended P14 slice is Slice C: controlled CDP attach for leased
+  service tab handles.

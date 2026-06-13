@@ -2234,6 +2234,7 @@ Software clients can use this TypeScript-shaped payload for `POST /api/service/r
 ```ts
 import {
   createServiceRequest,
+  requireServiceTabHandle,
   postServiceRequest,
   requestServiceTab,
 } from '@agent-browser/client/service-request';
@@ -2266,6 +2267,8 @@ const tab = await requestServiceTab({
   url: 'https://example.com',
   jobTimeoutMs: 30000,
 });
+
+const handle = requireServiceTabHandle(tab);
 ```
 
 The private workspace package `@agent-browser/client` is generated from the
@@ -2280,7 +2283,12 @@ command envelope with `success`, optional `data`, optional `error`, optional
 `docs/dev/contracts/service-request.v1.schema.json` gets a typed `data` shape
 through
 `ServiceRequestDataForAction`; `requestServiceTab` returns typed `tab_new`
-data. Remote-view route and lease actions return typed route checkout, route
+data with a `serviceTabHandle` when the service can bind the request to a
+service-owned tab. Use `getServiceTabHandle()` or `requireServiceTabHandle()`
+for follow-on work instead of reconstructing browser, session, profile, tab, or
+target identity from process lists or DevTools scans. The handle includes
+stale-state fields so clients can fail closed when the tab or browser has
+already gone away. Remote-view route and lease actions return typed route checkout, route
 release, viewer lease, and controller lease metadata. Use
 `requestServiceRemoteViewRouteCheckout()`,
 `requestServiceRemoteViewRouteRelease()`, `requestServiceViewerLease()`,

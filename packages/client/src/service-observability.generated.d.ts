@@ -298,6 +298,7 @@ export interface ServiceBrowserRecord {
   health: ServiceBrowserHealthState;
   displayIsolation?: 'private_virtual_display' | 'shared_display' | 'ambient_display' | string | null;
   displayName?: string | null;
+  tabHandles?: ServiceTabHandle[];
   [key: string]: unknown;
 }
 
@@ -389,11 +390,38 @@ export interface ServiceSessionRecord {
   [key: string]: unknown;
 }
 
+export interface ServiceTabHandleTraceFilter {
+  browserId?: string | null;
+  profileId?: string | null;
+  sessionId?: string | null;
+}
+
+export interface ServiceTabHandle {
+  browserId: string;
+  sessionName?: string | null;
+  tabId: string;
+  targetId?: string | null;
+  url?: string | null;
+  title?: string | null;
+  profileId?: string | null;
+  profileOrigin: 'agent_browser_owned' | 'external_byop' | 'external_observed' | string;
+  leaseId?: string | null;
+  leaseState?: 'shared' | 'exclusive' | 'human_takeover' | 'released' | 'expired' | string | null;
+  cleanupPolicy?: 'detach' | 'close_tabs' | 'close_browser' | 'release_only' | string | null;
+  leaseHeartbeatExpected: boolean;
+  ownerSessionId?: string | null;
+  jobId?: string | null;
+  traceFilter: ServiceTabHandleTraceFilter;
+  valid: boolean;
+  staleReason?: string | null;
+}
+
 export interface ServiceTabRecord {
   id: string;
   browserId: string | null;
   sessionId: string | null;
   lifecycle: string;
+  serviceTabHandle?: ServiceTabHandle | null;
   [key: string]: unknown;
 }
 

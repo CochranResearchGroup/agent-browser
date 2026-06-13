@@ -619,7 +619,10 @@ For operator handoff, prefer the inline `seedingHandoff` field from `getServiceA
 Copyable software-client broker pattern:
 
 ```js
-import { requestServiceTab } from '@agent-browser/client/service-request';
+import {
+  requestServiceTab,
+  requireServiceTabHandle,
+} from '@agent-browser/client/service-request';
 import {
   acquireServiceLoginProfile,
 } from '@agent-browser/client/service-observability';
@@ -638,14 +641,22 @@ const { accessPlan } = await acquireServiceLoginProfile({
   runBrowserCapabilityPreflight: true,
 });
 
-await requestServiceTab({
+const tab = await requestServiceTab({
   baseUrl,
   accessPlan,
   loginId: 'canva',
   targetServiceId: 'canva',
   url: 'https://www.canva.com/',
 });
+
+const handle = requireServiceTabHandle(tab);
 ```
+
+Use the returned `serviceTabHandle`, or `getServiceTabHandle()` when the handle
+is optional, for follow-on browser work. Do not rediscover DevTools ports,
+process IDs, browser sessions, or target IDs after a brokered tab request. A
+stale handle carries `valid: false` and `staleReason`, and
+`requireServiceTabHandle()` fails closed for that state.
 
 If `accessPlan.readinessSummary.needsManualSeeding` is true, show `accessPlan.seedingHandoff` plus `accessPlan.seedingHandoff.operatorIntervention` to the operator and seed the managed profile before expecting authenticated automation to succeed for the requested identity. After a bounded no-launch auth probe, update an existing managed profile through `verifyServiceProfileSeeding({ id, loginId, readinessState: "fresh", readinessEvidence, lastVerifiedAt, freshnessExpiresAt })`, `updateServiceProfileFreshness(...)`, HTTP `POST /api/service/profiles/<id>/freshness`, or MCP `service_profile_freshness_update`; this also records the post-close seeding verification result on any matching closed handoff. Use `registerServiceLoginProfile({ ..., readinessState: "fresh", readinessEvidence, lastVerifiedAt, freshnessExpiresAt })` only when registering or refreshing the whole login profile recipe. Use `upsertServiceProfileReadinessMonitor()` when a registered profile should continue reporting stale freshness through access-plan `monitorFindings`.
 
