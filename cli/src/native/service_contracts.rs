@@ -97,6 +97,7 @@ pub const SERVICE_REQUEST_ACTIONS: &[&str] = &[
     "cdp_free_launch",
     "cdp_attach",
     "cdp_detach",
+    "evaluate",
     "back",
     "forward",
     "reload",

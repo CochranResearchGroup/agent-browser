@@ -8,6 +8,7 @@ import {
   createServiceCdpAttachRequest,
   createServiceCdpDetachRequest,
   createServiceCdpFreeLaunchRequest,
+  createServiceEvaluateRequest,
   createServiceRemoteViewRouteCheckoutRequest,
   createServiceRemoteViewRouteReleaseRequest,
   createServiceRoutePoolRepairRequest,
@@ -27,6 +28,7 @@ import {
   requestServiceCdpAttach,
   requestServiceCdpDetach,
   requestServiceCdpFreeLaunch,
+  requestServiceEvaluate,
   requestServiceRemoteViewRouteCheckout,
   requestServiceRoutePoolRepair,
   requestServiceTab,
@@ -885,6 +887,87 @@ async function main() {
   });
   assert.equal(cdpDetachRecorder.calls[0].body.action, 'cdp_detach');
   assert.equal(cdpDetachRecorder.calls[0].body.browserId, 'session:acs');
+  assert.deepEqual(
+    createServiceEvaluateRequest({
+      serviceName: 'JournalDownloader',
+      agentName: 'article-probe-agent',
+      taskName: 'probeACSwebsite',
+      serviceTabHandle: tabHandle,
+      script: 'document.title',
+      timeoutMs: 1000,
+      maxReturnBytes: 128,
+    }),
+    {
+      serviceName: 'JournalDownloader',
+      agentName: 'article-probe-agent',
+      taskName: 'probeACSwebsite',
+      action: 'evaluate',
+      browserId: 'session:acs',
+      sessionName: 'acs',
+      targetId: 'target-1',
+      script: 'document.title',
+      returnByValue: true,
+      timeoutMs: 1000,
+      maxReturnBytes: 128,
+      serviceTabHandle: tabHandle,
+    },
+  );
+  assert.throws(
+    () =>
+      createServiceEvaluateRequest({
+        serviceTabHandle: tabHandle,
+        timeoutMs: 1000,
+        maxReturnBytes: 128,
+      }),
+    /requires script or expression/,
+  );
+  assert.throws(
+    () =>
+      createServiceEvaluateRequest({
+        serviceTabHandle: tabHandle,
+        script: 'document.title',
+        timeoutMs: 0,
+        maxReturnBytes: 128,
+      }),
+    /positive timeoutMs/,
+  );
+  assert.throws(
+    () =>
+      createServiceEvaluateRequest({
+        serviceTabHandle: {
+          ...tabHandle,
+          valid: false,
+          staleReason: 'tab_closed',
+        },
+        script: 'document.title',
+        timeoutMs: 1000,
+        maxReturnBytes: 128,
+      }),
+    /service tab handle is stale: tab_closed/,
+  );
+  const evaluateRecorder = createFetchRecorder({
+    success: true,
+    data: {
+      ok: true,
+      action: 'evaluate',
+      result: 'Example',
+      resultTruncated: false,
+      resultBytes: 9,
+      maxReturnBytes: 128,
+    },
+  });
+  await requestServiceEvaluate({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: evaluateRecorder.fetch,
+    serviceTabHandle: tabHandle,
+    expression: 'document.title',
+    timeoutMs: 1000,
+    maxReturnBytes: 128,
+  });
+  assert.equal(evaluateRecorder.calls[0].body.action, 'evaluate');
+  assert.equal(evaluateRecorder.calls[0].body.script, 'document.title');
+  assert.equal(evaluateRecorder.calls[0].body.returnByValue, true);
+  assert.deepEqual(evaluateRecorder.calls[0].body.serviceTabHandle, tabHandle);
   assert.deepEqual(tabRecorder.calls[0].body, {
     serviceName: 'JournalDownloader',
     agentName: 'article-probe-agent',

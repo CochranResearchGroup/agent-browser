@@ -193,6 +193,25 @@ export interface ServiceCdpDetachData {
   [key: string]: unknown;
 }
 
+export interface ServiceEvaluateData {
+  ok: boolean;
+  action: "evaluate";
+  result?: unknown;
+  resultTruncated?: boolean;
+  resultBytes?: number;
+  maxReturnBytes?: number;
+  timeoutMs?: number;
+  returnByValue?: boolean;
+  url?: string;
+  title?: string;
+  targetId?: string;
+  tabId?: string | null;
+  profileId?: string | null;
+  serviceTabHandle?: ServiceTabHandle;
+  evaluatedAt?: string;
+  [key: string]: unknown;
+}
+
 export interface ServiceTabHandleTraceFilter {
   browserId?: string | null;
   profileId?: string | null;
@@ -658,6 +677,7 @@ export interface ServiceRequestActionDataMap {
   cdp_free_launch: ServiceCdpFreeLaunchData;
   cdp_attach: ServiceCdpAttachDescriptor;
   cdp_detach: ServiceCdpDetachData;
+  evaluate: ServiceEvaluateData;
   back: ServiceUrlData;
   forward: ServiceUrlData;
   reload: ServiceUrlData;
@@ -836,6 +856,23 @@ export interface ServiceCdpDetachRequestHttpOptions extends ServiceCdpDetachRequ
   signal?: AbortSignal;
 }
 
+export interface ServiceEvaluateRequestOptions extends Omit<ServiceRequest, "action" | "params"> {
+  serviceTabHandle: ServiceTabHandle;
+  script?: string;
+  expression?: string;
+  returnByValue?: boolean;
+  timeoutMs: number;
+  maxReturnBytes: number;
+  captureEvidenceOnFailure?: boolean;
+  params?: Record<string, unknown>;
+}
+
+export interface ServiceEvaluateRequestHttpOptions extends ServiceEvaluateRequestOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
 export interface ServiceRemoteViewRouteCheckoutOptions extends Omit<ServiceRequest, "action" | "params"> {
   displayAllocationId: string;
   routeId?: string;
@@ -963,6 +1000,9 @@ export declare function createServiceCdpAttachRequest(
 export declare function createServiceCdpDetachRequest(
   input: ServiceCdpDetachRequestOptions,
 ): ServiceRequestForAction<"cdp_detach">;
+export declare function createServiceEvaluateRequest(
+  input: ServiceEvaluateRequestOptions,
+): ServiceRequestForAction<"evaluate">;
 export declare function createServiceRemoteViewRouteCheckoutRequest(
   input: ServiceRemoteViewRouteCheckoutOptions,
 ): ServiceRequestForAction<"service_remote_view_route_checkout">;
@@ -994,6 +1034,9 @@ export declare function requestServiceCdpAttach(
 export declare function requestServiceCdpDetach(
   options: ServiceCdpDetachRequestHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceCdpDetachData>>;
+export declare function requestServiceEvaluate(
+  options: ServiceEvaluateRequestHttpOptions,
+): Promise<ServiceRequestResponse<ServiceEvaluateData>>;
 export declare function requestServiceRemoteViewRouteCheckout(
   options: ServiceRemoteViewRouteCheckoutHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceRemoteViewRouteMutationData>>;

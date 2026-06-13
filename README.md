@@ -2236,6 +2236,7 @@ import {
   createServiceRequest,
   requestServiceCdpAttach,
   requestServiceCdpDetach,
+  requestServiceEvaluate,
   requireServiceTabHandle,
   postServiceRequest,
   requestServiceTab,
@@ -2281,6 +2282,14 @@ await requestServiceCdpAttach({
   cdpAttachmentAllowed: true,
 });
 
+await requestServiceEvaluate({
+  baseUrl: `http://127.0.0.1:${streamPort}`,
+  serviceTabHandle: handle,
+  script: 'document.title',
+  timeoutMs: 1000,
+  maxReturnBytes: 4096,
+});
+
 await requestServiceCdpDetach({
   baseUrl: `http://127.0.0.1:${streamPort}`,
   serviceTabHandle: handle,
@@ -2308,7 +2317,11 @@ already gone away. When site policy and the access plan allow CDP attachment,
 use `requestServiceCdpAttach()` with that valid handle to receive a
 service-owned attach descriptor, then call `requestServiceCdpDetach()` when the
 client is finished. Detach preserves the browser process by default, so browser
-lifecycle remains owned by agent-browser rather than the caller. Remote-view route and lease actions return typed route checkout, route
+lifecycle remains owned by agent-browser rather than the caller. Use
+`requestServiceEvaluate()` for bounded JavaScript reads against the same valid
+handle; it requires `timeoutMs` and `maxReturnBytes`, returns URL/title and
+truncation metadata, and refuses missing or stale handles before posting the
+request. Remote-view route and lease actions return typed route checkout, route
 release, viewer lease, and controller lease metadata. Use
 `requestServiceRemoteViewRouteCheckout()`,
 `requestServiceRemoteViewRouteRelease()`, `requestServiceViewerLease()`,

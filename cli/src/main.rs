@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 mod agent_env;
 mod chat;
 mod color;

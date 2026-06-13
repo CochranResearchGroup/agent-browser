@@ -863,6 +863,32 @@ fn service_mcp_tools() -> Vec<Value> {
                         "type": "string",
                         "description": "Optional CDP target id override when the service tab handle already authorizes the tab."
                     },
+                    "script": {
+                        "type": "string",
+                        "description": "JavaScript expression or function body for bounded evaluate."
+                    },
+                    "expression": {
+                        "type": "string",
+                        "description": "Alias for script when action is evaluate."
+                    },
+                    "returnByValue": {
+                        "type": "boolean",
+                        "description": "Evaluate result mode. Service-owned evaluate requires true so returned data can be size-capped."
+                    },
+                    "timeoutMs": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Daemon-side timeout for bounded evaluate."
+                    },
+                    "maxReturnBytes": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Maximum serialized evaluate result bytes returned to the caller before truncation metadata is emitted."
+                    },
+                    "captureEvidenceOnFailure": {
+                        "type": "boolean",
+                        "description": "Request compact URL/title evidence when bounded evaluate fails."
+                    },
                     "browserBuild": {
                         "type": "string",
                         "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"],
@@ -5160,6 +5186,7 @@ fn service_request_command(arguments: &Value) -> Result<(Value, Value), JsonRpcE
     reject_blocked_manual_service_request(arguments)?;
     reject_cdp_free_service_request(action, arguments)?;
     reject_cdp_attach_service_request(action, arguments)?;
+    reject_bounded_evaluate_service_request(action, arguments)?;
     let params = optional_object_argument(arguments, "params")?;
     let context = ServiceToolContext::from_arguments(arguments)?;
     let trace = context.trace();
@@ -5249,6 +5276,70 @@ fn reject_cdp_attach_service_request(action: &str, arguments: &Value) -> Result<
     if handle.get("targetId").and_then(Value::as_str).is_none() {
         return Err(JsonRpcError::invalid_params(
             "cdp_attach requires serviceTabHandle.targetId",
+        ));
+    }
+    Ok(())
+}
+
+fn reject_bounded_evaluate_service_request(
+    action: &str,
+    arguments: &Value,
+) -> Result<(), JsonRpcError> {
+    if action != "evaluate" {
+        return Ok(());
+    }
+    let Some(handle) = arguments.get("serviceTabHandle").and_then(Value::as_object) else {
+        return Err(JsonRpcError::invalid_params(
+            "evaluate requires serviceTabHandle",
+        ));
+    };
+    if handle.get("valid").and_then(Value::as_bool) != Some(true) {
+        let stale_reason = handle
+            .get("staleReason")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        return Err(JsonRpcError::invalid_params(&format!(
+            "service tab handle is stale: {stale_reason}"
+        )));
+    }
+    if handle.get("tabId").and_then(Value::as_str).is_none() {
+        return Err(JsonRpcError::invalid_params(
+            "serviceTabHandle.tabId is required",
+        ));
+    }
+    if handle.get("targetId").and_then(Value::as_str).is_none() {
+        return Err(JsonRpcError::invalid_params(
+            "evaluate requires serviceTabHandle.targetId",
+        ));
+    }
+    if arguments
+        .get("script")
+        .or_else(|| arguments.get("expression"))
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .is_none()
+    {
+        return Err(JsonRpcError::invalid_params(
+            "evaluate requires script or expression",
+        ));
+    }
+    if arguments.get("returnByValue").and_then(Value::as_bool) == Some(false) {
+        return Err(JsonRpcError::invalid_params(
+            "evaluate requires returnByValue=true so results can be capped",
+        ));
+    }
+    if arguments.get("timeoutMs").and_then(Value::as_u64).is_none() {
+        return Err(JsonRpcError::invalid_params(
+            "evaluate requires positive timeoutMs",
+        ));
+    }
+    if arguments
+        .get("maxReturnBytes")
+        .and_then(Value::as_u64)
+        .is_none()
+    {
+        return Err(JsonRpcError::invalid_params(
+            "evaluate requires positive maxReturnBytes",
         ));
     }
     Ok(())
@@ -9090,8 +9181,14 @@ struct ServiceToolContext<'a> {
     browser_id: Option<&'a str>,
     session_name: Option<&'a str>,
     target_id: Option<&'a str>,
+    script: Option<&'a str>,
+    expression: Option<&'a str>,
+    timeout_ms: Option<u64>,
+    max_return_bytes: Option<u64>,
     requires_cdp_free: Option<bool>,
     cdp_attachment_allowed: Option<bool>,
+    return_by_value: Option<bool>,
+    capture_evidence_on_failure: Option<bool>,
     service_tab_handle: Option<&'a Value>,
     allow_duplicate_profile_lane: Option<bool>,
 }
@@ -9122,8 +9219,17 @@ impl<'a> ServiceToolContext<'a> {
             browser_id: optional_string_argument(arguments, "browserId")?,
             session_name: optional_string_argument(arguments, "sessionName")?,
             target_id: optional_string_argument(arguments, "targetId")?,
+            script: optional_string_argument(arguments, "script")?,
+            expression: optional_string_argument(arguments, "expression")?,
+            timeout_ms: optional_positive_u64_argument(arguments, "timeoutMs")?,
+            max_return_bytes: optional_positive_u64_argument(arguments, "maxReturnBytes")?,
             requires_cdp_free: optional_bool_argument(arguments, "requiresCdpFree")?,
             cdp_attachment_allowed: optional_bool_argument(arguments, "cdpAttachmentAllowed")?,
+            return_by_value: optional_bool_argument(arguments, "returnByValue")?,
+            capture_evidence_on_failure: optional_bool_argument(
+                arguments,
+                "captureEvidenceOnFailure",
+            )?,
             service_tab_handle: arguments.get("serviceTabHandle"),
             allow_duplicate_profile_lane: optional_bool_argument(
                 arguments,
@@ -9178,11 +9284,29 @@ impl<'a> ServiceToolContext<'a> {
         if let Some(target_id) = self.target_id {
             command["targetId"] = json!(target_id);
         }
+        if let Some(script) = self.script {
+            command["script"] = json!(script);
+        }
+        if let Some(expression) = self.expression {
+            command["expression"] = json!(expression);
+        }
+        if let Some(timeout_ms) = self.timeout_ms {
+            command["timeoutMs"] = json!(timeout_ms);
+        }
+        if let Some(max_return_bytes) = self.max_return_bytes {
+            command["maxReturnBytes"] = json!(max_return_bytes);
+        }
         if let Some(requires_cdp_free) = self.requires_cdp_free {
             command["requiresCdpFree"] = json!(requires_cdp_free);
         }
         if let Some(cdp_attachment_allowed) = self.cdp_attachment_allowed {
             command["cdpAttachmentAllowed"] = json!(cdp_attachment_allowed);
+        }
+        if let Some(return_by_value) = self.return_by_value {
+            command["returnByValue"] = json!(return_by_value);
+        }
+        if let Some(capture_evidence_on_failure) = self.capture_evidence_on_failure {
+            command["captureEvidenceOnFailure"] = json!(capture_evidence_on_failure);
         }
         if let Some(service_tab_handle) = self.service_tab_handle {
             command["serviceTabHandle"] = service_tab_handle.clone();
@@ -11599,7 +11723,7 @@ mod tests {
                 "agentName": "agent-a",
                 "taskName": "probeACSwebsite"
             });
-            if matches!(*action, "cdp_attach" | "cdp_detach") {
+            if matches!(*action, "cdp_attach" | "cdp_detach" | "evaluate") {
                 arguments["cdpAttachmentAllowed"] = json!(true);
                 arguments["serviceTabHandle"] = json!({
                     "browserId": "session:default",
@@ -11615,6 +11739,11 @@ mod tests {
                     },
                     "valid": true
                 });
+            }
+            if *action == "evaluate" {
+                arguments["script"] = json!("document.title");
+                arguments["timeoutMs"] = json!(1000);
+                arguments["maxReturnBytes"] = json!(128);
             }
             let (_, command) = service_request_command(&arguments)
                 .unwrap_or_else(|err| panic!("service_request should accept {action}: {err:?}"));
@@ -11745,6 +11874,38 @@ mod tests {
         .expect_err("stale cdp_attach handle should fail");
 
         assert!(format!("{err:?}").contains("service tab handle is stale"));
+    }
+
+    #[test]
+    fn service_request_command_rejects_unbound_evaluate() {
+        let err = service_request_command(&json!({
+            "action": "evaluate",
+            "serviceName": "JournalDownloader",
+            "agentName": "agent-a",
+            "taskName": "probeACSwebsite",
+            "script": "document.title",
+            "timeoutMs": 1000,
+            "maxReturnBytes": 128
+        }))
+        .expect_err("evaluate without service tab handle should fail");
+
+        assert!(format!("{err:?}").contains("evaluate requires serviceTabHandle"));
+    }
+
+    #[test]
+    fn service_request_command_rejects_unbounded_evaluate() {
+        let err = service_request_command(&json!({
+            "action": "evaluate",
+            "serviceName": "JournalDownloader",
+            "agentName": "agent-a",
+            "taskName": "probeACSwebsite",
+            "script": "document.title",
+            "serviceTabHandle": service_request_test_tab_handle(true),
+            "timeoutMs": 1000
+        }))
+        .expect_err("evaluate without maxReturnBytes should fail");
+
+        assert!(format!("{err:?}").contains("maxReturnBytes"));
     }
 
     #[test]

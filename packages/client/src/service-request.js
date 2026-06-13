@@ -28,6 +28,8 @@ const displayIsolationSet = new Set([
  * @typedef {import('./service-request.generated.js').ServiceCdpAttachRequestOptions} ServiceCdpAttachRequestOptions
  * @typedef {import('./service-request.generated.js').ServiceCdpDetachRequestHttpOptions} ServiceCdpDetachRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceCdpDetachRequestOptions} ServiceCdpDetachRequestOptions
+ * @typedef {import('./service-request.generated.js').ServiceEvaluateRequestHttpOptions} ServiceEvaluateRequestHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceEvaluateRequestOptions} ServiceEvaluateRequestOptions
  * @typedef {import('./service-request.generated.js').ServiceTabAccessPlan} ServiceTabAccessPlan
  * @typedef {import('./service-request.generated.js').ServiceCdpFreeLaunchRequestHttpOptions} ServiceCdpFreeLaunchRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceCdpFreeLaunchRequestOptions} ServiceCdpFreeLaunchRequestOptions
@@ -341,6 +343,52 @@ export function createServiceCdpDetachRequest(input) {
 }
 
 /**
+ * Builds a bounded evaluate request against a leased service tab.
+ *
+ * @param {ServiceEvaluateRequestOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceEvaluateRequest(input) {
+  assertPlainObject(input, 'service evaluate request');
+  const { serviceTabHandle, script, expression, params, ...request } = input;
+  const handle = requireServiceTabHandle({ serviceTabHandle });
+  if (params !== undefined) {
+    assertPlainObject(params, 'service evaluate request params');
+  }
+  const source = script ?? expression;
+  if (typeof source !== 'string' || source.length === 0) {
+    throw new TypeError('service evaluate request requires script or expression');
+  }
+  if (request.returnByValue === false) {
+    throw new TypeError('service evaluate request requires returnByValue=true');
+  }
+  if (!Number.isInteger(request.timeoutMs) || Number(request.timeoutMs) < 1) {
+    throw new TypeError('service evaluate request requires positive timeoutMs');
+  }
+  if (!Number.isInteger(request.maxReturnBytes) || Number(request.maxReturnBytes) < 1) {
+    throw new TypeError('service evaluate request requires positive maxReturnBytes');
+  }
+  if (!handle.targetId) {
+    throw new TypeError('service evaluate request requires serviceTabHandle.targetId');
+  }
+  const sessionName = request.sessionName ?? handle.sessionName ?? handle.ownerSessionId;
+  const targetId = request.targetId ?? handle.targetId;
+  return createServiceRequest({
+    ...request,
+    action: 'evaluate',
+    browserId: request.browserId ?? handle.browserId,
+    ...(sessionName !== undefined && sessionName !== null ? { sessionName } : {}),
+    targetId,
+    script: source,
+    returnByValue: true,
+    timeoutMs: request.timeoutMs,
+    maxReturnBytes: request.maxReturnBytes,
+    serviceTabHandle: handle,
+    ...(params !== undefined ? { params } : {}),
+  });
+}
+
+/**
  * @param {ServiceRemoteViewRouteCheckoutOptions} input
  * @returns {ServiceRequest}
  */
@@ -544,6 +592,19 @@ export async function requestServiceCdpDetach({ baseUrl, fetch = globalThis.fetc
     fetch,
     signal,
     request: createServiceCdpDetachRequest(request),
+  });
+}
+
+/**
+ * @param {ServiceEvaluateRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function requestServiceEvaluate({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceEvaluateRequest(request),
   });
 }
 

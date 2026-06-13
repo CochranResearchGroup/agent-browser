@@ -1526,6 +1526,14 @@ fn service_request_command(body: &str) -> Result<Value, String> {
         request.get("serviceTabHandle"),
         request.get("cdpAttachmentAllowed"),
     )?;
+    reject_bounded_evaluate_service_request(
+        action,
+        request.get("serviceTabHandle"),
+        request.get("script").or_else(|| request.get("expression")),
+        request.get("returnByValue"),
+        request.get("timeoutMs"),
+        request.get("maxReturnBytes"),
+    )?;
     reject_stale_monitor_service_request(
         request.get("monitorRunDueSummary"),
         request.get("allowMonitorFreshnessRisk"),
@@ -1573,6 +1581,12 @@ fn service_request_command(body: &str) -> Result<Value, String> {
         "sessionName",
         "targetId",
         "serviceTabHandle",
+        "script",
+        "expression",
+        "returnByValue",
+        "timeoutMs",
+        "maxReturnBytes",
+        "captureEvidenceOnFailure",
     ] {
         if let Some(value) = request.get(key) {
             command[key] = value.clone();
@@ -1793,6 +1807,68 @@ fn reject_cdp_attach_service_request(
     }
     if handle.get("targetId").and_then(Value::as_str).is_none() {
         return Err("cdp_attach requires serviceTabHandle.targetId".to_string());
+    }
+    Ok(())
+}
+
+fn reject_bounded_evaluate_service_request(
+    action: &str,
+    service_tab_handle: Option<&Value>,
+    script: Option<&Value>,
+    return_by_value: Option<&Value>,
+    timeout_ms: Option<&Value>,
+    max_return_bytes: Option<&Value>,
+) -> Result<(), String> {
+    if action != "evaluate" {
+        return Ok(());
+    }
+    validate_bounded_evaluate_service_request(
+        service_tab_handle,
+        script,
+        return_by_value,
+        timeout_ms,
+        max_return_bytes,
+    )
+}
+
+fn validate_bounded_evaluate_service_request(
+    service_tab_handle: Option<&Value>,
+    script: Option<&Value>,
+    return_by_value: Option<&Value>,
+    timeout_ms: Option<&Value>,
+    max_return_bytes: Option<&Value>,
+) -> Result<(), String> {
+    let Some(handle) = service_tab_handle.and_then(Value::as_object) else {
+        return Err("evaluate requires serviceTabHandle".to_string());
+    };
+    if handle.get("valid").and_then(Value::as_bool) != Some(true) {
+        let stale_reason = handle
+            .get("staleReason")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        return Err(format!("service tab handle is stale: {stale_reason}"));
+    }
+    if handle.get("tabId").and_then(Value::as_str).is_none() {
+        return Err("serviceTabHandle.tabId is required".to_string());
+    }
+    if handle.get("targetId").and_then(Value::as_str).is_none() {
+        return Err("evaluate requires serviceTabHandle.targetId".to_string());
+    }
+    if script
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .is_none()
+    {
+        return Err("evaluate requires script or expression".to_string());
+    }
+    if return_by_value.and_then(Value::as_bool) == Some(false) {
+        return Err("evaluate requires returnByValue=true so results can be capped".to_string());
+    }
+    if timeout_ms.and_then(Value::as_u64).is_none() {
+        return Err("evaluate requires positive timeoutMs".to_string());
+    }
+    if max_return_bytes.and_then(Value::as_u64).is_none() {
+        return Err("evaluate requires positive maxReturnBytes".to_string());
     }
     Ok(())
 }
@@ -4292,11 +4368,31 @@ mod tests {
     }
 
     #[test]
+    fn service_request_command_rejects_unbound_evaluate() {
+        let err = service_request_command(
+            r##"{"action":"evaluate","serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","script":"document.title","timeoutMs":1000,"maxReturnBytes":128}"##,
+        )
+        .expect_err("evaluate without service tab handle should fail");
+
+        assert!(err.contains("evaluate requires serviceTabHandle"));
+    }
+
+    #[test]
+    fn service_request_command_rejects_unbounded_evaluate() {
+        let err = service_request_command(
+            r##"{"action":"evaluate","serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","serviceTabHandle":{"browserId":"session:default","sessionName":"default","tabId":"target:target-1","targetId":"target-1","profileOrigin":"agent_browser_owned","leaseHeartbeatExpected":true,"traceFilter":{"browserId":"session:default","profileId":null,"sessionId":"default"},"valid":true},"script":"document.title","timeoutMs":1000}"##,
+        )
+        .expect_err("evaluate without maxReturnBytes should fail");
+
+        assert!(err.contains("maxReturnBytes"));
+    }
+
+    #[test]
     fn service_request_command_accepts_contract_actions() {
         for action in SERVICE_REQUEST_ACTIONS {
-            let body = if matches!(*action, "cdp_attach" | "cdp_detach") {
+            let body = if matches!(*action, "cdp_attach" | "cdp_detach" | "evaluate") {
                 format!(
-                    r##"{{"action":"{}","params":{{"action":"ignored","id":"ignored"}},"serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","cdpAttachmentAllowed":true,"serviceTabHandle":{{"browserId":"session:default","sessionName":"default","tabId":"target:target-1","targetId":"target-1","profileOrigin":"agent_browser_owned","leaseHeartbeatExpected":true,"traceFilter":{{"browserId":"session:default","profileId":null,"sessionId":"default"}},"valid":true}}}}"##,
+                    r##"{{"action":"{}","params":{{"action":"ignored","id":"ignored"}},"serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","cdpAttachmentAllowed":true,"serviceTabHandle":{{"browserId":"session:default","sessionName":"default","tabId":"target:target-1","targetId":"target-1","profileOrigin":"agent_browser_owned","leaseHeartbeatExpected":true,"traceFilter":{{"browserId":"session:default","profileId":null,"sessionId":"default"}},"valid":true}},"script":"document.title","timeoutMs":1000,"maxReturnBytes":128}}"##,
                     action
                 )
             } else {

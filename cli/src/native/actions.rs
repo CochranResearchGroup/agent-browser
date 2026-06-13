@@ -3830,7 +3830,8 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         }
     }
 
-    let skip_launch = action_skips_browser_launch(action);
+    let skip_launch = action_skips_browser_launch(action)
+        || (action == "evaluate" && cmd.get("serviceTabHandle").is_some());
     if !skip_launch {
         // Check if existing connection is stale and needs re-launch.
         // First do a fast, non-blocking check: did the browser process crash/exit?
@@ -5727,7 +5728,10 @@ async fn handle_content(state: &mut DaemonState) -> Result<Value, String> {
     Ok(json!({ "html": html, "origin": url }))
 }
 
-async fn handle_evaluate(cmd: &Value, state: &DaemonState) -> Result<Value, String> {
+async fn handle_evaluate(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+    if cmd.get("serviceTabHandle").is_some() {
+        return handle_bounded_service_evaluate(cmd, state).await;
+    }
     if let Some(ref wb) = state.webdriver_backend {
         if state.browser.is_none() {
             let script = cmd
@@ -5748,6 +5752,130 @@ async fn handle_evaluate(cmd: &Value, state: &DaemonState) -> Result<Value, Stri
     let result = mgr.evaluate(script, None).await?;
     let url = mgr.get_url().await.unwrap_or_default();
     Ok(json!({ "result": result, "origin": url }))
+}
+
+async fn handle_bounded_service_evaluate(
+    cmd: &Value,
+    state: &mut DaemonState,
+) -> Result<Value, String> {
+    let handle = cmd
+        .get("serviceTabHandle")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "evaluate requires serviceTabHandle".to_string())?;
+    validate_service_tab_handle_for_current_session(handle, &state.session_id)?;
+    if cmd.get("returnByValue").and_then(Value::as_bool) == Some(false) {
+        return Err("evaluate requires returnByValue=true so results can be capped".to_string());
+    }
+    let script = cmd
+        .get("script")
+        .or_else(|| cmd.get("expression"))
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "evaluate requires script or expression".to_string())?;
+    let timeout_ms = cmd
+        .get("timeoutMs")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| "evaluate requires positive timeoutMs".to_string())?;
+    let max_return_bytes = cmd
+        .get("maxReturnBytes")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| "evaluate requires positive maxReturnBytes".to_string())?;
+    let mgr = state.browser.as_mut().ok_or_else(|| {
+        "Cannot evaluate: target browser session is not running; request a service tab first"
+            .to_string()
+    })?;
+    let target_id = handle
+        .get("targetId")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "evaluate requires serviceTabHandle.targetId".to_string())?;
+    if mgr.active_target_id().ok() != Some(target_id) {
+        let _ = mgr.tab_switch_target_id(target_id).await?;
+    }
+
+    let started_at = OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string());
+    let evaluate_outcome = tokio::time::timeout(
+        tokio::time::Duration::from_millis(timeout_ms),
+        mgr.evaluate(script, None),
+    )
+    .await;
+    let url = mgr.get_url().await.unwrap_or_default();
+    let title = mgr.get_title().await.unwrap_or_default();
+    let result = match evaluate_outcome {
+        Ok(Ok(result)) => result,
+        Ok(Err(error)) => {
+            return Ok(json!({
+                "ok": false,
+                "action": "evaluate",
+                "errorKind": "exception",
+                "error": error,
+                "timeoutMs": timeout_ms,
+                "maxReturnBytes": max_return_bytes,
+                "url": url,
+                "title": title,
+                "targetId": target_id,
+                "tabId": handle.get("tabId").cloned().unwrap_or(Value::Null),
+                "profileId": handle.get("profileId").cloned().unwrap_or(Value::Null),
+                "serviceTabHandle": cmd.get("serviceTabHandle").cloned().unwrap_or(Value::Null),
+                "evaluatedAt": started_at,
+            }));
+        }
+        Err(_) => {
+            return Ok(json!({
+                "ok": false,
+                "action": "evaluate",
+                "errorKind": "timeout",
+                "error": format!("evaluate timed out after {timeout_ms}ms"),
+                "timeoutMs": timeout_ms,
+                "maxReturnBytes": max_return_bytes,
+                "url": url,
+                "title": title,
+                "targetId": target_id,
+                "tabId": handle.get("tabId").cloned().unwrap_or(Value::Null),
+                "profileId": handle.get("profileId").cloned().unwrap_or(Value::Null),
+                "serviceTabHandle": cmd.get("serviceTabHandle").cloned().unwrap_or(Value::Null),
+                "evaluatedAt": started_at,
+            }));
+        }
+    };
+    let serialized = serde_json::to_string(&result).unwrap_or_else(|_| "null".to_string());
+    let serialized_len = serialized.len() as u64;
+    let truncated = serialized_len > max_return_bytes;
+    let returned = if truncated {
+        Value::String(truncate_utf8(&serialized, max_return_bytes as usize))
+    } else {
+        result
+    };
+
+    Ok(json!({
+        "ok": true,
+        "action": "evaluate",
+        "result": returned,
+        "resultTruncated": truncated,
+        "resultBytes": serialized_len,
+        "maxReturnBytes": max_return_bytes,
+        "timeoutMs": timeout_ms,
+        "returnByValue": true,
+        "url": url,
+        "title": title,
+        "targetId": target_id,
+        "tabId": handle.get("tabId").cloned().unwrap_or(Value::Null),
+        "profileId": handle.get("profileId").cloned().unwrap_or(Value::Null),
+        "serviceTabHandle": cmd.get("serviceTabHandle").cloned().unwrap_or(Value::Null),
+        "evaluatedAt": started_at,
+    }))
+}
+
+fn truncate_utf8(value: &str, max_bytes: usize) -> String {
+    if value.len() <= max_bytes {
+        return value.to_string();
+    }
+    let mut end = max_bytes;
+    while end > 0 && !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    value[..end].to_string()
 }
 
 async fn handle_close(state: &mut DaemonState) -> Result<Value, String> {

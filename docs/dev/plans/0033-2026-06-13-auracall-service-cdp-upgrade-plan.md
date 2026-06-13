@@ -52,6 +52,10 @@ expectations so work can proceed in parallel only where the sequence permits.
   request actions, generated client helpers, HTTP/MCP rejection guards, and
   no-launch stale-handle and policy-denial coverage. The next recommended
   implementation target is Slice D: bounded evaluate.
+- Slice D has implemented bounded `evaluate` service requests tied to valid
+  service tab handles, with required `timeoutMs`, `maxReturnBytes`, and
+  generated client helpers. The next recommended implementation target is Slice
+  E: diagnostics and readiness evidence.
 
 ## Operating Invariant
 
@@ -342,6 +346,38 @@ Acceptance:
 - Evaluation cannot run without a service-owned tab binding.
 - Large returns and slow scripts are capped deterministically.
 - Failure diagnostics are compact and linked to trace/job evidence.
+
+Status: IMPLEMENTED in the 2026-06-13 Slice D checkpoint, with live evaluate
+smoke still recommended before migration proof.
+
+Validation evidence:
+
+- `git diff --check`
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `cargo test --manifest-path cli/Cargo.toml service_request_command -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml cdp_screencast_view_stream -- --nocapture`
+- `cargo test --manifest-path cli/Cargo.toml service_contracts -- --test-threads=1`
+- `pnpm test:service-client`
+- `pnpm test:service-api-mcp-parity`
+- `pnpm --dir docs build`
+- `pnpm validation:select -- --base HEAD`
+- `node scripts/dev/select-validation.js --base HEAD --json`
+- `diff -q skills/agent-browser/SKILL.md /home/ecochran76/.codex/shared/skills/agent-browser/SKILL.md`
+
+Live smoke:
+
+- `pnpm test:service-cdp-tab-streaming-live` passed for
+  `session:cdp-tab-stream-73918`, stream `37595`.
+- A dedicated bounded-evaluate live smoke was not added in this slice.
+  No-launch tests prove HTTP/MCP rejection for unbound and unbounded evaluate
+  requests plus service-client helper shape. Add a focused live smoke that
+  requests a tab, evaluates `document.title` with caps, confirms truncation
+  metadata, and reads trace evidence before treating Slice D as live migration
+  proof.
+- Screenshot-on-failure capture is deferred to Slice E's diagnostic bundle
+  contract so screenshot storage, caps, and trace links are implemented in one
+  evidence surface.
 
 Suggested subagent prompt:
 

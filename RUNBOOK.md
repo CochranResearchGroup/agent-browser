@@ -750,3 +750,52 @@ Result:
   treating controlled attach as AuraCall migration proof.
 - The next recommended P14 slice is Slice D: bounded evaluate against leased
   service tab handles.
+
+## Turn 21 | 2026-06-13
+
+Scope: implement P14 Slice D bounded evaluate against leased service tab
+handles.
+
+Actions:
+
+- Added `evaluate` to the service request action metadata, HTTP relay, MCP
+  service request surface, JSON schema, generated client types, and
+  `@agent-browser/client/service-request` helpers.
+- Required `serviceTabHandle`, `script` or `expression`, positive `timeoutMs`,
+  and positive `maxReturnBytes` for service-owned evaluate requests.
+- Made service-bound evaluate skip browser auto-launch, switch to the handle's
+  CDP target, execute with a daemon-side timeout, cap serialized return data,
+  and return URL/title plus truncation metadata.
+- Added no-launch HTTP, MCP, and service-client coverage for missing handles,
+  missing caps, stale handles, and helper request shape.
+- Updated README, docs site, repo skill, installed agent-browser skill, P14
+  plan, and ROADMAP for the new bounded evaluate helper path.
+
+Validation run:
+
+- `git diff --check`
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `cargo test --manifest-path cli/Cargo.toml service_request_command -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml cdp_screencast_view_stream -- --nocapture`
+- `cargo test --manifest-path cli/Cargo.toml service_contracts -- --test-threads=1`
+- `pnpm test:service-client`
+- `pnpm test:service-api-mcp-parity`
+- `pnpm --dir docs build`
+- `pnpm validation:select -- --base HEAD`
+- `node scripts/dev/select-validation.js --base HEAD --json`
+- `diff -q skills/agent-browser/SKILL.md /home/ecochran76/.codex/shared/skills/agent-browser/SKILL.md`
+- `pnpm test:service-cdp-tab-streaming-live`
+
+Result:
+
+- Slice D is implemented with no-launch contract coverage.
+- Live CDP tab-streaming smoke passed for `session:cdp-tab-stream-73918`,
+  stream `37595`.
+- A dedicated live bounded-evaluate smoke remains as the validation gap before
+  treating bounded evaluate as AuraCall migration proof.
+- Screenshot-on-failure capture is deferred to Slice E diagnostic bundles so
+  screenshot storage, caps, and trace links are implemented in one evidence
+  surface.
+- The next recommended P14 slice is Slice E: diagnostics and readiness
+  evidence.
