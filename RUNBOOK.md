@@ -1359,5 +1359,43 @@ Result:
 - Direct installed `agent-browser install doctor --json` then reported
   `success=true`, no issue codes, `liveDashboardRuntime.ready=true`,
   `liveDashboardRuntime.state=ready`, and `runtimeInventory.status=none`.
-- P42 Slice C still has remaining stale stream-backend classification and final
-  convergence summary-state work.
+- P42 Slice C still has remaining stale stream-backend classification work.
+
+## Turn 32 | 2026-06-22
+
+Scope: continue P42 Slice C by adding explicit runtime convergence summary
+states.
+
+Actions:
+
+- Added install-doctor `runtimeConvergence` with schema
+  `agent-browser.runtime-convergence.v1`.
+- Derived summary status from runtime inventory plus live dashboard manifest
+  state, using `converged`, `partial`, `stale`, and
+  `manual_review_required`.
+- Lifted the summary into remote-view doctor and printed it in text output
+  separately from raw runtime inventory status.
+
+Validation run:
+
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo test --manifest-path cli/Cargo.toml runtime_convergence -- --nocapture`
+- `cargo test --manifest-path cli/Cargo.toml install_doctor -- --nocapture`
+- `cargo test --manifest-path cli/Cargo.toml recommend_next -- --nocapture`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `pnpm --silent converge:local-runtime -- --apply --json --evidence-path /tmp/agent-browser-converge-local-runtime-turn32.json`
+- `agent-browser install doctor --json`
+
+Result:
+
+- Format, focused Rust tests, and clippy passed.
+- Unit coverage now locks the `converged`, `partial`, `stale`, and
+  `manual_review_required` summary statuses plus remote-view summary lifting.
+- Convergence apply published the summary-state build and ended with final
+  install doctor ready, final remote-view ready, zero skipped remedies, and
+  retained evidence at `/tmp/agent-browser-converge-local-runtime-turn32.json`.
+- Direct installed `agent-browser install doctor --json` reported
+  `success=true`, no issue codes, `runtimeConvergence.status=converged`,
+  `liveDashboardRuntime.state=ready`, and `runtimeInventory.status=none`.
+- P42 Slice C still has remaining stale stream-backend and diagnostic
+  retained-row classification work.

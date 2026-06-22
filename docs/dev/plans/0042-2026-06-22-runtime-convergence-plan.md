@@ -252,13 +252,21 @@ Completed on 2026-06-22:
   convergence apply command, and ended with install doctor `success=true`, no
   issue codes, `liveDashboardRuntime.ready=true`, and
   `runtimeInventory.status=none`.
+- Install doctor now emits `runtimeConvergence` with schema
+  `agent-browser.runtime-convergence.v1` and status values `converged`,
+  `partial`, `stale`, or `manual_review_required`, derived from runtime
+  inventory plus live dashboard manifest state.
+- Remote-view doctor lifts install doctor's `runtimeConvergence` summary and
+  text output prints the summary status separately from raw runtime inventory.
+- Live validation after publishing the summary-state build reported install
+  doctor `success=true`, no issue codes,
+  `runtimeConvergence.status=converged`, `liveDashboardRuntime.state=ready`,
+  and `runtimeInventory.status=none`.
 
 Remaining:
 
 - Add equivalent stable issue codes and remedies for stale stream backend and
   any remaining diagnostic retained rows that should leave the live rail.
-- Add the final convergence summary states after every stale-runtime class has
-  a bounded classification.
 
 ### Slice D: Idempotent Remote-View Bootstrap
 

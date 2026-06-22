@@ -85,6 +85,7 @@ fn remote_view_doctor_report(args: &DoctorArgs) -> Value {
         remote_control_status(&install, &rdp_gateway, &route_pool, &route_displays);
     let dashboard_runtime = dashboard_runtime_from_install(&install);
     let runtime_inventory = runtime_inventory_from_install(&install);
+    let runtime_convergence = runtime_convergence_from_install(&install);
     let next_action = recommend_next_action(RecommendationContext {
         install: &install,
         rdp_gateway: &rdp_gateway,
@@ -130,6 +131,7 @@ fn remote_view_doctor_report(args: &DoctorArgs) -> Value {
             "remoteControl": remote_control,
             "dashboardRuntime": dashboard_runtime,
             "runtimeInventory": runtime_inventory,
+            "runtimeConvergence": runtime_convergence,
             "manyToMany": many_to_many,
             "viewerPrerequisites": viewer_prerequisites,
             "config": config,
@@ -1612,6 +1614,10 @@ fn print_remote_view_doctor_report(report: &Value) {
         display_value(&data["dashboardRuntime"]["executable"]["sha256"])
     );
     println!(
+        "runtime convergence: {}",
+        display_value(&data["runtimeConvergence"]["status"])
+    );
+    println!(
         "simultaneous viewing ready: {}",
         display_value(&data["manyToMany"]["simultaneousViewingReady"])
     );
@@ -1710,6 +1716,18 @@ fn runtime_inventory_from_install(install: &Value) -> Value {
             json!({
                 "available": false,
                 "reason": "install doctor did not report runtime inventory",
+            })
+        })
+}
+
+fn runtime_convergence_from_install(install: &Value) -> Value {
+    install
+        .pointer("/data/data/runtimeConvergence")
+        .cloned()
+        .unwrap_or_else(|| {
+            json!({
+                "available": false,
+                "reason": "install doctor did not report runtime convergence summary",
             })
         })
 }
@@ -1848,6 +1866,41 @@ mod tests {
         assert_eq!(
             inventory["reason"],
             "install doctor did not report runtime inventory"
+        );
+    }
+
+    #[test]
+    fn runtime_convergence_from_install_lifts_summary() {
+        let install = json!({
+            "available": true,
+            "data": {
+                "success": true,
+                "data": {
+                    "runtimeConvergence": {
+                        "schemaVersion": "agent-browser.runtime-convergence.v1",
+                        "status": "converged"
+                    }
+                }
+            }
+        });
+
+        let convergence = runtime_convergence_from_install(&install);
+
+        assert_eq!(
+            convergence["schemaVersion"],
+            "agent-browser.runtime-convergence.v1"
+        );
+        assert_eq!(convergence["status"], "converged");
+    }
+
+    #[test]
+    fn runtime_convergence_from_install_reports_unavailable_when_missing() {
+        let convergence = runtime_convergence_from_install(&json!({"success": true}));
+
+        assert_eq!(convergence["available"], false);
+        assert_eq!(
+            convergence["reason"],
+            "install doctor did not report runtime convergence summary"
         );
     }
 

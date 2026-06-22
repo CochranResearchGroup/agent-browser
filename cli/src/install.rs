@@ -981,6 +981,10 @@ pub fn run_install_doctor(flags: &Flags) {
     );
     print_doctor_field(
         "runtime convergence",
+        report.pointer("/data/runtimeConvergence/status"),
+    );
+    print_doctor_field(
+        "runtime inventory",
         report.pointer("/data/runtimeInventory/status"),
     );
     print_doctor_field(
@@ -1050,6 +1054,8 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
             .get("sha256")
             .and_then(|value| value.as_str()),
     );
+    let runtime_convergence =
+        runtime_convergence_summary(&live_dashboard_runtime, &runtime_inventory);
     let issues = install_doctor_issues(InstallDoctorIssueInputs {
         current_executable: &current_executable,
         path_command: &path_command,
@@ -1077,6 +1083,7 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
             "dashboardRuntime": dashboard_runtime,
             "liveDashboardRuntime": live_dashboard_runtime,
             "runtimeInventory": runtime_inventory,
+            "runtimeConvergence": runtime_convergence,
             "issues": issues,
         }
     })
@@ -1550,6 +1557,65 @@ fn parse_local_dashboard_host_port(host_port: &str) -> Result<(String, u16), Str
         .parse::<u16>()
         .map_err(|_| "local dashboard URL port is invalid".to_string())?;
     Ok((host.to_string(), port))
+}
+
+fn runtime_convergence_summary(
+    live_dashboard_runtime: &serde_json::Value,
+    runtime_inventory: &serde_json::Value,
+) -> serde_json::Value {
+    let stale_runtime_count = runtime_inventory
+        .get("staleCount")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let diagnostic_runtime_count = runtime_inventory
+        .get("runtimes")
+        .and_then(|value| value.as_array())
+        .map(|rows| {
+            rows.iter()
+                .filter(|row| {
+                    row.get("state")
+                        .and_then(|value| value.as_str())
+                        .is_some_and(|state| state == "diagnostic")
+                })
+                .count()
+        })
+        .unwrap_or(0);
+    let live_dashboard_available = live_dashboard_runtime
+        .get("available")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+    let live_dashboard_ready = live_dashboard_runtime
+        .get("ready")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(true);
+    let live_dashboard_state = live_dashboard_runtime
+        .get("state")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    let live_dashboard_stale = live_dashboard_available
+        && !live_dashboard_ready
+        && live_dashboard_state == "stale_executable";
+    let manual_review_required = live_dashboard_available
+        && !live_dashboard_ready
+        && live_dashboard_state != "stale_executable";
+    let status = if manual_review_required {
+        "manual_review_required"
+    } else if stale_runtime_count > 0 || live_dashboard_stale {
+        "stale"
+    } else if diagnostic_runtime_count > 0 {
+        "partial"
+    } else {
+        "converged"
+    };
+    json!({
+        "schemaVersion": "agent-browser.runtime-convergence.v1",
+        "status": status,
+        "staleRuntimeCount": stale_runtime_count,
+        "diagnosticRuntimeCount": diagnostic_runtime_count,
+        "liveDashboardAvailable": live_dashboard_available,
+        "liveDashboardReady": live_dashboard_ready,
+        "liveDashboardState": live_dashboard_state,
+    })
 }
 
 fn service_status_probe() -> serde_json::Value {
@@ -2709,6 +2775,55 @@ mod tests {
             json!(["pnpm", "converge:local-runtime", "--", "--apply", "--json"])
         );
         assert_eq!(issue["remedy"]["requiresInteractiveSudo"], false);
+    }
+
+    #[test]
+    fn runtime_convergence_summary_reports_expected_states() {
+        let ready_dashboard = json!({
+            "available": true,
+            "ready": true,
+            "state": "ready"
+        });
+        let stale_dashboard = json!({
+            "available": true,
+            "ready": false,
+            "state": "stale_executable"
+        });
+        let unreadable_dashboard = json!({
+            "available": true,
+            "ready": false,
+            "state": "unreadable_manifest"
+        });
+        let diagnostic_inventory = json!({
+            "staleCount": 0,
+            "runtimes": [{"state": "diagnostic"}]
+        });
+        let stale_inventory = json!({
+            "staleCount": 1,
+            "runtimes": [{"state": "stale"}]
+        });
+        let empty_inventory = empty_runtime_inventory();
+
+        assert_eq!(
+            runtime_convergence_summary(&ready_dashboard, &empty_inventory)["status"],
+            "converged"
+        );
+        assert_eq!(
+            runtime_convergence_summary(&ready_dashboard, &diagnostic_inventory)["status"],
+            "partial"
+        );
+        assert_eq!(
+            runtime_convergence_summary(&ready_dashboard, &stale_inventory)["status"],
+            "stale"
+        );
+        assert_eq!(
+            runtime_convergence_summary(&stale_dashboard, &empty_inventory)["status"],
+            "stale"
+        );
+        assert_eq!(
+            runtime_convergence_summary(&unreadable_dashboard, &empty_inventory)["status"],
+            "manual_review_required"
+        );
     }
 
     #[test]
