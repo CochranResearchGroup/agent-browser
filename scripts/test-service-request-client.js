@@ -31,8 +31,10 @@ import {
   evaluateServiceTab,
   getServiceTabHandle,
   getServiceTabDiagnostics,
+  getServiceRemoteViewOpenOperatorVisible,
   heartbeatServiceViewerLease,
   isServiceCdpFreeActionAvailable,
+  isServiceRemoteViewOpenOperatorVisibleReady,
   postServiceRequest,
   probeServiceTab,
   requestServiceFileTransfer,
@@ -58,6 +60,8 @@ import {
   requestServiceTab,
   requestServiceTabFromAccessPlan,
   requestServiceViewerLease,
+  requireServiceRemoteViewOpenOperatorVisible,
+  summarizeServiceRemoteViewOpenProof,
   transferServiceFiles,
   SERVICE_REQUEST_ACTIONS,
   summarizeServiceCdpFreeLaunchAvailability,
@@ -2028,9 +2032,30 @@ async function main() {
       status: 'opened',
       routeId: 'route-a',
       displayAllocationId: 'display-a',
+      browserId: 'session:rdp-a',
+      sessionName: 'rdp-a',
+      tab: {
+        targetId: 'target-facebook',
+        profileId: 'last30days-facebook',
+        url: 'https://www.facebook.com/',
+      },
+      operatorVisible: {
+        state: 'ready',
+        browserId: 'session:rdp-a',
+        sessionName: 'rdp-a',
+        routeId: 'route-a',
+        displayAllocationId: 'display-a',
+        displayName: ':11',
+        proof: {
+          state: 'ready',
+          displayContent: {
+            state: 'browser_window_visible',
+          },
+        },
+      },
     },
   });
-  await requestServiceRemoteViewOpen({
+  const remoteViewOpenResponse = await requestServiceRemoteViewOpen({
     baseUrl: 'http://127.0.0.1:4849',
     fetch: remoteViewOpenWorkflow.fetch,
     displayAllocationId: 'display-a',
@@ -2048,7 +2073,19 @@ async function main() {
     ],
     url: 'https://www.linkedin.com/',
   });
+  assert.equal(getServiceRemoteViewOpenOperatorVisible(remoteViewOpenResponse)?.state, 'ready');
+  assert.equal(isServiceRemoteViewOpenOperatorVisibleReady(remoteViewOpenResponse), true);
+  const remoteViewOpenSummary = summarizeServiceRemoteViewOpenProof(remoteViewOpenResponse);
+  assert.equal(remoteViewOpenSummary.ready, true);
+  assert.equal(remoteViewOpenSummary.routeId, 'route-a');
+  assert.equal(remoteViewOpenSummary.tabId, 'target-facebook');
+  assert.equal(remoteViewOpenSummary.profileId, 'last30days-facebook');
+  assert.equal(remoteViewOpenSummary.visualProof, 'browser_window_visible');
+  assert.match(remoteViewOpenSummary.summary, /operatorVisible=ready/);
+  assert.match(remoteViewOpenSummary.summary, /profile=last30days-facebook/);
+  assert.equal(requireServiceRemoteViewOpenOperatorVisible(remoteViewOpenResponse)?.status, 'opened');
   assert.equal(remoteViewOpenWorkflow.calls[0].body.action, 'remote_view_open');
+  assert.equal(remoteViewOpenWorkflow.calls[0].body.allowInfrastructureOnlyReadiness, undefined);
   assert.deepEqual(remoteViewOpenWorkflow.calls[0].body.params, {
     displayAllocationId: 'display-a',
     routeId: 'route-a',
@@ -2065,6 +2102,99 @@ async function main() {
     ],
     url: 'https://www.linkedin.com/',
   });
+
+  const terminalOnlyRemoteViewOpenWorkflow = createFetchRecorder({
+    success: true,
+    data: {
+      status: 'opened',
+      routeId: 'route-terminal',
+      displayAllocationId: 'display-terminal',
+      operatorVisible: {
+        state: 'terminal_only',
+        routeId: 'route-terminal',
+        displayAllocationId: 'display-terminal',
+        proof: {
+          displayContent: {
+            state: 'terminal_only',
+          },
+        },
+      },
+    },
+  });
+  await assert.rejects(
+    () =>
+      requestServiceRemoteViewOpen({
+        baseUrl: 'http://127.0.0.1:4849',
+        fetch: terminalOnlyRemoteViewOpenWorkflow.fetch,
+        displayAllocationId: 'display-terminal',
+        routeId: 'route-terminal',
+        url: 'https://www.facebook.com/',
+      }),
+    /remote-view open response is not operator-visible: .*operatorVisible=terminal_only.*proof=terminal_only/,
+  );
+
+  const missingProofRemoteViewOpenWorkflow = createFetchRecorder({
+    success: true,
+    data: {
+      status: 'opened',
+      routeId: 'route-missing-proof',
+      displayAllocationId: 'display-missing-proof',
+    },
+  });
+  await assert.rejects(
+    () =>
+      requestServiceRemoteViewOpen({
+        baseUrl: 'http://127.0.0.1:4849',
+        fetch: missingProofRemoteViewOpenWorkflow.fetch,
+        displayAllocationId: 'display-missing-proof',
+        routeId: 'route-missing-proof',
+        url: 'https://www.facebook.com/',
+      }),
+    /remote-view open response is not operator-visible: .*operatorVisible=missing/,
+  );
+
+  const dryRunRemoteViewOpenWorkflow = createFetchRecorder({
+    success: true,
+    data: {
+      status: 'planned',
+      dryRun: true,
+      routeId: 'route-dry-run',
+      displayAllocationId: 'display-dry-run',
+      operatorVisible: {
+        state: 'not_checked',
+      },
+    },
+  });
+  await requestServiceRemoteViewOpen({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: dryRunRemoteViewOpenWorkflow.fetch,
+    displayAllocationId: 'display-dry-run',
+    routeId: 'route-dry-run',
+    dryRun: true,
+  });
+
+  const infrastructureOnlyRemoteViewOpenWorkflow = createFetchRecorder({
+    success: true,
+    data: {
+      status: 'opened',
+      routeId: 'route-infra',
+      displayAllocationId: 'display-infra',
+      operatorVisible: {
+        state: 'not_checked',
+      },
+    },
+  });
+  await requestServiceRemoteViewOpen({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: infrastructureOnlyRemoteViewOpenWorkflow.fetch,
+    displayAllocationId: 'display-infra',
+    routeId: 'route-infra',
+    allowInfrastructureOnlyReadiness: true,
+  });
+  assert.equal(
+    infrastructureOnlyRemoteViewOpenWorkflow.calls[0].body.allowInfrastructureOnlyReadiness,
+    undefined,
+  );
 
   const routePoolRepairWorkflow = createFetchRecorder({
     success: true,

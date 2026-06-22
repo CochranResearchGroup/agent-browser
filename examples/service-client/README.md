@@ -56,6 +56,35 @@ handoffs, and the latest retained jobs so software projects can confirm that
 the planning, request, trace metadata, and operator handoff references are
 connected.
 
+## Route-Bound Remote View Handoff
+
+When a client needs an operator-visible Guacamole/RDP browser, use
+`requestServiceRemoteViewOpen()` instead of inferring success from a CDP URL,
+page title, or browser PID. The helper throws unless the response includes
+`operatorVisible.state === "ready"`; dry-runs return `not_checked`, and
+infrastructure-only checks must pass `allowInfrastructureOnlyReadiness: true`
+explicitly.
+
+```js
+import {
+  requestServiceRemoteViewOpen,
+  summarizeServiceRemoteViewOpenProof,
+} from '@agent-browser/client/service-request';
+
+const response = await requestServiceRemoteViewOpen({
+  baseUrl: 'http://127.0.0.1:4849',
+  serviceName: 'Last30Days',
+  agentName: 'facebook-source',
+  taskName: 'manualFacebookLogin',
+  displayAllocationId: 'display-a',
+  routeId: 'route-a',
+  runtimeProfile: 'last30days-facebook',
+  url: 'https://www.facebook.com/',
+});
+
+console.log(summarizeServiceRemoteViewOpenProof(response).summary);
+```
+
 For a recurring service-owned profile, pass `--register-profile-id` with
 `--register-readiness-monitor`. The script first asks for the no-launch access
 plan. It registers the managed profile and adds a `profile_readiness` monitor

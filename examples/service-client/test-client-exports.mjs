@@ -18,6 +18,8 @@ import {
   createServiceTabHandleReleaseRequest,
   evaluateServiceTab,
   getServiceTabDiagnostics,
+  getServiceRemoteViewOpenOperatorVisible,
+  isServiceRemoteViewOpenOperatorVisibleReady,
   postServiceRequest,
   probeServiceTab,
   requestServiceFileTransfer,
@@ -35,6 +37,8 @@ import {
   requestServiceTabHandleRefresh,
   requestServiceTabHandleRelease,
   requestServiceTabFromAccessPlan,
+  requireServiceRemoteViewOpenOperatorVisible,
+  summarizeServiceRemoteViewOpenProof,
   transferServiceFiles,
 } from '@agent-browser/client/service-request';
 import {
@@ -75,6 +79,8 @@ assert.equal(typeof createServiceTabHandleReleaseRequest, 'function');
 assert.equal(typeof attachServiceTabCdp, 'function');
 assert.equal(typeof evaluateServiceTab, 'function');
 assert.equal(typeof getServiceTabDiagnostics, 'function');
+assert.equal(typeof getServiceRemoteViewOpenOperatorVisible, 'function');
+assert.equal(typeof isServiceRemoteViewOpenOperatorVisibleReady, 'function');
 assert.equal(typeof postServiceRequest, 'function');
 assert.equal(typeof probeServiceTab, 'function');
 assert.equal(typeof requestServiceFileTransfer, 'function');
@@ -92,6 +98,8 @@ assert.equal(typeof requestServiceTab, 'function');
 assert.equal(typeof requestServiceTabHandleRefresh, 'function');
 assert.equal(typeof requestServiceTabHandleRelease, 'function');
 assert.equal(typeof requestServiceTabFromAccessPlan, 'function');
+assert.equal(typeof requireServiceRemoteViewOpenOperatorVisible, 'function');
+assert.equal(typeof summarizeServiceRemoteViewOpenProof, 'function');
 assert.equal(typeof transferServiceFiles, 'function');
 assert.equal(typeof cancelServiceJob, 'function');
 assert.equal(typeof createServiceProfileReadinessMonitor, 'function');

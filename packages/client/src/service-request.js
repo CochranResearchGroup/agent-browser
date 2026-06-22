@@ -53,6 +53,7 @@ const displayIsolationSet = new Set([
  * @typedef {import('./service-request.generated.js').ServiceControllerLeaseTakeoverOptions} ServiceControllerLeaseTakeoverOptions
  * @typedef {import('./service-request.generated.js').ServiceRemoteViewRouteCheckoutHttpOptions} ServiceRemoteViewRouteCheckoutHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceRemoteViewRouteCheckoutOptions} ServiceRemoteViewRouteCheckoutOptions
+ * @typedef {import('./service-request.generated.js').ServiceRemoteViewOpenProofSummary} ServiceRemoteViewOpenProofSummary
  * @typedef {import('./service-request.generated.js').ServiceRemoteViewRouteReleaseHttpOptions} ServiceRemoteViewRouteReleaseHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceRemoteViewRouteReleaseOptions} ServiceRemoteViewRouteReleaseOptions
  * @typedef {import('./service-request.generated.js').ServiceRoutePoolRepairHttpOptions} ServiceRoutePoolRepairHttpOptions
@@ -848,7 +849,7 @@ export function createServiceRemoteViewRoutePreflightRequest(input) {
  */
 export function createServiceRemoteViewOpenRequest(input) {
   assertPlainObject(input, 'remote-view open request');
-  const { params, ...request } = input;
+  const { params, allowInfrastructureOnlyReadiness: _allowInfrastructureOnlyReadiness, ...request } = input;
   const openParams = mergeParams(params, request, [
     'displayAllocationId',
     'routeId',
@@ -1321,12 +1322,137 @@ export async function requestServiceRemoteViewRoutePreflight({ baseUrl, fetch = 
  * @param {ServiceRemoteViewRouteCheckoutHttpOptions} options
  */
 export async function requestServiceRemoteViewOpen({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
-  return postServiceRequest({
+  const { allowInfrastructureOnlyReadiness, ...requestFields } = request;
+  const response = await postServiceRequest({
     baseUrl,
     fetch,
     signal,
-    request: createServiceRemoteViewOpenRequest(request),
+    request: createServiceRemoteViewOpenRequest(requestFields),
   });
+  requireServiceRemoteViewOpenOperatorVisible(response, {
+    allowInfrastructureOnlyReadiness,
+  });
+  return response;
+}
+
+/**
+ * @param {unknown} response
+ * @returns {Record<string, unknown> | null}
+ */
+function serviceRemoteViewOpenData(response) {
+  if (!response || typeof response !== 'object') return null;
+  const record = /** @type {Record<string, unknown>} */ (response);
+  const data = record.data;
+  if (data && typeof data === 'object') return /** @type {Record<string, unknown>} */ (data);
+  return /** @type {Record<string, unknown>} */ (record);
+}
+
+/**
+ * @param {unknown} response
+ * @returns {Record<string, unknown> | null}
+ */
+export function getServiceRemoteViewOpenOperatorVisible(response) {
+  const data = serviceRemoteViewOpenData(response);
+  const operatorVisible = data?.operatorVisible;
+  return operatorVisible && typeof operatorVisible === 'object'
+    ? /** @type {Record<string, unknown>} */ (operatorVisible)
+    : null;
+}
+
+/**
+ * @param {unknown} response
+ * @returns {boolean}
+ */
+export function isServiceRemoteViewOpenOperatorVisibleReady(response) {
+  const operatorVisible = getServiceRemoteViewOpenOperatorVisible(response);
+  return operatorVisible?.state === 'ready';
+}
+
+/**
+ * Build a one-line route, tab, profile, and visual-proof summary for
+ * route-bound operator handoff logs.
+ *
+ * @param {unknown} response
+ * @returns {ServiceRemoteViewOpenProofSummary}
+ */
+export function summarizeServiceRemoteViewOpenProof(response) {
+  const data = serviceRemoteViewOpenData(response);
+  const operatorVisible = getServiceRemoteViewOpenOperatorVisible(response);
+  const tab = recordFromUnknown(data?.tab) ?? recordFromUnknown(data?.tabNew);
+  const serviceTabHandle = recordFromUnknown(data?.serviceTabHandle) ?? recordFromUnknown(tab?.serviceTabHandle);
+  const proof = recordFromUnknown(operatorVisible?.proof);
+  const displayContent = recordFromUnknown(proof?.displayContent);
+  const state = stringOrNull(operatorVisible?.state);
+  const routeId = stringOrNull(operatorVisible?.routeId ?? data?.routeId ?? data?.remoteViewRouteId);
+  const displayAllocationId = stringOrNull(operatorVisible?.displayAllocationId ?? data?.displayAllocationId);
+  const displayName = stringOrNull(operatorVisible?.displayName ?? data?.displayName);
+  const browserId = stringOrNull(operatorVisible?.browserId ?? data?.browserId ?? tab?.browserId ?? serviceTabHandle?.browserId);
+  const sessionName = stringOrNull(operatorVisible?.sessionName ?? data?.sessionName ?? data?.sessionId ?? tab?.sessionId ?? serviceTabHandle?.sessionName);
+  const tabId = stringOrNull(
+    data?.tabId ??
+      tab?.tabId ??
+      tab?.id ??
+      tab?.targetId ??
+      serviceTabHandle?.tabId ??
+      serviceTabHandle?.targetId,
+  );
+  const profileId = stringOrNull(
+    data?.profileId ??
+      data?.runtimeProfile ??
+      tab?.profileId ??
+      tab?.runtimeProfile ??
+      serviceTabHandle?.profileId,
+  );
+  const visualProof = stringOrNull(displayContent?.state ?? proof?.state ?? state);
+  const failureReason = stringOrNull(operatorVisible?.reason ?? proof?.reason ?? data?.error);
+  const ready = state === 'ready';
+  const parts = [
+    'remote_view_open',
+    `operatorVisible=${state ?? 'missing'}`,
+    `route=${routeId ?? 'missing'}`,
+    `display=${displayAllocationId ?? displayName ?? 'missing'}`,
+    `browser=${browserId ?? 'missing'}`,
+    `session=${sessionName ?? 'missing'}`,
+    `tab=${tabId ?? 'missing'}`,
+    `profile=${profileId ?? 'missing'}`,
+    `proof=${visualProof ?? 'missing'}`,
+    failureReason ? `reason=${failureReason}` : null,
+  ].filter(Boolean);
+  return {
+    ready,
+    state,
+    routeId,
+    displayAllocationId,
+    displayName,
+    browserId,
+    sessionName,
+    tabId,
+    profileId,
+    visualProof,
+    failureReason,
+    summary: parts.join(' '),
+  };
+}
+
+/**
+ * Require `operatorVisible.state=ready` for a real route-bound handoff.
+ * Dry-runs and explicit infrastructure-only readiness checks do not claim
+ * operator visibility, so they are allowed to return without throwing.
+ *
+ * @param {unknown} response
+ * @param {{ allowInfrastructureOnlyReadiness?: boolean }} [options]
+ * @returns {Record<string, unknown> | null}
+ */
+export function requireServiceRemoteViewOpenOperatorVisible(response, options = {}) {
+  const data = serviceRemoteViewOpenData(response);
+  if (data?.dryRun === true || options.allowInfrastructureOnlyReadiness === true) {
+    return data;
+  }
+  if (isServiceRemoteViewOpenOperatorVisibleReady(response)) {
+    return data;
+  }
+  const summary = summarizeServiceRemoteViewOpenProof(response);
+  throw new TypeError(`remote-view open response is not operator-visible: ${summary.summary}`);
 }
 
 /**
@@ -1700,6 +1826,25 @@ function assertPlainObject(value, label) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new TypeError(`${label} must be an object`);
   }
+}
+
+/**
+ * @param {unknown} value
+ * @returns {Record<string, unknown> | null}
+ */
+function recordFromUnknown(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  return /** @type {Record<string, unknown>} */ (value);
+}
+
+/**
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+function stringOrNull(value) {
+  return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
 /**

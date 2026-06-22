@@ -549,6 +549,21 @@ export interface ServiceRemoteViewRouteMutationData {
   [key: string]: unknown;
 }
 
+export interface ServiceRemoteViewOpenProofSummary {
+  ready: boolean;
+  state: string | null;
+  routeId: string | null;
+  displayAllocationId: string | null;
+  displayName: string | null;
+  browserId: string | null;
+  sessionName: string | null;
+  tabId: string | null;
+  profileId: string | null;
+  visualProof: string | null;
+  failureReason: string | null;
+  summary: string;
+}
+
 export interface ServiceRoutePoolRepairData {
   repaired: boolean;
   dryRun: boolean;
@@ -1271,6 +1286,7 @@ export interface ServiceRemoteViewRouteCheckoutOptions extends Omit<ServiceReque
   displayName?: string;
   url?: string;
   dryRun?: boolean;
+  allowInfrastructureOnlyReadiness?: boolean;
   params?: Record<string, unknown>;
 }
 
@@ -1512,6 +1528,13 @@ export declare function requestServiceRemoteViewRoutePreflight(
 export declare function requestServiceRemoteViewOpen(
   options: ServiceRemoteViewRouteCheckoutHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceRemoteViewRouteMutationData>>;
+export declare function getServiceRemoteViewOpenOperatorVisible(response: unknown): Record<string, unknown> | null;
+export declare function isServiceRemoteViewOpenOperatorVisibleReady(response: unknown): boolean;
+export declare function summarizeServiceRemoteViewOpenProof(response: unknown): ServiceRemoteViewOpenProofSummary;
+export declare function requireServiceRemoteViewOpenOperatorVisible(
+  response: unknown,
+  options?: { allowInfrastructureOnlyReadiness?: boolean },
+): Record<string, unknown> | null;
 export declare function requestServiceRemoteViewRouteCheckout(
   options: ServiceRemoteViewRouteCheckoutHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceRemoteViewRouteMutationData>>;

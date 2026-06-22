@@ -611,11 +611,12 @@ non-owned browser addressability into agent-browser lifecycle ownership.
 
 ## P43 | Route Handoff Confusion Audit
 
-State: PLANNED
-Current state: P43 is the next audit lane for the Facebook remote-view
+State: IN PROGRESS
+Current state: P43 is the active audit lane for the Facebook remote-view
 incident where the route infrastructure was ready and CDP targets existed, but
 the dashboard still presented terminal-only Guacamole views for active browser
-rows.
+rows. Slice G is complete; the remaining work is the repeatable no-launch and
+live gate layer.
 
 ### Current State
 
@@ -647,6 +648,14 @@ rows.
   Control, or external open actions, and keep terminal-only or missing-proof
   route rows as disabled live diagnostics rather than no-action attention
   entries.
+- Slice G is complete. Service-client route-bound remote-view helpers now
+  require `operatorVisible.state=ready` before non-dry-run handoff success,
+  expose a compact route, tab, profile, and visual-proof summary helper, and
+  keep infrastructure-only readiness as an explicit caller opt-in.
+- `last30days` now calls the route-bound `agent-browser remote-view open`
+  one-liner for Facebook, uses the `last30days-facebook` runtime profile, and
+  rejects missing-proof, CDP-only, or terminal-only Guacamole/RDP handoff
+  success before scraping.
 - The incident note is
   `docs/dev/notes/2026-06-22-facebook-remote-view-open-friction.md`.
 - Live readback on 2026-06-22 showed `session:default` on profile
@@ -669,7 +678,7 @@ rows.
 
 ### Next Recommendation
 
-Execute P43 Slice G next. Update downstream client helpers and examples so
-callers such as `last30days` require `operatorVisible` browser-window proof
-before declaring a Guacamole or RDP handoff successful, and add a compact
-one-line route, tab, profile, and visual-proof summary for agent logs.
+Execute P43 Slice H next. Add the no-launch route-confusion fixtures and the
+OCR-backed live route gate so terminal-only route displays fail before an agent
+or downstream tool can report Facebook or any other Guacamole/RDP handoff as
+successful.

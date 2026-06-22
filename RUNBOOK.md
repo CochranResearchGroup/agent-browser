@@ -1784,3 +1784,48 @@ Result:
   The final publish used `--skip-browser`, so live browser launch remains
   covered by the separate temp-daemon startup blocker rather than this Slice F
   dashboard contract.
+
+## Turn 42 | 2026-06-22
+
+Scope: execute P43 Slice G downstream client contract and last30days handoff
+guidance.
+
+Actions:
+
+- Made `requestServiceRemoteViewOpen` require `operatorVisible.state=ready`
+  before returning non-dry-run handoff success.
+- Added service-client helpers for reading operator-visible state, checking
+  readiness, throwing on invalid handoff proof, and logging one compact route,
+  tab, profile, and visual-proof summary line.
+- Kept dry-run remote-view open responses allowed as `not_checked` and made
+  infrastructure-only readiness an explicit client opt-in that is not posted to
+  the service API.
+- Updated README, docs commands page, service-client examples, generated client
+  types, and the installed `agent-browser` skill.
+- Updated `last30days` so Facebook uses the route-bound
+  `agent-browser remote-view open` one-liner with the `last30days-facebook`
+  runtime profile and rejects missing-proof, CDP-only, or terminal-only
+  Guacamole/RDP handoff success.
+- Marked P43 Slice G done and moved `ROADMAP.md` to Slice H live gates.
+
+Validation run:
+
+- `git diff --check`
+- `pnpm test:service-api-mcp-parity`
+- `pnpm test:service-client-contract`
+- `pnpm test:service-client-types`
+- `pnpm test:service-client`
+- `pnpm --dir docs build`
+- `diff -q skills/agent-browser/SKILL.md /home/ecochran76/.codex/shared/skills/agent-browser/SKILL.md`
+- `uv run pytest tests/test_facebook.py`
+- `python3 -m py_compile skills/last30days/scripts/lib/facebook.py skills/last30days/scripts/lib/env.py`
+
+Result:
+
+- Service API/MCP parity, service-client contract/type/export/request/helper
+  smokes, docs build, diff hygiene, and installed-skill sync passed.
+- Focused last30days Facebook tests passed with 9 tests, including the
+  terminal-only rejection case.
+- P43 remains open for Slice H. The next gate needs no-launch route-confusion
+  fixtures and an OCR-backed live route proof that fails on terminal-only
+  route displays.

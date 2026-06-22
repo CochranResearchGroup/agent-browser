@@ -360,13 +360,22 @@ Acceptance:
 
 Goal: make clients such as `last30days` wait for the right success signal.
 
+Slice progress: done on 2026-06-22. The generated service client now exposes
+`operatorVisible` helpers for route-bound remote-view handoffs. The
+`requestServiceRemoteViewOpen` helper rejects non-dry-run responses unless
+`operatorVisible.state` is `ready`, except for callers that explicitly opt into
+infrastructure-only readiness. `last30days` now opens Facebook through
+`agent-browser remote-view open` with a route-bound runtime profile and refuses
+CDP-only, missing-proof, or terminal-only handoff success.
+
 Deliverables:
 
-- Update service-client helpers and examples to require `operatorVisible` for
+- Done: update service-client helpers and examples to require
+  `operatorVisible` for
   route-bound handoff workflows.
-- Add a client-side summary helper that logs route, tab, profile, and visual
-  proof status in one line.
-- Update `last30days` guidance to call only the route-bound one-liner for
+- Done: add a client-side summary helper that logs route, tab, profile, and
+  visual proof status in one line.
+- Done: update `last30days` guidance to call only the route-bound one-liner for
   Facebook manual login/search and to reject CDP-only success for Guacamole
   handoff.
 

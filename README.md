@@ -2470,7 +2470,14 @@ stealthcdp_chromium --provider rdp_gateway` when a caller needs the service to
 select the route binding, launch or reuse a remote-headed browser on that bound
 display, open the requested tab, check visible browser window evidence on the
 selected route display, and return dashboard and external route URLs without
-hand-editing Guacamole, display, Xauthority, or CDP fields. If post-launch
+hand-editing Guacamole, display, Xauthority, or CDP fields.
+`requestServiceRemoteViewOpen()` rejects handoff success unless
+`operatorVisible.state="ready"`; dry-runs are allowed as `not_checked`, and
+infrastructure-only callers must pass `allowInfrastructureOnlyReadiness: true`
+explicitly. Use `summarizeServiceRemoteViewOpenProof()` to log one compact
+route, tab, profile, and visual-proof line, or
+`requireServiceRemoteViewOpenOperatorVisible()` when validating a response from
+lower-level HTTP or MCP calls. If post-launch
 route verification fails, a newly launched browser is closed before the typed
 error is returned; reused retained browsers keep the browser process and clean
 up only the opened tab when possible. This is the default one-command path for
