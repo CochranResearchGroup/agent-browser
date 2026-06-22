@@ -1474,3 +1474,49 @@ Result:
   `remoteControl.ready=true`, `runtimeConvergence.status=converged`,
   `runtimeInventory.status=none`, and
   `nextAction=run_many_to_many_live_gate`.
+
+## Turn 35 | 2026-06-22
+
+Scope: investigate the `last30days` Facebook remote-view friction and open the
+next route-handoff audit lane.
+
+Actions:
+
+- Read the incident note at
+  `docs/dev/notes/2026-06-22-facebook-remote-view-open-friction.md`.
+- Used Graphiti discovery for advisory prior context and CodeGraph for the
+  route-binding and dashboard stream helper joins.
+- Captured live readbacks from `agent-browser doctor remote-view --json`,
+  `agent-browser service browsers --json`, and
+  `agent-browser service tabs --json`.
+- Added P43 in
+  `docs/dev/plans/0043-2026-06-22-route-handoff-confusion-audit-plan.md`.
+- Updated `ROADMAP.md` with the open P43 lane.
+
+Findings:
+
+- P42 binary/runtime convergence remains green. The failure sits above that
+  layer.
+- `session:default` owns the `last30days-facebook` browser on display `:11`
+  with Facebook tabs and a generic Guacamole stream.
+- `session:litscout-ai-smoke-clean` is a separate browser on display `:93`
+  with several `127.0.0.1` tabs and its own generic Guacamole stream.
+- The dashboard has stream metadata that can embed Guacamole, but it does not
+  yet require row-bound proof that the stream is showing the intended browser
+  instead of a terminal.
+
+Validation run:
+
+- `git diff --check`
+- `pnpm validation:select -- --base HEAD`
+- `python /home/ecochran76/workspace.local/agent-policies/repo-policy-selector/scripts/audit_planning_contract.py --repo-root /home/ecochran76/workspace.local/agent-browser --json`
+
+Result:
+
+- `git diff --check` passed.
+- `pnpm validation:select -- --base HEAD` selected only `git diff --check` for
+  the docs-only change set.
+- The planning-contract audit still fails on pre-existing older plan wiring and
+  deterministic-state debt. The new P43 plan itself is reported with
+  `filename_ok=true`, `lane_ok=true`, `state_ok=true`,
+  `wired_in_roadmap=true`, and `wired_in_runbook=true`.

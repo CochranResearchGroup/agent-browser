@@ -608,3 +608,42 @@ Keep P42 closed. Downstream work should use the convergence command and doctor
 readbacks before live browser work, then proceed to the many-to-many
 Guacamole/RDP live gate and P41 foreign-CDP browser management without turning
 non-owned browser addressability into agent-browser lifecycle ownership.
+
+## P43 | Route Handoff Confusion Audit
+
+State: PLANNED
+Current state: P43 is the next audit lane for the Facebook remote-view
+incident where the route infrastructure was ready and CDP targets existed, but
+the dashboard still presented terminal-only Guacamole views for active browser
+rows.
+
+### Current State
+
+- Plan
+  `docs/dev/plans/0043-2026-06-22-route-handoff-confusion-audit-plan.md`
+  is open.
+- The incident note is
+  `docs/dev/notes/2026-06-22-facebook-remote-view-open-friction.md`.
+- Live readback on 2026-06-22 showed `session:default` on profile
+  `last30days-facebook`, display `:11`, and generic `rdp_gateway` stream
+  metadata, plus a separate LitScout browser on display `:93` with multiple
+  `127.0.0.1` tabs.
+- The current gap is not binary convergence. P42 remains green. The gap is
+  route, browser, tab, stream, and operator-visible proof convergence.
+
+### Evidence
+
+- `agent-browser doctor remote-view --json` reported remote-view ready and
+  still recommended the OCR-backed many-to-many gate as the next proof.
+- `agent-browser service browsers --json` reported Facebook and LitScout as
+  separate active remote-headed browser rows with generic Guacamole stream
+  URLs.
+- CodeGraph inspection identified the route-binding path in
+  `cli/src/native/actions.rs` and the dashboard stream helper in
+  `packages/dashboard/src/lib/service-view-streams.ts` as the key audit joins.
+
+### Next Recommendation
+
+Execute P43 Slice A first. Add the read-only route-handoff audit output that
+joins browser, tab, profile, route, stream, and visual-proof state before
+changing launch behavior or dashboard affordances.
