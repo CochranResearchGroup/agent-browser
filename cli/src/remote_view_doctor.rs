@@ -846,6 +846,22 @@ fn first_failed_route_pool_next_action(route_pool: &Value) -> Option<String> {
         })
 }
 
+fn install_has_issue_code(install: &Value, code: &str) -> bool {
+    install
+        .pointer("/data/data/issues")
+        .and_then(Value::as_array)
+        .or_else(|| install.pointer("/data/issues").and_then(Value::as_array))
+        .map(|issues| {
+            issues.iter().any(|issue| {
+                issue
+                    .get("code")
+                    .and_then(Value::as_str)
+                    .is_some_and(|value| value == code)
+            })
+        })
+        .unwrap_or(false)
+}
+
 struct RecommendationContext<'a> {
     install: &'a Value,
     rdp_gateway: &'a Value,
@@ -869,6 +885,9 @@ fn recommend_next_action(context: RecommendationContext<'_>) -> String {
         privileges,
     } = context;
     if !nested_bool(install, &["success"]) {
+        if install_has_issue_code(install, "active_runtime_stale_executable") {
+            return "restart_stale_daemon_sessions_then_rerun_doctor".to_string();
+        }
         return "repair_install_drift".to_string();
     }
     if !nested_bool(rdp_gateway, &["available"]) {
@@ -1018,6 +1037,11 @@ fn recommend_next_command(next_action: &str) -> Value {
             "command": "agent-browser install doctor --json",
             "requiresInteractiveSudo": false,
             "why": "The installed command, current executable, package binary, workspace binary, or launch configuration is out of sync."
+        }),
+        "restart_stale_daemon_sessions_then_rerun_doctor" => json!({
+            "command": "agent-browser install doctor --json",
+            "requiresInteractiveSudo": false,
+            "why": "Install doctor reported active stale daemon sessions. Use each issue's remedy.argv to close only the affected session, then rerun the doctor."
         }),
         "run_many_to_many_live_gate" => json!({
             "command": "pnpm test:rdp-guac-many-to-many-live",
@@ -1977,6 +2001,52 @@ MaxSessions=50
             }),
             "repair_guacamole_admin_credentials"
         );
+    }
+
+    #[test]
+    fn recommend_next_action_restarts_stale_daemon_sessions_before_generic_install_drift() {
+        let route_pool = json!({"data": {"success": true}});
+        let rdp_gateway = ready_rdp_gateway();
+        let install = json!({
+            "success": false,
+            "data": {
+                "data": {
+                    "issues": [
+                        {
+                            "code": "active_runtime_stale_executable",
+                            "session": "default"
+                        }
+                    ]
+                }
+            }
+        });
+        let route_displays = json!({"data": {"success": true}});
+        let display_access = json!({"ready": true});
+        let viewer_prerequisites = json!({"ready": true});
+        let privileges = json!({"ready": true});
+        let users = json!({"entries": []});
+        assert_eq!(
+            recommend_next_action(RecommendationContext {
+                install: &install,
+                rdp_gateway: &rdp_gateway,
+                route_pool: &route_pool,
+                route_displays: &route_displays,
+                display_access: &display_access,
+                viewer_prerequisites: &viewer_prerequisites,
+                users: &users,
+                privileges: &privileges,
+            }),
+            "restart_stale_daemon_sessions_then_rerun_doctor"
+        );
+    }
+
+    #[test]
+    fn recommend_next_command_points_stale_daemon_action_at_issue_remedies() {
+        let command = recommend_next_command("restart_stale_daemon_sessions_then_rerun_doctor");
+
+        assert_eq!(command["command"], "agent-browser install doctor --json");
+        assert_eq!(command["requiresInteractiveSudo"], false);
+        assert!(command["why"].as_str().unwrap().contains("remedy.argv"));
     }
 
     #[test]

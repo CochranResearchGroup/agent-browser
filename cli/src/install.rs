@@ -1204,7 +1204,16 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
                     .unwrap_or("unknown");
                 issues.push(json!({
                     "code": "active_runtime_stale_executable",
-                    "message": format!("active daemon session {session} was started by stale or incomplete executable metadata")
+                    "message": format!("active daemon session {session} was started by stale or incomplete executable metadata"),
+                    "session": session,
+                    "nextAction": "restart_stale_daemon_session",
+                    "remedy": {
+                        "kind": "operator_command",
+                        "command": "agent-browser close --session <session>",
+                        "argv": ["agent-browser", "close", "--session", session],
+                        "requiresInteractiveSudo": false,
+                        "why": "Stop the stale daemon session so the next command relaunches it with the current executable."
+                    }
                 }));
             }
         }
@@ -2431,6 +2440,24 @@ mod tests {
         });
 
         assert_eq!(issue_codes(issues), vec!["active_runtime_stale_executable"]);
+        let issue = install_doctor_issues(InstallDoctorIssueInputs {
+            current_executable: &current_executable,
+            path_command: &path_command,
+            pnpm_package_binary: &pnpm_package_binary,
+            workspace_binary: &workspace_binary,
+            launch_config: &launch_config,
+            service: &service,
+            service_resources: &service_resources,
+            runtime_inventory: &runtime_inventory,
+        })
+        .remove(0);
+        assert_eq!(issue["session"], "default");
+        assert_eq!(issue["nextAction"], "restart_stale_daemon_session");
+        assert_eq!(
+            issue["remedy"]["argv"],
+            json!(["agent-browser", "close", "--session", "default"])
+        );
+        assert_eq!(issue["remedy"]["requiresInteractiveSudo"], false);
     }
 
     #[test]

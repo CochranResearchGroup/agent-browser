@@ -1138,3 +1138,41 @@ Result:
   reported `runtimeInventory.status=stale`. This intentionally made the
   debug-binary readback not remote-control ready against the installed runtime,
   proving stale active runtimes are no longer omitted from readiness.
+
+## Turn 27 | 2026-06-22
+
+Scope: execute the first P42 Slice C convergence doctor remedy.
+
+Actions:
+
+- Added session-scoped remedy metadata to `active_runtime_stale_executable`
+  install doctor issues.
+- Each stale daemon issue now carries `session`,
+  `nextAction=restart_stale_daemon_session`, and an argv-safe remedy for
+  `agent-browser close --session <session>`.
+- Made remote-view doctor prefer
+  `restart_stale_daemon_sessions_then_rerun_doctor` when install readiness is
+  blocked by stale active daemon sessions.
+- Updated P42 Slice C progress notes.
+
+Validation run:
+
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo test --manifest-path cli/Cargo.toml install_doctor -- --nocapture`
+- `cargo test --manifest-path cli/Cargo.toml recommend_next -- --nocapture`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `cargo build --manifest-path cli/Cargo.toml`
+- `./cli/target/debug/agent-browser install doctor --json`
+- `./cli/target/debug/agent-browser doctor remote-view --json`
+
+Result:
+
+- Focused tests, clippy, and debug CLI build passed.
+- The rebuilt debug-binary install doctor reported four
+  `active_runtime_stale_executable` issues; the first issue carried
+  `session=default`, `nextAction=restart_stale_daemon_session`, and
+  `remedy.argv=["agent-browser","close","--session","default"]`.
+- The rebuilt debug-binary remote-view doctor reported
+  `nextAction=restart_stale_daemon_sessions_then_rerun_doctor` and a
+  next-command explanation that points operators back to each issue's
+  session-scoped `remedy.argv`.

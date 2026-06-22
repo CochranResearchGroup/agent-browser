@@ -195,7 +195,7 @@ Completed on 2026-06-22:
 
 ### Slice C: Convergence Doctor And Remedy
 
-Slice progress: planned.
+Slice progress: in progress.
 
 Turn runtime drift into an actionable doctor surface.
 
@@ -214,6 +214,27 @@ Acceptance:
 - Doctor output explains exactly which session or service is stale.
 - The next action is runnable and bounded.
 - Manual-review-required states are not auto-repaired.
+
+Completed on 2026-06-22:
+
+- Active stale daemon issues now include the affected `session`,
+  `nextAction=restart_stale_daemon_session`, and an argv-safe operator remedy:
+  `["agent-browser", "close", "--session", "<session>"]`.
+- `agent-browser doctor remote-view --json` now promotes install drift caused
+  by `active_runtime_stale_executable` to
+  `nextAction=restart_stale_daemon_sessions_then_rerun_doctor` instead of
+  collapsing it into generic install drift.
+- The remote-view next command intentionally points back to install doctor and
+  tells the operator to use each issue's `remedy.argv`, so the remedy remains
+  session-scoped rather than blindly closing all active sessions.
+
+Remaining:
+
+- Add equivalent stable issue codes and remedies for stale dashboard runtime,
+  stale stream backend, and diagnostic retained rows that should leave the live
+  rail.
+- Add the final convergence summary states after every stale-runtime class has
+  a bounded classification.
 
 ### Slice D: Idempotent Remote-View Bootstrap
 
