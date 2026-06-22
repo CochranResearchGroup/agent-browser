@@ -1690,3 +1690,44 @@ Result:
   and unknown-owner diagnostics.
 - Docs build passed with the known Next.js multiple-lockfile root warning.
 - Clippy, diff hygiene, validation selector, and installed-skill sync passed.
+
+## Turn 40 | 2026-06-22
+
+Scope: execute P43 Slice E operator-visible success contract.
+
+Actions:
+
+- Added top-level `operatorVisible` to `remote-view open` dry-run and opened
+  responses.
+- Dry-runs report `operatorVisible.state=not_checked` with route, browser,
+  session, display, provider, and display allocation identity.
+- Successful opened responses report `operatorVisible.state=ready` and include
+  the visible-window proof that already gates success.
+- Added dry-run assertions and a pure ready-proof unit test for the
+  `operatorVisible` contract.
+- Updated README, CLI remote-view help, docs command page, and the
+  `agent-browser` skill to tell clients to require
+  `operatorVisible.state=ready`.
+- Marked P43 Slice E done and updated `ROADMAP.md` next recommendation.
+
+Validation run:
+
+- `cargo fmt --manifest-path cli/Cargo.toml`
+- `cargo test --manifest-path cli/Cargo.toml remote_view_open -- --test-threads=1`
+- `pnpm --dir docs build`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `cargo test --manifest-path cli/Cargo.toml cdp_screencast_view_stream -- --nocapture`
+- `git diff --check`
+- `pnpm validation:select -- --base HEAD`
+- `diff -q skills/agent-browser/SKILL.md /home/ecochran76/.codex/shared/skills/agent-browser/SKILL.md`
+
+Result:
+
+- Focused remote-view-open tests passed, including the new
+  `operatorVisible` dry-run and ready-proof coverage.
+- Docs build passed with the known Next.js multiple-lockfile root warning.
+- Clippy, format check, diff hygiene, validation selector, installed-skill
+  sync, and the no-launch CDP stream test passed.
+- The selector still recommends `pnpm test:service-cdp-tab-streaming-live`
+  because `actions.rs` changed; the same live smoke was already attempted in
+  Turn 38 and failed before CDP validation while starting a temporary daemon.

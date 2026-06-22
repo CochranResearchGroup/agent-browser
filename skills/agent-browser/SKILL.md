@@ -48,6 +48,10 @@ state. For a Facebook-style operator handoff, use:
 agent-browser --json remote-view open https://www.facebook.com/ --runtime-profile last30days-facebook --browser-build stealthcdp_chromium --provider rdp_gateway
 ```
 
+Successful responses include `operatorVisible`; require
+`operatorVisible.state=ready` before claiming the handoff is visible to the
+operator. Dry runs return `operatorVisible.state=not_checked`.
+
 Software clients should use the same path through service request action
 `remote_view_open` or the generated `requestServiceRemoteViewOpen()` helper.
 Pass caller labels and profile identity hints at the top level, and pass route

@@ -11699,6 +11699,8 @@ async fn handle_remote_view_open(cmd: &Value, state: &mut DaemonState) -> Result
     let dry_run = remote_view_open_dry_run(cmd);
 
     if dry_run {
+        let operator_visible =
+            remote_view_open_operator_visible(&route_binding, &browser_id, &session_id, None);
         return Ok(json!({
             "status": "planned",
             "dryRun": true,
@@ -11711,6 +11713,7 @@ async fn handle_remote_view_open(cmd: &Value, state: &mut DaemonState) -> Result
             "externalUrl": route_binding.external_url,
             "routeDescriptor": route_binding.route_descriptor,
             "routeBinding": route_binding.clone(),
+            "operatorVisible": operator_visible,
             "launchCommand": launch_command,
             "tabCommand": tab_command,
             "checkoutCommand": checkout_command,
@@ -11763,6 +11766,12 @@ async fn handle_remote_view_open(cmd: &Value, state: &mut DaemonState) -> Result
             ));
         }
     };
+    let operator_visible = remote_view_open_operator_visible(
+        &route_binding,
+        &browser_id,
+        &session_id,
+        Some(&visible_window_proof),
+    );
     if let Some(checkout) = checkout_command.as_object_mut() {
         checkout.insert(
             "readiness".to_string(),
@@ -11800,6 +11809,7 @@ async fn handle_remote_view_open(cmd: &Value, state: &mut DaemonState) -> Result
         "externalUrl": route_binding.external_url,
         "routeDescriptor": route_binding.route_descriptor,
         "routeBinding": route_binding.clone(),
+        "operatorVisible": operator_visible,
         "launch": launch,
         "tab": tab,
         "focus": focus,
@@ -11815,6 +11825,30 @@ async fn handle_remote_view_open(cmd: &Value, state: &mut DaemonState) -> Result
             "visibleWindowProof": visible_window_proof
         }
     }))
+}
+
+fn remote_view_open_operator_visible(
+    route_binding: &super::remote_view::RemoteViewRouteBinding,
+    browser_id: &str,
+    session_name: &str,
+    visible_window_proof: Option<&Value>,
+) -> Value {
+    json!({
+        "state": visible_window_proof
+            .and_then(|proof| proof.get("state"))
+            .and_then(Value::as_str)
+            .unwrap_or("not_checked"),
+        "browserId": browser_id,
+        "sessionName": session_name,
+        "routeId": route_binding.route_id,
+        "routePoolEntryId": route_binding.route_pool_entry_id,
+        "displayAllocationId": route_binding.display_allocation_id,
+        "displayName": route_binding.launch_display_name,
+        "displayIsolation": route_binding.display_isolation,
+        "provider": route_binding.provider,
+        "providerMode": route_binding.provider_mode,
+        "proof": visible_window_proof.cloned(),
+    })
 }
 
 async fn remote_view_open_cleanup_after_failure(
@@ -19704,6 +19738,50 @@ mod tests {
     }
 
     #[test]
+    fn test_remote_view_open_operator_visible_reports_ready_proof() {
+        let binding = crate::native::remote_view::RemoteViewRouteBinding {
+            route_id: "route-a".to_string(),
+            route_pool_entry_id: Some("pool-a".to_string()),
+            display_allocation_id: "display-a".to_string(),
+            display_name: Some(":11".to_string()),
+            launch_display_name: Some(":11".to_string()),
+            display_isolation: "shared_display".to_string(),
+            route_user: Some("agent-browser-rdp-a".to_string()),
+            display_access: None,
+            provider: ViewStreamProvider::RdpGateway,
+            provider_mode: "single_controller".to_string(),
+            connection_id: Some("conn-a".to_string()),
+            connection_name: Some("Route A".to_string()),
+            frame_url: Some("https://dashboard.example/guac/#/client/route-a".to_string()),
+            external_url: Some("https://guac.example/#/client/route-a".to_string()),
+            route_descriptor: None,
+            readiness: None,
+        };
+        let proof = json!({
+            "state": "ready",
+            "displayName": ":11",
+            "displayContent": {
+                "state": "browser_window_visible"
+            }
+        });
+
+        let operator_visible =
+            remote_view_open_operator_visible(&binding, "session:rdp-a", "rdp-a", Some(&proof));
+
+        assert_eq!(operator_visible["state"], "ready");
+        assert_eq!(operator_visible["browserId"], "session:rdp-a");
+        assert_eq!(operator_visible["sessionName"], "rdp-a");
+        assert_eq!(operator_visible["routeId"], "route-a");
+        assert_eq!(operator_visible["routePoolEntryId"], "pool-a");
+        assert_eq!(operator_visible["displayAllocationId"], "display-a");
+        assert_eq!(operator_visible["displayName"], ":11");
+        assert_eq!(
+            operator_visible["proof"]["displayContent"]["state"],
+            "browser_window_visible"
+        );
+    }
+
+    #[test]
     fn test_tab_handle_refresh_classifies_retained_candidates() {
         let ready_browser = BrowserProcess {
             id: "browser-ready".to_string(),
@@ -25021,6 +25099,16 @@ mod tests {
         assert_eq!(result["data"]["status"], "planned");
         assert_eq!(result["data"]["dryRun"], true);
         assert_eq!(result["data"]["routeId"], "route-a");
+        assert_eq!(result["data"]["operatorVisible"]["state"], "not_checked");
+        assert_eq!(
+            result["data"]["operatorVisible"]["browserId"],
+            "session:rdp-open-a"
+        );
+        assert_eq!(
+            result["data"]["operatorVisible"]["sessionName"],
+            "rdp-open-a"
+        );
+        assert_eq!(result["data"]["operatorVisible"]["displayName"], ":31");
         assert_eq!(
             result["data"]["displayAllocationId"],
             "remote-view-display:31"
@@ -25110,6 +25198,9 @@ mod tests {
         assert_eq!(result["success"], true);
         assert_eq!(result["data"]["status"], "planned");
         assert_eq!(result["data"]["routePoolEntryId"], "guacamole-rdp-a");
+        assert_eq!(result["data"]["operatorVisible"]["state"], "not_checked");
+        assert_eq!(result["data"]["operatorVisible"]["routeId"], "guacamole:1");
+        assert_eq!(result["data"]["operatorVisible"]["displayName"], ":10");
         assert_eq!(result["data"]["routeBinding"]["launchDisplayName"], ":10");
         assert_eq!(
             result["data"]["routeBinding"]["displayIsolation"],

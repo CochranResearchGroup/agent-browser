@@ -291,6 +291,13 @@ Acceptance:
 Goal: make `remote-view open` success depend on the same proof the operator
 needs.
 
+Slice progress: done on 2026-06-22. `remote-view open` now returns a top-level
+`operatorVisible` object. Dry-runs report `state=not_checked`; successful open
+responses report `state=ready` with route, browser, session, display, provider,
+display-allocation identity, and the visible-window proof that already gates
+success. Clients can require `operatorVisible.state=ready` instead of inferring
+visibility from nested checkout or verification fields.
+
 Deliverables:
 
 - Define `operatorVisible` in the `remote-view open` response with:

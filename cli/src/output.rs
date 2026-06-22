@@ -5019,6 +5019,9 @@ Usage: agent-browser remote-view open [url] [options]
 reuses a remote-headed browser on the bound display, opens the requested tab,
 checks visible browser-window evidence, checks out the route, and returns
 dashboard/external operator URLs.
+Successful JSON responses include operatorVisible; require
+operatorVisible.state=ready before claiming the handoff is visible to the
+operator. Dry runs return operatorVisible.state=not_checked.
 
 Options:
   --runtime-profile <id>       Use a managed runtime profile, for example last30days-facebook

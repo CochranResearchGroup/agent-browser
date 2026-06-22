@@ -2474,7 +2474,11 @@ hand-editing Guacamole, display, Xauthority, or CDP fields. If post-launch
 route verification fails, a newly launched browser is closed before the typed
 error is returned; reused retained browsers keep the browser process and clean
 up only the opened tab when possible. This is the default one-command path for
-operator-controlled Guacamole/RDP browser sessions. A typical HTTP request is:
+operator-controlled Guacamole/RDP browser sessions. Successful responses
+include `operatorVisible`; clients should require
+`operatorVisible.state=ready` before claiming the handoff is visible to the
+operator. Dry runs return `operatorVisible.state=not_checked`. A typical HTTP
+request is:
 
 Global flags may appear before or after `remote-view open`. Use `--session`
 for the agent-browser daemon session, and use `--session-name` for saved

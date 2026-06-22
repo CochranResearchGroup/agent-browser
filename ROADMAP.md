@@ -638,6 +638,10 @@ rows.
 - Slice D is complete. Chrome profile-lock failures now append diagnostic JSON
   with lock PID, runtime-profile and service-browser ownership matches, primary
   owner, and safe reuse, close, inspect, or separate-profile remedies.
+- Slice E is complete. `remote-view open` now returns top-level
+  `operatorVisible` proof. Dry-runs report `not_checked`; successful opens
+  report `ready` with route, browser, session, display, provider, and visible
+  proof identity.
 - The incident note is
   `docs/dev/notes/2026-06-22-facebook-remote-view-open-friction.md`.
 - Live readback on 2026-06-22 showed `session:default` on profile
@@ -660,6 +664,7 @@ rows.
 
 ### Next Recommendation
 
-Execute P43 Slice E next. Add an operator-visible proof field to
-`remote-view open` success so downstream clients cannot claim success when the
-route still shows terminal-only output or lacks browser-window evidence.
+Execute P43 Slice F next. Update dashboard left-rail and workspace viewport
+classification to consume route-bound proof fields directly, label terminal-only
+or missing-proof routes as not operator visible, and keep dead or
+non-actionable records out of the live control rail.
