@@ -622,6 +622,10 @@ rows.
 - Plan
   `docs/dev/plans/0043-2026-06-22-route-handoff-confusion-audit-plan.md`
   is open.
+- Slice A is complete. `pnpm audit:route-handoff -- --json` now emits the
+  read-only route-handoff audit artifact for active browsers, tabs, displays,
+  routes, route-pool entries, viewer leases, runtime convergence, stream URLs,
+  and retained visual proof.
 - The incident note is
   `docs/dev/notes/2026-06-22-facebook-remote-view-open-friction.md`.
 - Live readback on 2026-06-22 showed `session:default` on profile
@@ -644,6 +648,6 @@ rows.
 
 ### Next Recommendation
 
-Execute P43 Slice A first. Add the read-only route-handoff audit output that
-joins browser, tab, profile, route, stream, and visual-proof state before
-changing launch behavior or dashboard affordances.
+Execute P43 Slice B next. Make the route-bound one-liner discoverable and
+parser-safe before changing route allocation, profile lock, or dashboard
+operator-visible success behavior.

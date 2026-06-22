@@ -127,6 +127,8 @@ surfaces:
 
 ### Slice A: Incident Replay And State Snapshot
 
+Slice progress: done on 2026-06-22.
+
 Goal: produce a no-mutation audit artifact that joins browser, tab, profile,
 route, stream, and visual-proof state.
 
@@ -156,6 +158,29 @@ Acceptance:
   Guacamole streams without proving the row's browser is visible.
 - The audit can be attached to future incident notes without exposing cookies,
   auth state, screenshots, or private page contents.
+
+Completed on 2026-06-22:
+
+- Added `scripts/audit-route-handoff.js` and package command
+  `pnpm audit:route-handoff`.
+- The audit reads `agent-browser service status --json` and, unless
+  `--skip-doctor` is supplied, `agent-browser doctor remote-view --json`.
+- The output schema is `agent-browser.route-handoff-audit.v1`.
+- JSON and text output join browser rows, tabs, display allocations,
+  remote-view routes, route-pool entries, viewer leases, runtime convergence,
+  stream URLs, route descriptors, and retained visible-window proof.
+- Rows are keyed by browser, profile, display, display allocation, route,
+  route-pool entry, tab, URL/title, stream provider, proof state, and visual
+  state.
+- Classification values are `route_bound_ready`,
+  `route_bound_proof_missing`, `route_bound_terminal_only`,
+  `direct_remote_headed`, `foreign_cdp`, and `stale_or_retained`.
+- Added no-launch fixture coverage in `scripts/test-route-handoff-audit.js`
+  and package command `pnpm test:route-handoff-audit`.
+- Live read-only audit on 2026-06-22 reported Facebook rows as
+  `route_bound_ready` on `guacamole:3` with retained
+  `browser_window_visible` proof, and LitScout `127.0.0.1` rows as
+  `direct_remote_headed` with no ready route binding.
 
 ### Slice B: One-Line CLI Contract And Help
 

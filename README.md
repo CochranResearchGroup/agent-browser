@@ -2012,6 +2012,14 @@ two iframe URLs loaded. It saves service state, viewer/controller lease proof,
 tile screenshots, target-binding crops and OCR text, provider route evidence,
 and close/release artifacts under
 `/tmp/agent-browser-rdp-guac-many-to-many-<timestamp>/`.
+When a browser row, Guacamole route, and CDP tab appear to disagree, run
+`pnpm audit:route-handoff -- --json` before mutating state. The read-only audit
+joins active browsers, tabs, display allocations, remote-view routes,
+route-pool entries, viewer leases, runtime convergence, stream URLs, and
+retained visible-window proof. It classifies each row as route-bound ready,
+route-bound proof missing, route-bound terminal only, direct remote-headed,
+foreign CDP, or stale/retained so route confusion can be attached to incident
+notes without storing cookies, screenshots, or page contents.
 
 You can also manage streaming at runtime with `stream enable`, `stream disable`, and `stream status`:
 

@@ -1520,3 +1520,47 @@ Result:
   deterministic-state debt. The new P43 plan itself is reported with
   `filename_ok=true`, `lane_ok=true`, `state_ok=true`,
   `wired_in_roadmap=true`, and `wired_in_runbook=true`.
+
+## Turn 36 | 2026-06-22
+
+Scope: execute P43 Slice A with a read-only route-handoff audit surface.
+
+Actions:
+
+- Added `scripts/audit-route-handoff.js`.
+- Added package command `pnpm audit:route-handoff`.
+- Added no-launch fixture coverage in `scripts/test-route-handoff-audit.js`.
+- Added package command `pnpm test:route-handoff-audit`.
+- Documented the audit command in `README.md`.
+- Marked P43 Slice A done and updated `ROADMAP.md` next recommendation.
+
+Validation run:
+
+- `node --check scripts/audit-route-handoff.js`
+- `node --check scripts/test-route-handoff-audit.js`
+- `pnpm test:route-handoff-audit`
+- `pnpm --silent audit:route-handoff -- --json --skip-doctor`
+- `pnpm --silent audit:route-handoff -- --json`
+- `git diff --check`
+- `pnpm validation:select -- --base HEAD`
+- `node scripts/dev/select-validation.js --base HEAD --json`
+- `pnpm test:route-handoff-audit && pnpm --silent audit:route-handoff -- --json --skip-doctor | jq -e '.success == true and .data.summary.route_bound_ready == 2 and .data.summary.direct_remote_headed == 11'`
+
+Result:
+
+- Syntax checks passed.
+- The fixture test passed and covers `route_bound_ready`,
+  `route_bound_proof_missing`, `route_bound_terminal_only`,
+  `direct_remote_headed`, `foreign_cdp`, and `stale_or_retained`
+  classifications.
+- The live read-only audit with `--skip-doctor` returned `success=true`,
+  `collections.browsers=2`, `collections.tabs=13`, and summary
+  `route_bound_ready=2`, `direct_remote_headed=11`.
+- The full live audit also returned `success=true`, no collection errors,
+  `runtime.convergenceStatus=converged`,
+  `runtime.inventoryStatus=converged`, `runtime.runtimeCount=1`, and
+  `runtime.remoteControlStatus=ready`.
+- `git diff --check` passed.
+- `pnpm validation:select -- --base HEAD` recommended `git diff --check` and
+  `node scripts/dev/select-validation.js --base HEAD --json`; both passed.
+- The combined fixture plus live summary assertion passed.
