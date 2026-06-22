@@ -144,7 +144,7 @@ Acceptance:
 
 ### Slice B: Daemon SHA Convergence
 
-Slice progress: planned.
+Slice progress: done on 2026-06-22.
 
 Make daemon reuse compare executable identity, not only package version.
 
@@ -163,6 +163,20 @@ Acceptance:
   restarts the old daemon before command dispatch.
 - Version-only matches no longer mask stale executable drift.
 - The restart path preserves the existing auth-token safety model.
+
+Completed on 2026-06-22:
+
+- Daemons now write `<session>.sha256` next to existing PID, version, token,
+  and stream metadata.
+- Client daemon reuse compares the invoking executable SHA-256 against the
+  daemon metadata when the invoking executable can be hashed.
+- Missing daemon SHA metadata is treated as stale by default. Set
+  `AGENT_BROWSER_ALLOW_LEGACY_DAEMON_SHA_REUSE=1` only for a reviewed legacy
+  compatibility escape hatch.
+- Stale cleanup removes the SHA metadata file with the rest of the daemon
+  session metadata.
+- Focused tests cover matching SHA, mismatched SHA, missing SHA, explicit
+  legacy reuse, and cleanup.
 
 ### Slice C: Convergence Doctor And Remedy
 

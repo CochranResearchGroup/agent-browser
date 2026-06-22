@@ -1074,3 +1074,31 @@ Result:
 - P42 is active and not complete. Slice D is already in progress through the
   Guacamole Postgres/schema bootstrap guard. The next implementation slice is
   daemon executable SHA convergence and active runtime inventory.
+
+## Turn 25 | 2026-06-22
+
+Scope: execute P42 Slice B daemon executable SHA convergence.
+
+Actions:
+
+- Added daemon executable SHA metadata next to the existing daemon version
+  metadata.
+- Made daemon reuse compare the invoking executable SHA-256 against the daemon
+  SHA metadata when the invoking executable can be hashed.
+- Treated missing daemon SHA metadata as stale by default, with
+  `AGENT_BROWSER_ALLOW_LEGACY_DAEMON_SHA_REUSE=1` as an explicit reviewed
+  compatibility escape hatch.
+- Extended stale daemon cleanup to remove `<session>.sha256`.
+- Updated P42 Slice B completion notes.
+
+Validation run:
+
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo test --manifest-path cli/Cargo.toml daemon_executable_sha -- --nocapture`
+- `cargo test --manifest-path cli/Cargo.toml cleanup_stale_files_removes_version_and_executable_sha -- --nocapture`
+
+Result:
+
+- Focused daemon SHA convergence tests passed. P42 remains open for active
+  runtime inventory, doctor remedies, live rail convergence boundaries, and
+  one-command local convergence.

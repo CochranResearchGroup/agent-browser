@@ -1,8 +1,9 @@
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::env;
 use std::fs;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process;
 use std::sync::Arc;
 use std::time::Duration;
@@ -34,6 +35,13 @@ fn secure_daemon_file(path: &std::path::Path) {
         use std::os::unix::fs::PermissionsExt;
         let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
     }
+}
+
+fn file_sha256(path: &Path) -> Result<String, std::io::Error> {
+    let bytes = fs::read(path)?;
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 pub async fn run_daemon(session: &str) {
@@ -99,6 +107,14 @@ pub async fn run_daemon(session: &str) {
     let version_path = socket_dir.join(format!("{}.version", session));
     let _ = fs::write(&version_path, env!("CARGO_PKG_VERSION"));
     secure_daemon_file(&version_path);
+
+    let executable_sha_path = socket_dir.join(format!("{}.sha256", session));
+    if let Ok(current_exe) = env::current_exe() {
+        if let Ok(sha256) = file_sha256(&current_exe) {
+            let _ = fs::write(&executable_sha_path, sha256);
+            secure_daemon_file(&executable_sha_path);
+        }
+    }
 
     // On Unix the daemon listens on a Unix domain socket; on Windows it uses
     // TCP, so there is no .sock file — only a .port file written by the server.
@@ -191,6 +207,7 @@ pub async fn run_daemon(session: &str) {
     }
     let _ = fs::remove_file(&pid_path);
     let _ = fs::remove_file(&version_path);
+    let _ = fs::remove_file(&executable_sha_path);
     let _ = fs::remove_file(&stream_path);
     let _ = fs::remove_file(socket_dir.join(format!("{}.engine", session)));
     let _ = fs::remove_file(socket_dir.join(format!("{}.provider", session)));

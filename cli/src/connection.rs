@@ -1,10 +1,11 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::env;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
@@ -125,6 +126,10 @@ fn get_version_path(session: &str) -> PathBuf {
     get_socket_dir().join(format!("{}.version", session))
 }
 
+fn get_executable_sha_path(session: &str) -> PathBuf {
+    get_socket_dir().join(format!("{}.sha256", session))
+}
+
 fn get_auth_token_path(session: &str) -> PathBuf {
     get_socket_dir().join(format!("{}.token", session))
 }
@@ -195,6 +200,8 @@ pub fn cleanup_stale_files(session: &str) {
     let _ = fs::remove_file(&pid_path);
     let version_path = get_version_path(session);
     let _ = fs::remove_file(&version_path);
+    let executable_sha_path = get_executable_sha_path(session);
+    let _ = fs::remove_file(&executable_sha_path);
     let token_path = get_auth_token_path(session);
     let _ = fs::remove_file(&token_path);
     let stream_path = get_socket_dir().join(format!("{}.stream", session));
@@ -486,6 +493,36 @@ fn daemon_version_matches(session: &str) -> bool {
     }
 }
 
+fn file_sha256(path: &Path) -> Result<String, String> {
+    let bytes = fs::read(path).map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+fn current_executable_sha256() -> Result<String, String> {
+    let path =
+        env::current_exe().map_err(|e| format!("Failed to resolve current executable: {}", e))?;
+    file_sha256(&path)
+}
+
+fn allow_legacy_daemon_sha_reuse() -> bool {
+    matches!(
+        env::var("AGENT_BROWSER_ALLOW_LEGACY_DAEMON_SHA_REUSE")
+            .unwrap_or_default()
+            .as_str(),
+        "1" | "true" | "TRUE" | "yes" | "YES"
+    )
+}
+
+fn daemon_executable_sha_matches(session: &str, expected_sha256: &str) -> bool {
+    let sha_path = get_executable_sha_path(session);
+    match fs::read_to_string(&sha_path) {
+        Ok(value) => value.trim() == expected_sha256,
+        Err(_) => allow_legacy_daemon_sha_reuse(),
+    }
+}
+
 fn daemon_auth_token_available(session: &str) -> bool {
     load_daemon_auth_token(session)
         .map(|token| !token.is_empty())
@@ -500,6 +537,7 @@ fn disconnect_stale_daemon(session: &str) {
 }
 
 pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult, String> {
+    let current_executable_sha = current_executable_sha256().ok();
     // Socket connectivity is the sole liveness check — no PID check — so
     // callers in a different PID namespace (e.g. unshare) can still reuse
     // an existing daemon they can reach over the socket.
@@ -511,7 +549,14 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
         if daemon_ready(session) {
             // Check version: if the running daemon is from a different CLI
             // version (e.g. after an upgrade), kill it and start a fresh one.
-            if !daemon_version_matches(session) || !daemon_auth_token_available(session) {
+            let sha_matches = current_executable_sha
+                .as_deref()
+                .map(|sha| daemon_executable_sha_matches(session, sha))
+                .unwrap_or(true);
+            if !daemon_version_matches(session)
+                || !sha_matches
+                || !daemon_auth_token_available(session)
+            {
                 eprintln!(
                     "{} Daemon metadata mismatch detected, restarting...",
                     crate::color::warning_indicator()
@@ -1009,7 +1054,80 @@ mod tests {
     }
 
     #[test]
-    fn test_cleanup_stale_files_removes_version() {
+    fn test_daemon_executable_sha_matches_same_sha() {
+        let dir = std::env::temp_dir().join("ab-test-sha-match");
+        let _ = fs::create_dir_all(&dir);
+        let _guard = EnvGuard::new(&[
+            "AGENT_BROWSER_SOCKET_DIR",
+            "XDG_RUNTIME_DIR",
+            "AGENT_BROWSER_ALLOW_LEGACY_DAEMON_SHA_REUSE",
+        ]);
+        _guard.set("AGENT_BROWSER_SOCKET_DIR", dir.to_str().unwrap());
+
+        let sha_path = dir.join("test-session.sha256");
+        let _ = fs::write(&sha_path, "abc123");
+
+        assert!(daemon_executable_sha_matches("test-session", "abc123"));
+
+        let _ = fs::remove_file(&sha_path);
+        let _ = fs::remove_dir(&dir);
+    }
+
+    #[test]
+    fn test_daemon_executable_sha_rejects_different_sha() {
+        let dir = std::env::temp_dir().join("ab-test-sha-mismatch");
+        let _ = fs::create_dir_all(&dir);
+        let _guard = EnvGuard::new(&[
+            "AGENT_BROWSER_SOCKET_DIR",
+            "XDG_RUNTIME_DIR",
+            "AGENT_BROWSER_ALLOW_LEGACY_DAEMON_SHA_REUSE",
+        ]);
+        _guard.set("AGENT_BROWSER_SOCKET_DIR", dir.to_str().unwrap());
+
+        let sha_path = dir.join("test-session.sha256");
+        let _ = fs::write(&sha_path, "old-sha");
+
+        assert!(!daemon_executable_sha_matches("test-session", "new-sha"));
+
+        let _ = fs::remove_file(&sha_path);
+        let _ = fs::remove_dir(&dir);
+    }
+
+    #[test]
+    fn test_daemon_executable_sha_missing_is_stale_by_default() {
+        let dir = std::env::temp_dir().join("ab-test-sha-missing");
+        let _ = fs::create_dir_all(&dir);
+        let _guard = EnvGuard::new(&[
+            "AGENT_BROWSER_SOCKET_DIR",
+            "XDG_RUNTIME_DIR",
+            "AGENT_BROWSER_ALLOW_LEGACY_DAEMON_SHA_REUSE",
+        ]);
+        _guard.set("AGENT_BROWSER_SOCKET_DIR", dir.to_str().unwrap());
+
+        assert!(!daemon_executable_sha_matches("test-session", "new-sha"));
+
+        let _ = fs::remove_dir(&dir);
+    }
+
+    #[test]
+    fn test_daemon_executable_sha_missing_can_allow_legacy_reuse() {
+        let dir = std::env::temp_dir().join("ab-test-sha-missing-legacy");
+        let _ = fs::create_dir_all(&dir);
+        let _guard = EnvGuard::new(&[
+            "AGENT_BROWSER_SOCKET_DIR",
+            "XDG_RUNTIME_DIR",
+            "AGENT_BROWSER_ALLOW_LEGACY_DAEMON_SHA_REUSE",
+        ]);
+        _guard.set("AGENT_BROWSER_SOCKET_DIR", dir.to_str().unwrap());
+        _guard.set("AGENT_BROWSER_ALLOW_LEGACY_DAEMON_SHA_REUSE", "1");
+
+        assert!(daemon_executable_sha_matches("test-session", "new-sha"));
+
+        let _ = fs::remove_dir(&dir);
+    }
+
+    #[test]
+    fn test_cleanup_stale_files_removes_version_and_executable_sha() {
         let dir = std::env::temp_dir().join("ab-test-cleanup-version");
         let _ = fs::create_dir_all(&dir);
         let _guard = EnvGuard::new(&["AGENT_BROWSER_SOCKET_DIR", "XDG_RUNTIME_DIR"]);
@@ -1017,10 +1135,14 @@ mod tests {
 
         let version_path = dir.join("test-session.version");
         let _ = fs::write(&version_path, "0.1.0");
+        let sha_path = dir.join("test-session.sha256");
+        let _ = fs::write(&sha_path, "old-sha");
         assert!(version_path.exists());
+        assert!(sha_path.exists());
 
         cleanup_stale_files("test-session");
         assert!(!version_path.exists());
+        assert!(!sha_path.exists());
 
         let _ = fs::remove_dir(&dir);
     }
