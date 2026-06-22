@@ -27,6 +27,12 @@ assert.match(
 
 assert.match(
   script,
+  /report\.initial = readDoctors\('initial', \{ required: !options\.apply \}\)/,
+  'apply mode must proceed after repairable nonzero initial doctor JSON',
+);
+
+assert.match(
+  script,
   /function isSafeStaleDaemonRemedy\(argv\)[\s\S]*argv\[0\] === 'agent-browser'[\s\S]*argv\[1\] === 'close'[\s\S]*argv\[2\] === '--session'/,
   'apply mode must only run agent-browser close --session stale-daemon remedies',
 );

@@ -42,7 +42,7 @@ const report = {
 };
 
 try {
-  report.initial = readDoctors('initial');
+  report.initial = readDoctors('initial', { required: !options.apply });
   report.safeRemedies = staleDaemonRemedies(report.initial.install);
 
   if (options.apply) {
@@ -114,17 +114,17 @@ try {
   process.exit(1);
 }
 
-function readDoctors(label) {
+function readDoctors(label, { required = true } = {}) {
   const install = runJsonStep(`${label}_install_doctor`, 'agent-browser', [
     'install',
     'doctor',
     '--json',
-  ]);
+  ], { required });
   const remoteView = runJsonStep(`${label}_remote_view_doctor`, 'agent-browser', [
     'doctor',
     'remote-view',
     '--json',
-  ]);
+  ], { required });
   return {
     install: summarizeInstallDoctor(install),
     remoteView: summarizeRemoteViewDoctor(remoteView),
@@ -185,8 +185,8 @@ function isSafeStaleDaemonRemedy(argv) {
     !argv[3].startsWith('-');
 }
 
-function runJsonStep(name, command, commandArgs) {
-  const result = runStep(name, command, commandArgs, { capture: true });
+function runJsonStep(name, command, commandArgs, { required = true } = {}) {
+  const result = runStep(name, command, commandArgs, { capture: true, required });
   try {
     return JSON.parse(result.stdout.trim());
   } catch (error) {

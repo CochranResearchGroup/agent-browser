@@ -1312,3 +1312,52 @@ Result:
   reachable non-owned CDP browsers separately.
 - P42 remains open for Slice C stale dashboard/stream classifications and
   Slice D bootstrap hardening.
+
+## Turn 31 | 2026-06-22
+
+Scope: continue P42 Slice C by classifying stale or unreadable live dashboard
+runtime manifests.
+
+Actions:
+
+- Added an install-doctor live dashboard manifest probe for the local
+  `/api/runtime/manifest` endpoint.
+- Kept dashboard-not-running as non-drift, but classified a running dashboard
+  that serves no readable manifest or a mismatched executable SHA-256 as
+  `dashboard_runtime_stale_or_unreadable`.
+- Added a bounded remedy pointing to
+  `pnpm converge:local-runtime -- --apply --json`.
+- Updated remote-view doctor so that dashboard runtime drift recommends
+  `converge_local_runtime_then_rerun_doctor` before generic install drift.
+- Updated `pnpm converge:local-runtime -- --apply --json` so initial nonzero
+  doctor JSON is treated as repairable input in apply mode instead of aborting
+  before local publish.
+
+Validation run:
+
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo test --manifest-path cli/Cargo.toml install_doctor -- --nocapture`
+- `cargo test --manifest-path cli/Cargo.toml recommend_next -- --nocapture`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `cargo build --manifest-path cli/Cargo.toml`
+- `./cli/target/debug/agent-browser install doctor --json`
+- `pnpm --silent converge:local-runtime -- --apply --json --evidence-path /tmp/agent-browser-converge-local-runtime-turn31-final.json`
+- `agent-browser install doctor --json`
+
+Result:
+
+- Format, focused Rust tests, clippy, and debug CLI build passed.
+- The rebuilt debug install doctor reported
+  `dashboard_runtime_stale_or_unreadable` with `state=stale_executable` when
+  the running dashboard manifest executable SHA-256 did not match the debug
+  executable.
+- Convergence apply started with initial install issue
+  `dashboard_runtime_stale_or_unreadable`, published the new local runtime, and
+  ended with final install doctor ready, final remote-view ready, zero skipped
+  remedies, and retained evidence at
+  `/tmp/agent-browser-converge-local-runtime-turn31-final.json`.
+- Direct installed `agent-browser install doctor --json` then reported
+  `success=true`, no issue codes, `liveDashboardRuntime.ready=true`,
+  `liveDashboardRuntime.state=ready`, and `runtimeInventory.status=none`.
+- P42 Slice C still has remaining stale stream-backend classification and final
+  convergence summary-state work.

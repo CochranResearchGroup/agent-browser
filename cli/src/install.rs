@@ -6,8 +6,10 @@ use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::{self, Read, Write};
+use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command, Stdio};
+use std::time::Duration;
 
 const LAST_KNOWN_GOOD_URL: &str =
     "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json";
@@ -970,6 +972,14 @@ pub fn run_install_doctor(flags: &Flags) {
         report.pointer("/data/dashboardRuntime/executable/sha256"),
     );
     print_doctor_field(
+        "live dashboard runtime",
+        report.pointer("/data/liveDashboardRuntime/state"),
+    );
+    print_doctor_field(
+        "live dashboard executable",
+        report.pointer("/data/liveDashboardRuntime/executable/sha256"),
+    );
+    print_doctor_field(
         "runtime convergence",
         report.pointer("/data/runtimeInventory/status"),
     );
@@ -1028,6 +1038,11 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
     let launch_config = launch_config_status(flags);
     let remote_view_privileges = remote_view_privilege_status();
     let dashboard_runtime = runtime_manifest_json();
+    let live_dashboard_runtime = live_dashboard_runtime_probe(
+        current_executable
+            .get("sha256")
+            .and_then(|value| value.as_str()),
+    );
     let service = service_status_probe();
     let service_resources = service_resources_probe();
     let runtime_inventory = active_runtime_inventory(
@@ -1043,6 +1058,7 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
         launch_config: &launch_config,
         service: &service,
         service_resources: &service_resources,
+        live_dashboard_runtime: &live_dashboard_runtime,
         runtime_inventory: &runtime_inventory,
     });
 
@@ -1059,6 +1075,7 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
             "serviceResources": service_resources,
             "remoteViewPrivileges": remote_view_privileges,
             "dashboardRuntime": dashboard_runtime,
+            "liveDashboardRuntime": live_dashboard_runtime,
             "runtimeInventory": runtime_inventory,
             "issues": issues,
         }
@@ -1073,6 +1090,7 @@ struct InstallDoctorIssueInputs<'a> {
     launch_config: &'a serde_json::Value,
     service: &'a serde_json::Value,
     service_resources: &'a serde_json::Value,
+    live_dashboard_runtime: &'a serde_json::Value,
     runtime_inventory: &'a serde_json::Value,
 }
 
@@ -1085,6 +1103,7 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
     let launch_config = inputs.launch_config;
     let service = inputs.service;
     let service_resources = inputs.service_resources;
+    let live_dashboard_runtime = inputs.live_dashboard_runtime;
     let runtime_inventory = inputs.runtime_inventory;
 
     if path_command
@@ -1185,6 +1204,31 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
         issues.push(json!({
             "code": "service_duplicate_profile_pressure",
             "message": "service resource monitor found duplicate live browser or profile lease pressure for the same retained profile"
+        }));
+    }
+
+    if live_dashboard_runtime
+        .get("available")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
+        && !live_dashboard_runtime
+            .get("ready")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false)
+    {
+        issues.push(json!({
+            "code": "dashboard_runtime_stale_or_unreadable",
+            "message": "the running local dashboard service did not serve a runtime manifest matching the current executable",
+            "nextAction": "converge_local_runtime",
+            "remedy": {
+                "kind": "operator_command",
+                "command": "pnpm converge:local-runtime -- --apply --json",
+                "argv": ["pnpm", "converge:local-runtime", "--", "--apply", "--json"],
+                "requiresInteractiveSudo": false,
+                "why": "Republish and restart the local dashboard runtime, then rerun install doctor."
+            },
+            "dashboardUrl": live_dashboard_runtime.get("url").cloned().unwrap_or(serde_json::Value::Null),
+            "state": live_dashboard_runtime.get("state").cloned().unwrap_or(serde_json::Value::Null)
         }));
     }
 
@@ -1343,6 +1387,169 @@ fn pid_is_running(pid: u32) -> bool {
         let _ = pid;
         false
     }
+}
+
+fn live_dashboard_runtime_probe(expected_executable_sha256: Option<&str>) -> serde_json::Value {
+    let (url, host_header, port) = match local_dashboard_probe_target() {
+        Ok(target) => target,
+        Err(reason) => {
+            return json!({
+                "available": false,
+                "ready": true,
+                "state": "unsupported_dashboard_url",
+                "reason": reason,
+            });
+        }
+    };
+    let address = format!("127.0.0.1:{port}");
+    let timeout = Duration::from_millis(12_000);
+    let mut stream = match TcpStream::connect_timeout(
+        &address
+            .parse()
+            .unwrap_or_else(|_| "127.0.0.1:4848".parse().unwrap()),
+        timeout,
+    ) {
+        Ok(stream) => stream,
+        Err(error) => {
+            return json!({
+                "available": false,
+                "ready": true,
+                "state": "not_running",
+                "url": url,
+                "reason": redact_doctor_text(error.to_string()),
+            });
+        }
+    };
+    let _ = stream.set_read_timeout(Some(timeout));
+    let _ = stream.set_write_timeout(Some(timeout));
+    let request = format!(
+        "GET /api/runtime/manifest HTTP/1.1\r\nHost: {host_header}\r\nConnection: close\r\n\r\n"
+    );
+    if let Err(error) = stream.write_all(request.as_bytes()) {
+        return json!({
+            "available": true,
+            "ready": false,
+            "state": "unreadable_manifest",
+            "url": url,
+            "reason": redact_doctor_text(error.to_string()),
+        });
+    }
+    let mut response_bytes = Vec::new();
+    let mut buffer = [0u8; 4096];
+    loop {
+        match stream.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(n) => response_bytes.extend_from_slice(&buffer[..n]),
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+                ) && !response_bytes.is_empty() =>
+            {
+                break;
+            }
+            Err(error) => {
+                return json!({
+                    "available": true,
+                    "ready": false,
+                    "state": "unreadable_manifest",
+                    "url": url,
+                    "reason": redact_doctor_text(error.to_string()),
+                });
+            }
+        }
+    }
+    let response = String::from_utf8_lossy(&response_bytes);
+    let status_ok = response.starts_with("HTTP/1.1 200") || response.starts_with("HTTP/1.0 200");
+    let body = response
+        .split_once("\r\n\r\n")
+        .map(|(_, body)| body)
+        .unwrap_or("");
+    let manifest = serde_json::from_str::<serde_json::Value>(body).ok();
+    let executable_sha256 = manifest
+        .as_ref()
+        .and_then(|value| value.pointer("/executable/sha256"))
+        .and_then(|value| value.as_str());
+    let executable_matches = match (expected_executable_sha256, executable_sha256) {
+        (Some(expected), Some(actual)) => expected == actual,
+        (None, Some(_)) => true,
+        (_, None) => false,
+    };
+    let ready = status_ok && manifest.is_some() && executable_matches;
+    let state = if ready {
+        "ready"
+    } else if !status_ok {
+        "manifest_http_error"
+    } else if manifest.is_none() {
+        "unreadable_manifest"
+    } else {
+        "stale_executable"
+    };
+    json!({
+        "available": true,
+        "ready": ready,
+        "state": state,
+        "url": url,
+        "expectedExecutableSha256": expected_executable_sha256,
+        "executable": {
+            "sha256": executable_sha256,
+            "matchesExpected": executable_matches,
+        },
+        "serviceContractVersion": manifest
+            .as_ref()
+            .and_then(|value| value.get("serviceContractVersion"))
+            .cloned()
+            .unwrap_or(serde_json::Value::Null),
+        "dashboard": manifest
+            .as_ref()
+            .and_then(|value| value.get("dashboard"))
+            .cloned()
+            .unwrap_or(serde_json::Value::Null),
+    })
+}
+
+fn local_dashboard_probe_target() -> Result<(String, String, u16), String> {
+    if let Ok(url) = std::env::var("AGENT_BROWSER_DASHBOARD_URL") {
+        let trimmed = url.trim().trim_end_matches('/');
+        if !trimmed.is_empty() {
+            let Some(rest) = trimmed.strip_prefix("http://") else {
+                return Err(
+                    "AGENT_BROWSER_DASHBOARD_URL must use http:// for the local no-launch probe"
+                        .to_string(),
+                );
+            };
+            let host_port = rest.split('/').next().unwrap_or("");
+            let (host, port) = parse_local_dashboard_host_port(host_port)?;
+            let origin = format!("http://{host}:{port}");
+            return Ok((
+                format!("{origin}/api/runtime/manifest"),
+                format!("{host}:{port}"),
+                port,
+            ));
+        }
+    }
+    let port = std::env::var("AGENT_BROWSER_DASHBOARD_PORT")
+        .ok()
+        .and_then(|value| value.parse::<u16>().ok())
+        .unwrap_or(4848);
+    Ok((
+        format!("http://127.0.0.1:{port}/api/runtime/manifest"),
+        format!("127.0.0.1:{port}"),
+        port,
+    ))
+}
+
+fn parse_local_dashboard_host_port(host_port: &str) -> Result<(String, u16), String> {
+    let (host, port) = host_port
+        .rsplit_once(':')
+        .ok_or_else(|| "local dashboard URL must include an explicit port".to_string())?;
+    if host != "127.0.0.1" && host != "localhost" {
+        return Err("local dashboard URL must target 127.0.0.1 or localhost".to_string());
+    }
+    let port = port
+        .parse::<u16>()
+        .map_err(|_| "local dashboard URL port is invalid".to_string())?;
+    Ok((host.to_string(), port))
 }
 
 fn service_status_probe() -> serde_json::Value {
@@ -2240,6 +2447,14 @@ mod tests {
         })
     }
 
+    fn ready_live_dashboard_runtime() -> serde_json::Value {
+        json!({
+            "available": false,
+            "ready": true,
+            "state": "not_running"
+        })
+    }
+
     fn test_zip_with_chrome(chrome_bytes: &[u8], smoke: Option<&[u8]>) -> Vec<u8> {
         let mut cursor = io::Cursor::new(Vec::new());
         {
@@ -2298,6 +2513,7 @@ mod tests {
         let workspace_binary = fingerprint(None, None);
         let service = json!({"ready": true});
         let service_resources = json!({"readinessImpactingCandidates": 0});
+        let live_dashboard_runtime = ready_live_dashboard_runtime();
         let runtime_inventory = empty_runtime_inventory();
         let issues = install_doctor_issues(InstallDoctorIssueInputs {
             current_executable: &current_executable,
@@ -2307,6 +2523,7 @@ mod tests {
             launch_config: &launch_config,
             service: &service,
             service_resources: &service_resources,
+            live_dashboard_runtime: &live_dashboard_runtime,
             runtime_inventory: &runtime_inventory,
         });
 
@@ -2332,6 +2549,7 @@ mod tests {
         let workspace_binary = fingerprint(Some("/workspace/agent-browser"), Some("aaa"));
         let service = json!({"ready": true});
         let service_resources = json!({"readinessImpactingCandidates": 0});
+        let live_dashboard_runtime = ready_live_dashboard_runtime();
         let runtime_inventory = empty_runtime_inventory();
         let issues = install_doctor_issues(InstallDoctorIssueInputs {
             current_executable: &current_executable,
@@ -2341,6 +2559,7 @@ mod tests {
             launch_config: &launch_config,
             service: &service,
             service_resources: &service_resources,
+            live_dashboard_runtime: &live_dashboard_runtime,
             runtime_inventory: &runtime_inventory,
         });
 
@@ -2360,6 +2579,7 @@ mod tests {
         let workspace_binary = fingerprint(Some("/workspace/agent-browser"), Some("aaa"));
         let service = json!({"ready": false});
         let service_resources = json!({"readinessImpactingCandidates": 0});
+        let live_dashboard_runtime = ready_live_dashboard_runtime();
         let runtime_inventory = empty_runtime_inventory();
         let issues = install_doctor_issues(InstallDoctorIssueInputs {
             current_executable: &current_executable,
@@ -2369,6 +2589,7 @@ mod tests {
             launch_config: &launch_config,
             service: &service,
             service_resources: &service_resources,
+            live_dashboard_runtime: &live_dashboard_runtime,
             runtime_inventory: &runtime_inventory,
         });
 
@@ -2388,6 +2609,7 @@ mod tests {
         let workspace_binary = fingerprint(Some("/workspace/agent-browser"), Some("aaa"));
         let service = json!({"ready": true});
         let service_resources = json!({"readinessImpactingCandidates": 1});
+        let live_dashboard_runtime = ready_live_dashboard_runtime();
         let runtime_inventory = empty_runtime_inventory();
         let issues = install_doctor_issues(InstallDoctorIssueInputs {
             current_executable: &current_executable,
@@ -2397,6 +2619,7 @@ mod tests {
             launch_config: &launch_config,
             service: &service,
             service_resources: &service_resources,
+            live_dashboard_runtime: &live_dashboard_runtime,
             runtime_inventory: &runtime_inventory,
         });
 
@@ -2422,6 +2645,7 @@ mod tests {
             "readinessImpactingCandidates": 0,
             "duplicateProfilePressureWarnings": 1
         });
+        let live_dashboard_runtime = ready_live_dashboard_runtime();
         let runtime_inventory = empty_runtime_inventory();
         let issues = install_doctor_issues(InstallDoctorIssueInputs {
             current_executable: &current_executable,
@@ -2431,6 +2655,7 @@ mod tests {
             launch_config: &launch_config,
             service: &service,
             service_resources: &service_resources,
+            live_dashboard_runtime: &live_dashboard_runtime,
             runtime_inventory: &runtime_inventory,
         });
 
@@ -2438,6 +2663,52 @@ mod tests {
             issue_codes(issues),
             vec!["service_duplicate_profile_pressure"]
         );
+    }
+
+    #[test]
+    fn install_doctor_flags_stale_live_dashboard_runtime() {
+        let launch_config = json!({
+            "stealthCdpChromiumRequired": false,
+            "stealthCdpChromiumReady": true,
+        });
+
+        let current_executable = fingerprint(Some("/same/agent-browser"), Some("aaa"));
+        let path_command = fingerprint(Some("/same/agent-browser"), Some("aaa"));
+        let pnpm_package_binary = fingerprint(Some("/pnpm/agent-browser"), Some("aaa"));
+        let workspace_binary = fingerprint(Some("/workspace/agent-browser"), Some("aaa"));
+        let service = json!({"ready": true});
+        let service_resources = json!({"readinessImpactingCandidates": 0});
+        let live_dashboard_runtime = json!({
+            "available": true,
+            "ready": false,
+            "state": "stale_executable",
+            "url": "http://127.0.0.1:4848/api/runtime/manifest",
+            "executable": {
+                "sha256": "bbb",
+                "matchesExpected": false
+            }
+        });
+        let runtime_inventory = empty_runtime_inventory();
+        let issue = install_doctor_issues(InstallDoctorIssueInputs {
+            current_executable: &current_executable,
+            path_command: &path_command,
+            pnpm_package_binary: &pnpm_package_binary,
+            workspace_binary: &workspace_binary,
+            launch_config: &launch_config,
+            service: &service,
+            service_resources: &service_resources,
+            live_dashboard_runtime: &live_dashboard_runtime,
+            runtime_inventory: &runtime_inventory,
+        })
+        .remove(0);
+
+        assert_eq!(issue["code"], "dashboard_runtime_stale_or_unreadable");
+        assert_eq!(issue["nextAction"], "converge_local_runtime");
+        assert_eq!(
+            issue["remedy"]["argv"],
+            json!(["pnpm", "converge:local-runtime", "--", "--apply", "--json"])
+        );
+        assert_eq!(issue["remedy"]["requiresInteractiveSudo"], false);
     }
 
     #[test]
@@ -2453,6 +2724,7 @@ mod tests {
         let workspace_binary = fingerprint(Some("/workspace/agent-browser"), Some("aaa"));
         let service = json!({"ready": true});
         let service_resources = json!({"readinessImpactingCandidates": 0});
+        let live_dashboard_runtime = ready_live_dashboard_runtime();
         let runtime_inventory = json!({
             "schemaVersion": "agent-browser.runtime-inventory.v1",
             "status": "stale",
@@ -2472,6 +2744,7 @@ mod tests {
             launch_config: &launch_config,
             service: &service,
             service_resources: &service_resources,
+            live_dashboard_runtime: &live_dashboard_runtime,
             runtime_inventory: &runtime_inventory,
         });
 
@@ -2484,6 +2757,7 @@ mod tests {
             launch_config: &launch_config,
             service: &service,
             service_resources: &service_resources,
+            live_dashboard_runtime: &live_dashboard_runtime,
             runtime_inventory: &runtime_inventory,
         })
         .remove(0);

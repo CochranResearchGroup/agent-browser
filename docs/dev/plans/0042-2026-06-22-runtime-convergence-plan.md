@@ -235,12 +235,28 @@ Completed on 2026-06-22:
   and treats the isolated no-state probe as no-launch ready.
 - Runtime inventory now classifies running PID metadata without an addressable
   socket, stream, or port as `diagnostic` rather than stale live runtime.
+- Install doctor now probes the local dashboard service's
+  `/api/runtime/manifest` endpoint without requiring the dashboard to be
+  running. If a running local dashboard fails to serve a readable manifest or
+  serves an executable SHA-256 that does not match the current executable, it
+  emits `dashboard_runtime_stale_or_unreadable` with the bounded remedy
+  `pnpm converge:local-runtime -- --apply --json`.
+- Remote-view doctor promotes
+  `dashboard_runtime_stale_or_unreadable` to
+  `nextAction=converge_local_runtime_then_rerun_doctor` before generic install
+  drift.
+- `pnpm converge:local-runtime -- --apply --json` now treats nonzero initial
+  doctor JSON as repairable input instead of aborting before publish. Dry-run
+  remains strict.
+- Live validation started from `dashboard_runtime_stale_or_unreadable`, ran the
+  convergence apply command, and ended with install doctor `success=true`, no
+  issue codes, `liveDashboardRuntime.ready=true`, and
+  `runtimeInventory.status=none`.
 
 Remaining:
 
-- Add equivalent stable issue codes and remedies for stale dashboard runtime,
-  stale stream backend, and any remaining diagnostic retained rows that should
-  leave the live rail.
+- Add equivalent stable issue codes and remedies for stale stream backend and
+  any remaining diagnostic retained rows that should leave the live rail.
 - Add the final convergence summary states after every stale-runtime class has
   a bounded classification.
 
