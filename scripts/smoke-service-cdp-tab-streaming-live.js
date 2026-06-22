@@ -41,7 +41,11 @@ async function cleanup() {
     // Best effort only.
   }
   await closeSession(context);
-  context.cleanupTempHome();
+  if (process.env.AGENT_BROWSER_SMOKE_PRESERVE === '1') {
+    console.error(`Preserved smoke temp home: ${context.tempHome}`);
+  } else {
+    context.cleanupTempHome();
+  }
 }
 
 async function fail(message) {
@@ -141,13 +145,20 @@ async function serviceStatus(label) {
 
 async function waitForServiceTab(title, label, timeoutMs = 30000) {
   const deadline = Date.now() + timeoutMs;
+  const encodedTitle = encodeURIComponent(title);
   while (Date.now() < deadline) {
     const state = await serviceStatus(label);
-    const tab = Object.values(state?.tabs ?? {}).find((candidate) => candidate.title === title);
+    const tab = Object.values(state?.tabs ?? {}).find((candidate) =>
+      candidate.title === title || String(candidate.url || '').includes(encodedTitle),
+    );
     if (tab?.targetId) return { state, tab };
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  throw new Error(`Timed out waiting for service tab '${title}'`);
+  const state = await serviceStatus(`${label} timeout diagnostics`);
+  throw new Error(
+    `Timed out waiting for service tab '${title}'. ` +
+    `tabs=${JSON.stringify(state?.tabs ?? {})} browsers=${JSON.stringify(state?.browsers ?? {})}`,
+  );
 }
 
 function primaryCdpStream(browser) {

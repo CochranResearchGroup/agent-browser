@@ -8,13 +8,15 @@ use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
 
 const DAEMON_AUTH_TOKEN_ENV: &str = "AGENT_BROWSER_DAEMON_AUTH_TOKEN";
 const DAEMON_AUTH_FIELD: &str = "_agentBrowserAuthToken";
+const DAEMON_START_TIMEOUT: Duration = Duration::from_secs(15);
+const DAEMON_START_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 #[derive(Serialize)]
 #[allow(dead_code)]
@@ -518,9 +520,23 @@ fn allow_legacy_daemon_sha_reuse() -> bool {
 fn daemon_executable_sha_matches(session: &str, expected_sha256: &str) -> bool {
     let sha_path = get_executable_sha_path(session);
     match fs::read_to_string(&sha_path) {
-        Ok(value) => value.trim() == expected_sha256,
+        Ok(value) => {
+            let value = value.trim();
+            value == expected_sha256 || daemon_executable_sha_pending_within_grace(&sha_path, value)
+        }
         Err(_) => allow_legacy_daemon_sha_reuse(),
     }
+}
+
+fn daemon_executable_sha_pending_within_grace(path: &Path, value: &str) -> bool {
+    if value != "pending" {
+        return false;
+    }
+    fs::metadata(path)
+        .and_then(|metadata| metadata.modified())
+        .ok()
+        .and_then(|modified| modified.elapsed().ok())
+        .is_some_and(|elapsed| elapsed < Duration::from_secs(60))
 }
 
 fn daemon_auth_token_available(session: &str) -> bool {
@@ -537,7 +553,6 @@ fn disconnect_stale_daemon(session: &str) {
 }
 
 pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult, String> {
-    let current_executable_sha = current_executable_sha256().ok();
     // Socket connectivity is the sole liveness check — no PID check — so
     // callers in a different PID namespace (e.g. unshare) can still reuse
     // an existing daemon they can reach over the socket.
@@ -549,6 +564,7 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
         if daemon_ready(session) {
             // Check version: if the running daemon is from a different CLI
             // version (e.g. after an upgrade), kill it and start a fresh one.
+            let current_executable_sha = current_executable_sha256().ok();
             let sha_matches = current_executable_sha
                 .as_deref()
                 .map(|sha| daemon_executable_sha_matches(session, sha))
@@ -663,7 +679,8 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
         );
     }
 
-    for _ in 0..50 {
+    let startup_started = Instant::now();
+    while startup_started.elapsed() < DAEMON_START_TIMEOUT {
         if daemon_ready(session) {
             return Ok(DaemonResult {
                 already_running: false,
@@ -713,16 +730,38 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
             }
         }
 
-        thread::sleep(Duration::from_millis(100));
+        thread::sleep(DAEMON_START_POLL_INTERVAL);
     }
 
     #[cfg(unix)]
-    let endpoint_info = format!(
-        "socket: {}",
-        get_socket_dir().join(format!("{}.sock", session)).display()
-    );
+    let endpoint_info = {
+        let socket_dir = get_socket_dir();
+        let socket_path = socket_dir.join(format!("{}.sock", session));
+        let pid_path = socket_dir.join(format!("{}.pid", session));
+        let log_path = socket_dir.join(format!("{}.log", session));
+        let pid_detail = fs::read_to_string(&pid_path)
+            .ok()
+            .map(|value| format!(", pid: {}", value.trim()))
+            .unwrap_or_default();
+        let log_detail = if log_path.exists() {
+            format!(", log: {}", log_path.display())
+        } else {
+            String::new()
+        };
+        format!(
+            "socket: {}, waited: {}ms{}{}",
+            socket_path.display(),
+            startup_started.elapsed().as_millis(),
+            pid_detail,
+            log_detail
+        )
+    };
     #[cfg(windows)]
-    let endpoint_info = format!("port: 127.0.0.1:{}", resolve_port(session));
+    let endpoint_info = format!(
+        "port: 127.0.0.1:{}, waited: {}ms",
+        resolve_port(session),
+        startup_started.elapsed().as_millis()
+    );
 
     Err(format!("Daemon failed to start ({})", endpoint_info))
 }
@@ -1123,6 +1162,28 @@ mod tests {
 
         assert!(daemon_executable_sha_matches("test-session", "new-sha"));
 
+        let _ = fs::remove_dir(&dir);
+    }
+
+    #[test]
+    fn test_daemon_executable_sha_pending_is_startup_grace_only() {
+        let dir = std::env::temp_dir().join("ab-test-sha-pending");
+        let _ = fs::create_dir_all(&dir);
+        let _guard = EnvGuard::new(&[
+            "AGENT_BROWSER_SOCKET_DIR",
+            "XDG_RUNTIME_DIR",
+            "AGENT_BROWSER_ALLOW_LEGACY_DAEMON_SHA_REUSE",
+        ]);
+        _guard.set("AGENT_BROWSER_SOCKET_DIR", dir.to_str().unwrap());
+
+        let sha_path = dir.join("test-session.sha256");
+        let _ = fs::write(&sha_path, "pending");
+        assert!(daemon_executable_sha_matches("test-session", "new-sha"));
+
+        let _ = fs::write(&sha_path, "old-sha");
+        assert!(!daemon_executable_sha_matches("test-session", "new-sha"));
+
+        let _ = fs::remove_file(&sha_path);
         let _ = fs::remove_dir(&dir);
     }
 

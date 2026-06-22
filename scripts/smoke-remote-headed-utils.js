@@ -74,7 +74,7 @@ export function configureRemoteHeadedContext(context) {
 }
 
 export async function ensureStreamPort(context, timeoutMs = 60000) {
-  const streamStatusResult = await runCli(
+  const streamStatusResult = await runCliWithDaemonStartRetry(
     context,
     ['--json', '--session', context.session, 'stream', 'status'],
     timeoutMs,
@@ -96,6 +96,22 @@ export async function ensureStreamPort(context, timeoutMs = 60000) {
   const port = stream.data?.port;
   assert(Number.isInteger(port) && port > 0, `stream status did not return a port: ${JSON.stringify(stream)}`);
   return port;
+}
+
+async function runCliWithDaemonStartRetry(context, args, timeoutMs) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await runCli(context, args, timeoutMs);
+    } catch (err) {
+      lastError = err;
+      if (!String(err?.message || err).includes('Daemon failed to start') || attempt === 3) {
+        throw err;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 750 * attempt));
+    }
+  }
+  throw lastError;
 }
 
 export async function launchRemoteHeadedBrowser({

@@ -6,7 +6,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::signal;
@@ -45,6 +45,7 @@ fn file_sha256(path: &Path) -> Result<String, std::io::Error> {
 }
 
 pub async fn run_daemon(session: &str) {
+    let startup_started = Instant::now();
     let socket_dir = get_daemon_socket_dir();
     if !socket_dir.exists() {
         let _ = fs::create_dir_all(&socket_dir);
@@ -81,6 +82,7 @@ pub async fn run_daemon(session: &str) {
                 "[daemon] Debug logging started for session: {}",
                 session
             );
+            log_startup_milestone(startup_started, "debug-log-ready");
         }
     } else {
         // Redirect stderr to /dev/null to prevent daemon crash when the
@@ -103,18 +105,17 @@ pub async fn run_daemon(session: &str) {
     let pid_path = socket_dir.join(format!("{}.pid", session));
     let _ = fs::write(&pid_path, process::id().to_string());
     secure_daemon_file(&pid_path);
+    log_startup_milestone(startup_started, "pid-written");
 
     let version_path = socket_dir.join(format!("{}.version", session));
     let _ = fs::write(&version_path, env!("CARGO_PKG_VERSION"));
     secure_daemon_file(&version_path);
+    log_startup_milestone(startup_started, "version-written");
 
     let executable_sha_path = socket_dir.join(format!("{}.sha256", session));
-    if let Ok(current_exe) = env::current_exe() {
-        if let Ok(sha256) = file_sha256(&current_exe) {
-            let _ = fs::write(&executable_sha_path, sha256);
-            secure_daemon_file(&executable_sha_path);
-        }
-    }
+    let _ = fs::write(&executable_sha_path, "pending");
+    secure_daemon_file(&executable_sha_path);
+    log_startup_milestone(startup_started, "executable-sha-pending");
 
     // On Unix the daemon listens on a Unix domain socket; on Windows it uses
     // TCP, so there is no .sock file — only a .port file written by the server.
@@ -124,6 +125,20 @@ pub async fn run_daemon(session: &str) {
     if socket_path.exists() {
         let _ = fs::remove_file(&socket_path);
     }
+
+    #[cfg(unix)]
+    let socket_listener = match tokio::net::UnixListener::bind(&socket_path) {
+        Ok(listener) => {
+            secure_daemon_file(&socket_path);
+            log_startup_milestone(startup_started, "socket-bound");
+            write_executable_sha_in_background(executable_sha_path.clone(), startup_started);
+            listener
+        }
+        Err(e) => {
+            let _ = writeln!(std::io::stderr(), "Failed to bind socket: {}", e);
+            process::exit(1);
+        }
+    };
 
     #[cfg(windows)]
     {
@@ -159,9 +174,11 @@ pub async fn run_daemon(session: &str) {
                 secure_daemon_file(&stream_path);
             }
             stream_server_instance = Some(Arc::new(stream_server));
+            log_startup_milestone(startup_started, "stream-server-ready");
         }
         Err(e) => {
             let _ = writeln!(std::io::stderr(), "Stream server failed to start: {}", e);
+            log_startup_milestone(startup_started, "stream-server-failed");
         }
     }
 
@@ -185,6 +202,8 @@ pub async fn run_daemon(session: &str) {
         .filter(|&ms| ms > 0);
 
     let result = run_socket_server(
+        #[cfg(unix)]
+        socket_listener,
         &socket_path,
         session,
         daemon_auth_token,
@@ -219,10 +238,34 @@ pub async fn run_daemon(session: &str) {
     }
 }
 
+fn log_startup_milestone(startup_started: Instant, label: &str) {
+    if env::var("AGENT_BROWSER_DEBUG").is_ok() {
+        let _ = writeln!(
+            std::io::stderr(),
+            "[daemon] startup {} at {}ms",
+            label,
+            startup_started.elapsed().as_millis()
+        );
+    }
+}
+
+fn write_executable_sha_in_background(executable_sha_path: PathBuf, startup_started: Instant) {
+    tokio::task::spawn_blocking(move || {
+        if let Ok(current_exe) = env::current_exe() {
+            if let Ok(sha256) = file_sha256(&current_exe) {
+                let _ = fs::write(&executable_sha_path, sha256);
+                secure_daemon_file(&executable_sha_path);
+                log_startup_milestone(startup_started, "executable-sha-written");
+            }
+        }
+    });
+}
+
 #[cfg(unix)]
 #[allow(clippy::too_many_arguments)]
 async fn run_socket_server(
-    socket_path: &PathBuf,
+    listener: tokio::net::UnixListener,
+    socket_path: &Path,
     session: &str,
     daemon_auth_token: Arc<String>,
     stream_client: Option<Arc<RwLock<Option<Arc<CdpClient>>>>>,
@@ -232,12 +275,6 @@ async fn run_socket_server(
     service_job_timeout_ms: Option<u64>,
     service_monitor_interval_ms: Option<u64>,
 ) -> Result<(), String> {
-    use tokio::net::UnixListener;
-
-    let listener =
-        UnixListener::bind(socket_path).map_err(|e| format!("Failed to bind socket: {}", e))?;
-    secure_daemon_file(socket_path);
-
     let stream_file: Option<PathBuf> = if stream_server.is_some() {
         let dir = socket_path.parent().unwrap_or(std::path::Path::new("."));
         Some(dir.join(format!("{}.stream", session)))

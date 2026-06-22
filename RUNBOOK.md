@@ -1878,3 +1878,43 @@ Result:
 - `pnpm test:service-cdp-tab-streaming-live` was retried twice and failed
   before CDP validation at the known temporary-daemon startup boundary:
   `Daemon failed to start`.
+
+## Turn 44 | 2026-06-22
+
+Scope: diagnose and repair `pnpm test:service-cdp-tab-streaming-live`.
+
+Actions:
+
+- Reproduced the original failure with an isolated temp home and debug daemon
+  logs. The client timed out before the daemon bound its socket, but the daemon
+  stayed alive and became usable seconds later.
+- Added daemon startup milestones under `--debug`.
+- Moved Unix control-socket bind ahead of stream-server startup.
+- Moved executable SHA calculation out of the daemon startup critical path by
+  writing a short-lived `pending` marker and filling the real SHA in a
+  background task. The client tolerates `pending` only during startup grace.
+- Avoided hashing the current executable on fresh daemon startup unless an
+  already-running daemon must be compared.
+- Added a bounded smoke retry around first `stream status` daemon startup.
+- Fixed service-owned `navigate` so it persists the active tab record and
+  service tab handle, matching the existing `tab_new` retained-tab contract.
+- Hardened the CDP tab streaming smoke diagnostics and allowed data-URL marker
+  matching when Chrome has not populated a tab title yet.
+
+Validation run:
+
+- `git diff --check`
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `cargo test --manifest-path cli/Cargo.toml test_daemon_executable_sha_pending_is_startup_grace_only -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml cdp_screencast_view_stream -- --nocapture`
+- `pnpm test:route-confusion-gates`
+- `pnpm test:service-cdp-tab-streaming-live`
+- `pnpm validation:select -- --base HEAD --json`
+
+Result:
+
+- Isolated first-command startup dropped from roughly 10 to 13 seconds to
+  about 145 ms on the debug binary.
+- The original live smoke passed end to end:
+  `Service CDP tab streaming live smoke passed`.

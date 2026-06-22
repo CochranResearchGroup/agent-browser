@@ -5940,7 +5940,69 @@ async fn handle_navigate(cmd: &Value, state: &mut DaemonState) -> Result<Value, 
     state.active_frame_id = None;
     let mut data = cancellable(mgr.navigate(url, wait_until), cancellation).await?;
     add_manual_login_hint_warning(cmd, &mut data);
+    persist_service_owned_navigate_tab(cmd, &state.session_id, mgr, &data)?;
     Ok(data)
+}
+
+fn persist_service_owned_navigate_tab(
+    cmd: &Value,
+    session_id: &str,
+    mgr: &BrowserManager,
+    data: &Value,
+) -> Result<(), String> {
+    if optional_command_string(cmd, "serviceName").is_none()
+        && optional_command_string(cmd, "agentName").is_none()
+        && optional_command_string(cmd, "taskName").is_none()
+    {
+        return Ok(());
+    }
+    let Ok(target_id) = mgr.active_target_id() else {
+        return Ok(());
+    };
+    let url = data
+        .get("url")
+        .and_then(Value::as_str)
+        .or_else(|| mgr.active_page_url());
+    let title = data.get("title").and_then(Value::as_str);
+    let tab_id = format!("target:{target_id}");
+    let profile_id = mgr
+        .runtime_profile_name()
+        .map(|profile| Value::String(profile.to_string()))
+        .unwrap_or(Value::Null);
+    let service_tab_handle = json!({
+        "browserId": service_browser_id(session_id),
+        "sessionName": session_id,
+        "tabId": tab_id,
+        "targetId": target_id,
+        "url": url,
+        "title": title,
+        "profileId": profile_id.clone(),
+        "profileOrigin": "agent_browser_owned",
+        "leaseId": session_id,
+        "leaseState": "shared",
+        "cleanupPolicy": "detach",
+        "leaseHeartbeatExpected": true,
+        "ownerSessionId": session_id,
+        "jobId": Value::Null,
+        "traceFilter": {
+            "browserId": service_browser_id(session_id),
+            "profileId": profile_id,
+            "sessionId": session_id,
+            "serviceName": optional_command_string(cmd, "serviceName"),
+            "agentName": optional_command_string(cmd, "agentName"),
+            "taskName": optional_command_string(cmd, "taskName"),
+        },
+        "valid": true,
+        "staleReason": Value::Null,
+    });
+    persist_service_owned_tab_new(
+        cmd,
+        session_id,
+        Some(target_id),
+        url,
+        title,
+        &service_tab_handle,
+    )
 }
 
 fn add_manual_login_hint_warning(cmd: &Value, data: &mut Value) {
