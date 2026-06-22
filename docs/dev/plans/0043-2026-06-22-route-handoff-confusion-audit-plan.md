@@ -258,6 +258,14 @@ Acceptance:
 
 Goal: turn profile locks into a repairable ownership handoff.
 
+Slice progress: done on 2026-06-22. Chrome profile-lock failures now preserve
+the existing safety block and append compact `diagnostic={...}` JSON with the
+lock PID, user-data-dir, matching runtime profiles, matching service browser
+rows, primary owner, and safe remedies. Known service-owned locks name the
+browser ID and active session and suggest exact service-status reuse and
+session-close commands; unknown locks fall back to service-status inspection
+and explicit separate-profile guidance.
+
 Deliverables:
 
 - On Chrome profile lock failure, inspect service state and live process

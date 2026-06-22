@@ -635,6 +635,9 @@ rows.
   stable error codes and append compact diagnostic JSON with requested
   route/display/provider identity, matching and available pool entries, ready
   display allocations, existing remote-view routes, and recommended commands.
+- Slice D is complete. Chrome profile-lock failures now append diagnostic JSON
+  with lock PID, runtime-profile and service-browser ownership matches, primary
+  owner, and safe reuse, close, inspect, or separate-profile remedies.
 - The incident note is
   `docs/dev/notes/2026-06-22-facebook-remote-view-open-friction.md`.
 - Live readback on 2026-06-22 showed `session:default` on profile
@@ -657,7 +660,6 @@ rows.
 
 ### Next Recommendation
 
-Execute P43 Slice D next. Make Chrome profile-lock failures identify the owning
-browser/session/profile/process when possible, and return exact safe reuse,
-close, wait, or manual-review remedies before changing dashboard
-operator-visible success behavior.
+Execute P43 Slice E next. Add an operator-visible proof field to
+`remote-view open` success so downstream clients cannot claim success when the
+route still shows terminal-only output or lacks browser-window evidence.

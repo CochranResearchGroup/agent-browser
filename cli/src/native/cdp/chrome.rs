@@ -1,4 +1,5 @@
-use std::collections::{HashMap, VecDeque};
+use serde_json::{json, Value};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -10,9 +11,11 @@ use std::time::Duration;
 use std::os::unix::process::ExitStatusExt;
 
 use crate::runtime_profile::{
-    read_devtools_port as read_runtime_devtools_port, resolve_profile, write_runtime_state,
-    RuntimeState,
+    list_runtime_profiles, read_devtools_port as read_runtime_devtools_port, resolve_profile,
+    write_runtime_state, RuntimeProfileSummary, RuntimeState,
 };
+
+use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
 
 use super::discovery::discover_cdp_url;
 
@@ -961,11 +964,199 @@ fn ensure_profile_not_in_use(user_data_dir: &Path) -> Result<(), String> {
 }
 
 fn locked_profile_message(user_data_dir: &Path, pid: u32) -> String {
+    let diagnostic = profile_lock_diagnostic(user_data_dir, pid);
     format!(
-        "Chrome profile {} is already in use by PID {}. If this task needs the existing login state, do not switch to a fresh isolated profile. Inspect `agent-browser service status` or `agent-browser runtime status`, then reuse the managed browser through the service/session control plane or attach to the intended runtime profile. Use `--profile <path>` only for explicitly separate browser identities or unauthenticated throwaway work.",
+        "Chrome profile {} is already in use by PID {}. If this task needs the existing login state, do not switch to a fresh isolated profile. Inspect `agent-browser service status` or `agent-browser runtime status`, then reuse the managed browser through the service/session control plane or attach to the intended runtime profile. Use `--profile <path>` only for explicitly separate browser identities or unauthenticated throwaway work. diagnostic={}",
         user_data_dir.display(),
-        pid
+        pid,
+        compact_json(&diagnostic)
     )
+}
+
+fn profile_lock_diagnostic(user_data_dir: &Path, pid: u32) -> Value {
+    let runtime_profiles = matching_runtime_profiles(user_data_dir, pid);
+    let runtime_profile_names = runtime_profiles
+        .iter()
+        .map(|profile| profile.runtime_profile.clone())
+        .collect::<HashSet<_>>();
+    let service_browsers = matching_service_browsers(pid, &runtime_profile_names);
+    let remedies = profile_lock_remedies(&runtime_profiles, &service_browsers);
+    let primary_owner = service_browsers
+        .first()
+        .cloned()
+        .or_else(|| runtime_profiles.first().map(runtime_profile_owner_summary))
+        .unwrap_or_else(|| {
+            json!({
+                "source": "process",
+                "pid": pid,
+                "ownership": "unknown",
+            })
+        });
+    json!({
+        "lockPid": pid,
+        "userDataDir": user_data_dir.display().to_string(),
+        "owner": primary_owner,
+        "runtimeProfiles": runtime_profiles.iter().map(runtime_profile_diagnostic).collect::<Vec<_>>(),
+        "serviceBrowsers": service_browsers,
+        "remedies": remedies,
+    })
+}
+
+fn matching_runtime_profiles(user_data_dir: &Path, pid: u32) -> Vec<RuntimeProfileSummary> {
+    list_runtime_profiles(&[], None)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|profile| {
+            profile.browser_pid == Some(pid)
+                || same_path(Path::new(&profile.user_data_dir), user_data_dir)
+        })
+        .collect()
+}
+
+fn matching_service_browsers(pid: u32, runtime_profile_names: &HashSet<String>) -> Vec<Value> {
+    let Ok(path) = JsonServiceStateStore::default_path() else {
+        return Vec::new();
+    };
+    let Ok(state) = JsonServiceStateStore::new(path).load() else {
+        return Vec::new();
+    };
+    state
+        .browsers
+        .values()
+        .filter(|browser| {
+            browser.pid == Some(pid)
+                || browser
+                    .profile_id
+                    .as_ref()
+                    .is_some_and(|profile_id| runtime_profile_names.contains(profile_id))
+        })
+        .map(|browser| {
+            json!({
+                "source": "service_state",
+                "browserId": browser.id,
+                "profileId": browser.profile_id,
+                "host": browser.host,
+                "health": browser.health,
+                "pid": browser.pid,
+                "cdpEndpoint": browser.cdp_endpoint,
+                "displayName": browser.display_name,
+                "displayAllocationId": browser.display_allocation_id,
+                "activeSessionIds": browser.active_session_ids,
+                "viewStreamIds": browser.view_streams.iter().map(|stream| stream.id.clone()).collect::<Vec<_>>(),
+            })
+        })
+        .collect()
+}
+
+fn runtime_profile_owner_summary(profile: &RuntimeProfileSummary) -> Value {
+    json!({
+        "source": "runtime_state",
+        "runtimeProfile": profile.runtime_profile,
+        "userDataDir": profile.user_data_dir,
+        "pid": profile.browser_pid,
+        "browserAlive": profile.browser_alive,
+        "headed": profile.headed,
+        "launchMode": profile.launch_mode,
+        "devtoolsPort": profile.devtools_port,
+        "devtoolsWsUrl": profile.ws_url,
+    })
+}
+
+fn runtime_profile_diagnostic(profile: &RuntimeProfileSummary) -> Value {
+    json!({
+        "runtimeProfile": profile.runtime_profile,
+        "userDataDir": profile.user_data_dir,
+        "statePath": profile.state_path,
+        "configured": profile.configured,
+        "default": profile.default,
+        "browserPid": profile.browser_pid,
+        "browserAlive": profile.browser_alive,
+        "headed": profile.headed,
+        "launchMode": profile.launch_mode,
+        "devtoolsPort": profile.devtools_port,
+        "devtoolsWsUrl": profile.ws_url,
+    })
+}
+
+fn profile_lock_remedies(
+    runtime_profiles: &[RuntimeProfileSummary],
+    service_browsers: &[Value],
+) -> Vec<Value> {
+    let mut remedies = service_browsers
+        .iter()
+        .flat_map(|browser| {
+            let browser_id = browser
+                .get("browserId")
+                .and_then(Value::as_str)
+                .unwrap_or("<browser-id>");
+            let session_id = browser
+                .get("activeSessionIds")
+                .and_then(Value::as_array)
+                .and_then(|sessions| sessions.first())
+                .and_then(Value::as_str)
+                .unwrap_or("<session>");
+            [
+                json!({
+                    "action": "reuse_service_browser",
+                    "command": format!("agent-browser --json --session {} service status", session_id),
+                    "browserId": browser_id,
+                    "sessionName": session_id,
+                    "reason": "route work through the known owner instead of launching a second Chrome process on the same profile",
+                }),
+                json!({
+                    "action": "close_service_browser_owner",
+                    "command": format!("agent-browser --json --session {} close", session_id),
+                    "browserId": browser_id,
+                    "sessionName": session_id,
+                    "reason": "only close the owner when this task should take over the same profile",
+                }),
+            ]
+        })
+        .collect::<Vec<_>>();
+    remedies.extend(runtime_profiles
+        .iter()
+        .flat_map(|profile| {
+            [
+                json!({
+                    "action": "inspect_runtime_profile",
+                    "command": format!("agent-browser --json --runtime-profile {} runtime status", profile.runtime_profile),
+                    "reason": "verify the live managed runtime profile before starting another Chrome process on the same user-data-dir",
+                }),
+                json!({
+                    "action": "reuse_runtime_profile",
+                    "command": format!("agent-browser --json --runtime-profile {} attach about:blank", profile.runtime_profile),
+                    "reason": "attach to the known runtime profile when existing login state is required",
+                }),
+            ]
+        })
+        .collect::<Vec<_>>());
+    if remedies.is_empty() {
+        remedies.push(json!({
+            "action": "inspect_process_owner",
+            "command": "agent-browser service status --json",
+            "reason": "profile lock PID is live but not mapped to known runtime state",
+        }));
+    }
+    remedies.push(json!({
+        "action": "use_separate_profile",
+        "command": "agent-browser --profile <separate-profile-or-path> launch",
+        "reason": "only for explicitly separate browser identities or throwaway unauthenticated work",
+    }));
+    remedies
+}
+
+fn same_path(left: &Path, right: &Path) -> bool {
+    if left == right {
+        return true;
+    }
+    match (fs::canonicalize(left), fs::canonicalize(right)) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => false,
+    }
+}
+
+fn compact_json(value: &Value) -> String {
+    serde_json::to_string(value).unwrap_or_else(|_| "{}".to_string())
 }
 
 fn cleanup_stale_profile_lock(user_data_dir: &Path) {
@@ -3225,6 +3416,102 @@ mod tests {
         }
 
         assert!(!dir.exists(), "Temp dir should be cleaned up on drop");
+    }
+
+    #[test]
+    fn test_locked_profile_message_reports_runtime_and_service_owner() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = TempDir::new("profile-lock-owner");
+        std::fs::create_dir_all(&*home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let user_data_dir =
+            crate::runtime_profile::runtime_profile_user_data_dir("last30days-facebook").unwrap();
+        std::fs::create_dir_all(&user_data_dir).unwrap();
+        write_runtime_state(&RuntimeState {
+            runtime_profile: "last30days-facebook".to_string(),
+            user_data_dir: user_data_dir.display().to_string(),
+            browser_pid: 424_242,
+            headed: true,
+            launch_mode: "manual-attachable".to_string(),
+            devtools_port: Some(9222),
+            ws_url: Some("ws://127.0.0.1:9222/devtools/browser/test".to_string()),
+        })
+        .unwrap();
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&crate::native::service_model::ServiceState {
+                browsers: std::collections::BTreeMap::from([(
+                    "session:last30days-facebook".to_string(),
+                    crate::native::service_model::BrowserProcess {
+                        id: "session:last30days-facebook".to_string(),
+                        profile_id: Some("last30days-facebook".to_string()),
+                        host: crate::native::service_model::BrowserHost::RemoteHeaded,
+                        health: crate::native::service_model::BrowserHealth::Ready,
+                        pid: Some(424_242),
+                        cdp_endpoint: Some("http://127.0.0.1:9222".to_string()),
+                        display_name: Some(":11".to_string()),
+                        display_allocation_id: Some("remote-view-display:11".to_string()),
+                        active_session_ids: vec!["last30days-facebook".to_string()],
+                        ..crate::native::service_model::BrowserProcess::default()
+                    },
+                )]),
+                ..crate::native::service_model::ServiceState::default()
+            })
+            .unwrap();
+
+        let message = locked_profile_message(&user_data_dir, 424_242);
+
+        assert!(message.contains("Chrome profile"));
+        assert!(message.contains("already in use by PID 424242"));
+        assert!(message.contains("diagnostic="));
+        let diagnostic: Value = serde_json::from_str(message.split_once("diagnostic=").unwrap().1)
+            .expect("lock diagnostic should be valid JSON");
+        assert_eq!(diagnostic["lockPid"], 424_242);
+        assert_eq!(
+            diagnostic["owner"]["browserId"],
+            "session:last30days-facebook"
+        );
+        assert_eq!(diagnostic["owner"]["profileId"], "last30days-facebook");
+        assert_eq!(
+            diagnostic["owner"]["activeSessionIds"][0],
+            "last30days-facebook"
+        );
+        assert_eq!(
+            diagnostic["runtimeProfiles"][0]["runtimeProfile"],
+            "last30days-facebook"
+        );
+        assert_eq!(
+            diagnostic["remedies"][0]["command"],
+            "agent-browser --json --session last30days-facebook service status"
+        );
+        assert_eq!(
+            diagnostic["remedies"][1]["command"],
+            "agent-browser --json --session last30days-facebook close"
+        );
+    }
+
+    #[test]
+    fn test_locked_profile_message_reports_unknown_owner_remedies() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = TempDir::new("profile-lock-unknown-owner");
+        std::fs::create_dir_all(&*home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let user_data_dir = home.join("foreign-profile");
+        std::fs::create_dir_all(&user_data_dir).unwrap();
+
+        let message = locked_profile_message(&user_data_dir, 515_151);
+
+        let diagnostic: Value = serde_json::from_str(message.split_once("diagnostic=").unwrap().1)
+            .expect("lock diagnostic should be valid JSON");
+        assert_eq!(diagnostic["lockPid"], 515_151);
+        assert_eq!(diagnostic["owner"]["ownership"], "unknown");
+        assert_eq!(diagnostic["runtimeProfiles"], json!([]));
+        assert_eq!(diagnostic["serviceBrowsers"], json!([]));
+        assert_eq!(
+            diagnostic["remedies"][0]["command"],
+            "agent-browser service status --json"
+        );
+        assert_eq!(diagnostic["remedies"][0]["action"], "inspect_process_owner");
     }
 
     #[test]

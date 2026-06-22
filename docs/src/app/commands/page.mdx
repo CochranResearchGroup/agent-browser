@@ -807,6 +807,10 @@ existing login state, inspect <code>service status</code> or
 service/session control or attach to the intended runtime profile. Use
 <code>--profile &lt;path&gt;</code> only for separate browser identities or
 unauthenticated throwaway work.
+Profile-lock errors include compact <code>diagnostic=&#123;...&#125;</code>
+JSON with the lock PID, matching runtime profile, matching service
+browser/session when known, and safe reuse, close, inspect, or separate-profile
+remedies.
 Normal launch commands automatically reuse a selected managed runtime browser
 when agent-browser runtime state shows a live PID and reachable DevTools port.
 <code>runtime status</code> reports <code>DevTools reachable</code> so stale

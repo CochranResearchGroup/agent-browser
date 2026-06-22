@@ -1651,3 +1651,42 @@ Result:
   and left only pid/token/version files. This appears independent of the
   route-pool diagnostic change and should be handled as a separate daemon
   startup validation issue.
+
+## Turn 39 | 2026-06-22
+
+Scope: execute P43 Slice D profile-lock ownership diagnostics.
+
+Actions:
+
+- Added profile-lock diagnostic JSON to Chrome profile lock failures while
+  preserving the existing hard stop against launching a second Chrome process
+  on the same user-data-dir.
+- The diagnostic includes lock PID, user-data-dir, matching runtime profile
+  state, matching service browser rows, primary owner, and safe remedies.
+- Known service-owned locks now identify browser ID, active session, profile,
+  host, health, PID, CDP endpoint, display, display allocation, and view stream
+  IDs when persisted service state has them.
+- Remedies include exact session-scoped service-status reuse and close commands
+  for known owners, runtime-profile inspection and attach commands for matching
+  runtime state, service-status inspection for unknown owners, and explicit
+  separate-profile guidance for intentionally separate identities.
+- Updated README, CLI runtime help, docs command page, and the
+  `agent-browser` skill.
+- Marked P43 Slice D done and updated `ROADMAP.md` next recommendation.
+
+Validation run:
+
+- `cargo fmt --manifest-path cli/Cargo.toml`
+- `cargo test --manifest-path cli/Cargo.toml locked_profile -- --test-threads=1 --nocapture`
+- `pnpm --dir docs build`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `git diff --check`
+- `pnpm validation:select -- --base HEAD`
+- `diff -q skills/agent-browser/SKILL.md /home/ecochran76/.codex/shared/skills/agent-browser/SKILL.md`
+
+Result:
+
+- Focused profile-lock tests passed for known service/runtime owner diagnostics
+  and unknown-owner diagnostics.
+- Docs build passed with the known Next.js multiple-lockfile root warning.
+- Clippy, diff hygiene, validation selector, and installed-skill sync passed.

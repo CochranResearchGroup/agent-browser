@@ -835,7 +835,9 @@ browser is busy. For authenticated work, inspect `agent-browser service status`,
 managed runtime profile through the service/session control plane or attach to
 the intended browser. Switch to a new isolated profile only for explicitly
 unauthenticated throwaway QA, or when the operator asked for a separate browser
-identity.
+identity. Profile-lock errors include a compact `diagnostic={...}` suffix with
+the lock PID, matching runtime profile, matching service browser/session when
+known, and safe reuse, close, inspect, or separate-profile remedies.
 When a selected managed runtime profile already has a live agent-browser browser
 with a reachable DevTools port, normal launch commands automatically reuse that
 browser through the session control plane instead of trying to start a second

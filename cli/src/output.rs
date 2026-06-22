@@ -5737,6 +5737,9 @@ Locked profiles:
   then reuse the managed browser through service/session control or attach to
   the intended runtime profile. Use `--profile <path>` only for separate
   browser identities or unauthenticated throwaway work.
+  Profile-lock errors include diagnostic JSON with the lock PID, matching
+  runtime profile, matching service browser/session when known, and safe
+  reuse, close, inspect, or separate-profile remedies.
   Normal launch commands automatically reuse a selected managed runtime
   browser only when agent-browser runtime state shows a live PID and a
   reachable DevTools port.
