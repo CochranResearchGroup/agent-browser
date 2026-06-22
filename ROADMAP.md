@@ -630,6 +630,11 @@ rows.
   route-bound one-liner, flag-placement guidance, and session versus
   session-name distinction, and parser coverage preserves post-subcommand
   runtime/profile/session-state flags.
+- Slice C is complete. `route_pool_unavailable`,
+  `route_pool_entry_missing`, and `route_pool_entry_unavailable` now keep
+  stable error codes and append compact diagnostic JSON with requested
+  route/display/provider identity, matching and available pool entries, ready
+  display allocations, existing remote-view routes, and recommended commands.
 - The incident note is
   `docs/dev/notes/2026-06-22-facebook-remote-view-open-friction.md`.
 - Live readback on 2026-06-22 showed `session:default` on profile
@@ -652,6 +657,7 @@ rows.
 
 ### Next Recommendation
 
-Execute P43 Slice C next. Make `route_pool_unavailable` explain requested and
-available route/display identities before changing profile-lock or dashboard
+Execute P43 Slice D next. Make Chrome profile-lock failures identify the owning
+browser/session/profile/process when possible, and return exact safe reuse,
+close, wait, or manual-review remedies before changing dashboard
 operator-visible success behavior.

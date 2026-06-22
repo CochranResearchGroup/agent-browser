@@ -1603,3 +1603,51 @@ Result:
 - Validation selector required the Rust format, focused Rust test, clippy,
   docs build, diff hygiene, and repo-installed skill sync checks.
 - The repo and installed `agent-browser` skill copies now match.
+
+## Turn 38 | 2026-06-22
+
+Scope: execute P43 Slice C route allocation diagnostics.
+
+Actions:
+
+- Added compact route-pool diagnostic JSON for `route_pool_unavailable`.
+- Added the same diagnostic context to stale explicit pool-entry failures:
+  `route_pool_entry_missing` and `route_pool_entry_unavailable`.
+- Included requested route, route-pool entry, display allocation, display name,
+  display isolation, owner browser, owner session, profile, provider, matching
+  pool entries, available pool entries, ready display allocation IDs, existing
+  remote-view routes, and recommended commands.
+- Kept the existing string error-code contract intact so callers that check
+  `route_pool_unavailable` continue to work.
+- Tightened route-pool tests to parse the diagnostic suffix and assert the
+  actionable identity fields.
+- Marked P43 Slice C done and updated `ROADMAP.md` next recommendation.
+
+Validation run:
+
+- `cargo fmt --manifest-path cli/Cargo.toml`
+- `cargo test --manifest-path cli/Cargo.toml route_pool -- --test-threads=1`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `cargo test --manifest-path cli/Cargo.toml cdp_screencast_view_stream -- --nocapture`
+- `git diff --check`
+- `pnpm validation:select -- --base HEAD`
+- `pnpm test:service-cdp-tab-streaming-live`
+- Direct temp-session probe:
+  `HOME=<temp> AGENT_BROWSER_HOME=<temp>/.agent-browser AGENT_BROWSER_SOCKET_DIR=<temp>/s cargo run --quiet --manifest-path cli/Cargo.toml -- --json --session daemon-probe stream status`
+
+Result:
+
+- Focused route-pool Rust tests passed: 12 passed, 0 failed.
+- Focused CDP stream Rust tests passed: 3 passed, 0 failed.
+- Rust format, clippy, and diff hygiene passed.
+- The new route-pool unavailable test verifies stable error code retention and
+  machine-readable diagnostic fields for requested display identity, checked
+  out matching pool entry, ready display allocations, and recommended repair
+  command.
+- The selector-recommended live CDP smoke did not reach the CDP path. It failed
+  while starting a temporary daemon with
+  `Daemon failed to start (socket: <temp>/s/<session>.sock)`. A direct
+  temp-session `stream status` probe reproduced the same daemon-start failure
+  and left only pid/token/version files. This appears independent of the
+  route-pool diagnostic change and should be handled as a separate daemon
+  startup validation issue.

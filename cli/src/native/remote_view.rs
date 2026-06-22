@@ -637,12 +637,166 @@ pub fn resolve_route_pool_entry_id(
         || allocation
             .is_some_and(|allocation| allocation.display_isolation == "private_virtual_display")
     {
+        let diagnostic = route_pool_request_diagnostic(
+            state,
+            requested_pool_entry_id,
+            requested_route_id,
+            display_allocation_id,
+            allocation,
+            provider,
+        );
         return Err(format!(
-            "route_pool_unavailable: no available route pool entry for display allocation '{}'",
-            display_allocation_id
+            "route_pool_unavailable: no available route pool entry for display allocation '{}'; diagnostic={}",
+            display_allocation_id,
+            compact_json(&diagnostic)
         ));
     }
     Ok(None)
+}
+
+pub fn route_pool_request_diagnostic(
+    state: &ServiceState,
+    requested_pool_entry_id: Option<&str>,
+    requested_route_id: Option<&str>,
+    display_allocation_id: &str,
+    allocation: Option<&DisplayAllocation>,
+    provider: ViewStreamProvider,
+) -> Value {
+    let available_route_pool_entries = state
+        .route_pool
+        .values()
+        .filter(|entry| entry.provider == provider)
+        .filter(|entry| entry.state == "available")
+        .map(route_pool_entry_diagnostic)
+        .collect::<Vec<_>>();
+    let matching_route_pool_entries = state
+        .route_pool
+        .values()
+        .filter(|entry| entry.provider == provider)
+        .filter(|entry| {
+            requested_pool_entry_id
+                .map(|id| entry.id == id)
+                .unwrap_or(true)
+        })
+        .filter(|entry| {
+            requested_route_id
+                .map(|route_id| entry.route_id == route_id)
+                .unwrap_or(true)
+        })
+        .filter(|entry| route_pool_entry_matches_display(entry, display_allocation_id, allocation))
+        .map(route_pool_entry_diagnostic)
+        .collect::<Vec<_>>();
+    let recommended_commands = route_pool_recommended_commands(state, provider);
+
+    json!({
+        "requested": {
+            "routePoolEntryId": requested_pool_entry_id,
+            "routeId": requested_route_id,
+            "displayAllocationId": display_allocation_id,
+            "displayName": allocation.and_then(|allocation| allocation.display_name.as_deref()),
+            "displayIsolation": allocation.map(|allocation| allocation.display_isolation.as_str()),
+            "ownerBrowserId": allocation.and_then(|allocation| allocation.owner_browser_id.as_deref()),
+            "ownerSessionId": allocation.and_then(|allocation| allocation.owner_session_id.as_deref()),
+            "profileId": allocation.and_then(|allocation| allocation.profile_id.as_deref()),
+            "provider": provider,
+        },
+        "matchingRoutePoolEntries": matching_route_pool_entries,
+        "availableRoutePoolEntries": available_route_pool_entries,
+        "availableDisplayAllocationIds": state.display_allocations.values()
+            .filter(|allocation| allocation.state == "ready")
+            .map(|allocation| allocation.id.clone())
+            .collect::<Vec<_>>(),
+        "recommendedCommands": recommended_commands,
+        "routePoolEntries": state.route_pool.values().take(16).map(route_pool_entry_diagnostic).collect::<Vec<_>>(),
+        "displayAllocations": state.display_allocations.values().take(16).map(display_allocation_diagnostic).collect::<Vec<_>>(),
+        "remoteViewRoutes": state.remote_view_routes.values().take(16).map(|route| {
+            json!({
+                "id": route.id,
+                "provider": route.provider,
+                "displayAllocationId": route.display_allocation_id,
+                "browserId": route.browser_id,
+                "sessionId": route.session_id,
+                "providerMode": route.provider_mode,
+                "state": route.state,
+                "lastProviderEvent": route.last_provider_event,
+                "readinessState": route.readiness.as_ref().and_then(readiness_state),
+            })
+        }).collect::<Vec<_>>(),
+    })
+}
+
+fn route_pool_recommended_commands(
+    state: &ServiceState,
+    provider: ViewStreamProvider,
+) -> Vec<String> {
+    let mut commands = state
+        .route_pool
+        .values()
+        .filter(|entry| entry.provider == provider)
+        .filter(|entry| entry.state == "available")
+        .take(3)
+        .map(|entry| {
+            format!(
+                "agent-browser --json remote-view open <url> --provider {} --route-pool-entry-id {} --dry-run",
+                provider_name(provider),
+                entry.id
+            )
+        })
+        .collect::<Vec<_>>();
+    if commands.is_empty() {
+        commands.push("agent-browser service route-pool repair --dry-run".to_string());
+        commands.push("agent-browser doctor remote-view --json".to_string());
+    }
+    commands
+}
+
+fn provider_name(provider: ViewStreamProvider) -> &'static str {
+    match provider {
+        ViewStreamProvider::CdpScreencast => "cdp_screencast",
+        ViewStreamProvider::ChromeTabWebrtc => "chrome_tab_webrtc",
+        ViewStreamProvider::VirtualDisplayWebrtc => "virtual_display_webrtc",
+        ViewStreamProvider::Novnc => "novnc",
+        ViewStreamProvider::RdpGateway => "rdp_gateway",
+        ViewStreamProvider::ExternalUrl => "external_url",
+    }
+}
+
+pub fn compact_json(value: &Value) -> String {
+    serde_json::to_string(value).unwrap_or_else(|_| "{}".to_string())
+}
+
+fn route_pool_entry_diagnostic(entry: &RoutePoolEntry) -> Value {
+    json!({
+        "id": entry.id,
+        "provider": entry.provider,
+        "routeId": entry.route_id,
+        "connectionId": entry.connection_id,
+        "connectionName": entry.connection_name,
+        "targetDisplayAllocationId": route_pool_target_string(entry, "displayAllocationId"),
+        "targetDisplayName": route_pool_target_string(entry, "displayName"),
+        "targetBrowserId": route_pool_target_string(entry, "browserId"),
+        "targetSessionId": route_pool_target_string(entry, "sessionId"),
+        "providerMode": entry.provider_mode,
+        "state": entry.state,
+        "currentRouteAllocationId": entry.current_route_allocation_id,
+        "readinessState": entry.readiness.as_ref().and_then(readiness_state),
+    })
+}
+
+fn display_allocation_diagnostic(allocation: &DisplayAllocation) -> Value {
+    json!({
+        "id": allocation.id,
+        "displayName": allocation.display_name,
+        "displayIsolation": allocation.display_isolation,
+        "ownerBrowserId": allocation.owner_browser_id,
+        "ownerSessionId": allocation.owner_session_id,
+        "profileId": allocation.profile_id,
+        "browserBuild": allocation.browser_build,
+        "host": allocation.host,
+        "state": allocation.state,
+        "routeIds": allocation.route_ids,
+        "readinessState": allocation.readiness.as_ref().and_then(readiness_state),
+    })
 }
 
 #[cfg(test)]

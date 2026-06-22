@@ -42,9 +42,9 @@ use super::policy::{ActionPolicy, ConfirmActions, PolicyResult};
 use super::providers;
 use super::recording::{self, RecordingState};
 use super::remote_view::{
-    build_route_binding, display_allocation_id_for_route_pool_entry, readiness_state,
+    build_route_binding, compact_json, display_allocation_id_for_route_pool_entry, readiness_state,
     resolve_route_pool_entry_id, route_binding_readiness, route_display_content,
-    visible_browser_window_proof,
+    route_pool_request_diagnostic, visible_browser_window_proof,
 };
 use super::screenshot::{self, ScreenshotOptions};
 use super::service_access::{service_access_plan_for_state, ServiceAccessPlanRequest};
@@ -11498,7 +11498,18 @@ fn service_remote_view_route_binding_from_state(
     };
     if let Some(id) = selected_route_pool_entry_id.as_ref() {
         if pool_entry.is_none() {
-            return Err(format!("route pool entry '{}' not found", id));
+            return Err(format!(
+                "route_pool_entry_missing: route pool entry '{}' not found; diagnostic={}",
+                id,
+                compact_json(&route_pool_request_diagnostic(
+                    state,
+                    route_pool_entry_id.as_deref(),
+                    requested_route_id.as_deref(),
+                    &display_allocation_id,
+                    existing_display_allocation,
+                    provider,
+                ))
+            ));
         }
     }
     let command_display_allocation =
@@ -11518,8 +11529,16 @@ fn service_remote_view_route_binding_from_state(
             });
         if !entry_available && entry.current_route_allocation_id.as_deref() != reusable_route_id {
             return Err(format!(
-                "route pool entry '{}' is not available for checkout",
-                entry.id
+                "route_pool_entry_unavailable: route pool entry '{}' is not available for checkout; diagnostic={}",
+                entry.id,
+                compact_json(&route_pool_request_diagnostic(
+                    state,
+                    route_pool_entry_id.as_deref(),
+                    requested_route_id.as_deref(),
+                    &display_allocation_id,
+                    display_allocation,
+                    provider,
+                ))
             ));
         }
     }
@@ -19675,6 +19694,15 @@ mod tests {
         ))
     }
 
+    fn route_pool_error_diagnostic(result: &Value) -> Value {
+        let error = result["error"].as_str().unwrap();
+        let diagnostic = error
+            .split_once("diagnostic=")
+            .map(|(_, diagnostic)| diagnostic)
+            .expect("route pool error should include diagnostic JSON");
+        serde_json::from_str(diagnostic).expect("route pool diagnostic should be valid JSON")
+    }
+
     #[test]
     fn test_tab_handle_refresh_classifies_retained_candidates() {
         let ready_browser = BrowserProcess {
@@ -25957,6 +25985,8 @@ mod tests {
                         id: "display-a".to_string(),
                         display_name: Some(":91".to_string()),
                         display_isolation: "private_virtual_display".to_string(),
+                        owner_browser_id: Some("session:rdp-a".to_string()),
+                        owner_session_id: Some("rdp-a".to_string()),
                         state: "ready".to_string(),
                         ..DisplayAllocation::default()
                     },
@@ -26002,6 +26032,32 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("route_pool_unavailable"));
+        let diagnostic = route_pool_error_diagnostic(&result);
+        assert_eq!(diagnostic["requested"]["displayAllocationId"], "display-a");
+        assert_eq!(diagnostic["requested"]["displayName"], ":91");
+        assert_eq!(
+            diagnostic["requested"]["displayIsolation"],
+            "private_virtual_display"
+        );
+        assert_eq!(diagnostic["requested"]["ownerBrowserId"], "session:rdp-a");
+        assert_eq!(diagnostic["requested"]["ownerSessionId"], "rdp-a");
+        assert_eq!(diagnostic["requested"]["provider"], "rdp_gateway");
+        assert_eq!(diagnostic["matchingRoutePoolEntries"][0]["id"], "pool-a");
+        assert_eq!(
+            diagnostic["matchingRoutePoolEntries"][0]["state"],
+            "checked_out"
+        );
+        assert_eq!(
+            diagnostic["matchingRoutePoolEntries"][0]["currentRouteAllocationId"],
+            "route-a"
+        );
+        assert_eq!(diagnostic["availableRoutePoolEntries"], json!([]));
+        assert_eq!(diagnostic["availableDisplayAllocationIds"][0], "display-a");
+        assert_eq!(
+            diagnostic["recommendedCommands"][0],
+            "agent-browser service route-pool repair --dry-run"
+        );
+        assert_eq!(diagnostic["displayAllocations"][0]["id"], "display-a");
         let _ = fs::remove_dir_all(&home);
     }
 

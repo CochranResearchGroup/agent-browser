@@ -227,6 +227,14 @@ Completed on 2026-06-22:
 Goal: make route-pool failures explain the available choices instead of
 requiring route topology knowledge.
 
+Slice progress: done on 2026-06-22. `route_pool_unavailable` and adjacent
+stale route-pool selection failures now preserve their stable error codes and
+append compact `diagnostic={...}` JSON with requested route, pool, display,
+provider, owner session/browser/profile, matching entries, available entries,
+ready display allocations, existing remote-view routes, and recommended
+commands. The existing `remote-view open --dry-run` route plan remains the
+pre-launch route selection surface.
+
 Deliverables:
 
 - When `route_pool_unavailable` occurs, include the requested display
