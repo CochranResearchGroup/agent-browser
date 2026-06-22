@@ -1176,3 +1176,47 @@ Result:
   `nextAction=restart_stale_daemon_sessions_then_rerun_doctor` and a
   next-command explanation that points operators back to each issue's
   session-scoped `remedy.argv`.
+
+## Turn 28 | 2026-06-22
+
+Scope: execute P42 local binary/runtime convergence after publishing the
+structured commits.
+
+Actions:
+
+- Extended `pnpm publish:local-dashboard` so it synchronizes the user-scoped
+  install binary, ignored workspace package binary, and user pnpm package
+  binary to the same freshly built executable by default.
+- Added `--skip-reference-sync` for operator cases that intentionally do not
+  want reference binaries changed.
+- Published the current debug build to the local dashboard runtime and restarted
+  `agent-browser-dashboard.service`.
+- Applied the stale daemon restart path by invoking the three
+  session-scoped remedies reported by install doctor. Those commands returned
+  nonzero because `close --session` still routes through daemon restart, but
+  the restart path did replace the stale daemon metadata and all active daemon
+  rows converged.
+- Reran publish after adding reference-binary sync so install doctor no longer
+  failed on pnpm/workspace binary drift.
+
+Validation run:
+
+- `pnpm publish:local-dashboard -- --skip-browser --json`
+- `agent-browser install doctor --json`
+- `agent-browser doctor remote-view --json`
+
+Result:
+
+- The publish report synchronized
+  `/home/ecochran76/.local/bin/agent-browser`,
+  `bin/agent-browser-linux-x64`, and the user pnpm global package binary to
+  `94d1d022b4f1315b2f3eb9ff08fdc3faa816d77960500c6b6854cab98161cfa8`.
+- Installed `agent-browser install doctor --json` reported `success=true`,
+  `runtimeInventory.status=converged`, `staleCount=0`, no issue codes, and
+  matching PATH, pnpm, and workspace binary SHA-256 values.
+- Installed `agent-browser doctor remote-view --json` reported `success=true`,
+  `status=ready`, `remoteControl.ready=true`,
+  `runtimeInventory.status=converged`, and
+  `nextAction=run_many_to_many_live_gate`.
+- Follow-up required: make stale daemon close remedies return success without
+  depending on a daemon restart side effect.

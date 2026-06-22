@@ -282,7 +282,7 @@ Acceptance:
 
 ### Slice F: One-Command Local Convergence
 
-Slice progress: planned.
+Slice progress: in progress.
 
 Provide one bounded command or script for local operator repair.
 
@@ -301,6 +301,34 @@ Acceptance:
 - Apply mode converges repairable local runtime drift without requiring the
   operator to remember the sequence.
 - Apply mode does not kill foreign browsers or delete diagnostic evidence.
+
+Completed on 2026-06-22:
+
+- `pnpm publish:local-dashboard -- --skip-browser --json` now synchronizes the
+  user-scoped install binary, ignored workspace package binary, and user pnpm
+  package binary to the same freshly built executable SHA-256 by default.
+- The publish report includes a `referenceBinaries` array with before and
+  after SHA-256 evidence for every synchronized reference binary.
+- The script keeps `--skip-reference-sync` for cases where the operator wants
+  to restart the dashboard without changing reference binaries.
+- Live execution synchronized
+  `/home/ecochran76/.local/bin/agent-browser`,
+  `bin/agent-browser-linux-x64`, and the user pnpm global package binary to
+  `94d1d022b4f1315b2f3eb9ff08fdc3faa816d77960500c6b6854cab98161cfa8`.
+- After applying the publish convergence step, installed `agent-browser install
+  doctor --json` reported `success=true`, no issue codes, and
+  `runtimeInventory.status=converged`.
+- Installed `agent-browser doctor remote-view --json` reported
+  `remoteControl.ready=true`, `runtimeInventory.status=converged`, and
+  `nextAction=run_many_to_many_live_gate`.
+
+Remaining:
+
+- Promote the convergence behavior into a dedicated dry-run/apply command that
+  can also sequence safe daemon restart remedies, Guacamole schema ensure,
+  route-pool refresh, and display-access grants.
+- Ensure the dedicated command refuses foreign process lifecycle changes and
+  emits retained evidence for each action.
 
 ## Validation Plan
 
@@ -323,7 +351,7 @@ agent-browser doctor remote-view --json
 For live publication or user-visible dashboard changes, also run:
 
 ```bash
-pnpm publish:local-dashboard -- --skip-browser --expect-marker "Runtime contract drift" --json
+pnpm publish:local-dashboard -- --skip-browser --json
 ```
 
 For P41 foreign browser interaction, run the dedicated foreign-CDP live smoke

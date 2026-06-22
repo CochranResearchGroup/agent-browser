@@ -17,6 +17,7 @@ const options = {
   browserProfile: '',
   release: false,
   skipSmoke: false,
+  syncReferenceBinaries: true,
   smokeBrowser: true,
   startIfMissing: false,
   workspaceSession: '',
@@ -42,6 +43,8 @@ for (let index = 0; index < args.length; index += 1) {
     options.release = true;
   } else if (arg === '--skip-browser') {
     options.smokeBrowser = false;
+  } else if (arg === '--skip-reference-sync') {
+    options.syncReferenceBinaries = false;
   } else if (arg === '--skip-smoke') {
     options.skipSmoke = true;
   } else if (arg === '--start-if-missing') {
@@ -69,6 +72,7 @@ const report = {
   },
   smoke: null,
   runtimeManifest: null,
+  referenceBinaries: [],
 };
 
 try {
@@ -111,6 +115,9 @@ async function run() {
 
   try {
     installBinaryAtomically(builtBin, installBin, beforeStat ? beforeStat.mode & 0o777 : 0o755);
+    if (options.syncReferenceBinaries) {
+      report.referenceBinaries = syncReferenceBinaries(builtBin);
+    }
 
     await restartOrStartDashboard(installBin);
 
@@ -132,6 +139,53 @@ async function run() {
   } finally {
     report.service.after = serviceStatus();
   }
+}
+
+function syncReferenceBinaries(builtBin) {
+  const references = [];
+  const seen = new Set([resolve(builtBin), resolve(report.installBin || '')]);
+  for (const target of referenceBinaryCandidates()) {
+    const resolved = resolve(target);
+    if (seen.has(resolved)) continue;
+    seen.add(resolved);
+    if (!existsSync(resolved)) {
+      references.push({
+        path: resolved,
+        synced: false,
+        reason: 'missing',
+      });
+      continue;
+    }
+    guardInstallPath(resolved);
+    const before = sha256File(resolved);
+    const mode = statSync(resolved).mode & 0o777;
+    installBinaryAtomically(builtBin, resolved, mode);
+    references.push({
+      path: resolved,
+      synced: true,
+      beforeSha256: before,
+      afterSha256: sha256File(resolved),
+    });
+  }
+  return references;
+}
+
+function referenceBinaryCandidates() {
+  const candidates = [
+    resolve(rootDir, 'bin', platformBinaryName()),
+  ];
+  const pnpmRoot = commandOutput('pnpm', ['root', '-g']).trim();
+  if (pnpmRoot) {
+    candidates.push(resolve(pnpmRoot, 'agent-browser', 'bin', platformBinaryName()));
+  }
+  return candidates;
+}
+
+function platformBinaryName() {
+  const platform = process.platform === 'win32' ? 'windows' : process.platform;
+  const arch = process.arch === 'x64' ? 'x64' : process.arch;
+  const extension = process.platform === 'win32' ? '.exe' : '';
+  return `agent-browser-${platform}-${arch}${extension}`;
 }
 
 function installBinaryAtomically(source, target, mode) {
@@ -370,6 +424,7 @@ Options:
   --install-bin <path>        Installed binary path. Default: ~/.local/bin/agent-browser.
   --release                   Build cli/target/release/agent-browser instead of debug.
   --skip-browser              Skip browser smoke, keep HTTP and bundle marker smoke.
+  --skip-reference-sync        Do not sync ignored workspace and pnpm package binaries.
   --skip-smoke                Build, install, and restart without smoke.
   --start-if-missing          Start dashboard if the user service is not installed.
   --workspace-session <name>  Smoke a workspace viewport route for a daemon session.
