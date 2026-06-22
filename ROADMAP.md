@@ -642,6 +642,11 @@ rows.
   `operatorVisible` proof. Dry-runs report `not_checked`; successful opens
   report `ready` with route, browser, session, display, provider, and visible
   proof identity.
+- Slice F is complete. Dashboard workspace rows now carry operator-visible
+  route-proof state, require browser-window proof before RDP gateway View,
+  Control, or external open actions, and keep terminal-only or missing-proof
+  route rows as disabled live diagnostics rather than no-action attention
+  entries.
 - The incident note is
   `docs/dev/notes/2026-06-22-facebook-remote-view-open-friction.md`.
 - Live readback on 2026-06-22 showed `session:default` on profile
@@ -664,7 +669,7 @@ rows.
 
 ### Next Recommendation
 
-Execute P43 Slice F next. Update dashboard left-rail and workspace viewport
-classification to consume route-bound proof fields directly, label terminal-only
-or missing-proof routes as not operator visible, and keep dead or
-non-actionable records out of the live control rail.
+Execute P43 Slice G next. Update downstream client helpers and examples so
+callers such as `last30days` require `operatorVisible` browser-window proof
+before declaring a Guacamole or RDP handoff successful, and add a compact
+one-line route, tab, profile, and visual-proof summary for agent logs.

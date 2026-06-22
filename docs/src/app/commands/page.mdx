@@ -853,13 +853,17 @@ the selected workspace, browser, session, tab, profile, and job IDs in separate
 query parameters so refreshes and handoff links reopen the same operational
 context. Selecting a workspace row shows PID, memory, CPU time, CDP port, stream
 port, available actions, and disabled-action reasons when the service reports
-them; rows with an embeddable stream open the workspace viewport, including
-<code>cdp_screencast</code> streams synthesized from live session stream files.
+them; rows with an embeddable and operator-visible stream open the workspace
+viewport, including <code>cdp_screencast</code> streams synthesized from live
+session stream files. RDP gateway rows require current browser-window proof
+before View, Control, or external open are enabled, so terminal-only,
+idle-display, and missing-proof routes remain disabled diagnostics.
 Guided browser/profile launches use <code>/api/service/request</code>. A launch
 response with browser or tab identity moves the operator into
 <code>?view=workspace:control</code> or <code>?view=workspace:view</code> when
-retained stream metadata is embeddable; otherwise the dashboard opens the
-Service Jobs view for the submitted job.
+retained stream metadata is embeddable and operator-visible; otherwise the
+dashboard opens the Service Jobs view for the submitted job or leaves the row
+disabled with the route-proof reason.
 Copied access-plan requests preserve the planner-selected
 <code>runtimeProfile</code>, configured profile path, and <code>browserBuild</code>,
 so a guided launch stays on the selected browser/profile lane. Non-blocking

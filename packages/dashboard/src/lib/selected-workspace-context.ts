@@ -94,7 +94,7 @@ const EMPTY_RUNTIME: SelectedWorkspaceRuntime = {
 
 export function buildSelectedWorkspaceContext(input: SelectedWorkspaceContextInput): SelectedWorkspaceContext {
   const selection = input.selection;
-  const nodes = input.nodes ?? deriveWorkspaceNodes(input);
+  const nodes = input.nodes ?? deriveWorkspaceNodes({ ...input, includeRetained: true });
   const node = selectWorkspaceNode(selection, nodes);
   const serviceBrowsers = input.serviceBrowsers ?? [];
   const serviceSessions = input.serviceSessions ?? [];

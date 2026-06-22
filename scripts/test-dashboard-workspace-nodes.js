@@ -54,6 +54,7 @@ const diagnosticFixture = {
           viewerLeaseIds: ['viewer-a'],
           controllerLeaseId: 'viewer-a',
           remoteReadiness: { state: 'ready' },
+          displayContent: { state: 'browser_window_visible' },
           controlInput: 'manual_attached_desktop',
           readOnly: false,
         },
@@ -76,6 +77,7 @@ const diagnosticFixture = {
           displayAllocationId: 'display-shared',
           providerMode: 'single_controller',
           viewerLeaseIds: ['viewer-b'],
+          displayContent: { state: 'browser_window_visible' },
           controlInput: 'manual_attached_desktop',
           readOnly: false,
         },
@@ -143,6 +145,26 @@ const diagnosticFixture = {
       ],
       activeSessionIds: ['rdp-unbound-session'],
     },
+    {
+      id: 'rdp-proof-missing',
+      profileId: 'rdp-profile-proof-missing',
+      host: 'remote_headed',
+      health: 'ready',
+      pid: 6106,
+      displayName: ':13',
+      viewStreams: [
+        {
+          provider: 'rdp_gateway',
+          url: 'https://agent-browser.example.test/guacamole/#/client/proof-missing',
+          routeId: 'proof-missing-route',
+          displayAllocationId: 'display-proof-missing',
+          remoteReadiness: { state: 'ready' },
+          controlInput: 'manual_attached_desktop',
+          readOnly: false,
+        },
+      ],
+      activeSessionIds: ['rdp-proof-missing-session'],
+    },
   ],
   serviceSessions: [
     { id: 'rdp-a-session', browserIds: ['rdp-a'], tabIds: ['rdp-a-tab'], profileId: 'rdp-profile-a' },
@@ -150,6 +172,7 @@ const diagnosticFixture = {
     { id: 'rdp-stale-session', browserIds: ['rdp-stale-target'], tabIds: ['rdp-stale-old', 'rdp-stale-live'], profileId: 'rdp-profile-c' },
     { id: 'rdp-idle-session', browserIds: ['rdp-idle-display'], tabIds: ['rdp-idle-tab'], profileId: 'rdp-profile-idle' },
     { id: 'rdp-unbound-session', browserIds: ['rdp-unbound-display'], tabIds: ['rdp-unbound-tab'], profileId: 'rdp-profile-unbound' },
+    { id: 'rdp-proof-missing-session', browserIds: ['rdp-proof-missing'], tabIds: ['rdp-proof-missing-tab'], profileId: 'rdp-profile-proof-missing' },
   ],
   serviceTabs: [
     { id: 'rdp-a-tab', browserId: 'rdp-a', sessionId: 'rdp-a-session', targetId: 'target-shared', lifecycle: 'active', title: 'A', url: 'https://example.test/a' },
@@ -158,6 +181,7 @@ const diagnosticFixture = {
     { id: 'rdp-stale-live', browserId: 'rdp-stale-target', sessionId: 'rdp-stale-session', targetId: 'target-stale-live', lifecycle: 'active', title: 'Live fallback', url: 'https://example.test/live' },
     { id: 'rdp-idle-tab', browserId: 'rdp-idle-display', sessionId: 'rdp-idle-session', targetId: 'target-idle', lifecycle: 'active', title: 'Expected target', url: 'https://example.test/target' },
     { id: 'rdp-unbound-tab', browserId: 'rdp-unbound-display', sessionId: 'rdp-unbound-session', targetId: 'target-unbound', lifecycle: 'active', title: 'Expected target on :109', url: 'https://example.test/unbound' },
+    { id: 'rdp-proof-missing-tab', browserId: 'rdp-proof-missing', sessionId: 'rdp-proof-missing-session', targetId: 'target-proof-missing', lifecycle: 'active', title: 'Expected target proof missing', url: 'https://example.test/proof-missing' },
   ],
 };
 
@@ -177,19 +201,47 @@ assert.ok(staleDiagnosticNode.diagnostics.some((diagnostic) => diagnostic.kind =
 assert.equal(staleDiagnosticNode.primaryTab?.id, 'rdp-stale-live');
 const idleDisplayNode = byId(diagnosticNodes, 'browser:rdp-idle-display');
 assert.ok(idleDisplayNode.diagnostics.some((diagnostic) => diagnostic.kind === 'idle-route-display'));
-assert.equal(idleDisplayNode.group, 'needs-attention');
-assert.match(idleDisplayNode.attentionReason ?? '', /terminal/i);
+assert.equal(idleDisplayNode.group, 'active');
+assert.equal(idleDisplayNode.state, 'active');
+assert.equal(idleDisplayNode.attentionReason, null);
+assert.equal(idleDisplayNode.viewStream?.operatorVisibleState, 'route_bound_terminal_only');
+assert.match(idleDisplayNode.viewStream?.operatorVisibleReason ?? '', /terminal/i);
+assert.equal(idleDisplayNode.viewStream?.embeddable, false);
 assert.equal(idleDisplayNode.viewStream?.controllable, false);
+assert.equal(action(idleDisplayNode, 'view').enabled, false);
+assert.match(action(idleDisplayNode, 'view').reason ?? '', /terminal/i);
 assert.equal(action(idleDisplayNode, 'control').enabled, false);
+assert.match(action(idleDisplayNode, 'control').reason ?? '', /terminal/i);
 
 const unboundDisplayNode = byId(diagnosticNodes, 'browser:rdp-unbound-display');
 assert.ok(unboundDisplayNode.diagnostics.some((diagnostic) => diagnostic.kind === 'idle-route-display'));
-assert.equal(unboundDisplayNode.group, 'needs-attention');
-assert.match(unboundDisplayNode.attentionReason ?? '', /no service-owned Guacamole route/);
-assert.match(unboundDisplayNode.attentionReason ?? '', /:109/);
+assert.equal(unboundDisplayNode.group, 'active');
+assert.equal(unboundDisplayNode.state, 'active');
+assert.equal(unboundDisplayNode.attentionReason, null);
+assert.equal(unboundDisplayNode.viewStream?.operatorVisibleState, 'route_bound_proof_missing');
+assert.match(unboundDisplayNode.viewStream?.operatorVisibleReason ?? '', /no service-owned Guacamole route/);
+assert.match(unboundDisplayNode.viewStream?.operatorVisibleReason ?? '', /:109/);
 assert.equal(unboundDisplayNode.viewStream?.url, null);
+assert.equal(unboundDisplayNode.viewStream?.embeddable, false);
 assert.equal(unboundDisplayNode.viewStream?.controllable, false);
+assert.equal(action(unboundDisplayNode, 'view').enabled, false);
+assert.match(action(unboundDisplayNode, 'view').reason ?? '', /no service-owned Guacamole route/);
 assert.equal(action(unboundDisplayNode, 'control').enabled, false);
+assert.match(action(unboundDisplayNode, 'control').reason ?? '', /no service-owned Guacamole route/);
+
+const proofMissingNode = byId(diagnosticNodes, 'browser:rdp-proof-missing');
+assert.ok(proofMissingNode.diagnostics.some((diagnostic) => diagnostic.kind === 'idle-route-display'));
+assert.equal(proofMissingNode.group, 'active');
+assert.equal(proofMissingNode.state, 'active');
+assert.equal(proofMissingNode.attentionReason, null);
+assert.equal(proofMissingNode.viewStream?.operatorVisibleState, 'route_bound_proof_missing');
+assert.match(proofMissingNode.viewStream?.routeSummary ?? '', /operator-visible proof missing/);
+assert.equal(proofMissingNode.viewStream?.embeddable, false);
+assert.equal(proofMissingNode.viewStream?.controllable, false);
+assert.equal(action(proofMissingNode, 'view').enabled, false);
+assert.match(action(proofMissingNode, 'view').reason ?? '', /operator-visible proof missing/);
+assert.equal(action(proofMissingNode, 'control').enabled, false);
+assert.match(action(proofMissingNode, 'control').reason ?? '', /operator-visible proof missing/);
 
 const nodes = deriveWorkspaceNodes({
   daemonSessions: [
@@ -312,6 +364,7 @@ const nodes = deriveWorkspaceNodes({
           viewerLeaseIds: ['viewer-control-observer'],
           controllerLeaseId: 'viewer-control-controller',
           remoteReadiness: { state: 'ready' },
+          displayContent: { state: 'browser_window_visible' },
           controlInput: 'manual_attached_desktop',
           readOnly: false,
         },
@@ -333,6 +386,7 @@ const nodes = deriveWorkspaceNodes({
           routeSource: 'config',
           providerMode: 'single_controller',
           remoteReadiness: { state: 'ready' },
+          displayContent: { state: 'browser_window_visible' },
           controlInput: 'manual_attached_desktop',
           readOnly: false,
         },
@@ -345,6 +399,7 @@ const nodes = deriveWorkspaceNodes({
           providerMode: 'simultaneous_view',
           viewerLeaseIds: ['viewer-private-a', 'viewer-private-b'],
           remoteReadiness: { state: 'ready' },
+          displayContent: { state: 'browser_window_visible' },
           controlInput: 'manual_attached_desktop',
           readOnly: false,
         },
@@ -361,6 +416,7 @@ const nodes = deriveWorkspaceNodes({
         {
           provider: 'rdp_gateway',
           url: 'http://127.0.0.1:8080/rdp/browser-takeover',
+          displayContent: { state: 'browser_window_visible' },
           controlInput: 'manual_attached_desktop',
           readOnly: false,
         },
@@ -379,6 +435,7 @@ const nodes = deriveWorkspaceNodes({
         {
           provider: 'rdp_gateway',
           url: 'https://agent-browser.example.test/guacamole/#/client/MQBjAHBvc3RncmVzcWw=',
+          displayContent: { state: 'browser_window_visible' },
           controlInput: 'manual_attached_desktop',
           readOnly: false,
         },
@@ -744,7 +801,9 @@ assert.equal(control.viewStream?.displayAllocationId, 'display-control');
 assert.equal(control.viewStream?.providerMode, 'simultaneous_view');
 assert.deepEqual(control.viewStream?.viewerLeaseIds, ['viewer-control-observer']);
 assert.equal(control.viewStream?.controllerLeaseId, 'viewer-control-controller');
-assert.match(control.viewStream?.routeSummary ?? '', /route-control \/ display display-control \/ simultaneous view \/ 1 viewer, controller leased \/ ready/);
+assert.equal(control.viewStream?.operatorVisibleState, 'ready');
+assert.equal(control.viewStream?.operatorVisibleReason, null);
+assert.match(control.viewStream?.routeSummary ?? '', /route-control \/ display display-control \/ simultaneous view \/ 1 viewer, controller leased \/ operator visible \/ ready/);
 assert.match(control.secondaryLabel, /route-control \/ display display-control/);
 assert.equal(action(control, 'control').enabled, true);
 assert.equal(action(control, 'external-open').enabled, true);
@@ -765,7 +824,8 @@ assert.ok(serviceDashboardViewer.diagnostics.some((diagnostic) => diagnostic.kin
 assert.equal(action(serviceDashboardViewer, 'control').enabled, false);
 assert.equal(privatePreferred.viewStream?.providerMode, 'simultaneous_view');
 assert.deepEqual(privatePreferred.viewStream?.viewerLeaseIds, ['viewer-private-a', 'viewer-private-b']);
-assert.match(privatePreferred.viewStream?.routeSummary ?? '', /route-private \/ display display-private-a \/ simultaneous view \/ 2 viewers \/ ready/);
+assert.equal(privatePreferred.viewStream?.operatorVisibleState, 'ready');
+assert.match(privatePreferred.viewStream?.routeSummary ?? '', /route-private \/ display display-private-a \/ simultaneous view \/ 2 viewers \/ operator visible \/ ready/);
 
 const odolloUps = byId(nodes, 'browser:session:odollo-carrier-ups');
 assert.equal(odolloUps.group, 'active');

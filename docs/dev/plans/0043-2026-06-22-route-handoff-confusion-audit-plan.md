@@ -328,6 +328,13 @@ Acceptance:
 Goal: make the left rail and workspace detail show route proof and ownership
 truthfully.
 
+Status: Done on 2026-06-22. The dashboard workspace model now carries
+`operatorVisibleState` and `operatorVisibleReason` on each row view stream. RDP
+gateway streams require current browser-window proof before View, Control, or
+external open are enabled. Terminal-only, idle-display, and missing-proof routes
+stay in the live owned group as disabled diagnostics rather than entering a
+no-action attention bucket or opening a generic desktop as a browser viewport.
+
 Deliverables:
 
 - Attach route-bound proof metadata to each service-owned browser row.

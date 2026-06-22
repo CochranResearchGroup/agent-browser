@@ -1731,3 +1731,56 @@ Result:
 - The selector still recommends `pnpm test:service-cdp-tab-streaming-live`
   because `actions.rs` changed; the same live smoke was already attempted in
   Turn 38 and failed before CDP validation while starting a temporary daemon.
+
+## Turn 41 | 2026-06-22
+
+Scope: execute P43 Slice F dashboard row binding and route-proof UX.
+
+Actions:
+
+- Added `operatorVisibleState` and `operatorVisibleReason` to dashboard
+  workspace view-stream rows.
+- Required current browser-window proof before RDP gateway View, Control, or
+  external open actions are enabled.
+- Kept terminal-only, idle-display, and missing-proof route rows in the live
+  owned group as disabled diagnostics rather than moving them into a no-action
+  attention category.
+- Preserved detected non-owned browser grouping and retained-record filtering in
+  the live workspace navigator.
+- Updated README, docs dashboard/service/commands pages, the `agent-browser`
+  skill, P43, and `ROADMAP.md`.
+
+Validation run:
+
+- `pnpm test:dashboard-workspace-nodes`
+- `pnpm test:dashboard-workspace-navigator`
+- `pnpm test:dashboard-selected-workspace-context`
+- `pnpm test:dashboard-selected-workspace-chat-packet`
+- `pnpm test:dashboard-selected-workspace-console`
+- `pnpm --dir docs build`
+- `pnpm build:dashboard`
+- `pnpm validation:select -- --base HEAD`
+- `node scripts/dev/select-validation.js --base HEAD --json`
+- `git diff --check`
+- `diff -q skills/agent-browser/SKILL.md /home/ecochran76/.codex/shared/skills/agent-browser/SKILL.md`
+- `pnpm publish:local-dashboard -- --expect-marker "operator-visible proof missing" --skip-browser --json`
+
+Result:
+
+- Dashboard workspace node, navigator, selected-context, chat-packet, and
+  console smokes passed.
+- Docs and dashboard builds passed with the known Next.js multiple-lockfile and
+  static-export rewrite warnings.
+- Diff hygiene, validation selector, selector JSON, and installed-skill sync
+  passed.
+- The local dashboard runtime was rebuilt into
+  `/home/ecochran76/.local/bin/agent-browser`, `agent-browser-dashboard.service`
+  restarted, `/api/runtime/manifest` matched the installed executable SHA
+  `f626320b5d084f824917560bdad60c8111678896cf81299a602c2d3a35c9d0a6`, and the
+  served chunk contained `operator-visible proof missing`.
+- The full publish browser smoke was attempted first and failed at the known
+  temp-daemon startup boundary:
+  `Daemon failed to start (socket: /run/user/1000/agent-browser/local-dashboard-runtime-smoke-2846318.sock)`.
+  The final publish used `--skip-browser`, so live browser launch remains
+  covered by the separate temp-daemon startup blocker rather than this Slice F
+  dashboard contract.

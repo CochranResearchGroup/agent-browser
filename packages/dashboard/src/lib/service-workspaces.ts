@@ -70,6 +70,8 @@ export type WorkspaceNodeViewStream = {
   controllable: boolean;
   readOnly: boolean;
   controlInput?: string | null;
+  operatorVisibleState: string;
+  operatorVisibleReason?: string | null;
   routeSummary: string;
 };
 
@@ -318,6 +320,7 @@ export type WorkspaceNodeInput = {
   jobs?: WorkspaceServiceJob[];
   incidents?: WorkspaceServiceIncident[];
   resources?: WorkspaceResourceRecord[];
+  includeRetained?: boolean;
 };
 
 const TERMINAL_BROWSER_HEALTH = new Set([
@@ -521,7 +524,7 @@ export function deriveWorkspaceNodes(input: WorkspaceNodeInput): WorkspaceNode[]
   }
 
   return nodes
-    .filter((node) => node.group !== "retained")
+    .filter((node) => input.includeRetained || node.group !== "retained")
     .sort(compareWorkspaceNodes);
 }
 
@@ -657,7 +660,7 @@ function createBrowserWorkspaceNode({
     includeTerminalHealth: !terminal || busy || incidents.some((incident) => !incident.resolvedAt) || Boolean(takeover),
   });
   const live = isLiveBrowser(browser);
-  const idleRouteDisplayDiagnostic = live
+  const routeProofDiagnostic = live
     ? idleRouteDisplayDiagnosticFor({
         browser,
         stream: rawViewStream,
@@ -666,12 +669,12 @@ function createBrowserWorkspaceNode({
     : null;
   const disabledStreamReason = !live
     ? "Browser is retained, not live."
-    : viewerClient.reason ?? idleRouteDisplayDiagnostic?.message ?? null;
+    : viewerClient.reason ?? routeProofDiagnostic?.message ?? null;
   const viewStream = rawPrimaryViewStream && disabledStreamReason
     ? disableViewStream(rawPrimaryViewStream, disabledStreamReason)
     : rawPrimaryViewStream;
   const blockedReason = takeover?.queueImpact ?? (terminal ? null : live && viewStream?.controllable ? null : profileBlockedReason(allocation));
-  const state = viewerClient.active || idleRouteDisplayDiagnostic ? "needs-attention" : workspaceState({
+  const state = viewerClient.active ? "needs-attention" : workspaceState({
     busy,
     blockedReason,
     attentionReason,
@@ -684,7 +687,7 @@ function createBrowserWorkspaceNode({
   });
   const nodeDiagnostics = uniqueDiagnostics([
     ...(viewerClientDiagnostic ? [viewerClientDiagnostic] : []),
-    ...(idleRouteDisplayDiagnostic ? [idleRouteDisplayDiagnostic] : []),
+    ...(routeProofDiagnostic ? [routeProofDiagnostic] : []),
     ...diagnostics,
   ]);
   const label = browserWorkspaceLabel({
@@ -720,7 +723,7 @@ function createBrowserWorkspaceNode({
     secondaryLabel,
     sortLabel: `${label} ${browser.id}`.toLowerCase(),
     health: browser.health ?? null,
-    attentionReason: viewerClient.reason ?? idleRouteDisplayDiagnostic?.message ?? blockedReason ?? attentionReason,
+    attentionReason: viewerClient.reason ?? blockedReason ?? attentionReason,
     retained: !live,
     live,
     browserId: browser.id,
@@ -967,6 +970,8 @@ function daemonViewStream(session: SessionInfo, live: boolean): WorkspaceNodeVie
     controllable: true,
     readOnly: false,
     controlInput: "cdp_input",
+    operatorVisibleState: "ready",
+    operatorVisibleReason: null,
     routeSummary: `daemon stream ${session.port} / ready`,
   };
 }
@@ -1416,6 +1421,10 @@ function idleRouteDisplayReason(browser: WorkspaceServiceBrowser, stream?: Works
       "The projected route may show a shared terminal desktop instead of this browser.",
     ]).join(" ");
   }
+  const proof = routeProofState(stream);
+  if (proof.state === "route_bound_proof_missing") {
+    return "Remote route operator-visible proof missing; run route-bound open or focus proof before using the Guacamole stream.";
+  }
   const explicitState = readinessState(stream.remoteReadiness ?? stream.readiness);
   const normalizedState = normalize(explicitState);
   if (["idle_display", "terminal_only", "no_browser_window", "display_idle"].includes(normalizedState)) {
@@ -1472,6 +1481,8 @@ function disableViewStream(
     controllable: false,
     readOnly: true,
     controlInput: null,
+    operatorVisibleState: stream.operatorVisibleState === "ready" ? "disabled" : stream.operatorVisibleState,
+    operatorVisibleReason: reason,
     routeSummary: reason,
   };
 }
@@ -1534,9 +1545,12 @@ function primaryServiceTab(tabs: WorkspaceServiceTab[]): WorkspaceNodePrimaryTab
 function primaryViewStream(streams?: WorkspaceServiceViewStream[]): WorkspaceNodeViewStream | null {
   const stream = selectPrimaryWorkspaceViewStream(streams);
   if (!stream) return null;
-  const streamUrl = stream.frameUrl || stream.url || stream.externalUrl || null;
-  const embeddable = Boolean(streamUrl);
+  const operatorVisible = routeProofState(stream);
   const readOnly = stream.readOnly === true || !stream.controlInput;
+  const routeProofReady = operatorVisible.state === "ready";
+  const routeProofRequired = normalize(stream.provider) === "rdp_gateway";
+  const streamUrl = stream.frameUrl || stream.url || stream.externalUrl || null;
+  const embeddable = Boolean(streamUrl) && (!routeProofRequired || routeProofReady);
   return {
     provider: stream.provider ?? null,
     url: streamUrl,
@@ -1549,10 +1563,12 @@ function primaryViewStream(streams?: WorkspaceServiceViewStream[]): WorkspaceNod
     viewerLeaseIds: stream.viewerLeaseIds ?? [],
     controllerLeaseId: stream.controllerLeaseId ?? null,
     embeddable,
-    controllable: embeddable && !readOnly,
-    readOnly,
-    controlInput: stream.controlInput ?? null,
-    routeSummary: viewStreamRouteSummary(stream),
+    controllable: embeddable && !readOnly && (!routeProofRequired || routeProofReady),
+    readOnly: readOnly || (routeProofRequired && !routeProofReady),
+    controlInput: routeProofRequired && !routeProofReady ? null : stream.controlInput ?? null,
+    operatorVisibleState: operatorVisible.state,
+    operatorVisibleReason: operatorVisible.reason,
+    routeSummary: viewStreamRouteSummary(stream, operatorVisible),
   };
 }
 
@@ -1611,7 +1627,10 @@ function workspaceViewStreamScore(stream: WorkspaceServiceViewStream): number {
   return score;
 }
 
-function viewStreamRouteSummary(stream: WorkspaceServiceViewStream): string {
+function viewStreamRouteSummary(
+  stream: WorkspaceServiceViewStream,
+  operatorVisible: { state: string; reason: string | null } = routeProofState(stream),
+): string {
   const viewerCount = stream.viewerLeaseIds?.length ?? 0;
   const leaseLabel = stream.controllerLeaseId
     ? `${viewerCount} viewer${viewerCount === 1 ? "" : "s"}, controller leased`
@@ -1621,8 +1640,46 @@ function viewStreamRouteSummary(stream: WorkspaceServiceViewStream): string {
     stream.displayAllocationId ? `display ${stream.displayAllocationId}` : null,
     stream.providerMode?.replaceAll("_", " ") ?? null,
     leaseLabel,
+    operatorVisible.state === "ready" ? "operator visible" : operatorVisible.reason,
     viewStreamReadinessLabel(stream),
   ]).join(" / ");
+}
+
+function routeProofState(stream: WorkspaceServiceViewStream): { state: string; reason: string | null } {
+  const provider = normalize(stream.provider);
+  if (provider !== "rdp_gateway") return { state: "ready", reason: null };
+  const displayStateValue = recordValue(stream.displayContent, "state");
+  const displayState = normalize(typeof displayStateValue === "string" ? displayStateValue : null);
+  if (displayState === "browser_window_visible") return { state: "ready", reason: null };
+  if (displayState === "terminal_only") {
+    return {
+      state: "route_bound_terminal_only",
+      reason: "Remote route display is terminal-only.",
+    };
+  }
+  if (displayState === "empty_display" || displayState === "display_idle" || displayState === "idle_display") {
+    return {
+      state: "route_bound_display_idle",
+      reason: "Remote route display has no visible browser window.",
+    };
+  }
+  if (displayState === "non_browser_windows" || displayState === "no_browser_window") {
+    return {
+      state: "route_bound_browser_not_visible",
+      reason: "Remote route display does not show a browser window.",
+    };
+  }
+  const readiness = normalize(readinessState(stream.remoteReadiness ?? stream.readiness));
+  if (readiness === "terminal_only_route" || readiness === "terminal_only") {
+    return {
+      state: "route_bound_terminal_only",
+      reason: "Remote route readiness reports a terminal-only display.",
+    };
+  }
+  return {
+    state: "route_bound_proof_missing",
+    reason: "operator-visible proof missing",
+  };
 }
 
 function viewStreamReadinessLabel(stream: WorkspaceServiceViewStream): string {
@@ -1651,6 +1708,10 @@ function readinessState(readiness: unknown): string | null {
   const components = record.components ?? record.checks ?? record.results;
   if (Array.isArray(components)) return readinessState(components);
   return null;
+}
+
+function recordValue(source: unknown, key: string): unknown {
+  return source && typeof source === "object" ? (source as Record<string, unknown>)[key] : undefined;
 }
 
 function actorLabel(value: unknown): string {
@@ -1719,14 +1780,15 @@ function browserActions(
 ): WorkspaceNodeAction[] {
   const canViewStream = live && Boolean(viewStream?.embeddable);
   const canControlStream = live && Boolean(viewStream?.controllable);
+  const streamUnavailableReason = viewStream?.operatorVisibleReason ?? viewStream?.routeSummary;
   const actions: WorkspaceNodeAction[] = [
     ...(takeover ? [{ id: "resume" as const, label: "Resume", enabled: takeover.resumeSupported, reason: takeover.resumeReason }] : []),
     { id: "focus", label: "Focus", enabled: live, reason: live ? null : "Browser is retained, not live." },
-    { id: "view", label: "View", enabled: canViewStream, reason: canViewStream ? null : live ? "No embeddable service-owned view stream." : "Browser is retained, not live." },
-    { id: "control", label: "Control", enabled: canControlStream, reason: canControlStream ? null : live ? "No controllable service-owned view stream." : "Browser is retained, not live." },
+    { id: "view", label: "View", enabled: canViewStream, reason: canViewStream ? null : live ? streamUnavailableReason || "No embeddable service-owned view stream." : "Browser is retained, not live." },
+    { id: "control", label: "Control", enabled: canControlStream, reason: canControlStream ? null : live ? streamUnavailableReason || "No controllable service-owned view stream." : "Browser is retained, not live." },
     { id: "repair", label: "Repair", enabled: Boolean(attentionReason), reason: attentionReason ? null : "No service-owned repair reason is present." },
     { id: "close", label: "Close", enabled: live, reason: live ? null : "Browser is already retained." },
-    { id: "external-open", label: "Open externally", enabled: canViewStream, reason: canViewStream ? null : live ? "No external stream URL is recorded." : "Browser is retained, not live." },
+    { id: "external-open", label: "Open externally", enabled: canViewStream, reason: canViewStream ? null : live ? streamUnavailableReason || "No external stream URL is recorded." : "Browser is retained, not live." },
   ];
   return actions.filter((action) => action.id !== "external-open" || browser.viewStreams?.length);
 }
