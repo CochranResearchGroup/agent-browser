@@ -118,7 +118,7 @@ and feature support.
 
 ### Slice A: Active Runtime Inventory
 
-Slice progress: planned.
+Slice progress: done on 2026-06-22.
 
 Add a no-launch inventory that reports every active agent-browser runtime that
 can affect the operator control surface.
@@ -141,6 +141,21 @@ Acceptance:
   reported as partially converged, not ready by omission.
 - Inventory rows do not expose secrets, auth state, cookies, page contents, or
   browser profile data.
+
+Completed on 2026-06-22:
+
+- `agent-browser install doctor --json` now includes
+  `runtimeInventory.schemaVersion=agent-browser.runtime-inventory.v1`.
+- The inventory scans the user-scoped daemon metadata directory without
+  launching Chrome and reports daemon session PID, PID liveness, package
+  version match, executable SHA-256 match, stream port, and metadata presence.
+- Active daemon sessions with stale or incomplete executable metadata add
+  `active_runtime_stale_executable` install doctor issues.
+- `agent-browser doctor remote-view --json` lifts the install doctor's
+  `runtimeInventory` to a top-level `runtimeInventory` field.
+- Live debug-binary readback reported `runtimeInventory.status=stale`,
+  `runtimeCount=4`, and `staleCount=4`, proving the inventory catches active
+  runtimes that do not match the invoking executable identity.
 
 ### Slice B: Daemon SHA Convergence
 

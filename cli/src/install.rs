@@ -1,7 +1,9 @@
 use crate::color;
+use crate::connection::get_socket_dir;
 use crate::flags::{launch_config_status, Flags};
 use crate::native::stream::runtime_manifest_json;
 use serde_json::json;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
@@ -968,6 +970,14 @@ pub fn run_install_doctor(flags: &Flags) {
         report.pointer("/data/dashboardRuntime/executable/sha256"),
     );
     print_doctor_field(
+        "runtime convergence",
+        report.pointer("/data/runtimeInventory/status"),
+    );
+    print_doctor_field(
+        "stale runtimes",
+        report.pointer("/data/runtimeInventory/staleCount"),
+    );
+    print_doctor_field(
         "remote-view helper",
         report.pointer("/data/remoteViewPrivileges/helperPath"),
     );
@@ -1020,15 +1030,21 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
     let dashboard_runtime = runtime_manifest_json();
     let service = service_status_probe();
     let service_resources = service_resources_probe();
-    let issues = install_doctor_issues(
-        &current_executable,
-        &path_command,
-        &pnpm_package_binary,
-        &workspace_binary,
-        &launch_config,
-        &service,
-        &service_resources,
+    let runtime_inventory = active_runtime_inventory(
+        current_executable
+            .get("sha256")
+            .and_then(|value| value.as_str()),
     );
+    let issues = install_doctor_issues(InstallDoctorIssueInputs {
+        current_executable: &current_executable,
+        path_command: &path_command,
+        pnpm_package_binary: &pnpm_package_binary,
+        workspace_binary: &workspace_binary,
+        launch_config: &launch_config,
+        service: &service,
+        service_resources: &service_resources,
+        runtime_inventory: &runtime_inventory,
+    });
 
     json!({
         "success": issues.is_empty(),
@@ -1043,21 +1059,33 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
             "serviceResources": service_resources,
             "remoteViewPrivileges": remote_view_privileges,
             "dashboardRuntime": dashboard_runtime,
+            "runtimeInventory": runtime_inventory,
             "issues": issues,
         }
     })
 }
 
-fn install_doctor_issues(
-    current_executable: &serde_json::Value,
-    path_command: &serde_json::Value,
-    pnpm_package_binary: &serde_json::Value,
-    workspace_binary: &serde_json::Value,
-    launch_config: &serde_json::Value,
-    service: &serde_json::Value,
-    service_resources: &serde_json::Value,
-) -> Vec<serde_json::Value> {
+struct InstallDoctorIssueInputs<'a> {
+    current_executable: &'a serde_json::Value,
+    path_command: &'a serde_json::Value,
+    pnpm_package_binary: &'a serde_json::Value,
+    workspace_binary: &'a serde_json::Value,
+    launch_config: &'a serde_json::Value,
+    service: &'a serde_json::Value,
+    service_resources: &'a serde_json::Value,
+    runtime_inventory: &'a serde_json::Value,
+}
+
+fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json::Value> {
     let mut issues = Vec::new();
+    let current_executable = inputs.current_executable;
+    let path_command = inputs.path_command;
+    let pnpm_package_binary = inputs.pnpm_package_binary;
+    let workspace_binary = inputs.workspace_binary;
+    let launch_config = inputs.launch_config;
+    let service = inputs.service;
+    let service_resources = inputs.service_resources;
+    let runtime_inventory = inputs.runtime_inventory;
 
     if path_command
         .get("path")
@@ -1160,7 +1188,145 @@ fn install_doctor_issues(
         }));
     }
 
+    if let Some(rows) = runtime_inventory
+        .get("runtimes")
+        .and_then(|value| value.as_array())
+    {
+        for row in rows {
+            if row
+                .get("state")
+                .and_then(|value| value.as_str())
+                .is_some_and(|state| state == "stale")
+            {
+                let session = row
+                    .get("session")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("unknown");
+                issues.push(json!({
+                    "code": "active_runtime_stale_executable",
+                    "message": format!("active daemon session {session} was started by stale or incomplete executable metadata")
+                }));
+            }
+        }
+    }
+
     issues
+}
+
+fn active_runtime_inventory(expected_sha256: Option<&str>) -> serde_json::Value {
+    let socket_dir = get_socket_dir();
+    let mut sessions: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    if let Ok(entries) = fs::read_dir(&socket_dir) {
+        for entry in entries.flatten() {
+            let file_name = entry.file_name().to_string_lossy().to_string();
+            let Some((session, extension)) = file_name.rsplit_once('.') else {
+                continue;
+            };
+            match extension {
+                "pid" | "version" | "sha256" | "stream" | "sock" | "port" => {
+                    sessions
+                        .entry(session.to_string())
+                        .or_default()
+                        .insert(extension.to_string());
+                }
+                _ => {}
+            }
+        }
+    }
+
+    let mut rows = Vec::new();
+    let mut converged_count = 0usize;
+    let mut stale_count = 0usize;
+    for (session, extensions) in sessions {
+        let pid_path = socket_dir.join(format!("{session}.pid"));
+        let version_path = socket_dir.join(format!("{session}.version"));
+        let sha_path = socket_dir.join(format!("{session}.sha256"));
+        let stream_path = socket_dir.join(format!("{session}.stream"));
+        let pid = fs::read_to_string(&pid_path)
+            .ok()
+            .and_then(|value| value.trim().parse::<u32>().ok());
+        let package_version = fs::read_to_string(&version_path)
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        let executable_sha256 = fs::read_to_string(&sha_path)
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        let stream_port = fs::read_to_string(&stream_path)
+            .ok()
+            .and_then(|value| value.trim().parse::<u16>().ok());
+        let pid_running = pid.is_some_and(pid_is_running);
+        let package_version_matches = package_version
+            .as_deref()
+            .map(|value| value == env!("CARGO_PKG_VERSION"))
+            .unwrap_or(false);
+        let executable_sha256_matches = match (expected_sha256, executable_sha256.as_deref()) {
+            (Some(expected), Some(actual)) => expected == actual,
+            (None, _) => true,
+            (_, None) => false,
+        };
+        let state = if pid_running && package_version_matches && executable_sha256_matches {
+            converged_count += 1;
+            "converged"
+        } else if pid_running {
+            stale_count += 1;
+            "stale"
+        } else {
+            "inactive"
+        };
+        rows.push(json!({
+            "kind": "daemon_session",
+            "session": session,
+            "state": state,
+            "pid": pid,
+            "pidRunning": pid_running,
+            "packageVersion": package_version,
+            "packageVersionMatches": package_version_matches,
+            "executableSha256": executable_sha256,
+            "expectedExecutableSha256": expected_sha256,
+            "executableSha256Matches": executable_sha256_matches,
+            "streamPort": stream_port,
+            "metadata": {
+                "socketDir": socket_dir.display().to_string(),
+                "hasPid": extensions.contains("pid"),
+                "hasVersion": extensions.contains("version"),
+                "hasExecutableSha256": extensions.contains("sha256"),
+                "hasSocket": extensions.contains("sock"),
+                "hasPort": extensions.contains("port"),
+                "hasStream": extensions.contains("stream"),
+            }
+        }));
+    }
+    let status = if stale_count > 0 {
+        "stale"
+    } else if converged_count > 0 {
+        "converged"
+    } else {
+        "none"
+    };
+    json!({
+        "schemaVersion": "agent-browser.runtime-inventory.v1",
+        "status": status,
+        "socketDir": socket_dir.display().to_string(),
+        "expectedExecutableSha256": expected_sha256,
+        "runtimeCount": rows.len(),
+        "convergedCount": converged_count,
+        "staleCount": stale_count,
+        "runtimes": rows,
+    })
+}
+
+fn pid_is_running(pid: u32) -> bool {
+    #[cfg(unix)]
+    {
+        unsafe { libc::kill(pid as i32, 0) == 0 }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = pid;
+        false
+    }
 }
 
 fn service_status_probe() -> serde_json::Value {
@@ -2018,6 +2184,17 @@ mod tests {
             .collect()
     }
 
+    fn empty_runtime_inventory() -> serde_json::Value {
+        json!({
+            "schemaVersion": "agent-browser.runtime-inventory.v1",
+            "status": "none",
+            "runtimeCount": 0,
+            "convergedCount": 0,
+            "staleCount": 0,
+            "runtimes": [],
+        })
+    }
+
     fn test_zip_with_chrome(chrome_bytes: &[u8], smoke: Option<&[u8]>) -> Vec<u8> {
         let mut cursor = io::Cursor::new(Vec::new());
         {
@@ -2070,15 +2247,23 @@ mod tests {
             "stealthCdpChromiumReady": true,
         });
 
-        let issues = install_doctor_issues(
-            &fingerprint(Some("/current/agent-browser"), Some("aaa")),
-            &fingerprint(Some("/path/agent-browser"), Some("bbb")),
-            &fingerprint(Some("/pnpm/agent-browser"), Some("ccc")),
-            &fingerprint(None, None),
-            &launch_config,
-            &json!({"ready": true}),
-            &json!({"readinessImpactingCandidates": 0}),
-        );
+        let current_executable = fingerprint(Some("/current/agent-browser"), Some("aaa"));
+        let path_command = fingerprint(Some("/path/agent-browser"), Some("bbb"));
+        let pnpm_package_binary = fingerprint(Some("/pnpm/agent-browser"), Some("ccc"));
+        let workspace_binary = fingerprint(None, None);
+        let service = json!({"ready": true});
+        let service_resources = json!({"readinessImpactingCandidates": 0});
+        let runtime_inventory = empty_runtime_inventory();
+        let issues = install_doctor_issues(InstallDoctorIssueInputs {
+            current_executable: &current_executable,
+            path_command: &path_command,
+            pnpm_package_binary: &pnpm_package_binary,
+            workspace_binary: &workspace_binary,
+            launch_config: &launch_config,
+            service: &service,
+            service_resources: &service_resources,
+            runtime_inventory: &runtime_inventory,
+        });
 
         assert_eq!(
             issue_codes(issues),
@@ -2096,15 +2281,23 @@ mod tests {
             "stealthCdpChromiumReady": false,
         });
 
-        let issues = install_doctor_issues(
-            &fingerprint(Some("/same/agent-browser"), Some("aaa")),
-            &fingerprint(Some("/same/agent-browser"), Some("aaa")),
-            &fingerprint(Some("/pnpm/agent-browser"), Some("aaa")),
-            &fingerprint(Some("/workspace/agent-browser"), Some("aaa")),
-            &launch_config,
-            &json!({"ready": true}),
-            &json!({"readinessImpactingCandidates": 0}),
-        );
+        let current_executable = fingerprint(Some("/same/agent-browser"), Some("aaa"));
+        let path_command = fingerprint(Some("/same/agent-browser"), Some("aaa"));
+        let pnpm_package_binary = fingerprint(Some("/pnpm/agent-browser"), Some("aaa"));
+        let workspace_binary = fingerprint(Some("/workspace/agent-browser"), Some("aaa"));
+        let service = json!({"ready": true});
+        let service_resources = json!({"readinessImpactingCandidates": 0});
+        let runtime_inventory = empty_runtime_inventory();
+        let issues = install_doctor_issues(InstallDoctorIssueInputs {
+            current_executable: &current_executable,
+            path_command: &path_command,
+            pnpm_package_binary: &pnpm_package_binary,
+            workspace_binary: &workspace_binary,
+            launch_config: &launch_config,
+            service: &service,
+            service_resources: &service_resources,
+            runtime_inventory: &runtime_inventory,
+        });
 
         assert_eq!(issue_codes(issues), vec!["launch_config_not_ready"]);
     }
@@ -2116,15 +2309,23 @@ mod tests {
             "stealthCdpChromiumReady": true,
         });
 
-        let issues = install_doctor_issues(
-            &fingerprint(Some("/same/agent-browser"), Some("aaa")),
-            &fingerprint(Some("/same/agent-browser"), Some("aaa")),
-            &fingerprint(Some("/pnpm/agent-browser"), Some("aaa")),
-            &fingerprint(Some("/workspace/agent-browser"), Some("aaa")),
-            &launch_config,
-            &json!({"ready": false}),
-            &json!({"readinessImpactingCandidates": 0}),
-        );
+        let current_executable = fingerprint(Some("/same/agent-browser"), Some("aaa"));
+        let path_command = fingerprint(Some("/same/agent-browser"), Some("aaa"));
+        let pnpm_package_binary = fingerprint(Some("/pnpm/agent-browser"), Some("aaa"));
+        let workspace_binary = fingerprint(Some("/workspace/agent-browser"), Some("aaa"));
+        let service = json!({"ready": false});
+        let service_resources = json!({"readinessImpactingCandidates": 0});
+        let runtime_inventory = empty_runtime_inventory();
+        let issues = install_doctor_issues(InstallDoctorIssueInputs {
+            current_executable: &current_executable,
+            path_command: &path_command,
+            pnpm_package_binary: &pnpm_package_binary,
+            workspace_binary: &workspace_binary,
+            launch_config: &launch_config,
+            service: &service,
+            service_resources: &service_resources,
+            runtime_inventory: &runtime_inventory,
+        });
 
         assert_eq!(issue_codes(issues), vec!["service_status_not_ready"]);
     }
@@ -2136,15 +2337,23 @@ mod tests {
             "stealthCdpChromiumReady": true,
         });
 
-        let issues = install_doctor_issues(
-            &fingerprint(Some("/same/agent-browser"), Some("aaa")),
-            &fingerprint(Some("/same/agent-browser"), Some("aaa")),
-            &fingerprint(Some("/pnpm/agent-browser"), Some("aaa")),
-            &fingerprint(Some("/workspace/agent-browser"), Some("aaa")),
-            &launch_config,
-            &json!({"ready": true}),
-            &json!({"readinessImpactingCandidates": 1}),
-        );
+        let current_executable = fingerprint(Some("/same/agent-browser"), Some("aaa"));
+        let path_command = fingerprint(Some("/same/agent-browser"), Some("aaa"));
+        let pnpm_package_binary = fingerprint(Some("/pnpm/agent-browser"), Some("aaa"));
+        let workspace_binary = fingerprint(Some("/workspace/agent-browser"), Some("aaa"));
+        let service = json!({"ready": true});
+        let service_resources = json!({"readinessImpactingCandidates": 1});
+        let runtime_inventory = empty_runtime_inventory();
+        let issues = install_doctor_issues(InstallDoctorIssueInputs {
+            current_executable: &current_executable,
+            path_command: &path_command,
+            pnpm_package_binary: &pnpm_package_binary,
+            workspace_binary: &workspace_binary,
+            launch_config: &launch_config,
+            service: &service,
+            service_resources: &service_resources,
+            runtime_inventory: &runtime_inventory,
+        });
 
         assert_eq!(
             issue_codes(issues),
@@ -2159,23 +2368,69 @@ mod tests {
             "stealthCdpChromiumReady": true,
         });
 
-        let issues = install_doctor_issues(
-            &fingerprint(Some("/same/agent-browser"), Some("aaa")),
-            &fingerprint(Some("/same/agent-browser"), Some("aaa")),
-            &fingerprint(Some("/pnpm/agent-browser"), Some("aaa")),
-            &fingerprint(Some("/workspace/agent-browser"), Some("aaa")),
-            &launch_config,
-            &json!({"ready": true}),
-            &json!({
-                "readinessImpactingCandidates": 0,
-                "duplicateProfilePressureWarnings": 1
-            }),
-        );
+        let current_executable = fingerprint(Some("/same/agent-browser"), Some("aaa"));
+        let path_command = fingerprint(Some("/same/agent-browser"), Some("aaa"));
+        let pnpm_package_binary = fingerprint(Some("/pnpm/agent-browser"), Some("aaa"));
+        let workspace_binary = fingerprint(Some("/workspace/agent-browser"), Some("aaa"));
+        let service = json!({"ready": true});
+        let service_resources = json!({
+            "readinessImpactingCandidates": 0,
+            "duplicateProfilePressureWarnings": 1
+        });
+        let runtime_inventory = empty_runtime_inventory();
+        let issues = install_doctor_issues(InstallDoctorIssueInputs {
+            current_executable: &current_executable,
+            path_command: &path_command,
+            pnpm_package_binary: &pnpm_package_binary,
+            workspace_binary: &workspace_binary,
+            launch_config: &launch_config,
+            service: &service,
+            service_resources: &service_resources,
+            runtime_inventory: &runtime_inventory,
+        });
 
         assert_eq!(
             issue_codes(issues),
             vec!["service_duplicate_profile_pressure"]
         );
+    }
+
+    #[test]
+    fn install_doctor_flags_stale_runtime_inventory() {
+        let launch_config = json!({
+            "stealthCdpChromiumRequired": false,
+            "stealthCdpChromiumReady": true,
+        });
+
+        let current_executable = fingerprint(Some("/same/agent-browser"), Some("aaa"));
+        let path_command = fingerprint(Some("/same/agent-browser"), Some("aaa"));
+        let pnpm_package_binary = fingerprint(Some("/pnpm/agent-browser"), Some("aaa"));
+        let workspace_binary = fingerprint(Some("/workspace/agent-browser"), Some("aaa"));
+        let service = json!({"ready": true});
+        let service_resources = json!({"readinessImpactingCandidates": 0});
+        let runtime_inventory = json!({
+            "schemaVersion": "agent-browser.runtime-inventory.v1",
+            "status": "stale",
+            "runtimes": [
+                {
+                    "kind": "daemon_session",
+                    "session": "default",
+                    "state": "stale"
+                }
+            ]
+        });
+        let issues = install_doctor_issues(InstallDoctorIssueInputs {
+            current_executable: &current_executable,
+            path_command: &path_command,
+            pnpm_package_binary: &pnpm_package_binary,
+            workspace_binary: &workspace_binary,
+            launch_config: &launch_config,
+            service: &service,
+            service_resources: &service_resources,
+            runtime_inventory: &runtime_inventory,
+        });
+
+        assert_eq!(issue_codes(issues), vec!["active_runtime_stale_executable"]);
     }
 
     #[test]

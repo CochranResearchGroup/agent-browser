@@ -84,6 +84,7 @@ fn remote_view_doctor_report(args: &DoctorArgs) -> Value {
     let remote_control =
         remote_control_status(&install, &rdp_gateway, &route_pool, &route_displays);
     let dashboard_runtime = dashboard_runtime_from_install(&install);
+    let runtime_inventory = runtime_inventory_from_install(&install);
     let next_action = recommend_next_action(RecommendationContext {
         install: &install,
         rdp_gateway: &rdp_gateway,
@@ -128,6 +129,7 @@ fn remote_view_doctor_report(args: &DoctorArgs) -> Value {
             },
             "remoteControl": remote_control,
             "dashboardRuntime": dashboard_runtime,
+            "runtimeInventory": runtime_inventory,
             "manyToMany": many_to_many,
             "viewerPrerequisites": viewer_prerequisites,
             "config": config,
@@ -1668,6 +1670,18 @@ fn dashboard_runtime_from_install(install: &Value) -> Value {
         })
 }
 
+fn runtime_inventory_from_install(install: &Value) -> Value {
+    install
+        .pointer("/data/data/runtimeInventory")
+        .cloned()
+        .unwrap_or_else(|| {
+            json!({
+                "available": false,
+                "reason": "install doctor did not report runtime inventory",
+            })
+        })
+}
+
 fn readiness_component_ready(value: &Value, component_name: &str) -> bool {
     value
         .pointer("/data/readiness/components")
@@ -1765,6 +1779,43 @@ mod tests {
         assert_eq!(
             runtime["reason"],
             "install doctor did not report dashboard runtime manifest"
+        );
+    }
+
+    #[test]
+    fn runtime_inventory_from_install_lifts_inventory() {
+        let install = json!({
+            "available": true,
+            "data": {
+                "success": true,
+                "data": {
+                    "runtimeInventory": {
+                        "schemaVersion": "agent-browser.runtime-inventory.v1",
+                        "status": "converged",
+                        "runtimeCount": 1
+                    }
+                }
+            }
+        });
+
+        let inventory = runtime_inventory_from_install(&install);
+
+        assert_eq!(
+            inventory["schemaVersion"],
+            "agent-browser.runtime-inventory.v1"
+        );
+        assert_eq!(inventory["status"], "converged");
+        assert_eq!(inventory["runtimeCount"], 1);
+    }
+
+    #[test]
+    fn runtime_inventory_from_install_reports_unavailable_when_missing() {
+        let inventory = runtime_inventory_from_install(&json!({"success": true}));
+
+        assert_eq!(inventory["available"], false);
+        assert_eq!(
+            inventory["reason"],
+            "install doctor did not report runtime inventory"
         );
     }
 

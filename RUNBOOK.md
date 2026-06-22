@@ -1102,3 +1102,39 @@ Result:
 - Focused daemon SHA convergence tests passed. P42 remains open for active
   runtime inventory, doctor remedies, live rail convergence boundaries, and
   one-command local convergence.
+
+## Turn 26 | 2026-06-22
+
+Scope: execute P42 Slice A active runtime inventory in doctor output.
+
+Actions:
+
+- Added `runtimeInventory` to `agent-browser install doctor --json`.
+- The inventory scans the daemon socket metadata directory without launching
+  Chrome and reports daemon session PID, PID liveness, package version match,
+  executable SHA-256 match, stream port, and metadata presence.
+- Added `active_runtime_stale_executable` install doctor issues for active
+  daemon sessions whose metadata is stale or incomplete.
+- Lifted the install doctor's runtime inventory into
+  `agent-browser doctor remote-view --json` as top-level `runtimeInventory`.
+- Updated P42 Slice A completion notes.
+
+Validation run:
+
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo test --manifest-path cli/Cargo.toml install_doctor -- --nocapture`
+- `cargo test --manifest-path cli/Cargo.toml runtime_inventory_from_install -- --nocapture`
+- `cargo test --manifest-path cli/Cargo.toml daemon_executable_sha -- --nocapture`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `./cli/target/debug/agent-browser install doctor --json`
+- `./cli/target/debug/agent-browser doctor remote-view --json`
+
+Result:
+
+- Focused tests and clippy passed.
+- The rebuilt debug-binary install doctor reported
+  `runtimeInventory.status=stale`, `runtimeCount=4`, and `staleCount=4`.
+- The rebuilt debug-binary remote-view doctor lifted the same inventory and
+  reported `runtimeInventory.status=stale`. This intentionally made the
+  debug-binary readback not remote-control ready against the installed runtime,
+  proving stale active runtimes are no longer omitted from readiness.
