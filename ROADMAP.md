@@ -626,6 +626,10 @@ rows.
   read-only route-handoff audit artifact for active browsers, tabs, displays,
   routes, route-pool entries, viewer leases, runtime convergence, stream URLs,
   and retained visual proof.
+- Slice B is complete. `agent-browser remote-view open --help` now shows the
+  route-bound one-liner, flag-placement guidance, and session versus
+  session-name distinction, and parser coverage preserves post-subcommand
+  runtime/profile/session-state flags.
 - The incident note is
   `docs/dev/notes/2026-06-22-facebook-remote-view-open-friction.md`.
 - Live readback on 2026-06-22 showed `session:default` on profile
@@ -648,6 +652,6 @@ rows.
 
 ### Next Recommendation
 
-Execute P43 Slice B next. Make the route-bound one-liner discoverable and
-parser-safe before changing route allocation, profile lock, or dashboard
+Execute P43 Slice C next. Make `route_pool_unavailable` explain requested and
+available route/display identities before changing profile-lock or dashboard
 operator-visible success behavior.

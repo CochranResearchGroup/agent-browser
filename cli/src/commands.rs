@@ -856,6 +856,9 @@ fn parse_remote_view_open(id: String, rest: &[&str], flags: &Flags) -> Result<Va
     if let Some(display_isolation) = flags.display_isolation.as_ref() {
         cmd["displayIsolation"] = json!(display_isolation);
     }
+    if let Some(session_name) = flags.session_name.as_ref() {
+        cmd["sessionName"] = json!(session_name);
+    }
     if let Some(browser_host) = flags.browser_host.as_ref() {
         cmd["browserHost"] = json!(browser_host);
     }
@@ -7144,6 +7147,39 @@ mod tests {
         assert_eq!(cmd["agentName"], "codex");
         assert_eq!(cmd["taskName"], "authenticateLinkedIn");
         assert_eq!(cmd["dryRun"], true);
+    }
+
+    #[test]
+    fn test_remote_view_open_preserves_global_flags_after_subcommand() {
+        let raw = args("remote-view open https://www.facebook.com/ --runtime-profile last30days-facebook --session-name last30days-facebook-state --session last30days-facebook-daemon --browser-build stealthcdp_chromium --provider rdp_gateway --dry-run");
+        let flags = crate::flags::parse_flags(&raw);
+        let clean = crate::flags::clean_args(&raw);
+        let cmd = parse_command(&clean, &flags).unwrap();
+
+        assert_eq!(flags.session, "last30days-facebook-daemon");
+        assert_eq!(cmd["action"], "remote_view_open");
+        assert_eq!(cmd["url"], "https://www.facebook.com/");
+        assert_eq!(cmd["runtimeProfile"], "last30days-facebook");
+        assert_eq!(cmd["sessionName"], "last30days-facebook-state");
+        assert_eq!(cmd["browserBuild"], "stealthcdp_chromium");
+        assert_eq!(cmd["viewStreamProvider"], "rdp_gateway");
+        assert_eq!(cmd["provider"], "rdp_gateway");
+        assert_eq!(cmd["dryRun"], true);
+    }
+
+    #[test]
+    fn test_remote_view_open_command_session_name_overrides_global_session_name() {
+        let raw = args("--session-name global-state remote-view open https://www.facebook.com/ --session-name command-state --dry-run");
+        let flags = crate::flags::parse_flags(&raw);
+        let cmd = parse_command(
+            &args(
+                "remote-view open https://www.facebook.com/ --session-name command-state --dry-run",
+            ),
+            &flags,
+        )
+        .unwrap();
+
+        assert_eq!(cmd["sessionName"], "command-state");
     }
 
     #[test]

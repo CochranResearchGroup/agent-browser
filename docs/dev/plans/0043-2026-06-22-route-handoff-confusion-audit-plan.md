@@ -184,6 +184,8 @@ Completed on 2026-06-22:
 
 ### Slice B: One-Line CLI Contract And Help
 
+Slice progress: done on 2026-06-22.
+
 Goal: make the intended Facebook-style handoff command obvious and hard to
 misuse.
 
@@ -203,6 +205,22 @@ Acceptance:
 - A caller can discover the correct Facebook handoff command from help output
   without reading plan notes.
 - Tests cover the documented flag order and the most likely wrong flag order.
+
+Completed on 2026-06-22:
+
+- Added command-specific `agent-browser remote-view open --help` output through
+  the `remote-view` help branch.
+- Help output now includes the Facebook-style one-liner, route-pool dry-run
+  example, and global flag-placement guidance.
+- `parse_remote_view_open` now preserves global `--session-name` into the
+  `remote_view_open` command. Command-position `--session-name` still
+  overrides the global value when parsed directly.
+- Added parser tests proving `--runtime-profile`, `--session-name`,
+  `--session`, `--browser-build`, and `--provider` work when supplied after
+  `remote-view open`.
+- Updated `README.md`, `docs/src/app/commands/page.mdx`, and
+  `skills/agent-browser/SKILL.md` with the one-liner and the distinction
+  between `--session` daemon routing and `--session-name` browser state.
 
 ### Slice C: Route Allocation Diagnostics
 

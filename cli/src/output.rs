@@ -5008,6 +5008,51 @@ Examples:
 "##
         }
 
+        // === Remote View ===
+        "remote-view" => {
+            r##"
+agent-browser remote-view - Route-bound remote-headed browser handoff
+
+Usage: agent-browser remote-view open [url] [options]
+
+`remote-view open` selects a service-owned remote-view route, launches or
+reuses a remote-headed browser on the bound display, opens the requested tab,
+checks visible browser-window evidence, checks out the route, and returns
+dashboard/external operator URLs.
+
+Options:
+  --runtime-profile <id>       Use a managed runtime profile, for example last30days-facebook
+  --browser-build <build>      Browser build: stock_chrome, stealthcdp_chromium, or cdp_free_headed
+  --provider rdp_gateway       Use the Guacamole/RDP gateway provider
+  --route-pool-entry-id <id>   Select one retained route-pool entry
+  --route-pool-entry-json <json>
+                               Use one inline route-pool entry from doctor/readiness output
+  --route-id <id>              Select an existing remote-view route id
+  --display <name>             Bind to an explicit route display, for example :11
+  --display-allocation-id <id> Bind to an explicit display allocation id
+  --browser-id <id>            Reuse or bind a specific service browser id
+  --session-name <name>        Browser state name for cookies/localStorage
+  --service-name <name>        Caller service label for service trace records
+  --agent-name <name>          Caller agent label for service trace records
+  --task-name <name>           Caller task label for service trace records
+  --dry-run                    Show planned route, launch, tab, and checkout commands
+  --json                       Output JSON
+
+Global placement:
+  Global flags such as --runtime-profile, --session, --session-name,
+  --browser-host, --view-stream-provider, --control-input-provider, and
+  --display-isolation may appear before or after remote-view open.
+  --session selects the agent-browser daemon session. --session-name selects
+  saved browser state and is also copied into the remote-view open request.
+
+Examples:
+  agent-browser --json remote-view open https://www.facebook.com/ --provider rdp_gateway
+  agent-browser remote-view open https://www.facebook.com/ --runtime-profile last30days-facebook --browser-build stealthcdp_chromium --provider rdp_gateway
+  agent-browser --session facebook-route remote-view open https://www.facebook.com/ --runtime-profile last30days-facebook --session-name last30days-facebook --provider rdp_gateway
+  agent-browser remote-view open linkedin.com --route-pool-entry-id guacamole-rdp-a --display :11 --dry-run
+"##
+        }
+
         // === Doctor ===
         "doctor" => {
             r##"

@@ -40,6 +40,14 @@ browser, tab, display allocation, route, and stream:
 agent-browser remote-view open <url> --runtime-profile <profile> --browser-build stealthcdp_chromium --provider rdp_gateway
 ```
 
+Global flags may appear before or after `remote-view open`. Use `--session`
+for the agent-browser daemon session and `--session-name` for saved browser
+state. For a Facebook-style operator handoff, use:
+
+```bash
+agent-browser --json remote-view open https://www.facebook.com/ --runtime-profile last30days-facebook --browser-build stealthcdp_chromium --provider rdp_gateway
+```
+
 Software clients should use the same path through service request action
 `remote_view_open` or the generated `requestServiceRemoteViewOpen()` helper.
 Pass caller labels and profile identity hints at the top level, and pass route

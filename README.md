@@ -2474,6 +2474,14 @@ error is returned; reused retained browsers keep the browser process and clean
 up only the opened tab when possible. This is the default one-command path for
 operator-controlled Guacamole/RDP browser sessions. A typical HTTP request is:
 
+Global flags may appear before or after `remote-view open`. Use `--session`
+for the agent-browser daemon session, and use `--session-name` for saved
+browser state. For a Facebook-style operator handoff, the durable one-liner is:
+
+```bash
+agent-browser --json remote-view open https://www.facebook.com/ --runtime-profile last30days-facebook --browser-build stealthcdp_chromium --provider rdp_gateway
+```
+
 ```json
 {
   "serviceName": "ManualAuth",

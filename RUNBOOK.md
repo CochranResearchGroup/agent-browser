@@ -1564,3 +1564,42 @@ Result:
 - `pnpm validation:select -- --base HEAD` recommended `git diff --check` and
   `node scripts/dev/select-validation.js --base HEAD --json`; both passed.
 - The combined fixture plus live summary assertion passed.
+
+## Turn 37 | 2026-06-22
+
+Scope: execute P43 Slice B one-line CLI contract and help.
+
+Actions:
+
+- Added command-specific `remote-view` help covering
+  `agent-browser remote-view open`.
+- Added the Facebook-style one-liner and flag placement guidance to CLI help.
+- Changed `parse_remote_view_open` to copy global `--session-name` into the
+  `remote_view_open` request.
+- Added parser tests for post-subcommand `--runtime-profile`, `--session`,
+  `--session-name`, `--browser-build`, and `--provider` placement.
+- Updated `README.md`, `docs/src/app/commands/page.mdx`, and
+  `skills/agent-browser/SKILL.md`.
+- Marked P43 Slice B done and updated `ROADMAP.md` next recommendation.
+
+Validation run:
+
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo test --manifest-path cli/Cargo.toml remote_view_open -- --nocapture`
+- `cargo run --quiet --manifest-path cli/Cargo.toml -- remote-view open --help | rg -n "Facebook|Global placement|--session selects|last30days-facebook"`
+- `pnpm --dir docs build`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `pnpm validation:select -- --base HEAD`
+- `diff -q skills/agent-browser/SKILL.md /home/ecochran76/.codex/shared/skills/agent-browser/SKILL.md`
+
+Result:
+
+- Rust format passed after applying `cargo fmt`.
+- Focused Rust tests passed: 10 passed, 0 failed.
+- Help output includes the global placement section, Facebook examples, and
+  the `--session` versus `--session-name` distinction.
+- Docs build passed.
+- Clippy passed with `-D warnings`.
+- Validation selector required the Rust format, focused Rust test, clippy,
+  docs build, diff hygiene, and repo-installed skill sync checks.
+- The repo and installed `agent-browser` skill copies now match.
