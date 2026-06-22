@@ -575,23 +575,26 @@ in their own environment before changing browser-owner defaults.
 
 ## P42 | Runtime Convergence
 
-State: OPEN
-Current state: P42 is opened to make dashboard, daemon sessions, route helpers,
-service state, and live workspace rows converge on one explicit runtime
-identity.
+State: CLOSED
+Current state: P42 closed after making dashboard, daemon sessions, route
+helpers, service state, and live workspace rows converge on one explicit
+runtime identity.
 
 ### Current State
 
-- Plan `docs/dev/plans/0042-2026-06-22-runtime-convergence-plan.md` is the
-  active corrective lane for runtime identity drift.
-- P40 proved the dashboard service can report its executable and embedded UI
-  identity, but it does not prove every daemon session, stream backend, route
-  helper, and retained workspace row is using the same executable.
-- The immediate implementation priority is active runtime inventory, daemon
-  executable SHA convergence, actionable doctor remedies, and a live rail that
-  excludes stale diagnostic records from the control surface.
-- The Guacamole Postgres/schema guard is the first in-progress bootstrap slice
-  under this convergence lane.
+- Plan `docs/dev/plans/0042-2026-06-22-runtime-convergence-plan.md` is closed.
+- Install doctor now reports active runtime inventory, live dashboard runtime
+  readiness, explicit runtime convergence summary states, stale daemon
+  executable drift, and stale stream-backend drift.
+- Daemon reuse compares executable SHA-256, not only package version.
+- The dashboard live rail excludes retained/no-action diagnostic records and
+  groups detected non-owned CDP browsers separately.
+- `pnpm converge:local-runtime -- --apply --json` is the bounded local repair
+  command for publish/restart, stale daemon remedies, Guacamole schema guard,
+  route-pool readiness, and route display-access grants.
+- Final installed readbacks reported install doctor ready, remote-view ready,
+  `runtimeConvergence.status=converged`, and route-pool readiness
+  `success=true`.
 
 ### Evidence
 
@@ -601,7 +604,7 @@ identity.
 
 ### Next Recommendation
 
-Implement P42 Slice A and Slice B first: inventory every active runtime and make
-daemon reuse compare executable SHA-256, not only package version. Keep P41
-foreign-CDP work separate so non-owned browser addressability does not become
-agent-browser lifecycle ownership by accident.
+Keep P42 closed. Downstream work should use the convergence command and doctor
+readbacks before live browser work, then proceed to the many-to-many
+Guacamole/RDP live gate and P41 foreign-CDP browser management without turning
+non-owned browser addressability into agent-browser lifecycle ownership.

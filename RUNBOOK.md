@@ -1439,3 +1439,38 @@ Result:
 - Direct installed `agent-browser install doctor --json` reported
   `success=true`, no issue codes, `runtimeConvergence.status=converged`,
   `staleRuntimeCount=0`, and `runtimeInventory.status=none`.
+
+## Turn 34 | 2026-06-22
+
+Scope: close P42 by auditing and validating Slice D idempotent remote-view
+bootstrap.
+
+Actions:
+
+- Verified `pnpm ensure:rdp-guac-postgres -- --apply` exists and is invoked by
+  local convergence.
+- Verified route-pool setup, existing-user route sync, and legacy autologin
+  setup call the shared Guacamole Postgres schema guard before writing records.
+- Verified the schema guard refuses partial `guacamole_*` relation state,
+  imports only absent schema state, waits for Postgres readiness, and
+  checkpoints after ready/imported states.
+- Verified the live Guacamole compose file keeps explicit Postgres durability
+  settings for WSL hard-stop resilience.
+- Marked P42 `State: CLOSED`.
+
+Validation run:
+
+- `bash scripts/ensure-rdp-guac-postgres.sh --dry-run`
+- `pnpm --silent test:rdp-guac-route-pool-readiness -- --report-only`
+- `agent-browser doctor remote-view --json`
+
+Result:
+
+- Schema guard dry-run reported `Guacamole Postgres schema is ready.`
+- Route-pool readiness reported `success=true`; Postgres, schema, Guacamole
+  web/login, guacd, RDP connections, connection permissions, distinct targets,
+  and both RDP backend TCP checks were ready.
+- Direct installed remote-view doctor reported `success=true`, `status=ready`,
+  `remoteControl.ready=true`, `runtimeConvergence.status=converged`,
+  `runtimeInventory.status=none`, and
+  `nextAction=run_many_to_many_live_gate`.

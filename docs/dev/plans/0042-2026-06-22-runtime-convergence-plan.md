@@ -1,7 +1,7 @@
 # Runtime Convergence Plan
 
 Date: 2026-06-22
-State: OPEN
+State: CLOSED
 Lane: P42
 Depends On:
 - `docs/dev/plans/0039-2026-06-20-remote-control-ready-command-plan.md`
@@ -278,7 +278,7 @@ Completed on 2026-06-22:
 
 ### Slice D: Idempotent Remote-View Bootstrap
 
-Slice progress: in progress.
+Slice progress: done on 2026-06-22.
 
 Move the manual Guacamole and Postgres repair into durable bootstrap.
 
@@ -298,6 +298,33 @@ Acceptance:
 - Route-pool readiness reports the repair command for schema drift.
 - `agent-browser doctor remote-view --json` remains ready after applying the
   compose change.
+
+Completed on 2026-06-22:
+
+- `pnpm ensure:rdp-guac-postgres -- --apply` exists and is invoked by the
+  local convergence command.
+- `scripts/setup-rdp-guac-route-pool.sh`,
+  `scripts/sync-rdp-guac-existing-user-route-pool.sh`, and
+  `scripts/setup-rdp-autologin-user.sh` route Guacamole writes through the
+  shared schema guard before mutating route or login records.
+- The schema guard starts Postgres when needed, waits for `pg_isready`, imports
+  the Guacamole schema only when the required `guacamole_*` relations are
+  absent, refuses partial `guacamole_*` state with manual recovery guidance,
+  and checkpoints after ready/imported states.
+- The live Guacamole compose file keeps Postgres durability settings explicit:
+  `fsync=on`, `synchronous_commit=on`, `full_page_writes=on`,
+  `checkpoint_timeout=5min`, and `max_wal_size=1GB`.
+- `bash scripts/ensure-rdp-guac-postgres.sh --dry-run` reported
+  `Guacamole Postgres schema is ready.`
+- `pnpm --silent test:rdp-guac-route-pool-readiness -- --report-only`
+  reported `success=true`; `guacamole_postgres`, `guacamole_schema`,
+  `guacamole_web`, `guacamole_login`, `guacd`,
+  `guacamole_rdp_connections`, `guacamole_connection_permissions`,
+  `distinct_rdp_targets`, and both RDP backend TCP checks were ready.
+- Direct installed `agent-browser doctor remote-view --json` reported
+  `success=true`, `status=ready`, `remoteControl.ready=true`,
+  `runtimeConvergence.status=converged`, `runtimeInventory.status=none`, and
+  `nextAction=run_many_to_many_live_gate`.
 
 ### Slice E: Live Rail Convergence Boundary
 
