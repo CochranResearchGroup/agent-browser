@@ -1253,19 +1253,45 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
                     .get("session")
                     .and_then(|value| value.as_str())
                     .unwrap_or("unknown");
-                issues.push(json!({
-                    "code": "active_runtime_stale_executable",
-                    "message": format!("active daemon session {session} was started by stale or incomplete executable metadata"),
-                    "session": session,
-                    "nextAction": "restart_stale_daemon_session",
-                    "remedy": {
-                        "kind": "operator_command",
-                        "command": "agent-browser close --session <session>",
-                        "argv": ["agent-browser", "close", "--session", session],
-                        "requiresInteractiveSudo": false,
-                        "why": "Stop the stale daemon session so the next command relaunches it with the current executable."
-                    }
-                }));
+                let drift_reasons = row
+                    .get("driftReasons")
+                    .and_then(|value| value.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+                let stale_stream_backend = drift_reasons.iter().any(|reason| {
+                    reason.as_str().is_some_and(|reason| {
+                        matches!(reason, "stream_unreachable" | "stream_metadata_invalid")
+                    })
+                });
+                if stale_stream_backend {
+                    issues.push(json!({
+                        "code": "active_runtime_stale_stream_backend",
+                        "message": format!("active daemon session {session} advertises stale or unreachable stream backend metadata"),
+                        "session": session,
+                        "nextAction": "restart_stale_daemon_session",
+                        "remedy": {
+                            "kind": "operator_command",
+                            "command": "agent-browser close --session <session>",
+                            "argv": ["agent-browser", "close", "--session", session],
+                            "requiresInteractiveSudo": false,
+                            "why": "Stop the stale daemon session so the next command relaunches it with a current stream backend."
+                        }
+                    }));
+                } else {
+                    issues.push(json!({
+                        "code": "active_runtime_stale_executable",
+                        "message": format!("active daemon session {session} was started by stale or incomplete executable metadata"),
+                        "session": session,
+                        "nextAction": "restart_stale_daemon_session",
+                        "remedy": {
+                            "kind": "operator_command",
+                            "command": "agent-browser close --session <session>",
+                            "argv": ["agent-browser", "close", "--session", session],
+                            "requiresInteractiveSudo": false,
+                            "why": "Stop the stale daemon session so the next command relaunches it with the current executable."
+                        }
+                    }));
+                }
             }
         }
     }
@@ -1316,6 +1342,7 @@ fn active_runtime_inventory(expected_sha256: Option<&str>) -> serde_json::Value 
         let stream_port = fs::read_to_string(&stream_path)
             .ok()
             .and_then(|value| value.trim().parse::<u16>().ok());
+        let stream_reachable = stream_port.map(local_port_reachable);
         let pid_running = pid.is_some_and(pid_is_running);
         let addressable = extensions.contains("sock")
             || extensions.contains("port")
@@ -1329,18 +1356,36 @@ fn active_runtime_inventory(expected_sha256: Option<&str>) -> serde_json::Value 
             (None, _) => true,
             (_, None) => false,
         };
-        let state =
-            if pid_running && addressable && package_version_matches && executable_sha256_matches {
-                converged_count += 1;
-                "converged"
-            } else if pid_running && addressable {
-                stale_count += 1;
-                "stale"
-            } else if pid_running {
-                "diagnostic"
-            } else {
-                "inactive"
-            };
+        let mut drift_reasons = Vec::new();
+        if pid_running && addressable && !package_version_matches {
+            drift_reasons.push("package_version_mismatch");
+        }
+        if pid_running && addressable && !executable_sha256_matches {
+            drift_reasons.push("executable_sha256_mismatch");
+        }
+        if pid_running && extensions.contains("stream") && stream_port.is_none() {
+            drift_reasons.push("stream_metadata_invalid");
+        }
+        if pid_running && stream_reachable == Some(false) {
+            drift_reasons.push("stream_unreachable");
+        }
+        let stream_backend_ready = !extensions.contains("stream") || stream_reachable == Some(true);
+        let state = if pid_running
+            && addressable
+            && package_version_matches
+            && executable_sha256_matches
+            && stream_backend_ready
+        {
+            converged_count += 1;
+            "converged"
+        } else if pid_running && addressable {
+            stale_count += 1;
+            "stale"
+        } else if pid_running {
+            "diagnostic"
+        } else {
+            "inactive"
+        };
         rows.push(json!({
             "kind": "daemon_session",
             "session": session,
@@ -1353,6 +1398,8 @@ fn active_runtime_inventory(expected_sha256: Option<&str>) -> serde_json::Value 
             "expectedExecutableSha256": expected_sha256,
             "executableSha256Matches": executable_sha256_matches,
             "streamPort": stream_port,
+            "streamReachable": stream_reachable,
+            "driftReasons": drift_reasons,
             "metadata": {
                 "socketDir": socket_dir.display().to_string(),
                 "hasPid": extensions.contains("pid"),
@@ -1394,6 +1441,15 @@ fn pid_is_running(pid: u32) -> bool {
         let _ = pid;
         false
     }
+}
+
+fn local_port_reachable(port: u16) -> bool {
+    let address = format!("127.0.0.1:{port}");
+    address
+        .parse()
+        .ok()
+        .and_then(|address| TcpStream::connect_timeout(&address, Duration::from_millis(200)).ok())
+        .is_some()
 }
 
 fn live_dashboard_runtime_probe(expected_executable_sha256: Option<&str>) -> serde_json::Value {
@@ -2886,6 +2942,54 @@ mod tests {
     }
 
     #[test]
+    fn install_doctor_flags_stale_stream_backend_inventory() {
+        let launch_config = json!({
+            "stealthCdpChromiumRequired": false,
+            "stealthCdpChromiumReady": true,
+        });
+
+        let current_executable = fingerprint(Some("/same/agent-browser"), Some("aaa"));
+        let path_command = fingerprint(Some("/same/agent-browser"), Some("aaa"));
+        let pnpm_package_binary = fingerprint(Some("/pnpm/agent-browser"), Some("aaa"));
+        let workspace_binary = fingerprint(Some("/workspace/agent-browser"), Some("aaa"));
+        let service = json!({"ready": true});
+        let service_resources = json!({"readinessImpactingCandidates": 0});
+        let live_dashboard_runtime = ready_live_dashboard_runtime();
+        let runtime_inventory = json!({
+            "schemaVersion": "agent-browser.runtime-inventory.v1",
+            "status": "stale",
+            "runtimes": [
+                {
+                    "kind": "daemon_session",
+                    "session": "default",
+                    "state": "stale",
+                    "driftReasons": ["stream_unreachable"]
+                }
+            ]
+        });
+        let issue = install_doctor_issues(InstallDoctorIssueInputs {
+            current_executable: &current_executable,
+            path_command: &path_command,
+            pnpm_package_binary: &pnpm_package_binary,
+            workspace_binary: &workspace_binary,
+            launch_config: &launch_config,
+            service: &service,
+            service_resources: &service_resources,
+            live_dashboard_runtime: &live_dashboard_runtime,
+            runtime_inventory: &runtime_inventory,
+        })
+        .remove(0);
+
+        assert_eq!(issue["code"], "active_runtime_stale_stream_backend");
+        assert_eq!(issue["session"], "default");
+        assert_eq!(issue["nextAction"], "restart_stale_daemon_session");
+        assert_eq!(
+            issue["remedy"]["argv"],
+            json!(["agent-browser", "close", "--session", "default"])
+        );
+    }
+
+    #[test]
     fn active_runtime_inventory_classifies_unaddressable_pid_as_diagnostic() {
         let dir = std::env::temp_dir().join(format!(
             "agent-browser-runtime-inventory-diagnostic-{}",
@@ -2907,6 +3011,42 @@ mod tests {
         assert_eq!(inventory["runtimes"][0]["session"], "probe");
         assert_eq!(inventory["runtimes"][0]["state"], "diagnostic");
         assert_eq!(inventory["runtimes"][0]["metadata"]["addressable"], false);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn active_runtime_inventory_classifies_unreachable_stream_backend_as_stale() {
+        let dir = std::env::temp_dir().join(format!(
+            "agent-browser-runtime-inventory-stream-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+        let guard = EnvGuard::new(&["AGENT_BROWSER_SOCKET_DIR"]);
+        guard.set("AGENT_BROWSER_SOCKET_DIR", dir.to_str().unwrap());
+        fs::write(dir.join("probe.pid"), std::process::id().to_string()).unwrap();
+        fs::write(dir.join("probe.version"), env!("CARGO_PKG_VERSION")).unwrap();
+        fs::write(dir.join("probe.sha256"), "expected").unwrap();
+        fs::write(dir.join("probe.stream"), port.to_string()).unwrap();
+
+        let inventory = active_runtime_inventory(Some("expected"));
+
+        assert_eq!(inventory["staleCount"], 1);
+        assert_eq!(inventory["runtimeCount"], 1);
+        assert_eq!(inventory["runtimes"][0]["session"], "probe");
+        assert_eq!(inventory["runtimes"][0]["state"], "stale");
+        assert_eq!(inventory["runtimes"][0]["streamReachable"], false);
+        assert!(inventory["runtimes"][0]["driftReasons"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|reason| reason == "stream_unreachable"));
 
         let _ = fs::remove_dir_all(&dir);
     }

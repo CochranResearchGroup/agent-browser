@@ -195,7 +195,7 @@ Completed on 2026-06-22:
 
 ### Slice C: Convergence Doctor And Remedy
 
-Slice progress: in progress.
+Slice progress: done on 2026-06-22.
 
 Turn runtime drift into an actionable doctor surface.
 
@@ -262,11 +262,19 @@ Completed on 2026-06-22:
   doctor `success=true`, no issue codes,
   `runtimeConvergence.status=converged`, `liveDashboardRuntime.state=ready`,
   and `runtimeInventory.status=none`.
-
-Remaining:
-
-- Add equivalent stable issue codes and remedies for stale stream backend and
-  any remaining diagnostic retained rows that should leave the live rail.
+- Runtime inventory now probes advertised stream ports. A live daemon with
+  stale or unreachable stream metadata is classified stale with
+  `driftReasons=["stream_unreachable"]` or
+  `driftReasons=["stream_metadata_invalid"]`.
+- Install doctor emits `active_runtime_stale_stream_backend` with the same
+  bounded `agent-browser close --session <session>` remedy used for stale
+  daemon executable drift.
+- Remote-view doctor treats `active_runtime_stale_stream_backend` as a
+  session-scoped daemon restart prerequisite before generic install drift.
+- Live validation after publishing the stream-backend build reported install
+  doctor `success=true`, no issue codes,
+  `runtimeConvergence.status=converged`, `staleRuntimeCount=0`, and
+  `runtimeInventory.status=none`.
 
 ### Slice D: Idempotent Remote-View Bootstrap
 

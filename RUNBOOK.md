@@ -1399,3 +1399,43 @@ Result:
   `liveDashboardRuntime.state=ready`, and `runtimeInventory.status=none`.
 - P42 Slice C still has remaining stale stream-backend and diagnostic
   retained-row classification work.
+
+## Turn 33 | 2026-06-22
+
+Scope: finish P42 Slice C stale stream-backend classification.
+
+Actions:
+
+- Extended runtime inventory to probe advertised daemon stream ports.
+- Added runtime row `streamReachable` and `driftReasons` evidence.
+- Classified live daemon sessions with unreachable or invalid stream metadata
+  as stale instead of converged.
+- Added install-doctor issue code `active_runtime_stale_stream_backend` with
+  the bounded `agent-browser close --session <session>` remedy.
+- Updated remote-view doctor to treat stale stream backends as a
+  session-scoped daemon restart prerequisite before generic install drift.
+- Marked P42 Slice C done.
+
+Validation run:
+
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo test --manifest-path cli/Cargo.toml stream_backend -- --nocapture`
+- `cargo test --manifest-path cli/Cargo.toml install_doctor -- --nocapture`
+- `cargo test --manifest-path cli/Cargo.toml recommend_next -- --nocapture`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `pnpm --silent converge:local-runtime -- --apply --json --evidence-path /tmp/agent-browser-converge-local-runtime-turn33.json`
+- `agent-browser install doctor --json`
+
+Result:
+
+- Format, focused Rust tests, and clippy passed.
+- Unit coverage now proves unreachable stream metadata produces a stale runtime
+  inventory row, install doctor emits
+  `active_runtime_stale_stream_backend`, and remote-view doctor recommends the
+  same session-scoped restart prerequisite.
+- Convergence apply published the stream-backend build and ended with final
+  install doctor ready, final remote-view ready, zero skipped remedies, and
+  retained evidence at `/tmp/agent-browser-converge-local-runtime-turn33.json`.
+- Direct installed `agent-browser install doctor --json` reported
+  `success=true`, no issue codes, `runtimeConvergence.status=converged`,
+  `staleRuntimeCount=0`, and `runtimeInventory.status=none`.

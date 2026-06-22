@@ -887,7 +887,9 @@ fn recommend_next_action(context: RecommendationContext<'_>) -> String {
         privileges,
     } = context;
     if !nested_bool(install, &["success"]) {
-        if install_has_issue_code(install, "active_runtime_stale_executable") {
+        if install_has_issue_code(install, "active_runtime_stale_executable")
+            || install_has_issue_code(install, "active_runtime_stale_stream_backend")
+        {
             return "restart_stale_daemon_sessions_then_rerun_doctor".to_string();
         }
         if install_has_issue_code(install, "dashboard_runtime_stale_or_unreadable") {
@@ -2075,6 +2077,43 @@ MaxSessions=50
                     "issues": [
                         {
                             "code": "active_runtime_stale_executable",
+                            "session": "default"
+                        }
+                    ]
+                }
+            }
+        });
+        let route_displays = json!({"data": {"success": true}});
+        let display_access = json!({"ready": true});
+        let viewer_prerequisites = json!({"ready": true});
+        let privileges = json!({"ready": true});
+        let users = json!({"entries": []});
+        assert_eq!(
+            recommend_next_action(RecommendationContext {
+                install: &install,
+                rdp_gateway: &rdp_gateway,
+                route_pool: &route_pool,
+                route_displays: &route_displays,
+                display_access: &display_access,
+                viewer_prerequisites: &viewer_prerequisites,
+                users: &users,
+                privileges: &privileges,
+            }),
+            "restart_stale_daemon_sessions_then_rerun_doctor"
+        );
+    }
+
+    #[test]
+    fn recommend_next_action_restarts_stale_stream_backend_before_generic_install_drift() {
+        let route_pool = json!({"data": {"success": true}});
+        let rdp_gateway = ready_rdp_gateway();
+        let install = json!({
+            "success": false,
+            "data": {
+                "data": {
+                    "issues": [
+                        {
+                            "code": "active_runtime_stale_stream_backend",
                             "session": "default"
                         }
                     ]
