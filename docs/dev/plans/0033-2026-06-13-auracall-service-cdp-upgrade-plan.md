@@ -1,7 +1,7 @@
 # AuraCall Service CDP Upgrade Plan
 
 Date: 2026-06-13
-State: OPEN
+State: CLOSED
 Lane: P14
 Depends On:
 - `docs/dev/notes/2026-05-09-access-plan-service-request-handoff.md`
@@ -40,26 +40,25 @@ expectations so work can proceed in parallel only where the sequence permits.
   post-termination browser state belongs in logs and trace, and ordinary headed
   browser work should use hidden remote-viewable sessions rather than the
   operator's local desktop.
-- Existing service request actions cover many high-level browser operations,
-  but software clients do not yet have a controlled CDP attach contract,
-  bounded evaluate service action, or diagnostic bundle contract.
 - Slice A has implemented the profile-origin and explicit BYOP registration
   contract.
 - Slice B has implemented lease-backed service tab handles on `tab_new`
   responses, service tab records, service browser records, and trace event/job
   evidence.
 - Slice C has implemented policy-gated `cdp_attach` and `cdp_detach` service
-  request actions, generated client helpers, HTTP/MCP rejection guards, and
-  no-launch stale-handle and policy-denial coverage. The next recommended
-  implementation target is Slice D: bounded evaluate.
+  request actions, generated client helpers, HTTP/MCP rejection guards,
+  no-launch stale-handle and policy-denial coverage, and live attach/detach
+  migration proof.
 - Slice D has implemented bounded `evaluate` service requests tied to valid
-  service tab handles, with required `timeoutMs`, `maxReturnBytes`, and
-  generated client helpers. The next recommended implementation target is Slice
-  E: diagnostics and readiness evidence.
-- Slice E has started with a compact `diagnostics` service request action and
-  `requestServiceDiagnostics()` helper for leased service tab handles. The
-  remaining Slice E target is readiness/freshness lifecycle gating and any
-  focused live evidence-capture smoke requested for migration proof.
+  service tab handles, with required `timeoutMs`, `maxReturnBytes`, generated
+  client helpers, deterministic truncation metadata, and live evaluate proof.
+- Slice E has implemented compact `diagnostics` service requests and repaired
+  MCP parity for diagnostics screenshot/evidence options plus monitor
+  freshness gates. The focused live evidence-capture smoke now proves screenshot
+  capture and trace-backed diagnostics.
+- Slice F has implemented client migration aliases and a generic broker bridge
+  harness so software clients can follow the broker-first path without private
+  AuraCall profile data.
 
 ## Operating Invariant
 
@@ -293,8 +292,8 @@ Acceptance:
 - A focused live smoke proves a software client can request a tab, attach,
   perform a bounded read, detach, and find trace evidence.
 
-Status: IMPLEMENTED in the 2026-06-13 Slice C checkpoint, with one validation
-gap retained for a dedicated attach-read-detach live smoke.
+Status: IMPLEMENTED in the 2026-06-13 Slice C checkpoint and closed by the
+2026-06-13 attach/evaluate/diagnostics live smoke.
 
 Validation evidence:
 
@@ -310,16 +309,17 @@ Validation evidence:
 - `pnpm validation:select -- --base HEAD`
 - `node scripts/dev/select-validation.js --base HEAD --json`
 - `diff -q skills/agent-browser/SKILL.md /home/ecochran76/.codex/shared/skills/agent-browser/SKILL.md`
+- `pnpm test:service-cdp-evaluate-diagnostics-live`
 
 Live smoke:
 
 - `pnpm test:service-cdp-tab-streaming-live` passed for
   `session:cdp-tab-stream-98925`, stream `37669`.
-- A dedicated attach-read-detach live smoke was not added in this slice. The
-  no-launch tests prove policy gating and stale-handle rejection, while the
-  existing live smoke proves the local CDP browser and streaming environment is
-  viable. Add the narrower attach-read-detach live smoke before relying on
-  Slice C as migration proof for AuraCall provider adapters.
+- `pnpm test:service-cdp-evaluate-diagnostics-live` passed for
+  `session:cdp-eval-diag-39820`, stream `37883`. It requested a service tab,
+  attached through `cdp_attach`, detached through `cdp_detach`, preserved the
+  browser process, and verified retained service trace jobs for `tab_new`,
+  `cdp_attach`, `evaluate`, `diagnostics`, and `cdp_detach`.
 
 Suggested subagent prompt:
 
@@ -351,8 +351,8 @@ Acceptance:
 - Large returns and slow scripts are capped deterministically.
 - Failure diagnostics are compact and linked to trace/job evidence.
 
-Status: IMPLEMENTED in the 2026-06-13 Slice D checkpoint, with live evaluate
-smoke still recommended before migration proof.
+Status: IMPLEMENTED in the 2026-06-13 Slice D checkpoint and closed by the
+2026-06-13 attach/evaluate/diagnostics live smoke.
 
 Validation evidence:
 
@@ -368,20 +368,16 @@ Validation evidence:
 - `pnpm validation:select -- --base HEAD`
 - `node scripts/dev/select-validation.js --base HEAD --json`
 - `diff -q skills/agent-browser/SKILL.md /home/ecochran76/.codex/shared/skills/agent-browser/SKILL.md`
+- `pnpm test:service-cdp-evaluate-diagnostics-live`
 
 Live smoke:
 
 - `pnpm test:service-cdp-tab-streaming-live` passed for
   `session:cdp-tab-stream-73918`, stream `37595`.
-- A dedicated bounded-evaluate live smoke was not added in this slice.
-  No-launch tests prove HTTP/MCP rejection for unbound and unbounded evaluate
-  requests plus service-client helper shape. Add a focused live smoke that
-  requests a tab, evaluates `document.title` with caps, confirms truncation
-  metadata, and reads trace evidence before treating Slice D as live migration
-  proof.
-- Screenshot-on-failure capture is deferred to Slice E's diagnostic bundle
-  contract so screenshot storage, caps, and trace links are implemented in one
-  evidence surface.
+- `pnpm test:service-cdp-evaluate-diagnostics-live` passed for
+  `session:cdp-eval-diag-39820`, stream `37883`. It evaluated
+  `document.title` through a valid `serviceTabHandle`, verified capped evaluate
+  metadata with `resultTruncated: true`, and confirmed trace evidence.
 
 Suggested subagent prompt:
 
@@ -418,7 +414,8 @@ Acceptance:
 - Access-plan gates authenticated work on wrong-account or expired freshness
   evidence where configured.
 
-Status: PARTIAL in the 2026-06-13 Slice E diagnostic bundle checkpoint.
+Status: IMPLEMENTED in the 2026-06-13 Slice E diagnostic bundle and parity
+repair checkpoints and closed by the 2026-06-13 diagnostics live smoke.
 
 Implemented:
 
@@ -432,15 +429,32 @@ Implemented:
   validation.
 - Kept HTTP, MCP, Rust service request metadata, JSON schema, generated client
   types, docs, and skill guidance aligned.
+- Repaired MCP `service_request` parity for diagnostics options:
+  `includeScreenshot`, `screenshotDir`, `maxConsoleEntries`,
+  `maxErrorEntries`, and `maxRequestEntries`.
+- Repaired MCP monitor freshness gating so stale, unverified, or missing
+  `monitorRunDueSummary` evidence is rejected unless
+  `allowMonitorFreshnessRisk` is true, matching the HTTP and JSON contract.
+- Chose `serviceTabHandle` plus embedded `traceFilter` as the migration bridge
+  retrieval contract. Recent-job diagnostic lookup is deferred until a real
+  consumer needs post-hoc diagnostics without a retained handle.
+- Added `pnpm test:service-cdp-evaluate-diagnostics-live`, which captured a
+  diagnostics screenshot to an isolated temp directory, verified compact
+  console, page-error, request, trace-filter, and handle echo fields, then
+  verified retained trace jobs.
 
-Remaining:
+Repair plan:
 
-- Add readiness/freshness lifecycle improvements for wrong-account, expired,
-  unverified, and manual-action-required states.
-- Decide whether diagnostic bundles should also be retrievable by recent job
-  id, or whether handle plus trace filter is enough for the migration bridge.
-- Add a focused live diagnostics smoke if evidence capture needs live proof
-  before AuraCall migration work consumes it.
+- `docs/dev/notes/2026-06-13-plan-0033-repair-plan.md`
+
+Repair validation evidence:
+
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo test --manifest-path cli/Cargo.toml service_request_command -- --test-threads=1`
+- `pnpm test:service-api-mcp-parity`
+- `pnpm test:service-client`
+- `pnpm test:service-cdp-evaluate-diagnostics-live`
+- `codegraph sync /home/ecochran76/workspace.local/agent-browser`
 
 Suggested subagent prompt:
 
@@ -472,6 +486,31 @@ Acceptance:
   service-tab work.
 - Helper failures include actionable policy reasons.
 - Generated types expose the stable contracts without local casts.
+
+Status: IMPLEMENTED in the 2026-06-13 Slice F checkpoint.
+
+Implemented:
+
+- Added `requestServiceTabFromAccessPlan`, `attachServiceTabCdp`,
+  `evaluateServiceTab`, and `getServiceTabDiagnostics` aliases in
+  `@agent-browser/client`.
+- Regenerated client declarations and added contract, export, type, and example
+  coverage for the aliases.
+- Added `examples/service-client/broker-bridge.mjs`, a generic broker-first
+  harness that reads an access plan, optionally registers a BYOP profile,
+  requests a tab, attaches CDP, evaluates, collects diagnostics, and detaches.
+- Added `scripts/test-service-client-broker-bridge.js` and the example package
+  `broker-bridge-dry-run` script.
+- Updated README, docs site command guidance, and the agent-browser skill for
+  the migration helper path.
+
+Validation evidence:
+
+- `pnpm test:service-request-client`
+- `pnpm test:service-client-exports`
+- `pnpm test:service-client-types`
+- `pnpm test:service-client-example`
+- `pnpm test:service-client`
 
 Suggested subagent prompt:
 
@@ -529,17 +568,25 @@ Live smoke candidates, only after no-launch tests pass:
 ```bash
 pnpm test:service-request-live
 pnpm test:service-cdp-tab-streaming-live
+pnpm test:service-cdp-evaluate-diagnostics-live
 ```
 
 ## Open Questions
 
-- Should controlled attach return a raw websocket descriptor, a temporary
-  broker URL, or only a managed client helper?
-- Should BYOP profiles ever be eligible for automatic browser close, or only
-  tab close and lease release?
-- Which readiness evidence fields are mandatory for authenticated account work
-  versus optional advisory state?
-- Should bounded evaluate be implemented directly as a service request action,
-  as a CDP attach helper method, or both?
-- What is the minimum live smoke that proves AuraCall migration compatibility
-  without depending on private provider state?
+- Resolved: controlled attach returns a constrained descriptor with the current
+  browser websocket URL and a required `cdp_detach` action. A broker URL can be
+  added later without changing the service-owned handle contract.
+- Resolved: BYOP cleanup remains conservative. Automatic destructive browser
+  cleanup is not part of this plan; callers get tab/lease release behavior
+  unless a later policy explicitly allows more.
+- Resolved: authenticated work depends on service profile identity, target
+  service/account hints, freshness/readiness timestamps, and evidence links
+  where configured. Missing, expired, or unverified monitor evidence is rejected
+  unless the caller explicitly accepts freshness risk.
+- Resolved: bounded evaluate is a first-class service request action and client
+  helper alias. Raw CDP remains available only through the controlled attach
+  path.
+- Resolved: the minimum provider-neutral migration proof is
+  `pnpm test:service-cdp-evaluate-diagnostics-live`, which requests a managed
+  tab, attaches, evaluates with caps, captures diagnostics, detaches, and checks
+  trace evidence without private provider state.

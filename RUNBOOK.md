@@ -4,6 +4,174 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 19 | 2026-06-21
+
+Scope: repair the Plan 0039 audit findings after closeout review.
+
+Actions:
+
+- Made `agent-browser remote-view open` accept the documented
+  `--browser-build stealthcdp_chromium` and `--provider rdp_gateway` flags.
+- Added post-launch failure cleanup to `remote_view_open`: tab open, focus, visible-window proof, or checkout failures now clean up before returning the typed error. New
+  browser launches close the browser; reused retained browsers preserve the
+  browser process and close only the opened tab when possible.
+- Updated CLI help, README, docs command page, repo skill guidance, Plan 0039,
+  and P16 roadmap text for the accepted flags and cleanup boundary.
+
+Validation run:
+
+- `cargo test --manifest-path cli/Cargo.toml test_remote_view_open_builds_route_bound_service_action -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml test_remote_view_open_cleanup_reports_new_browser_close_on_failure -- --test-threads=1`
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo test --manifest-path cli/Cargo.toml remote_view_open -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml remote_view -- --test-threads=1`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `cargo test --manifest-path cli/Cargo.toml service_model -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml service_access_plan -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml service_health -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml service_contracts -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml service_config -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml cdp_screencast_view_stream -- --nocapture`
+- `pnpm test:service-api-mcp-parity`
+- `pnpm test:service-client`
+- `pnpm --dir docs build`
+- `pnpm test:dashboard-view-streams`
+- `pnpm test:dashboard-browser-row-actions-render`
+- `pnpm test:dashboard-browser-table`
+- `pnpm test:dashboard-workspace-navigator`
+- `pnpm test:dashboard-inspector-actions`
+- `pnpm build:dashboard`
+- `diff -q skills/agent-browser/SKILL.md /home/ecochran76/.codex/shared/skills/agent-browser/SKILL.md`
+- `git diff --check`
+- `python /home/ecochran76/workspace.local/agent-policies/repo-policy-selector/scripts/audit_planning_contract.py --repo-root /home/ecochran76/workspace.local/agent-browser --json`
+
+Result:
+
+- The focused Plan 0039 parser and cleanup tests passed, the non-live Rust,
+  client, docs, and dashboard gates above passed, and the installed skill copy
+  matches the repo skill.
+- The direct documented dry-run command
+  `agent-browser remote-view open --runtime-profile stealthcdp-default
+  --browser-build stealthcdp_chromium --provider rdp_gateway --url
+  https://www.linkedin.com/ --dry-run` returned `success=true` and
+  `status=planned`.
+- The repo-wide planning audit still reports older unrelated drift, but the
+  Plan 0039 row remains clean: `state=CLOSED`, `current_state_ok=true`,
+  `wired_in_roadmap=true`, and `wired_in_runbook=true`.
+
+## Turn 18 | 2026-06-21
+
+Scope: close Plan 0039 by making the route-specific `remote_view_open` lane the
+documented default and proving it on the installed binary.
+
+Actions:
+
+- Added prelaunch route-display access repair to `remote_view_open`: it probes
+  the selected route display, invokes the installed privileged helper when
+  access is missing, and fails with typed display-access errors if access still
+  cannot be proven.
+- Fixed route binding selection so checked-out retained routes reuse their
+  existing display allocation when no inline route material overrides them.
+- Updated README, CLI help, docs site, service-request contract description,
+  repo skill, installed skill, Plan 0039, ROADMAP, and downstream handoff note
+  `docs/dev/notes/2026-06-21-remote-view-open-route-specific-handoff.md`.
+- Rebuilt and installed binary SHA
+  `54248451b6bea3ced7acb6df8dd3e0f7514c866e08584bb025569a2ec6ad28ad` into
+  `~/.local/bin/agent-browser`, `bin/agent-browser-linux-x64`, and the pnpm
+  package binary.
+
+Validation run:
+
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo test --manifest-path cli/Cargo.toml remote_view_open -- --test-threads=1`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `pnpm --dir docs build`
+- `pnpm test:service-client`
+- `cargo test --manifest-path cli/Cargo.toml remote_view_doctor -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml service_contracts -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml service_model -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml service_access_plan -- --test-threads=1`
+- `pnpm test:service-api-mcp-parity`
+- `pnpm test:dashboard-view-streams`
+- `pnpm test:dashboard-inspector-actions`
+- `pnpm build:dashboard`
+- `diff -q skills/agent-browser/SKILL.md /home/ecochran76/.codex/shared/skills/agent-browser/SKILL.md`
+- `agent-browser install doctor --json`
+- `agent-browser doctor remote-view --json`
+- `pnpm test:remote-view-open-fixture-live`
+- `pnpm test:rdp-guac-many-to-many-live`
+- `git diff --check`
+- `python /home/ecochran76/workspace.local/agent-policies/repo-policy-selector/scripts/audit_planning_contract.py --repo-root /home/ecochran76/workspace.local/agent-browser --json`
+
+Result:
+
+- `agent-browser install doctor --json` passed with no issues and aligned SHA
+  `54248451b6bea3ced7acb6df8dd3e0f7514c866e08584bb025569a2ec6ad28ad`.
+- `agent-browser doctor remote-view --json` reported `status=ready`,
+  `remoteControl.status=ready`, `remoteControl.routeId=guacamole:3`,
+  `remoteControl.displayName=:11`, and `manyToMany.status=ready`.
+- `pnpm test:remote-view-open-fixture-live` passed with artifact directory
+  `/tmp/agent-browser-remote-view-open-live-2026-06-21T01-24-32-095Z`.
+- `pnpm test:rdp-guac-many-to-many-live` passed with artifact directory
+  `/tmp/agent-browser-rdp-guac-many-to-many-2026-06-21T01-24-32-207Z`.
+- `git diff --check` passed.
+- The repo-wide planning audit still reports older unrelated planning-contract
+  drift, but the Plan 0039 row is clean: `state=CLOSED`,
+  `current_state_ok=true`, `wired_in_roadmap=true`, and
+  `wired_in_runbook=true`.
+- Plan 0039 and P16 are closed.
+
+## Turn 17 | 2026-06-20
+
+Scope: continue Plan 0039 remote-control ready command hardening after the
+route-specific Guacamole/RDP lane exposed stale retained route state.
+
+Actions:
+
+- Repaired the retained service route pool from the current route-pool
+  readiness report after backing up
+  `~/.agent-browser/service/state.json.pre-route-pool-refresh-2026-06-21T00-56-42-211Z`.
+- Changed `remote_view_open` route binding to prefer supplied/current
+  route-pool identity over stale retained route id and display allocation
+  state.
+- Made requested route-pool entry id authoritative for allocation lookup and
+  allowed top-level `readiness.state=ready` route-pool entries to be used even
+  when informational nested components are not ready.
+- Updated the remote-view open live smoke to use the selected route entry's
+  display name and display isolation for CLI, HTTP, state, and X11 checks.
+- Rebuilt and installed the local binary into `~/.local/bin/agent-browser`,
+  `bin/agent-browser-linux-x64`, and the pnpm global package binary.
+
+Validation run:
+
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `cargo test --manifest-path cli/Cargo.toml remote_view_open_dry_run_prefers_inline_route_pool_identity_over_stale_state -- --test-threads=1`
+- `cargo test --manifest-path cli/Cargo.toml remote_view_doctor -- --test-threads=1`
+- `node --check scripts/smoke-rdp-guac-route-pool-readiness.js`
+- `node --check scripts/open-rdp-guac-route-displays.js`
+- `node --check scripts/test-rdp-guac-many-to-many-live.js`
+- `node --check scripts/smoke-remote-view-open-live.js`
+- `pnpm test:remote-view-open-fixture-live`
+- `pnpm test:rdp-guac-many-to-many-live`
+- `agent-browser install doctor --json`
+- `agent-browser doctor remote-view --json`
+- `git diff --check`
+
+Result:
+
+- Route-specific `remote-view open` dry-run resolves `guacamole-rdp-a` to
+  `guacamole:3`, display `:11`, and display allocation
+  `remote-view-display:11`.
+- `pnpm test:remote-view-open-fixture-live` passed with artifact directory
+  `/tmp/agent-browser-remote-view-open-live-2026-06-21T01-05-37-262Z`.
+- `pnpm test:rdp-guac-many-to-many-live` passed with artifact directory
+  `/tmp/agent-browser-rdp-guac-many-to-many-2026-06-21T01-05-55-809Z`.
+- `agent-browser doctor remote-view --json` reports `status=ready`,
+  `remoteControl.status=ready`, and `manyToMany.status=ready`.
+- Plan 0039 remains open only for Slice F documentation and downstream
+  handoff closeout.
+
 ## Turn 1 | 2026-05-26
 
 Scope: repair the planning contract after adopting Graphiti and CodeGraph
@@ -844,3 +1012,65 @@ Result:
   stream `36831`.
 - Slice E remains open for readiness/freshness lifecycle gating and any focused
   live diagnostics smoke requested before AuraCall migration proof.
+
+## Turn 23 | 2026-06-20
+
+Scope: open the corrective planning lane for recurring Guacamole/RDP
+false-ready states after the live LinkedIn manual-auth route repair.
+
+Actions:
+
+- Added
+  `docs/dev/plans/0039-2026-06-20-remote-control-ready-command-plan.md`.
+- Added P16 to `ROADMAP.md`.
+- Made the combined readiness invariant explicit: a remote-control browser is
+  ready only when the selected browser window is loaded, visible, and
+  controllable through the selected external Guacamole/RDP route.
+- Captured the two recurring failure classes as plan gates:
+  - Guacamole unhappy document or internal error caused by schema, route, URL,
+    or permission drift.
+  - Terminal-only remote desktop caused by browser/display mismatch.
+- Scoped the next fix as a generic one-command/API path,
+  `agent-browser remote-view open` and service action `remote_view_open`,
+  rather than a LinkedIn-specific or AuraCall-specific repair.
+
+Validation run:
+
+- `python /home/ecochran76/workspace.local/agent-policies/repo-policy-selector/scripts/audit_planning_contract.py --repo-root /home/ecochran76/workspace.local/agent-browser --json`
+- `git diff --check`
+
+Result:
+
+- Focused Plan 0039 validation passed. The broad planning audit remains red
+  from pre-existing historical plan drift, but it reports no Plan 0039
+  problems.
+- Implementation remains open under Plan 0039. Slice A and Slice B are the
+  recommended parallel starting points.
+
+## Turn 24 | 2026-06-22
+
+Scope: open the runtime convergence lane after remote-view and dashboard
+binary harmonization exposed remaining runtime identity confusion.
+
+Actions:
+
+- Added `docs/dev/plans/0042-2026-06-22-runtime-convergence-plan.md`.
+- Added P42 to `ROADMAP.md`.
+- Captured the missing invariant: the dashboard runtime manifest proves only
+  the dashboard service identity, not every active daemon session, stream
+  backend, route helper, retained browser row, or foreign CDP browser.
+- Scoped executable slices for active runtime inventory, daemon executable
+  SHA-256 convergence, actionable doctor remedies, idempotent remote-view
+  bootstrap, live rail boundaries, and one-command local convergence.
+- Kept P41 foreign CDP discovery as a separate dependency so non-owned browser
+  addressability is not confused with lifecycle ownership.
+
+Validation run:
+
+- `git diff --check`
+
+Result:
+
+- P42 is active and not complete. Slice D is already in progress through the
+  Guacamole Postgres/schema bootstrap guard. The next implementation slice is
+  daemon executable SHA convergence and active runtime inventory.

@@ -528,3 +528,80 @@ Continue P14 Slice E with readiness/freshness lifecycle gating. Keep focused
 live smokes for attach-read-detach, bounded evaluate, and diagnostics evidence
 capture as validation follow-up before treating the AuraCall migration bridge
 as live-proven.
+
+## P16 | Remote Control Ready Command
+
+State: CLOSED
+Current state: P16 is closed. The route-specific `remote_view_open` path is
+live-proven, documented, and handed off for downstream clients.
+
+### Current State
+
+- Plan
+  `docs/dev/plans/0039-2026-06-20-remote-control-ready-command-plan.md`
+  is closed.
+- The motivating live failure loaded LinkedIn successfully in
+  `stealthcdp-default`, but the operator first saw a Guacamole error document
+  because the Guacamole PostgreSQL schema was missing, then saw only an
+  `xterm` because the browser was on hidden Xvfb display `:90` while the
+  external Guacamole route showed XRDP display `:10`.
+- The route-specific live path now proves the desired outcome through
+  `remote-view open`: the selected route-pool entry resolves to Guacamole
+  connection `3`, route `guacamole:3`, display `:11`, and display allocation
+  `remote-view-display:11`.
+- `agent-browser doctor remote-view --json` reports `status=ready`,
+  `remoteControl.status=ready`, and `manyToMany.status=ready` for the current
+  route-pool topology.
+- `remote_view_open` now grants route-display access through the installed
+  privileged helper when needed before launching on the selected route display.
+- `remote-view open` accepts the documented `--browser-build
+  stealthcdp_chromium` and `--provider rdp_gateway` flags, and post-launch
+  route verification failures clean up before returning the typed error.
+- Downstream handoff is recorded in
+  `docs/dev/notes/2026-06-21-remote-view-open-route-specific-handoff.md`.
+
+### Evidence
+
+- `docs/dev/plans/0036-2026-06-18-rdp-ready-to-go-plan.md`
+- `docs/dev/plans/0038-2026-06-19-remote-headed-cutover-proof-plan.md`
+- `docs/dev/plans/0039-2026-06-20-remote-control-ready-command-plan.md`
+- `docs/dev/notes/2026-06-21-remote-view-open-route-specific-handoff.md`
+
+### Next Recommendation
+
+Keep P16 closed. Downstream clients should adopt the generic `remote_view_open`
+path and run the required remote-view doctor, fixture, and many-to-many gates
+in their own environment before changing browser-owner defaults.
+
+## P42 | Runtime Convergence
+
+State: OPEN
+Current state: P42 is opened to make dashboard, daemon sessions, route helpers,
+service state, and live workspace rows converge on one explicit runtime
+identity.
+
+### Current State
+
+- Plan `docs/dev/plans/0042-2026-06-22-runtime-convergence-plan.md` is the
+  active corrective lane for runtime identity drift.
+- P40 proved the dashboard service can report its executable and embedded UI
+  identity, but it does not prove every daemon session, stream backend, route
+  helper, and retained workspace row is using the same executable.
+- The immediate implementation priority is active runtime inventory, daemon
+  executable SHA convergence, actionable doctor remedies, and a live rail that
+  excludes stale diagnostic records from the control surface.
+- The Guacamole Postgres/schema guard is the first in-progress bootstrap slice
+  under this convergence lane.
+
+### Evidence
+
+- `docs/dev/plans/0040-2026-06-21-dashboard-binary-harmonization-plan.md`
+- `docs/dev/plans/0041-2026-06-22-foreign-cdp-browser-discovery-and-control-plan.md`
+- `docs/dev/plans/0042-2026-06-22-runtime-convergence-plan.md`
+
+### Next Recommendation
+
+Implement P42 Slice A and Slice B first: inventory every active runtime and make
+daemon reuse compare executable SHA-256, not only package version. Keep P41
+foreign-CDP work separate so non-owned browser addressability does not become
+agent-browser lifecycle ownership by accident.

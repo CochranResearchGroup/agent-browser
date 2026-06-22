@@ -1,0 +1,290 @@
+# Runtime Convergence Plan
+
+Date: 2026-06-22
+State: OPEN
+Lane: P42
+Depends On:
+- `docs/dev/plans/0039-2026-06-20-remote-control-ready-command-plan.md`
+- `docs/dev/plans/0040-2026-06-21-dashboard-binary-harmonization-plan.md`
+- `docs/dev/plans/0041-2026-06-22-foreign-cdp-browser-discovery-and-control-plan.md`
+
+## Purpose
+
+Make every live agent-browser control surface converge on one explicit runtime
+identity instead of relying on operator memory, manual binary replacement, or a
+single dashboard manifest.
+
+The immediate failure class is that the operator can see a dashboard, daemon
+session, Guacamole route, or left-rail row that looks current while some other
+runtime piece is stale, manually repaired, or owned by a different process. P40
+made the dashboard service identify the embedded UI and executable it serves.
+That is necessary, but it is not sufficient: daemon sessions, service status,
+route helpers, retained workspace records, and external browser discovery all
+need a common convergence contract.
+
+## Current Evidence
+
+- P40 added `/api/runtime/manifest`, dashboard bundle SHA-256, executable
+  SHA-256, service contract version, and dashboard drift warnings.
+- P40 publish validation restarts `agent-browser-dashboard.service` and proves
+  that port `4848` serves the just-installed dashboard-embedded binary.
+- `ensure_daemon()` restarts a session when daemon version metadata or auth
+  metadata is missing or mismatched, but it does not compare executable
+  SHA-256.
+- `agent-browser install doctor --json` compares the current executable,
+  command on `PATH`, pnpm package binary, workspace binary, service probe, and
+  dashboard runtime manifest. It does not report a complete inventory of every
+  active daemon session and stream process.
+- Remote-view recovery required manual Guacamole schema import, route-pool
+  repair, display grants, local binary replacement, and daemon restart before
+  the live path became ready. The Postgres/schema repair is now being moved
+  into bootstrap, but the same convergence gap remains for binary/runtime
+  identity.
+- The dashboard left rail previously showed stale or retained records as live
+  attention rows even when no operator action existed. P41 separately scopes
+  live non-owned CDP browser discovery so foreign addressable browsers are not
+  mixed with agent-browser-owned rows.
+
+## Vocabulary
+
+- **Expected runtime identity**: the executable SHA-256, package version,
+  service UI contract version, dashboard bundle SHA-256, and supported feature
+  set that the installed user-scoped runtime should expose.
+- **Active runtime inventory**: every currently running agent-browser process
+  or daemon session that can serve commands, dashboard APIs, streams, or
+  service state.
+- **Converged runtime**: an active runtime whose executable identity and
+  contract match the expected user-scoped runtime identity.
+- **Stale runtime**: an active runtime that is reachable but was started by a
+  different executable, missing metadata, stale contract, or an unsupported
+  feature set.
+- **Diagnostic retained record**: historical service state, incidents, jobs,
+  old stream metadata, or failed browser evidence that is useful for logs and
+  trace views but must not appear as a live control target.
+
+## Operating Invariants
+
+- A dashboard manifest proves only the dashboard service identity. It does not
+  prove that existing daemon sessions, stream backends, or retained browser
+  rows are current.
+- Every live control target must carry enough runtime identity to explain which
+  executable and contract produced it.
+- A version match is not a sufficient convergence proof. Executable SHA-256 is
+  the primary local identity check.
+- Stale diagnostic records belong in Service, trace, event, job, incident, and
+  log viewers, not the live workspace left rail.
+- Repairable drift should produce a runnable remedy command.
+- Non-owned but addressable browsers must remain distinct from agent-browser
+  owned runtimes.
+- Bootstrap commands must be idempotent and explicit about which changes are
+  detect-only, repairable, or manual-review-required.
+
+## Target Runtime Contract
+
+Each active daemon or dashboard process should expose:
+
+```json
+{
+  "schemaVersion": "agent-browser.runtime-identity.v1",
+  "process": {
+    "pid": 1234,
+    "startedAt": "2026-06-22T00:00:00Z"
+  },
+  "executable": {
+    "path": "/home/ecochran76/.local/bin/agent-browser",
+    "sha256": "<sha256>"
+  },
+  "packageVersion": "0.27.0",
+  "serviceContractVersion": "service-ui-runtime.v1",
+  "dashboard": {
+    "sha256": "<sha256-or-null>"
+  },
+  "features": [
+    "workspace.detectedBrowsers",
+    "workspace.noRetainedLiveRail"
+  ],
+  "owner": {
+    "kind": "dashboard_service | daemon_session | service_worker | stream_backend",
+    "session": "default"
+  }
+}
+```
+
+The exact JSON can evolve during implementation, but it must preserve these
+semantics: executable identity, contract identity, process identity, owner kind,
+and feature support.
+
+## Slices
+
+### Slice A: Active Runtime Inventory
+
+Slice progress: planned.
+
+Add a no-launch inventory that reports every active agent-browser runtime that
+can affect the operator control surface.
+
+Deliverables:
+
+- Extend daemon metadata to include executable path and SHA-256 when a daemon
+  starts.
+- Add a read-only inventory builder that reads daemon socket metadata, dashboard
+  runtime manifest, service process evidence, stream ports, and relevant PID
+  files without launching Chrome.
+- Include inventory rows in `agent-browser install doctor --json`.
+- Include inventory rows in `agent-browser doctor remote-view --json`.
+
+Acceptance:
+
+- A live stale daemon with the same package version but different SHA-256 is
+  reported as stale.
+- A dashboard service with the current manifest but a stale daemon session is
+  reported as partially converged, not ready by omission.
+- Inventory rows do not expose secrets, auth state, cookies, page contents, or
+  browser profile data.
+
+### Slice B: Daemon SHA Convergence
+
+Slice progress: planned.
+
+Make daemon reuse compare executable identity, not only package version.
+
+Deliverables:
+
+- Persist daemon executable SHA-256 next to existing daemon version metadata.
+- Update `ensure_daemon()` to restart a reachable daemon when its executable
+  SHA-256 differs from the invoking executable SHA-256.
+- Add a compatibility path for old metadata: missing SHA is stale unless an
+  explicit environment override allows legacy reuse.
+- Add focused unit tests for same-version SHA drift and missing-SHA drift.
+
+Acceptance:
+
+- Replacing `~/.local/bin/agent-browser` and then invoking the same session
+  restarts the old daemon before command dispatch.
+- Version-only matches no longer mask stale executable drift.
+- The restart path preserves the existing auth-token safety model.
+
+### Slice C: Convergence Doctor And Remedy
+
+Slice progress: planned.
+
+Turn runtime drift into an actionable doctor surface.
+
+Deliverables:
+
+- Add stable issue codes for stale daemon SHA, missing daemon SHA, stale
+  dashboard runtime, stale stream backend, and diagnostic retained rows in the
+  live rail.
+- Add a runnable next command for repairable drift.
+- Add a convergence summary to install doctor and remote-view doctor:
+  `converged`, `partial`, `stale`, or `manual_review_required`.
+- Add text output that names the stale runtime owner and session.
+
+Acceptance:
+
+- Doctor output explains exactly which session or service is stale.
+- The next action is runnable and bounded.
+- Manual-review-required states are not auto-repaired.
+
+### Slice D: Idempotent Remote-View Bootstrap
+
+Slice progress: in progress.
+
+Move the manual Guacamole and Postgres repair into durable bootstrap.
+
+Deliverables:
+
+- Add `pnpm ensure:rdp-guac-postgres -- --apply`.
+- Route Guacamole route-pool setup, existing-user sync, and legacy autologin
+  setup through the shared schema guard before writing Guacamole records.
+- Harden the live Guacamole Postgres compose for WSL hard stops by keeping
+  durable Postgres settings explicit.
+- Refuse automatic schema import over partial `guacamole_*` state.
+
+Acceptance:
+
+- An empty initialized Guacamole database is repaired by the bootstrap guard.
+- A partial schema fails loudly with manual recovery guidance.
+- Route-pool readiness reports the repair command for schema drift.
+- `agent-browser doctor remote-view --json` remains ready after applying the
+  compose change.
+
+### Slice E: Live Rail Convergence Boundary
+
+Slice progress: planned.
+
+Make the left rail show only live actionable control targets.
+
+Deliverables:
+
+- Remove stale retained and no-action attention records from the live left rail.
+- Keep diagnostic retained evidence in Service, trace, job, incident, event, and
+  log views.
+- Add a distinct `Detected non-owned browsers` group for P41 foreign CDP rows.
+- Gate live controls on runtime convergence and ownership capability.
+
+Acceptance:
+
+- A stale retained browser record does not appear as a live left-rail target.
+- A reachable non-owned CDP browser appears only in the non-owned group.
+- A stale daemon session row shows a repair action or disabled controls with a
+  convergence reason.
+
+### Slice F: One-Command Local Convergence
+
+Slice progress: planned.
+
+Provide one bounded command or script for local operator repair.
+
+Deliverables:
+
+- Add a dry-run by default convergence command or package script.
+- In apply mode, repair only safe local drift: dashboard service restart,
+  daemon-session restart for stale agent-browser daemons, Guacamole schema
+  ensure, route-pool readiness refresh, and route-display access grants.
+- Refuse foreign process lifecycle changes and partial database repair.
+- Emit retained evidence for every action taken.
+
+Acceptance:
+
+- Dry-run reports the same stale runtime inventory as doctor.
+- Apply mode converges repairable local runtime drift without requiring the
+  operator to remember the sequence.
+- Apply mode does not kill foreign browsers or delete diagnostic evidence.
+
+## Validation Plan
+
+Use the smallest gate that proves each touched surface, then widen for
+cross-surface runtime work:
+
+```bash
+cargo fmt --manifest-path cli/Cargo.toml -- --check
+cargo clippy --manifest-path cli/Cargo.toml -- -D warnings
+cargo test --manifest-path cli/Cargo.toml runtime_manifest -- --nocapture
+cargo test --manifest-path cli/Cargo.toml install_doctor -- --nocapture
+cargo test --manifest-path cli/Cargo.toml remote_view_doctor -- --nocapture
+pnpm test:dashboard-workspace-navigator
+pnpm test:dashboard-view-streams
+pnpm test:rdp-guac-route-pool-readiness -- --report-only
+agent-browser install doctor --json
+agent-browser doctor remote-view --json
+```
+
+For live publication or user-visible dashboard changes, also run:
+
+```bash
+pnpm publish:local-dashboard -- --skip-browser --expect-marker "Runtime contract drift" --json
+```
+
+For P41 foreign browser interaction, run the dedicated foreign-CDP live smoke
+once implemented. Do not use AuraCall or im-receipts private page contents as
+durable plan evidence.
+
+## Closeout Requirements
+
+- ROADMAP and RUNBOOK identify the active P42 lane and latest validation.
+- Commits are structured by coherent slice.
+- The branch is pushed after a coherent validation point.
+- Completion requires runtime inventory, daemon SHA convergence, doctor remedy,
+  live rail boundary, and one-command convergence to be implemented and
+  validated. Completing only Slice D is not enough to close P42.
