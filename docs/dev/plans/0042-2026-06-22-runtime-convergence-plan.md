@@ -269,7 +269,7 @@ Acceptance:
 
 ### Slice E: Live Rail Convergence Boundary
 
-Slice progress: planned.
+Slice progress: done on 2026-06-22.
 
 Make the left rail show only live actionable control targets.
 
@@ -288,9 +288,21 @@ Acceptance:
 - A stale daemon session row shows a repair action or disabled controls with a
   convergence reason.
 
+Completed on 2026-06-22:
+
+- The dashboard workspace navigator filters the live left rail to active
+  agent-browser-owned rows and detected non-owned browser rows.
+- The live rail no longer renders `Needs attention`, `Retained browsers`,
+  `Retained profiles`, `Sessions`, or `Jobs` as live control groups.
+- Detected non-owned CDP browsers render under the distinct
+  `Detected non-owned browsers` group.
+- Contract tests cover stale retained browser omission, non-owned CDP grouping,
+  disabled non-owned control action reasons, and removal of no-action
+  attention records from the live rail.
+
 ### Slice F: One-Command Local Convergence
 
-Slice progress: in progress.
+Slice progress: done on 2026-06-22.
 
 Provide one bounded command or script for local operator repair.
 
@@ -329,14 +341,31 @@ Completed on 2026-06-22:
 - Installed `agent-browser doctor remote-view --json` reported
   `remoteControl.ready=true`, `runtimeInventory.status=converged`, and
   `nextAction=run_many_to_many_live_gate`.
-
-Remaining:
-
-- Promote the convergence behavior into a dedicated dry-run/apply command that
-  can also sequence safe daemon restart remedies, Guacamole schema ensure,
-  route-pool refresh, and display-access grants.
-- Ensure the dedicated command refuses foreign process lifecycle changes and
-  emits retained evidence for each action.
+- `pnpm --silent converge:local-runtime -- --json` now provides the dry-run
+  local convergence report. It reads install doctor and remote-view doctor,
+  reports runtime inventory, and enumerates safe stale-daemon remedies. Use
+  `--silent` when consuming JSON through pnpm so pnpm does not prefix the
+  output with a run banner.
+- `pnpm --silent converge:local-runtime -- --apply --json` now provides the
+  bounded apply path. It runs local dashboard publication, applies only
+  `agent-browser close --session <name>` stale-daemon remedies reported by
+  doctor, runs the Guacamole Postgres schema ensure, runs route-pool readiness,
+  applies route display-access grants only when remote-view doctor reports
+  `nextAction=grant_route_display_access`, and reruns doctors.
+- The apply path refuses foreign process lifecycle changes by accepting only
+  the exact session-scoped stale-daemon remedy argv shape.
+- Apply mode writes retained evidence to
+  `~/.agent-browser/convergence/local-runtime-latest.json` by default, or to a
+  caller-provided `--evidence-path <path>`.
+- Validated syntax with `node --check scripts/converge-local-runtime.js` and
+  `node --check scripts/test-local-runtime-convergence.js`.
+- Validated the contract smoke with `pnpm test:local-runtime-convergence`.
+- Live dry-run validation reported `success=true`, final install doctor ready,
+  final remote-view ready, zero safe stale remedies, and zero skipped remedies.
+- Live apply validation with explicit evidence path
+  `/tmp/agent-browser-converge-local-runtime-evidence.json` reported
+  `success=true`, evidence exists with `success=true`, final install doctor
+  ready, final remote-view ready, and zero skipped remedies.
 
 ## Validation Plan
 

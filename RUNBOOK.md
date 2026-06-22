@@ -1270,3 +1270,45 @@ Result:
   `success=true`, `status=ready`, `remoteControl.ready=true`,
   `runtimeInventory.status=none`, `staleCount=0`, and
   `nextAction=run_many_to_many_live_gate`.
+
+## Turn 30 | 2026-06-22
+
+Scope: finish P42 live-rail and one-command local runtime convergence.
+
+Actions:
+
+- Added `pnpm converge:local-runtime` as a dry-run by default local operator
+  convergence command.
+- In apply mode, the command runs local dashboard publication, applies only
+  doctor-reported `agent-browser close --session <name>` stale-daemon
+  remedies, runs the Guacamole Postgres schema ensure, runs route-pool
+  readiness, applies route display-access grants only when remote-view doctor
+  asks for them, and reruns final doctors.
+- Added `pnpm test:local-runtime-convergence` to lock the command contract,
+  foreign-process refusal boundary, display-grant sequencing, and retained
+  evidence behavior.
+- Marked P42 Slice E done from the dashboard live-rail contract tests and
+  Slice F done from command validation.
+
+Validation run:
+
+- `node --check scripts/converge-local-runtime.js`
+- `node --check scripts/test-local-runtime-convergence.js`
+- `pnpm test:local-runtime-convergence`
+- `pnpm --silent converge:local-runtime -- --json`
+- `pnpm --silent converge:local-runtime -- --apply --json --evidence-path /tmp/agent-browser-converge-local-runtime-evidence.json`
+- `pnpm test:dashboard-workspace-navigator`
+- `pnpm test:dashboard-workspace-nodes`
+
+Result:
+
+- Dry-run convergence returned `success=true`, final install doctor ready,
+  final remote-view ready, zero safe stale remedies, and zero skipped remedies.
+- Apply convergence returned `success=true`, wrote
+  `/tmp/agent-browser-converge-local-runtime-evidence.json`, final install
+  doctor ready, final remote-view ready, and zero skipped remedies.
+- Dashboard workspace tests passed, proving the live rail keeps retained and
+  no-action attention rows out of the live control surface and groups
+  reachable non-owned CDP browsers separately.
+- P42 remains open for Slice C stale dashboard/stream classifications and
+  Slice D bootstrap hardening.
