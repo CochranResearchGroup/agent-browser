@@ -30,7 +30,9 @@ use windows_sys::Win32::Foundation::CloseHandle;
 use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
 
 use commands::{gen_id, parse_command, ParseError};
-use connection::{cleanup_stale_files, ensure_daemon, get_socket_dir, send_command, DaemonOptions};
+use connection::{
+    cleanup_stale_files, daemon_ready, ensure_daemon, get_socket_dir, send_command, DaemonOptions,
+};
 use flags::{clean_args, parse_flags, upsert_runtime_profile_in_user_config, Flags};
 use install::{run_install, run_install_doctor, run_install_stealthcdp_chromium};
 use native::cdp::chrome::{launch_chrome_detached, LaunchOptions};
@@ -1457,6 +1459,32 @@ fn run_close_all(flags: &Flags) {
     }
 }
 
+fn force_close_session_from_metadata(session: &str) -> bool {
+    let pid_path = get_socket_dir().join(format!("{}.pid", session));
+    let pid = fs::read_to_string(&pid_path)
+        .ok()
+        .and_then(|value| value.trim().parse::<u32>().ok());
+    let Some(pid) = pid else {
+        cleanup_stale_files(session);
+        return true;
+    };
+
+    #[cfg(unix)]
+    unsafe {
+        libc::kill(pid as i32, libc::SIGKILL);
+    }
+    #[cfg(windows)]
+    unsafe {
+        let handle = OpenProcess(1, 0, pid);
+        if handle != 0 {
+            windows_sys::Win32::System::Threading::TerminateProcess(handle, 1);
+            CloseHandle(handle);
+        }
+    }
+    cleanup_stale_files(session);
+    true
+}
+
 fn main() {
     // Rust ignores SIGPIPE by default, causing println! to panic on broken pipes.
     // Reset to SIG_DFL so the OS terminates the process cleanly instead.
@@ -1824,6 +1852,117 @@ fn main() {
             exit(1);
         }
         return;
+    }
+
+    if command_targets_existing_daemon_before_prestart(&cmd)
+        && !daemon_ready(&flags.session)
+        && force_close_session_from_metadata(&flags.session)
+    {
+        let resp = connection::Response {
+            success: true,
+            data: Some(json!({
+                "closed": true,
+                "forced": true,
+                "reason": "existing_daemon_not_ready",
+            })),
+            error: None,
+            warning: Some("Closed stale session metadata before daemon prestart".to_string()),
+        };
+        let action = cmd.get("action").and_then(|value| value.as_str());
+        let output_opts = OutputOptions::from_flags(&flags);
+        if flags.json {
+            print_json_value(json!({
+                "success": true,
+                "data": resp.data,
+                "error": null,
+                "warning": resp.warning,
+            }));
+        } else {
+            print_response_with_opts(&resp, action, &output_opts);
+        }
+        return;
+    }
+
+    if command_targets_existing_daemon_before_prestart(&cmd) && daemon_ready(&flags.session) {
+        let action = cmd.get("action").and_then(|value| value.as_str());
+        let output_opts = OutputOptions::from_flags(&flags);
+        match send_command(cmd.clone(), &flags.session) {
+            Ok(resp) => {
+                if action == Some("close")
+                    && !resp.success
+                    && resp.error.as_deref() == Some("Unauthorized daemon command")
+                    && force_close_session_from_metadata(&flags.session)
+                {
+                    let resp = connection::Response {
+                        success: true,
+                        data: Some(json!({
+                            "closed": true,
+                            "forced": true,
+                            "reason": "unauthorized_daemon_command",
+                        })),
+                        error: None,
+                        warning: Some(
+                            "Closed stale session metadata after daemon auth failed".to_string(),
+                        ),
+                    };
+                    if flags.json {
+                        print_json_value(json!({
+                            "success": true,
+                            "data": resp.data,
+                            "error": null,
+                            "warning": resp.warning,
+                        }));
+                    } else {
+                        print_response_with_opts(&resp, action, &output_opts);
+                    }
+                    return;
+                }
+                if flags.json {
+                    print_json_value(json!({
+                        "success": resp.success,
+                        "data": resp.data,
+                        "error": resp.error,
+                    }));
+                } else {
+                    print_response_with_opts(&resp, action, &output_opts);
+                }
+                if !resp.success {
+                    exit(1);
+                }
+                return;
+            }
+            Err(_) => {
+                if action == Some("close") && force_close_session_from_metadata(&flags.session) {
+                    let resp = connection::Response {
+                        success: true,
+                        data: Some(json!({
+                            "closed": true,
+                            "forced": true,
+                            "reason": "existing_daemon_unreachable",
+                        })),
+                        error: None,
+                        warning: Some(
+                            "Closed stale session metadata after daemon connection failed"
+                                .to_string(),
+                        ),
+                    };
+                    if flags.json {
+                        print_json_value(json!({
+                            "success": true,
+                            "data": resp.data,
+                            "error": null,
+                            "warning": resp.warning,
+                        }));
+                    } else {
+                        print_response_with_opts(&resp, action, &output_opts);
+                    }
+                    return;
+                }
+                // Fall through to the normal daemon prestart path. This keeps
+                // token-missing or mid-shutdown sessions repairable when there
+                // is no explicit stale metadata to clean up.
+            }
+        }
     }
 
     // Parse proxy URL to separate server from credentials for the daemon.
@@ -2735,12 +2874,19 @@ fn command_executes_locally_before_daemon(cmd: &serde_json::Value) -> bool {
                     | "service_resources"
                     | "service_resources_monitor_summary"
                     | "service_resources_write_monitor_summary"
+                    | "service_status"
                     | "service_gc"
                     | "service_prune_retained"
                     | "service_repair_retained"
                     | "service_access_plan"
             )
         })
+}
+
+fn command_targets_existing_daemon_before_prestart(cmd: &serde_json::Value) -> bool {
+    cmd.get("action")
+        .and_then(|value| value.as_str())
+        .is_some_and(|action| matches!(action, "close"))
 }
 
 #[cfg(test)]
@@ -2847,10 +2993,47 @@ mod tests {
     }
 
     #[test]
+    fn test_command_executes_service_status_locally_before_daemon() {
+        assert!(command_executes_locally_before_daemon(&json!({
+            "action": "service_status"
+        })));
+    }
+
+    #[test]
     fn test_command_skips_browser_launch_for_close() {
         assert!(command_skips_browser_launch_for_prestart(&json!({
             "action": "close"
         })));
+    }
+
+    #[test]
+    fn test_close_targets_existing_daemon_before_prestart() {
+        assert!(command_targets_existing_daemon_before_prestart(&json!({
+            "action": "close"
+        })));
+        assert!(!command_targets_existing_daemon_before_prestart(&json!({
+            "action": "navigate"
+        })));
+    }
+
+    #[test]
+    fn test_force_close_session_from_metadata_cleans_missing_pid_session() {
+        let dir = std::env::temp_dir().join(format!(
+            "agent-browser-force-close-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let guard = EnvGuard::new(&["AGENT_BROWSER_SOCKET_DIR"]);
+        guard.set("AGENT_BROWSER_SOCKET_DIR", dir.to_str().unwrap());
+        std::fs::write(dir.join("stale.version"), env!("CARGO_PKG_VERSION")).unwrap();
+
+        assert!(force_close_session_from_metadata("stale"));
+        assert!(!dir.join("stale.version").exists());
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

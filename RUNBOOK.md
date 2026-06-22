@@ -1220,3 +1220,53 @@ Result:
   `nextAction=run_many_to_many_live_gate`.
 - Follow-up required: make stale daemon close remedies return success without
   depending on a daemon restart side effect.
+
+## Turn 29 | 2026-06-22
+
+Scope: finish P42 close/remedy and install-doctor probe convergence discovered
+during local execution.
+
+Actions:
+
+- Added a `close --session` prestart path that targets an existing daemon
+  before daemon convergence startup.
+- Added explicit-session stale metadata cleanup for unauthorized or non-ready
+  daemon close attempts, returning success with a warning instead of trying to
+  start a replacement daemon.
+- Classified running PID metadata without an addressable socket, stream, or
+  port as `diagnostic` instead of stale active runtime inventory.
+- Changed `service status` to execute locally before daemon startup.
+- Changed install doctor service-status probing to use a unique owned session,
+  terminate the owned probe daemon after reading status, and treat the isolated
+  no-state probe as no-launch ready.
+- Ran service GC apply for the orphaned Xvfb candidate that was blocking local
+  install doctor readiness.
+- Published the final local runtime and synchronized reference binaries.
+
+Validation run:
+
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo test --manifest-path cli/Cargo.toml force_close_session_from_metadata -- --nocapture`
+- `cargo test --manifest-path cli/Cargo.toml close_targets_existing_daemon_before_prestart -- --nocapture`
+- `cargo test --manifest-path cli/Cargo.toml service_status_locally_before_daemon -- --nocapture`
+- `cargo test --manifest-path cli/Cargo.toml install_doctor -- --nocapture`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `pnpm publish:local-dashboard -- --skip-browser --json`
+- `agent-browser install doctor --json`
+- `agent-browser doctor remote-view --json`
+
+Result:
+
+- Final local publish succeeded and restarted
+  `agent-browser-dashboard.service`.
+- Final installed executable SHA-256:
+  `19ba0d616388e1eb84241eea5ddcffa56a1803831c5085acc25abb01277b78e6`.
+- Reference binaries in `~/.local/bin`, ignored workspace `bin/`, and user
+  pnpm global package path matched the installed executable SHA-256.
+- Final installed `agent-browser install doctor --json` reported
+  `success=true`, no issue codes, `runtimeInventory.status=none`,
+  `runtimeCount=0`, and `staleCount=0`.
+- Final installed `agent-browser doctor remote-view --json` reported
+  `success=true`, `status=ready`, `remoteControl.ready=true`,
+  `runtimeInventory.status=none`, `staleCount=0`, and
+  `nextAction=run_many_to_many_live_gate`.

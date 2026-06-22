@@ -227,12 +227,20 @@ Completed on 2026-06-22:
 - The remote-view next command intentionally points back to install doctor and
   tells the operator to use each issue's `remedy.argv`, so the remedy remains
   session-scoped rather than blindly closing all active sessions.
+- `close --session <name>` now targets an existing daemon before daemon
+  prestart, force-cleans explicitly requested stale metadata when the daemon is
+  unauthorized or not ready, and returns a successful bounded close result.
+- Install doctor service status now runs as a local pre-daemon action, uses a
+  unique owned probe session, terminates the probe daemon after reading status,
+  and treats the isolated no-state probe as no-launch ready.
+- Runtime inventory now classifies running PID metadata without an addressable
+  socket, stream, or port as `diagnostic` rather than stale live runtime.
 
 Remaining:
 
 - Add equivalent stable issue codes and remedies for stale dashboard runtime,
-  stale stream backend, and diagnostic retained rows that should leave the live
-  rail.
+  stale stream backend, and any remaining diagnostic retained rows that should
+  leave the live rail.
 - Add the final convergence summary states after every stale-runtime class has
   a bounded classification.
 

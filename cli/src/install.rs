@@ -1,5 +1,5 @@
 use crate::color;
-use crate::connection::get_socket_dir;
+use crate::connection::{cleanup_stale_files, get_socket_dir};
 use crate::flags::{launch_config_status, Flags};
 use crate::native::stream::runtime_manifest_json;
 use serde_json::json;
@@ -1266,6 +1266,9 @@ fn active_runtime_inventory(expected_sha256: Option<&str>) -> serde_json::Value 
             .ok()
             .and_then(|value| value.trim().parse::<u16>().ok());
         let pid_running = pid.is_some_and(pid_is_running);
+        let addressable = extensions.contains("sock")
+            || extensions.contains("port")
+            || extensions.contains("stream");
         let package_version_matches = package_version
             .as_deref()
             .map(|value| value == env!("CARGO_PKG_VERSION"))
@@ -1275,15 +1278,18 @@ fn active_runtime_inventory(expected_sha256: Option<&str>) -> serde_json::Value 
             (None, _) => true,
             (_, None) => false,
         };
-        let state = if pid_running && package_version_matches && executable_sha256_matches {
-            converged_count += 1;
-            "converged"
-        } else if pid_running {
-            stale_count += 1;
-            "stale"
-        } else {
-            "inactive"
-        };
+        let state =
+            if pid_running && addressable && package_version_matches && executable_sha256_matches {
+                converged_count += 1;
+                "converged"
+            } else if pid_running && addressable {
+                stale_count += 1;
+                "stale"
+            } else if pid_running {
+                "diagnostic"
+            } else {
+                "inactive"
+            };
         rows.push(json!({
             "kind": "daemon_session",
             "session": session,
@@ -1304,6 +1310,7 @@ fn active_runtime_inventory(expected_sha256: Option<&str>) -> serde_json::Value 
                 "hasSocket": extensions.contains("sock"),
                 "hasPort": extensions.contains("port"),
                 "hasStream": extensions.contains("stream"),
+                "addressable": addressable,
             }
         }));
     }
@@ -1347,6 +1354,14 @@ fn service_status_probe() -> serde_json::Value {
             .map(|duration| duration.as_micros())
             .unwrap_or(0)
     ));
+    let probe_session = format!(
+        "install-doctor-service-probe-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_micros())
+            .unwrap_or(0)
+    );
     let current_exe = std::env::current_exe().ok();
     let Some(current_exe) = current_exe else {
         return json!({
@@ -1363,13 +1378,7 @@ fn service_status_probe() -> serde_json::Value {
     };
 
     let output = Command::new(&current_exe)
-        .args([
-            "--json",
-            "--session",
-            "install-doctor-service-probe",
-            "service",
-            "status",
-        ])
+        .args(["--json", "--session", &probe_session, "service", "status"])
         .env("AGENT_BROWSER_HOME", &temp_home)
         .env("AGENT_BROWSER_ARGS", "--no-sandbox")
         .output();
@@ -1391,15 +1400,16 @@ fn service_status_probe() -> serde_json::Value {
                 .and_then(|value| value.pointer("/data/control_plane/browser_health"))
                 .and_then(|value| value.as_str())
                 .map(ToString::to_string);
-            let no_launch = browser_health.as_deref() == Some("NotStarted");
+            let no_launch = browser_health.as_deref() == Some("NotStarted") || !state_path.exists();
             json!({
                 "available": true,
                 "ready": command_success && response_success && no_launch,
                 "success": command_success,
                 "exitCode": output.status.code(),
                 "command": format!(
-                    "{} --json --session install-doctor-service-probe service status",
-                    current_exe.display()
+                    "{} --json --session {} service status",
+                    current_exe.display(),
+                    probe_session
                 ),
                 "noLaunch": no_launch,
                 "browserHealth": browser_health,
@@ -1413,8 +1423,9 @@ fn service_status_probe() -> serde_json::Value {
             "success": false,
             "exitCode": null,
             "command": format!(
-                "{} --json --session install-doctor-service-probe service status",
-                current_exe.display()
+                "{} --json --session {} service status",
+                current_exe.display(),
+                probe_session
             ),
             "noLaunch": true,
             "browserHealth": null,
@@ -1423,8 +1434,33 @@ fn service_status_probe() -> serde_json::Value {
         }),
     };
 
+    let _ = Command::new(&current_exe)
+        .args(["--json", "--session", &probe_session, "close"])
+        .env("AGENT_BROWSER_HOME", &temp_home)
+        .env("AGENT_BROWSER_ARGS", "--no-sandbox")
+        .output();
+    terminate_session_process_from_metadata(&probe_session);
+    cleanup_stale_files(&probe_session);
     let _ = fs::remove_dir_all(&temp_home);
     result
+}
+
+fn terminate_session_process_from_metadata(session: &str) {
+    let pid_path = get_socket_dir().join(format!("{session}.pid"));
+    let pid = fs::read_to_string(pid_path)
+        .ok()
+        .and_then(|value| value.trim().parse::<u32>().ok());
+    let Some(pid) = pid else {
+        return;
+    };
+    #[cfg(unix)]
+    unsafe {
+        libc::kill(pid as i32, libc::SIGKILL);
+    }
+    #[cfg(windows)]
+    {
+        let _ = pid;
+    }
 }
 
 fn service_resources_probe() -> serde_json::Value {
@@ -2458,6 +2494,32 @@ mod tests {
             json!(["agent-browser", "close", "--session", "default"])
         );
         assert_eq!(issue["remedy"]["requiresInteractiveSudo"], false);
+    }
+
+    #[test]
+    fn active_runtime_inventory_classifies_unaddressable_pid_as_diagnostic() {
+        let dir = std::env::temp_dir().join(format!(
+            "agent-browser-runtime-inventory-diagnostic-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let guard = EnvGuard::new(&["AGENT_BROWSER_SOCKET_DIR"]);
+        guard.set("AGENT_BROWSER_SOCKET_DIR", dir.to_str().unwrap());
+        fs::write(dir.join("probe.pid"), std::process::id().to_string()).unwrap();
+        fs::write(dir.join("probe.version"), env!("CARGO_PKG_VERSION")).unwrap();
+
+        let inventory = active_runtime_inventory(Some("expected"));
+
+        assert_eq!(inventory["staleCount"], 0);
+        assert_eq!(inventory["runtimeCount"], 1);
+        assert_eq!(inventory["runtimes"][0]["session"], "probe");
+        assert_eq!(inventory["runtimes"][0]["state"], "diagnostic");
+        assert_eq!(inventory["runtimes"][0]["metadata"]["addressable"], false);
+
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
