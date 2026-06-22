@@ -13,10 +13,17 @@
       "enum": [
         "navigate",
         "cdp_free_launch",
+        "external_byop_adopt",
         "cdp_attach",
         "cdp_detach",
         "evaluate",
         "diagnostics",
+        "probe",
+        "tab_handle_refresh",
+        "tab_handle_release",
+        "ui_action",
+        "network_capture",
+        "file_transfer",
         "back",
         "forward",
         "reload",
@@ -25,6 +32,8 @@
         "tab_close",
         "view_focus",
         "view_takeover",
+        "remote_view_open",
+        "service_remote_view_route_preflight",
         "service_remote_view_route_checkout",
         "service_remote_view_route_release",
         "service_route_pool_repair",
@@ -96,7 +105,7 @@
         "service_prune_retained",
         "service_repair_retained"
       ],
-      "description": "Underlying service or browser-control action to queue through the service worker. cdp_free_launch starts a headed browser without DevTools and records service-owned lifecycle metadata. cdp_attach returns a policy-gated CDP descriptor for a valid serviceTabHandle, and cdp_detach records a detach without closing the browser. evaluate runs a bounded JavaScript expression against a valid serviceTabHandle and returns capped result metadata. diagnostics returns a compact evidence bundle for a valid serviceTabHandle, including active URL/title, browser/profile/session/tab metadata, readiness rows, console/errors, recent request summaries, route/view metadata, and an optional screenshot path. view_focus brings a selected tab forward and asks the browser host to maximize the containing window for remote-view inspection; pass params.targetId when available, otherwise params.index is accepted as a fallback. view_takeover records a service-owned remote-view takeover or reconnect request for single-active-viewer providers such as RDP through Guacamole; pass params.browserId, params.sessionName, params.streamId, params.provider, and params.openMode when known. service_remote_view_route_checkout and service_remote_view_route_release mutate service-owned display allocation, route pool, and remote-view route records without launching a browser. service_route_pool_repair resets stale checked-out route-pool entries whose route allocation is missing or no longer active, and defaults to dry-run unless params.apply is true. service_viewer_lease_request, service_viewer_lease_heartbeat, service_viewer_lease_release, and service_controller_lease_takeover mutate viewer and controller leases for retained remote-view routes. service_browser_close politely closes the currently controlled service browser identified by params.browserId and records shutdown health. service_browser_repair makes one degraded or faulted retained browser record retryable again. service_prune_retained and service_repair_retained provide reviewed retained-state cleanup and default to dry-run unless params.apply is true; service_prune_retained can include orphanedProfiles to remove custom profile records only when they have no retained service references and missing ephemeral user-data directories."
+      "description": "Underlying service or browser-control action to queue through the service worker. cdp_free_launch starts a headed browser without DevTools and records service-owned lifecycle metadata. external_byop_adopt attaches to a caller-supplied CDP endpoint for a registered external_byop profile, records the existing browser as retained service state, and returns a serviceTabHandle. cdp_attach returns a policy-gated CDP descriptor for a valid serviceTabHandle, and cdp_detach records a detach without closing the browser. tab_handle_release releases a retained serviceTabHandle in service state, best-effort closes that exact physical target when the routed live browser owns it, marks only that retained tab closed, and preserves the browser process and session route for other clients. evaluate runs a bounded JavaScript expression against a valid serviceTabHandle and returns capped result metadata. diagnostics returns a compact evidence bundle for a valid serviceTabHandle, including active URL/title, browser/profile/session/tab metadata, readiness rows, console/errors, recent request summaries, route/view metadata, and an optional screenshot path. probe runs bounded provider-neutral detector recipes against a valid serviceTabHandle and can optionally record target/account freshness evidence. ui_action runs a bounded provider-neutral UI step recipe against a valid serviceTabHandle and returns per-step evidence for find, click, fill, type, select, menu_select, wait, focus, clear, and guarded dialog steps. network_capture captures capped provider-neutral network response evidence for a valid serviceTabHandle; metadata is returned by default and response bodies require explicit captureBodies plus maxBodyBytes. file_transfer runs service-owned file input and download capture recipes with explicit allowed paths, max files, timeout, and optional maxBytes caps. view_focus brings a selected tab forward and asks the browser host to maximize the containing window for remote-view inspection; pass params.targetId when available, otherwise params.index is accepted as a fallback. view_takeover records a service-owned remote-view takeover or reconnect request for single-active-viewer providers such as RDP through Guacamole; pass params.browserId, params.sessionName, params.streamId, params.provider, and params.openMode when known. remote_view_open selects a route binding, grants route-display access through the installed privileged helper when needed, launches or reuses a remote-headed browser on that bound display, opens a tab, verifies visible browser-window evidence, and checks out the route with matching display and URL metadata; params.dryRun plans the same path without launching. service_remote_view_route_preflight returns the selected no-launch routeBinding for a retained browser display or available route-pool entry without mutating state. service_remote_view_route_checkout and service_remote_view_route_release mutate service-owned display allocation, route pool, and remote-view route records without launching a browser. service_route_pool_repair resets stale checked-out route-pool entries whose route allocation is missing or no longer active, and defaults to dry-run unless params.apply is true. service_viewer_lease_request, service_viewer_lease_heartbeat, service_viewer_lease_release, and service_controller_lease_takeover mutate viewer and controller leases for retained remote-view routes. service_browser_close politely closes the currently controlled service browser identified by params.browserId and records shutdown health. service_browser_repair makes one degraded or faulted retained browser record retryable again. service_prune_retained and service_repair_retained provide reviewed retained-state cleanup and default to dry-run unless params.apply is true; service_prune_retained can include orphanedProfiles to remove custom profile records only when they have no retained service references and missing ephemeral user-data directories."
     },
     "params": {
       "type": "object",
@@ -180,6 +189,16 @@
       "minimum": 1,
       "description": "Maximum serialized evaluate result bytes returned to the caller before truncation metadata is emitted."
     },
+    "maxTextBytes": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Maximum text bytes returned by action=ui_action find evidence. The daemon caps this value."
+    },
+    "maxBodyBytes": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Maximum response body bytes returned by action=network_capture when body capture is explicitly enabled. The daemon caps this value."
+    },
     "includeScreenshot": {
       "type": "boolean",
       "description": "When action is diagnostics, capture a fresh screenshot and return the saved path in the diagnostic bundle."
@@ -206,6 +225,31 @@
     "captureEvidenceOnFailure": {
       "type": "boolean",
       "description": "Request compact URL/title evidence when bounded evaluate fails."
+    },
+    "probe": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Provider-neutral probe recipe for action=probe. The object must include a bounded detectors array. Supported detector types are evaluate, url_title, selector_text, and client_evidence. Optional recordFreshness records target/account freshness evidence against the selected service profile."
+    },
+    "uiAction": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Provider-neutral UI recipe for action=ui_action. The object must include a bounded steps array. Supported step types are find, click, fill, type, select, menu_select, wait, focus, clear, and dialog. Dialog accept or dismiss requires an allowedDialogLabels match."
+    },
+    "networkCapture": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Provider-neutral network evidence recipe for action=network_capture. The object must include maxEvents plus timeoutMs, maxDurationMs, or top-level timeoutMs. Metadata is returned by default. Response bodies require captureBodies=true and a positive maxBodyBytes. Supported filters include urlPatterns, methods, resourceTypes, and status."
+    },
+    "fileTransfer": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Provider-neutral upload/download recipe for action=file_transfer. Include upload and/or download recipes with explicit allowedPaths or allowedDirectories, maxFiles, timeoutMs, and optional maxBytes."
+    },
+    "repairPolicy": {
+      "type": "string",
+      "enum": ["reject_only", "reuse_compatible", "open_if_missing"],
+      "description": "Repair policy for action=tab_handle_refresh. reject_only returns structured stale evidence, reuse_compatible can bind to a compatible retained target, and open_if_missing can create a replacement tab in the routed browser session."
     },
     "browserBuild": {
       "type": "string",
@@ -288,13 +332,30 @@
       "type": "string",
       "description": "Target URL hint. When targetServiceId is omitted, agent-browser may derive a site policy or target service from this URL."
     },
+    "desiredUrl": {
+      "type": "string",
+      "description": "Desired tab URL for action=tab_handle_refresh when classifying compatible same-origin targets or opening a replacement tab."
+    },
     "profile": {
       "type": "string",
       "description": "Explicit caller-supplied profile path for bring-your-own-profile requests."
     },
+    "profileId": {
+      "type": "string",
+      "description": "Explicit service profile id alias for actions that operate on an already registered profile, including external_byop_adopt."
+    },
     "runtimeProfile": {
       "type": "string",
       "description": "Explicit managed runtime profile name when the caller knows where the needed login state lives."
+    },
+    "cdpUrl": {
+      "type": "string",
+      "description": "Caller-supplied Chrome DevTools endpoint for action=external_byop_adopt. Use exactly one of cdpUrl or cdpPort."
+    },
+    "cdpPort": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Caller-supplied local Chrome DevTools port for action=external_byop_adopt. Use exactly one of cdpUrl or cdpPort."
     },
     "browserId": {
       "type": "string",

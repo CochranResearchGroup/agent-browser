@@ -151,6 +151,41 @@ export interface ServiceCdpFreeLaunchAvailability {
   hasUnsupportedCommandList: boolean;
 }
 
+export interface ServiceSharedTabAcquisition {
+  policy: "shared_browser_tabs" | string;
+  mode: "tab_new" | string;
+  action: "opened_new_tab" | "waited" | "rejected_duplicate_process" | string;
+  browserReused: boolean;
+  tabOpened: boolean;
+  waitedForProfileLease: boolean;
+  rejectedDuplicateProcess: boolean;
+  duplicateProcessAllowed: boolean;
+  browserId: string;
+  sessionName: string;
+  profileId?: string | null;
+  requestedBrowserId?: string | null;
+  requestedSessionName?: string | null;
+  routeHintSource?: string;
+  [key: string]: unknown;
+}
+
+export interface ServiceExternalByopAdoptData {
+  ok: boolean;
+  action: "external_byop_adopt";
+  adopted: boolean;
+  browserId: string;
+  sessionName: string;
+  profileId: string;
+  profileOrigin: "external_byop" | string;
+  browserHost: "attached_existing" | string;
+  targetId?: string | null;
+  url?: string | null;
+  title?: string | null;
+  tabNew?: ServiceTabNewData;
+  serviceTabHandle: ServiceTabHandle;
+  [key: string]: unknown;
+}
+
 export interface ServiceCdpAttachDescriptor {
   attached: true;
   controlPlaneMode: "cdp";
@@ -212,6 +247,183 @@ export interface ServiceEvaluateData {
   [key: string]: unknown;
 }
 
+export interface ServiceProbeDetectorResult {
+  id?: string;
+  type?: "evaluate" | "url_title" | "selector_text" | "client_evidence" | string;
+  ok: boolean;
+  result?: unknown;
+  evidence?: unknown;
+  error?: string;
+  resultTruncated?: boolean;
+  resultBytes?: number;
+  maxReturnBytes?: number;
+  [key: string]: unknown;
+}
+
+export interface ServiceProbeIdentity {
+  detectedIdentity?: string | null;
+  detectedAccountId?: string | null;
+  expectedIdentity?: string | null;
+  confidence: "none" | "low" | "medium" | "high" | string;
+  source?: string | null;
+  [key: string]: unknown;
+}
+
+export interface ServiceProbeData {
+  ok: boolean;
+  action: "probe";
+  observedAt: string;
+  url?: string | null;
+  title?: string | null;
+  targetId?: string | null;
+  tabId?: string | null;
+  profileId?: string | null;
+  serviceTabHandle: ServiceTabHandle;
+  probe: Record<string, unknown>;
+  identity: ServiceProbeIdentity;
+  detectors: ServiceProbeDetectorResult[];
+  freshness?: Record<string, unknown> | null;
+  [key: string]: unknown;
+}
+
+export interface ServiceTabHandleRefreshData {
+  ok: boolean;
+  action: "tab_handle_refresh";
+  refreshed: boolean;
+  decision: string;
+  repairPolicy: "reject_only" | "reuse_compatible" | "open_if_missing" | string;
+  observedAt: string;
+  browserId: string;
+  targetId?: string | null;
+  url?: string | null;
+  title?: string | null;
+  serviceTabHandle?: ServiceTabHandle | null;
+  candidates: Record<string, unknown>[];
+  [key: string]: unknown;
+}
+
+export interface ServiceTabHandleReleaseData {
+  ok: boolean;
+  action: "tab_handle_release";
+  released: boolean;
+  tabReleased: boolean;
+  tabMissing: boolean;
+  browserProcessPreserved: true;
+  sessionRoutePreserved: true;
+  closeBrowserOnRelease: false;
+  physicalTabClose?: Record<string, unknown> | null;
+  physicalTabCloseAttempted?: boolean;
+  physicalTabClosed?: boolean;
+  physicalTabCloseSkippedReason?: string | null;
+  browserId: string;
+  sessionName: string;
+  tabId: string;
+  targetId?: string | null;
+  cleanupPolicy?: string | null;
+  beforeLifecycle?: string | null;
+  afterLifecycle?: string | null;
+  serviceTabHandle?: ServiceTabHandle | null;
+  releasedAt?: string;
+  [key: string]: unknown;
+}
+
+export interface ServiceUiActionStepResult {
+  index: number;
+  type: string;
+  id?: string | null;
+  ok: boolean;
+  selector?: string | null;
+  result?: unknown;
+  page?: Record<string, unknown>;
+  error?: string;
+  [key: string]: unknown;
+}
+
+export interface ServiceUiActionData {
+  ok: boolean;
+  action: "ui_action";
+  observedAt: string;
+  targetId?: string | null;
+  tabId?: string | null;
+  profileId?: string | null;
+  serviceTabHandle: ServiceTabHandle;
+  traceFilter?: ServiceTabHandleTraceFilter | null;
+  uiAction: Record<string, unknown>;
+  before?: Record<string, unknown>;
+  after?: Record<string, unknown>;
+  steps: ServiceUiActionStepResult[];
+  failedStepIndex?: number;
+  caller?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface ServiceNetworkCaptureBody {
+  captured: boolean;
+  base64Encoded?: boolean;
+  body?: string;
+  bodyBase64?: string;
+  bodyBytes?: number;
+  bodyTruncated?: boolean;
+  maxBodyBytes?: number | null;
+  error?: string;
+  [key: string]: unknown;
+}
+
+export interface ServiceNetworkCaptureEvent {
+  requestId: string;
+  url?: string | null;
+  method?: string | null;
+  resourceType?: string | null;
+  status?: number | null;
+  statusText?: string | null;
+  mimeType?: string | null;
+  encodedDataLength?: number | null;
+  headersRedacted?: boolean;
+  requestHeaders?: Record<string, unknown>;
+  responseHeaders?: Record<string, unknown>;
+  body?: ServiceNetworkCaptureBody;
+  [key: string]: unknown;
+}
+
+export interface ServiceNetworkCaptureData {
+  ok: boolean;
+  action: "network_capture";
+  observedAt: string;
+  timedOut: boolean;
+  targetId?: string | null;
+  tabId?: string | null;
+  profileId?: string | null;
+  serviceTabHandle: ServiceTabHandle;
+  traceFilter?: ServiceTabHandleTraceFilter | null;
+  networkCapture: Record<string, unknown>;
+  before?: Record<string, unknown>;
+  after?: Record<string, unknown>;
+  events: ServiceNetworkCaptureEvent[];
+  caller?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface ServiceFileTransferData {
+  ok: boolean;
+  action: "file_transfer";
+  observedAt: string;
+  targetId?: string | null;
+  tabId?: string | null;
+  profileId?: string | null;
+  serviceTabHandle: ServiceTabHandle;
+  traceFilter?: ServiceTabHandleTraceFilter | null;
+  fileTransfer: Record<string, unknown>;
+  before?: Record<string, unknown>;
+  after?: Record<string, unknown>;
+  upload?: Record<string, unknown> | null;
+  download?: Record<string, unknown> | null;
+  failedPhase?: string;
+  error?: string;
+  diagnostics?: Record<string, unknown> | null;
+  caller?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
 export interface ServiceDiagnosticsData {
   ok: boolean;
   action: "diagnostics";
@@ -246,6 +458,9 @@ export interface ServiceTabHandleTraceFilter {
   browserId?: string | null;
   profileId?: string | null;
   sessionId?: string | null;
+  serviceName?: string | null;
+  agentName?: string | null;
+  taskName?: string | null;
 }
 
 export interface ServiceTabHandle {
@@ -277,6 +492,7 @@ export interface ServiceTabNewData {
   sessionId?: string;
   runtimeProfile?: string;
   profileId?: string;
+  sharedAcquisition?: ServiceSharedTabAcquisition;
   serviceTabHandle?: ServiceTabHandle;
 }
 
@@ -705,9 +921,16 @@ export interface ServiceBrowserRepairData {
 export interface ServiceRequestActionDataMap {
   navigate: ServiceNavigateData;
   cdp_free_launch: ServiceCdpFreeLaunchData;
+  external_byop_adopt: ServiceExternalByopAdoptData;
   cdp_attach: ServiceCdpAttachDescriptor;
   cdp_detach: ServiceCdpDetachData;
   evaluate: ServiceEvaluateData;
+  probe: ServiceProbeData;
+  tab_handle_refresh: ServiceTabHandleRefreshData;
+  tab_handle_release: ServiceTabHandleReleaseData;
+  ui_action: ServiceUiActionData;
+  network_capture: ServiceNetworkCaptureData;
+  file_transfer: ServiceFileTransferData;
   diagnostics: ServiceDiagnosticsData;
   back: ServiceUrlData;
   forward: ServiceUrlData;
@@ -717,6 +940,8 @@ export interface ServiceRequestActionDataMap {
   tab_close: ServiceTabCloseData;
   view_focus: ServiceViewFocusData;
   view_takeover: ServiceViewTakeoverData;
+  remote_view_open: ServiceRemoteViewRouteMutationData;
+  service_remote_view_route_preflight: ServiceRemoteViewRouteMutationData;
   service_remote_view_route_checkout: ServiceRemoteViewRouteMutationData;
   service_remote_view_route_release: ServiceRemoteViewRouteMutationData;
   service_route_pool_repair: ServiceRoutePoolRepairData;
@@ -814,6 +1039,15 @@ export interface ServiceTabAccessPlan {
       request: ServiceRequestForAction<"tab_new">;
       [key: string]: unknown;
     };
+    profileReuse?: {
+      sharedAcquisition?: {
+        mode?: "tab_new" | string | null;
+        browserId?: string | null;
+        sessionName?: string | null;
+        [key: string]: unknown;
+      };
+      [key: string]: unknown;
+    };
     [key: string]: unknown;
   };
   [key: string]: unknown;
@@ -860,6 +1094,21 @@ export interface ServiceCdpFreeLaunchRequestOptions extends Omit<ServiceRequest,
 }
 
 export interface ServiceCdpFreeLaunchRequestHttpOptions extends ServiceCdpFreeLaunchRequestOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
+export interface ServiceExternalByopAdoptRequestOptions extends Omit<ServiceRequest, "action" | "params"> {
+  profileId?: string;
+  runtimeProfile?: string;
+  cdpUrl?: string;
+  cdpPort?: number;
+  url?: string;
+  params?: Record<string, unknown>;
+}
+
+export interface ServiceExternalByopAdoptRequestHttpOptions extends ServiceExternalByopAdoptRequestOptions {
   baseUrl: string;
   fetch?: typeof globalThis.fetch;
   signal?: AbortSignal;
@@ -920,11 +1169,93 @@ export interface ServiceDiagnosticsRequestHttpOptions extends ServiceDiagnostics
   signal?: AbortSignal;
 }
 
+export interface ServiceProbeRequestOptions extends Omit<ServiceRequest, "action" | "params"> {
+  serviceTabHandle: ServiceTabHandle;
+  probe: Record<string, unknown>;
+  timeoutMs: number;
+  maxReturnBytes: number;
+  params?: Record<string, unknown>;
+}
+
+export interface ServiceProbeRequestHttpOptions extends ServiceProbeRequestOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
+export interface ServiceUiActionRequestOptions extends Omit<ServiceRequest, "action" | "params"> {
+  serviceTabHandle: ServiceTabHandle;
+  uiAction: Record<string, unknown>;
+  timeoutMs: number;
+  maxTextBytes?: number;
+  params?: Record<string, unknown>;
+}
+
+export interface ServiceUiActionRequestHttpOptions extends ServiceUiActionRequestOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
+export interface ServiceNetworkCaptureRequestOptions extends Omit<ServiceRequest, "action" | "params"> {
+  serviceTabHandle: ServiceTabHandle;
+  networkCapture: Record<string, unknown>;
+  timeoutMs: number;
+  maxBodyBytes?: number;
+  params?: Record<string, unknown>;
+}
+
+export interface ServiceNetworkCaptureRequestHttpOptions extends ServiceNetworkCaptureRequestOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
+export interface ServiceFileTransferRequestOptions extends Omit<ServiceRequest, "action" | "params"> {
+  serviceTabHandle: ServiceTabHandle;
+  fileTransfer: Record<string, unknown>;
+  timeoutMs: number;
+  params?: Record<string, unknown>;
+}
+
+export interface ServiceFileTransferRequestHttpOptions extends ServiceFileTransferRequestOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
+export interface ServiceTabHandleRefreshOptions extends Omit<ServiceRequest, "action" | "params"> {
+  serviceTabHandle: ServiceTabHandle;
+  repairPolicy?: "reject_only" | "reuse_compatible" | "open_if_missing";
+  url?: string;
+  desiredUrl?: string;
+  params?: Record<string, unknown>;
+}
+
+export interface ServiceTabHandleRefreshHttpOptions extends ServiceTabHandleRefreshOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
+export interface ServiceTabHandleReleaseOptions extends Omit<ServiceRequest, "action" | "params"> {
+  serviceTabHandle: ServiceTabHandle;
+  params?: Record<string, unknown>;
+}
+
+export interface ServiceTabHandleReleaseHttpOptions extends ServiceTabHandleReleaseOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
 export interface ServiceRemoteViewRouteCheckoutOptions extends Omit<ServiceRequest, "action" | "params"> {
   displayAllocationId: string;
   routeId?: string;
   remoteViewRouteId?: string;
   routePoolEntryId?: string;
+  routePoolEntry?: Record<string, unknown>;
+  routePool?: Record<string, unknown>[];
   browserId?: string;
   sessionName?: string;
   streamId?: string;
@@ -934,6 +1265,12 @@ export interface ServiceRemoteViewRouteCheckoutOptions extends Omit<ServiceReque
   externalUrl?: string;
   connectionId?: string;
   connectionName?: string;
+  routeDescriptor?: Record<string, unknown>;
+  remoteHeadedDisplay?: string;
+  display?: string;
+  displayName?: string;
+  url?: string;
+  dryRun?: boolean;
   params?: Record<string, unknown>;
 }
 
@@ -1041,6 +1378,9 @@ export declare function requireServiceTabHandle(response: unknown): ServiceTabHa
 export declare function createServiceCdpFreeLaunchRequest(
   input: ServiceCdpFreeLaunchRequestOptions,
 ): ServiceRequestForAction<"cdp_free_launch">;
+export declare function createServiceExternalByopAdoptRequest(
+  input: ServiceExternalByopAdoptRequestOptions,
+): ServiceRequestForAction<"external_byop_adopt">;
 export declare function createServiceCdpAttachRequest(
   input: ServiceCdpAttachRequestOptions,
 ): ServiceRequestForAction<"cdp_attach">;
@@ -1053,6 +1393,30 @@ export declare function createServiceEvaluateRequest(
 export declare function createServiceDiagnosticsRequest(
   input: ServiceDiagnosticsRequestOptions,
 ): ServiceRequestForAction<"diagnostics">;
+export declare function createServiceProbeRequest(
+  input: ServiceProbeRequestOptions,
+): ServiceRequestForAction<"probe">;
+export declare function createServiceUiActionRequest(
+  input: ServiceUiActionRequestOptions,
+): ServiceRequestForAction<"ui_action">;
+export declare function createServiceNetworkCaptureRequest(
+  input: ServiceNetworkCaptureRequestOptions,
+): ServiceRequestForAction<"network_capture">;
+export declare function createServiceFileTransferRequest(
+  input: ServiceFileTransferRequestOptions,
+): ServiceRequestForAction<"file_transfer">;
+export declare function createServiceTabHandleRefreshRequest(
+  input: ServiceTabHandleRefreshOptions,
+): ServiceRequestForAction<"tab_handle_refresh">;
+export declare function createServiceTabHandleReleaseRequest(
+  input: ServiceTabHandleReleaseOptions,
+): ServiceRequestForAction<"tab_handle_release">;
+export declare function createServiceRemoteViewRoutePreflightRequest(
+  input: ServiceRemoteViewRouteCheckoutOptions,
+): ServiceRequestForAction<"service_remote_view_route_preflight">;
+export declare function createServiceRemoteViewOpenRequest(
+  input: ServiceRemoteViewRouteCheckoutOptions,
+): ServiceRequestForAction<"remote_view_open">;
 export declare function createServiceRemoteViewRouteCheckoutRequest(
   input: ServiceRemoteViewRouteCheckoutOptions,
 ): ServiceRequestForAction<"service_remote_view_route_checkout">;
@@ -1075,10 +1439,20 @@ export declare function createServiceControllerLeaseTakeoverRequest(
   input: ServiceControllerLeaseTakeoverOptions,
 ): ServiceRequestForAction<"service_controller_lease_takeover">;
 export declare function requestServiceTab(options: ServiceTabRequestHttpOptions): Promise<ServiceRequestResponse<ServiceTabNewData>>;
+export declare function requestServiceTabFromAccessPlan(
+  options: ServiceTabRequestHttpOptions,
+): Promise<ServiceRequestResponse<ServiceTabNewData>>;
 export declare function requestServiceCdpFreeLaunch(
   options: ServiceCdpFreeLaunchRequestHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceCdpFreeLaunchData>>;
+export declare function requestServiceExternalByopAdopt(
+  options: ServiceExternalByopAdoptRequestHttpOptions,
+): Promise<ServiceRequestResponse<ServiceExternalByopAdoptData>>;
+export declare const adoptExternalByopBrowser: typeof requestServiceExternalByopAdopt;
 export declare function requestServiceCdpAttach(
+  options: ServiceCdpAttachRequestHttpOptions,
+): Promise<ServiceRequestResponse<ServiceCdpAttachDescriptor>>;
+export declare function attachServiceTabCdp(
   options: ServiceCdpAttachRequestHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceCdpAttachDescriptor>>;
 export declare function requestServiceCdpDetach(
@@ -1087,9 +1461,57 @@ export declare function requestServiceCdpDetach(
 export declare function requestServiceEvaluate(
   options: ServiceEvaluateRequestHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceEvaluateData>>;
+export declare function evaluateServiceTab(
+  options: ServiceEvaluateRequestHttpOptions,
+): Promise<ServiceRequestResponse<ServiceEvaluateData>>;
 export declare function requestServiceDiagnostics(
   options: ServiceDiagnosticsRequestHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceDiagnosticsData>>;
+export declare function getServiceTabDiagnostics(
+  options: ServiceDiagnosticsRequestHttpOptions,
+): Promise<ServiceRequestResponse<ServiceDiagnosticsData>>;
+export declare function requestServiceProbe(
+  options: ServiceProbeRequestHttpOptions,
+): Promise<ServiceRequestResponse<ServiceProbeData>>;
+export declare function probeServiceTab(
+  options: ServiceProbeRequestHttpOptions,
+): Promise<ServiceRequestResponse<ServiceProbeData>>;
+export declare function requestServiceUiAction(
+  options: ServiceUiActionRequestHttpOptions,
+): Promise<ServiceRequestResponse<ServiceUiActionData>>;
+export declare function runServiceUiAction(
+  options: ServiceUiActionRequestHttpOptions,
+): Promise<ServiceRequestResponse<ServiceUiActionData>>;
+export declare function requestServiceNetworkCapture(
+  options: ServiceNetworkCaptureRequestHttpOptions,
+): Promise<ServiceRequestResponse<ServiceNetworkCaptureData>>;
+export declare function captureServiceNetwork(
+  options: ServiceNetworkCaptureRequestHttpOptions,
+): Promise<ServiceRequestResponse<ServiceNetworkCaptureData>>;
+export declare function requestServiceFileTransfer(
+  options: ServiceFileTransferRequestHttpOptions,
+): Promise<ServiceRequestResponse<ServiceFileTransferData>>;
+export declare function transferServiceFiles(
+  options: ServiceFileTransferRequestHttpOptions,
+): Promise<ServiceRequestResponse<ServiceFileTransferData>>;
+export declare function refreshServiceTabHandle(
+  options: ServiceTabHandleRefreshHttpOptions,
+): Promise<ServiceRequestResponse<ServiceTabHandleRefreshData>>;
+export declare function requestServiceTabHandleRefresh(
+  options: ServiceTabHandleRefreshHttpOptions,
+): Promise<ServiceRequestResponse<ServiceTabHandleRefreshData>>;
+export declare function releaseServiceTabHandle(
+  options: ServiceTabHandleReleaseHttpOptions,
+): Promise<ServiceRequestResponse<ServiceTabHandleReleaseData>>;
+export declare function requestServiceTabHandleRelease(
+  options: ServiceTabHandleReleaseHttpOptions,
+): Promise<ServiceRequestResponse<ServiceTabHandleReleaseData>>;
+export declare function requestServiceRemoteViewRoutePreflight(
+  options: ServiceRemoteViewRouteCheckoutHttpOptions,
+): Promise<ServiceRequestResponse<ServiceRemoteViewRouteMutationData>>;
+export declare function requestServiceRemoteViewOpen(
+  options: ServiceRemoteViewRouteCheckoutHttpOptions,
+): Promise<ServiceRequestResponse<ServiceRemoteViewRouteMutationData>>;
 export declare function requestServiceRemoteViewRouteCheckout(
   options: ServiceRemoteViewRouteCheckoutHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceRemoteViewRouteMutationData>>;

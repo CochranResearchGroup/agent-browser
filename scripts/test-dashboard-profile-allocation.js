@@ -199,8 +199,20 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /service-profile-route-grid[\s\S]*<strong>Target<\/strong>[\s\S]*<strong>Login<\/strong>[\s\S]*<strong>Browser build<\/strong>[\s\S]*<strong>Keyring<\/strong>/,
-  'Profile allocation rows must show target, login, browser build, and keyring routing cells',
+  /function profileAllocationOwnerBrowser\(allocation: ServiceProfileAllocation\): string \{[\s\S]*allocation\.browserSummaries[\s\S]*allocation\.browserIds[\s\S]*"no retained owner"/,
+  'Profile allocation helpers must expose the retained browser that owns a shared profile lane',
+);
+
+assert.match(
+  servicePanel,
+  /function profileAllocationSharedClientSummary\(allocation: ServiceProfileAllocation\): string \{[\s\S]*allocation\.serviceNames[\s\S]*allocation\.agentNames[\s\S]*allocation\.taskNames/,
+  'Profile allocation helpers must summarize shared service, agent, and task clients',
+);
+
+assert.match(
+  servicePanel,
+  /service-profile-route-grid[\s\S]*<strong>Target<\/strong>[\s\S]*<strong>Login<\/strong>[\s\S]*<strong>Browser build<\/strong>[\s\S]*<strong>Keyring<\/strong>[\s\S]*Profile owner: \{ownerBrowser\}[\s\S]*Clients: \{sharedClients\}/,
+  'Profile allocation rows must show target, login, browser build, keyring, retained owner, and shared clients',
 );
 
 assert.match(
@@ -211,8 +223,8 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /<InspectorHero[\s\S]*kicker="Profile"[\s\S]*profileAllocationPrimaryTarget\(allocation\)[\s\S]*profileAllocationPrimaryLogin\(allocation\)[\s\S]*<InspectorSection title="Identity And Routing">[\s\S]*label: "Primary target", value: profileAllocationPrimaryTarget\(allocation\)[\s\S]*label: "Primary login", value: profileAllocationPrimaryLogin\(allocation\)[\s\S]*label: "Browser build", value: allocation\.browserBuild \?\? "service default"[\s\S]*<ProfileAllocationTokenSection title="Account identities" values=\{allocation\.accountIds\} \/>[\s\S]*<InspectorSection title="Related Records">[\s\S]*<ProfileBrowserSummarySection rows=\{allocation\.browserSummaries\} \/>[\s\S]*<InspectorEvidenceDisclosure[\s\S]*Raw allocation/,
-  'Profile allocation detail must include browser-build, identity, account, browser-summary, and raw allocation evidence',
+  /<InspectorHero[\s\S]*kicker="Profile"[\s\S]*profileAllocationPrimaryTarget\(allocation\)[\s\S]*profileAllocationPrimaryLogin\(allocation\)[\s\S]*<InspectorSection title="Identity And Routing">[\s\S]*label: "Primary target", value: profileAllocationPrimaryTarget\(allocation\)[\s\S]*label: "Primary login", value: profileAllocationPrimaryLogin\(allocation\)[\s\S]*label: "Browser build", value: allocation\.browserBuild \?\? "service default"[\s\S]*label: "Duplicate launch", value: allocation\.browserIds\?\.length[\s\S]*<ProfileAllocationTokenSection title="Account identities" values=\{allocation\.accountIds\} \/>[\s\S]*<InspectorSection title="Leases And Conflicts">[\s\S]*label: "Profile owner", value: ownerBrowser[\s\S]*label: "Shared clients", value: sharedClients[\s\S]*<InspectorSection title="Related Records">[\s\S]*<ProfileBrowserSummarySection rows=\{allocation\.browserSummaries\} \/>[\s\S]*<InspectorEvidenceDisclosure[\s\S]*Raw allocation/,
+  'Profile allocation detail must include duplicate-launch guidance, retained owner, shared clients, browser-summary, and raw allocation evidence',
 );
 
 assert.match(

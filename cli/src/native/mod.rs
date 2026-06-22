@@ -31,6 +31,8 @@ pub mod providers;
 #[allow(dead_code)]
 pub mod recording;
 #[allow(dead_code)]
+pub mod remote_view;
+#[allow(dead_code)]
 pub mod screenshot;
 #[allow(dead_code)]
 pub mod service_access;

@@ -203,6 +203,16 @@ const nodes = deriveWorkspaceNodes({
       port: 37273,
       engine: 'chrome',
     },
+    {
+      session: 'detected-chatgpt-45011',
+      port: 45011,
+      engine: 'chrome',
+      provider: 'detected-cdp',
+      detected: true,
+      cdpPort: 45011,
+      profilePath: '/home/example/.auracall/browser-profiles/default/chatgpt',
+      pid: 45011,
+    },
   ],
   daemonTabsByPort: {
     4101: [
@@ -219,6 +229,15 @@ const nodes = deriveWorkspaceNodes({
         index: 0,
         title: 'Agent Browser',
         url: 'https://agent-browser.example.test/?workspace=browser%3Asession%3Adefault&view=workspace%3Acontrol',
+        type: 'page',
+        active: true,
+      },
+    ],
+    45011: [
+      {
+        index: 0,
+        title: 'ChatGPT',
+        url: 'https://chatgpt.com/',
         type: 'page',
         active: true,
       },
@@ -705,10 +724,7 @@ assert.equal(action(live, 'control').enabled, true);
 assert.equal(action(live, 'close').enabled, true);
 
 missingId(nodes, 'browser:browser-retained');
-const retainedProfile = byId(nodes, 'profile:profile-retained');
-assert.equal(retainedProfile.group, 'retained');
-assert.equal(retainedProfile.state, 'retained');
-assert.equal(action(retainedProfile, 'launch').enabled, true);
+missingId(nodes, 'profile:profile-retained');
 
 const disconnected = byId(nodes, 'browser:browser-disconnected');
 assert.equal(disconnected.group, 'needs-attention');
@@ -716,15 +732,7 @@ assert.equal(disconnected.state, 'needs-attention');
 assert.equal(disconnected.attentionReason, 'Repair the retained browser record.');
 assert.equal(action(disconnected, 'repair').enabled, true);
 
-const cdpDisconnected = byId(nodes, 'browser:browser-cdp-disconnected');
-assert.equal(cdpDisconnected.group, 'retained');
-assert.equal(cdpDisconnected.state, 'retained');
-assert.equal(cdpDisconnected.live, false);
-assert.equal(cdpDisconnected.attentionReason, null);
-assert.equal(cdpDisconnected.process?.pid, 30734);
-assert.equal(cdpDisconnected.process?.cdpPort, 37883);
-assert.equal(action(cdpDisconnected, 'repair').enabled, false);
-assert.equal(action(cdpDisconnected, 'control').enabled, false);
+missingId(nodes, 'browser:browser-cdp-disconnected');
 
 const control = byId(nodes, 'browser:browser-control');
 assert.equal(control.group, 'active');
@@ -803,8 +811,9 @@ assert.equal(action(standaloneTakeover, 'resume').enabled, false);
 const daemon = byId(nodes, 'daemon-session:daemon-only');
 assert.equal(daemon.source, 'daemon-session');
 assert.equal(daemon.role, 'target-browser');
-assert.equal(daemon.group, 'active');
+assert.equal(daemon.group, 'detected');
 assert.equal(daemon.label, 'Standalone tab');
+assert.match(daemon.secondaryLabel, /not agent-browser service-owned/);
 assert.equal(daemon.primaryTab?.url, 'https://example.test/standalone');
 assert.equal(daemon.viewStream?.provider, 'cdp_screencast');
 assert.equal(daemon.viewStream?.url, 'http://127.0.0.1:4101/');
@@ -812,6 +821,19 @@ assert.equal(daemon.process?.streamPort, 4101);
 assert.equal(action(daemon, 'view').enabled, true);
 assert.equal(action(daemon, 'control').enabled, true);
 assert.equal(action(daemon, 'add-tab').enabled, true);
+
+const detectedExternal = byId(nodes, 'daemon-session:detected-chatgpt-45011');
+assert.equal(detectedExternal.source, 'daemon-session');
+assert.equal(detectedExternal.group, 'detected');
+assert.equal(detectedExternal.label, 'ChatGPT');
+assert.equal(detectedExternal.viewStream, null);
+assert.equal(detectedExternal.process?.cdpPort, 45011);
+assert.equal(detectedExternal.process?.streamPort, null);
+assert.match(detectedExternal.secondaryLabel, /detected external Chrome/);
+assert.match(detectedExternal.secondaryLabel, /not agent-browser service-owned/);
+assert.equal(action(detectedExternal, 'control').enabled, false);
+assert.match(action(detectedExternal, 'control').reason ?? '', /no agent-browser-owned stream/);
+assert.equal(action(detectedExternal, 'kill').enabled, false);
 
 const dashboardViewer = byId(nodes, 'daemon-session:dashboard-viewer-plan0025');
 assert.equal(dashboardViewer.source, 'daemon-session');
@@ -834,11 +856,7 @@ assert.equal(conflict.state, 'blocked');
 assert.equal(conflict.attentionReason, 'Wait for the exclusive profile lease to clear.');
 assert.equal(action(conflict, 'launch').enabled, false);
 
-const authReady = byId(nodes, 'profile:profile-auth-ready');
-assert.equal(authReady.group, 'retained');
-assert.equal(authReady.state, 'retained');
-assert.equal(action(authReady, 'launch').enabled, true);
-assert.equal(action(authReady, 'seed').enabled, false);
+missingId(nodes, 'profile:profile-auth-ready');
 
 const manualSeeding = byId(nodes, 'profile:profile-manual-seeding');
 assert.equal(manualSeeding.group, 'needs-attention');
@@ -850,10 +868,11 @@ assert.equal(action(manualSeeding, 'seed').enabled, true);
 assert.deepEqual(
   nodes.map((node) => node.group),
   [...nodes.map((node) => node.group)].sort((left, right) => {
-    const order = { 'needs-attention': 0, active: 1, retained: 2 };
+    const order = { 'needs-attention': 0, active: 1, detected: 2, retained: 3 };
     return order[left] - order[right];
   }),
-  'Workspace nodes should be grouped by attention, active, then retained order',
+  'Workspace nodes should be grouped by attention, owned active, then detected order',
 );
+assert.ok(!nodes.some((node) => node.group === 'retained'), 'Retained rows belong outside the live workspace rail');
 
 console.log('Dashboard workspace node contract smoke passed');

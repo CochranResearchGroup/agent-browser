@@ -989,6 +989,20 @@ function profileAllocationPrimaryBrowser(allocation: ServiceProfileAllocation): 
   return firstStringValue(allocation.browserIds, "no browser assigned");
 }
 
+function profileAllocationOwnerBrowser(allocation: ServiceProfileAllocation): string {
+  return firstStringValue([
+    allocation.browserSummaries?.find((browser) => browser.browserId?.trim())?.browserId,
+    allocation.browserIds?.find((value) => value.trim()),
+  ], "no retained owner");
+}
+
+function profileAllocationSharedClientSummary(allocation: ServiceProfileAllocation): string {
+  const services = allocation.serviceNames?.filter((value) => value.trim()).length ?? 0;
+  const agents = allocation.agentNames?.filter((value) => value.trim()).length ?? 0;
+  const tasks = allocation.taskNames?.filter((value) => value.trim()).length ?? 0;
+  return `${services} services / ${agents} agents / ${tasks} tasks`;
+}
+
 function profileReadinessNeedsAttention(rows?: ServiceProfileTargetReadiness[]): boolean {
   return Boolean(rows?.some((row) =>
     row.manualSeedingRequired ||
@@ -4719,6 +4733,8 @@ function ProfileAllocationRow({
   const primaryTarget = profileAllocationPrimaryTarget(allocation);
   const primaryLogin = profileAllocationPrimaryLogin(allocation);
   const primaryBrowser = profileAllocationPrimaryBrowser(allocation);
+  const ownerBrowser = profileAllocationOwnerBrowser(allocation);
+  const sharedClients = profileAllocationSharedClientSummary(allocation);
   const readinessAttention = profileReadinessNeedsAttention(allocation.targetReadiness);
   return (
     <button
@@ -4768,7 +4784,9 @@ function ProfileAllocationRow({
           </span>
         </div>
         <div className="service-profile-route-detail">
+          <span>Profile owner: {ownerBrowser}</span>
           <span>Browser: {primaryBrowser}</span>
+          <span>Clients: {sharedClients}</span>
           <span>{holderCount} holders</span>
           <span>{waitingCount} waiting</span>
           <span>{allocation.tabIds?.length ?? 0} tabs</span>
@@ -5152,6 +5170,8 @@ function ProfileAllocationDetailContent({
   const primarySessionId = allocation.holderSessionIds?.find((value) => value.trim()) ?? allocation.exclusiveHolderSessionIds?.find((value) => value.trim());
   const primaryWaitingJobId = allocation.waitingJobIds?.find((value) => value.trim());
   const primaryTabId = allocation.tabIds?.find((value) => value.trim());
+  const ownerBrowser = profileAllocationOwnerBrowser(allocation);
+  const sharedClients = profileAllocationSharedClientSummary(allocation);
   return (
     <div className="service-event-dialog-body">
       <InspectorHero
@@ -5217,6 +5237,7 @@ function ProfileAllocationDetailContent({
             { label: "Allocation", value: allocation.allocation },
             { label: "Keyring", value: allocation.keyring },
             { label: "Recommended action", value: allocation.recommendedAction },
+            { label: "Duplicate launch", value: allocation.browserIds?.length ? "Use the retained profile owner browser instead of starting another profile process." : "Launch may be allowed when no compatible retained owner exists." },
           ]}
         />
         <ProfileAllocationTokenSection title="Target services" values={allocation.targetServiceIds} />
@@ -5229,6 +5250,8 @@ function ProfileAllocationDetailContent({
         <InspectorFactRows
           rows={[
             { label: "Lease state", value: allocation.leaseState },
+            { label: "Profile owner", value: ownerBrowser, mono: true },
+            { label: "Shared clients", value: sharedClients },
             { label: "Holder count", value: String(holderCount) },
             { label: "Waiting jobs", value: String(waitingCount) },
             { label: "Conflicts", value: String(allocation.conflictSessionIds?.length ?? 0) },

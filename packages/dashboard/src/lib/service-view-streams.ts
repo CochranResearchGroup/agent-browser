@@ -1,3 +1,11 @@
+export type ServiceRouteDescriptor = {
+  localEmbedUrl?: string | null;
+  publicOperatorUrl?: string | null;
+  dashboardEmbedUrl?: string | null;
+  externalUrl?: string | null;
+  healthUrl?: string | null;
+};
+
 export type ServiceViewStream = {
   id?: string;
   provider?: string;
@@ -5,6 +13,10 @@ export type ServiceViewStream = {
   url?: string | null;
   frameUrl?: string | null;
   externalUrl?: string | null;
+  localEmbedUrl?: string | null;
+  publicOperatorUrl?: string | null;
+  dashboardEmbedUrl?: string | null;
+  routeDescriptor?: ServiceRouteDescriptor | null;
   routeId?: string | null;
   displayAllocationId?: string | null;
   connectionId?: string | null;
@@ -49,6 +61,27 @@ export function viewStreamFrameUrl(stream?: ServiceViewStream | null): string | 
 
 export function viewStreamExternalUrl(stream?: ServiceViewStream | null): string | null {
   return stream?.externalUrl || stream?.frameUrl || stream?.url || null;
+}
+
+export function viewStreamDashboardFrameUrl(stream?: ServiceViewStream | null, dashboardHref?: string | null): string | null {
+  const frameUrl = viewStreamFrameUrl(stream);
+  const localEmbedUrl = stream?.localEmbedUrl || stream?.routeDescriptor?.localEmbedUrl || frameUrl;
+  const publicUrl = (
+    stream?.publicOperatorUrl
+    || stream?.routeDescriptor?.publicOperatorUrl
+    || stream?.externalUrl
+    || stream?.routeDescriptor?.externalUrl
+    || null
+  );
+  const dashboardEmbedUrl = stream?.dashboardEmbedUrl || stream?.routeDescriptor?.dashboardEmbedUrl || null;
+  if (!dashboardHref) return dashboardEmbedUrl || frameUrl || publicUrl || null;
+
+  const dashboardIsLocal = isLoopbackUrl(dashboardHref);
+  if (dashboardIsLocal) return localEmbedUrl || dashboardEmbedUrl || publicUrl || null;
+
+  if (dashboardEmbedUrl && !isLoopbackUrl(dashboardEmbedUrl, dashboardHref)) return dashboardEmbedUrl;
+  if (frameUrl && isLoopbackUrl(frameUrl, dashboardHref) && publicUrl) return publicUrl;
+  return frameUrl || publicUrl || dashboardEmbedUrl || null;
 }
 
 export function canControlViewStream(stream: ServiceViewStream): boolean {
@@ -148,4 +181,15 @@ function readinessReason(readiness: unknown): string | null {
   const record = readiness as Record<string, unknown>;
   const reason = record.reason ?? record.message ?? record.lastProviderEvent;
   return typeof reason === "string" && reason.trim() ? reason.trim().replaceAll("_", " ") : null;
+}
+
+function isLoopbackUrl(value: string | null | undefined, base?: string | null): boolean {
+  if (!value) return false;
+  try {
+    const url = base ? new URL(value, base) : new URL(value);
+    const hostname = url.hostname.toLowerCase();
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]";
+  } catch {
+    return false;
+  }
 }

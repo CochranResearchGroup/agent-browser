@@ -46,6 +46,18 @@ assert.match(
 );
 
 assert.match(
+  page,
+  /fetch\("\/api\/runtime\/manifest", \{ cache: "no-store" \}\)[\s\S]*runtimeManifestIssue\(manifest\)[\s\S]*<RuntimeManifestNotice state=\{runtimeManifest\} \/>/,
+  'Dashboard shell must read the live runtime manifest and render a drift warning when the binary/UI contract is stale',
+);
+
+assert.match(
+  css,
+  /\.dashboard-runtime-notice[\s\S]*border: 1px solid color-mix\(in srgb, var\(--warning\)/,
+  'Dashboard runtime drift warning must have a dedicated visible warning style',
+);
+
+assert.match(
   navigator,
   /deriveWorkspaceNodes\(\{?workspaceInput\}?\)/,
   'Workspace navigator must derive rows from the shared WorkspaceNode model',
@@ -204,32 +216,32 @@ assert.match(
 
 assert.match(
   navigator,
-  /SCOPE_LABELS[\s\S]*active: "Active"[\s\S]*"needs-attention": "Attention"[\s\S]*retained: "Retained"/,
-  'Workspace navigator must expose Active, Attention, and Retained scopes',
+  /type LiveWorkspaceScope = "all" \| "active" \| "detected"[\s\S]*LIVE_WORKSPACE_SCOPES: LiveWorkspaceScope\[\] = \["all", "active", "detected"\]/,
+  'Workspace navigator live rail scope tabs must include only all, owned, and detected control targets',
 );
 
 assert.match(
   navigator,
-  /<WorkspaceGroup[\s\S]*title="Active"[\s\S]*nodes=\{grouped\.active\}[\s\S]*<WorkspaceGroup[\s\S]*title="Needs attention"[\s\S]*nodes=\{grouped\["needs-attention"\]\}[\s\S]*defaultOpen=\{attentionDefaultOpen\}[\s\S]*onDismiss=\{dismissAttentionNode\}[\s\S]*<WorkspaceGroup[\s\S]*title="Retained"[\s\S]*nodes=\{grouped\.retained\}/,
-  'Workspace navigator must render active work first, keep attention collapsible, and expose dismissal for attention rows',
+  /const liveRailNodes = useMemo\([\s\S]*node\.group === "active" \|\| node\.group === "detected"[\s\S]*<WorkspaceGroup[\s\S]*title="Agent-browser owned"[\s\S]*nodes=\{grouped\.active\}[\s\S]*<WorkspaceGroup[\s\S]*title="Detected non-owned browsers"[\s\S]*nodes=\{grouped\.detected\}/,
+  'Workspace navigator must separate owned work from detected non-owned browsers and exclude attention rows from the live rail',
+);
+
+assert.doesNotMatch(
+  navigator,
+  /title="Needs attention"|dismissAttentionNode|restoreDismissedAttention|DISMISSED_ATTENTION_STORAGE_KEY/,
+  'Workspace navigator must not keep a dismissible attention category in the live left rail',
 );
 
 assert.match(
   navigator,
-  /DISMISSED_ATTENTION_STORAGE_KEY[\s\S]*readDismissedAttentionIds[\s\S]*writeDismissedAttentionIds[\s\S]*dismissedAttentionIds[\s\S]*visibleNodes[\s\S]*dismissAttentionNode[\s\S]*restoreDismissedAttention/,
-  'Workspace navigator must persist local dismissal state for noisy attention rows',
+  /LIVE_WORKSPACE_SCOPES\.map\(\(value\)[\s\S]*title="Detected non-owned browsers"[\s\S]*rowWindow=\{WORKSPACE_ACTIVE_ROW_WINDOW\}/,
+  'Workspace navigator must remove retained history and attention rows from the live rail and window detected non-owned browsers',
 );
 
 assert.match(
   navigator,
-  /const WORKSPACE_RETAINED_ROW_WINDOW = 80;[\s\S]*const retainedDefaultOpen = scope === "retained" \|\| Boolean\(query\.trim\(\)\);[\s\S]*defaultOpen=\{retainedDefaultOpen\}[\s\S]*rowWindow=\{WORKSPACE_RETAINED_ROW_WINDOW\}/,
-  'Workspace navigator must keep large retained history collapsed by default and windowed when opened',
-);
-
-assert.match(
-  navigator,
-  /const WORKSPACE_ACTIVE_ROW_WINDOW = 64;[\s\S]*const WORKSPACE_ATTENTION_ROW_WINDOW = 48;[\s\S]*rowWindow=\{WORKSPACE_ACTIVE_ROW_WINDOW\}[\s\S]*rowWindow=\{WORKSPACE_ATTENTION_ROW_WINDOW\}/,
-  'Workspace navigator must window large active and attention groups so mobile workspaces stay responsive',
+  /const WORKSPACE_ACTIVE_ROW_WINDOW = 64;[\s\S]*rowWindow=\{WORKSPACE_ACTIVE_ROW_WINDOW\}/,
+  'Workspace navigator must window large live control groups so mobile workspaces stay responsive',
 );
 
 assert.match(
@@ -360,8 +372,8 @@ assert.match(
 
 assert.match(
   serviceWorkspaces,
-  /process: portRegistered[\s\S]*streamPort: session\.port, running: live/,
-  'Daemon workspace rows must expose stream process indicators without marking stale port-only rows live',
+  /process: portRegistered[\s\S]*cdpPort: session\.cdpPort \?\? \(detectedExternal \? session\.port : null\)[\s\S]*streamPort: detectedExternal \? null : session\.port[\s\S]*running: live/,
+  'Daemon workspace rows must keep detected CDP ports separate from agent-browser stream ports',
 );
 
 assert.match(

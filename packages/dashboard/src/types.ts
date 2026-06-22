@@ -114,6 +114,10 @@ export interface SessionInfo {
   engine?: string;
   provider?: string;
   extensions?: ExtensionInfo[];
+  detected?: boolean;
+  cdpPort?: number;
+  profilePath?: string;
+  pid?: number;
   pending?: boolean;
   closing?: boolean;
 }

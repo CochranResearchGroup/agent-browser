@@ -104,7 +104,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-type WorkspaceScope = "all" | WorkspaceNodeGroup;
+type WorkspaceScope = "all" | "active" | "needs-attention" | "detected";
+type LiveWorkspaceScope = "all" | "active" | "detected";
 type LauncherRowFilter = "all" | "eligible" | "needs-action" | "blocked";
 
 type ServiceStatusData = {
@@ -146,10 +147,11 @@ const BROWSER_OPTIONS: { id: string; label: string; engine?: string; provider?: 
 
 const SCOPE_LABELS: Record<WorkspaceScope, string> = {
   all: "All",
-  active: "Active",
+  active: "Owned",
+  detected: "Detected",
   "needs-attention": "Attention",
-  retained: "Retained",
 };
+const LIVE_WORKSPACE_SCOPES: LiveWorkspaceScope[] = ["all", "active", "detected"];
 
 const LAUNCHER_DISPLAY_OPTIONS: Array<{ value: LauncherDisplayIsolation; label: string }> = [
   { value: "service_default", label: "Service plan" },
@@ -178,10 +180,7 @@ const LAUNCHER_CONTROL_INPUT_OPTIONS: Array<{ value: LauncherControlInputPrefere
 
 const DEFAULT_LAUNCH_TARGET_URL = "about:blank";
 const WORKSPACE_ACTIVE_ROW_WINDOW = 64;
-const WORKSPACE_ATTENTION_ROW_WINDOW = 48;
-const WORKSPACE_RETAINED_ROW_WINDOW = 80;
 const LAUNCHER_ROW_WINDOW = 48;
-const DISMISSED_ATTENTION_STORAGE_KEY = "agent-browser-dashboard-dismissed-attention-workspaces";
 
 const LAUNCHER_FILTER_LABELS: Record<LauncherRowFilter, string> = {
   all: "All",
@@ -205,21 +204,6 @@ const EMPTY_LAUNCHER_PREVIEW: LauncherEligibilityPreview = {
 
 function serviceBase(_activePort: number): string {
   return SERVICE_API_BASE;
-}
-
-function readDismissedAttentionIds(): Set<string> {
-  if (typeof window === "undefined") return new Set();
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(DISMISSED_ATTENTION_STORAGE_KEY) ?? "[]");
-    return new Set(Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : []);
-  } catch {
-    return new Set();
-  }
-}
-
-function writeDismissedAttentionIds(ids: Set<string>): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(DISMISSED_ATTENTION_STORAGE_KEY, JSON.stringify([...ids]));
 }
 
 async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = 10000): Promise<Response> {
@@ -443,6 +427,7 @@ function workspaceUrlSelectionScore(node: WorkspaceNode, selection: DashboardWor
 function nodeIcon(node: WorkspaceNode) {
   if (node.state === "blocked") return ShieldAlert;
   if (node.group === "needs-attention") return AlertTriangle;
+  if (node.group === "detected") return Search;
   if (node.state === "controllable") return MousePointer2;
   if (node.state === "view-only") return Eye;
   if (node.group === "retained") return Archive;
@@ -454,6 +439,7 @@ function groupNodes(nodes: WorkspaceNode[]): Record<WorkspaceNodeGroup, Workspac
   const grouped: Record<WorkspaceNodeGroup, WorkspaceNode[]> = {
     "needs-attention": [],
     active: [],
+    detected: [],
     retained: [],
   };
   for (const node of nodes) {
@@ -994,9 +980,9 @@ function WorkspaceGroup({
             <button
               type="button"
               className="workspace-nav-show-more"
-              onClick={() => setVisibleNodeCount((current) => Math.min(nodes.length, current + Math.max(rowWindow, WORKSPACE_RETAINED_ROW_WINDOW)))}
+              onClick={() => setVisibleNodeCount((current) => Math.min(nodes.length, current + rowWindow))}
             >
-              Show {Math.min(Math.max(rowWindow, WORKSPACE_RETAINED_ROW_WINDOW), hiddenNodeCount)} more rows
+              Show {Math.min(rowWindow, hiddenNodeCount)} more rows
               <span>{visibleNodes.length} of {nodes.length} shown</span>
             </button>
           )}
@@ -1248,11 +1234,10 @@ export function WorkspaceNavigator() {
     action: string;
     request: LauncherServiceRequest;
   } | null>(null);
-  const [dismissedAttentionIds, setDismissedAttentionIds] = useState<Set<string>>(() => readDismissedAttentionIds());
   const [serviceError, setServiceError] = useState("");
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
-  const [scope, setScope] = useState<WorkspaceScope>("all");
+  const [scope, setScope] = useState<LiveWorkspaceScope>("all");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [urlSelection, setUrlSelection] = useState<DashboardWorkspaceUrlSelection>(() => readDashboardWorkspaceUrlSelection());
   const [newSessionName, setNewSessionName] = useState("");
@@ -1346,26 +1331,22 @@ export function WorkspaceNavigator() {
   }, [getEngineForSession, getTabsForSession, serviceStatus, sessions]);
 
   const nodes = useMemo(() => deriveWorkspaceNodes(workspaceInput), [workspaceInput]);
-  const visibleNodes = useMemo(
-    () => nodes.filter((node) => !(node.group === "needs-attention" && dismissedAttentionIds.has(node.id))),
-    [dismissedAttentionIds, nodes],
-  );
-  const dismissedAttentionCount = useMemo(
-    () => nodes.filter((node) => node.group === "needs-attention" && dismissedAttentionIds.has(node.id)).length,
-    [dismissedAttentionIds, nodes],
+  const liveRailNodes = useMemo(
+    () => nodes.filter((node) => node.group === "active" || node.group === "detected"),
+    [nodes],
   );
   const filteredNodes = useMemo(() => {
     const text = deferredQuery.trim().toLowerCase();
-    return visibleNodes.filter((node) => {
+    return liveRailNodes.filter((node) => {
       if (scope !== "all" && node.group !== scope) return false;
       return text ? nodeSearchText(node).includes(text) : true;
     });
-  }, [deferredQuery, scope, visibleNodes]);
+  }, [deferredQuery, liveRailNodes, scope]);
   const grouped = useMemo(() => groupNodes(filteredNodes), [filteredNodes]);
-  const counts = useMemo(() => groupNodes(visibleNodes), [visibleNodes]);
+  const counts = useMemo(() => groupNodes(liveRailNodes), [liveRailNodes]);
   const selectedNode = useMemo(
-    () => selectedNodeId ? nodes.find((node) => node.id === selectedNodeId) ?? null : null,
-    [nodes, selectedNodeId],
+    () => selectedNodeId ? liveRailNodes.find((node) => node.id === selectedNodeId) ?? null : null,
+    [liveRailNodes, selectedNodeId],
   );
   const launcherPreview = useMemo(() => {
     if (!newSessionOpen) return EMPTY_LAUNCHER_PREVIEW;
@@ -1574,7 +1555,7 @@ export function WorkspaceNavigator() {
     if (!dashboardWorkspaceSelectionHasValue(urlSelection)) return;
     let bestNode: WorkspaceNode | null = null;
     let bestScore = 0;
-    for (const node of nodes) {
+    for (const node of liveRailNodes) {
       const score = workspaceUrlSelectionScore(node, urlSelection);
       if (score > bestScore) {
         bestNode = node;
@@ -1593,7 +1574,7 @@ export function WorkspaceNavigator() {
     } else if (bestNode && bestNode.id === selectedNodeId && bestNode.id !== urlSelection.workspaceId) {
       setUrlSelection(updateDashboardWorkspaceUrlSelection({ workspaceId: bestNode.id }, "replace"));
     }
-  }, [nodes, selectNode, selectedNodeId, urlSelection]);
+  }, [liveRailNodes, selectNode, selectedNodeId, urlSelection]);
 
   useEffect(() => {
     if (!selectedNodeId) {
@@ -1636,22 +1617,6 @@ export function WorkspaceNavigator() {
     performNodeAction(node, action.id);
   }, [performNodeAction]);
 
-  const dismissAttentionNode = useCallback((node: WorkspaceNode) => {
-    if (node.group !== "needs-attention") return;
-    setDismissedAttentionIds((current) => {
-      const next = new Set(current);
-      next.add(node.id);
-      writeDismissedAttentionIds(next);
-      return next;
-    });
-  }, []);
-
-  const restoreDismissedAttention = useCallback(() => {
-    const next = new Set<string>();
-    writeDismissedAttentionIds(next);
-    setDismissedAttentionIds(next);
-  }, []);
-
   const handleCreateSubmit = useCallback(async () => {
     const name = newSessionName.trim();
     if (!name || creating) return;
@@ -1685,11 +1650,7 @@ export function WorkspaceNavigator() {
     setPendingDangerAction(null);
   }, [dispatchCloseAllSessions, dispatchCloseSession, dispatchKillSession, pendingDangerAction]);
 
-  const sessionBackedNodes = nodes.filter((node) => node.source === "daemon-session");
-  const retainedDefaultOpen = scope === "retained" || Boolean(query.trim());
-  const attentionDefaultOpen = scope === "needs-attention" ||
-    Boolean(query.trim()) ||
-    grouped["needs-attention"].some((node) => node.id === selectedNodeId);
+  const sessionBackedNodes = liveRailNodes.filter((node) => node.source === "daemon-session");
 
   return (
     <div className="workspace-nav flex h-full flex-col">
@@ -1697,7 +1658,7 @@ export function WorkspaceNavigator() {
         <div className="min-w-0">
           <div className="workspace-nav-title">Workspaces</div>
           <div className="workspace-nav-subtitle">
-            {nodes.length} derived from service state and sessions
+            {liveRailNodes.length} live control targets
           </div>
         </div>
         <div className="ml-auto flex items-center gap-1">
@@ -1761,7 +1722,7 @@ export function WorkspaceNavigator() {
           )}
         </label>
         <div className="workspace-nav-scope" role="tablist" aria-label="Workspace scope">
-          {(["all", "active", "needs-attention", "retained"] as WorkspaceScope[]).map((value) => (
+          {LIVE_WORKSPACE_SCOPES.map((value) => (
             <button
               key={value}
               type="button"
@@ -1771,19 +1732,10 @@ export function WorkspaceNavigator() {
               onClick={() => setScope(value)}
             >
               <span>{SCOPE_LABELS[value]}</span>
-              <small>{value === "all" ? nodes.length : counts[value].length}</small>
+              <small>{value === "all" ? liveRailNodes.length : counts[value].length}</small>
             </button>
           ))}
         </div>
-        {dismissedAttentionCount > 0 && (
-          <button
-            type="button"
-            className="workspace-nav-dismissed-restore"
-            onClick={restoreDismissedAttention}
-          >
-            Restore {dismissedAttentionCount} dismissed
-          </button>
-        )}
       </div>
       {selectedNode && (
         <WorkspaceNodeDetail
@@ -1805,7 +1757,7 @@ export function WorkspaceNavigator() {
           ) : (
             <>
               <WorkspaceGroup
-                title="Active"
+                title="Agent-browser owned"
                 nodes={grouped.active}
                 selectedNodeId={selectedNodeId}
                 onSelect={selectNode}
@@ -1815,27 +1767,14 @@ export function WorkspaceNavigator() {
                 rowWindow={WORKSPACE_ACTIVE_ROW_WINDOW}
               />
               <WorkspaceGroup
-                title="Needs attention"
-                nodes={grouped["needs-attention"]}
+                title="Detected non-owned browsers"
+                nodes={grouped.detected}
                 selectedNodeId={selectedNodeId}
-                defaultOpen={attentionDefaultOpen}
-                rowWindow={WORKSPACE_ATTENTION_ROW_WINDOW}
                 onSelect={selectNode}
                 onPrimaryAction={performPrimaryAction}
                 onClose={(node) => setPendingDangerAction({ type: "close", node })}
                 onKill={(node) => setPendingDangerAction({ type: "kill", node })}
-                onDismiss={dismissAttentionNode}
-              />
-              <WorkspaceGroup
-                title="Retained"
-                nodes={grouped.retained}
-                selectedNodeId={selectedNodeId}
-                defaultOpen={retainedDefaultOpen}
-                rowWindow={WORKSPACE_RETAINED_ROW_WINDOW}
-                onSelect={selectNode}
-                onPrimaryAction={performPrimaryAction}
-                onClose={(node) => setPendingDangerAction({ type: "close", node })}
-                onKill={(node) => setPendingDangerAction({ type: "kill", node })}
+                rowWindow={WORKSPACE_ACTIVE_ROW_WINDOW}
               />
             </>
           )}

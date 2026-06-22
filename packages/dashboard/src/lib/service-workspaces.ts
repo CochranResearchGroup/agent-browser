@@ -9,7 +9,7 @@ export type WorkspaceNodeState =
   | "view-only"
   | "controllable";
 
-export type WorkspaceNodeGroup = "active" | "needs-attention" | "retained";
+export type WorkspaceNodeGroup = "active" | "needs-attention" | "detected" | "retained";
 
 export type WorkspaceNodeSource =
   | "service-browser"
@@ -501,11 +501,12 @@ export function deriveWorkspaceNodes(input: WorkspaceNodeInput): WorkspaceNode[]
       continue;
     }
     const tabs = daemonTabsByPort[session.port] ?? [];
-    nodes.push(createDaemonWorkspaceNode({
+    const node = createDaemonWorkspaceNode({
       session,
       tabs,
       engine: session.engine ?? daemonEngineByPort[session.port],
-    }));
+    });
+    if (node.live || node.group === "needs-attention") nodes.push(node);
     daemonNamesWithNodes.add(session.session);
   }
 
@@ -519,7 +520,9 @@ export function deriveWorkspaceNodes(input: WorkspaceNodeInput): WorkspaceNode[]
     profileIdsWithNodes.add(allocation.profileId);
   }
 
-  return nodes.sort(compareWorkspaceNodes);
+  return nodes
+    .filter((node) => node.group !== "retained")
+    .sort(compareWorkspaceNodes);
 }
 
 export function deriveWorkspaceOwnershipDiagnostics(input: Pick<WorkspaceNodeInput, "serviceBrowsers" | "serviceSessions" | "serviceTabs">): WorkspaceOwnershipDiagnostic[] {
@@ -839,6 +842,7 @@ function createDaemonWorkspaceNode({
   engine?: string | null;
 }): WorkspaceNode {
   const activeTab = tabs.find((tab) => tab.active) ?? tabs[0];
+  const detectedExternal = session.detected === true;
   const portRegistered = !session.pending && !session.closing && session.port > 0;
   const hasBrowserEvidence = tabs.length > 0;
   const live = portRegistered && hasBrowserEvidence;
@@ -847,7 +851,7 @@ function createDaemonWorkspaceNode({
     : portRegistered && !hasBrowserEvidence
       ? "Daemon stream port is registered but no CDP tab evidence is available."
       : null;
-  const viewStream = daemonViewStream(session, live);
+  const viewStream = detectedExternal ? null : daemonViewStream(session, live);
   const viewerClient = classifyViewerClient({
     ids: [session.session, session.provider, session.engine, engine],
     tabs,
@@ -872,12 +876,16 @@ function createDaemonWorkspaceNode({
     source: "daemon-session",
     role: viewerClient.active ? "viewer-client" : "target-browser",
     roleReason: viewerClient.reason,
-    group: groupForState(state),
+    group: live && !viewerClient.active ? "detected" : groupForState(state),
     state,
     label,
     secondaryLabel: compactLabels([
       session.session,
       session.provider ?? session.engine ?? engine,
+      detectedExternal ? "detected external Chrome" : null,
+      live && !viewerClient.active ? "not agent-browser service-owned" : null,
+      session.profilePath,
+      session.cdpPort ? `CDP ${session.cdpPort}` : null,
       portRegistered && !hasBrowserEvidence ? "no CDP tab evidence" : null,
       activeTab?.url,
       viewerClient.active ? "viewer client" : null,
@@ -899,7 +907,12 @@ function createDaemonWorkspaceNode({
     daemonSession: session.session,
     port: session.port,
     process: portRegistered
-      ? { streamPort: session.port, running: live }
+      ? {
+          pid: session.pid ?? null,
+          cdpPort: session.cdpPort ?? (detectedExternal ? session.port : null),
+          streamPort: detectedExternal ? null : session.port,
+          running: live,
+        }
       : null,
     ownership: {},
     primaryTab: activeTab
@@ -928,9 +941,11 @@ function createDaemonWorkspaceNode({
       jobIds: [],
       incidentIds: [],
     },
-    actions: viewerClient.active
-      ? viewerClientActions(daemonActions(session, live, viewStream), viewerClient.reason)
-      : daemonActions(session, live, viewStream),
+    actions: detectedExternal
+      ? detectedBrowserActions(live)
+      : viewerClient.active
+        ? viewerClientActions(daemonActions(session, live, viewStream), viewerClient.reason)
+        : daemonActions(session, live, viewStream),
   };
 }
 
@@ -1751,6 +1766,20 @@ function daemonActions(
   ];
 }
 
+function detectedBrowserActions(live: boolean): WorkspaceNodeAction[] {
+  const reason = live
+    ? "Detected browser has CDP evidence but no agent-browser-owned stream or control route."
+    : "Detected browser is not live.";
+  return [
+    { id: "focus", label: "Focus", enabled: false, reason },
+    { id: "view", label: "View", enabled: false, reason },
+    { id: "control", label: "Control", enabled: false, reason },
+    { id: "add-tab", label: "Add tab", enabled: false, reason },
+    { id: "close", label: "Close", enabled: false, reason: "Non-owned browsers are not closed from the live workspace rail." },
+    { id: "kill", label: "Kill", enabled: false, reason: "Non-owned browsers are not killed from the live workspace rail." },
+  ];
+}
+
 function profileActions(
   allocation: WorkspaceServiceProfileAllocation,
   reason?: string | null,
@@ -1885,7 +1914,8 @@ function compareWorkspaceNodes(left: WorkspaceNode, right: WorkspaceNode): numbe
   const groupOrder: Record<WorkspaceNodeGroup, number> = {
     "needs-attention": 0,
     active: 1,
-    retained: 2,
+    detected: 2,
+    retained: 3,
   };
   const groupDelta = groupOrder[left.group] - groupOrder[right.group];
   if (groupDelta !== 0) return groupDelta;

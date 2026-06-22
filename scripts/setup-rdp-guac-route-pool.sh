@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 DRY_RUN=0
 FORCE=0
 for arg in "$@"; do
@@ -45,6 +47,10 @@ if ! command -v python3 >/dev/null 2>&1; then
   echo "python3 is required" >&2
   exit 1
 fi
+
+ensure_guacamole_postgres() {
+  bash "$SCRIPT_DIR/ensure-rdp-guac-postgres.sh" --apply
+}
 
 privileged_helper_available() {
   [[ -x "$PRIVILEGED_HELPER" ]] && sudo -n "$PRIVILEGED_HELPER" check >/dev/null 2>&1
@@ -245,6 +251,8 @@ lines.extend([
 path.write_text("\n".join(lines) + "\n")
 path.chmod(0o600)
 PY
+
+ensure_guacamole_postgres
 
 SQL="$(python3 - "$CONNECTION_A" "$USER_A" "$PASS_A" "$CONNECTION_B" "$USER_B" "$PASS_B" "$HOSTNAME" "$PORT" <<'PY'
 import sys

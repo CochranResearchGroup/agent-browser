@@ -1,6 +1,6 @@
 use std::io::{self, BufRead, Write};
 
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 use crate::connection::{send_command, Response};
 use crate::native::service_access::{
@@ -842,6 +842,15 @@ fn service_mcp_tools() -> Vec<Value> {
                         "type": "boolean",
                         "description": "Explicit override allowing a request marked blockedByManualAction and manualSeedingRequired to be submitted anyway."
                     },
+                    "monitorRunDueSummary": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "description": "Optional summary copied from a just-run service monitors run-due check. Raw service requests are rejected when it reports expired, unverified, or missing target freshness evidence unless allowMonitorFreshnessRisk is true."
+                    },
+                    "allowMonitorFreshnessRisk": {
+                        "type": "boolean",
+                        "description": "Explicit override allowing a request to proceed when monitorRunDueSummary reports stale, unverified, or missing target freshness evidence."
+                    },
                     "allowDuplicateProfileLane": {
                         "type": "boolean",
                         "description": "Explicit reviewed override allowing a launch to create another live browser/profile lane even when access-plan profileReuse could route to an existing lane."
@@ -862,6 +871,10 @@ fn service_mcp_tools() -> Vec<Value> {
                     "targetId": {
                         "type": "string",
                         "description": "Optional CDP target id override when the service tab handle already authorizes the tab."
+                    },
+                    "desiredUrl": {
+                        "type": "string",
+                        "description": "Desired tab URL for action=tab_handle_refresh when classifying compatible same-origin targets or opening a replacement tab."
                     },
                     "script": {
                         "type": "string",
@@ -885,9 +898,67 @@ fn service_mcp_tools() -> Vec<Value> {
                         "minimum": 1,
                         "description": "Maximum serialized evaluate result bytes returned to the caller before truncation metadata is emitted."
                     },
+                    "maxTextBytes": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Maximum text bytes returned by action=ui_action find evidence. The daemon caps this value."
+                    },
+                    "maxBodyBytes": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Maximum response body bytes returned by action=network_capture when body capture is explicitly enabled. The daemon caps this value."
+                    },
                     "captureEvidenceOnFailure": {
                         "type": "boolean",
                         "description": "Request compact URL/title evidence when bounded evaluate fails."
+                    },
+                    "probe": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "description": "Provider-neutral probe recipe for action=probe. Include a bounded detectors array, for example url_title, selector_text, evaluate, or client_evidence detectors. Optional recordFreshness can persist generic target/account freshness evidence."
+                    },
+                    "uiAction": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "description": "Provider-neutral UI recipe for action=ui_action. Include a bounded steps array using generic step types such as find, click, fill, type, select, menu_select, wait, focus, clear, or guarded dialog."
+                    },
+                    "networkCapture": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "description": "Provider-neutral network evidence recipe for action=network_capture. Include maxEvents, timeoutMs or maxDurationMs, optional URL, method, resource type, and status filters, and explicit capped body capture options when bodies are needed."
+                    },
+                    "fileTransfer": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "description": "Provider-neutral upload/download recipe for action=file_transfer. Include upload and/or download recipes with explicit allowedPaths or allowedDirectories, maxFiles, timeoutMs, and optional maxBytes."
+                    },
+                    "repairPolicy": {
+                        "type": "string",
+                        "enum": ["reject_only", "reuse_compatible", "open_if_missing"],
+                        "description": "Repair policy for action=tab_handle_refresh."
+                    },
+                    "includeScreenshot": {
+                        "type": "boolean",
+                        "description": "When action is diagnostics, capture a fresh screenshot and return the saved path in the diagnostic bundle."
+                    },
+                    "screenshotDir": {
+                        "type": "string",
+                        "description": "Optional screenshot output directory for diagnostics screenshot capture."
+                    },
+                    "maxConsoleEntries": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Maximum recent console entries returned by diagnostics. The daemon caps this value."
+                    },
+                    "maxErrorEntries": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Maximum recent page error entries returned by diagnostics. The daemon caps this value."
+                    },
+                    "maxRequestEntries": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Maximum recent network request summaries returned by diagnostics. The daemon caps this value."
                     },
                     "browserBuild": {
                         "type": "string",
@@ -5188,6 +5259,12 @@ fn service_request_command(arguments: &Value) -> Result<(Value, Value), JsonRpcE
     reject_cdp_attach_service_request(action, arguments)?;
     reject_bounded_evaluate_service_request(action, arguments)?;
     reject_service_diagnostics_request(action, arguments)?;
+    reject_service_probe_request(action, arguments)?;
+    reject_tab_handle_refresh_request(action, arguments)?;
+    reject_service_ui_action_request(action, arguments)?;
+    reject_service_network_capture_request(action, arguments)?;
+    reject_service_file_transfer_request(action, arguments)?;
+    reject_stale_monitor_service_request(arguments)?;
     let params = optional_object_argument(arguments, "params")?;
     let context = ServiceToolContext::from_arguments(arguments)?;
     let trace = context.trace();
@@ -5223,6 +5300,70 @@ fn reject_blocked_manual_service_request(arguments: &Value) -> Result<(), JsonRp
         ));
     }
     Ok(())
+}
+
+fn reject_stale_monitor_service_request(arguments: &Value) -> Result<(), JsonRpcError> {
+    let Some(summary) = arguments.get("monitorRunDueSummary") else {
+        return Ok(());
+    };
+    if summary.is_null()
+        || arguments
+            .get("allowMonitorFreshnessRisk")
+            .and_then(Value::as_bool)
+            == Some(true)
+    {
+        return Ok(());
+    }
+    let Some(summary) = summary.as_object() else {
+        return Err(JsonRpcError::invalid_params(
+            "service_request monitorRunDueSummary must be a JSON object",
+        ));
+    };
+
+    let expired_target_service_ids =
+        service_request_summary_string_array(summary.get("expiredTargetServiceIds"));
+    if !expired_target_service_ids.is_empty() {
+        return Err(JsonRpcError::invalid_params(&format!(
+            "service monitor run-due found expired profile freshness before service_request: {}",
+            expired_target_service_ids.join(",")
+        )));
+    }
+
+    let unverified_target_service_ids =
+        service_request_summary_string_array(summary.get("unverifiedTargetServiceIds"));
+    if !unverified_target_service_ids.is_empty() {
+        return Err(JsonRpcError::invalid_params(&format!(
+            "service monitor run-due could not verify profile freshness before service_request: {}",
+            unverified_target_service_ids.join(",")
+        )));
+    }
+
+    let matched = summary.get("matched").and_then(Value::as_u64).unwrap_or(0);
+    let failed = summary.get("failed").and_then(Value::as_bool) == Some(true);
+    let recommended_action = summary
+        .get("recommendedAction")
+        .and_then(Value::as_str)
+        .unwrap_or("inspect_monitor_results");
+    if matched == 0 || (failed && recommended_action != "use_selected_profile") {
+        return Err(JsonRpcError::invalid_params(&format!(
+            "service monitor run-due requires inspection before service_request: {recommended_action}"
+        )));
+    }
+
+    Ok(())
+}
+
+fn service_request_summary_string_array(value: Option<&Value>) -> Vec<String> {
+    value
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(ToString::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn reject_cdp_free_service_request(action: &str, arguments: &Value) -> Result<(), JsonRpcError> {
@@ -5370,6 +5511,431 @@ fn reject_service_diagnostics_request(action: &str, arguments: &Value) -> Result
         ));
     }
     Ok(())
+}
+
+fn reject_service_probe_request(action: &str, arguments: &Value) -> Result<(), JsonRpcError> {
+    if action != "probe" {
+        return Ok(());
+    }
+    let Some(handle) = arguments.get("serviceTabHandle").and_then(Value::as_object) else {
+        return Err(JsonRpcError::invalid_params(
+            "probe requires serviceTabHandle",
+        ));
+    };
+    if handle.get("valid").and_then(Value::as_bool) != Some(true) {
+        let stale_reason = handle
+            .get("staleReason")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        return Err(JsonRpcError::invalid_params(&format!(
+            "service tab handle is stale: {stale_reason}"
+        )));
+    }
+    if handle.get("tabId").and_then(Value::as_str).is_none() {
+        return Err(JsonRpcError::invalid_params(
+            "serviceTabHandle.tabId is required",
+        ));
+    }
+    if handle.get("targetId").and_then(Value::as_str).is_none() {
+        return Err(JsonRpcError::invalid_params(
+            "probe requires serviceTabHandle.targetId",
+        ));
+    }
+    let Some(probe) = arguments.get("probe").and_then(Value::as_object) else {
+        return Err(JsonRpcError::invalid_params(
+            "probe requires probe recipe object",
+        ));
+    };
+    let Some(detectors) = probe.get("detectors").and_then(Value::as_array) else {
+        return Err(JsonRpcError::invalid_params(
+            "probe requires probe.detectors array",
+        ));
+    };
+    if detectors.is_empty() {
+        return Err(JsonRpcError::invalid_params(
+            "probe requires at least one detector",
+        ));
+    }
+    if arguments
+        .get("timeoutMs")
+        .or_else(|| probe.get("timeoutMs"))
+        .and_then(Value::as_u64)
+        .is_none()
+    {
+        return Err(JsonRpcError::invalid_params(
+            "probe requires positive timeoutMs",
+        ));
+    }
+    if arguments
+        .get("maxReturnBytes")
+        .or_else(|| probe.get("maxReturnBytes"))
+        .and_then(Value::as_u64)
+        .is_none()
+    {
+        return Err(JsonRpcError::invalid_params(
+            "probe requires positive maxReturnBytes",
+        ));
+    }
+    if let Some(record_freshness) = probe.get("recordFreshness") {
+        let Some(record_freshness) = record_freshness.as_object() else {
+            return Err(JsonRpcError::invalid_params(
+                "probe.recordFreshness must be an object",
+            ));
+        };
+        if record_freshness
+            .get("targetServiceId")
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+            .is_none()
+        {
+            return Err(JsonRpcError::invalid_params(
+                "probe.recordFreshness requires targetServiceId",
+            ));
+        }
+        if record_freshness
+            .get("accountId")
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+            .is_none()
+        {
+            return Err(JsonRpcError::invalid_params(
+                "probe.recordFreshness requires accountId",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn reject_tab_handle_refresh_request(action: &str, arguments: &Value) -> Result<(), JsonRpcError> {
+    if action != "tab_handle_refresh" {
+        return Ok(());
+    }
+    let Some(handle) = arguments.get("serviceTabHandle").and_then(Value::as_object) else {
+        return Err(JsonRpcError::invalid_params(
+            "tab_handle_refresh requires serviceTabHandle",
+        ));
+    };
+    if handle.get("tabId").and_then(Value::as_str).is_none() {
+        return Err(JsonRpcError::invalid_params(
+            "serviceTabHandle.tabId is required",
+        ));
+    }
+    if let Some(policy) = arguments.get("repairPolicy").and_then(Value::as_str) {
+        if !matches!(
+            policy,
+            "reject_only" | "reuse_compatible" | "open_if_missing"
+        ) {
+            return Err(JsonRpcError::invalid_params(
+                "tab_handle_refresh repairPolicy must be reject_only, reuse_compatible, or open_if_missing",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn reject_service_ui_action_request(action: &str, arguments: &Value) -> Result<(), JsonRpcError> {
+    if action != "ui_action" {
+        return Ok(());
+    }
+    let Some(handle) = arguments.get("serviceTabHandle").and_then(Value::as_object) else {
+        return Err(JsonRpcError::invalid_params(
+            "ui_action requires serviceTabHandle",
+        ));
+    };
+    if handle.get("valid").and_then(Value::as_bool) != Some(true) {
+        let stale_reason = handle
+            .get("staleReason")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        return Err(JsonRpcError::invalid_params(&format!(
+            "service tab handle is stale: {stale_reason}"
+        )));
+    }
+    if handle.get("tabId").and_then(Value::as_str).is_none() {
+        return Err(JsonRpcError::invalid_params(
+            "serviceTabHandle.tabId is required",
+        ));
+    }
+    if handle.get("targetId").and_then(Value::as_str).is_none() {
+        return Err(JsonRpcError::invalid_params(
+            "ui_action requires serviceTabHandle.targetId",
+        ));
+    }
+    let Some(recipe) = arguments.get("uiAction").and_then(Value::as_object) else {
+        return Err(JsonRpcError::invalid_params(
+            "ui_action requires uiAction object",
+        ));
+    };
+    let Some(steps) = recipe.get("steps").and_then(Value::as_array) else {
+        return Err(JsonRpcError::invalid_params(
+            "ui_action requires uiAction.steps array",
+        ));
+    };
+    if steps.is_empty() {
+        return Err(JsonRpcError::invalid_params(
+            "ui_action requires at least one step",
+        ));
+    }
+    if arguments
+        .get("timeoutMs")
+        .or_else(|| recipe.get("timeoutMs"))
+        .and_then(Value::as_u64)
+        .filter(|value| *value > 0)
+        .is_none()
+    {
+        return Err(JsonRpcError::invalid_params(
+            "ui_action requires positive timeoutMs",
+        ));
+    }
+    Ok(())
+}
+
+fn reject_service_network_capture_request(
+    action: &str,
+    arguments: &Value,
+) -> Result<(), JsonRpcError> {
+    if action != "network_capture" {
+        return Ok(());
+    }
+    let Some(handle) = arguments.get("serviceTabHandle").and_then(Value::as_object) else {
+        return Err(JsonRpcError::invalid_params(
+            "network_capture requires serviceTabHandle",
+        ));
+    };
+    if handle.get("valid").and_then(Value::as_bool) != Some(true) {
+        let stale_reason = handle
+            .get("staleReason")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        return Err(JsonRpcError::invalid_params(&format!(
+            "service tab handle is stale: {stale_reason}"
+        )));
+    }
+    if handle.get("tabId").and_then(Value::as_str).is_none() {
+        return Err(JsonRpcError::invalid_params(
+            "serviceTabHandle.tabId is required",
+        ));
+    }
+    if handle.get("targetId").and_then(Value::as_str).is_none() {
+        return Err(JsonRpcError::invalid_params(
+            "network_capture requires serviceTabHandle.targetId",
+        ));
+    }
+    let Some(recipe) = arguments.get("networkCapture").and_then(Value::as_object) else {
+        return Err(JsonRpcError::invalid_params(
+            "network_capture requires networkCapture object",
+        ));
+    };
+    let timeout_ms = arguments
+        .get("timeoutMs")
+        .or_else(|| recipe.get("timeoutMs"))
+        .or_else(|| recipe.get("maxDurationMs"))
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    if timeout_ms == 0 {
+        return Err(JsonRpcError::invalid_params(
+            "network_capture requires positive timeoutMs",
+        ));
+    }
+    if recipe
+        .get("maxEvents")
+        .and_then(Value::as_u64)
+        .filter(|value| *value > 0)
+        .is_none()
+    {
+        return Err(JsonRpcError::invalid_params(
+            "network_capture requires positive networkCapture.maxEvents",
+        ));
+    }
+    if recipe
+        .get("captureBodies")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        let max_body_bytes = recipe
+            .get("maxBodyBytes")
+            .or_else(|| arguments.get("maxBodyBytes"))
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        if max_body_bytes == 0 {
+            return Err(JsonRpcError::invalid_params(
+                "network_capture captureBodies requires positive maxBodyBytes",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn reject_service_file_transfer_request(
+    action: &str,
+    arguments: &Value,
+) -> Result<(), JsonRpcError> {
+    if action != "file_transfer" {
+        return Ok(());
+    }
+    let Some(handle) = arguments.get("serviceTabHandle").and_then(Value::as_object) else {
+        return Err(JsonRpcError::invalid_params(
+            "file_transfer requires serviceTabHandle",
+        ));
+    };
+    if handle.get("valid").and_then(Value::as_bool) != Some(true) {
+        let stale_reason = handle
+            .get("staleReason")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        return Err(JsonRpcError::invalid_params(&format!(
+            "service tab handle is stale: {stale_reason}"
+        )));
+    }
+    if handle.get("tabId").and_then(Value::as_str).is_none() {
+        return Err(JsonRpcError::invalid_params(
+            "serviceTabHandle.tabId is required",
+        ));
+    }
+    if handle.get("targetId").and_then(Value::as_str).is_none() {
+        return Err(JsonRpcError::invalid_params(
+            "file_transfer requires serviceTabHandle.targetId",
+        ));
+    }
+    let Some(recipe) = arguments.get("fileTransfer").and_then(Value::as_object) else {
+        return Err(JsonRpcError::invalid_params(
+            "file_transfer requires fileTransfer object",
+        ));
+    };
+    let timeout_ms = arguments
+        .get("timeoutMs")
+        .or_else(|| recipe.get("timeoutMs"))
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    if timeout_ms == 0 {
+        return Err(JsonRpcError::invalid_params(
+            "file_transfer requires positive timeoutMs",
+        ));
+    }
+    if recipe.get("upload").is_none() && recipe.get("download").is_none() {
+        return Err(JsonRpcError::invalid_params(
+            "file_transfer requires upload or download recipe",
+        ));
+    }
+    if let Some(upload) = recipe.get("upload") {
+        let Some(upload) = upload.as_object() else {
+            return Err(JsonRpcError::invalid_params(
+                "file_transfer upload must be an object",
+            ));
+        };
+        reject_file_transfer_upload_recipe(upload)?;
+    }
+    if let Some(download) = recipe.get("download") {
+        let Some(download) = download.as_object() else {
+            return Err(JsonRpcError::invalid_params(
+                "file_transfer download must be an object",
+            ));
+        };
+        reject_file_transfer_download_recipe(download)?;
+    }
+    Ok(())
+}
+
+fn reject_file_transfer_upload_recipe(upload: &Map<String, Value>) -> Result<(), JsonRpcError> {
+    if upload
+        .get("selector")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .is_none()
+        && upload
+            .get("labelText")
+            .or_else(|| upload.get("label"))
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .is_none()
+    {
+        return Err(JsonRpcError::invalid_params(
+            "file_transfer upload requires selector or labelText",
+        ));
+    }
+    let Some(files) = upload.get("files").and_then(Value::as_array) else {
+        return Err(JsonRpcError::invalid_params(
+            "file_transfer upload requires files array",
+        ));
+    };
+    if files.is_empty()
+        || !files
+            .iter()
+            .all(|file| file.as_str().is_some_and(|value| !value.trim().is_empty()))
+    {
+        return Err(JsonRpcError::invalid_params(
+            "file_transfer upload files must be nonempty strings",
+        ));
+    }
+    let max_files = upload.get("maxFiles").and_then(Value::as_u64).unwrap_or(0);
+    if max_files == 0 {
+        return Err(JsonRpcError::invalid_params(
+            "file_transfer upload requires positive maxFiles",
+        ));
+    }
+    if files.len() as u64 > max_files {
+        return Err(JsonRpcError::invalid_params(&format!(
+            "file_transfer upload file count {} exceeds maxFiles {}",
+            files.len(),
+            max_files
+        )));
+    }
+    reject_nonempty_string_array(
+        upload.get("allowedPaths"),
+        "file_transfer upload allowedPaths",
+    )
+}
+
+fn reject_file_transfer_download_recipe(download: &Map<String, Value>) -> Result<(), JsonRpcError> {
+    if download
+        .get("selector")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .is_none()
+    {
+        return Err(JsonRpcError::invalid_params(
+            "file_transfer download requires selector",
+        ));
+    }
+    if download
+        .get("directory")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .is_none()
+    {
+        return Err(JsonRpcError::invalid_params(
+            "file_transfer download requires directory",
+        ));
+    }
+    reject_nonempty_string_array(
+        download.get("allowedDirectories"),
+        "file_transfer download allowedDirectories",
+    )?;
+    if download.get("maxBytes").and_then(Value::as_u64) == Some(0) {
+        return Err(JsonRpcError::invalid_params(
+            "file_transfer download maxBytes must be positive",
+        ));
+    }
+    Ok(())
+}
+
+fn reject_nonempty_string_array(value: Option<&Value>, label: &str) -> Result<(), JsonRpcError> {
+    let valid = value
+        .and_then(Value::as_array)
+        .filter(|items| {
+            !items.is_empty()
+                && items
+                    .iter()
+                    .all(|item| item.as_str().is_some_and(|text| !text.trim().is_empty()))
+        })
+        .is_some();
+    if valid {
+        Ok(())
+    } else {
+        Err(JsonRpcError::invalid_params(&format!(
+            "{label} must be a nonempty string array"
+        )))
+    }
 }
 
 fn call_service_request(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
@@ -9208,14 +9774,30 @@ struct ServiceToolContext<'a> {
     browser_id: Option<&'a str>,
     session_name: Option<&'a str>,
     target_id: Option<&'a str>,
+    url: Option<&'a str>,
+    desired_url: Option<&'a str>,
     script: Option<&'a str>,
     expression: Option<&'a str>,
     timeout_ms: Option<u64>,
     max_return_bytes: Option<u64>,
+    max_text_bytes: Option<u64>,
+    max_body_bytes: Option<u64>,
     requires_cdp_free: Option<bool>,
     cdp_attachment_allowed: Option<bool>,
     return_by_value: Option<bool>,
     capture_evidence_on_failure: Option<bool>,
+    probe: Option<&'a Value>,
+    ui_action: Option<&'a Value>,
+    network_capture: Option<&'a Value>,
+    file_transfer: Option<&'a Value>,
+    repair_policy: Option<&'a str>,
+    include_screenshot: Option<bool>,
+    screenshot_dir: Option<&'a str>,
+    max_console_entries: Option<u64>,
+    max_error_entries: Option<u64>,
+    max_request_entries: Option<u64>,
+    monitor_run_due_summary: Option<&'a Value>,
+    allow_monitor_freshness_risk: Option<bool>,
     service_tab_handle: Option<&'a Value>,
     allow_duplicate_profile_lane: Option<bool>,
 }
@@ -9246,16 +9828,35 @@ impl<'a> ServiceToolContext<'a> {
             browser_id: optional_string_argument(arguments, "browserId")?,
             session_name: optional_string_argument(arguments, "sessionName")?,
             target_id: optional_string_argument(arguments, "targetId")?,
+            url: optional_string_argument(arguments, "url")?,
+            desired_url: optional_string_argument(arguments, "desiredUrl")?,
             script: optional_string_argument(arguments, "script")?,
             expression: optional_string_argument(arguments, "expression")?,
             timeout_ms: optional_positive_u64_argument(arguments, "timeoutMs")?,
             max_return_bytes: optional_positive_u64_argument(arguments, "maxReturnBytes")?,
+            max_text_bytes: optional_positive_u64_argument(arguments, "maxTextBytes")?,
+            max_body_bytes: optional_positive_u64_argument(arguments, "maxBodyBytes")?,
             requires_cdp_free: optional_bool_argument(arguments, "requiresCdpFree")?,
             cdp_attachment_allowed: optional_bool_argument(arguments, "cdpAttachmentAllowed")?,
             return_by_value: optional_bool_argument(arguments, "returnByValue")?,
             capture_evidence_on_failure: optional_bool_argument(
                 arguments,
                 "captureEvidenceOnFailure",
+            )?,
+            probe: arguments.get("probe"),
+            ui_action: arguments.get("uiAction"),
+            network_capture: arguments.get("networkCapture"),
+            file_transfer: arguments.get("fileTransfer"),
+            repair_policy: optional_string_argument(arguments, "repairPolicy")?,
+            include_screenshot: optional_bool_argument(arguments, "includeScreenshot")?,
+            screenshot_dir: optional_string_argument(arguments, "screenshotDir")?,
+            max_console_entries: optional_positive_u64_argument(arguments, "maxConsoleEntries")?,
+            max_error_entries: optional_positive_u64_argument(arguments, "maxErrorEntries")?,
+            max_request_entries: optional_positive_u64_argument(arguments, "maxRequestEntries")?,
+            monitor_run_due_summary: arguments.get("monitorRunDueSummary"),
+            allow_monitor_freshness_risk: optional_bool_argument(
+                arguments,
+                "allowMonitorFreshnessRisk",
             )?,
             service_tab_handle: arguments.get("serviceTabHandle"),
             allow_duplicate_profile_lane: optional_bool_argument(
@@ -9311,6 +9912,12 @@ impl<'a> ServiceToolContext<'a> {
         if let Some(target_id) = self.target_id {
             command["targetId"] = json!(target_id);
         }
+        if let Some(url) = self.url {
+            command["url"] = json!(url);
+        }
+        if let Some(desired_url) = self.desired_url {
+            command["desiredUrl"] = json!(desired_url);
+        }
         if let Some(script) = self.script {
             command["script"] = json!(script);
         }
@@ -9323,6 +9930,12 @@ impl<'a> ServiceToolContext<'a> {
         if let Some(max_return_bytes) = self.max_return_bytes {
             command["maxReturnBytes"] = json!(max_return_bytes);
         }
+        if let Some(max_text_bytes) = self.max_text_bytes {
+            command["maxTextBytes"] = json!(max_text_bytes);
+        }
+        if let Some(max_body_bytes) = self.max_body_bytes {
+            command["maxBodyBytes"] = json!(max_body_bytes);
+        }
         if let Some(requires_cdp_free) = self.requires_cdp_free {
             command["requiresCdpFree"] = json!(requires_cdp_free);
         }
@@ -9334,6 +9947,42 @@ impl<'a> ServiceToolContext<'a> {
         }
         if let Some(capture_evidence_on_failure) = self.capture_evidence_on_failure {
             command["captureEvidenceOnFailure"] = json!(capture_evidence_on_failure);
+        }
+        if let Some(probe) = self.probe {
+            command["probe"] = probe.clone();
+        }
+        if let Some(ui_action) = self.ui_action {
+            command["uiAction"] = ui_action.clone();
+        }
+        if let Some(network_capture) = self.network_capture {
+            command["networkCapture"] = network_capture.clone();
+        }
+        if let Some(file_transfer) = self.file_transfer {
+            command["fileTransfer"] = file_transfer.clone();
+        }
+        if let Some(repair_policy) = self.repair_policy {
+            command["repairPolicy"] = json!(repair_policy);
+        }
+        if let Some(include_screenshot) = self.include_screenshot {
+            command["includeScreenshot"] = json!(include_screenshot);
+        }
+        if let Some(screenshot_dir) = self.screenshot_dir {
+            command["screenshotDir"] = json!(screenshot_dir);
+        }
+        if let Some(max_console_entries) = self.max_console_entries {
+            command["maxConsoleEntries"] = json!(max_console_entries);
+        }
+        if let Some(max_error_entries) = self.max_error_entries {
+            command["maxErrorEntries"] = json!(max_error_entries);
+        }
+        if let Some(max_request_entries) = self.max_request_entries {
+            command["maxRequestEntries"] = json!(max_request_entries);
+        }
+        if let Some(monitor_run_due_summary) = self.monitor_run_due_summary {
+            command["monitorRunDueSummary"] = monitor_run_due_summary.clone();
+        }
+        if let Some(allow_monitor_freshness_risk) = self.allow_monitor_freshness_risk {
+            command["allowMonitorFreshnessRisk"] = json!(allow_monitor_freshness_risk);
         }
         if let Some(service_tab_handle) = self.service_tab_handle {
             command["serviceTabHandle"] = service_tab_handle.clone();
@@ -11733,6 +12382,10 @@ mod tests {
         assert!(service_request["inputSchema"]["properties"]["blockedByManualAction"].is_object());
         assert!(service_request["inputSchema"]["properties"]["manualSeedingRequired"].is_object());
         assert!(service_request["inputSchema"]["properties"]["allowManualAction"].is_object());
+        assert!(service_request["inputSchema"]["properties"]["monitorRunDueSummary"].is_object());
+        assert!(
+            service_request["inputSchema"]["properties"]["allowMonitorFreshnessRisk"].is_object()
+        );
         assert!(
             service_request["inputSchema"]["properties"]["allowDuplicateProfileLane"].is_object()
         );
@@ -11742,6 +12395,18 @@ mod tests {
         assert!(service_request["inputSchema"]["properties"]["targetId"].is_object());
         assert!(service_request["inputSchema"]["properties"]["browserId"].is_object());
         assert!(service_request["inputSchema"]["properties"]["sessionName"].is_object());
+        assert!(service_request["inputSchema"]["properties"]["includeScreenshot"].is_object());
+        assert!(service_request["inputSchema"]["properties"]["screenshotDir"].is_object());
+        assert!(service_request["inputSchema"]["properties"]["maxConsoleEntries"].is_object());
+        assert!(service_request["inputSchema"]["properties"]["maxErrorEntries"].is_object());
+        assert!(service_request["inputSchema"]["properties"]["maxRequestEntries"].is_object());
+        assert!(service_request["inputSchema"]["properties"]["probe"].is_object());
+        assert!(service_request["inputSchema"]["properties"]["uiAction"].is_object());
+        assert!(service_request["inputSchema"]["properties"]["networkCapture"].is_object());
+        assert!(service_request["inputSchema"]["properties"]["fileTransfer"].is_object());
+        assert!(service_request["inputSchema"]["properties"]["maxTextBytes"].is_object());
+        assert!(service_request["inputSchema"]["properties"]["maxBodyBytes"].is_object());
+        assert!(service_request["inputSchema"]["properties"]["repairPolicy"].is_object());
 
         for action in SERVICE_REQUEST_ACTIONS {
             let mut arguments = json!({
@@ -11752,7 +12417,15 @@ mod tests {
             });
             if matches!(
                 *action,
-                "cdp_attach" | "cdp_detach" | "evaluate" | "diagnostics"
+                "cdp_attach"
+                    | "cdp_detach"
+                    | "evaluate"
+                    | "diagnostics"
+                    | "probe"
+                    | "tab_handle_refresh"
+                    | "ui_action"
+                    | "network_capture"
+                    | "file_transfer"
             ) {
                 arguments["cdpAttachmentAllowed"] = json!(true);
                 arguments["serviceTabHandle"] = json!({
@@ -11774,6 +12447,44 @@ mod tests {
                 arguments["script"] = json!("document.title");
                 arguments["timeoutMs"] = json!(1000);
                 arguments["maxReturnBytes"] = json!(128);
+            }
+            if *action == "probe" {
+                arguments["probe"] = json!({
+                    "detectors": [
+                        {"id": "title", "type": "url_title"}
+                    ]
+                });
+                arguments["timeoutMs"] = json!(1000);
+                arguments["maxReturnBytes"] = json!(128);
+            }
+            if *action == "tab_handle_refresh" {
+                arguments["repairPolicy"] = json!("reject_only");
+            }
+            if *action == "ui_action" {
+                arguments["uiAction"] = json!({
+                    "steps": [
+                        {"id": "find-main", "type": "find", "selector": "main"}
+                    ]
+                });
+                arguments["timeoutMs"] = json!(1000);
+                arguments["maxTextBytes"] = json!(128);
+            }
+            if *action == "network_capture" {
+                arguments["networkCapture"] = json!({
+                    "maxEvents": 1
+                });
+                arguments["timeoutMs"] = json!(1000);
+            }
+            if *action == "file_transfer" {
+                arguments["fileTransfer"] = json!({
+                    "upload": {
+                        "selector": "#file",
+                        "files": ["/tmp/report.txt"],
+                        "allowedPaths": ["/tmp"],
+                        "maxFiles": 1
+                    }
+                });
+                arguments["timeoutMs"] = json!(1000);
             }
             let (_, command) = service_request_command(&arguments)
                 .unwrap_or_else(|err| panic!("service_request should accept {action}: {err:?}"));
@@ -11818,6 +12529,100 @@ mod tests {
         assert!(command["blockedByManualAction"].is_null());
         assert!(command["manualSeedingRequired"].is_null());
         assert!(command["allowManualAction"].is_null());
+    }
+
+    #[test]
+    fn service_request_command_rejects_expired_monitor_summary_without_override() {
+        let err = service_request_command(&json!({
+            "action": "tab_new",
+            "serviceName": "JournalDownloader",
+            "agentName": "agent-a",
+            "taskName": "probeACSwebsite",
+            "targetServiceId": "acs",
+            "monitorRunDueSummary": {
+                "targetServiceIds": ["acs"],
+                "matched": 1,
+                "expiredTargetServiceIds": ["acs"],
+                "unverifiedTargetServiceIds": [],
+                "failed": true,
+                "recommendedAction": "probe_target_auth_or_reseed_if_needed"
+            }
+        }))
+        .expect_err("expired monitor freshness should block copied raw requests");
+
+        assert!(format!("{err:?}").contains("expired profile freshness"));
+    }
+
+    #[test]
+    fn service_request_command_rejects_unverified_monitor_summary_without_override() {
+        let err = service_request_command(&json!({
+            "action": "tab_new",
+            "serviceName": "JournalDownloader",
+            "agentName": "agent-a",
+            "taskName": "probeACSwebsite",
+            "targetServiceId": "acs",
+            "monitorRunDueSummary": {
+                "targetServiceIds": ["acs"],
+                "matched": 1,
+                "expiredTargetServiceIds": [],
+                "unverifiedTargetServiceIds": ["acs"],
+                "failed": true,
+                "recommendedAction": "verify_or_seed_profile_before_authenticated_work"
+            }
+        }))
+        .expect_err("unverified monitor freshness should block copied raw requests");
+
+        assert!(format!("{err:?}").contains("could not verify profile freshness"));
+    }
+
+    #[test]
+    fn service_request_command_rejects_missing_monitor_evidence_without_override() {
+        let err = service_request_command(&json!({
+            "action": "tab_new",
+            "serviceName": "JournalDownloader",
+            "agentName": "agent-a",
+            "taskName": "probeACSwebsite",
+            "targetServiceId": "acs",
+            "monitorRunDueSummary": {
+                "targetServiceIds": ["acs"],
+                "matched": 0,
+                "expiredTargetServiceIds": [],
+                "unverifiedTargetServiceIds": [],
+                "failed": false,
+                "recommendedAction": "inspect_monitor_results"
+            }
+        }))
+        .expect_err("missing monitor evidence should block copied raw requests");
+
+        assert!(format!("{err:?}").contains("requires inspection"));
+    }
+
+    #[test]
+    fn service_request_command_accepts_monitor_summary_with_override() {
+        let (_, command) = service_request_command(&json!({
+            "action": "tab_new",
+            "serviceName": "JournalDownloader",
+            "agentName": "agent-a",
+            "taskName": "probeACSwebsite",
+            "targetServiceId": "acs",
+            "monitorRunDueSummary": {
+                "targetServiceIds": ["acs"],
+                "matched": 1,
+                "expiredTargetServiceIds": ["acs"],
+                "unverifiedTargetServiceIds": [],
+                "failed": true,
+                "recommendedAction": "probe_target_auth_or_reseed_if_needed"
+            },
+            "allowMonitorFreshnessRisk": true
+        }))
+        .unwrap();
+
+        assert_eq!(command["action"], "tab_new");
+        assert_eq!(
+            command["monitorRunDueSummary"]["expiredTargetServiceIds"][0],
+            "acs"
+        );
+        assert_eq!(command["allowMonitorFreshnessRisk"], true);
     }
 
     #[test]
@@ -11936,6 +12741,357 @@ mod tests {
         .expect_err("evaluate without maxReturnBytes should fail");
 
         assert!(format!("{err:?}").contains("maxReturnBytes"));
+    }
+
+    #[test]
+    fn service_request_command_rejects_unbound_probe() {
+        let err = service_request_command(&json!({
+            "action": "probe",
+            "serviceName": "JournalDownloader",
+            "agentName": "agent-a",
+            "taskName": "probeACSwebsite",
+            "probe": {"detectors": [{"id": "title", "type": "url_title"}]},
+            "timeoutMs": 1000,
+            "maxReturnBytes": 128
+        }))
+        .expect_err("probe without service tab handle should fail");
+
+        assert!(format!("{err:?}").contains("probe requires serviceTabHandle"));
+    }
+
+    #[test]
+    fn service_request_command_rejects_unbounded_probe() {
+        let err = service_request_command(&json!({
+            "action": "probe",
+            "serviceName": "JournalDownloader",
+            "agentName": "agent-a",
+            "taskName": "probeACSwebsite",
+            "serviceTabHandle": service_request_test_tab_handle(true),
+            "probe": {"detectors": [{"id": "title", "type": "url_title"}]},
+            "timeoutMs": 1000
+        }))
+        .expect_err("probe without maxReturnBytes should fail");
+
+        assert!(format!("{err:?}").contains("maxReturnBytes"));
+    }
+
+    #[test]
+    fn service_request_command_rejects_unbound_tab_handle_refresh() {
+        let err = service_request_command(&json!({
+            "action": "tab_handle_refresh",
+            "serviceName": "JournalDownloader",
+            "agentName": "agent-a",
+            "taskName": "probeACSwebsite",
+            "repairPolicy": "reject_only"
+        }))
+        .expect_err("tab_handle_refresh without service tab handle should fail");
+
+        assert!(format!("{err:?}").contains("tab_handle_refresh requires serviceTabHandle"));
+    }
+
+    #[test]
+    fn service_request_command_rejects_unknown_tab_handle_refresh_policy() {
+        let err = service_request_command(&json!({
+            "action": "tab_handle_refresh",
+            "serviceName": "JournalDownloader",
+            "agentName": "agent-a",
+            "taskName": "probeACSwebsite",
+            "serviceTabHandle": service_request_test_tab_handle(true),
+            "repairPolicy": "surprise_me"
+        }))
+        .expect_err("unknown tab_handle_refresh repair policy should fail");
+
+        assert!(format!("{err:?}").contains("repairPolicy"));
+    }
+
+    #[test]
+    fn service_request_command_rejects_unbound_ui_action() {
+        let err = service_request_command(&json!({
+            "action": "ui_action",
+            "serviceName": "JournalDownloader",
+            "agentName": "agent-a",
+            "taskName": "probeACSwebsite",
+            "uiAction": {
+                "steps": [
+                    {"id": "find-main", "type": "find", "selector": "main"}
+                ]
+            },
+            "timeoutMs": 1000
+        }))
+        .expect_err("ui_action without service tab handle should fail");
+
+        assert!(format!("{err:?}").contains("ui_action requires serviceTabHandle"));
+    }
+
+    #[test]
+    fn service_request_command_rejects_unbounded_ui_action() {
+        let err = service_request_command(&json!({
+            "action": "ui_action",
+            "serviceName": "JournalDownloader",
+            "agentName": "agent-a",
+            "taskName": "probeACSwebsite",
+            "serviceTabHandle": service_request_test_tab_handle(true),
+            "uiAction": {
+                "steps": [
+                    {"id": "find-main", "type": "find", "selector": "main"}
+                ]
+            }
+        }))
+        .expect_err("ui_action without timeout should fail");
+
+        assert!(format!("{err:?}").contains("positive timeoutMs"));
+    }
+
+    #[test]
+    fn service_request_command_forwards_ui_action_recipe() {
+        let (_, command) = service_request_command(&json!({
+            "action": "ui_action",
+            "serviceName": "JournalDownloader",
+            "agentName": "agent-a",
+            "taskName": "probeACSwebsite",
+            "serviceTabHandle": service_request_test_tab_handle(true),
+            "uiAction": {
+                "recipeId": "generic-ui",
+                "steps": [
+                    {"id": "find-main", "type": "find", "selector": "main"}
+                ]
+            },
+            "timeoutMs": 1000,
+            "maxTextBytes": 256
+        }))
+        .unwrap();
+
+        assert_eq!(command["action"], "ui_action");
+        assert_eq!(command["uiAction"]["recipeId"], "generic-ui");
+        assert_eq!(command["timeoutMs"], 1000);
+        assert_eq!(command["maxTextBytes"], 256);
+        assert_eq!(command["serviceTabHandle"]["tabId"], "target:target-1");
+    }
+
+    #[test]
+    fn service_request_command_rejects_unbound_network_capture() {
+        let err = service_request_command(&json!({
+            "action": "network_capture",
+            "serviceName": "JournalDownloader",
+            "agentName": "agent-a",
+            "taskName": "probeACSwebsite",
+            "networkCapture": {"maxEvents": 2},
+            "timeoutMs": 1000
+        }))
+        .expect_err("network_capture without service tab handle should fail");
+
+        assert!(format!("{err:?}").contains("network_capture requires serviceTabHandle"));
+    }
+
+    #[test]
+    fn service_request_command_rejects_unbounded_network_capture_body() {
+        let err = service_request_command(&json!({
+            "action": "network_capture",
+            "serviceName": "JournalDownloader",
+            "agentName": "agent-a",
+            "taskName": "probeACSwebsite",
+            "serviceTabHandle": service_request_test_tab_handle(true),
+            "networkCapture": {
+                "maxEvents": 2,
+                "captureBodies": true
+            },
+            "timeoutMs": 1000
+        }))
+        .expect_err("network_capture body capture without maxBodyBytes should fail");
+
+        assert!(format!("{err:?}").contains("maxBodyBytes"));
+    }
+
+    #[test]
+    fn service_request_command_forwards_network_capture_recipe() {
+        let (_, command) = service_request_command(&json!({
+            "action": "network_capture",
+            "serviceName": "JournalDownloader",
+            "agentName": "agent-a",
+            "taskName": "probeACSwebsite",
+            "serviceTabHandle": service_request_test_tab_handle(true),
+            "networkCapture": {
+                "recipeId": "generic-network",
+                "urlPatterns": ["/api/data"],
+                "methods": ["GET"],
+                "status": "2xx",
+                "maxEvents": 2,
+                "captureBodies": true,
+                "maxBodyBytes": 128
+            },
+            "timeoutMs": 1000,
+            "maxBodyBytes": 128
+        }))
+        .unwrap();
+
+        assert_eq!(command["action"], "network_capture");
+        assert_eq!(command["networkCapture"]["recipeId"], "generic-network");
+        assert_eq!(command["networkCapture"]["maxEvents"], 2);
+        assert_eq!(command["maxBodyBytes"], 128);
+        assert_eq!(command["serviceTabHandle"]["tabId"], "target:target-1");
+    }
+
+    #[test]
+    fn service_request_command_rejects_unbound_file_transfer() {
+        let err = service_request_command(&json!({
+            "action": "file_transfer",
+            "serviceName": "JournalDownloader",
+            "agentName": "agent-a",
+            "taskName": "probeACSwebsite",
+            "fileTransfer": {
+                "upload": {
+                    "selector": "#file",
+                    "files": ["/tmp/report.txt"],
+                    "allowedPaths": ["/tmp"],
+                    "maxFiles": 1
+                }
+            },
+            "timeoutMs": 1000
+        }))
+        .expect_err("file_transfer without service tab handle should fail");
+
+        assert!(format!("{err:?}").contains("file_transfer requires serviceTabHandle"));
+    }
+
+    #[test]
+    fn service_request_command_rejects_unbounded_file_transfer_upload() {
+        let err = service_request_command(&json!({
+            "action": "file_transfer",
+            "serviceName": "JournalDownloader",
+            "agentName": "agent-a",
+            "taskName": "probeACSwebsite",
+            "serviceTabHandle": service_request_test_tab_handle(true),
+            "fileTransfer": {
+                "upload": {
+                    "selector": "#file",
+                    "files": ["/tmp/report.txt"],
+                    "maxFiles": 1
+                }
+            },
+            "timeoutMs": 1000
+        }))
+        .expect_err("file_transfer upload without allowedPaths should fail");
+
+        assert!(format!("{err:?}").contains("allowedPaths"));
+    }
+
+    #[test]
+    fn service_request_command_forwards_file_transfer_recipe() {
+        let (_, command) = service_request_command(&json!({
+            "action": "file_transfer",
+            "serviceName": "JournalDownloader",
+            "agentName": "agent-a",
+            "taskName": "probeACSwebsite",
+            "serviceTabHandle": service_request_test_tab_handle(true),
+            "fileTransfer": {
+                "recipeId": "generic-file-transfer",
+                "upload": {
+                    "labelText": "Upload report",
+                    "files": ["/tmp/report.txt"],
+                    "allowedPaths": ["/tmp"],
+                    "maxFiles": 1
+                },
+                "download": {
+                    "selector": "#download",
+                    "directory": "/tmp/downloads",
+                    "allowedDirectories": ["/tmp"],
+                    "expectedFileName": "report.txt",
+                    "maxBytes": 1024
+                }
+            },
+            "timeoutMs": 1000,
+            "captureEvidenceOnFailure": true
+        }))
+        .unwrap();
+
+        assert_eq!(command["action"], "file_transfer");
+        assert_eq!(command["fileTransfer"]["recipeId"], "generic-file-transfer");
+        assert_eq!(command["fileTransfer"]["upload"]["maxFiles"], 1);
+        assert_eq!(command["fileTransfer"]["download"]["maxBytes"], 1024);
+        assert_eq!(command["captureEvidenceOnFailure"], true);
+        assert_eq!(command["serviceTabHandle"]["tabId"], "target:target-1");
+    }
+
+    #[test]
+    fn service_request_command_forwards_tab_handle_refresh_options() {
+        let (_, command) = service_request_command(&json!({
+            "action": "tab_handle_refresh",
+            "serviceName": "JournalDownloader",
+            "agentName": "agent-a",
+            "taskName": "probeACSwebsite",
+            "serviceTabHandle": service_request_test_tab_handle(true),
+            "repairPolicy": "open_if_missing",
+            "url": "https://example.com/recover",
+            "desiredUrl": "https://example.com/desired"
+        }))
+        .unwrap();
+
+        assert_eq!(command["action"], "tab_handle_refresh");
+        assert_eq!(command["repairPolicy"], "open_if_missing");
+        assert_eq!(command["url"], "https://example.com/recover");
+        assert_eq!(command["desiredUrl"], "https://example.com/desired");
+        assert_eq!(command["serviceTabHandle"]["tabId"], "target:target-1");
+    }
+
+    #[test]
+    fn service_request_command_forwards_probe_recipe() {
+        let (_, command) = service_request_command(&json!({
+            "action": "probe",
+            "serviceName": "JournalDownloader",
+            "agentName": "agent-a",
+            "taskName": "probeACSwebsite",
+            "targetServiceId": "acs",
+            "serviceTabHandle": service_request_test_tab_handle(true),
+            "probe": {
+                "expectedIdentity": "acct@example.test",
+                "detectors": [
+                    {"id": "title", "type": "url_title"},
+                    {"id": "account", "type": "selector_text", "selector": "[data-account]"}
+                ],
+                "recordFreshness": {
+                    "targetServiceId": "acs",
+                    "accountId": "acct@example.test",
+                    "profileId": "journal-acs"
+                }
+            },
+            "timeoutMs": 1000,
+            "maxReturnBytes": 256
+        }))
+        .unwrap();
+
+        assert_eq!(command["action"], "probe");
+        assert_eq!(command["targetServiceId"], "acs");
+        assert_eq!(command["timeoutMs"], 1000);
+        assert_eq!(command["maxReturnBytes"], 256);
+        assert_eq!(command["probe"]["detectors"][0]["type"], "url_title");
+        assert_eq!(
+            command["probe"]["recordFreshness"]["accountId"],
+            "acct@example.test"
+        );
+    }
+
+    #[test]
+    fn service_request_command_forwards_diagnostics_options() {
+        let (_, command) = service_request_command(&json!({
+            "action": "diagnostics",
+            "serviceName": "JournalDownloader",
+            "agentName": "agent-a",
+            "taskName": "probeACSwebsite",
+            "serviceTabHandle": service_request_test_tab_handle(true),
+            "includeScreenshot": true,
+            "screenshotDir": "/tmp/agent-browser-diagnostics",
+            "maxConsoleEntries": 5,
+            "maxErrorEntries": 3,
+            "maxRequestEntries": 4
+        }))
+        .unwrap();
+
+        assert_eq!(command["action"], "diagnostics");
+        assert_eq!(command["includeScreenshot"], true);
+        assert_eq!(command["screenshotDir"], "/tmp/agent-browser-diagnostics");
+        assert_eq!(command["maxConsoleEntries"], 5);
+        assert_eq!(command["maxErrorEntries"], 3);
+        assert_eq!(command["maxRequestEntries"], 4);
     }
 
     #[test]

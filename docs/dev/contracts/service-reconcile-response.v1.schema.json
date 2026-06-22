@@ -8,6 +8,8 @@
     "reconciled",
     "browserCount",
     "changedBrowsers",
+    "expiredSessionLeases",
+    "expiredSessionLeaseCount",
     "service_state"
   ],
   "properties": {
@@ -19,6 +21,16 @@
       "minimum": 0
     },
     "changedBrowsers": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "expiredSessionLeases": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "expiredSessionLeaseCount": {
       "type": "integer",
       "minimum": 0
     },

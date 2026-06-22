@@ -255,8 +255,101 @@ function loadGuacamoleCredentials() {
   return { username, password };
 }
 
+function guacamoleHeaderUser() {
+  return envValue('AGENT_BROWSER_GUACAMOLE_HEADER_USER') ||
+    envValue('GUACAMOLE_HEADER_USER') ||
+    envValue('REMOTE_USER') ||
+    envValue('USER');
+}
+
+function acquireGuacamoleToken(baseUrl) {
+  const headerUser = guacamoleHeaderUser();
+  if (headerUser) {
+    const headerToken = requestGuacamoleToken(baseUrl, {
+      authMode: 'header',
+      headerUser,
+    });
+    if (headerToken.ok) return headerToken;
+  }
+  const credentials = loadGuacamoleCredentials();
+  return requestGuacamoleToken(baseUrl, {
+    authMode: 'password',
+    username: credentials.username,
+    password: credentials.password,
+  });
+}
+
+function requestGuacamoleToken(baseUrl, auth) {
+  const tokenUrl = new URL('api/tokens', baseUrl).toString();
+  const args = [
+    '--insecure',
+    '--silent',
+    '--show-error',
+    '--max-time',
+    '8',
+    '--request',
+    'POST',
+    '--header',
+    'Content-Type: application/x-www-form-urlencoded',
+  ];
+  if (auth.authMode === 'header') {
+    args.push('--header', `Remote-User: ${auth.headerUser}`, '--data', '');
+  } else {
+    args.push(
+      '--data-urlencode',
+      `username=${auth.username}`,
+      '--data-urlencode',
+      `password=${auth.password}`,
+    );
+  }
+  args.push('--write-out', '\n%{http_code}', tokenUrl);
+  const result = spawnSync('curl', args, {
+    encoding: 'utf8',
+    stdio: 'pipe',
+  });
+  if (result.status !== 0) {
+    return {
+      ok: false,
+      authMode: auth.authMode,
+      statusCode: null,
+      payload: null,
+      error: (result.stderr || result.stdout || 'curl failed').trim(),
+    };
+  }
+  const lines = result.stdout.split(/\r?\n/);
+  const statusCode = Number.parseInt(lines.pop()?.trim() || '', 10);
+  const body = lines.join('\n');
+  let payload = null;
+  try {
+    payload = JSON.parse(body || '{}');
+  } catch (error) {
+    return {
+      ok: false,
+      authMode: auth.authMode,
+      statusCode: Number.isInteger(statusCode) ? statusCode : null,
+      payload: null,
+      error: `failed to parse Guacamole token response: ${error.message}`,
+    };
+  }
+  const ok = Number.isInteger(statusCode) &&
+    statusCode >= 200 &&
+    statusCode < 300 &&
+    typeof payload.authToken === 'string' &&
+    payload.authToken.length > 0;
+  return {
+    ok,
+    authMode: auth.authMode,
+    statusCode: Number.isInteger(statusCode) ? statusCode : null,
+    payload,
+    error: ok ? null : `Guacamole ${auth.authMode} token endpoint returned HTTP ${Number.isInteger(statusCode) ? statusCode : 'unknown'} without a usable auth token`,
+  };
+}
+
 function guacamoleBaseUrl(route) {
-  const rawUrl = route.frameUrl || route.externalUrl;
+  const rawUrl = route.routeDescriptor?.localEmbedUrl ||
+    route.routeDescriptor?.dashboardEmbedUrl ||
+    route.frameUrl ||
+    route.externalUrl;
   assert(rawUrl, `Route is missing a Guacamole URL: ${JSON.stringify(route)}`);
   const url = new URL(rawUrl);
   const marker = '/guacamole/';
@@ -272,7 +365,7 @@ function assertLocalEmbeddableGuacamoleUrls(routes) {
   if (envValue('AGENT_BROWSER_RDP_TEST_ALLOW_PUBLIC_GUAC_URL') === '1') return;
   const publicUrls = [];
   for (const route of routes) {
-    const rawUrl = route.frameUrl || route.externalUrl;
+    const rawUrl = route.routeDescriptor?.localEmbedUrl || route.frameUrl || route.externalUrl;
     if (!rawUrl) continue;
     const url = new URL(rawUrl);
     const host = url.hostname.toLowerCase();
@@ -283,7 +376,7 @@ function assertLocalEmbeddableGuacamoleUrls(routes) {
     publicUrls.length === 0,
     [
       'non_embeddable_guacamole_url: many-to-many live smoke requires local embeddable Guacamole frame URLs.',
-      'Set AGENT_BROWSER_REMOTE_VIEW_URL=http://127.0.0.1:8092/guacamole/ before running the gate,',
+      'Run route-pool readiness with local route descriptors, or set AGENT_BROWSER_REMOTE_VIEW_LOCAL_URL=http://127.0.0.1:8092/guacamole/,',
       'or set AGENT_BROWSER_RDP_TEST_ALLOW_PUBLIC_GUAC_URL=1 only for a reviewed public-ingress diagnostic.',
       `Observed URLs: ${publicUrls.join(', ')}`,
     ].join(' '),
@@ -345,6 +438,7 @@ function seedRoutePoolEntry(context, route, browser) {
     connectionName: route.connectionName,
     frameUrl: route.frameUrl,
     externalUrl: route.externalUrl,
+    routeDescriptor: route.routeDescriptor || null,
     target: {
       displayAllocationId: browser.displayAllocationId,
       browserId: browser.id,
@@ -368,10 +462,15 @@ async function launchRemoteBrowser({ context, remoteConfig, route, sessionName, 
   const streamPort = await ensureStreamPortForSession(context, sessionName, 180000);
   const routeDisplayName = route.target?.displayName || null;
   const displayIsolation = routeDisplayName ? 'shared_display' : 'private_virtual_display';
+  const runtimeProfile = `${sessionName}-profile`;
+  const profile = join(context.agentHome, 'runtime-profiles', runtimeProfile, 'user-data');
   const launch = await serviceRequest(
     streamPort,
     {
       action: 'navigate',
+      sessionName,
+      runtimeProfile,
+      profile,
       serviceName,
       agentName,
       taskName: launchTaskName,
@@ -380,7 +479,6 @@ async function launchRemoteBrowser({ context, remoteConfig, route, sessionName, 
         displayIsolation,
         ...(routeDisplayName ? { remoteHeadedDisplay: routeDisplayName } : {}),
         headless: false,
-        runtimeProfile: `${sessionName}-profile`,
         url: bindingProofDataUrl(title),
         waitUntil: 'load',
         viewStreamProvider: remoteConfig.viewStreamProvider,
@@ -507,11 +605,41 @@ async function loginDashboardClient(context, session, credentials) {
 })()
 `, 30000);
   assert(result?.ok === true, `${session} dashboard login failed: ${JSON.stringify(result)}`);
+  const started = Date.now();
+  let lastState = null;
+  while (Date.now() - started < 30000) {
+    try {
+      lastState = await evalInClient(context, session, `
+(async () => {
+  const status = await fetch("/api/dashboard-auth/status", {
+    credentials: "same-origin",
+  }).then((response) => response.json()).catch((error) => ({ error: String(error) }));
+  return {
+    authenticated: status.authenticated === true,
+    hasPasswordInput: Boolean(document.querySelector('input[type="password"]')),
+    text: document.body?.innerText?.replace(/\\s+/g, " ").slice(0, 300) || "",
+  };
+})()
+`, 30000);
+      if (lastState?.authenticated && !lastState?.hasPasswordInput) {
+        return;
+      }
+    } catch (error) {
+      lastState = { error: String(error) };
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw new Error(`${session} dashboard login did not settle before tile proof: ${JSON.stringify(lastState)}`);
 }
 
 async function loginGuacamoleClient(context, { executable, profile, session, route, viewport }) {
-  const credentials = loadGuacamoleCredentials();
   const baseUrl = guacamoleBaseUrl(route);
+  const token = acquireGuacamoleToken(baseUrl);
+  assert(token.ok, `${session} Guacamole token acquisition failed: ${JSON.stringify({
+    authMode: token.authMode,
+    statusCode: token.statusCode,
+    error: token.error,
+  })}`);
   const openedResult = await runCli(context, [
     '--json',
     '--session',
@@ -530,20 +658,10 @@ async function loginGuacamoleClient(context, { executable, profile, session, rou
   await runCli(context, ['--json', '--session', session, 'set', 'viewport', String(viewport.width), String(viewport.height)]);
   const login = await evalInClient(context, session, `
 (async () => {
-  const response = await fetch("api/tokens", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      username: ${JSON.stringify(credentials.username)},
-      password: ${JSON.stringify(credentials.password)},
-    }).toString(),
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || !payload.authToken) {
-    return { ok: false, status: response.status, payload };
-  }
+  const payload = ${JSON.stringify(token.payload)};
   localStorage.setItem("GUAC_AUTH", JSON.stringify(payload));
-  return { ok: true, status: response.status, username: payload.username, dataSource: payload.dataSource };
+  window.location.reload();
+  return { ok: true, authMode: ${JSON.stringify(token.authMode)}, username: payload.username, dataSource: payload.dataSource };
 })()
 `, 30000);
   assert(login?.ok === true, `${session} Guacamole login failed: ${JSON.stringify(login)}`);

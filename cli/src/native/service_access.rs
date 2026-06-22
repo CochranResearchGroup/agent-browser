@@ -16,9 +16,9 @@ use super::service_model::{
     builtin_site_policy, service_profile_seeding_handoff, service_site_policy_id_for_url,
     BrowserBuild, BrowserHealth, BrowserHost, BrowserProcess, BrowserProfile, BrowserSession,
     Challenge, ChallengeKind, ChallengePolicy, ChallengeState, ControlInputProvider,
-    InteractionMode, LeaseState, ProfileSelectionReason, ProviderCapability, ServiceEntitySource,
-    ServiceIncidentEscalation, ServiceIncidentState, ServiceProvider, ServiceState, SitePolicy,
-    ViewStreamProvider, SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
+    InteractionMode, LeaseState, ProfileOrigin, ProfileSelectionReason, ProviderCapability,
+    ServiceEntitySource, ServiceIncidentEscalation, ServiceIncidentState, ServiceProvider,
+    ServiceState, SitePolicy, ViewStreamProvider, SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
     SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
 };
 
@@ -998,6 +998,35 @@ fn profile_reuse_decision(
         });
     };
 
+    if profile.profile_origin == ProfileOrigin::ExternalObserved {
+        let mut same_profile_live_browser_ids = service_state
+            .browsers
+            .iter()
+            .filter(|(_id, browser)| {
+                browser.profile_id.as_deref() == Some(profile.id.as_str())
+                    && browser_has_live_health(browser)
+            })
+            .map(|(id, _browser)| id.clone())
+            .collect::<Vec<_>>();
+        same_profile_live_browser_ids.sort();
+        same_profile_live_browser_ids.dedup();
+
+        return json!({
+            "recommendedAction": "launch_new_browser",
+            "selectedProfileId": profile.id,
+            "reusableBrowserId": null,
+            "reusableSessionName": null,
+            "reusableBrowserIds": [],
+            "compatibleLiveBrowserCount": same_profile_live_browser_ids.len(),
+            "sameProfileLiveBrowserIds": same_profile_live_browser_ids,
+            "activeLeaseSessionIds": [],
+            "activeLeaseCount": 0,
+            "duplicatePressure": false,
+            "profileLeasePolicy": "wait",
+            "reasons": ["external_observed_not_reusable"],
+        });
+    }
+
     let browser_host = launch_posture
         .get("browserHost")
         .and_then(|value| serde_json::from_value::<BrowserHost>(value.clone()).ok());
@@ -1010,6 +1039,13 @@ fn profile_reuse_decision(
     let display_isolation = launch_posture
         .get("displayIsolation")
         .and_then(Value::as_str);
+    let reusable_browser_host = if profile.profile_origin == ProfileOrigin::ExternalByop
+        && request.browser_host.is_none()
+    {
+        None
+    } else {
+        browser_host
+    };
 
     let mut reusable_browser_ids = service_state
         .browsers
@@ -1018,7 +1054,7 @@ fn profile_reuse_decision(
             browser.profile_id.as_deref() == Some(profile.id.as_str())
                 && browser_is_reusable_for_posture(
                     browser,
-                    browser_host,
+                    reusable_browser_host,
                     view_stream_provider,
                     control_input_provider,
                     display_isolation,
@@ -1078,6 +1114,8 @@ fn profile_reuse_decision(
     }
     if request.browser_host.is_some() {
         reasons.push("browser_host_constrained_by_request");
+    } else if profile.profile_origin == ProfileOrigin::ExternalByop && browser_host.is_some() {
+        reasons.push("external_byop_browser_host_unconstrained");
     }
     if request.view_stream_provider.is_some() {
         reasons.push("view_stream_constrained_by_request");
@@ -1108,6 +1146,22 @@ fn profile_reuse_decision(
     json!({
         "recommendedAction": recommended_action,
         "selectedProfileId": profile.id,
+        "profileProcessPolicy": "exclusive_process",
+        "clientSharingPolicy": "shared_browser_tabs",
+        "defaultAcquisition": if recommended_action == "reuse_existing_browser" { "tab_new" } else { "launch_new_browser" },
+        "sharedAcquisition": {
+            "policy": "shared_browser_tabs",
+            "mode": if recommended_action == "reuse_existing_browser" { json!("tab_new") } else { Value::Null },
+            "browserId": reusable_browser_id.clone(),
+            "sessionName": reusable_session_name.clone(),
+            "requiresRouteHints": recommended_action == "reuse_existing_browser",
+            "routeHintFields": if recommended_action == "reuse_existing_browser" { json!(["browserId", "sessionName"]) } else { json!([]) },
+            "controlSerialization": "service_queue",
+            "cleanupPolicy": "client_tab",
+            "duplicateProcessAllowed": false,
+        },
+        "maxConcurrentTabs": Value::Null,
+        "maxConcurrentWindows": Value::Null,
         "reusableBrowserId": reusable_browser_id,
         "reusableSessionName": reusable_session_name,
         "reusableBrowserIds": reusable_browser_ids,
@@ -3742,6 +3796,151 @@ mod tests {
     }
 
     #[test]
+    fn service_access_plan_does_not_reuse_external_observed_browser() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "observed".to_string(),
+                BrowserProfile {
+                    id: "observed".to_string(),
+                    name: "Observed Chrome".to_string(),
+                    target_service_ids: vec!["auracall".to_string()],
+                    authenticated_service_ids: vec!["auracall".to_string()],
+                    profile_origin: ProfileOrigin::ExternalObserved,
+                    ..BrowserProfile::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                "browser-observed".to_string(),
+                BrowserProcess {
+                    id: "browser-observed".to_string(),
+                    profile_id: Some("observed".to_string()),
+                    host: BrowserHost::AttachedExisting,
+                    health: BrowserHealth::Ready,
+                    active_session_ids: vec!["session-observed".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                target_service_ids: vec!["auracall".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(
+            plan["decision"]["profileReuse"]["recommendedAction"],
+            "launch_new_browser"
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["reusableBrowserIds"],
+            json!([])
+        );
+        assert!(plan["decision"]["profileReuse"]["reasons"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("external_observed_not_reusable")));
+    }
+
+    #[test]
+    fn service_access_plan_reuses_external_byop_attached_browser_without_host_request() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "byop".to_string(),
+                BrowserProfile {
+                    id: "byop".to_string(),
+                    name: "BYOP Chrome".to_string(),
+                    target_service_ids: vec!["auracall".to_string()],
+                    authenticated_service_ids: vec!["auracall".to_string()],
+                    profile_origin: ProfileOrigin::ExternalByop,
+                    ..BrowserProfile::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                "browser-byop".to_string(),
+                BrowserProcess {
+                    id: "browser-byop".to_string(),
+                    profile_id: Some("byop".to_string()),
+                    host: BrowserHost::AttachedExisting,
+                    health: BrowserHealth::Ready,
+                    view_streams: vec![ViewStream {
+                        provider: ViewStreamProvider::CdpScreencast,
+                        control_input: Some(ControlInputProvider::CdpInput),
+                        ..ViewStream::default()
+                    }],
+                    active_session_ids: vec!["session-byop".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                target_service_ids: vec!["auracall".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(
+            plan["decision"]["profileReuse"]["recommendedAction"],
+            "reuse_existing_browser"
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["profileProcessPolicy"],
+            "exclusive_process"
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["clientSharingPolicy"],
+            "shared_browser_tabs"
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["defaultAcquisition"],
+            "tab_new"
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["sharedAcquisition"]["policy"],
+            "shared_browser_tabs"
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["sharedAcquisition"]["mode"],
+            "tab_new"
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["sharedAcquisition"]["browserId"],
+            "browser-byop"
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["sharedAcquisition"]["sessionName"],
+            "session-byop"
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["sharedAcquisition"]["requiresRouteHints"],
+            true
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["sharedAcquisition"]["routeHintFields"],
+            json!(["browserId", "sessionName"])
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["reusableBrowserId"],
+            "browser-byop"
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["reusableSessionName"],
+            "session-byop"
+        );
+        assert!(plan["decision"]["profileReuse"]["reasons"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("external_byop_browser_host_unconstrained")));
+    }
+
+    #[test]
     fn service_access_plan_recommends_waiting_for_profile_lease() {
         let state = ServiceState {
             profiles: BTreeMap::from([(
@@ -3777,6 +3976,30 @@ mod tests {
         assert_eq!(
             plan["decision"]["profileReuse"]["recommendedAction"],
             "wait_for_profile_lease"
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["profileProcessPolicy"],
+            "exclusive_process"
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["clientSharingPolicy"],
+            "shared_browser_tabs"
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["defaultAcquisition"],
+            "launch_new_browser"
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["sharedAcquisition"]["policy"],
+            "shared_browser_tabs"
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["sharedAcquisition"]["mode"],
+            Value::Null
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["sharedAcquisition"]["requiresRouteHints"],
+            false
         );
         assert_eq!(
             plan["decision"]["profileReuse"]["activeLeaseSessionIds"][0],

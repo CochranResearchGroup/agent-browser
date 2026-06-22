@@ -1,15 +1,14 @@
 use serde_json::{json, Value};
-use std::collections::{HashMap, HashSet};
 use std::env;
-use std::process::Command;
-use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, Instant};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
 use crate::connection::get_socket_dir;
 
+use super::super::remote_view::route_display_content;
+#[cfg(test)]
+use super::super::remote_view::{display_content_from_xwininfo, should_probe_route_display};
 use super::app_intelligence::{
     app_intelligence_status_json, inspect_workspace_response, operator_confirm_response,
     operator_status_json, operator_turn_response, OperatorIdentity,
@@ -20,27 +19,11 @@ use super::app_intelligence::{
 use super::chat::{chat_status_json, handle_chat_request, handle_models_request};
 use super::dashboard_auth;
 use super::discovery::discover_sessions;
-use super::http::{relay_command_to_daemon, serve_embedded_file, CORS_HEADERS};
+use super::http::{
+    relay_command_to_daemon, runtime_manifest_json, serve_embedded_file, CORS_HEADERS,
+};
 
 const DASHBOARD_SERVICE_BACKEND_SESSION: &str = "dashboard-service-backend";
-const ROUTE_DISPLAY_CONTENT_TTL: Duration = Duration::from_secs(5);
-const ROUTE_DISPLAY_NAME_TTL: Duration = Duration::from_secs(10);
-
-struct RouteDisplayContentCacheEntry {
-    observed_at: Instant,
-    content: Value,
-}
-
-struct RouteDisplayNameCacheEntry {
-    observed_at: Instant,
-    names: HashSet<String>,
-}
-
-static ROUTE_DISPLAY_CONTENT_CACHE: OnceLock<
-    Mutex<HashMap<String, RouteDisplayContentCacheEntry>>,
-> = OnceLock::new();
-static ROUTE_DISPLAY_NAME_CACHE: OnceLock<Mutex<RouteDisplayNameCacheEntry>> = OnceLock::new();
-
 pub async fn run_dashboard_server(port: u16) {
     if let Err(err) = dashboard_auth::ensure_dashboard_auth_config() {
         eprintln!("Failed to initialize dashboard auth: {}", err);
@@ -118,6 +101,11 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
     if method == "GET" && path == "/api/dashboard-auth/verify" {
         let response = dashboard_auth::verify_forward_auth_response(&headers, secure_cookie);
         let _ = stream.write_all(&response.into_http_bytes()).await;
+        return;
+    }
+
+    if method == "GET" && path == "/api/runtime/manifest" {
+        write_json_value(&mut stream, "200 OK", runtime_manifest_json()).await;
         return;
     }
 
@@ -585,255 +573,6 @@ fn repair_dashboard_service_status_value(value: &mut Value) -> bool {
         }
     }
     changed
-}
-
-fn route_display_content(display_name: &str) -> Option<Value> {
-    let display_name = display_name.trim();
-    if display_name.is_empty() {
-        return None;
-    }
-    if !should_probe_route_display(display_name) {
-        return Some(json!({
-            "state": "display_probe_unavailable",
-            "displayName": display_name,
-            "windows": [],
-            "error": "display is not a configured RDP route display",
-        }));
-    }
-
-    let cache = ROUTE_DISPLAY_CONTENT_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    if let Ok(mut cache) = cache.lock() {
-        if let Some(entry) = cache.get(display_name) {
-            if entry.observed_at.elapsed() < ROUTE_DISPLAY_CONTENT_TTL {
-                return Some(entry.content.clone());
-            }
-        }
-
-        let content = inspect_route_display_content(display_name);
-        cache.insert(
-            display_name.to_string(),
-            RouteDisplayContentCacheEntry {
-                observed_at: Instant::now(),
-                content: content.clone(),
-            },
-        );
-        return Some(content);
-    }
-    Some(inspect_route_display_content(display_name))
-}
-
-fn should_probe_route_display(display_name: &str) -> bool {
-    route_display_names().contains(display_name)
-}
-
-fn route_display_names() -> HashSet<String> {
-    let cache = ROUTE_DISPLAY_NAME_CACHE.get_or_init(|| {
-        Mutex::new(RouteDisplayNameCacheEntry {
-            observed_at: Instant::now() - ROUTE_DISPLAY_NAME_TTL,
-            names: HashSet::new(),
-        })
-    });
-    if let Ok(mut cache) = cache.lock() {
-        if cache.observed_at.elapsed() >= ROUTE_DISPLAY_NAME_TTL {
-            cache.names = inspect_route_display_names();
-            cache.observed_at = Instant::now();
-        }
-        let mut names = cache.names.clone();
-        names.extend(env_route_display_names());
-        return names;
-    }
-    let mut names = inspect_route_display_names();
-    names.extend(env_route_display_names());
-    names
-}
-
-fn env_route_display_names() -> HashSet<String> {
-    let mut names = HashSet::new();
-    for key in [
-        "AGENT_BROWSER_RDP_ROUTE_A_DISPLAY_NAME",
-        "AGENT_BROWSER_RDP_ROUTE_B_DISPLAY_NAME",
-        "AGENT_BROWSER_REMOTE_HEADED_DISPLAY",
-    ] {
-        if let Ok(value) = env::var(key) {
-            let value = value.trim();
-            if is_x11_display_name(value) {
-                names.insert(value.to_string());
-            }
-        }
-    }
-    names
-}
-
-fn inspect_route_display_names() -> HashSet<String> {
-    let mut names = HashSet::new();
-    let route_users = [
-        env::var("AGENT_BROWSER_RDP_ROUTE_A_USERNAME")
-            .unwrap_or_else(|_| "agent-browser-rdp-a".to_string()),
-        env::var("AGENT_BROWSER_RDP_ROUTE_B_USERNAME")
-            .unwrap_or_else(|_| "agent-browser-rdp-b".to_string()),
-        env::var("AGENT_BROWSER_RDP_EXISTING_USERNAME")
-            .or_else(|_| env::var("XRDP_AGENT_BROWSER_USERNAME"))
-            .unwrap_or_else(|_| "agent-browser-rdp".to_string()),
-    ];
-
-    if let Ok(output) = Command::new("ps")
-        .args(["-eo", "user:64=,comm=,args="])
-        .output()
-    {
-        if output.status.success() {
-            let text = String::from_utf8_lossy(&output.stdout);
-            for line in text.lines() {
-                let trimmed = line.trim();
-                let mut parts = trimmed.split_whitespace();
-                let Some(user) = parts.next() else {
-                    continue;
-                };
-                if !route_users.iter().any(|route_user| route_user == user) {
-                    continue;
-                }
-                let Some(command) = parts.next() else {
-                    continue;
-                };
-                let args = parts.collect::<Vec<_>>().join(" ");
-                if !matches!(command, "Xorg" | "Xvnc" | "Xvfb")
-                    && !args.contains("Xorg")
-                    && !args.contains("Xvnc")
-                    && !args.contains("Xvfb")
-                {
-                    continue;
-                }
-                if let Some(display_name) = x11_display_name_from_args(&args) {
-                    names.insert(display_name);
-                }
-            }
-        }
-    }
-
-    names
-}
-
-fn is_x11_display_name(value: &str) -> bool {
-    if !value.starts_with(':') {
-        return false;
-    }
-    value[1..]
-        .split('.')
-        .next()
-        .is_some_and(|number| number.parse::<u16>().is_ok())
-}
-
-fn x11_display_name_from_args(args: &str) -> Option<String> {
-    args.split_whitespace()
-        .find(|part| is_x11_display_name(part))
-        .map(str::to_string)
-}
-
-fn inspect_route_display_content(display_name: &str) -> Value {
-    let output = Command::new("timeout")
-        .args([
-            "--kill-after=1",
-            "2",
-            "xwininfo",
-            "-display",
-            display_name,
-            "-root",
-            "-tree",
-        ])
-        .output();
-    let Ok(output) = output else {
-        return json!({
-            "state": "display_probe_unavailable",
-            "displayName": display_name,
-            "windows": [],
-            "error": "xwininfo probe could not be started",
-        });
-    };
-    if !output.status.success() {
-        let error = String::from_utf8_lossy(if output.stderr.is_empty() {
-            &output.stdout
-        } else {
-            &output.stderr
-        })
-        .trim()
-        .chars()
-        .take(240)
-        .collect::<String>();
-        return json!({
-            "state": "display_probe_unavailable",
-            "displayName": display_name,
-            "windows": [],
-            "error": if error.is_empty() { "xwininfo probe failed" } else { error.as_str() },
-        });
-    }
-    display_content_from_xwininfo(display_name, &String::from_utf8_lossy(&output.stdout))
-}
-
-fn display_content_from_xwininfo(display_name: &str, text: &str) -> Value {
-    let windows = xwininfo_windows(text);
-    let joined = windows
-        .iter()
-        .filter_map(|window| window.as_object())
-        .flat_map(|window| {
-            [
-                window.get("title").and_then(Value::as_str).unwrap_or(""),
-                window
-                    .get("className")
-                    .and_then(Value::as_str)
-                    .unwrap_or(""),
-            ]
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-        .to_lowercase();
-    let browser_visible = ["chromium", "google chrome", "chrome browser", "firefox"]
-        .iter()
-        .any(|needle| joined.contains(needle));
-    let terminal_visible = ["xterm", "terminal", "shell"]
-        .iter()
-        .any(|needle| joined.contains(needle));
-    let state = if browser_visible {
-        "browser_window_visible"
-    } else if terminal_visible {
-        "terminal_only"
-    } else if windows.is_empty() {
-        "empty_display"
-    } else {
-        "non_browser_windows"
-    };
-    json!({
-        "state": state,
-        "displayName": display_name,
-        "windowCount": windows.len(),
-        "windows": windows,
-    })
-}
-
-fn xwininfo_windows(text: &str) -> Vec<Value> {
-    text.lines()
-        .filter_map(|line| xwininfo_window(line.trim()))
-        .collect()
-}
-
-fn xwininfo_window(line: &str) -> Option<Value> {
-    if !line.starts_with("0x") {
-        return None;
-    }
-    let title_start = line.find('"')?;
-    let rest = &line[title_start + 1..];
-    let title_end = rest.find('"')?;
-    let title = rest[..title_end].chars().take(120).collect::<String>();
-    let id = line[..title_start].split_whitespace().next()?.to_string();
-    let class_name = line[title_start + title_end + 2..]
-        .split_once('(')
-        .and_then(|(_, after)| after.split_once(')'))
-        .map(|(inside, _)| inside)
-        .and_then(|inside| inside.rsplit('"').nth(1))
-        .map(|value| value.chars().take(80).collect::<String>());
-    Some(json!({
-        "id": id,
-        "title": title,
-        "className": class_name,
-    }))
 }
 
 fn dashboard_guacamole_client_url(root_url: Option<&str>) -> Option<String> {

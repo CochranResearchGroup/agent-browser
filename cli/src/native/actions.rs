@@ -1,11 +1,14 @@
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use chrono::{DateTime, FixedOffset};
 use serde_json::{json, Map, Value};
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::future::Future;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
@@ -38,6 +41,11 @@ use super::network::{self, DomainFilter, EventTracker};
 use super::policy::{ActionPolicy, ConfirmActions, PolicyResult};
 use super::providers;
 use super::recording::{self, RecordingState};
+use super::remote_view::{
+    build_route_binding, display_allocation_id_for_route_pool_entry, readiness_state,
+    resolve_route_pool_entry_id, route_binding_readiness, route_display_content,
+    visible_browser_window_proof,
+};
 use super::screenshot::{self, ScreenshotOptions};
 use super::service_access::{service_access_plan_for_state, ServiceAccessPlanRequest};
 use super::service_activity::service_incident_activity_response;
@@ -71,11 +79,12 @@ use super::service_lifecycle::{
 use super::service_model::{
     service_profile_allocations, service_profile_seeding_handoff, service_profile_sources,
     BrowserBuild, BrowserCapabilityRegistry, BrowserHealth as ServiceBrowserHealth,
-    BrowserHost as ServiceBrowserHost, BrowserProcess, BrowserProfile, BrowserSession,
+    BrowserHost as ServiceBrowserHost, BrowserProcess, BrowserProfile, BrowserSession, BrowserTab,
     ControlInputProvider, DisplayAllocation, JobState as ServiceJobState, LeaseState, MonitorState,
     ProfileKeyringPolicy, ProfileLeaseDisposition, ProfileOrigin, ProfileSelectionReason,
     RemoteViewRoute, RoutePoolEntry, ServiceEvent, ServiceEventKind, ServiceState,
-    SessionCleanupPolicy, TabLifecycle, ViewStream, ViewStreamProvider, ViewerLease,
+    ServiceTabHandle, SessionCleanupPolicy, TabLifecycle, ViewStream, ViewStreamProvider,
+    ViewerLease,
 };
 use super::service_monitors::{
     parse_monitor_state, run_due_persisted_monitors, service_monitors_response,
@@ -201,9 +210,11 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
         action,
         "" | "launch"
             | "cdp_free_launch"
+            | "external_byop_adopt"
             | "cdp_attach"
             | "cdp_detach"
             | "diagnostics"
+            | "probe"
             | "close"
             | "har_stop"
             | "credentials_set"
@@ -224,6 +235,8 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "stream_disable"
             | "stream_status"
             | "view_takeover"
+            | "remote_view_open"
+            | "service_remote_view_route_preflight"
             | "service_remote_view_route_checkout"
             | "service_remote_view_route_release"
             | "service_route_pool_repair"
@@ -281,6 +294,9 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_jobs"
             | "service_incidents"
             | "service_events"
+            | "tab_handle_refresh"
+            | "tab_handle_release"
+            | "file_transfer"
     )
 }
 
@@ -1372,6 +1388,20 @@ fn optional_command_string(command: &Value, name: &str) -> Option<String> {
         .map(str::to_string)
 }
 
+fn optional_command_or_params_string(command: &Value, name: &str) -> Option<String> {
+    optional_command_string(command, name).or_else(|| {
+        command
+            .get("params")
+            .and_then(|params| optional_command_string(params, name))
+    })
+}
+
+fn command_or_params_value<'a>(command: &'a Value, name: &str) -> Option<&'a Value> {
+    command
+        .get(name)
+        .or_else(|| command.get("params").and_then(|params| params.get(name)))
+}
+
 fn browser_host_from_command(command: &Value) -> Option<ServiceBrowserHost> {
     for name in ["browserHost", "browser_host", "browser-host"] {
         if let Some(host) = command.get(name).and_then(Value::as_str) {
@@ -1649,6 +1679,28 @@ fn remote_headed_view_streams_from_command(command: &Value) -> Vec<ViewStream> {
         &["connectionName", "guacamoleConnectionName"],
         "AGENT_BROWSER_GUACAMOLE_CONNECTION_NAME",
     );
+    let route_descriptor = command
+        .get("routeDescriptor")
+        .cloned()
+        .or_else(|| command.get("route_descriptor").cloned())
+        .or_else(|| {
+            command
+                .get("params")
+                .and_then(|params| params.get("routeDescriptor").cloned())
+        });
+    let display_allocation_id = optional_command_string(command, "displayAllocationId")
+        .or_else(|| optional_command_string(command, "requestedDisplayAllocationId"))
+        .or_else(|| {
+            command.get("params").and_then(|params| {
+                optional_command_string(params, "displayAllocationId")
+                    .or_else(|| optional_command_string(params, "requestedDisplayAllocationId"))
+            })
+        });
+    let provider_mode = optional_command_string(command, "providerMode").or_else(|| {
+        command
+            .get("params")
+            .and_then(|params| optional_command_string(params, "providerMode"))
+    });
     let route_source = if route_id.is_some()
         || connection_id.is_some()
         || frame_url.is_some()
@@ -1679,12 +1731,13 @@ fn remote_headed_view_streams_from_command(command: &Value) -> Vec<ViewStream> {
         url,
         frame_url,
         external_url,
+        route_descriptor,
         route_id,
-        display_allocation_id: None,
+        display_allocation_id,
         connection_id,
         connection_name,
         route_source,
-        provider_mode: None,
+        provider_mode,
         viewer_lease_ids: Vec::new(),
         controller_lease_id: None,
         read_only: false,
@@ -1913,6 +1966,7 @@ fn cdp_screencast_view_stream(
         url: url.clone(),
         frame_url: url.clone(),
         external_url: url,
+        route_descriptor: None,
         route_id: None,
         display_allocation_id: None,
         connection_id: None,
@@ -2325,6 +2379,66 @@ fn allow_duplicate_profile_lane_from_command(command: &Value) -> bool {
         .get("allowDuplicateProfileLane")
         .and_then(Value::as_bool)
         .unwrap_or(false)
+}
+
+fn active_browser_profile_mismatch(command: &Value, state: &DaemonState) -> Option<String> {
+    let browser = state.browser.as_ref()?;
+    active_browser_profile_mismatch_message(
+        optional_command_string(command, "runtimeProfile").as_deref(),
+        optional_command_string(command, "profile").as_deref(),
+        browser.runtime_profile_name(),
+        browser.browser_user_data_dir(),
+        &state.session_id,
+    )
+}
+
+fn active_browser_profile_mismatch_message(
+    requested_runtime_profile: Option<&str>,
+    requested_profile: Option<&str>,
+    active_runtime_profile: Option<&str>,
+    active_user_data_dir: Option<&Path>,
+    session_id: &str,
+) -> Option<String> {
+    let requested_runtime_profile = requested_runtime_profile
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let requested_profile = requested_profile
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if requested_runtime_profile.is_none() && requested_profile.is_none() {
+        return None;
+    }
+
+    if let (Some(requested), Some(active)) = (requested_runtime_profile, active_runtime_profile) {
+        if requested == active {
+            return None;
+        }
+    }
+
+    if let (Some(requested), Some(active)) = (requested_profile, active_user_data_dir) {
+        if pathish_eq(requested, active) {
+            return None;
+        }
+    }
+
+    Some(format!(
+        "Service request selected profile mismatch: request runtimeProfile={} profile={} but active session '{}' is using runtimeProfile={} profile={}. Refusing to run against the wrong authenticated profile; request the access-plan route hints, close or route away from the current browser, or use a matching retained browser.",
+        requested_runtime_profile.unwrap_or("none"),
+        requested_profile.unwrap_or("none"),
+        session_id,
+        active_runtime_profile.unwrap_or("none"),
+        active_user_data_dir
+            .map(|path| path.display().to_string())
+            .unwrap_or_else(|| "none".to_string()),
+    ))
+}
+
+fn pathish_eq(left: &str, right: &Path) -> bool {
+    let left = Path::new(left);
+    match (fs::canonicalize(left), fs::canonicalize(right)) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => left == right,
+    }
 }
 
 fn profile_lease_policy_from_command(command: &Value) -> Result<ProfileLeasePolicy, String> {
@@ -3893,6 +4007,10 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
                 let _ = mgr.ensure_page().await;
             }
         }
+
+        if let Some(mismatch) = active_browser_profile_mismatch(cmd, state) {
+            return error_response(&id, &mismatch);
+        }
     }
 
     // WebDriver backend: reject unsupported CDP-only actions
@@ -3911,9 +4029,14 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
     let result = match action {
         "launch" => handle_launch(cmd, state).await,
         "cdp_free_launch" => handle_cdp_free_launch(cmd, state).await,
+        "external_byop_adopt" => handle_external_byop_adopt(cmd, state).await,
         "cdp_attach" => handle_cdp_attach(cmd, state).await,
         "cdp_detach" => handle_cdp_detach(cmd, state).await,
         "diagnostics" => handle_service_diagnostics(cmd, state).await,
+        "probe" => handle_service_probe(cmd, state).await,
+        "ui_action" => handle_service_ui_action(cmd, state).await,
+        "network_capture" => handle_service_network_capture(cmd, state).await,
+        "file_transfer" => handle_service_file_transfer(cmd, state).await,
         "navigate" => handle_navigate(cmd, state).await,
         "url" => handle_url(state).await,
         "browser_pid" => handle_browser_pid(state),
@@ -3973,8 +4096,14 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "tab_new" => handle_tab_new(cmd, state).await,
         "tab_switch" => handle_tab_switch(cmd, state).await,
         "tab_close" => handle_tab_close(cmd, state).await,
+        "tab_handle_refresh" => handle_tab_handle_refresh(cmd, state).await,
+        "tab_handle_release" => handle_tab_handle_release(cmd, state).await,
         "view_focus" => handle_view_focus(cmd, state).await,
         "view_takeover" => handle_view_takeover(cmd, state).await,
+        "remote_view_open" => handle_remote_view_open(cmd, state).await,
+        "service_remote_view_route_preflight" => {
+            handle_service_remote_view_route_preflight(cmd, state).await
+        }
         "service_remote_view_route_checkout" => {
             handle_service_remote_view_route_checkout(cmd, state).await
         }
@@ -4259,6 +4388,39 @@ async fn focus_remote_headed_launch_for_view(
     }))
 }
 
+fn should_retry_transient_chrome_predevtools_launch_error(
+    engine: Option<&str>,
+    error: &str,
+) -> bool {
+    if engine.unwrap_or("chrome") != "chrome" {
+        return false;
+    }
+    error.contains("Chrome exited early")
+        && error.contains("without exposing DevTools")
+        && error.contains("UtilAcceptVsock")
+        && error.contains("accept4 failed 110")
+}
+
+async fn launch_browser_with_transient_retry(
+    options: LaunchOptions,
+    engine: Option<&str>,
+) -> Result<BrowserManager, String> {
+    match BrowserManager::launch(options.clone(), engine).await {
+        Ok(mgr) => Ok(mgr),
+        Err(first_error)
+            if should_retry_transient_chrome_predevtools_launch_error(engine, &first_error) =>
+        {
+            tokio::time::sleep(std::time::Duration::from_millis(750)).await;
+            BrowserManager::launch(options, engine).await.map_err(|second_error| {
+                format!(
+                    "{second_error}\nRetried once after transient WSL pre-DevTools Chrome launch failure: {first_error}"
+                )
+            })
+        }
+        Err(error) => Err(error),
+    }
+}
+
 async fn auto_launch(state: &mut DaemonState, command: &Value) -> Result<(), String> {
     let mut options = launch_options_from_env();
     let leave_open = env::var("AGENT_BROWSER_LEAVE_OPEN")
@@ -4412,7 +4574,7 @@ async fn auto_launch(state: &mut DaemonState, command: &Value) -> Result<(), Str
         }
     }
     let remote_focus_options = options.clone();
-    let mgr = BrowserManager::launch(options, engine.as_deref()).await?;
+    let mgr = launch_browser_with_transient_retry(options, engine.as_deref()).await?;
     let _ = focus_remote_headed_launch_for_view(&mgr, &remote_focus_options).await;
     state.reset_input_state();
     state.attached_runtime_profile = None;
@@ -4893,7 +5055,8 @@ async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Result<Value, St
     state.reset_input_state();
     state.attached_runtime_profile = None;
     state.attached_browser_pid = None;
-    let launched_browser = BrowserManager::launch(launch_options, engine.as_deref()).await?;
+    let launched_browser =
+        launch_browser_with_transient_retry(launch_options, engine.as_deref()).await?;
     let remote_view_focus =
         focus_remote_headed_launch_for_view(&launched_browser, &remote_focus_options).await;
     state.browser = Some(launched_browser);
@@ -4978,6 +5141,237 @@ async fn handle_cdp_free_launch(cmd: &Value, state: &mut DaemonState) -> Result<
         &launch,
         plan.url,
     ))
+}
+
+async fn handle_external_byop_adopt(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+    let profile_id = optional_command_string(cmd, "runtimeProfile")
+        .or_else(|| optional_command_string(cmd, "profileId"))
+        .ok_or_else(|| {
+            "external_byop_adopt requires runtimeProfile or profileId for a registered external_byop profile"
+                .to_string()
+        })?;
+    let cdp_url = optional_command_string(cmd, "cdpUrl");
+    let cdp_port = cmd.get("cdpPort").and_then(Value::as_u64);
+    if cdp_url.is_some() == cdp_port.is_some() {
+        return Err("external_byop_adopt requires exactly one of cdpUrl or cdpPort".to_string());
+    }
+
+    let repository = LockedServiceStateRepository::default_json()?;
+    let service_state = repository.load_snapshot()?;
+    let profile = service_state.profiles.get(&profile_id).ok_or_else(|| {
+        format!(
+            "external_byop_adopt profile '{}' is not registered",
+            profile_id
+        )
+    })?;
+    if profile.profile_origin != ProfileOrigin::ExternalByop {
+        return Err(format!(
+            "external_byop_adopt requires profileOrigin external_byop; profile '{}' is {:?}",
+            profile_id, profile.profile_origin
+        ));
+    }
+
+    if let Some(mgr) = state.browser.as_mut() {
+        if mgr.is_connection_alive().await {
+            return Err(
+                "external_byop_adopt requires an idle service session; route the request to a new sessionName or close the current browser first"
+                    .to_string(),
+            );
+        }
+    }
+
+    state.browser = None;
+    state.launch_hash = None;
+    state.reset_input_state();
+    state.attached_runtime_profile = None;
+    state.attached_browser_pid = None;
+    state.close_behavior = CloseBehavior::Detach;
+    state.screencasting = false;
+
+    let mgr = if let Some(url) = cdp_url.as_deref() {
+        BrowserManager::connect_cdp(url).await?
+    } else {
+        BrowserManager::connect_cdp(&cdp_port.unwrap().to_string()).await?
+    };
+    state.browser = Some(mgr);
+    state.subscribe_to_browser_events();
+    state.start_fetch_handler();
+    state.start_dialog_handler();
+    state.update_stream_client().await;
+
+    let metadata = ServiceLaunchMetadata {
+        profile_id: Some(profile_id.clone()),
+        profile_name: Some(profile.name.clone()),
+        user_data_dir: profile.user_data_dir.clone(),
+        persistent_profile: true,
+        keyring: profile.keyring,
+        service_name: optional_command_string(cmd, "serviceName").or_else(|| {
+            profile
+                .registration
+                .as_ref()
+                .and_then(|registration| registration.service_name.clone())
+        }),
+        agent_name: optional_command_string(cmd, "agentName"),
+        task_name: optional_command_string(cmd, "taskName"),
+        cleanup: SessionCleanupPolicy::Detach,
+        profile_selection_reason: Some(ProfileSelectionReason::ExplicitProfile),
+        browser_stderr_log_path: None,
+        browser_capability_launch: None,
+        view_streams: Vec::new(),
+        display_isolation: None,
+        display_name: None,
+    };
+    persist_current_browser_health(
+        state,
+        ServiceBrowserHost::AttachedExisting,
+        ServiceBrowserHealth::Ready,
+        Some(metadata),
+    );
+
+    let open_url = optional_command_string(cmd, "url").unwrap_or_else(|| "about:blank".to_string());
+    let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
+    let opened = mgr.tab_new(Some(open_url.as_str())).await?;
+    let target_id = opened
+        .get("targetId")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "external_byop_adopt opened a tab without targetId".to_string())?
+        .to_string();
+    let url = mgr.get_url().await.unwrap_or(open_url);
+    let title = mgr.get_title().await.unwrap_or_default();
+    let service_tab_handle =
+        external_byop_service_tab_handle(&state.session_id, &target_id, &url, &title, &profile_id);
+    persist_external_byop_adopted_tab(
+        cmd,
+        &state.session_id,
+        &profile_id,
+        &target_id,
+        &url,
+        &title,
+        &service_tab_handle,
+    )?;
+
+    Ok(json!({
+        "ok": true,
+        "action": "external_byop_adopt",
+        "adopted": true,
+        "browserId": service_browser_id(&state.session_id),
+        "sessionName": state.session_id,
+        "profileId": profile_id,
+        "profileOrigin": "external_byop",
+        "browserHost": ServiceBrowserHost::AttachedExisting,
+        "targetId": target_id,
+        "url": url,
+        "title": title,
+        "tabNew": opened,
+        "serviceTabHandle": service_tab_handle,
+    }))
+}
+
+fn external_byop_service_tab_handle(
+    session_id: &str,
+    target_id: &str,
+    url: &str,
+    title: &str,
+    profile_id: &str,
+) -> Value {
+    let browser_id = service_browser_id(session_id);
+    let tab_id = format!("target:{target_id}");
+    json!({
+        "browserId": browser_id,
+        "sessionName": session_id,
+        "tabId": tab_id,
+        "targetId": target_id,
+        "url": url,
+        "title": title,
+        "profileId": profile_id,
+        "profileOrigin": "external_byop",
+        "leaseId": session_id,
+        "leaseState": "shared",
+        "cleanupPolicy": "detach",
+        "leaseHeartbeatExpected": true,
+        "ownerSessionId": session_id,
+        "jobId": Value::Null,
+        "traceFilter": {
+            "browserId": service_browser_id(session_id),
+            "profileId": profile_id,
+            "sessionId": session_id,
+        },
+        "valid": true,
+        "staleReason": Value::Null,
+    })
+}
+
+fn persist_external_byop_adopted_tab(
+    cmd: &Value,
+    session_id: &str,
+    profile_id: &str,
+    target_id: &str,
+    url: &str,
+    title: &str,
+    service_tab_handle: &Value,
+) -> Result<(), String> {
+    let handle: ServiceTabHandle = serde_json::from_value(service_tab_handle.clone())
+        .map_err(|err| format!("Invalid adopted service tab handle: {}", err))?;
+    let repository = LockedServiceStateRepository::default_json()?;
+    let browser_id = service_browser_id(session_id);
+    let tab_id = format!("target:{target_id}");
+    let observed_at = OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string());
+    let service_name = optional_command_string(cmd, "serviceName");
+    let agent_name = optional_command_string(cmd, "agentName");
+    let task_name = optional_command_string(cmd, "taskName");
+    repository.mutate(|state| {
+        state.tabs.insert(
+            tab_id.clone(),
+            BrowserTab {
+                id: tab_id.clone(),
+                browser_id: browser_id.clone(),
+                target_id: Some(target_id.to_string()),
+                session_id: Some(session_id.to_string()),
+                lifecycle: TabLifecycle::Ready,
+                url: Some(url.to_string()),
+                title: (!title.is_empty()).then(|| title.to_string()),
+                owner_session_id: Some(session_id.to_string()),
+                service_tab_handle: Some(handle.clone()),
+                ..BrowserTab::default()
+            },
+        );
+        if let Some(session) = state.sessions.get_mut(session_id) {
+            if !session.tab_ids.contains(&tab_id) {
+                session.tab_ids.push(tab_id.clone());
+            }
+        }
+        if let Some(browser) = state.browsers.get_mut(&browser_id) {
+            if !browser.active_session_ids.iter().any(|id| id == session_id) {
+                browser.active_session_ids.push(session_id.to_string());
+            }
+        }
+        state.events.push(ServiceEvent {
+            id: format!("external-byop-adopt-{}-{}", session_id, observed_at),
+            timestamp: observed_at.clone(),
+            kind: ServiceEventKind::TabLifecycleChanged,
+            message: format!("External BYOP browser adopted for profile {}.", profile_id),
+            browser_id: Some(browser_id.clone()),
+            profile_id: Some(profile_id.to_string()),
+            session_id: Some(session_id.to_string()),
+            service_name,
+            agent_name,
+            task_name,
+            details: Some(json!({
+                "action": "external_byop_adopt",
+                "targetId": target_id,
+                "tabId": tab_id,
+                "url": url,
+            })),
+            ..ServiceEvent::default()
+        });
+        if state.events.len() > 100 {
+            let excess = state.events.len() - 100;
+            state.events.drain(0..excess);
+        }
+        Ok(())
+    })
 }
 
 fn build_cdp_free_launch_plan(cmd: &Value) -> Result<CdpFreeLaunchPlan, String> {
@@ -5336,6 +5730,13 @@ fn validate_service_tab_handle_for_current_session(
             .unwrap_or("unknown");
         return Err(format!("service tab handle is stale: {stale_reason}"));
     }
+    validate_service_tab_handle_route_for_current_session(handle, session_id)
+}
+
+fn validate_service_tab_handle_route_for_current_session(
+    handle: &Map<String, Value>,
+    session_id: &str,
+) -> Result<(), String> {
     let browser_id = handle
         .get("browserId")
         .and_then(Value::as_str)
@@ -5867,6 +6268,2082 @@ async fn handle_bounded_service_evaluate(
         "serviceTabHandle": cmd.get("serviceTabHandle").cloned().unwrap_or(Value::Null),
         "evaluatedAt": started_at,
     }))
+}
+
+async fn handle_service_probe(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+    let handle = cmd
+        .get("serviceTabHandle")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "probe requires serviceTabHandle".to_string())?;
+    validate_service_tab_handle_for_current_session(handle, &state.session_id)?;
+    let probe = cmd
+        .get("probe")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "probe requires probe object".to_string())?;
+    let timeout_ms = cmd
+        .get("timeoutMs")
+        .and_then(Value::as_u64)
+        .or_else(|| probe.get("timeoutMs").and_then(Value::as_u64))
+        .ok_or_else(|| "probe requires positive timeoutMs".to_string())?;
+    let max_return_bytes = cmd
+        .get("maxReturnBytes")
+        .and_then(Value::as_u64)
+        .or_else(|| probe.get("maxReturnBytes").and_then(Value::as_u64))
+        .ok_or_else(|| "probe requires positive maxReturnBytes".to_string())?;
+    if timeout_ms == 0 || max_return_bytes == 0 {
+        return Err("probe requires positive timeoutMs and maxReturnBytes".to_string());
+    }
+    let detectors = probe
+        .get("detectors")
+        .and_then(Value::as_array)
+        .filter(|detectors| !detectors.is_empty())
+        .ok_or_else(|| "probe requires at least one detector".to_string())?;
+    let max_detectors = probe
+        .get("maxDetectors")
+        .and_then(Value::as_u64)
+        .unwrap_or(10)
+        .clamp(1, 25) as usize;
+    if detectors.len() > max_detectors {
+        return Err(format!(
+            "probe detector count {} exceeds maxDetectors {}",
+            detectors.len(),
+            max_detectors
+        ));
+    }
+
+    let mgr = state.browser.as_mut().ok_or_else(|| {
+        "Cannot probe: target browser session is not running; request a service tab first"
+            .to_string()
+    })?;
+    let target_id = handle
+        .get("targetId")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "probe requires serviceTabHandle.targetId".to_string())?;
+    if mgr.active_target_id().ok() != Some(target_id) {
+        let _ = mgr.tab_switch_target_id(target_id).await?;
+    }
+
+    let observed_at = OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string());
+    let url = mgr.get_url().await.unwrap_or_default();
+    let title = mgr.get_title().await.unwrap_or_default();
+    let mut results = Vec::new();
+    for detector in detectors {
+        results.push(
+            run_service_probe_detector(mgr, detector, timeout_ms, max_return_bytes)
+                .await
+                .unwrap_or_else(|error| {
+                    json!({
+                        "ok": false,
+                        "error": error,
+                    })
+                }),
+        );
+    }
+    let identity = normalize_probe_identity(&results, probe.get("expectedIdentity"));
+    let freshness = record_probe_freshness(cmd, probe, handle, &identity, &observed_at)?;
+
+    Ok(json!({
+        "ok": true,
+        "action": "probe",
+        "observedAt": observed_at,
+        "url": url,
+        "title": title,
+        "targetId": target_id,
+        "tabId": handle.get("tabId").cloned().unwrap_or(Value::Null),
+        "profileId": handle.get("profileId").cloned().unwrap_or(Value::Null),
+        "serviceTabHandle": cmd.get("serviceTabHandle").cloned().unwrap_or(Value::Null),
+        "traceFilter": handle.get("traceFilter").cloned().unwrap_or(Value::Null),
+        "probe": {
+            "detectorCount": detectors.len(),
+            "maxReturnBytes": max_return_bytes,
+            "timeoutMs": timeout_ms,
+            "recipeId": probe.get("recipeId").cloned().unwrap_or(Value::Null),
+            "recipeFingerprint": probe_recipe_fingerprint(probe),
+        },
+        "identity": identity,
+        "detectors": results,
+        "freshness": freshness,
+        "caller": {
+            "serviceName": cmd.get("serviceName").cloned().unwrap_or(Value::Null),
+            "agentName": cmd.get("agentName").cloned().unwrap_or(Value::Null),
+            "taskName": cmd.get("taskName").cloned().unwrap_or(Value::Null),
+            "jobId": cmd.get("id").cloned().unwrap_or(Value::Null),
+        },
+    }))
+}
+
+async fn run_service_probe_detector(
+    mgr: &mut BrowserManager,
+    detector: &Value,
+    timeout_ms: u64,
+    max_return_bytes: u64,
+) -> Result<Value, String> {
+    let detector = detector
+        .as_object()
+        .ok_or_else(|| "probe detector must be an object".to_string())?;
+    let detector_id = detector
+        .get("id")
+        .and_then(Value::as_str)
+        .unwrap_or("detector");
+    let detector_type = detector
+        .get("type")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "probe detector requires type".to_string())?;
+    match detector_type {
+        "evaluate" => {
+            let expression = detector
+                .get("expression")
+                .or_else(|| detector.get("script"))
+                .and_then(Value::as_str)
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| "evaluate probe detector requires expression".to_string())?;
+            let result = run_probe_evaluate(mgr, expression, timeout_ms, max_return_bytes).await?;
+            Ok(json!({
+                "id": detector_id,
+                "type": "evaluate",
+                "ok": true,
+                "result": result.value,
+                "resultTruncated": result.truncated,
+                "resultBytes": result.bytes,
+                "maxReturnBytes": max_return_bytes,
+            }))
+        }
+        "url_title" => {
+            let url = mgr.get_url().await.unwrap_or_default();
+            let title = mgr.get_title().await.unwrap_or_default();
+            Ok(json!({
+                "id": detector_id,
+                "type": "url_title",
+                "ok": true,
+                "url": url,
+                "title": title,
+            }))
+        }
+        "selector_text" => {
+            let selector = detector
+                .get("selector")
+                .and_then(Value::as_str)
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| "selector_text probe detector requires selector".to_string())?;
+            let max_text_bytes = detector
+                .get("maxTextBytes")
+                .and_then(Value::as_u64)
+                .unwrap_or(max_return_bytes)
+                .min(max_return_bytes);
+            let selector_json = serde_json::to_string(selector)
+                .map_err(|err| format!("Invalid selector: {err}"))?;
+            let expression = format!(
+                r#"(() => {{
+const node = document.querySelector({selector_json});
+if (!node) return {{ matched: false, text: null, visible: false }};
+const style = window.getComputedStyle(node);
+const rect = node.getBoundingClientRect();
+const visible = style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0' && rect.width > 0 && rect.height > 0;
+const text = String(node.innerText || node.textContent || '').replace(/\s+/g, ' ').trim();
+return {{ matched: true, text, visible, tagName: node.tagName ? node.tagName.toLowerCase() : null }};
+}})()"#
+            );
+            let result = run_probe_evaluate(mgr, &expression, timeout_ms, max_text_bytes).await?;
+            Ok(json!({
+                "id": detector_id,
+                "type": "selector_text",
+                "ok": true,
+                "selector": selector,
+                "result": result.value,
+                "resultTruncated": result.truncated,
+                "resultBytes": result.bytes,
+                "maxReturnBytes": max_text_bytes,
+            }))
+        }
+        "client_evidence" => Ok(json!({
+            "id": detector_id,
+            "type": "client_evidence",
+            "ok": true,
+            "evidence": detector.get("evidence").cloned().unwrap_or(Value::Null),
+        })),
+        _ => Err(format!("unsupported probe detector type: {detector_type}")),
+    }
+}
+
+struct ProbeEvalResult {
+    value: Value,
+    truncated: bool,
+    bytes: u64,
+}
+
+async fn run_probe_evaluate(
+    mgr: &BrowserManager,
+    expression: &str,
+    timeout_ms: u64,
+    max_return_bytes: u64,
+) -> Result<ProbeEvalResult, String> {
+    let outcome = tokio::time::timeout(
+        tokio::time::Duration::from_millis(timeout_ms),
+        mgr.evaluate(expression, None),
+    )
+    .await;
+    let result = match outcome {
+        Ok(Ok(value)) => value,
+        Ok(Err(error)) => return Err(error),
+        Err(_) => return Err(format!("probe detector timed out after {timeout_ms}ms")),
+    };
+    let value = result
+        .pointer("/result/value")
+        .cloned()
+        .unwrap_or_else(|| result.clone());
+    let serialized = serde_json::to_string(&value).unwrap_or_else(|_| "null".to_string());
+    let bytes = serialized.len() as u64;
+    let truncated = bytes > max_return_bytes;
+    let returned = if truncated {
+        Value::String(truncate_utf8(&serialized, max_return_bytes as usize))
+    } else {
+        value
+    };
+    Ok(ProbeEvalResult {
+        value: returned,
+        truncated,
+        bytes,
+    })
+}
+
+fn normalize_probe_identity(results: &[Value], expected_identity: Option<&Value>) -> Value {
+    let mut detected_identity = None;
+    let mut detected_account_id = None;
+    let mut confidence = None;
+    let mut source = None;
+    for result in results {
+        let mut found_identity = false;
+        let candidates = [
+            result.pointer("/result/detectedIdentity"),
+            result.pointer("/result/identity"),
+            result.pointer("/result/email"),
+            result.pointer("/result/accountId"),
+            result.pointer("/evidence/detectedIdentity"),
+            result.pointer("/evidence/accountId"),
+        ];
+        for candidate in candidates.into_iter().flatten() {
+            if let Some(value) = candidate.as_str().filter(|value| !value.trim().is_empty()) {
+                detected_identity.get_or_insert_with(|| value.trim().to_string());
+                detected_account_id.get_or_insert_with(|| value.trim().to_string());
+                found_identity = true;
+                break;
+            }
+        }
+        if let Some(value) = result
+            .pointer("/result/confidence")
+            .or_else(|| result.pointer("/evidence/confidence"))
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+        {
+            confidence.get_or_insert_with(|| value.trim().to_string());
+        }
+        if found_identity {
+            source.get_or_insert_with(|| {
+                result
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .unwrap_or("probe")
+                    .to_string()
+            });
+        }
+    }
+    json!({
+        "detectedIdentity": detected_identity,
+        "detectedAccountId": detected_account_id,
+        "expectedIdentity": expected_identity.cloned().unwrap_or(Value::Null),
+        "confidence": confidence.unwrap_or_else(|| "unknown".to_string()),
+        "source": source.unwrap_or_else(|| "probe".to_string()),
+    })
+}
+
+fn record_probe_freshness(
+    cmd: &Value,
+    probe: &Map<String, Value>,
+    handle: &Map<String, Value>,
+    identity: &Value,
+    observed_at: &str,
+) -> Result<Value, String> {
+    let Some(record_freshness) = probe.get("recordFreshness") else {
+        return Ok(Value::Null);
+    };
+    let record = record_freshness
+        .as_object()
+        .ok_or_else(|| "probe recordFreshness must be an object".to_string())?;
+    let target_service_id = record
+        .get("targetServiceId")
+        .or_else(|| cmd.get("targetServiceId"))
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "probe recordFreshness requires targetServiceId".to_string())?;
+    let account_id = record
+        .get("accountId")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "probe recordFreshness requires accountId".to_string())?;
+    let profile_id = record
+        .get("profileId")
+        .or_else(|| handle.get("profileId"))
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "probe recordFreshness requires profileId".to_string())?;
+    let readiness_state = record
+        .get("readinessState")
+        .and_then(Value::as_str)
+        .unwrap_or("fresh");
+    let evidence = json!({
+        "kind": "service_probe",
+        "observedAt": observed_at,
+        "targetServiceId": target_service_id,
+        "accountId": account_id,
+        "detectedIdentity": identity.get("detectedIdentity").cloned().unwrap_or(Value::Null),
+        "detectedAccountId": identity.get("detectedAccountId").cloned().unwrap_or(Value::Null),
+        "confidence": identity.get("confidence").cloned().unwrap_or(Value::Null),
+        "source": identity.get("source").cloned().unwrap_or(Value::Null),
+        "recipeId": probe.get("recipeId").cloned().unwrap_or(Value::Null),
+    });
+    let body = json!({
+        "targetServiceId": target_service_id,
+        "accountId": account_id,
+        "readinessState": readiness_state,
+        "readinessEvidence": serde_json::to_string(&evidence).unwrap_or_else(|_| "service_probe".to_string()),
+        "readinessRecommendedAction": record.get("readinessRecommendedAction").and_then(Value::as_str).unwrap_or("profile_freshness_verified_by_service_probe"),
+        "lastVerifiedAt": observed_at,
+        "freshnessExpiresAt": record.get("freshnessExpiresAt").cloned().unwrap_or(Value::Null),
+        "updateAuthenticatedServiceIds": record.get("updateAuthenticatedServiceIds").and_then(Value::as_bool).unwrap_or(true),
+    });
+    let profile = update_persisted_profile_freshness(profile_id, body)?;
+    Ok(json!({
+        "recorded": true,
+        "profileId": profile_id,
+        "targetServiceId": target_service_id,
+        "accountId": account_id,
+        "profile": profile,
+    }))
+}
+
+fn probe_recipe_fingerprint(probe: &Map<String, Value>) -> String {
+    let raw = serde_json::to_string(probe).unwrap_or_else(|_| "{}".to_string());
+    let digest = Sha256::digest(raw.as_bytes());
+    format!("{digest:x}").chars().take(16).collect()
+}
+
+async fn handle_service_ui_action(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+    let handle = cmd
+        .get("serviceTabHandle")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "ui_action requires serviceTabHandle".to_string())?;
+    validate_service_tab_handle_for_current_session(handle, &state.session_id)?;
+    let ui_action = cmd
+        .get("uiAction")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "ui_action requires uiAction object".to_string())?;
+    let steps = ui_action
+        .get("steps")
+        .and_then(Value::as_array)
+        .filter(|steps| !steps.is_empty())
+        .ok_or_else(|| "ui_action requires uiAction.steps array".to_string())?;
+    let max_actions = ui_action
+        .get("maxActions")
+        .and_then(Value::as_u64)
+        .unwrap_or(10)
+        .clamp(1, 20) as usize;
+    if steps.len() > max_actions {
+        return Err(format!(
+            "ui_action step count {} exceeds maxActions {}",
+            steps.len(),
+            max_actions
+        ));
+    }
+    let timeout_ms = cmd
+        .get("timeoutMs")
+        .and_then(Value::as_u64)
+        .or_else(|| ui_action.get("timeoutMs").and_then(Value::as_u64))
+        .ok_or_else(|| "ui_action requires positive timeoutMs".to_string())?;
+    let max_text_bytes = cmd
+        .get("maxTextBytes")
+        .and_then(Value::as_u64)
+        .or_else(|| ui_action.get("maxTextBytes").and_then(Value::as_u64))
+        .unwrap_or(1024)
+        .clamp(1, 16 * 1024);
+    if timeout_ms == 0 {
+        return Err("ui_action requires positive timeoutMs".to_string());
+    }
+    for step in steps {
+        validate_service_ui_step(step)?;
+    }
+
+    let target_id = handle
+        .get("targetId")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "ui_action requires serviceTabHandle.targetId".to_string())?;
+    {
+        let mgr = state.browser.as_mut().ok_or_else(|| {
+            "Cannot run ui_action: target browser session is not running; request a service tab first"
+                .to_string()
+        })?;
+        if mgr.active_target_id().ok() != Some(target_id) {
+            let _ = mgr.tab_switch_target_id(target_id).await?;
+        }
+    }
+
+    let observed_at = OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string());
+    let before = service_ui_current_page(state).await;
+    let mut results = Vec::new();
+    for (index, step) in steps.iter().enumerate() {
+        match run_service_ui_step(cmd, state, step, index, timeout_ms, max_text_bytes).await {
+            Ok(result) => results.push(result),
+            Err(error) => {
+                let failure_page = service_ui_current_page(state).await;
+                let diagnostics = if ui_action
+                    .get("includeDiagnosticsOnFailure")
+                    .or_else(|| cmd.get("captureEvidenceOnFailure"))
+                    .and_then(Value::as_bool)
+                    == Some(true)
+                {
+                    handle_service_diagnostics(cmd, state).await.unwrap_or_else(
+                        |diagnostic_error| {
+                            json!({
+                                "ok": false,
+                                "error": diagnostic_error,
+                            })
+                        },
+                    )
+                } else {
+                    Value::Null
+                };
+                results.push(json!({
+                    "index": index,
+                    "type": step.get("type").and_then(Value::as_str).unwrap_or("unknown"),
+                    "ok": false,
+                    "error": error,
+                    "page": failure_page,
+                }));
+                return Ok(json!({
+                    "ok": false,
+                    "action": "ui_action",
+                    "observedAt": observed_at,
+                    "failedStepIndex": index,
+                    "targetId": target_id,
+                    "tabId": handle.get("tabId").cloned().unwrap_or(Value::Null),
+                    "profileId": handle.get("profileId").cloned().unwrap_or(Value::Null),
+                    "serviceTabHandle": cmd.get("serviceTabHandle").cloned().unwrap_or(Value::Null),
+                    "traceFilter": handle.get("traceFilter").cloned().unwrap_or(Value::Null),
+                    "uiAction": service_ui_action_summary(ui_action, steps.len(), max_actions, timeout_ms, max_text_bytes),
+                    "before": before,
+                    "after": failure_page,
+                    "diagnostics": diagnostics,
+                    "steps": results,
+                    "caller": service_ui_caller(cmd),
+                }));
+            }
+        }
+    }
+    let after = service_ui_current_page(state).await;
+
+    Ok(json!({
+        "ok": true,
+        "action": "ui_action",
+        "observedAt": observed_at,
+        "targetId": target_id,
+        "tabId": handle.get("tabId").cloned().unwrap_or(Value::Null),
+        "profileId": handle.get("profileId").cloned().unwrap_or(Value::Null),
+        "serviceTabHandle": cmd.get("serviceTabHandle").cloned().unwrap_or(Value::Null),
+        "traceFilter": handle.get("traceFilter").cloned().unwrap_or(Value::Null),
+        "uiAction": service_ui_action_summary(ui_action, steps.len(), max_actions, timeout_ms, max_text_bytes),
+        "before": before,
+        "after": after,
+        "steps": results,
+        "caller": service_ui_caller(cmd),
+    }))
+}
+
+fn service_ui_action_summary(
+    ui_action: &Map<String, Value>,
+    step_count: usize,
+    max_actions: usize,
+    timeout_ms: u64,
+    max_text_bytes: u64,
+) -> Value {
+    json!({
+        "stepCount": step_count,
+        "maxActions": max_actions,
+        "timeoutMs": timeout_ms,
+        "maxTextBytes": max_text_bytes,
+        "recipeId": ui_action.get("recipeId").cloned().unwrap_or(Value::Null),
+        "recipeFingerprint": probe_recipe_fingerprint(ui_action),
+    })
+}
+
+fn validate_service_ui_step(step: &Value) -> Result<(), String> {
+    let step = step
+        .as_object()
+        .ok_or_else(|| "ui_action step must be an object".to_string())?;
+    let step_type = step
+        .get("type")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "ui_action step requires type".to_string())?;
+    match step_type {
+        "find" | "click" | "fill" | "type" | "select" | "wait" | "focus" | "clear" | "dialog"
+        | "menu_select" => {}
+        _ => return Err(format!("unsupported ui_action step type: {step_type}")),
+    }
+    if matches!(
+        step_type,
+        "find" | "click" | "fill" | "type" | "select" | "focus" | "clear" | "menu_select"
+    ) && step
+        .get("selector")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .is_none()
+    {
+        return Err(format!("ui_action {step_type} step requires selector"));
+    }
+    if step_type == "fill" && step.get("value").and_then(Value::as_str).is_none() {
+        return Err("ui_action fill step requires value".to_string());
+    }
+    if step_type == "type" && step.get("text").and_then(Value::as_str).is_none() {
+        return Err("ui_action type step requires text".to_string());
+    }
+    if step_type == "select" && step.get("value").or_else(|| step.get("values")).is_none() {
+        return Err("ui_action select step requires value or values".to_string());
+    }
+    if step_type == "wait"
+        && ["selector", "text", "url", "function", "loadState"]
+            .iter()
+            .all(|field| step.get(*field).is_none())
+    {
+        return Err(
+            "ui_action wait step requires selector, text, url, function, or loadState".to_string(),
+        );
+    }
+    if step_type == "menu_select"
+        && step
+            .get("optionSelector")
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+            .is_none()
+    {
+        return Err("ui_action menu_select step requires optionSelector".to_string());
+    }
+    if step_type == "dialog" {
+        let response = step
+            .get("response")
+            .and_then(Value::as_str)
+            .unwrap_or("status");
+        if !matches!(response, "status" | "accept" | "dismiss") {
+            return Err("ui_action dialog response must be status, accept, or dismiss".to_string());
+        }
+    }
+    Ok(())
+}
+
+async fn run_service_ui_step(
+    top_cmd: &Value,
+    state: &mut DaemonState,
+    step: &Value,
+    index: usize,
+    timeout_ms: u64,
+    max_text_bytes: u64,
+) -> Result<Value, String> {
+    let step_type = step
+        .get("type")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "ui_action step requires type".to_string())?;
+    let started_at = OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string());
+    let mut cmd = step.clone();
+    if let Some(object) = cmd.as_object_mut() {
+        object.insert("timeoutMs".to_string(), json!(timeout_ms));
+        for key in ["serviceName", "agentName", "taskName"] {
+            if let Some(value) = top_cmd.get(key) {
+                object.insert(key.to_string(), value.clone());
+            }
+        }
+    }
+    let result = match step_type {
+        "find" => run_service_ui_find_step(state, step, timeout_ms, max_text_bytes).await?,
+        "click" => handle_click(&cmd, state).await?,
+        "fill" => handle_fill(&cmd, state).await?,
+        "type" => handle_type(&cmd, state).await?,
+        "select" => handle_select(&cmd, state).await?,
+        "wait" => handle_wait(&cmd, state).await?,
+        "focus" => handle_focus(&cmd, state).await?,
+        "clear" => handle_clear(&cmd, state).await?,
+        "dialog" => run_service_ui_dialog_step(&cmd, state).await?,
+        "menu_select" => {
+            handle_click(&cmd, state).await?;
+            let mut option = cmd.clone();
+            if let Some(object) = option.as_object_mut() {
+                object.insert(
+                    "selector".to_string(),
+                    step.get("optionSelector").cloned().unwrap_or(Value::Null),
+                );
+            }
+            handle_click(&option, state).await?
+        }
+        _ => return Err(format!("unsupported ui_action step type: {step_type}")),
+    };
+    let completed_at = OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string());
+    let page = service_ui_current_page(state).await;
+    Ok(json!({
+        "index": index,
+        "type": step_type,
+        "id": step.get("id").cloned().unwrap_or(Value::Null),
+        "ok": true,
+        "startedAt": started_at,
+        "completedAt": completed_at,
+        "selector": step.get("selector").cloned().unwrap_or(Value::Null),
+        "result": result,
+        "page": page,
+    }))
+}
+
+async fn run_service_ui_find_step(
+    state: &mut DaemonState,
+    step: &Value,
+    timeout_ms: u64,
+    max_text_bytes: u64,
+) -> Result<Value, String> {
+    let selector = step
+        .get("selector")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "ui_action find step requires selector".to_string())?;
+    let max_candidates = step
+        .get("maxCandidates")
+        .and_then(Value::as_u64)
+        .unwrap_or(5)
+        .clamp(1, 50);
+    let selector_json =
+        serde_json::to_string(selector).map_err(|err| format!("Invalid selector: {err}"))?;
+    let expression = format!(
+        r#"(() => {{
+const nodes = Array.from(document.querySelectorAll({selector_json})).slice(0, {max_candidates});
+return nodes.map((node) => {{
+  const style = window.getComputedStyle(node);
+  const rect = node.getBoundingClientRect();
+  const visible = style.display !== 'none' && style.visibility !== 'hidden' && Number.parseFloat(style.opacity || '1') !== 0 && rect.width > 0 && rect.height > 0;
+  const text = String(node.innerText || node.textContent || '').replace(/\s+/g, ' ').trim();
+  return {{
+    tagName: node.tagName ? node.tagName.toLowerCase() : null,
+    text,
+    visible,
+    disabled: Boolean(node.disabled),
+    rect: {{ x: rect.x, y: rect.y, width: rect.width, height: rect.height }},
+    role: node.getAttribute('role'),
+    ariaLabel: node.getAttribute('aria-label'),
+  }};
+}});
+}})()"#
+    );
+    let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+    let result = tokio::time::timeout(
+        tokio::time::Duration::from_millis(timeout_ms),
+        mgr.evaluate(&expression, None),
+    )
+    .await
+    .map_err(|_| format!("ui_action find timed out after {timeout_ms}ms"))??;
+    let mut value = result
+        .pointer("/result/value")
+        .cloned()
+        .unwrap_or_else(|| result.clone());
+    if let Some(items) = value.as_array_mut() {
+        for item in items {
+            let original = item
+                .get("text")
+                .and_then(Value::as_str)
+                .map(ToString::to_string);
+            if let Some(text) = original {
+                item["text"] = json!(truncate_utf8(&text, max_text_bytes as usize));
+            }
+        }
+    }
+    Ok(json!({
+        "selector": selector,
+        "maxCandidates": max_candidates,
+        "candidates": value,
+    }))
+}
+
+async fn run_service_ui_dialog_step(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+    let response = cmd
+        .get("response")
+        .and_then(Value::as_str)
+        .unwrap_or("status");
+    if response == "status" {
+        return handle_dialog(cmd, state).await;
+    }
+    let allowed = cmd
+        .get("allowedDialogLabels")
+        .or_else(|| cmd.get("allowedLabels"))
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let timeout_ms = cmd
+        .get("timeoutMs")
+        .and_then(Value::as_u64)
+        .unwrap_or(1000)
+        .clamp(100, 10_000);
+    let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_millis(timeout_ms);
+    while state.pending_dialog.is_none() && tokio::time::Instant::now() < deadline {
+        tokio::time::sleep(tokio::time::Duration::from_millis(25)).await;
+    }
+    let Some(dialog) = state.pending_dialog.as_ref() else {
+        return Err("ui_action dialog step found no pending dialog".to_string());
+    };
+    if allowed.is_empty()
+        || !allowed
+            .iter()
+            .any(|label| dialog.message.contains(label.as_str()))
+    {
+        return Err("ui_action dialog step requires an allowedDialogLabels match".to_string());
+    }
+    match tokio::time::timeout(
+        tokio::time::Duration::from_millis(timeout_ms),
+        handle_dialog(cmd, state),
+    )
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => Err("ui_action dialog step timed out while handling dialog".to_string()),
+    }
+}
+
+async fn service_ui_current_page(state: &mut DaemonState) -> Value {
+    let Some(mgr) = state.browser.as_mut() else {
+        return json!({
+            "url": Value::Null,
+            "title": Value::Null,
+        });
+    };
+    let url = mgr.get_url().await.unwrap_or_default();
+    let title = mgr.get_title().await.unwrap_or_default();
+    json!({
+        "url": url,
+        "title": title,
+    })
+}
+
+fn service_ui_caller(cmd: &Value) -> Value {
+    json!({
+        "serviceName": cmd.get("serviceName").cloned().unwrap_or(Value::Null),
+        "agentName": cmd.get("agentName").cloned().unwrap_or(Value::Null),
+        "taskName": cmd.get("taskName").cloned().unwrap_or(Value::Null),
+        "jobId": cmd.get("id").cloned().unwrap_or(Value::Null),
+    })
+}
+
+async fn handle_service_network_capture(
+    cmd: &Value,
+    state: &mut DaemonState,
+) -> Result<Value, String> {
+    let handle = cmd
+        .get("serviceTabHandle")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "network_capture requires serviceTabHandle".to_string())?;
+    validate_service_tab_handle_for_current_session(handle, &state.session_id)?;
+    let capture = cmd
+        .get("networkCapture")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "network_capture requires networkCapture object".to_string())?;
+    let timeout_ms = cmd
+        .get("timeoutMs")
+        .and_then(Value::as_u64)
+        .or_else(|| capture.get("timeoutMs").and_then(Value::as_u64))
+        .or_else(|| capture.get("maxDurationMs").and_then(Value::as_u64))
+        .ok_or_else(|| "network_capture requires positive timeoutMs".to_string())?;
+    if timeout_ms == 0 {
+        return Err("network_capture requires positive timeoutMs".to_string());
+    }
+    let max_events = capture
+        .get("maxEvents")
+        .and_then(Value::as_u64)
+        .unwrap_or(20)
+        .clamp(1, 100) as usize;
+    let capture_bodies = capture
+        .get("captureBodies")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let max_body_bytes = if capture_bodies {
+        let max_body_bytes = capture
+            .get("maxBodyBytes")
+            .and_then(Value::as_u64)
+            .or_else(|| cmd.get("maxBodyBytes").and_then(Value::as_u64))
+            .ok_or_else(|| {
+                "network_capture captureBodies requires positive maxBodyBytes".to_string()
+            })?;
+        if max_body_bytes == 0 {
+            return Err("network_capture captureBodies requires positive maxBodyBytes".to_string());
+        }
+        max_body_bytes.min(1024 * 1024)
+    } else {
+        0
+    };
+    validate_service_network_capture_recipe(capture)?;
+
+    let target_id = handle
+        .get("targetId")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "network_capture requires serviceTabHandle.targetId".to_string())?;
+    let session_id = {
+        let mgr = state.browser.as_mut().ok_or_else(|| {
+            "Cannot run network_capture: target browser session is not running; request a service tab first"
+                .to_string()
+        })?;
+        if mgr.active_target_id().ok() != Some(target_id) {
+            let _ = mgr.tab_switch_target_id(target_id).await?;
+        }
+        mgr.active_session_id()?.to_string()
+    };
+
+    let observed_at = OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string());
+    let before = service_ui_current_page(state).await;
+    let mgr = state
+        .browser
+        .as_ref()
+        .ok_or_else(|| "Browser not launched".to_string())?;
+    mgr.client
+        .send_command_no_params("Network.enable", Some(&session_id))
+        .await?;
+    let mut rx = mgr.client.subscribe();
+
+    run_service_network_capture_trigger(cmd, state).await?;
+
+    let mut request_metadata: HashMap<String, Value> = HashMap::new();
+    let mut pending_body: HashMap<String, Value> = HashMap::new();
+    let mut captured = Vec::new();
+    let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_millis(timeout_ms);
+    let mut timed_out = false;
+
+    loop {
+        if captured.len() >= max_events && (!capture_bodies || pending_body.is_empty()) {
+            break;
+        }
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            timed_out = true;
+            break;
+        }
+        match tokio::time::timeout(remaining, rx.recv()).await {
+            Ok(Ok(event)) => {
+                if event.session_id.as_deref() != Some(&session_id) {
+                    continue;
+                }
+                match event.method.as_str() {
+                    "Network.requestWillBeSent" => {
+                        if let Some(request_id) =
+                            event.params.get("requestId").and_then(Value::as_str)
+                        {
+                            let request = event.params.get("request").cloned().unwrap_or(json!({}));
+                            request_metadata.insert(
+                                request_id.to_string(),
+                                json!({
+                                    "requestId": request_id,
+                                    "url": request.get("url").cloned().unwrap_or(Value::Null),
+                                    "method": request.get("method").cloned().unwrap_or(Value::Null),
+                                    "resourceType": event.params.get("type").cloned().unwrap_or(Value::Null),
+                                    "timestamp": event.params.get("wallTime").cloned().unwrap_or(Value::Null),
+                                    "requestHeaders": request.get("headers").cloned().unwrap_or_else(|| json!({})),
+                                }),
+                            );
+                        }
+                    }
+                    "Network.responseReceived" => {
+                        if captured.len() + pending_body.len() >= max_events {
+                            continue;
+                        }
+                        let Some(request_id) =
+                            event.params.get("requestId").and_then(Value::as_str)
+                        else {
+                            continue;
+                        };
+                        let response = event.params.get("response").cloned().unwrap_or(json!({}));
+                        let metadata = request_metadata
+                            .get(request_id)
+                            .cloned()
+                            .unwrap_or_else(|| json!({ "requestId": request_id }));
+                        if !service_network_capture_matches(capture, &metadata, &response) {
+                            continue;
+                        }
+                        let event_value = service_network_capture_event(
+                            capture,
+                            request_id,
+                            &metadata,
+                            &response,
+                            false,
+                            None,
+                            max_body_bytes,
+                        );
+                        if capture_bodies {
+                            pending_body.insert(request_id.to_string(), event_value);
+                        } else {
+                            captured.push(event_value);
+                        }
+                    }
+                    "Network.loadingFinished" => {
+                        let Some(request_id) =
+                            event.params.get("requestId").and_then(Value::as_str)
+                        else {
+                            continue;
+                        };
+                        let Some(mut event_value) = pending_body.remove(request_id) else {
+                            continue;
+                        };
+                        let body = service_network_capture_body(
+                            state,
+                            request_id,
+                            &session_id,
+                            max_body_bytes,
+                        )
+                        .await
+                        .unwrap_or_else(|error| {
+                            json!({
+                                "captured": false,
+                                "error": error,
+                            })
+                        });
+                        event_value["body"] = body;
+                        captured.push(event_value);
+                    }
+                    "Network.loadingFailed" => {
+                        if let Some(request_id) =
+                            event.params.get("requestId").and_then(Value::as_str)
+                        {
+                            if let Some(mut event_value) = pending_body.remove(request_id) {
+                                event_value["body"] = json!({
+                                    "captured": false,
+                                    "error": event.params.get("errorText").cloned().unwrap_or_else(|| json!("loading failed")),
+                                });
+                                captured.push(event_value);
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(_))) => continue,
+            Ok(Err(_)) => {
+                timed_out = true;
+                break;
+            }
+            Err(_) => {
+                timed_out = true;
+                break;
+            }
+        }
+    }
+
+    let after = service_ui_current_page(state).await;
+    Ok(json!({
+        "ok": true,
+        "action": "network_capture",
+        "observedAt": observed_at,
+        "timedOut": timed_out,
+        "targetId": target_id,
+        "tabId": handle.get("tabId").cloned().unwrap_or(Value::Null),
+        "profileId": handle.get("profileId").cloned().unwrap_or(Value::Null),
+        "serviceTabHandle": cmd.get("serviceTabHandle").cloned().unwrap_or(Value::Null),
+        "traceFilter": handle.get("traceFilter").cloned().unwrap_or(Value::Null),
+        "networkCapture": {
+            "eventCount": captured.len(),
+            "pendingBodyCount": pending_body.len(),
+            "maxEvents": max_events,
+            "timeoutMs": timeout_ms,
+            "captureBodies": capture_bodies,
+            "maxBodyBytes": if capture_bodies { json!(max_body_bytes) } else { Value::Null },
+            "metadataOnly": !capture_bodies,
+            "recipeId": capture.get("recipeId").cloned().unwrap_or(Value::Null),
+            "recipeFingerprint": probe_recipe_fingerprint(capture),
+        },
+        "before": before,
+        "after": after,
+        "events": captured,
+        "caller": service_ui_caller(cmd),
+    }))
+}
+
+fn validate_service_network_capture_recipe(capture: &Map<String, Value>) -> Result<(), String> {
+    if let Some(patterns) = capture.get("urlPatterns") {
+        let valid = patterns
+            .as_array()
+            .filter(|items| {
+                !items.is_empty()
+                    && items
+                        .iter()
+                        .all(|item| item.as_str().is_some_and(|value| !value.is_empty()))
+            })
+            .is_some();
+        if !valid {
+            return Err("network_capture urlPatterns must be a nonempty string array".to_string());
+        }
+    }
+    if let Some(methods) = capture.get("methods") {
+        let valid = methods
+            .as_array()
+            .filter(|items| {
+                !items.is_empty()
+                    && items
+                        .iter()
+                        .all(|item| item.as_str().is_some_and(|value| !value.is_empty()))
+            })
+            .is_some();
+        if !valid {
+            return Err("network_capture methods must be a nonempty string array".to_string());
+        }
+    }
+    if let Some(resource_types) = capture.get("resourceTypes") {
+        let valid = resource_types
+            .as_array()
+            .filter(|items| {
+                !items.is_empty()
+                    && items
+                        .iter()
+                        .all(|item| item.as_str().is_some_and(|value| !value.is_empty()))
+            })
+            .is_some();
+        if !valid {
+            return Err(
+                "network_capture resourceTypes must be a nonempty string array".to_string(),
+            );
+        }
+    }
+    if let Some(statuses) = capture.get("status") {
+        let valid = statuses
+            .as_array()
+            .filter(|items| {
+                !items.is_empty()
+                    && items
+                        .iter()
+                        .all(|item| item.as_str().is_some_and(|value| !value.is_empty()))
+            })
+            .is_some()
+            || statuses
+                .as_str()
+                .is_some_and(|value| !value.trim().is_empty());
+        if !valid {
+            return Err("network_capture status must be a string or string array".to_string());
+        }
+    }
+    if let Some(trigger) = capture.get("trigger") {
+        let trigger = trigger
+            .as_object()
+            .ok_or_else(|| "network_capture trigger must be an object".to_string())?;
+        let trigger_type = trigger
+            .get("type")
+            .and_then(Value::as_str)
+            .ok_or_else(|| "network_capture trigger requires type".to_string())?;
+        if trigger_type != "reload" {
+            return Err("network_capture trigger.type must be reload".to_string());
+        }
+    }
+    Ok(())
+}
+
+async fn run_service_network_capture_trigger(
+    cmd: &Value,
+    state: &mut DaemonState,
+) -> Result<(), String> {
+    let Some(trigger) = cmd
+        .get("networkCapture")
+        .and_then(Value::as_object)
+        .and_then(|capture| capture.get("trigger"))
+        .and_then(Value::as_object)
+    else {
+        return Ok(());
+    };
+    match trigger.get("type").and_then(Value::as_str).unwrap_or("") {
+        "reload" => {
+            handle_reload(state).await?;
+            Ok(())
+        }
+        _ => Err("network_capture trigger.type must be reload".to_string()),
+    }
+}
+
+fn service_network_capture_matches(
+    capture: &Map<String, Value>,
+    metadata: &Value,
+    response: &Value,
+) -> bool {
+    let url = response
+        .get("url")
+        .or_else(|| metadata.get("url"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let method = metadata.get("method").and_then(Value::as_str).unwrap_or("");
+    let resource_type = metadata
+        .get("resourceType")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let status = response.get("status").and_then(Value::as_i64);
+    if let Some(patterns) = capture.get("urlPatterns").and_then(Value::as_array) {
+        if !patterns
+            .iter()
+            .filter_map(Value::as_str)
+            .any(|pattern| url.contains(pattern))
+        {
+            return false;
+        }
+    }
+    if let Some(methods) = capture.get("methods").and_then(Value::as_array) {
+        if !methods
+            .iter()
+            .filter_map(Value::as_str)
+            .any(|expected| method.eq_ignore_ascii_case(expected))
+        {
+            return false;
+        }
+    }
+    if let Some(types) = capture.get("resourceTypes").and_then(Value::as_array) {
+        if !types
+            .iter()
+            .filter_map(Value::as_str)
+            .any(|expected| resource_type.eq_ignore_ascii_case(expected))
+        {
+            return false;
+        }
+    }
+    if let Some(status_filter) = capture.get("status") {
+        let Some(code) = status else {
+            return false;
+        };
+        if let Some(filter) = status_filter.as_str() {
+            if !matches_status_filter(Some(code), filter) {
+                return false;
+            }
+        } else if let Some(filters) = status_filter.as_array() {
+            if !filters
+                .iter()
+                .filter_map(Value::as_str)
+                .any(|filter| matches_status_filter(Some(code), filter))
+            {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+fn service_network_capture_event(
+    capture: &Map<String, Value>,
+    request_id: &str,
+    metadata: &Value,
+    response: &Value,
+    body_captured: bool,
+    body: Option<Value>,
+    max_body_bytes: u64,
+) -> Value {
+    let allowed_headers = service_network_allowed_header_names(capture);
+    let include_request_headers = capture
+        .get("includeRequestHeaders")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let include_response_headers = capture
+        .get("includeResponseHeaders")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let mut event = json!({
+        "requestId": request_id,
+        "url": response.get("url").or_else(|| metadata.get("url")).cloned().unwrap_or(Value::Null),
+        "method": metadata.get("method").cloned().unwrap_or(Value::Null),
+        "resourceType": metadata.get("resourceType").cloned().unwrap_or(Value::Null),
+        "status": response.get("status").cloned().unwrap_or(Value::Null),
+        "statusText": response.get("statusText").cloned().unwrap_or(Value::Null),
+        "mimeType": response.get("mimeType").cloned().unwrap_or(Value::Null),
+        "encodedDataLength": response.get("encodedDataLength").cloned().unwrap_or(Value::Null),
+        "headersRedacted": true,
+        "body": body.unwrap_or_else(|| json!({
+            "captured": body_captured,
+            "maxBodyBytes": if max_body_bytes > 0 { json!(max_body_bytes) } else { Value::Null },
+        })),
+    });
+    if include_request_headers {
+        event["requestHeaders"] = filter_headers(metadata.get("requestHeaders"), &allowed_headers);
+    }
+    if include_response_headers {
+        event["responseHeaders"] = filter_headers(response.get("headers"), &allowed_headers);
+    }
+    event
+}
+
+async fn service_network_capture_body(
+    state: &DaemonState,
+    request_id: &str,
+    session_id: &str,
+    max_body_bytes: u64,
+) -> Result<Value, String> {
+    let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+    let body_result = mgr
+        .client
+        .send_command(
+            "Network.getResponseBody",
+            Some(json!({ "requestId": request_id })),
+            Some(session_id),
+        )
+        .await?;
+    let base64_encoded = body_result
+        .get("base64Encoded")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let body = body_result
+        .get("body")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let bytes = body.len() as u64;
+    let truncated = bytes > max_body_bytes;
+    let returned = if truncated {
+        truncate_utf8(body, max_body_bytes as usize)
+    } else {
+        body.to_string()
+    };
+    if base64_encoded {
+        Ok(json!({
+            "captured": true,
+            "base64Encoded": true,
+            "bodyBase64": returned,
+            "bodyBytes": bytes,
+            "bodyTruncated": truncated,
+            "maxBodyBytes": max_body_bytes,
+        }))
+    } else {
+        Ok(json!({
+            "captured": true,
+            "base64Encoded": false,
+            "body": returned,
+            "bodyBytes": bytes,
+            "bodyTruncated": truncated,
+            "maxBodyBytes": max_body_bytes,
+        }))
+    }
+}
+
+fn service_network_allowed_header_names(capture: &Map<String, Value>) -> HashSet<String> {
+    capture
+        .get("allowedHeaderNames")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(|value| value.to_ascii_lowercase())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn filter_headers(headers: Option<&Value>, allowed_headers: &HashSet<String>) -> Value {
+    let Some(headers) = headers.and_then(Value::as_object) else {
+        return json!({});
+    };
+    if allowed_headers.is_empty() {
+        return json!({});
+    }
+    let mut filtered = Map::new();
+    for (key, value) in headers {
+        if allowed_headers.contains(&key.to_ascii_lowercase()) {
+            filtered.insert(key.clone(), value.clone());
+        }
+    }
+    Value::Object(filtered)
+}
+
+async fn handle_service_file_transfer(
+    cmd: &Value,
+    state: &mut DaemonState,
+) -> Result<Value, String> {
+    let handle = cmd
+        .get("serviceTabHandle")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "file_transfer requires serviceTabHandle".to_string())?;
+    validate_service_tab_handle_for_current_session(handle, &state.session_id)?;
+    let transfer = cmd
+        .get("fileTransfer")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "file_transfer requires fileTransfer object".to_string())?;
+    let timeout_ms = cmd
+        .get("timeoutMs")
+        .and_then(Value::as_u64)
+        .or_else(|| transfer.get("timeoutMs").and_then(Value::as_u64))
+        .ok_or_else(|| "file_transfer requires positive timeoutMs".to_string())?;
+    if timeout_ms == 0 {
+        return Err("file_transfer requires positive timeoutMs".to_string());
+    }
+    if transfer.get("upload").is_none() && transfer.get("download").is_none() {
+        return Err("file_transfer requires upload or download recipe".to_string());
+    }
+    validate_service_file_transfer_recipe(transfer)?;
+
+    let target_id = handle
+        .get("targetId")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "file_transfer requires serviceTabHandle.targetId".to_string())?;
+    {
+        let mgr = state.browser.as_mut().ok_or_else(|| {
+            "Cannot run file_transfer: target browser session is not running; request a service tab first"
+                .to_string()
+        })?;
+        if mgr.active_target_id().ok() != Some(target_id) {
+            let _ = mgr.tab_switch_target_id(target_id).await?;
+        }
+    }
+
+    let observed_at = OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string());
+    let before = service_ui_current_page(state).await;
+    let mut upload_result = Value::Null;
+    let mut download_result = Value::Null;
+
+    if let Some(upload) = transfer.get("upload").and_then(Value::as_object) {
+        match run_service_file_upload(upload, state).await {
+            Ok(result) => upload_result = result,
+            Err(error) => {
+                return service_file_transfer_failure(
+                    cmd,
+                    state,
+                    ServiceFileTransferFailure {
+                        handle,
+                        transfer,
+                        target_id,
+                        observed_at: &observed_at,
+                        before,
+                        phase: "upload",
+                        error,
+                    },
+                )
+                .await;
+            }
+        }
+    }
+
+    if let Some(download) = transfer.get("download").and_then(Value::as_object) {
+        match run_service_download_capture(download, state, timeout_ms).await {
+            Ok(result) => download_result = result,
+            Err(error) => {
+                return service_file_transfer_failure(
+                    cmd,
+                    state,
+                    ServiceFileTransferFailure {
+                        handle,
+                        transfer,
+                        target_id,
+                        observed_at: &observed_at,
+                        before,
+                        phase: "download",
+                        error,
+                    },
+                )
+                .await;
+            }
+        }
+    }
+
+    let after = service_ui_current_page(state).await;
+    Ok(json!({
+        "ok": true,
+        "action": "file_transfer",
+        "observedAt": observed_at,
+        "targetId": target_id,
+        "tabId": handle.get("tabId").cloned().unwrap_or(Value::Null),
+        "profileId": handle.get("profileId").cloned().unwrap_or(Value::Null),
+        "serviceTabHandle": cmd.get("serviceTabHandle").cloned().unwrap_or(Value::Null),
+        "traceFilter": handle.get("traceFilter").cloned().unwrap_or(Value::Null),
+        "fileTransfer": service_file_transfer_summary(transfer, timeout_ms),
+        "before": before,
+        "after": after,
+        "upload": upload_result,
+        "download": download_result,
+        "caller": service_ui_caller(cmd),
+    }))
+}
+
+struct ServiceFileTransferFailure<'a> {
+    handle: &'a Map<String, Value>,
+    transfer: &'a Map<String, Value>,
+    target_id: &'a str,
+    observed_at: &'a str,
+    before: Value,
+    phase: &'a str,
+    error: String,
+}
+
+async fn service_file_transfer_failure(
+    cmd: &Value,
+    state: &mut DaemonState,
+    failure: ServiceFileTransferFailure<'_>,
+) -> Result<Value, String> {
+    let after = service_ui_current_page(state).await;
+    let diagnostics = if failure
+        .transfer
+        .get("includeDiagnosticsOnFailure")
+        .or_else(|| cmd.get("captureEvidenceOnFailure"))
+        .and_then(Value::as_bool)
+        == Some(true)
+    {
+        handle_service_diagnostics(cmd, state)
+            .await
+            .unwrap_or_else(|diagnostic_error| {
+                json!({
+                    "ok": false,
+                    "error": diagnostic_error,
+                })
+            })
+    } else {
+        Value::Null
+    };
+    Ok(json!({
+        "ok": false,
+        "action": "file_transfer",
+        "observedAt": failure.observed_at,
+        "failedPhase": failure.phase,
+        "error": failure.error,
+        "targetId": failure.target_id,
+        "tabId": failure.handle.get("tabId").cloned().unwrap_or(Value::Null),
+        "profileId": failure.handle.get("profileId").cloned().unwrap_or(Value::Null),
+        "serviceTabHandle": cmd.get("serviceTabHandle").cloned().unwrap_or(Value::Null),
+        "traceFilter": failure.handle.get("traceFilter").cloned().unwrap_or(Value::Null),
+        "fileTransfer": service_file_transfer_summary(
+            failure.transfer,
+            cmd.get("timeoutMs")
+                .and_then(Value::as_u64)
+                .or_else(|| failure.transfer.get("timeoutMs").and_then(Value::as_u64))
+                .unwrap_or(0),
+        ),
+        "before": failure.before,
+        "after": after,
+        "diagnostics": diagnostics,
+        "caller": service_ui_caller(cmd),
+    }))
+}
+
+fn service_file_transfer_summary(transfer: &Map<String, Value>, timeout_ms: u64) -> Value {
+    json!({
+        "hasUpload": transfer.get("upload").is_some(),
+        "hasDownload": transfer.get("download").is_some(),
+        "timeoutMs": timeout_ms,
+        "recipeId": transfer.get("recipeId").cloned().unwrap_or(Value::Null),
+        "recipeFingerprint": probe_recipe_fingerprint(transfer),
+    })
+}
+
+fn validate_service_file_transfer_recipe(transfer: &Map<String, Value>) -> Result<(), String> {
+    if let Some(upload) = transfer.get("upload") {
+        let upload = upload
+            .as_object()
+            .ok_or_else(|| "file_transfer upload must be an object".to_string())?;
+        validate_service_file_upload_recipe(upload)?;
+    }
+    if let Some(download) = transfer.get("download") {
+        let download = download
+            .as_object()
+            .ok_or_else(|| "file_transfer download must be an object".to_string())?;
+        validate_service_download_recipe(download)?;
+    }
+    Ok(())
+}
+
+fn validate_service_file_upload_recipe(upload: &Map<String, Value>) -> Result<(), String> {
+    if upload
+        .get("selector")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .is_none()
+        && upload
+            .get("labelText")
+            .or_else(|| upload.get("label"))
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .is_none()
+    {
+        return Err("file_transfer upload requires selector or labelText".to_string());
+    }
+    let files = upload
+        .get("files")
+        .and_then(Value::as_array)
+        .filter(|items| !items.is_empty())
+        .ok_or_else(|| "file_transfer upload requires files array".to_string())?;
+    if !files
+        .iter()
+        .all(|file| file.as_str().is_some_and(|value| !value.trim().is_empty()))
+    {
+        return Err("file_transfer upload files must be nonempty strings".to_string());
+    }
+    let max_files = upload
+        .get("maxFiles")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| "file_transfer upload requires positive maxFiles".to_string())?;
+    if max_files == 0 {
+        return Err("file_transfer upload requires positive maxFiles".to_string());
+    }
+    if files.len() as u64 > max_files {
+        return Err(format!(
+            "file_transfer upload file count {} exceeds maxFiles {}",
+            files.len(),
+            max_files
+        ));
+    }
+    validate_nonempty_string_array(
+        upload.get("allowedPaths"),
+        "file_transfer upload allowedPaths",
+    )
+}
+
+fn validate_service_download_recipe(download: &Map<String, Value>) -> Result<(), String> {
+    if download
+        .get("selector")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .is_none()
+    {
+        return Err("file_transfer download requires selector".to_string());
+    }
+    if download
+        .get("directory")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .is_none()
+    {
+        return Err("file_transfer download requires directory".to_string());
+    }
+    validate_nonempty_string_array(
+        download.get("allowedDirectories"),
+        "file_transfer download allowedDirectories",
+    )?;
+    if let Some(max_bytes) = download.get("maxBytes").and_then(Value::as_u64) {
+        if max_bytes == 0 {
+            return Err("file_transfer download maxBytes must be positive".to_string());
+        }
+    }
+    Ok(())
+}
+
+fn validate_nonempty_string_array(value: Option<&Value>, label: &str) -> Result<(), String> {
+    let valid = value
+        .and_then(Value::as_array)
+        .filter(|items| {
+            !items.is_empty()
+                && items
+                    .iter()
+                    .all(|item| item.as_str().is_some_and(|text| !text.trim().is_empty()))
+        })
+        .is_some();
+    if !valid {
+        return Err(format!("{label} must be a nonempty string array"));
+    }
+    Ok(())
+}
+
+async fn run_service_file_upload(
+    upload: &Map<String, Value>,
+    state: &mut DaemonState,
+) -> Result<Value, String> {
+    let selector = resolve_service_file_input_selector(upload, state).await?;
+    let allowed_paths = service_canonical_allowed_paths(upload.get("allowedPaths"))?;
+    let files = upload
+        .get("files")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "file_transfer upload requires files array".to_string())?;
+    let mut resolved_files = Vec::new();
+    let mut file_items = Vec::new();
+    for file in files {
+        let raw = file
+            .as_str()
+            .ok_or_else(|| "file_transfer upload files must be strings".to_string())?;
+        let path = service_existing_path(raw)?;
+        service_require_allowed_path(&path, &allowed_paths, "upload file")?;
+        let metadata = fs::metadata(&path)
+            .map_err(|err| format!("Failed to read upload file metadata: {err}"))?;
+        resolved_files.push(path.to_string_lossy().to_string());
+        file_items.push(json!({
+            "name": path.file_name().and_then(|value| value.to_str()).unwrap_or(""),
+            "path": path.to_string_lossy().to_string(),
+            "size": metadata.len(),
+        }));
+    }
+
+    let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+    mgr.upload_files(
+        &selector,
+        &resolved_files,
+        &state.ref_map,
+        &state.iframe_sessions,
+    )
+    .await?;
+
+    let selected = if upload
+        .get("verifySelectedNames")
+        .and_then(Value::as_bool)
+        .unwrap_or(true)
+    {
+        service_file_input_selected_names(&selector, state).await?
+    } else {
+        Value::Null
+    };
+
+    Ok(json!({
+        "ok": true,
+        "selector": selector,
+        "uploaded": resolved_files.len(),
+        "files": file_items,
+        "selectedFileNames": selected,
+    }))
+}
+
+async fn resolve_service_file_input_selector(
+    upload: &Map<String, Value>,
+    state: &mut DaemonState,
+) -> Result<String, String> {
+    if let Some(selector) = upload
+        .get("selector")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+    {
+        return Ok(selector.to_string());
+    }
+    let label_text = upload
+        .get("labelText")
+        .or_else(|| upload.get("label"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| "file_transfer upload requires selector or labelText".to_string())?;
+    let label_json = serde_json::to_string(label_text).unwrap_or_else(|_| "\"\"".to_string());
+    let expression = format!(
+        r#"(() => {{
+const expected = String({label_json}).trim().toLowerCase();
+for (const input of Array.from(document.querySelectorAll('input[type="file"]'))) {{
+  const labels = Array.from(input.labels || []);
+  const text = labels.map((label) => String(label.innerText || label.textContent || '')).join(' ').replace(/\s+/g, ' ').trim().toLowerCase();
+  if (text.includes(expected)) {{
+    const token = input.getAttribute('data-agent-browser-file-input-id') || `file-input-${{Date.now()}}-${{Math.random().toString(16).slice(2)}}`;
+    input.setAttribute('data-agent-browser-file-input-id', token);
+    return `[data-agent-browser-file-input-id="${{token}}"]`;
+  }}
+}}
+return null;
+}})()"#
+    );
+    let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+    let result = mgr.evaluate(&expression, None).await?;
+    result
+        .pointer("/result/value")
+        .or_else(|| result.pointer("/result/result/value"))
+        .or_else(|| result.get("value"))
+        .or(Some(&result))
+        .and_then(Value::as_str)
+        .map(ToString::to_string)
+        .ok_or_else(|| {
+            format!(
+                "file_transfer upload could not resolve labelText to file input: {}",
+                result
+            )
+        })
+}
+
+async fn service_file_input_selected_names(
+    selector: &str,
+    state: &DaemonState,
+) -> Result<Value, String> {
+    let selector_json = serde_json::to_string(selector).unwrap_or_else(|_| "\"\"".to_string());
+    let expression = format!(
+        r#"(() => {{
+const input = document.querySelector({selector_json});
+if (!input || !input.files) return [];
+return Array.from(input.files).map((file) => file.name);
+}})()"#
+    );
+    let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+    let result = mgr.evaluate(&expression, None).await?;
+    Ok(result
+        .pointer("/result/value")
+        .or_else(|| result.pointer("/result/result/value"))
+        .or_else(|| result.get("value"))
+        .or(Some(&result))
+        .cloned()
+        .unwrap_or_else(|| json!([])))
+}
+
+async fn run_service_download_capture(
+    download: &Map<String, Value>,
+    state: &mut DaemonState,
+    timeout_ms: u64,
+) -> Result<Value, String> {
+    let selector = download
+        .get("selector")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "file_transfer download requires selector".to_string())?;
+    let directory = download
+        .get("directory")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "file_transfer download requires directory".to_string())?;
+    let download_dir = service_prepare_allowed_download_dir(directory, download)?;
+    let download_dir_str = download_dir
+        .to_str()
+        .ok_or("Download directory path is not valid UTF-8")?;
+    let max_bytes = download.get("maxBytes").and_then(Value::as_u64);
+
+    if download
+        .get("captureMode")
+        .and_then(Value::as_str)
+        .unwrap_or("fetch")
+        != "browser"
+    {
+        return run_service_download_fetch_capture(download, state, &download_dir, max_bytes).await;
+    }
+
+    let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+    let session_id = mgr.active_session_id()?.to_string();
+    tokio::time::timeout(
+        tokio::time::Duration::from_millis(timeout_ms.min(1000)),
+        mgr.set_download_behavior(download_dir_str),
+    )
+    .await
+    .map_err(|_| "file_transfer set download behavior timed out".to_string())??;
+    let mut rx = mgr.client.subscribe();
+
+    tokio::time::timeout(
+        tokio::time::Duration::from_millis(timeout_ms.min(1000)),
+        interaction::click(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            selector,
+            "left",
+            1,
+            &state.iframe_sessions,
+        ),
+    )
+    .await
+    .map_err(|_| "file_transfer download click timed out".to_string())??;
+
+    let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_millis(timeout_ms);
+    let mut downloaded_guid: Option<String> = None;
+    let mut source_url: Option<String> = None;
+    let mut canceled_event = false;
+    let mut suggested_filename = download
+        .get("expectedFileName")
+        .or_else(|| download.get("expectedFilename"))
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            return Err("Timeout waiting for file_transfer download".to_string());
+        }
+        match tokio::time::timeout(remaining, rx.recv()).await {
+            Ok(Ok(event)) => {
+                let is_page_session = event.session_id.as_deref() == Some(&session_id);
+                let is_download_event = |method: &str, browser_method: &str, page_method: &str| {
+                    method == browser_method || (method == page_method && is_page_session)
+                };
+                if is_download_event(
+                    &event.method,
+                    "Browser.downloadWillBegin",
+                    "Page.downloadWillBegin",
+                ) {
+                    if let Some(guid) = event.params.get("guid").and_then(Value::as_str) {
+                        downloaded_guid = Some(guid.to_string());
+                    }
+                    if source_url.is_none() {
+                        source_url = event
+                            .params
+                            .get("url")
+                            .and_then(Value::as_str)
+                            .map(ToString::to_string);
+                    }
+                    if suggested_filename.is_none() {
+                        suggested_filename = event
+                            .params
+                            .get("suggestedFilename")
+                            .and_then(Value::as_str)
+                            .map(ToString::to_string);
+                    }
+                }
+                if is_download_event(
+                    &event.method,
+                    "Browser.downloadProgress",
+                    "Page.downloadProgress",
+                ) {
+                    match event.params.get("state").and_then(Value::as_str) {
+                        Some("completed") => break,
+                        Some("canceled") => {
+                            canceled_event = true;
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(_))) => continue,
+            Ok(Err(_)) => return Err("Event stream closed".to_string()),
+            Err(_) => return Err("Timeout waiting for file_transfer download".to_string()),
+        }
+    }
+
+    let file_name = suggested_filename
+        .as_deref()
+        .and_then(service_safe_file_name)
+        .ok_or_else(|| "file_transfer download could not determine safe file name".to_string())?;
+    let dest = download_dir.join(&file_name);
+    if let Some(guid) = downloaded_guid.as_deref() {
+        let guid_path = download_dir.join(guid);
+        for _ in 0..10 {
+            if guid_path.exists() {
+                break;
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        }
+        if guid_path.exists() && guid_path != dest {
+            fs::rename(&guid_path, &dest)
+                .map_err(|err| format!("Failed to rename downloaded file: {err}"))?;
+        }
+    }
+    if !dest.exists() && canceled_event {
+        return Err("Download was canceled".to_string());
+    }
+    if !dest.exists() {
+        return Err("Downloaded file not found at captured path".to_string());
+    }
+    let metadata = fs::metadata(&dest)
+        .map_err(|err| format!("Failed to read downloaded file metadata: {err}"))?;
+    if let Some(max_bytes) = max_bytes {
+        if metadata.len() > max_bytes {
+            return Err(format!(
+                "Downloaded file size {} exceeds maxBytes {}",
+                metadata.len(),
+                max_bytes
+            ));
+        }
+    }
+
+    Ok(json!({
+        "ok": true,
+        "selector": selector,
+        "localPath": dest.to_string_lossy().to_string(),
+        "fileName": file_name,
+        "size": metadata.len(),
+        "mimeType": service_guess_mime_type(&dest),
+        "sourceUrl": source_url,
+        "timedOut": false,
+        "canceledEvent": canceled_event,
+        "maxBytes": max_bytes,
+    }))
+}
+
+fn service_canonical_allowed_paths(value: Option<&Value>) -> Result<Vec<PathBuf>, String> {
+    let items = value
+        .and_then(Value::as_array)
+        .ok_or_else(|| "allowed paths must be an array".to_string())?;
+    items
+        .iter()
+        .map(|item| {
+            let path = item
+                .as_str()
+                .ok_or_else(|| "allowed paths must be strings".to_string())?;
+            service_existing_path(path)
+        })
+        .collect()
+}
+
+fn service_existing_path(path: &str) -> Result<PathBuf, String> {
+    let raw = if Path::new(path).is_absolute() {
+        PathBuf::from(path)
+    } else {
+        env::current_dir()
+            .map_err(|err| format!("Failed to get current directory: {err}"))?
+            .join(path)
+    };
+    raw.canonicalize()
+        .map_err(|err| format!("Failed to resolve path '{}': {err}", raw.display()))
+}
+
+fn service_require_allowed_path(
+    path: &Path,
+    allowed_paths: &[PathBuf],
+    label: &str,
+) -> Result<(), String> {
+    if allowed_paths
+        .iter()
+        .any(|allowed| path == allowed || path.starts_with(allowed))
+    {
+        Ok(())
+    } else {
+        Err(format!("{label} is outside allowedPaths"))
+    }
+}
+
+fn service_prepare_allowed_download_dir(
+    directory: &str,
+    download: &Map<String, Value>,
+) -> Result<PathBuf, String> {
+    let raw = if Path::new(directory).is_absolute() {
+        PathBuf::from(directory)
+    } else {
+        env::current_dir()
+            .map_err(|err| format!("Failed to get current directory: {err}"))?
+            .join(directory)
+    };
+    fs::create_dir_all(&raw)
+        .map_err(|err| format!("Failed to create download directory: {err}"))?;
+    let canonical_dir = raw
+        .canonicalize()
+        .map_err(|err| format!("Failed to resolve download directory: {err}"))?;
+    let allowed = service_canonical_allowed_paths(download.get("allowedDirectories"))?;
+    if allowed.iter().any(|item| canonical_dir.starts_with(item)) {
+        Ok(canonical_dir)
+    } else {
+        Err("download directory is outside allowedDirectories".to_string())
+    }
+}
+
+fn service_safe_file_name(value: &str) -> Option<String> {
+    let path = Path::new(value);
+    let name = path.file_name()?.to_str()?.trim();
+    if name.is_empty() || name == "." || name == ".." || name.contains('/') || name.contains('\\') {
+        None
+    } else {
+        Some(name.to_string())
+    }
+}
+
+async fn run_service_download_fetch_capture(
+    download: &Map<String, Value>,
+    state: &DaemonState,
+    download_dir: &Path,
+    max_bytes: Option<u64>,
+) -> Result<Value, String> {
+    let selector = download
+        .get("selector")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "file_transfer download requires selector".to_string())?;
+    let max_fetch_bytes = max_bytes.unwrap_or(10 * 1024 * 1024).min(10 * 1024 * 1024);
+    let expected_file_name = download
+        .get("expectedFileName")
+        .or_else(|| download.get("expectedFilename"))
+        .and_then(Value::as_str);
+    let selector_json =
+        serde_json::to_string(selector).map_err(|err| format!("Invalid selector: {err}"))?;
+    let expected_json = serde_json::to_string(&expected_file_name)
+        .map_err(|err| format!("Invalid file name: {err}"))?;
+    let script = format!(
+        r#"(async () => {{
+const node = document.querySelector({selector_json});
+if (!node) throw new Error('download selector not found');
+const rawUrl = node.href || node.getAttribute('href');
+if (!rawUrl) throw new Error('download selector has no href');
+const url = new URL(rawUrl, window.location.href).toString();
+const response = await fetch(url, {{ credentials: 'include' }});
+const buffer = await response.arrayBuffer();
+if (buffer.byteLength > {max_fetch_bytes}) throw new Error(`download exceeds maxBytes ${{buffer.byteLength}}`);
+let binary = '';
+const bytes = new Uint8Array(buffer);
+const chunkSize = 0x8000;
+for (let i = 0; i < bytes.length; i += chunkSize) {{
+  binary += String.fromCharCode(...bytes.slice(i, i + chunkSize));
+}}
+const expected = {expected_json};
+const attrName = node.getAttribute('download');
+const pathName = new URL(response.url || url).pathname.split('/').filter(Boolean).pop();
+return {{
+  sourceUrl: response.url || url,
+  status: response.status,
+  ok: response.ok,
+  fileName: expected || attrName || pathName || 'download',
+  mimeType: response.headers.get('content-type'),
+  size: buffer.byteLength,
+  bodyBase64: btoa(binary),
+}};
+}})()"#
+    );
+    let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+    let result = tokio::time::timeout(
+        tokio::time::Duration::from_millis(
+            download
+                .get("fetchTimeoutMs")
+                .and_then(Value::as_u64)
+                .unwrap_or(10_000)
+                .clamp(1, 60_000),
+        ),
+        mgr.evaluate(&script, None),
+    )
+    .await
+    .map_err(|_| "file_transfer fetch download timed out".to_string())??;
+    let payload = service_extract_evaluate_value(&result)
+        .ok_or_else(|| format!("file_transfer fetch download returned no payload: {result}"))?;
+    let file_name = payload
+        .get("fileName")
+        .and_then(Value::as_str)
+        .and_then(service_safe_file_name)
+        .ok_or_else(|| "file_transfer download could not determine safe file name".to_string())?;
+    let body = payload
+        .get("bodyBase64")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "file_transfer fetch download returned no body".to_string())?;
+    let bytes = BASE64_STANDARD
+        .decode(body)
+        .map_err(|err| format!("file_transfer fetch download body was invalid base64: {err}"))?;
+    if let Some(max_bytes) = max_bytes {
+        if bytes.len() as u64 > max_bytes {
+            return Err(format!(
+                "Downloaded file size {} exceeds maxBytes {}",
+                bytes.len(),
+                max_bytes
+            ));
+        }
+    }
+    let dest = download_dir.join(&file_name);
+    fs::write(&dest, &bytes).map_err(|err| format!("Failed to write downloaded file: {err}"))?;
+    Ok(json!({
+        "ok": true,
+        "selector": selector,
+        "captureMode": "fetch",
+        "localPath": dest.to_string_lossy().to_string(),
+        "fileName": file_name,
+        "size": bytes.len(),
+        "mimeType": payload.get("mimeType").cloned().unwrap_or(Value::Null),
+        "sourceUrl": payload.get("sourceUrl").cloned().unwrap_or(Value::Null),
+        "status": payload.get("status").cloned().unwrap_or(Value::Null),
+        "timedOut": false,
+        "maxBytes": max_bytes,
+    }))
+}
+
+fn service_extract_evaluate_value(result: &Value) -> Option<&Value> {
+    result
+        .pointer("/result/value")
+        .or_else(|| result.pointer("/result/result/value"))
+        .or_else(|| result.get("value"))
+        .or(Some(result))
+}
+
+fn service_guess_mime_type(path: &Path) -> Value {
+    let mime = match path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("")
+    {
+        "txt" | "text" => "text/plain",
+        "json" => "application/json",
+        "csv" => "text/csv",
+        "pdf" => "application/pdf",
+        "html" | "htm" => "text/html",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        _ => return Value::Null,
+    };
+    json!(mime)
 }
 
 async fn handle_service_diagnostics(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
@@ -7781,33 +10258,165 @@ async fn handle_tab_new(cmd: &Value, state: &mut DaemonState) -> Result<Value, S
         }
         let profile_id = object.get("profileId").cloned().unwrap_or(Value::Null);
         object.insert(
-            "serviceTabHandle".to_string(),
-            json!({
-                "browserId": service_browser_id(&state.session_id),
-                "sessionName": state.session_id.clone(),
-                "tabId": tab_id,
-                "targetId": target_id,
-                "url": current_url,
-                "title": title,
-                "profileId": profile_id.clone(),
-                "profileOrigin": "agent_browser_owned",
-                "leaseId": state.session_id.clone(),
-                "leaseState": "shared",
-                "cleanupPolicy": "detach",
-                "leaseHeartbeatExpected": true,
-                "ownerSessionId": state.session_id.clone(),
-                "jobId": Value::Null,
-                "traceFilter": {
-                    "browserId": service_browser_id(&state.session_id),
-                    "profileId": profile_id.clone(),
-                    "sessionId": state.session_id.clone(),
-                },
-                "valid": true,
-                "staleReason": Value::Null,
-            }),
+            "sharedAcquisition".to_string(),
+            tab_new_shared_acquisition_evidence(cmd, &state.session_id, profile_id.clone()),
         );
+        let service_tab_handle = json!({
+            "browserId": service_browser_id(&state.session_id),
+            "sessionName": state.session_id.clone(),
+            "tabId": tab_id,
+            "targetId": target_id,
+            "url": current_url,
+            "title": title,
+            "profileId": profile_id.clone(),
+            "profileOrigin": "agent_browser_owned",
+            "leaseId": state.session_id.clone(),
+            "leaseState": "shared",
+            "cleanupPolicy": "detach",
+            "leaseHeartbeatExpected": true,
+            "ownerSessionId": state.session_id.clone(),
+            "jobId": Value::Null,
+            "traceFilter": {
+                "browserId": service_browser_id(&state.session_id),
+                "profileId": profile_id.clone(),
+                "sessionId": state.session_id.clone(),
+                "serviceName": optional_command_string(cmd, "serviceName"),
+                "agentName": optional_command_string(cmd, "agentName"),
+                "taskName": optional_command_string(cmd, "taskName"),
+            },
+            "valid": true,
+            "staleReason": Value::Null,
+        });
+        persist_service_owned_tab_new(
+            cmd,
+            &state.session_id,
+            object.get("targetId").and_then(Value::as_str),
+            object.get("url").and_then(Value::as_str),
+            object.get("title").and_then(Value::as_str),
+            &service_tab_handle,
+        )?;
+        object.insert("serviceTabHandle".to_string(), service_tab_handle);
     }
     Ok(result)
+}
+
+fn persist_service_owned_tab_new(
+    cmd: &Value,
+    session_id: &str,
+    target_id: Option<&str>,
+    url: Option<&str>,
+    title: Option<&str>,
+    service_tab_handle: &Value,
+) -> Result<(), String> {
+    let Some(target_id) = target_id else {
+        return Ok(());
+    };
+    let handle: ServiceTabHandle = serde_json::from_value(service_tab_handle.clone())
+        .map_err(|err| format!("Invalid service tab handle: {}", err))?;
+    let repository = LockedServiceStateRepository::default_json()?;
+    let browser_id = service_browser_id(session_id);
+    let tab_id = format!("target:{target_id}");
+    let observed_at = OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string());
+    let service_name = optional_command_string(cmd, "serviceName");
+    let agent_name = optional_command_string(cmd, "agentName");
+    let task_name = optional_command_string(cmd, "taskName");
+    repository.mutate(|state| {
+        state.tabs.insert(
+            tab_id.clone(),
+            BrowserTab {
+                id: tab_id.clone(),
+                browser_id: browser_id.clone(),
+                target_id: Some(target_id.to_string()),
+                session_id: Some(session_id.to_string()),
+                lifecycle: TabLifecycle::Ready,
+                url: url.map(str::to_string),
+                title: title.filter(|value| !value.is_empty()).map(str::to_string),
+                owner_session_id: Some(session_id.to_string()),
+                service_tab_handle: Some(handle.clone()),
+                ..BrowserTab::default()
+            },
+        );
+        if let Some(session) = state.sessions.get_mut(session_id) {
+            if !session.tab_ids.contains(&tab_id) {
+                session.tab_ids.push(tab_id.clone());
+            }
+        }
+        if let Some(browser) = state.browsers.get_mut(&browser_id) {
+            if !browser.active_session_ids.iter().any(|id| id == session_id) {
+                browser.active_session_ids.push(session_id.to_string());
+            }
+        }
+        state.events.push(ServiceEvent {
+            id: format!(
+                "service-tab-new-{}-{}",
+                tab_id.replace(':', "-"),
+                observed_at
+            ),
+            timestamp: observed_at.clone(),
+            kind: ServiceEventKind::TabLifecycleChanged,
+            message: format!("Service tab '{}' opened.", tab_id),
+            browser_id: Some(browser_id),
+            profile_id: handle.profile_id.clone(),
+            session_id: Some(session_id.to_string()),
+            service_name,
+            agent_name,
+            task_name,
+            details: Some(json!({
+                "action": "tab_new",
+                "targetId": target_id,
+                "tabId": tab_id,
+                "url": url,
+            })),
+            ..ServiceEvent::default()
+        });
+        if state.events.len() > 100 {
+            let excess = state.events.len() - 100;
+            state.events.drain(0..excess);
+        }
+        Ok(())
+    })
+}
+
+fn tab_new_shared_acquisition_evidence(cmd: &Value, session_id: &str, profile_id: Value) -> Value {
+    let requested_browser_id = optional_command_string(cmd, "browserId");
+    let requested_session_name = optional_command_string(cmd, "sessionName");
+    let routed_browser_id = service_browser_id(session_id);
+    let reused_browser = requested_browser_id
+        .as_deref()
+        .map(|browser_id| browser_id == routed_browser_id)
+        .unwrap_or(false)
+        || requested_session_name
+            .as_deref()
+            .map(|session_name| session_name == session_id)
+            .unwrap_or(false);
+    let route_hint_source = match (
+        requested_browser_id.as_ref(),
+        requested_session_name.as_ref(),
+    ) {
+        (Some(_), Some(_)) => "request.browserId_sessionName",
+        (Some(_), None) => "request.browserId",
+        (None, Some(_)) => "request.sessionName",
+        (None, None) => "none",
+    };
+
+    json!({
+        "policy": "shared_browser_tabs",
+        "mode": "tab_new",
+        "action": "opened_new_tab",
+        "browserReused": reused_browser,
+        "tabOpened": true,
+        "waitedForProfileLease": false,
+        "rejectedDuplicateProcess": false,
+        "duplicateProcessAllowed": false,
+        "browserId": routed_browser_id,
+        "sessionName": session_id,
+        "profileId": profile_id,
+        "requestedBrowserId": requested_browser_id,
+        "requestedSessionName": requested_session_name,
+        "routeHintSource": route_hint_source,
+    })
 }
 
 async fn handle_tab_switch(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
@@ -7852,6 +10461,675 @@ async fn handle_tab_close(cmd: &Value, state: &mut DaemonState) -> Result<Value,
     state.iframe_sessions.clear();
     state.active_frame_id = None;
     mgr.tab_close(index).await
+}
+
+async fn handle_tab_handle_refresh(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+    let handle = cmd
+        .get("serviceTabHandle")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "tab_handle_refresh requires serviceTabHandle".to_string())?;
+    let repair_policy =
+        optional_command_string(cmd, "repairPolicy").unwrap_or_else(|| "reject_only".to_string());
+    if !matches!(
+        repair_policy.as_str(),
+        "reject_only" | "reuse_compatible" | "open_if_missing"
+    ) {
+        return Err(
+            "tab_handle_refresh repairPolicy must be reject_only, reuse_compatible, or open_if_missing"
+                .to_string(),
+        );
+    }
+
+    let observed_at = OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string());
+    let browser_id = handle
+        .get("browserId")
+        .and_then(Value::as_str)
+        .map(ToString::to_string)
+        .unwrap_or_else(|| service_browser_id(&state.session_id));
+    let target_id = handle.get("targetId").and_then(Value::as_str);
+    let requested_url = optional_command_string(cmd, "url")
+        .or_else(|| optional_command_string(cmd, "desiredUrl"))
+        .or_else(|| {
+            handle
+                .get("url")
+                .and_then(Value::as_str)
+                .map(ToString::to_string)
+        });
+    let desired_origin = requested_url.as_deref().and_then(origin_for_url);
+    let mut candidates = retained_tab_handle_candidates(handle, requested_url.as_deref());
+    let old_handle_valid =
+        validate_service_tab_handle_for_current_session(handle, &state.session_id)
+            .map(|_| true)
+            .unwrap_or(false);
+
+    let mgr = state.browser.as_mut().ok_or_else(|| {
+        "Cannot refresh service tab handle: routed browser session is not running".to_string()
+    })?;
+    for page in mgr.pages_list() {
+        let classification = classify_live_page_candidate(
+            &page.target_id,
+            page.url.as_str(),
+            target_id,
+            desired_origin.as_deref(),
+        );
+        candidates.push(json!({
+            "source": "live_browser",
+            "classification": classification,
+            "targetId": page.target_id,
+            "url": page.url,
+            "title": page.title,
+        }));
+    }
+
+    if let Some(target_id) = target_id {
+        if old_handle_valid || repair_policy != "reject_only" {
+            if let Ok(mut switched) = mgr.tab_switch_target_id(target_id).await {
+                let url = mgr.get_url().await.unwrap_or_default();
+                let title = mgr.get_title().await.unwrap_or_default();
+                switched["refreshDecision"] = json!("exact_handle_still_valid");
+                let refreshed_handle = refreshed_service_tab_handle(
+                    handle,
+                    &state.session_id,
+                    target_id,
+                    url.as_str(),
+                    title.as_str(),
+                );
+                persist_tab_handle_refresh_event(
+                    cmd,
+                    &browser_id,
+                    refreshed_handle.get("profileId").and_then(Value::as_str),
+                    "exact_handle_still_valid",
+                    &observed_at,
+                    &candidates,
+                )?;
+                return Ok(json!({
+                    "ok": true,
+                    "action": "tab_handle_refresh",
+                    "refreshed": true,
+                    "decision": "exact_handle_still_valid",
+                    "repairPolicy": repair_policy,
+                    "observedAt": observed_at,
+                    "browserId": browser_id,
+                    "targetId": target_id,
+                    "url": url,
+                    "title": title,
+                    "tabSwitch": switched,
+                    "serviceTabHandle": refreshed_handle,
+                    "candidates": candidates,
+                }));
+            }
+        }
+    }
+
+    if repair_policy == "reject_only" {
+        persist_tab_handle_refresh_event(
+            cmd,
+            &browser_id,
+            handle.get("profileId").and_then(Value::as_str),
+            "rejected_stale_or_missing_target",
+            &observed_at,
+            &candidates,
+        )?;
+        return Ok(json!({
+            "ok": false,
+            "action": "tab_handle_refresh",
+            "refreshed": false,
+            "decision": "rejected_stale_or_missing_target",
+            "repairPolicy": repair_policy,
+            "observedAt": observed_at,
+            "browserId": browser_id,
+            "staleReason": handle.get("staleReason").cloned().unwrap_or(Value::Null),
+            "serviceTabHandle": cmd.get("serviceTabHandle").cloned().unwrap_or(Value::Null),
+            "candidates": candidates,
+        }));
+    }
+
+    if repair_policy == "reuse_compatible" || repair_policy == "open_if_missing" {
+        if let Some(page) = mgr.pages_list().into_iter().find(|page| {
+            classify_live_page_candidate(
+                &page.target_id,
+                page.url.as_str(),
+                target_id,
+                desired_origin.as_deref(),
+            )
+            .starts_with("compatible_")
+        }) {
+            let mut switched = mgr.tab_switch_target_id(&page.target_id).await?;
+            let url = mgr.get_url().await.unwrap_or_default();
+            let title = mgr.get_title().await.unwrap_or_default();
+            switched["refreshDecision"] = json!("reused_compatible_target");
+            let refreshed_handle = service_tab_handle_from_parts(
+                handle,
+                &state.session_id,
+                &page.target_id,
+                url.as_str(),
+                title.as_str(),
+            );
+            persist_tab_handle_refresh_event(
+                cmd,
+                &browser_id,
+                refreshed_handle.get("profileId").and_then(Value::as_str),
+                "reused_compatible_target",
+                &observed_at,
+                &candidates,
+            )?;
+            return Ok(json!({
+                "ok": true,
+                "action": "tab_handle_refresh",
+                "refreshed": true,
+                "decision": "reused_compatible_target",
+                "repairPolicy": repair_policy,
+                "observedAt": observed_at,
+                "browserId": browser_id,
+                "targetId": page.target_id,
+                "url": url,
+                "title": title,
+                "tabSwitch": switched,
+                "serviceTabHandle": refreshed_handle,
+                "candidates": candidates,
+            }));
+        }
+    }
+
+    if repair_policy == "open_if_missing" {
+        let open_url = requested_url.as_deref().unwrap_or("about:blank");
+        let mut opened = mgr.tab_new(Some(open_url)).await?;
+        let new_target_id = opened
+            .get("targetId")
+            .and_then(Value::as_str)
+            .ok_or_else(|| "tab_handle_refresh opened a tab without targetId".to_string())?
+            .to_string();
+        let url = mgr.get_url().await.unwrap_or_else(|_| open_url.to_string());
+        let title = mgr.get_title().await.unwrap_or_default();
+        opened["refreshDecision"] = json!("opened_replacement_target");
+        let refreshed_handle =
+            service_tab_handle_from_parts(handle, &state.session_id, &new_target_id, &url, &title);
+        persist_tab_handle_refresh_event(
+            cmd,
+            &browser_id,
+            refreshed_handle.get("profileId").and_then(Value::as_str),
+            "opened_replacement_target",
+            &observed_at,
+            &candidates,
+        )?;
+        return Ok(json!({
+            "ok": true,
+            "action": "tab_handle_refresh",
+            "refreshed": true,
+            "decision": "opened_replacement_target",
+            "repairPolicy": repair_policy,
+            "observedAt": observed_at,
+            "browserId": browser_id,
+            "targetId": new_target_id,
+            "url": url,
+            "title": title,
+            "tabNew": opened,
+            "serviceTabHandle": refreshed_handle,
+            "candidates": candidates,
+        }));
+    }
+
+    persist_tab_handle_refresh_event(
+        cmd,
+        &browser_id,
+        handle.get("profileId").and_then(Value::as_str),
+        "no_compatible_target",
+        &observed_at,
+        &candidates,
+    )?;
+    Ok(json!({
+        "ok": false,
+        "action": "tab_handle_refresh",
+        "refreshed": false,
+        "decision": "no_compatible_target",
+        "repairPolicy": repair_policy,
+        "observedAt": observed_at,
+        "browserId": browser_id,
+        "serviceTabHandle": cmd.get("serviceTabHandle").cloned().unwrap_or(Value::Null),
+        "candidates": candidates,
+    }))
+}
+
+async fn handle_tab_handle_release(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+    let handle = cmd
+        .get("serviceTabHandle")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "tab_handle_release requires serviceTabHandle".to_string())?;
+    validate_service_tab_handle_route_for_current_session(handle, &state.session_id)?;
+    let physical_tab_close =
+        release_physical_tab_for_handle(handle, state, cmd.get("closePhysicalTab")).await;
+    let released_at = OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string());
+    let repository = LockedServiceStateRepository::default_json()?;
+    repository.mutate(|service_state| {
+        release_service_tab_handle_record(
+            service_state,
+            handle,
+            &state.session_id,
+            &released_at,
+            &physical_tab_close,
+        )
+    })
+}
+
+async fn release_physical_tab_for_handle(
+    handle: &Map<String, Value>,
+    state: &mut DaemonState,
+    close_physical_tab: Option<&Value>,
+) -> Value {
+    let close_requested = close_physical_tab.and_then(Value::as_bool).unwrap_or(true);
+    if !close_requested {
+        return json!({
+            "attempted": false,
+            "closed": false,
+            "skippedReason": "request_disabled_physical_close",
+            "error": Value::Null,
+            "result": Value::Null,
+        });
+    }
+
+    if handle.get("cleanupPolicy").and_then(Value::as_str) == Some("release_only") {
+        return json!({
+            "attempted": false,
+            "closed": false,
+            "skippedReason": "cleanup_policy_release_only",
+            "error": Value::Null,
+            "result": Value::Null,
+        });
+    }
+
+    let Some(target_id) = handle.get("targetId").and_then(Value::as_str) else {
+        return json!({
+            "attempted": false,
+            "closed": false,
+            "skippedReason": "missing_target_id",
+            "error": Value::Null,
+            "result": Value::Null,
+        });
+    };
+
+    let Some(mgr) = state.browser.as_mut() else {
+        return json!({
+            "attempted": false,
+            "closed": false,
+            "skippedReason": "no_live_browser",
+            "error": Value::Null,
+            "result": Value::Null,
+        });
+    };
+
+    match mgr.tab_close_target_id(target_id).await {
+        Ok(result) => json!({
+            "attempted": true,
+            "closed": true,
+            "skippedReason": Value::Null,
+            "error": Value::Null,
+            "result": result,
+        }),
+        Err(error) => {
+            let skipped_reason = if error.contains("Cannot close the last tab") {
+                "last_tab_preserved"
+            } else if error.contains("was not found in the attached tab list") {
+                "target_not_attached"
+            } else {
+                "physical_close_failed"
+            };
+            json!({
+                "attempted": true,
+                "closed": false,
+                "skippedReason": skipped_reason,
+                "error": error,
+                "result": Value::Null,
+            })
+        }
+    }
+}
+
+fn release_service_tab_handle_record(
+    service_state: &mut ServiceState,
+    handle: &Map<String, Value>,
+    routed_session_id: &str,
+    released_at: &str,
+    physical_tab_close: &Value,
+) -> Result<Value, String> {
+    let tab_id = handle
+        .get("tabId")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "serviceTabHandle.tabId is required".to_string())?;
+    let browser_id = handle
+        .get("browserId")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "serviceTabHandle.browserId is required".to_string())?;
+    let session_name = handle
+        .get("sessionName")
+        .and_then(Value::as_str)
+        .or_else(|| handle.get("ownerSessionId").and_then(Value::as_str))
+        .unwrap_or(routed_session_id);
+    let target_id = handle.get("targetId").cloned().unwrap_or(Value::Null);
+    let cleanup_policy = handle.get("cleanupPolicy").cloned().unwrap_or(Value::Null);
+
+    let before_lifecycle = service_state
+        .tabs
+        .get(tab_id)
+        .map(|tab| serde_json::to_value(tab.lifecycle).unwrap_or_else(|_| json!("unknown")));
+    let mut tab_released = false;
+    let mut tab_missing = false;
+    match service_state.tabs.get_mut(tab_id) {
+        Some(tab) => {
+            if tab.browser_id != browser_id {
+                return Err(format!(
+                    "service tab handle browserId {browser_id} does not match retained tab {} browserId {}",
+                    tab.id, tab.browser_id
+                ));
+            }
+            tab.lifecycle = TabLifecycle::Closed;
+            tab.service_tab_handle = None;
+            tab_released = true;
+        }
+        None => {
+            tab_missing = true;
+        }
+    }
+
+    if let Some(session) = service_state.sessions.get_mut(session_name) {
+        session.last_lease_observed_at = Some(released_at.to_string());
+    }
+
+    service_state.events.push(ServiceEvent {
+        id: format!(
+            "tab-handle-release-{}-{}",
+            tab_id.replace(':', "-"),
+            released_at
+        ),
+        timestamp: released_at.to_string(),
+        kind: ServiceEventKind::TabLifecycleChanged,
+        message: format!("Service tab handle '{}' released.", tab_id),
+        browser_id: Some(browser_id.to_string()),
+        profile_id: handle
+            .get("profileId")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        session_id: Some(session_name.to_string()),
+        service_name: optional_command_string_from_handle_or_trace(handle, "serviceName"),
+        agent_name: optional_command_string_from_handle_or_trace(handle, "agentName"),
+        task_name: optional_command_string_from_handle_or_trace(handle, "taskName"),
+        details: Some(json!({
+            "action": "tab_handle_release",
+            "tabId": tab_id,
+            "targetId": target_id,
+            "cleanupPolicy": cleanup_policy,
+            "physicalTabClose": physical_tab_close,
+            "browserProcessPreserved": true,
+            "sessionRoutePreserved": true,
+            "tabMissing": tab_missing,
+        })),
+        ..ServiceEvent::default()
+    });
+    if service_state.events.len() > 100 {
+        let excess = service_state.events.len() - 100;
+        service_state.events.drain(0..excess);
+    }
+    service_state.refresh_service_tab_handles();
+    let released_handle = service_state
+        .tabs
+        .get(tab_id)
+        .and_then(|tab| tab.service_tab_handle.clone());
+
+    Ok(json!({
+        "ok": true,
+        "action": "tab_handle_release",
+        "released": true,
+        "tabReleased": tab_released,
+        "tabMissing": tab_missing,
+        "browserProcessPreserved": true,
+        "sessionRoutePreserved": true,
+        "closeBrowserOnRelease": false,
+        "physicalTabClose": physical_tab_close,
+        "physicalTabCloseAttempted": physical_tab_close
+            .get("attempted")
+            .cloned()
+            .unwrap_or(Value::Bool(false)),
+        "physicalTabClosed": physical_tab_close
+            .get("closed")
+            .cloned()
+            .unwrap_or(Value::Bool(false)),
+        "physicalTabCloseSkippedReason": physical_tab_close
+            .get("skippedReason")
+            .cloned()
+            .unwrap_or(Value::Null),
+        "browserId": browser_id,
+        "sessionName": session_name,
+        "tabId": tab_id,
+        "targetId": target_id,
+        "cleanupPolicy": cleanup_policy,
+        "beforeLifecycle": before_lifecycle.unwrap_or(Value::Null),
+        "afterLifecycle": if tab_released { json!("closed") } else { Value::Null },
+        "serviceTabHandle": released_handle,
+        "releasedAt": released_at,
+    }))
+}
+
+fn optional_command_string_from_handle_or_trace(
+    handle: &Map<String, Value>,
+    key: &str,
+) -> Option<String> {
+    handle
+        .get(key)
+        .and_then(Value::as_str)
+        .or_else(|| {
+            handle
+                .get("traceFilter")
+                .and_then(Value::as_object)
+                .and_then(|trace_filter| trace_filter.get(key))
+                .and_then(Value::as_str)
+        })
+        .map(str::to_string)
+}
+
+fn service_tab_handle_from_parts(
+    previous: &Map<String, Value>,
+    session_id: &str,
+    target_id: &str,
+    url: &str,
+    title: &str,
+) -> Value {
+    let tab_id = format!("target:{target_id}");
+    let profile_id = previous.get("profileId").cloned().unwrap_or(Value::Null);
+    json!({
+        "browserId": service_browser_id(session_id),
+        "sessionName": session_id,
+        "tabId": tab_id,
+        "targetId": target_id,
+        "url": url,
+        "title": title,
+        "profileId": profile_id.clone(),
+        "profileOrigin": previous.get("profileOrigin").cloned().unwrap_or_else(|| json!("agent_browser_owned")),
+        "leaseId": previous.get("leaseId").cloned().unwrap_or_else(|| json!(session_id)),
+        "leaseState": previous.get("leaseState").cloned().unwrap_or_else(|| json!("shared")),
+        "cleanupPolicy": previous.get("cleanupPolicy").cloned().unwrap_or_else(|| json!("detach")),
+        "leaseHeartbeatExpected": previous.get("leaseHeartbeatExpected").and_then(Value::as_bool).unwrap_or(true),
+        "ownerSessionId": previous.get("ownerSessionId").cloned().unwrap_or_else(|| json!(session_id)),
+        "jobId": previous.get("jobId").cloned().unwrap_or(Value::Null),
+        "traceFilter": {
+            "browserId": service_browser_id(session_id),
+            "profileId": profile_id,
+            "sessionId": session_id,
+        },
+        "valid": true,
+        "staleReason": Value::Null,
+    })
+}
+
+fn refreshed_service_tab_handle(
+    previous: &Map<String, Value>,
+    session_id: &str,
+    target_id: &str,
+    url: &str,
+    title: &str,
+) -> Value {
+    let mut refreshed = service_tab_handle_from_parts(previous, session_id, target_id, url, title);
+    if let Some(tab_id) = previous.get("tabId") {
+        refreshed["tabId"] = tab_id.clone();
+    }
+    refreshed
+}
+
+fn retained_tab_handle_candidates(
+    handle: &Map<String, Value>,
+    desired_url: Option<&str>,
+) -> Vec<Value> {
+    let mut service_state = LockedServiceStateRepository::default_json()
+        .and_then(|repository| repository.load_snapshot())
+        .unwrap_or_default();
+    service_state.refresh_service_tab_handles();
+    let handle_tab_id = handle.get("tabId").and_then(Value::as_str);
+    let handle_target_id = handle.get("targetId").and_then(Value::as_str);
+    let desired_origin = desired_url
+        .or_else(|| handle.get("url").and_then(Value::as_str))
+        .and_then(origin_for_url);
+    service_state
+        .tabs
+        .values()
+        .map(|tab| {
+            let browser = service_state.browsers.get(&tab.browser_id);
+            json!({
+                "source": "service_state",
+                "classification": classify_retained_tab_candidate(tab, browser, handle_tab_id, handle_target_id, desired_origin.as_deref()),
+                "tabId": tab.id,
+                "browserId": tab.browser_id,
+                "targetId": tab.target_id,
+                "url": tab.url,
+                "title": tab.title,
+                "lifecycle": tab.lifecycle,
+                "browserHealth": browser.map(|browser| browser.health),
+                "serviceTabHandle": tab.service_tab_handle,
+            })
+        })
+        .collect()
+}
+
+fn classify_retained_tab_candidate(
+    tab: &BrowserTab,
+    browser: Option<&BrowserProcess>,
+    handle_tab_id: Option<&str>,
+    handle_target_id: Option<&str>,
+    desired_origin: Option<&str>,
+) -> &'static str {
+    if Some(tab.id.as_str()) == handle_tab_id {
+        if tab.lifecycle == TabLifecycle::Closed {
+            return "closed_tab";
+        }
+        if browser.is_none_or(|browser| browser.health != ServiceBrowserHealth::Ready) {
+            return "dead_browser";
+        }
+        return "exact_handle";
+    }
+    if tab.target_id.as_deref().is_some() && tab.target_id.as_deref() == handle_target_id {
+        return "matching_target";
+    }
+    if tab.lifecycle == TabLifecycle::Closed {
+        return "closed_tab";
+    }
+    if browser.is_none_or(|browser| browser.health != ServiceBrowserHealth::Ready) {
+        return "dead_browser";
+    }
+    if let Some(url) = tab.url.as_deref() {
+        if is_blank_url(url) {
+            return "compatible_blank_tab";
+        }
+        if desired_origin.is_some() && origin_for_url(url).as_deref() == desired_origin {
+            return "compatible_same_origin_tab";
+        }
+    }
+    "incompatible_tab"
+}
+
+fn classify_live_page_candidate(
+    page_target_id: &str,
+    page_url: &str,
+    handle_target_id: Option<&str>,
+    desired_origin: Option<&str>,
+) -> &'static str {
+    if Some(page_target_id) == handle_target_id {
+        return "matching_target";
+    }
+    if is_blank_url(page_url) {
+        return "compatible_blank_tab";
+    }
+    if desired_origin.is_some() && origin_for_url(page_url).as_deref() == desired_origin {
+        return "compatible_same_origin_tab";
+    }
+    "incompatible_tab"
+}
+
+fn is_blank_url(url: &str) -> bool {
+    let trimmed = url.trim();
+    trimmed.is_empty() || trimmed == "about:blank"
+}
+
+fn origin_for_url(url: &str) -> Option<String> {
+    let trimmed = url.trim();
+    if let Some(rest) = trimmed.strip_prefix("https://") {
+        return rest
+            .split('/')
+            .next()
+            .filter(|host| !host.is_empty())
+            .map(|host| format!("https://{}", host.to_ascii_lowercase()));
+    }
+    if let Some(rest) = trimmed.strip_prefix("http://") {
+        return rest
+            .split('/')
+            .next()
+            .filter(|host| !host.is_empty())
+            .map(|host| format!("http://{}", host.to_ascii_lowercase()));
+    }
+    None
+}
+
+fn persist_tab_handle_refresh_event(
+    cmd: &Value,
+    browser_id: &str,
+    profile_id: Option<&str>,
+    decision: &str,
+    observed_at: &str,
+    candidates: &[Value],
+) -> Result<(), String> {
+    let repository = LockedServiceStateRepository::default_json()?;
+    let event_id = format!("tab-handle-refresh-{}-{}", browser_id, observed_at);
+    let service_name = optional_command_string(cmd, "serviceName");
+    let agent_name = optional_command_string(cmd, "agentName");
+    let task_name = optional_command_string(cmd, "taskName");
+    repository.mutate(|state| {
+        state.events.push(ServiceEvent {
+            id: event_id.clone(),
+            timestamp: observed_at.to_string(),
+            kind: ServiceEventKind::TabLifecycleChanged,
+            message: format!("Service tab handle refresh {decision}."),
+            browser_id: Some(browser_id.to_string()),
+            profile_id: profile_id.map(ToString::to_string),
+            session_id: optional_command_string(cmd, "sessionName"),
+            service_name,
+            agent_name,
+            task_name,
+            details: Some(json!({
+                "action": "tab_handle_refresh",
+                "decision": decision,
+                "repairPolicy": cmd.get("repairPolicy").cloned().unwrap_or_else(|| json!("reject_only")),
+                "targetId": cmd.get("targetId").cloned().unwrap_or(Value::Null),
+                "candidateCount": candidates.len(),
+                "candidates": candidates,
+            })),
+            ..ServiceEvent::default()
+        });
+        if state.events.len() > 100 {
+            let excess = state.events.len() - 100;
+            state.events.drain(0..excess);
+        }
+        Ok(())
+    })
 }
 
 async fn handle_view_focus(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
@@ -8026,155 +11304,6 @@ fn persist_view_takeover_requested_event(
     Ok(event_id)
 }
 
-fn route_pool_target_string(entry: &RoutePoolEntry, key: &str) -> Option<String> {
-    entry
-        .target
-        .get(key)
-        .and_then(Value::as_str)
-        .map(|value| value.trim())
-        .filter(|value| !value.is_empty())
-        .map(|value| value.to_string())
-}
-
-fn route_pool_entry_matches_display(
-    entry: &RoutePoolEntry,
-    display_allocation_id: &str,
-    allocation: Option<&DisplayAllocation>,
-) -> bool {
-    if let Some(target_allocation_id) = route_pool_target_string(entry, "displayAllocationId") {
-        return target_allocation_id == display_allocation_id;
-    }
-    if let Some(target_browser_id) = route_pool_target_string(entry, "browserId") {
-        return allocation.and_then(|allocation| allocation.owner_browser_id.as_deref())
-            == Some(target_browser_id.as_str());
-    }
-    if let Some(target_session_id) = route_pool_target_string(entry, "sessionId") {
-        return allocation.and_then(|allocation| allocation.owner_session_id.as_deref())
-            == Some(target_session_id.as_str());
-    }
-    if let Some(target_display_name) = route_pool_target_string(entry, "displayName") {
-        return allocation.and_then(|allocation| allocation.display_name.as_deref())
-            == Some(target_display_name.as_str());
-    }
-    true
-}
-
-fn ensure_route_pool_entry_matches_display(
-    entry: &RoutePoolEntry,
-    display_allocation_id: &str,
-    allocation: Option<&DisplayAllocation>,
-) -> Result<(), String> {
-    if route_pool_entry_matches_display(entry, display_allocation_id, allocation) {
-        return Ok(());
-    }
-    Err(format!(
-        "route_pool_target_mismatch: route pool entry '{}' does not target display allocation '{}'",
-        entry.id, display_allocation_id
-    ))
-}
-
-fn route_pool_readiness_state(readiness: &Value) -> Option<String> {
-    match readiness {
-        Value::String(value) => {
-            let trimmed = value.trim();
-            if trimmed.is_empty() {
-                None
-            } else {
-                Some(trimmed.to_string())
-            }
-        }
-        Value::Array(items) => items
-            .iter()
-            .filter_map(route_pool_readiness_state)
-            .find(|state| state != "ready"),
-        Value::Object(record) => {
-            for key in ["state", "status", "readiness", "lastProviderEvent"] {
-                if let Some(value) = record.get(key).and_then(Value::as_str) {
-                    let trimmed = value.trim();
-                    if !trimmed.is_empty() {
-                        return Some(trimmed.to_string());
-                    }
-                }
-            }
-            for key in ["components", "checks", "results"] {
-                if let Some(Value::Array(items)) = record.get(key) {
-                    if let Some(state) = items
-                        .iter()
-                        .filter_map(route_pool_readiness_state)
-                        .find(|state| state != "ready")
-                    {
-                        return Some(state);
-                    }
-                }
-            }
-            None
-        }
-        _ => None,
-    }
-}
-
-fn ensure_route_pool_entry_ready_for_checkout(entry: &RoutePoolEntry) -> Result<(), String> {
-    let Some(readiness) = entry.readiness.as_ref() else {
-        return Ok(());
-    };
-    let Some(state) = route_pool_readiness_state(readiness) else {
-        return Ok(());
-    };
-    if state == "ready" {
-        return Ok(());
-    }
-    Err(format!(
-        "route_pool_not_ready: route pool entry '{}' readiness is '{}'",
-        entry.id, state
-    ))
-}
-
-fn resolve_route_pool_entry_id(
-    state: &ServiceState,
-    requested_pool_entry_id: Option<&str>,
-    requested_route_id: Option<&str>,
-    display_allocation_id: &str,
-    allocation: Option<&DisplayAllocation>,
-    provider: ViewStreamProvider,
-) -> Result<Option<String>, String> {
-    if let Some(id) = requested_pool_entry_id {
-        return Ok(Some(id.to_string()));
-    }
-    if state.route_pool.is_empty() {
-        return Ok(None);
-    }
-
-    let matching_entries = state
-        .route_pool
-        .values()
-        .filter(|entry| entry.provider == provider)
-        .filter(|entry| {
-            requested_route_id
-                .map(|route_id| entry.route_id == route_id)
-                .unwrap_or(true)
-        })
-        .filter(|entry| route_pool_entry_matches_display(entry, display_allocation_id, allocation))
-        .collect::<Vec<_>>();
-
-    if let Some(entry) = matching_entries
-        .iter()
-        .find(|entry| entry.state == "available")
-    {
-        return Ok(Some(entry.id.clone()));
-    }
-
-    if requested_route_id.is_some()
-        || allocation
-            .is_some_and(|allocation| allocation.display_isolation == "private_virtual_display")
-    {
-        return Err(format!(
-            "route_pool_unavailable: no available route pool entry for display allocation '{}'",
-            display_allocation_id
-        ));
-    }
-    Ok(None)
-}
-
 fn ensure_remote_view_route_available_for_display(
     state: &ServiceState,
     route_id: &str,
@@ -8244,6 +11373,833 @@ fn push_remote_view_service_event(
     event_id
 }
 
+fn service_remote_view_route_binding_from_state(
+    cmd: &Value,
+    state: &ServiceState,
+    browser_id: &str,
+) -> Result<super::remote_view::RemoteViewRouteBinding, String> {
+    let inline_route_pool_entry = inline_route_pool_entry_from_command(cmd)?;
+    let provider = optional_command_string(cmd, "provider")
+        .and_then(|value| parse_view_stream_provider(&value))
+        .unwrap_or(ViewStreamProvider::RdpGateway);
+    let route_pool_entry_id = optional_command_or_params_string(cmd, "routePoolEntryId")
+        .or_else(|| optional_command_or_params_string(cmd, "poolEntryId"));
+    let requested_route_id = optional_command_or_params_string(cmd, "remoteViewRouteId")
+        .or_else(|| optional_command_or_params_string(cmd, "routeId"))
+        .or_else(|| optional_command_or_params_string(cmd, "viewStreamRouteId"));
+    let requested_route_id = inline_route_pool_entry
+        .as_ref()
+        .filter(|entry| route_pool_entry_id.as_deref() == Some(entry.id.as_str()))
+        .map(|entry| entry.route_id.clone())
+        .or(requested_route_id);
+    let inline_display_allocation_id = inline_route_pool_entry
+        .as_ref()
+        .filter(|entry| {
+            route_pool_entry_request_matches(
+                entry,
+                route_pool_entry_id.as_deref(),
+                requested_route_id.as_deref(),
+                provider,
+            )
+        })
+        .map(display_allocation_id_for_route_pool_entry);
+    let display_allocation_id = inline_display_allocation_id
+        .clone()
+        .or_else(|| optional_command_or_params_string(cmd, "displayAllocationId"))
+        .or_else(|| optional_command_or_params_string(cmd, "requestedDisplayAllocationId"))
+        .or_else(|| {
+            inline_route_pool_entry
+                .as_ref()
+                .filter(|entry| {
+                    route_pool_entry_request_matches(
+                        entry,
+                        route_pool_entry_id.as_deref(),
+                        requested_route_id.as_deref(),
+                        provider,
+                    )
+                })
+                .map(display_allocation_id_for_route_pool_entry)
+        })
+        .or_else(|| {
+            state
+                .browsers
+                .get(browser_id)
+                .and_then(|browser| browser.display_allocation_id.clone())
+        })
+        .or_else(|| {
+            checked_out_route_display_allocation_id(
+                state,
+                route_pool_entry_id.as_deref(),
+                requested_route_id.as_deref(),
+            )
+        })
+        .or_else(|| {
+            route_pool_entry_id
+                .as_deref()
+                .and_then(|id| state.route_pool.get(id))
+                .filter(|entry| {
+                    route_pool_entry_request_matches(
+                        entry,
+                        route_pool_entry_id.as_deref(),
+                        None,
+                        provider,
+                    )
+                })
+                .map(display_allocation_id_for_route_pool_entry)
+        })
+        .or_else(|| {
+            select_route_pool_entry_for_unbound_display(
+                state,
+                route_pool_entry_id.as_deref(),
+                requested_route_id.as_deref(),
+                provider,
+            )
+            .map(display_allocation_id_for_route_pool_entry)
+        })
+        .or_else(|| {
+            inline_route_pool_entry
+                .as_ref()
+                .filter(|entry| {
+                    route_pool_entry_request_matches(
+                        entry,
+                        route_pool_entry_id.as_deref(),
+                        requested_route_id.as_deref(),
+                        provider,
+                    )
+                })
+                .map(display_allocation_id_for_route_pool_entry)
+        })
+        .ok_or_else(|| {
+            "service_remote_view_route_preflight requires displayAllocationId, a browser with displayAllocationId, or an available route pool entry".to_string()
+        })?;
+    let existing_display_allocation = state.display_allocations.get(&display_allocation_id);
+    let selected_route_pool_entry_id = resolve_route_pool_entry_id(
+        state,
+        route_pool_entry_id.as_deref(),
+        requested_route_id.as_deref(),
+        &display_allocation_id,
+        existing_display_allocation,
+        provider,
+    )?;
+    let pool_entry = if let Some(id) = selected_route_pool_entry_id.as_ref() {
+        inline_route_pool_entry
+            .as_ref()
+            .filter(|entry| entry.id == *id)
+            .or_else(|| state.route_pool.get(id))
+    } else {
+        inline_route_pool_entry.as_ref().filter(|entry| {
+            route_pool_entry_request_matches(
+                entry,
+                route_pool_entry_id.as_deref(),
+                requested_route_id.as_deref(),
+                provider,
+            )
+        })
+    };
+    if let Some(id) = selected_route_pool_entry_id.as_ref() {
+        if pool_entry.is_none() {
+            return Err(format!("route pool entry '{}' not found", id));
+        }
+    }
+    let command_display_allocation =
+        command_display_allocation(cmd, &display_allocation_id, existing_display_allocation);
+    let display_allocation = existing_display_allocation.or(command_display_allocation.as_ref());
+    if let Some(entry) = pool_entry {
+        let reusable_route_id = requested_route_id
+            .as_deref()
+            .or_else(|| (!entry.route_id.trim().is_empty()).then_some(entry.route_id.as_str()));
+        let entry_available = entry.state == "available"
+            || entry.readiness.as_ref().is_some_and(|readiness| {
+                readiness
+                    .get("state")
+                    .and_then(Value::as_str)
+                    .is_some_and(|state| state.trim() == "ready")
+                    || readiness_state(readiness).as_deref() == Some("ready")
+            });
+        if !entry_available && entry.current_route_allocation_id.as_deref() != reusable_route_id {
+            return Err(format!(
+                "route pool entry '{}' is not available for checkout",
+                entry.id
+            ));
+        }
+    }
+    build_route_binding(
+        pool_entry,
+        &display_allocation_id,
+        display_allocation,
+        requested_route_id.as_deref(),
+        provider,
+    )
+}
+
+fn checked_out_route_display_allocation_id(
+    state: &ServiceState,
+    requested_pool_entry_id: Option<&str>,
+    requested_route_id: Option<&str>,
+) -> Option<String> {
+    let entry = requested_pool_entry_id
+        .and_then(|id| state.route_pool.get(id))
+        .or_else(|| {
+            requested_route_id.and_then(|route_id| {
+                state
+                    .route_pool
+                    .values()
+                    .find(|entry| entry.route_id == route_id)
+            })
+        })?;
+    if entry.state != "checked_out" {
+        return None;
+    }
+    let route_id = entry
+        .current_route_allocation_id
+        .as_deref()
+        .or_else(|| (!entry.route_id.trim().is_empty()).then_some(entry.route_id.as_str()))?;
+    state
+        .remote_view_routes
+        .get(route_id)
+        .and_then(|route| route.display_allocation_id.clone())
+}
+
+fn inline_route_pool_entry_from_command(cmd: &Value) -> Result<Option<RoutePoolEntry>, String> {
+    if let Some(entry) = command_or_params_value(cmd, "routePoolEntry") {
+        return serde_json::from_value::<RoutePoolEntry>(entry.clone())
+            .map(normalize_inline_route_pool_entry)
+            .map(Some)
+            .map_err(|err| format!("invalid routePoolEntry: {}", err));
+    }
+    if let Some(entries) = command_or_params_value(cmd, "routePool").and_then(Value::as_array) {
+        let route_pool_entry_id = optional_command_or_params_string(cmd, "routePoolEntryId")
+            .or_else(|| optional_command_or_params_string(cmd, "poolEntryId"));
+        let requested_route_id = optional_command_or_params_string(cmd, "remoteViewRouteId")
+            .or_else(|| optional_command_or_params_string(cmd, "routeId"))
+            .or_else(|| optional_command_or_params_string(cmd, "viewStreamRouteId"));
+        for entry in entries {
+            let parsed = serde_json::from_value::<RoutePoolEntry>(entry.clone())
+                .map(normalize_inline_route_pool_entry)
+                .map_err(|err| format!("invalid routePool entry: {}", err))?;
+            if route_pool_entry_id.as_deref() == Some(parsed.id.as_str())
+                || requested_route_id.as_deref() == Some(parsed.route_id.as_str())
+                || (route_pool_entry_id.is_none() && requested_route_id.is_none())
+            {
+                return Ok(Some(parsed));
+            }
+        }
+    }
+    Ok(None)
+}
+
+fn normalize_inline_route_pool_entry(mut entry: RoutePoolEntry) -> RoutePoolEntry {
+    if matches!(entry.state.trim(), "" | "unknown")
+        && entry.readiness.as_ref().is_some_and(|readiness| {
+            readiness
+                .get("state")
+                .and_then(Value::as_str)
+                .is_some_and(|state| state.trim() == "ready")
+                || readiness_state(readiness).as_deref() == Some("ready")
+        })
+    {
+        entry.state = "available".to_string();
+    }
+    entry
+}
+
+fn route_pool_entry_request_matches(
+    entry: &RoutePoolEntry,
+    requested_pool_entry_id: Option<&str>,
+    requested_route_id: Option<&str>,
+    provider: ViewStreamProvider,
+) -> bool {
+    entry.provider == provider
+        && requested_pool_entry_id
+            .map(|id| entry.id == id)
+            .unwrap_or(true)
+        && requested_route_id
+            .map(|route_id| entry.route_id == route_id)
+            .unwrap_or(true)
+}
+
+fn command_display_allocation(
+    cmd: &Value,
+    display_allocation_id: &str,
+    existing: Option<&DisplayAllocation>,
+) -> Option<DisplayAllocation> {
+    if existing.is_some() {
+        return None;
+    }
+    let display_name = optional_command_or_params_string(cmd, "remoteHeadedDisplay")
+        .or_else(|| optional_command_or_params_string(cmd, "display"))
+        .or_else(|| optional_command_or_params_string(cmd, "displayName"));
+    let display_name = display_name?;
+    Some(DisplayAllocation {
+        id: display_allocation_id.to_string(),
+        display_name: Some(display_name),
+        display_isolation: remote_headed_display_isolation_from_command(cmd)
+            .unwrap_or_else(|| "shared_display".to_string()),
+        state: "ready".to_string(),
+        ..DisplayAllocation::default()
+    })
+}
+
+fn select_route_pool_entry_for_unbound_display<'a>(
+    state: &'a ServiceState,
+    requested_pool_entry_id: Option<&str>,
+    requested_route_id: Option<&str>,
+    provider: ViewStreamProvider,
+) -> Option<&'a RoutePoolEntry> {
+    if let Some(id) = requested_pool_entry_id {
+        return state.route_pool.get(id);
+    }
+    state
+        .route_pool
+        .values()
+        .filter(|entry| entry.provider == provider)
+        .filter(|entry| {
+            requested_route_id
+                .map(|route_id| entry.route_id == route_id)
+                .unwrap_or(true)
+        })
+        .find(|entry| entry.state == "available")
+}
+
+async fn handle_remote_view_open(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+    let browser_id = optional_command_string(cmd, "browserId")
+        .unwrap_or_else(|| service_browser_id(&state.session_id));
+    let session_id =
+        optional_command_string(cmd, "sessionName").unwrap_or_else(|| state.session_id.clone());
+    let repository = LockedServiceStateRepository::default_json()?;
+    let mut service_state = repository.load_snapshot()?;
+    if let Some(entry) = inline_route_pool_entry_from_command(cmd)? {
+        service_state.route_pool.insert(entry.id.clone(), entry);
+    }
+    let route_binding =
+        service_remote_view_route_binding_from_state(cmd, &service_state, &browser_id)?;
+    let launch_command = remote_view_open_launch_command(cmd, &route_binding);
+    let tab_command = remote_view_open_tab_command(cmd, &browser_id, &session_id);
+    let mut checkout_command =
+        remote_view_open_checkout_command(cmd, &route_binding, &browser_id, &session_id);
+    let dry_run = remote_view_open_dry_run(cmd);
+
+    if dry_run {
+        return Ok(json!({
+            "status": "planned",
+            "dryRun": true,
+            "browserId": browser_id,
+            "sessionName": session_id,
+            "routeId": route_binding.route_id,
+            "displayAllocationId": route_binding.display_allocation_id,
+            "routePoolEntryId": route_binding.route_pool_entry_id,
+            "frameUrl": route_binding.frame_url,
+            "externalUrl": route_binding.external_url,
+            "routeDescriptor": route_binding.route_descriptor,
+            "routeBinding": route_binding.clone(),
+            "launchCommand": launch_command,
+            "tabCommand": tab_command,
+            "checkoutCommand": checkout_command,
+            "verification": {
+                "routeBindingPlanned": true,
+                "launchDisplayName": route_binding.launch_display_name,
+                "displayIsolation": route_binding.display_isolation,
+                "displayAccessGrant": "not_checked",
+                "browserLaunchRequested": false,
+                "tabOpenRequested": false,
+                "routeCheckoutRequested": false,
+                "visibleWindowProof": "not_checked"
+            }
+        }));
+    }
+
+    let display_access_grant = remote_view_open_ensure_display_access(&route_binding)?;
+    let launch = handle_launch(&launch_command, state).await?;
+    let tab = match handle_tab_new(&tab_command, state).await {
+        Ok(tab) => tab,
+        Err(error) => {
+            let cleanup = remote_view_open_cleanup_after_failure(state, &launch, None).await;
+            return Err(format!(
+                "{}; cleanup={}",
+                error,
+                remote_view_open_cleanup_summary(&cleanup)
+            ));
+        }
+    };
+    let focus_command = remote_view_open_focus_command(cmd, &tab, &session_id);
+    let focus = match handle_view_focus(&focus_command, state).await {
+        Ok(focus) => focus,
+        Err(error) => {
+            let cleanup = remote_view_open_cleanup_after_failure(state, &launch, Some(&tab)).await;
+            return Err(format!(
+                "{}; cleanup={}",
+                error,
+                remote_view_open_cleanup_summary(&cleanup)
+            ));
+        }
+    };
+    let visible_window_proof = match remote_view_open_visible_window_proof(&route_binding) {
+        Ok(proof) => proof,
+        Err(error) => {
+            let cleanup = remote_view_open_cleanup_after_failure(state, &launch, Some(&tab)).await;
+            return Err(format!(
+                "{}; cleanup={}",
+                error,
+                remote_view_open_cleanup_summary(&cleanup)
+            ));
+        }
+    };
+    if let Some(checkout) = checkout_command.as_object_mut() {
+        checkout.insert(
+            "readiness".to_string(),
+            json!({
+                "state": "ready",
+                "component": "remote_view_open_visible_window",
+                "displayContent": visible_window_proof.get("displayContent").cloned().unwrap_or(Value::Null),
+            }),
+        );
+        if let Some(display_content) = visible_window_proof.get("displayContent").cloned() {
+            checkout.insert("displayContent".to_string(), display_content);
+        }
+    }
+    let checkout = match handle_service_remote_view_route_checkout(&checkout_command, state).await {
+        Ok(checkout) => checkout,
+        Err(error) => {
+            let cleanup = remote_view_open_cleanup_after_failure(state, &launch, Some(&tab)).await;
+            return Err(format!(
+                "{}; cleanup={}",
+                error,
+                remote_view_open_cleanup_summary(&cleanup)
+            ));
+        }
+    };
+
+    Ok(json!({
+        "status": "opened",
+        "dryRun": false,
+        "browserId": browser_id,
+        "sessionName": session_id,
+        "routeId": route_binding.route_id,
+        "displayAllocationId": route_binding.display_allocation_id,
+        "routePoolEntryId": route_binding.route_pool_entry_id,
+        "frameUrl": route_binding.frame_url,
+        "externalUrl": route_binding.external_url,
+        "routeDescriptor": route_binding.route_descriptor,
+        "routeBinding": route_binding.clone(),
+        "launch": launch,
+        "tab": tab,
+        "focus": focus,
+        "checkout": checkout,
+            "verification": {
+                "routeBindingPlanned": true,
+                "launchDisplayName": route_binding.launch_display_name,
+                "displayIsolation": route_binding.display_isolation,
+                "displayAccessGrant": display_access_grant,
+                "browserLaunchRequested": true,
+                "tabOpenRequested": true,
+            "routeCheckoutRequested": true,
+            "visibleWindowProof": visible_window_proof
+        }
+    }))
+}
+
+async fn remote_view_open_cleanup_after_failure(
+    state: &mut DaemonState,
+    launch: &Value,
+    tab: Option<&Value>,
+) -> Value {
+    if launch
+        .get("reused")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        let Some(index) = tab.and_then(|tab| tab.get("index")).and_then(Value::as_u64) else {
+            return json!({
+                "state": "skipped_existing_browser_reused",
+                "reason": "opened tab index unavailable"
+            });
+        };
+        let close_result = handle_tab_close(&json!({ "index": index }), state).await;
+        return match close_result {
+            Ok(result) => json!({
+                "state": "closed_opened_tab",
+                "index": index,
+                "result": result,
+            }),
+            Err(error) => json!({
+                "state": "failed_opened_tab_close",
+                "index": index,
+                "error": error,
+            }),
+        };
+    }
+
+    match handle_close(state).await {
+        Ok(result) => json!({
+            "state": "closed_new_browser",
+            "result": result,
+        }),
+        Err(error) => json!({
+            "state": "failed_new_browser_close",
+            "error": error,
+        }),
+    }
+}
+
+fn remote_view_open_cleanup_summary(cleanup: &Value) -> String {
+    cleanup
+        .get("state")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown")
+        .to_string()
+}
+
+fn remote_view_open_ensure_display_access(
+    route_binding: &super::remote_view::RemoteViewRouteBinding,
+) -> Result<Value, String> {
+    let Some(display_name) = route_binding
+        .launch_display_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Err(format!(
+            "route_display_missing: route '{}' has no launch display",
+            route_binding.route_id
+        ));
+    };
+    let initial_probe = remote_view_open_display_access_probe(display_name);
+    if initial_probe
+        .get("success")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        return Ok(json!({
+            "state": "already_ready",
+            "displayName": display_name,
+            "probe": initial_probe,
+        }));
+    }
+
+    let route_user = route_binding
+        .route_user
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            format!(
+                "x11_auth_denied: route '{}' display '{}' is not accessible and no route user was reported",
+                route_binding.route_id, display_name
+            )
+        })?;
+    let operator_user = env::var("AGENT_BROWSER_RDP_DISPLAY_ACCESS_USER")
+        .or_else(|_| env::var("USER"))
+        .map(|value| value.trim().to_string())
+        .ok()
+        .filter(|value| !value.is_empty() && value != "root")
+        .ok_or_else(|| {
+            format!(
+                "display_access_grant_failed: route '{}' display '{}' cannot infer non-root operator user",
+                route_binding.route_id, display_name
+            )
+        })?;
+    let helper_path = env::var("AGENT_BROWSER_PRIVILEGED_HELPER").unwrap_or_else(|_| {
+        "/usr/local/libexec/agent-browser/agent-browser-privileged-helper".to_string()
+    });
+    let output = Command::new("sudo")
+        .args([
+            "-n",
+            &helper_path,
+            "grant-display-access",
+            "--operator-user",
+            &operator_user,
+            "--route-user",
+            route_user,
+            "--display",
+            display_name,
+        ])
+        .output()
+        .map_err(|err| {
+            format!(
+                "display_access_grant_failed: route '{}' display '{}' helper could not start: {}",
+                route_binding.route_id, display_name, err
+            )
+        })?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(if output.stderr.is_empty() {
+            &output.stdout
+        } else {
+            &output.stderr
+        })
+        .trim()
+        .chars()
+        .take(240)
+        .collect::<String>();
+        return Err(format!(
+            "display_access_grant_failed: route '{}' display '{}' helper exited with {}{}",
+            route_binding.route_id,
+            display_name,
+            output.status.code().unwrap_or(-1),
+            if stderr.is_empty() {
+                String::new()
+            } else {
+                format!(": {stderr}")
+            }
+        ));
+    }
+
+    let final_probe = remote_view_open_display_access_probe(display_name);
+    if final_probe
+        .get("success")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        return Ok(json!({
+            "state": "granted",
+            "displayName": display_name,
+            "operatorUser": operator_user,
+            "routeUser": route_user,
+            "helperPath": helper_path,
+            "probe": final_probe,
+        }));
+    }
+
+    Err(format!(
+        "x11_auth_denied: route '{}' display '{}' remained inaccessible after display access grant",
+        route_binding.route_id, display_name
+    ))
+}
+
+fn remote_view_open_display_access_probe(display_name: &str) -> Value {
+    match Command::new("xdpyinfo")
+        .env("DISPLAY", display_name)
+        .output()
+    {
+        Ok(output) => json!({
+            "available": true,
+            "success": output.status.success(),
+            "exitCode": output.status.code(),
+            "stdout": String::from_utf8_lossy(&output.stdout).lines().find(|line| line.trim_start().starts_with("name of display:")).unwrap_or("").trim(),
+            "stderr": String::from_utf8_lossy(&output.stderr).trim().chars().take(240).collect::<String>(),
+        }),
+        Err(error) => json!({
+            "available": false,
+            "success": false,
+            "exitCode": null,
+            "stdout": "",
+            "stderr": error.to_string(),
+        }),
+    }
+}
+
+fn remote_view_open_dry_run(cmd: &Value) -> bool {
+    cmd.get("dryRun")
+        .and_then(Value::as_bool)
+        .or_else(|| {
+            cmd.get("params")
+                .and_then(|params| params.get("dryRun"))
+                .and_then(Value::as_bool)
+        })
+        .unwrap_or(false)
+}
+
+fn remote_view_open_launch_command(
+    cmd: &Value,
+    route_binding: &super::remote_view::RemoteViewRouteBinding,
+) -> Value {
+    let mut command = command_object_with_action(cmd, "launch");
+    command.remove("provider");
+    command.insert("headless".to_string(), Value::Bool(false));
+    command.insert(
+        "browserHost".to_string(),
+        Value::String("remote_headed".to_string()),
+    );
+    command.insert(
+        "displayIsolation".to_string(),
+        Value::String(route_binding.display_isolation.clone()),
+    );
+    command.insert(
+        "viewStreamProvider".to_string(),
+        json!(route_binding.provider),
+    );
+    command.insert(
+        "controlInput".to_string(),
+        Value::String("manual_attached_desktop".to_string()),
+    );
+    command.insert(
+        "displayAllocationId".to_string(),
+        Value::String(route_binding.display_allocation_id.clone()),
+    );
+    command.insert(
+        "routeId".to_string(),
+        Value::String(route_binding.route_id.clone()),
+    );
+    command.insert(
+        "providerMode".to_string(),
+        Value::String(route_binding.provider_mode.clone()),
+    );
+    if let Some(value) = route_binding.launch_display_name.clone() {
+        command.insert("remoteHeadedDisplay".to_string(), Value::String(value));
+    }
+    if let Some(value) = route_binding.route_pool_entry_id.clone() {
+        command.insert("routePoolEntryId".to_string(), Value::String(value));
+    }
+    if let Some(value) = route_binding.frame_url.clone() {
+        command.insert("frameUrl".to_string(), Value::String(value));
+    }
+    if let Some(value) = route_binding.external_url.clone() {
+        command.insert("externalUrl".to_string(), Value::String(value));
+    }
+    if let Some(value) = route_binding.connection_id.clone() {
+        command.insert("connectionId".to_string(), Value::String(value));
+    }
+    if let Some(value) = route_binding.connection_name.clone() {
+        command.insert("connectionName".to_string(), Value::String(value));
+    }
+    if let Some(value) = route_binding.route_descriptor.clone() {
+        command.insert("routeDescriptor".to_string(), value);
+    }
+    Value::Object(command)
+}
+
+fn remote_view_open_tab_command(cmd: &Value, browser_id: &str, session_id: &str) -> Value {
+    let mut command = command_object_with_action(cmd, "tab_new");
+    command.insert(
+        "browserId".to_string(),
+        Value::String(browser_id.to_string()),
+    );
+    command.insert(
+        "sessionName".to_string(),
+        Value::String(session_id.to_string()),
+    );
+    if !command.contains_key("url") {
+        command.insert("url".to_string(), Value::String("about:blank".to_string()));
+    }
+    Value::Object(command)
+}
+
+fn remote_view_open_focus_command(cmd: &Value, tab: &Value, session_id: &str) -> Value {
+    let mut command = command_object_with_action(cmd, "view_focus");
+    command.insert(
+        "sessionName".to_string(),
+        Value::String(session_id.to_string()),
+    );
+    command.insert("maximize".to_string(), Value::Bool(true));
+    if let Some(target_id) = tab.get("targetId").and_then(Value::as_str) {
+        command.insert("targetId".to_string(), Value::String(target_id.to_string()));
+    }
+    if let Some(index) = tab.get("index").and_then(Value::as_u64) {
+        command.insert("index".to_string(), Value::Number(index.into()));
+    }
+    Value::Object(command)
+}
+
+fn remote_view_open_visible_window_proof(
+    route_binding: &super::remote_view::RemoteViewRouteBinding,
+) -> Result<Value, String> {
+    let display_name = route_binding
+        .launch_display_name
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| {
+            format!(
+                "route_display_missing: route '{}' has no launch display",
+                route_binding.route_id
+            )
+        })?;
+    let display_content = route_display_content(display_name).unwrap_or_else(|| {
+        json!({
+            "state": "display_probe_unavailable",
+            "displayName": display_name,
+            "windows": [],
+            "error": "route display probe returned no content",
+        })
+    });
+    visible_browser_window_proof(&route_binding.route_id, display_name, display_content)
+}
+
+fn remote_view_open_checkout_command(
+    cmd: &Value,
+    route_binding: &super::remote_view::RemoteViewRouteBinding,
+    browser_id: &str,
+    session_id: &str,
+) -> Value {
+    let mut command = command_object_with_action(cmd, "service_remote_view_route_checkout");
+    command.insert(
+        "browserId".to_string(),
+        Value::String(browser_id.to_string()),
+    );
+    command.insert(
+        "sessionName".to_string(),
+        Value::String(session_id.to_string()),
+    );
+    command.insert(
+        "displayAllocationId".to_string(),
+        Value::String(route_binding.display_allocation_id.clone()),
+    );
+    command.insert(
+        "routeId".to_string(),
+        Value::String(route_binding.route_id.clone()),
+    );
+    command.insert("provider".to_string(), json!(route_binding.provider));
+    command.insert(
+        "providerMode".to_string(),
+        Value::String(route_binding.provider_mode.clone()),
+    );
+    command.insert(
+        "streamId".to_string(),
+        Value::String("remote-headed-view".to_string()),
+    );
+    if let Some(value) = route_binding.route_pool_entry_id.clone() {
+        command.insert("routePoolEntryId".to_string(), Value::String(value));
+    }
+    if let Some(value) = route_binding.frame_url.clone() {
+        command.insert("frameUrl".to_string(), Value::String(value));
+    }
+    if let Some(value) = route_binding.external_url.clone() {
+        command.insert("externalUrl".to_string(), Value::String(value));
+    }
+    if let Some(value) = route_binding.connection_id.clone() {
+        command.insert("connectionId".to_string(), Value::String(value));
+    }
+    if let Some(value) = route_binding.connection_name.clone() {
+        command.insert("connectionName".to_string(), Value::String(value));
+    }
+    if let Some(value) = route_binding.route_descriptor.clone() {
+        command.insert("routeDescriptor".to_string(), value);
+    }
+    Value::Object(command)
+}
+
+fn command_object_with_action(cmd: &Value, action: &str) -> Map<String, Value> {
+    let mut command = cmd.as_object().cloned().unwrap_or_default();
+    command.insert("action".to_string(), Value::String(action.to_string()));
+    command.remove("dryRun");
+    command
+}
+
+async fn handle_service_remote_view_route_preflight(
+    cmd: &Value,
+    daemon_state: &DaemonState,
+) -> Result<Value, String> {
+    let browser_id = optional_command_string(cmd, "browserId")
+        .unwrap_or_else(|| service_browser_id(&daemon_state.session_id));
+    let session_id = optional_command_string(cmd, "sessionName")
+        .unwrap_or_else(|| daemon_state.session_id.clone());
+    let repository = LockedServiceStateRepository::default_json()?;
+    let state = repository.load_snapshot()?;
+    let route_binding = service_remote_view_route_binding_from_state(cmd, &state, &browser_id)?;
+
+    Ok(json!({
+        "status": "preflight_ready",
+        "routeId": route_binding.route_id,
+        "displayAllocationId": route_binding.display_allocation_id,
+        "routePoolEntryId": route_binding.route_pool_entry_id,
+        "browserId": browser_id,
+        "sessionName": session_id,
+        "frameUrl": route_binding.frame_url,
+        "externalUrl": route_binding.external_url,
+        "routeDescriptor": route_binding.route_descriptor,
+        "providerMode": route_binding.provider_mode,
+        "routeBinding": route_binding,
+    }))
+}
+
 async fn handle_service_remote_view_route_checkout(
     cmd: &Value,
     daemon_state: &DaemonState,
@@ -8252,83 +12208,24 @@ async fn handle_service_remote_view_route_checkout(
         .unwrap_or_else(|| service_browser_id(&daemon_state.session_id));
     let session_id = optional_command_string(cmd, "sessionName")
         .unwrap_or_else(|| daemon_state.session_id.clone());
-    let display_allocation_id = optional_command_string(cmd, "displayAllocationId")
-        .or_else(|| optional_command_string(cmd, "requestedDisplayAllocationId"));
-    let route_pool_entry_id = optional_command_string(cmd, "routePoolEntryId")
-        .or_else(|| optional_command_string(cmd, "poolEntryId"));
-    let requested_route_id = optional_command_string(cmd, "remoteViewRouteId")
-        .or_else(|| optional_command_string(cmd, "routeId"))
-        .or_else(|| optional_command_string(cmd, "viewStreamRouteId"));
     let now = service_remote_view_timestamp();
     let repository = LockedServiceStateRepository::default_json()?;
 
     repository.mutate(|state| {
-        let display_allocation_id = display_allocation_id
-            .clone()
-            .or_else(|| {
-                state
-                    .browsers
-                    .get(&browser_id)
-                    .and_then(|browser| browser.display_allocation_id.clone())
-            })
-            .ok_or_else(|| {
-                "service_remote_view_route_checkout requires displayAllocationId or a browser with displayAllocationId".to_string()
-            })?;
-
+        let inline_route_pool_entry = inline_route_pool_entry_from_command(cmd)?;
+        let route_binding = service_remote_view_route_binding_from_state(cmd, state, &browser_id)?;
+        let display_allocation_id = route_binding.display_allocation_id.clone();
         let existing_display_allocation = state
             .display_allocations
             .get(&display_allocation_id)
             .cloned();
-        let provider = optional_command_string(cmd, "provider")
-            .and_then(|value| parse_view_stream_provider(&value))
-            .unwrap_or(ViewStreamProvider::RdpGateway);
-        let selected_route_pool_entry_id = resolve_route_pool_entry_id(
-            state,
-            route_pool_entry_id.as_deref(),
-            requested_route_id.as_deref(),
-            &display_allocation_id,
-            existing_display_allocation.as_ref(),
-            provider,
-        )?;
-        let pool_entry = selected_route_pool_entry_id
-            .as_ref()
-            .map(|id| {
-                state
-                    .route_pool
-                    .get(id)
-                    .cloned()
-                    .ok_or_else(|| format!("route pool entry '{}' not found", id))
-            })
-            .transpose()?;
-        if let Some(ref entry) = pool_entry {
-            ensure_route_pool_entry_matches_display(
-                entry,
-                &display_allocation_id,
-                existing_display_allocation.as_ref(),
-            )?;
-            ensure_route_pool_entry_ready_for_checkout(entry)?;
-            if entry.state != "available"
-                && entry.current_route_allocation_id.as_deref() != requested_route_id.as_deref()
-            {
-                return Err(format!(
-                    "route pool entry '{}' is not available for checkout",
-                    entry.id
-                ));
-            }
-        }
 
-        let provider = pool_entry
-            .as_ref()
-            .map(|entry| entry.provider)
-            .unwrap_or(provider);
+        let provider = route_binding.provider;
         let control_input = optional_command_string(cmd, "controlInput")
             .or_else(|| optional_command_string(cmd, "controlInputProvider"))
             .and_then(|value| parse_control_input_provider(&value))
             .or_else(|| default_control_input_provider(provider));
-        let route_id = requested_route_id
-            .clone()
-            .or_else(|| pool_entry.as_ref().map(|entry| entry.route_id.clone()))
-            .unwrap_or_else(|| format!("remote-view-route:{}", display_allocation_id));
+        let route_id = route_binding.route_id.clone();
         ensure_remote_view_route_available_for_display(
             state,
             &route_id,
@@ -8337,30 +12234,34 @@ async fn handle_service_remote_view_route_checkout(
         )?;
         let connection_id = optional_command_string(cmd, "connectionId")
             .or_else(|| optional_command_string(cmd, "guacamoleConnectionId"))
-            .or_else(|| pool_entry.as_ref().and_then(|entry| entry.connection_id.clone()));
+            .or_else(|| route_binding.connection_id.clone());
         let connection_name = optional_command_string(cmd, "connectionName")
             .or_else(|| optional_command_string(cmd, "guacamoleConnectionName"))
-            .or_else(|| pool_entry.as_ref().and_then(|entry| entry.connection_name.clone()));
+            .or_else(|| route_binding.connection_name.clone());
         let frame_url = optional_command_string(cmd, "frameUrl")
             .or_else(|| optional_command_string(cmd, "remoteViewFrameUrl"))
-            .or_else(|| pool_entry.as_ref().and_then(|entry| entry.frame_url.clone()));
+            .or_else(|| route_binding.frame_url.clone());
         let external_url = optional_command_string(cmd, "externalUrl")
             .or_else(|| optional_command_string(cmd, "remoteViewExternalUrl"))
-            .or_else(|| pool_entry.as_ref().and_then(|entry| entry.external_url.clone()))
+            .or_else(|| route_binding.external_url.clone())
             .or_else(|| frame_url.clone());
+        let route_descriptor = cmd
+            .get("routeDescriptor")
+            .cloned()
+            .or_else(|| cmd.get("route_descriptor").cloned())
+            .or_else(|| route_binding.route_descriptor.clone());
         let provider_mode = optional_command_string(cmd, "providerMode")
-            .or_else(|| pool_entry.as_ref().map(|entry| entry.provider_mode.clone()))
-            .unwrap_or_else(|| "unknown".to_string());
-        let route_source = if pool_entry.is_some() {
+            .unwrap_or_else(|| route_binding.provider_mode.clone());
+        let route_source = if route_binding.route_pool_entry_id.is_some() {
             "pool"
         } else {
             "retained_state"
         };
-        let readiness = cmd.get("readiness").cloned().or_else(|| {
-            pool_entry
-                .as_ref()
-                .and_then(|entry| entry.readiness.clone())
-        });
+        let readiness = cmd
+            .get("readiness")
+            .cloned()
+            .or_else(|| route_binding.readiness.clone())
+            .or_else(|| Some(route_binding_readiness(&route_binding)));
 
         let display_allocation = state
             .display_allocations
@@ -8376,6 +12277,8 @@ async fn handle_service_remote_view_route_checkout(
             });
         display_allocation.owner_browser_id = Some(browser_id.clone());
         display_allocation.owner_session_id = Some(session_id.clone());
+        display_allocation.display_name = route_binding.launch_display_name.clone();
+        display_allocation.display_isolation = route_binding.display_isolation.clone();
         display_allocation.state = "ready".to_string();
         display_allocation.updated_at = Some(now.clone());
         if !display_allocation.route_ids.contains(&route_id) {
@@ -8394,16 +12297,34 @@ async fn handle_service_remote_view_route_checkout(
             route_template: optional_command_string(cmd, "routeTemplate"),
             frame_url: frame_url.clone(),
             external_url: external_url.clone(),
-            read_only: cmd.get("readOnly").and_then(Value::as_bool).unwrap_or(false),
+            route_descriptor: route_descriptor.clone(),
+            read_only: cmd
+                .get("readOnly")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
             control_input,
             provider_mode: provider_mode.clone(),
             state: "ready".to_string(),
             last_provider_event: Some("route_checked_out".to_string()),
             readiness: readiness.clone(),
-            ..state.remote_view_routes.get(&route_id).cloned().unwrap_or_default()
+            ..state
+                .remote_view_routes
+                .get(&route_id)
+                .cloned()
+                .unwrap_or_default()
         };
-        state.remote_view_routes.insert(route_id.clone(), route.clone());
-        if let Some(route_pool_entry_id) = selected_route_pool_entry_id.as_ref() {
+        state
+            .remote_view_routes
+            .insert(route_id.clone(), route.clone());
+        if let Some(route_pool_entry_id) = route_binding.route_pool_entry_id.as_ref() {
+            if let Some(entry) = inline_route_pool_entry
+                .as_ref()
+                .filter(|entry| entry.id == *route_pool_entry_id)
+            {
+                state
+                    .route_pool
+                    .insert(route_pool_entry_id.clone(), entry.clone());
+            }
             if let Some(entry) = state.route_pool.get_mut(route_pool_entry_id) {
                 entry.state = "checked_out".to_string();
                 entry.current_route_allocation_id = Some(route_id.clone());
@@ -8424,23 +12345,27 @@ async fn handle_service_remote_view_route_checkout(
             );
         }
 
-        let route_pool_entry = route_pool_entry_id
-            .as_ref()
-            .and_then(|id| state.route_pool.get(id).cloned());
-        let route_pool_entry = selected_route_pool_entry_id
+        let route_pool_entry = route_binding
+            .route_pool_entry_id
             .as_ref()
             .and_then(|id| state.route_pool.get(id).cloned())
-            .or(route_pool_entry);
+            .or_else(|| {
+                optional_command_string(cmd, "routePoolEntryId")
+                    .or_else(|| optional_command_string(cmd, "poolEntryId"))
+                    .and_then(|id| state.route_pool.get(&id).cloned())
+            });
         Ok(json!({
             "status": "checked_out",
             "routeId": route_id,
             "remoteViewRouteId": route.id,
             "displayAllocationId": display_allocation_id,
-            "routePoolEntryId": selected_route_pool_entry_id,
+            "routePoolEntryId": route_binding.route_pool_entry_id,
             "browserId": browser_id,
             "sessionName": session_id,
             "frameUrl": route.frame_url,
             "externalUrl": route.external_url,
+            "routeDescriptor": route.route_descriptor,
+            "routeBinding": route_binding,
             "providerMode": route.provider_mode,
             "remoteViewRoute": route,
             "routePoolEntry": route_pool_entry,
@@ -8907,6 +12832,7 @@ fn upsert_remote_view_stream_for_route(
         stream.url = url.clone();
         stream.frame_url = frame_url.clone();
         stream.external_url = external_url.clone();
+        stream.route_descriptor = route.route_descriptor.clone();
         stream.route_id = Some(route.id.clone());
         stream.display_allocation_id = Some(display_allocation_id.to_string());
         stream.connection_id = route.connection_id.clone();
@@ -8917,10 +12843,14 @@ fn upsert_remote_view_stream_for_route(
         stream.controller_lease_id = route.controller_lease_id.clone();
         stream.read_only = route.read_only;
         stream.readiness = route.readiness.clone();
-        stream.remote_readiness = Some(json!({
+        let mut remote_readiness = json!({
             "state": route.state,
             "lastProviderEvent": route.last_provider_event,
-        }));
+        });
+        if let Some(display_content) = cmd.get("displayContent").cloned() {
+            remote_readiness["displayContent"] = display_content;
+        }
+        stream.remote_readiness = Some(remote_readiness);
     };
     if let Some(stream) = stream {
         update_stream(stream);
@@ -11017,6 +14947,8 @@ async fn handle_service_reconcile(cmd: &Value) -> Result<Value, String> {
         "reconciled": true,
         "browserCount": summary.browser_count,
         "changedBrowsers": summary.changed_browsers,
+        "expiredSessionLeases": summary.expired_session_leases.clone(),
+        "expiredSessionLeaseCount": summary.expired_session_leases.len(),
         "service_state": service_state,
     }))
 }
@@ -15744,6 +19676,437 @@ mod tests {
     }
 
     #[test]
+    fn test_tab_handle_refresh_classifies_retained_candidates() {
+        let ready_browser = BrowserProcess {
+            id: "browser-ready".to_string(),
+            health: ServiceBrowserHealth::Ready,
+            ..BrowserProcess::default()
+        };
+        let dead_browser = BrowserProcess {
+            id: "browser-dead".to_string(),
+            health: ServiceBrowserHealth::ProcessExited,
+            ..BrowserProcess::default()
+        };
+        let exact_tab = BrowserTab {
+            id: "target:old-target".to_string(),
+            browser_id: "browser-ready".to_string(),
+            target_id: Some("old-target".to_string()),
+            lifecycle: TabLifecycle::Ready,
+            url: Some("https://example.com/old".to_string()),
+            ..BrowserTab::default()
+        };
+        let closed_tab = BrowserTab {
+            lifecycle: TabLifecycle::Closed,
+            ..exact_tab.clone()
+        };
+        let same_origin_tab = BrowserTab {
+            id: "target:new-target".to_string(),
+            browser_id: "browser-ready".to_string(),
+            target_id: Some("new-target".to_string()),
+            lifecycle: TabLifecycle::Ready,
+            url: Some("https://example.com/recover".to_string()),
+            ..BrowserTab::default()
+        };
+        let blank_tab = BrowserTab {
+            id: "target:blank-target".to_string(),
+            browser_id: "browser-ready".to_string(),
+            target_id: Some("blank-target".to_string()),
+            lifecycle: TabLifecycle::Ready,
+            url: Some("about:blank".to_string()),
+            ..BrowserTab::default()
+        };
+        let incompatible_tab = BrowserTab {
+            id: "target:other-target".to_string(),
+            browser_id: "browser-ready".to_string(),
+            target_id: Some("other-target".to_string()),
+            lifecycle: TabLifecycle::Ready,
+            url: Some("https://other.example/recover".to_string()),
+            ..BrowserTab::default()
+        };
+
+        assert_eq!(
+            classify_retained_tab_candidate(
+                &exact_tab,
+                Some(&ready_browser),
+                Some("target:old-target"),
+                Some("old-target"),
+                Some("https://example.com")
+            ),
+            "exact_handle"
+        );
+        assert_eq!(
+            classify_retained_tab_candidate(
+                &closed_tab,
+                Some(&ready_browser),
+                Some("target:old-target"),
+                Some("old-target"),
+                Some("https://example.com")
+            ),
+            "closed_tab"
+        );
+        assert_eq!(
+            classify_retained_tab_candidate(
+                &same_origin_tab,
+                Some(&ready_browser),
+                Some("target:old-target"),
+                Some("old-target"),
+                Some("https://example.com")
+            ),
+            "compatible_same_origin_tab"
+        );
+        assert_eq!(
+            classify_retained_tab_candidate(
+                &blank_tab,
+                Some(&ready_browser),
+                Some("target:old-target"),
+                Some("old-target"),
+                Some("https://example.com")
+            ),
+            "compatible_blank_tab"
+        );
+        assert_eq!(
+            classify_retained_tab_candidate(
+                &incompatible_tab,
+                Some(&ready_browser),
+                Some("target:old-target"),
+                Some("old-target"),
+                Some("https://example.com")
+            ),
+            "incompatible_tab"
+        );
+        assert_eq!(
+            classify_retained_tab_candidate(
+                &same_origin_tab,
+                Some(&dead_browser),
+                Some("target:old-target"),
+                Some("old-target"),
+                Some("https://example.com")
+            ),
+            "dead_browser"
+        );
+    }
+
+    #[test]
+    fn test_tab_handle_refresh_handle_builder_preserves_trace_context() {
+        let previous = serde_json::Map::from_iter([
+            ("browserId".to_string(), json!("session:old")),
+            ("sessionName".to_string(), json!("old")),
+            ("tabId".to_string(), json!("target:old-target")),
+            ("targetId".to_string(), json!("old-target")),
+            ("profileId".to_string(), json!("profile-1")),
+            ("profileOrigin".to_string(), json!("agent_browser_owned")),
+            ("leaseId".to_string(), json!("lease-1")),
+            ("leaseState".to_string(), json!("shared")),
+            ("valid".to_string(), json!(false)),
+            ("staleReason".to_string(), json!("tab_closed")),
+        ]);
+
+        let refreshed = refreshed_service_tab_handle(
+            &previous,
+            "service-session",
+            "new-target",
+            "https://example.com/recover",
+            "Recovered",
+        );
+
+        assert_eq!(refreshed["browserId"], "session:service-session");
+        assert_eq!(refreshed["sessionName"], "service-session");
+        assert_eq!(refreshed["tabId"], "target:old-target");
+        assert_eq!(refreshed["targetId"], "new-target");
+        assert_eq!(refreshed["profileId"], "profile-1");
+        assert_eq!(refreshed["valid"], true);
+        assert_eq!(refreshed["staleReason"], Value::Null);
+        assert_eq!(
+            refreshed["traceFilter"]["browserId"],
+            "session:service-session"
+        );
+        assert_eq!(refreshed["traceFilter"]["profileId"], "profile-1");
+        assert_eq!(refreshed["traceFilter"]["sessionId"], "service-session");
+    }
+
+    #[test]
+    fn test_tab_new_shared_acquisition_evidence_reports_reused_route_hints() {
+        let command = json!({
+            "action": "tab_new",
+            "browserId": "session:runtime-session",
+            "sessionName": "runtime-session",
+            "runtimeProfile": "auracall-profile"
+        });
+
+        let evidence = tab_new_shared_acquisition_evidence(
+            &command,
+            "runtime-session",
+            json!("auracall-profile"),
+        );
+
+        assert_eq!(evidence["policy"], "shared_browser_tabs");
+        assert_eq!(evidence["mode"], "tab_new");
+        assert_eq!(evidence["action"], "opened_new_tab");
+        assert_eq!(evidence["browserReused"], true);
+        assert_eq!(evidence["tabOpened"], true);
+        assert_eq!(evidence["waitedForProfileLease"], false);
+        assert_eq!(evidence["rejectedDuplicateProcess"], false);
+        assert_eq!(evidence["duplicateProcessAllowed"], false);
+        assert_eq!(evidence["browserId"], "session:runtime-session");
+        assert_eq!(evidence["sessionName"], "runtime-session");
+        assert_eq!(evidence["profileId"], "auracall-profile");
+        assert_eq!(evidence["requestedBrowserId"], "session:runtime-session");
+        assert_eq!(evidence["requestedSessionName"], "runtime-session");
+        assert_eq!(evidence["routeHintSource"], "request.browserId_sessionName");
+    }
+
+    #[test]
+    fn test_tab_new_shared_acquisition_evidence_reports_direct_tab() {
+        let command = json!({
+            "action": "tab_new",
+            "runtimeProfile": "scratch-profile"
+        });
+
+        let evidence = tab_new_shared_acquisition_evidence(
+            &command,
+            "scratch-session",
+            json!("scratch-profile"),
+        );
+
+        assert_eq!(evidence["policy"], "shared_browser_tabs");
+        assert_eq!(evidence["mode"], "tab_new");
+        assert_eq!(evidence["browserReused"], false);
+        assert_eq!(evidence["tabOpened"], true);
+        assert_eq!(evidence["browserId"], "session:scratch-session");
+        assert_eq!(evidence["sessionName"], "scratch-session");
+        assert_eq!(evidence["requestedBrowserId"], Value::Null);
+        assert_eq!(evidence["requestedSessionName"], Value::Null);
+        assert_eq!(evidence["routeHintSource"], "none");
+    }
+
+    #[test]
+    fn test_active_browser_profile_mismatch_rejects_wrong_runtime_profile() {
+        let message = active_browser_profile_mismatch_message(
+            Some("auracall-chatgpt-wsl-chrome-2-consult"),
+            Some("/home/me/.auracall/browser-profiles/chatgpt-consult"),
+            Some("default"),
+            Some(Path::new(
+                "/home/me/.agent-browser/runtime-profiles/default/user-data",
+            )),
+            "default",
+        )
+        .expect("mismatched selected profile should fail closed");
+
+        assert!(message.contains("selected profile mismatch"));
+        assert!(message.contains("auracall-chatgpt-wsl-chrome-2-consult"));
+        assert!(message.contains("runtimeProfile=default"));
+    }
+
+    #[test]
+    fn test_active_browser_profile_mismatch_allows_matching_runtime_profile() {
+        assert!(active_browser_profile_mismatch_message(
+            Some("auracall-chatgpt-wsl-chrome-2-consult"),
+            Some("/home/me/.auracall/browser-profiles/chatgpt-consult"),
+            Some("auracall-chatgpt-wsl-chrome-2-consult"),
+            Some(Path::new("/different/path")),
+            "auracall-chatgpt-wsl-chrome-2-consult",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn test_active_browser_profile_mismatch_allows_matching_profile_path() {
+        assert!(active_browser_profile_mismatch_message(
+            Some("auracall-chatgpt-wsl-chrome-2-consult"),
+            Some("/tmp/agent-browser-profile-match"),
+            None,
+            Some(Path::new("/tmp/agent-browser-profile-match")),
+            "profile-path-session",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn test_transient_wsl_predevtools_launch_error_is_retryable_only_for_chrome() {
+        let error = "Chrome exited early (exit code: 1) without exposing DevTools\nChrome stderr:\n  <3>WSL (123 - ) ERROR: UtilAcceptVsock:271: accept4 failed 110";
+
+        assert!(should_retry_transient_chrome_predevtools_launch_error(
+            Some("chrome"),
+            error
+        ));
+        assert!(should_retry_transient_chrome_predevtools_launch_error(
+            None, error
+        ));
+        assert!(!should_retry_transient_chrome_predevtools_launch_error(
+            Some("lightpanda"),
+            error
+        ));
+        assert!(!should_retry_transient_chrome_predevtools_launch_error(
+            Some("chrome"),
+            "Chrome exited early without exposing DevTools"
+        ));
+    }
+
+    #[test]
+    fn test_tab_handle_release_closes_only_selected_tab_record() {
+        let mut service_state = ServiceState {
+            browsers: BTreeMap::from([(
+                "session:shared-session".to_string(),
+                BrowserProcess {
+                    id: "session:shared-session".to_string(),
+                    profile_id: Some("shared-profile".to_string()),
+                    health: ServiceBrowserHealth::Ready,
+                    active_session_ids: vec!["shared-session".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "shared-session".to_string(),
+                BrowserSession {
+                    id: "shared-session".to_string(),
+                    service_name: Some("AuraCall".to_string()),
+                    agent_name: Some("auracall-agent".to_string()),
+                    task_name: Some("shared-tab".to_string()),
+                    lease: LeaseState::Exclusive,
+                    profile_id: Some("shared-profile".to_string()),
+                    cleanup: SessionCleanupPolicy::Detach,
+                    browser_ids: vec!["session:shared-session".to_string()],
+                    tab_ids: vec!["target:tab-a".to_string(), "target:tab-b".to_string()],
+                    ..BrowserSession::default()
+                },
+            )]),
+            tabs: BTreeMap::from([
+                (
+                    "target:tab-a".to_string(),
+                    BrowserTab {
+                        id: "target:tab-a".to_string(),
+                        browser_id: "session:shared-session".to_string(),
+                        target_id: Some("tab-a".to_string()),
+                        session_id: Some("shared-session".to_string()),
+                        lifecycle: TabLifecycle::Ready,
+                        owner_session_id: Some("shared-session".to_string()),
+                        ..BrowserTab::default()
+                    },
+                ),
+                (
+                    "target:tab-b".to_string(),
+                    BrowserTab {
+                        id: "target:tab-b".to_string(),
+                        browser_id: "session:shared-session".to_string(),
+                        target_id: Some("tab-b".to_string()),
+                        session_id: Some("shared-session".to_string()),
+                        lifecycle: TabLifecycle::Ready,
+                        owner_session_id: Some("shared-session".to_string()),
+                        ..BrowserTab::default()
+                    },
+                ),
+            ]),
+            ..ServiceState::default()
+        };
+        service_state.refresh_service_tab_handles();
+        let handle_value = serde_json::to_value(
+            service_state.tabs["target:tab-a"]
+                .service_tab_handle
+                .clone()
+                .expect("tab handle should exist"),
+        )
+        .expect("handle should serialize");
+        let handle = handle_value
+            .as_object()
+            .expect("handle should be an object");
+
+        let result = release_service_tab_handle_record(
+            &mut service_state,
+            handle,
+            "shared-session",
+            "2026-06-19T22:45:00Z",
+            &json!({
+                "attempted": false,
+                "closed": false,
+                "skippedReason": "no_live_browser",
+                "error": Value::Null,
+                "result": Value::Null,
+            }),
+        )
+        .expect("release should succeed");
+
+        assert_eq!(result["action"], "tab_handle_release");
+        assert_eq!(result["tabReleased"], true);
+        assert_eq!(result["browserProcessPreserved"], true);
+        assert_eq!(result["sessionRoutePreserved"], true);
+        assert_eq!(result["closeBrowserOnRelease"], false);
+        assert_eq!(result["physicalTabCloseAttempted"], false);
+        assert_eq!(result["physicalTabClosed"], false);
+        assert_eq!(result["physicalTabCloseSkippedReason"], "no_live_browser");
+        assert_eq!(
+            service_state.tabs["target:tab-a"].lifecycle,
+            TabLifecycle::Closed
+        );
+        assert_eq!(
+            service_state.tabs["target:tab-b"].lifecycle,
+            TabLifecycle::Ready
+        );
+        assert!(service_state
+            .browsers
+            .contains_key("session:shared-session"));
+        assert_eq!(
+            service_state.browsers["session:shared-session"].active_session_ids,
+            vec!["shared-session".to_string()]
+        );
+        assert_eq!(
+            service_state.sessions["shared-session"].lease,
+            LeaseState::Exclusive
+        );
+        assert_eq!(
+            service_state.sessions["shared-session"].tab_ids,
+            vec!["target:tab-a".to_string(), "target:tab-b".to_string()]
+        );
+        assert_eq!(result["serviceTabHandle"]["staleReason"], "tab_closed");
+        assert_eq!(
+            service_state.tabs["target:tab-a"]
+                .service_tab_handle
+                .as_ref()
+                .and_then(|handle| handle.stale_reason.as_deref()),
+            Some("tab_closed")
+        );
+    }
+
+    #[test]
+    fn test_tab_handle_refresh_classifies_live_pages_by_origin() {
+        assert_eq!(
+            classify_live_page_candidate(
+                "old-target",
+                "https://example.com/old",
+                Some("old-target"),
+                Some("https://example.com")
+            ),
+            "matching_target"
+        );
+        assert_eq!(
+            classify_live_page_candidate(
+                "blank-target",
+                "about:blank",
+                Some("old-target"),
+                Some("https://example.com")
+            ),
+            "compatible_blank_tab"
+        );
+        assert_eq!(
+            classify_live_page_candidate(
+                "new-target",
+                "https://example.com/recover",
+                Some("old-target"),
+                Some("https://example.com")
+            ),
+            "compatible_same_origin_tab"
+        );
+        assert_eq!(
+            classify_live_page_candidate(
+                "other-target",
+                "https://other.example/recover",
+                Some("old-target"),
+                Some("https://example.com")
+            ),
+            "incompatible_tab"
+        );
+    }
+
+    #[test]
     fn service_browser_host_for_launch_honors_nested_remote_headed_param() {
         let command = json!({
             "action": "tab_new",
@@ -16407,6 +20770,7 @@ mod tests {
                 url: Some("/guacamole/#/client/MQBjAHBvc3RncmVzcWw=".to_string()),
                 frame_url: Some("/guacamole/#/client/MQBjAHBvc3RncmVzcWw=".to_string()),
                 external_url: Some("/guacamole/#/client/MQBjAHBvc3RncmVzcWw=".to_string()),
+                route_descriptor: None,
                 route_id: None,
                 display_allocation_id: None,
                 connection_id: Some("MQBjAHBvc3RncmVzcWw=".to_string()),
@@ -16471,6 +20835,7 @@ mod tests {
                 url: None,
                 frame_url: None,
                 external_url: None,
+                route_descriptor: None,
                 route_id: None,
                 display_allocation_id: None,
                 connection_id: None,
@@ -20366,6 +24731,21 @@ mod tests {
                         route_id: "route-a".to_string(),
                         frame_url: Some("https://guac.example/#/client/route-a".to_string()),
                         external_url: Some("https://guac.example/#/client/route-a".to_string()),
+                        route_descriptor: Some(json!({
+                            "localEmbedUrl": "http://127.0.0.1:8092/guacamole/#/client/route-a",
+                            "dashboardEmbedUrl": "https://dashboard.example/guacamole/#/client/route-a",
+                            "publicOperatorUrl": "https://guac.example/#/client/route-a",
+                            "healthUrl": "http://127.0.0.1:8092/guacamole/#/client/route-a",
+                            "externalUrl": "https://guac.example/#/client/route-a"
+                        })),
+                        target: json!({
+                            "displayName": ":21",
+                            "displayIsolation": "shared_display",
+                            "routeUser": "agent-browser-rdp-a",
+                            "displayAccess": {
+                                "state": "ready"
+                            }
+                        }),
                         provider_mode: "single_controller".to_string(),
                         state: "available".to_string(),
                         ..RoutePoolEntry::default()
@@ -20386,6 +24766,26 @@ mod tests {
         let mut state = DaemonState::new();
         state.session_id = "rdp-a".to_string();
 
+        let preflight = execute_command(
+            &json!({
+                "action": "service_remote_view_route_preflight",
+                "displayAllocationId": "display-a",
+                "routePoolEntryId": "pool-a",
+                "browserId": "session:rdp-a",
+                "sessionName": "rdp-a"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(preflight["success"], true);
+        assert_eq!(preflight["data"]["status"], "preflight_ready");
+        assert_eq!(preflight["data"]["routeBinding"]["routeId"], "route-a");
+        assert_eq!(preflight["data"]["routeBinding"]["displayName"], ":21");
+        assert_eq!(
+            store.load().unwrap().route_pool["pool-a"].state,
+            "available"
+        );
+
         let checkout = execute_command(
             &json!({
                 "action": "service_remote_view_route_checkout",
@@ -20401,6 +24801,16 @@ mod tests {
         assert_eq!(checkout["success"], true);
         assert_eq!(checkout["data"]["routeId"], "route-a");
         assert_eq!(checkout["data"]["displayAllocationId"], "display-a");
+        assert_eq!(checkout["data"]["routeBinding"]["displayName"], ":21");
+        assert_eq!(checkout["data"]["routeBinding"]["launchDisplayName"], ":21");
+        assert_eq!(
+            checkout["data"]["routeBinding"]["displayIsolation"],
+            "shared_display"
+        );
+        assert_eq!(
+            checkout["data"]["routeBinding"]["routeUser"],
+            "agent-browser-rdp-a"
+        );
 
         let viewer = execute_command(
             &json!({
@@ -20466,6 +24876,15 @@ mod tests {
         let persisted = store.load().unwrap();
         let route = persisted.remote_view_routes.get("route-a").unwrap();
         assert_eq!(route.state, "released");
+        assert_eq!(
+            route
+                .route_descriptor
+                .as_ref()
+                .unwrap()
+                .get("publicOperatorUrl")
+                .and_then(Value::as_str),
+            Some("https://guac.example/#/client/route-a")
+        );
         assert_eq!(route.controller_lease_id, None);
         assert_eq!(
             persisted.route_pool["pool-a"].current_route_allocation_id,
@@ -20502,8 +24921,391 @@ mod tests {
                 .as_deref(),
             Some("route-a")
         );
+        assert_eq!(
+            persisted.browsers["session:rdp-a"].view_streams[0]
+                .route_descriptor
+                .as_ref()
+                .unwrap()
+                .get("dashboardEmbedUrl")
+                .and_then(Value::as_str),
+            Some("https://dashboard.example/guacamole/#/client/route-a")
+        );
         assert!(state.browser.is_none());
         let _ = fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn test_remote_view_open_dry_run_plans_route_bound_launch_without_existing_display() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_socket_dir("remote-view-open-dry-run-home");
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                route_pool: BTreeMap::from([(
+                    "pool-a".to_string(),
+                    RoutePoolEntry {
+                        id: "pool-a".to_string(),
+                        route_id: "route-a".to_string(),
+                        frame_url: Some("https://dashboard.example/guacamole/#/client/route-a".to_string()),
+                        external_url: Some("https://guac.example/#/client/route-a".to_string()),
+                        route_descriptor: Some(json!({
+                            "localEmbedUrl": "http://127.0.0.1:8092/guacamole/#/client/route-a",
+                            "dashboardEmbedUrl": "https://dashboard.example/guacamole/#/client/route-a",
+                            "publicOperatorUrl": "https://guac.example/#/client/route-a",
+                            "healthUrl": "http://127.0.0.1:8092/guacamole/#/client/route-a",
+                            "externalUrl": "https://guac.example/#/client/route-a"
+                        })),
+                        target: json!({
+                            "displayName": ":31",
+                            "displayIsolation": "shared_display",
+                            "routeUser": "agent-browser-rdp-a",
+                            "displayAccess": {
+                                "state": "ready"
+                            }
+                        }),
+                        provider_mode: "single_controller".to_string(),
+                        state: "available".to_string(),
+                        ..RoutePoolEntry::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+        let mut state = DaemonState::new();
+        state.session_id = "rdp-open-a".to_string();
+
+        let result = execute_command(
+            &json!({
+                "action": "remote_view_open",
+                "routePoolEntryId": "pool-a",
+                "provider": "rdp_gateway",
+                "runtimeProfile": "stealthcdp-default",
+                "url": "https://www.linkedin.com/",
+                "dryRun": true
+            }),
+            &mut state,
+        )
+        .await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["status"], "planned");
+        assert_eq!(result["data"]["dryRun"], true);
+        assert_eq!(result["data"]["routeId"], "route-a");
+        assert_eq!(
+            result["data"]["displayAllocationId"],
+            "remote-view-display:31"
+        );
+        assert_eq!(result["data"]["routeBinding"]["launchDisplayName"], ":31");
+        assert_eq!(
+            result["data"]["launchCommand"]["browserHost"],
+            "remote_headed"
+        );
+        assert_eq!(
+            result["data"]["launchCommand"]["remoteHeadedDisplay"],
+            ":31"
+        );
+        assert_eq!(
+            result["data"]["launchCommand"]["displayIsolation"],
+            "shared_display"
+        );
+        assert!(result["data"]["launchCommand"]["provider"].is_null());
+        assert_eq!(
+            result["data"]["launchCommand"]["viewStreamProvider"],
+            "rdp_gateway"
+        );
+        assert_eq!(
+            result["data"]["launchCommand"]["routeDescriptor"]["dashboardEmbedUrl"],
+            "https://dashboard.example/guacamole/#/client/route-a"
+        );
+        assert_eq!(
+            result["data"]["tabCommand"]["url"],
+            "https://www.linkedin.com/"
+        );
+        assert_eq!(
+            result["data"]["checkoutCommand"]["displayAllocationId"],
+            "remote-view-display:31"
+        );
+        assert!(state.browser.is_none());
+        assert_eq!(
+            store.load().unwrap().route_pool["pool-a"].state,
+            "available"
+        );
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn test_remote_view_open_dry_run_accepts_inline_route_pool_entry_and_display() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_socket_dir("remote-view-open-inline-route-home");
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store.save(&ServiceState::default()).unwrap();
+        let mut state = DaemonState::new();
+        state.session_id = "rdp-open-inline".to_string();
+
+        let result = execute_command(
+            &json!({
+                "action": "remote_view_open",
+                "runtimeProfile": "stealthcdp-default",
+                "url": "https://www.linkedin.com/",
+                "remoteHeadedDisplay": ":10",
+                "displayIsolation": "shared_display",
+                "dryRun": true,
+                "routePoolEntry": {
+                    "id": "guacamole-rdp-a",
+                    "routeId": "guacamole:1",
+                    "connectionId": "1",
+                    "connectionName": "Agent Browser RDP Existing User Route A",
+                    "frameUrl": "http://127.0.0.1:8092/guacamole/#/client/route-a",
+                    "externalUrl": "https://agent-browser.example/guacamole/#/client/route-a",
+                    "routeDescriptor": {
+                        "dashboardEmbedUrl": "http://127.0.0.1:8092/guacamole/#/client/route-a",
+                        "publicOperatorUrl": "https://agent-browser.example/guacamole/#/client/route-a"
+                    },
+                    "providerMode": "simultaneous_view",
+                    "readiness": {
+                        "state": "ready"
+                    },
+                    "target": {
+                        "hostname": "host.docker.internal",
+                        "port": "3389"
+                    }
+                }
+            }),
+            &mut state,
+        )
+        .await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["status"], "planned");
+        assert_eq!(result["data"]["routePoolEntryId"], "guacamole-rdp-a");
+        assert_eq!(result["data"]["routeBinding"]["launchDisplayName"], ":10");
+        assert_eq!(
+            result["data"]["routeBinding"]["displayIsolation"],
+            "shared_display"
+        );
+        assert_eq!(
+            result["data"]["launchCommand"]["remoteHeadedDisplay"],
+            ":10"
+        );
+        assert!(store.load().unwrap().route_pool.is_empty());
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn test_remote_view_open_dry_run_reuses_checked_out_same_route() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_socket_dir("remote-view-open-reuse-route-home");
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                route_pool: BTreeMap::from([(
+                    "guacamole-rdp-a".to_string(),
+                    RoutePoolEntry {
+                        id: "guacamole-rdp-a".to_string(),
+                        route_id: "guacamole:1".to_string(),
+                        frame_url: Some("http://127.0.0.1:8092/guacamole/#/client/route-a".to_string()),
+                        external_url: Some("https://agent-browser.example/guacamole/#/client/route-a".to_string()),
+                        route_descriptor: Some(json!({
+                            "dashboardEmbedUrl": "http://127.0.0.1:8092/guacamole/#/client/route-a",
+                            "publicOperatorUrl": "https://agent-browser.example/guacamole/#/client/route-a"
+                        })),
+                        target: json!({
+                            "displayName": ":10",
+                            "displayIsolation": "shared_display"
+                        }),
+                        provider_mode: "simultaneous_view".to_string(),
+                        state: "checked_out".to_string(),
+                        current_route_allocation_id: Some("guacamole:1".to_string()),
+                        readiness: Some(json!({ "state": "ready" })),
+                        ..RoutePoolEntry::default()
+                    },
+                )]),
+                remote_view_routes: BTreeMap::from([(
+                    "guacamole:1".to_string(),
+                    RemoteViewRoute {
+                        id: "guacamole:1".to_string(),
+                        display_allocation_id: Some("remote-view-display:guacamole-1".to_string()),
+                        state: "ready".to_string(),
+                        ..RemoteViewRoute::default()
+                    },
+                )]),
+                display_allocations: BTreeMap::from([(
+                    "remote-view-display:guacamole-1".to_string(),
+                    DisplayAllocation {
+                        id: "remote-view-display:guacamole-1".to_string(),
+                        display_name: Some(":10".to_string()),
+                        display_isolation: "shared_display".to_string(),
+                        state: "ready".to_string(),
+                        ..DisplayAllocation::default()
+                    },
+                )]),
+                browsers: BTreeMap::from([(
+                    "session:default".to_string(),
+                    BrowserProcess {
+                        id: "session:default".to_string(),
+                        display_allocation_id: Some("remote-view-display:guacamole-1".to_string()),
+                        ..BrowserProcess::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+        let mut state = DaemonState::new();
+        state.session_id = "default".to_string();
+
+        let result = execute_command(
+            &json!({
+                "action": "remote_view_open",
+                "routePoolEntryId": "guacamole-rdp-a",
+                "runtimeProfile": "stealthcdp-default",
+                "url": "https://www.linkedin.com/",
+                "dryRun": true
+            }),
+            &mut state,
+        )
+        .await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["routeId"], "guacamole:1");
+        assert_eq!(result["data"]["routeBinding"]["launchDisplayName"], ":10");
+        assert_eq!(
+            result["data"]["displayAllocationId"],
+            "remote-view-display:guacamole-1"
+        );
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn test_remote_view_open_dry_run_prefers_inline_route_pool_identity_over_stale_state() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_socket_dir("remote-view-open-inline-refresh-home");
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                route_pool: BTreeMap::from([(
+                    "guacamole-rdp-a".to_string(),
+                    RoutePoolEntry {
+                        id: "guacamole-rdp-a".to_string(),
+                        route_id: "guacamole:1".to_string(),
+                        frame_url: Some("http://127.0.0.1:8092/guacamole/#/client/old".to_string()),
+                        target: json!({
+                            "hostname": "host.docker.internal",
+                            "port": "3389",
+                            "targetIdentityKey": "host.docker.internal:3389:user:stale:bpp:24"
+                        }),
+                        provider_mode: "simultaneous_view".to_string(),
+                        state: "checked_out".to_string(),
+                        current_route_allocation_id: Some("guacamole:1".to_string()),
+                        readiness: Some(json!({ "state": "ready" })),
+                        ..RoutePoolEntry::default()
+                    },
+                )]),
+                remote_view_routes: BTreeMap::from([(
+                    "guacamole:1".to_string(),
+                    RemoteViewRoute {
+                        id: "guacamole:1".to_string(),
+                        display_allocation_id: Some("remote-view-display:guacamole-1".to_string()),
+                        state: "ready".to_string(),
+                        ..RemoteViewRoute::default()
+                    },
+                )]),
+                display_allocations: BTreeMap::from([(
+                    "remote-view-display:guacamole-1".to_string(),
+                    DisplayAllocation {
+                        id: "remote-view-display:guacamole-1".to_string(),
+                        display_name: Some(":10".to_string()),
+                        display_isolation: "shared_display".to_string(),
+                        state: "ready".to_string(),
+                        readiness: Some(json!({
+                            "state": "released",
+                            "reason": "operator_requested_close"
+                        })),
+                        ..DisplayAllocation::default()
+                    },
+                )]),
+                browsers: BTreeMap::from([(
+                    "session:default".to_string(),
+                    BrowserProcess {
+                        id: "session:default".to_string(),
+                        display_allocation_id: Some("remote-view-display:guacamole-1".to_string()),
+                        display_name: Some(":10".to_string()),
+                        ..BrowserProcess::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+        let mut state = DaemonState::new();
+        state.session_id = "default".to_string();
+
+        let result = execute_command(
+            &json!({
+                "action": "remote_view_open",
+                "routePoolEntryId": "guacamole-rdp-a",
+                "runtimeProfile": "stealthcdp-default",
+                "url": "https://www.linkedin.com/",
+                "displayAllocationId": "remote-view-display:guacamole-1",
+                "dryRun": true,
+                "routePoolEntry": {
+                    "id": "guacamole-rdp-a",
+                    "routeId": "guacamole:3",
+                    "connectionId": "3",
+                    "connectionName": "Agent Browser RDP Route A",
+                    "frameUrl": "http://127.0.0.1:8092/guacamole/#/client/new",
+                    "externalUrl": "https://agent-browser.example/guacamole/#/client/new",
+                    "routeDescriptor": {
+                        "dashboardEmbedUrl": "http://127.0.0.1:8092/guacamole/#/client/new",
+                        "publicOperatorUrl": "https://agent-browser.example/guacamole/#/client/new"
+                    },
+                    "providerMode": "simultaneous_view",
+                    "readiness": {
+                        "state": "ready"
+                    },
+                    "target": {
+                        "hostname": "host.docker.internal",
+                        "port": "3389",
+                        "colorDepth": null,
+                        "targetIdentityKey": "host.docker.internal:3389:user:current:bpp:default",
+                        "displayName": ":11",
+                        "displayIsolation": "shared_display"
+                    }
+                }
+            }),
+            &mut state,
+        )
+        .await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["routeId"], "guacamole:3");
+        assert_eq!(result["data"]["routeBinding"]["connectionId"], "3");
+        assert_eq!(result["data"]["routeBinding"]["launchDisplayName"], ":11");
+        assert_eq!(
+            result["data"]["displayAllocationId"],
+            "remote-view-display:11"
+        );
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn test_remote_view_open_cleanup_reports_new_browser_close_on_failure() {
+        let mut state = DaemonState::new();
+        let cleanup =
+            remote_view_open_cleanup_after_failure(&mut state, &json!({ "launched": true }), None)
+                .await;
+
+        assert_eq!(
+            remote_view_open_cleanup_summary(&cleanup),
+            "closed_new_browser"
+        );
+        assert_eq!(cleanup["result"]["closed"], true);
     }
 
     #[tokio::test]
@@ -21034,6 +25836,10 @@ mod tests {
                         RoutePoolEntry {
                             id: "pool-busy".to_string(),
                             route_id: "route-busy".to_string(),
+                            frame_url: Some("https://guac.example/#/client/route-busy".to_string()),
+                            external_url: Some(
+                                "https://guac.example/#/client/route-busy".to_string(),
+                            ),
                             target: json!({ "displayName": ":92" }),
                             state: "available".to_string(),
                             ..RoutePoolEntry::default()
@@ -23257,6 +28063,7 @@ mod tests {
             url: Some("/guacamole/#/client/MQBjAHBvc3RncmVzcWw=".to_string()),
             frame_url: Some("/guacamole/#/client/MQBjAHBvc3RncmVzcWw=".to_string()),
             external_url: Some("/guacamole/#/client/MQBjAHBvc3RncmVzcWw=".to_string()),
+            route_descriptor: None,
             route_id: None,
             display_allocation_id: None,
             connection_id: Some("MQBjAHBvc3RncmVzcWw=".to_string()),

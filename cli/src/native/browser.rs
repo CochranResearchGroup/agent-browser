@@ -1211,6 +1211,18 @@ impl BrowserManager {
         Ok(json!({ "closed": target_index, "activeIndex": self.active_page_index }))
     }
 
+    pub async fn tab_close_target_id(&mut self, target_id: &str) -> Result<Value, String> {
+        let target_index = page_index_for_target_id(&self.pages, target_id).ok_or_else(|| {
+            format!("Target ID {target_id} was not found in the attached tab list")
+        })?;
+        let result = self.tab_close(Some(target_index)).await?;
+        Ok(json!({
+            "targetId": target_id,
+            "closed": result.get("closed").cloned().unwrap_or(Value::Null),
+            "activeIndex": result.get("activeIndex").cloned().unwrap_or(Value::Null),
+        }))
+    }
+
     // -----------------------------------------------------------------------
     // Emulation
     // -----------------------------------------------------------------------

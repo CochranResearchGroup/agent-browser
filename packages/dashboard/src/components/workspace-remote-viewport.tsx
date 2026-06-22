@@ -10,8 +10,8 @@ import {
   canOpenViewStream,
   controlInputLabel,
   viewStreamCapabilityLabel,
+  viewStreamDashboardFrameUrl,
   viewStreamExternalUrl,
-  viewStreamFrameUrl,
   viewStreamLabel,
   viewStreamOpenTitle,
   viewStreamReadinessLabel,
@@ -734,7 +734,8 @@ function responseLooksLikeDashboardLogin(response: Response, fallbackUrl: URL): 
 }
 
 function resolveWorkspaceStreamUrl(stream?: ServiceViewStream | null, mode: "frame" | "external" = "frame"): string | null {
-  const streamUrl = mode === "external" ? viewStreamExternalUrl(stream) : viewStreamFrameUrl(stream);
+  const dashboardHref = typeof window === "undefined" ? null : window.location.href;
+  const streamUrl = mode === "external" ? viewStreamExternalUrl(stream) : viewStreamDashboardFrameUrl(stream, dashboardHref);
   if (!streamUrl) return null;
   if (typeof window === "undefined") return streamUrl;
   try {
@@ -1284,7 +1285,7 @@ export function WorkspaceRemoteViewport({
     recoveredStaleTarget: tabSelection.recoveredFromStaleSelection,
     streamProvider: stream?.provider,
     streamUrl,
-    streamReadiness: stream?.readiness ?? stream?.remoteReadiness,
+    streamReadiness: stream?.remoteReadiness ?? stream?.readiness,
     focusMessage,
   });
 

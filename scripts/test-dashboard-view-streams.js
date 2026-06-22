@@ -10,6 +10,7 @@ import {
   controlInputLabel,
   viewStreamCapabilityLabel,
   viewStreamControlTitle,
+  viewStreamDashboardFrameUrl,
   viewStreamLabel,
   viewStreamOpenTitle,
   viewStreamReadinessLabel,
@@ -37,6 +38,13 @@ const rdpGatewayStream = {
   controlInput: 'manual_attached_desktop',
   url: 'http://127.0.0.1:8080/rdp/session',
   frameUrl: 'http://127.0.0.1:8080/guacamole/#/client/route-a',
+  externalUrl: 'https://agent-browser.example.test/guacamole/#/client/route-a',
+  routeDescriptor: {
+    localEmbedUrl: 'http://127.0.0.1:8080/guacamole/#/client/route-a',
+    publicOperatorUrl: 'https://agent-browser.example.test/guacamole/#/client/route-a',
+    dashboardEmbedUrl: 'https://agent-browser.example.test/guacamole/#/client/route-a',
+    healthUrl: 'http://127.0.0.1:8080/guacamole/',
+  },
   routeId: 'route-a',
   displayAllocationId: 'display-a',
   connectionId: 'guac-a',
@@ -60,6 +68,29 @@ assert.equal(viewStreamControlTitle(rdpGatewayStream), 'Focus the browser and op
 assert.equal(viewStreamRouteLabel(rdpGatewayStream), 'route-a');
 assert.equal(viewStreamLeaseLabel(rdpGatewayStream), '2 viewers, controller leased');
 assert.equal(viewStreamReadinessLabel(rdpGatewayStream), 'ready');
+assert.equal(
+  viewStreamDashboardFrameUrl(rdpGatewayStream, 'http://127.0.0.1:4848/workspace'),
+  'http://127.0.0.1:8080/guacamole/#/client/route-a',
+);
+assert.equal(
+  viewStreamDashboardFrameUrl(rdpGatewayStream, 'https://agent-browser.example.test/workspace'),
+  'https://agent-browser.example.test/guacamole/#/client/route-a',
+);
+assert.equal(
+  viewStreamDashboardFrameUrl({
+    provider: 'rdp_gateway',
+    frameUrl: 'http://127.0.0.1:8092/guacamole/#/client/route-b',
+    externalUrl: 'https://configured.example.test/guacamole/#/client/route-b',
+  }, 'https://operator.example.test/workspace'),
+  'https://configured.example.test/guacamole/#/client/route-b',
+);
+assert.equal(
+  viewStreamDashboardFrameUrl({
+    provider: 'rdp_gateway',
+    frameUrl: 'https://private.example.test/guacamole/#/client/route-c',
+  }, 'https://operator.example.test/workspace'),
+  'https://private.example.test/guacamole/#/client/route-c',
+);
 assert.equal(
   viewStreamRouteSummary(rdpGatewayStream),
   'route-a / display display-a / simultaneous view / 2 viewers, controller leased / ready',
@@ -252,6 +283,34 @@ assert.equal(
     },
   }).component,
   'guacamole_connection',
+);
+assert.deepEqual(
+  deriveWorkspaceViewportReadiness({
+    hasBrowser: true,
+    browserHealth: 'ready',
+    hasStream: true,
+    canEmbed: true,
+    canControl: true,
+    mode: 'control',
+    preflightStatus: 'ready',
+    streamProvider: 'rdp_gateway',
+    streamUrl: 'http://127.0.0.1:8080/guacamole',
+    streamReadiness: {
+      component: 'remote_view_open_visible_window',
+      state: 'terminal_only_route',
+      evidence: 'route display :10 contains only xterm and no browser window',
+      nextAction: 'inspect_readiness',
+      recovery: 'Open the browser on the selected route display before treating this route as ready.',
+    },
+  }),
+  {
+    component: 'remote_view_open_visible_window',
+    status: 'blocked',
+    evidence: 'route display :10 contains only xterm and no browser window',
+    nextAction: 'inspect_readiness',
+    title: 'remote view open visible window readiness failed',
+    recoveryCopy: 'Open the browser on the selected route display before treating this route as ready.',
+  },
 );
 assert.equal(
   deriveWorkspaceViewportReadiness({
@@ -457,7 +516,7 @@ assert.match(
 );
 assert.match(
   workspaceViewport,
-  /deriveWorkspaceViewportReadiness[\s\S]*streamReadiness: stream\?\.readiness \?\? stream\?\.remoteReadiness[\s\S]*data-readiness-status=\{viewportReadiness\.status\}[\s\S]*viewStreamRouteSummary\(stream\)[\s\S]*viewportReadiness\.recoveryCopy/,
+  /deriveWorkspaceViewportReadiness[\s\S]*streamReadiness: stream\?\.remoteReadiness \?\? stream\?\.readiness[\s\S]*data-readiness-status=\{viewportReadiness\.status\}[\s\S]*viewStreamRouteSummary\(stream\)[\s\S]*viewportReadiness\.recoveryCopy/,
   'Workspace remote viewport must derive compact readiness and render actionable recovery copy for auth, provider, browser, viewer, and retained-job states',
 );
 assert.match(
@@ -473,8 +532,8 @@ assert.match(
 
 assert.match(
   workspaceViewport,
-  /function resolveWorkspaceStreamUrl[\s\S]*viewStreamExternalUrl\(stream\)[\s\S]*viewStreamFrameUrl\(stream\)[\s\S]*new URL\(streamUrl, window\.location\.href\)\.toString\(\)[\s\S]*resolved\.origin === window\.location\.origin[\s\S]*setStreamPreflight\(\{ status: "ready", message: "" \}\)/,
-  'Workspace remote viewport must resolve service-owned frame and external stream URLs and allow cross-origin iframe rendering instead of treating CORS preflight failure as stream unavailability',
+  /function resolveWorkspaceStreamUrl[\s\S]*viewStreamExternalUrl\(stream\)[\s\S]*viewStreamDashboardFrameUrl\(stream, dashboardHref\)[\s\S]*new URL\(streamUrl, window\.location\.href\)\.toString\(\)[\s\S]*resolved\.origin === window\.location\.origin[\s\S]*setStreamPreflight\(\{ status: "ready", message: "" \}\)/,
+  'Workspace remote viewport must resolve service-owned frame and external stream URLs with hosted-dashboard loopback protection and allow cross-origin iframe rendering instead of treating CORS preflight failure as stream unavailability',
 );
 assert.match(
   workspaceViewport,

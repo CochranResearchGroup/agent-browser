@@ -59,6 +59,7 @@ for (let index = 0; index < args.length; index += 1) {
 const report = {
   dashboardUrl: options.dashboardUrl,
   http: null,
+  runtimeManifest: null,
   markers: [],
   browser: null,
 };
@@ -93,6 +94,12 @@ async function run() {
   if (!html.includes('Agent Browser') && !html.includes('__next')) {
     throw new Error(`Dashboard HTML at ${dashboardUrl.href} did not look like the Agent Browser dashboard.`);
   }
+
+  currentPhase = 'fetch runtime manifest';
+  const manifestUrl = new URL('/api/runtime/manifest', dashboardUrl.origin);
+  const runtimeManifest = parseJson(await getText(manifestUrl), 'runtime manifest');
+  assertRuntimeManifest(runtimeManifest);
+  report.runtimeManifest = runtimeManifest;
 
   const chunks = [...new Set([...html.matchAll(/(?:\/_next\/)?static\/[^"']+\.js/g)].map((match) => match[0]))];
   report.http.chunkCount = chunks.length;
@@ -479,6 +486,27 @@ async function getText(url) {
     await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
   }
   throw lastError ?? new Error(`Failed to read ${url.href}`);
+}
+
+function assertRuntimeManifest(manifest) {
+  if (manifest?.schemaVersion !== 'agent-browser.runtime-manifest.v1') {
+    throw new Error(`Runtime manifest has unexpected schemaVersion: ${JSON.stringify(manifest?.schemaVersion)}`);
+  }
+  if (manifest.serviceContractVersion !== 'service-ui-runtime.v1') {
+    throw new Error(`Runtime manifest has unexpected serviceContractVersion: ${JSON.stringify(manifest.serviceContractVersion)}`);
+  }
+  if (!manifest.packageVersion) {
+    throw new Error('Runtime manifest is missing packageVersion');
+  }
+  if (!manifest.dashboard || typeof manifest.dashboard.sha256 !== 'string' || manifest.dashboard.sha256.length !== 64) {
+    throw new Error(`Runtime manifest is missing dashboard sha256: ${JSON.stringify(manifest.dashboard)}`);
+  }
+  const features = new Set(Array.isArray(manifest.supportedUiFeatures) ? manifest.supportedUiFeatures : []);
+  for (const feature of ['workspace.detectedBrowsers', 'workspace.noRetainedLiveRail']) {
+    if (!features.has(feature)) {
+      throw new Error(`Runtime manifest is missing required UI feature: ${feature}`);
+    }
+  }
 }
 
 function dashboardCredentials() {

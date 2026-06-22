@@ -410,6 +410,16 @@ export interface ServiceRoutePoolEntryRecord {
   connectionName: string | null;
   frameUrl: string | null;
   externalUrl: string | null;
+  routeDescriptor?: {
+    localEmbedUrl?: string | null;
+    publicOperatorUrl?: string | null;
+    dashboardEmbedUrl?: string | null;
+    healthUrl?: string | null;
+    externalUrl?: string | null;
+    embeddingPolicy?: string | null;
+    providerMode?: string | null;
+    [key: string]: unknown;
+  } | null;
   target: Record<string, unknown>;
   providerMode: 'simultaneous_view' | 'single_viewer' | 'single_controller' | 'unknown' | 'unavailable' | string;
   state: 'available' | 'allocated' | 'degraded' | 'disabled' | 'unknown' | string;
@@ -454,6 +464,9 @@ export interface ServiceTabHandleTraceFilter {
   browserId?: string | null;
   profileId?: string | null;
   sessionId?: string | null;
+  serviceName?: string | null;
+  agentName?: string | null;
+  taskName?: string | null;
 }
 
 export interface ServiceTabHandle {
@@ -873,6 +886,10 @@ export interface ServiceChallengesResponse extends ServiceListResponse<ServiceCh
 
 export interface ServiceReconcileResponse {
   reconciled: boolean;
+  browserCount: number;
+  changedBrowsers: number;
+  expiredSessionLeases: string[];
+  expiredSessionLeaseCount: number;
   service_state: Record<string, unknown>;
   [key: string]: unknown;
 }

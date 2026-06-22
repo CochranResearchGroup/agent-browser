@@ -1306,6 +1306,7 @@ pub struct Flags {
     pub cli_headed: bool,
     pub cli_leave_open: bool,
     pub cli_runtime_profile: bool,
+    pub cli_provider: bool,
     pub cli_browser_host: bool,
     pub cli_view_stream_provider: bool,
     pub cli_control_input_provider: bool,
@@ -1696,6 +1697,7 @@ pub fn parse_flags(args: &[String]) -> Flags {
         cli_headed: false,
         cli_leave_open: false,
         cli_runtime_profile: false,
+        cli_provider: false,
         cli_browser_host: false,
         cli_view_stream_provider: false,
         cli_control_input_provider: false,
@@ -1925,6 +1927,7 @@ pub fn parse_flags(args: &[String]) -> Flags {
             "-p" | "--provider" => {
                 if let Some(p) = args.get(i + 1) {
                     flags.provider = Some(p.clone());
+                    flags.cli_provider = true;
                     i += 1;
                 }
             }

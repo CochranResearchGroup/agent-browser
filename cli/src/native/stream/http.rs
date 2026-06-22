@@ -1,5 +1,6 @@
 use rust_embed::Embed;
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
+use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -52,6 +53,69 @@ const SERVICE_REQUEST_ALLOWED_ACTIONS: &[&str] = SERVICE_REQUEST_ACTIONS;
 struct DashboardAssets;
 
 pub(super) const CORS_HEADERS: &str = "Access-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\n";
+
+pub(crate) fn runtime_manifest_json() -> Value {
+    let dashboard = dashboard_asset_manifest();
+    let executable = executable_manifest();
+    json!({
+        "schemaVersion": "agent-browser.runtime-manifest.v1",
+        "packageVersion": env!("CARGO_PKG_VERSION"),
+        "serviceContractVersion": "service-ui-runtime.v1",
+        "dashboard": dashboard,
+        "executable": executable,
+        "supportedUiFeatures": [
+            "workspace.detectedBrowsers",
+            "workspace.noRetainedLiveRail",
+            "workspace.rdpGateway",
+            "workspace.cdpScreencast",
+            "workspace.serviceOwnedBrowsers"
+        ],
+        "apiShapes": {
+            "sessions": 2,
+            "serviceStatus": 4,
+            "viewStreams": 3
+        }
+    })
+}
+
+fn dashboard_asset_manifest() -> Value {
+    let mut names = DashboardAssets::iter()
+        .map(|name| name.to_string())
+        .collect::<Vec<_>>();
+    names.sort();
+    let mut hasher = Sha256::new();
+    let mut total_bytes = 0usize;
+    for name in &names {
+        hasher.update(name.as_bytes());
+        hasher.update([0]);
+        if let Some(content) = DashboardAssets::get(name) {
+            total_bytes += content.data.len();
+            hasher.update(&content.data);
+        }
+        hasher.update([0]);
+    }
+    json!({
+        "assetCount": names.len(),
+        "totalBytes": total_bytes,
+        "sha256": format!("{:x}", hasher.finalize()),
+    })
+}
+
+fn executable_manifest() -> Value {
+    let path = std::env::current_exe().ok();
+    let sha256 = path
+        .as_ref()
+        .and_then(|path| std::fs::read(path).ok())
+        .map(|bytes| {
+            let mut hasher = Sha256::new();
+            hasher.update(bytes);
+            format!("{:x}", hasher.finalize())
+        });
+    json!({
+        "path": path.map(|path| path.display().to_string()),
+        "sha256": sha256,
+    })
+}
 
 /// Build CORS headers that reflect the request origin only when it passes
 /// `is_allowed_origin`. Used for sensitive endpoints (chat, models) so the
@@ -924,6 +988,12 @@ pub(super) async fn handle_http_request(
             "application/json; charset=utf-8",
             discover_sessions().into_bytes(),
         )
+    } else if path == "/api/runtime/manifest" {
+        (
+            "200 OK",
+            "application/json; charset=utf-8",
+            runtime_manifest_json().to_string().into_bytes(),
+        )
     } else if path == "/api/tabs" {
         let tabs = last_tabs.read().await;
         (
@@ -1526,6 +1596,14 @@ fn service_request_command(body: &str) -> Result<Value, String> {
         request.get("serviceTabHandle"),
         request.get("cdpAttachmentAllowed"),
     )?;
+    reject_external_byop_adopt_request(
+        action,
+        request
+            .get("runtimeProfile")
+            .or_else(|| request.get("profileId")),
+        request.get("cdpUrl"),
+        request.get("cdpPort"),
+    )?;
     reject_bounded_evaluate_service_request(
         action,
         request.get("serviceTabHandle"),
@@ -1535,6 +1613,37 @@ fn service_request_command(body: &str) -> Result<Value, String> {
         request.get("maxReturnBytes"),
     )?;
     reject_service_diagnostics_request(action, request.get("serviceTabHandle"))?;
+    reject_service_probe_request(
+        action,
+        request.get("serviceTabHandle"),
+        request.get("probe"),
+        request.get("timeoutMs"),
+        request.get("maxReturnBytes"),
+    )?;
+    reject_tab_handle_refresh_request(
+        action,
+        request.get("serviceTabHandle"),
+        request.get("repairPolicy"),
+    )?;
+    reject_service_ui_action_request(
+        action,
+        request.get("serviceTabHandle"),
+        request.get("uiAction"),
+        request.get("timeoutMs"),
+    )?;
+    reject_service_network_capture_request(
+        action,
+        request.get("serviceTabHandle"),
+        request.get("networkCapture"),
+        request.get("timeoutMs"),
+        request.get("maxBodyBytes"),
+    )?;
+    reject_service_file_transfer_request(
+        action,
+        request.get("serviceTabHandle"),
+        request.get("fileTransfer"),
+        request.get("timeoutMs"),
+    )?;
     reject_stale_monitor_service_request(
         request.get("monitorRunDueSummary"),
         request.get("allowMonitorFreshnessRisk"),
@@ -1576,8 +1685,12 @@ fn service_request_command(body: &str) -> Result<Value, String> {
         "accountId",
         "accountIds",
         "url",
+        "desiredUrl",
         "profile",
+        "profileId",
         "runtimeProfile",
+        "cdpUrl",
+        "cdpPort",
         "browserId",
         "sessionName",
         "targetId",
@@ -1587,12 +1700,19 @@ fn service_request_command(body: &str) -> Result<Value, String> {
         "returnByValue",
         "timeoutMs",
         "maxReturnBytes",
+        "maxTextBytes",
+        "maxBodyBytes",
         "captureEvidenceOnFailure",
         "includeScreenshot",
         "screenshotDir",
         "maxConsoleEntries",
         "maxErrorEntries",
         "maxRequestEntries",
+        "probe",
+        "uiAction",
+        "networkCapture",
+        "fileTransfer",
+        "repairPolicy",
     ] {
         if let Some(value) = request.get(key) {
             command[key] = value.clone();
@@ -1817,6 +1937,34 @@ fn reject_cdp_attach_service_request(
     Ok(())
 }
 
+fn reject_external_byop_adopt_request(
+    action: &str,
+    profile_id: Option<&Value>,
+    cdp_url: Option<&Value>,
+    cdp_port: Option<&Value>,
+) -> Result<(), String> {
+    if action != "external_byop_adopt" {
+        return Ok(());
+    }
+    if profile_id
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .is_none()
+    {
+        return Err("external_byop_adopt requires runtimeProfile or profileId".to_string());
+    }
+    let has_cdp_url = cdp_url
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .is_some_and(|value| !value.is_empty());
+    let has_cdp_port = cdp_port.and_then(Value::as_u64).is_some();
+    if has_cdp_url == has_cdp_port {
+        return Err("external_byop_adopt requires exactly one of cdpUrl or cdpPort".to_string());
+    }
+    Ok(())
+}
+
 fn reject_bounded_evaluate_service_request(
     action: &str,
     service_tab_handle: Option<&Value>,
@@ -1858,6 +2006,344 @@ fn reject_service_diagnostics_request(
         return Err("serviceTabHandle.tabId is required".to_string());
     }
     Ok(())
+}
+
+fn reject_service_probe_request(
+    action: &str,
+    service_tab_handle: Option<&Value>,
+    probe: Option<&Value>,
+    timeout_ms: Option<&Value>,
+    max_return_bytes: Option<&Value>,
+) -> Result<(), String> {
+    if action != "probe" {
+        return Ok(());
+    }
+    let Some(handle) = service_tab_handle.and_then(Value::as_object) else {
+        return Err("probe requires serviceTabHandle".to_string());
+    };
+    if handle.get("valid").and_then(Value::as_bool) != Some(true) {
+        let stale_reason = handle
+            .get("staleReason")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        return Err(format!("service tab handle is stale: {stale_reason}"));
+    }
+    if handle.get("tabId").and_then(Value::as_str).is_none() {
+        return Err("serviceTabHandle.tabId is required".to_string());
+    }
+    if handle.get("targetId").and_then(Value::as_str).is_none() {
+        return Err("probe requires serviceTabHandle.targetId".to_string());
+    }
+    let Some(probe) = probe.and_then(Value::as_object) else {
+        return Err("probe requires probe object".to_string());
+    };
+    if probe
+        .get("detectors")
+        .and_then(Value::as_array)
+        .filter(|detectors| !detectors.is_empty())
+        .is_none()
+    {
+        return Err("probe requires at least one detector".to_string());
+    }
+    let timeout_ms = timeout_ms
+        .and_then(Value::as_u64)
+        .or_else(|| probe.get("timeoutMs").and_then(Value::as_u64));
+    let max_return_bytes = max_return_bytes
+        .and_then(Value::as_u64)
+        .or_else(|| probe.get("maxReturnBytes").and_then(Value::as_u64));
+    if timeout_ms.unwrap_or(0) == 0 {
+        return Err("probe requires positive timeoutMs".to_string());
+    }
+    if max_return_bytes.unwrap_or(0) == 0 {
+        return Err("probe requires positive maxReturnBytes".to_string());
+    }
+    if let Some(record) = probe.get("recordFreshness").and_then(Value::as_object) {
+        if record
+            .get("targetServiceId")
+            .and_then(Value::as_str)
+            .is_none()
+        {
+            return Err("probe recordFreshness requires targetServiceId".to_string());
+        }
+        if record.get("accountId").and_then(Value::as_str).is_none() {
+            return Err("probe recordFreshness requires accountId".to_string());
+        }
+    }
+    Ok(())
+}
+
+fn reject_tab_handle_refresh_request(
+    action: &str,
+    service_tab_handle: Option<&Value>,
+    repair_policy: Option<&Value>,
+) -> Result<(), String> {
+    if action != "tab_handle_refresh" {
+        return Ok(());
+    }
+    let Some(handle) = service_tab_handle.and_then(Value::as_object) else {
+        return Err("tab_handle_refresh requires serviceTabHandle".to_string());
+    };
+    if handle.get("tabId").and_then(Value::as_str).is_none() {
+        return Err("serviceTabHandle.tabId is required".to_string());
+    }
+    if let Some(policy) = repair_policy.and_then(Value::as_str) {
+        if !matches!(
+            policy,
+            "reject_only" | "reuse_compatible" | "open_if_missing"
+        ) {
+            return Err(
+                "tab_handle_refresh repairPolicy must be reject_only, reuse_compatible, or open_if_missing"
+                    .to_string(),
+            );
+        }
+    }
+    Ok(())
+}
+
+fn reject_service_ui_action_request(
+    action: &str,
+    service_tab_handle: Option<&Value>,
+    ui_action: Option<&Value>,
+    timeout_ms: Option<&Value>,
+) -> Result<(), String> {
+    if action != "ui_action" {
+        return Ok(());
+    }
+    let Some(handle) = service_tab_handle.and_then(Value::as_object) else {
+        return Err("ui_action requires serviceTabHandle".to_string());
+    };
+    if handle.get("valid").and_then(Value::as_bool) != Some(true) {
+        let stale_reason = handle
+            .get("staleReason")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        return Err(format!("service tab handle is stale: {stale_reason}"));
+    }
+    if handle.get("tabId").and_then(Value::as_str).is_none() {
+        return Err("serviceTabHandle.tabId is required".to_string());
+    }
+    if handle.get("targetId").and_then(Value::as_str).is_none() {
+        return Err("ui_action requires serviceTabHandle.targetId".to_string());
+    }
+    let Some(recipe) = ui_action.and_then(Value::as_object) else {
+        return Err("ui_action requires uiAction object".to_string());
+    };
+    let Some(steps) = recipe.get("steps").and_then(Value::as_array) else {
+        return Err("ui_action requires uiAction.steps array".to_string());
+    };
+    if steps.is_empty() {
+        return Err("ui_action requires at least one step".to_string());
+    }
+    if timeout_ms
+        .or_else(|| recipe.get("timeoutMs"))
+        .and_then(Value::as_u64)
+        .filter(|value| *value > 0)
+        .is_none()
+    {
+        return Err("ui_action requires positive timeoutMs".to_string());
+    }
+    Ok(())
+}
+
+fn reject_service_network_capture_request(
+    action: &str,
+    service_tab_handle: Option<&Value>,
+    network_capture: Option<&Value>,
+    timeout_ms: Option<&Value>,
+    max_body_bytes: Option<&Value>,
+) -> Result<(), String> {
+    if action != "network_capture" {
+        return Ok(());
+    }
+    let Some(handle) = service_tab_handle.and_then(Value::as_object) else {
+        return Err("network_capture requires serviceTabHandle".to_string());
+    };
+    if handle.get("valid").and_then(Value::as_bool) != Some(true) {
+        let stale_reason = handle
+            .get("staleReason")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        return Err(format!("service tab handle is stale: {stale_reason}"));
+    }
+    if handle.get("tabId").and_then(Value::as_str).is_none() {
+        return Err("serviceTabHandle.tabId is required".to_string());
+    }
+    if handle.get("targetId").and_then(Value::as_str).is_none() {
+        return Err("network_capture requires serviceTabHandle.targetId".to_string());
+    }
+    let Some(recipe) = network_capture.and_then(Value::as_object) else {
+        return Err("network_capture requires networkCapture object".to_string());
+    };
+    let timeout_ms = timeout_ms
+        .or_else(|| recipe.get("timeoutMs"))
+        .or_else(|| recipe.get("maxDurationMs"))
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    if timeout_ms == 0 {
+        return Err("network_capture requires positive timeoutMs".to_string());
+    }
+    if recipe
+        .get("maxEvents")
+        .and_then(Value::as_u64)
+        .filter(|value| *value > 0)
+        .is_none()
+    {
+        return Err("network_capture requires positive networkCapture.maxEvents".to_string());
+    }
+    if recipe
+        .get("captureBodies")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        let max_body_bytes = recipe
+            .get("maxBodyBytes")
+            .or(max_body_bytes)
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        if max_body_bytes == 0 {
+            return Err("network_capture captureBodies requires positive maxBodyBytes".to_string());
+        }
+    }
+    Ok(())
+}
+
+fn reject_service_file_transfer_request(
+    action: &str,
+    service_tab_handle: Option<&Value>,
+    file_transfer: Option<&Value>,
+    timeout_ms: Option<&Value>,
+) -> Result<(), String> {
+    if action != "file_transfer" {
+        return Ok(());
+    }
+    let Some(handle) = service_tab_handle.and_then(Value::as_object) else {
+        return Err("file_transfer requires serviceTabHandle".to_string());
+    };
+    if handle.get("valid").and_then(Value::as_bool) != Some(true) {
+        let stale_reason = handle
+            .get("staleReason")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        return Err(format!("service tab handle is stale: {stale_reason}"));
+    }
+    if handle.get("tabId").and_then(Value::as_str).is_none() {
+        return Err("serviceTabHandle.tabId is required".to_string());
+    }
+    if handle.get("targetId").and_then(Value::as_str).is_none() {
+        return Err("file_transfer requires serviceTabHandle.targetId".to_string());
+    }
+    let Some(recipe) = file_transfer.and_then(Value::as_object) else {
+        return Err("file_transfer requires fileTransfer object".to_string());
+    };
+    let timeout_ms = timeout_ms
+        .or_else(|| recipe.get("timeoutMs"))
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    if timeout_ms == 0 {
+        return Err("file_transfer requires positive timeoutMs".to_string());
+    }
+    if recipe.get("upload").is_none() && recipe.get("download").is_none() {
+        return Err("file_transfer requires upload or download recipe".to_string());
+    }
+    if let Some(upload) = recipe.get("upload") {
+        let Some(upload) = upload.as_object() else {
+            return Err("file_transfer upload must be an object".to_string());
+        };
+        reject_file_transfer_upload_recipe(upload)?;
+    }
+    if let Some(download) = recipe.get("download") {
+        let Some(download) = download.as_object() else {
+            return Err("file_transfer download must be an object".to_string());
+        };
+        reject_file_transfer_download_recipe(download)?;
+    }
+    Ok(())
+}
+
+fn reject_file_transfer_upload_recipe(upload: &Map<String, Value>) -> Result<(), String> {
+    if upload
+        .get("selector")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .is_none()
+        && upload
+            .get("labelText")
+            .or_else(|| upload.get("label"))
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .is_none()
+    {
+        return Err("file_transfer upload requires selector or labelText".to_string());
+    }
+    let Some(files) = upload.get("files").and_then(Value::as_array) else {
+        return Err("file_transfer upload requires files array".to_string());
+    };
+    if files.is_empty()
+        || !files
+            .iter()
+            .all(|file| file.as_str().is_some_and(|value| !value.trim().is_empty()))
+    {
+        return Err("file_transfer upload files must be nonempty strings".to_string());
+    }
+    let max_files = upload.get("maxFiles").and_then(Value::as_u64).unwrap_or(0);
+    if max_files == 0 {
+        return Err("file_transfer upload requires positive maxFiles".to_string());
+    }
+    if files.len() as u64 > max_files {
+        return Err(format!(
+            "file_transfer upload file count {} exceeds maxFiles {}",
+            files.len(),
+            max_files
+        ));
+    }
+    reject_nonempty_string_array(
+        upload.get("allowedPaths"),
+        "file_transfer upload allowedPaths",
+    )
+}
+
+fn reject_file_transfer_download_recipe(download: &Map<String, Value>) -> Result<(), String> {
+    if download
+        .get("selector")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .is_none()
+    {
+        return Err("file_transfer download requires selector".to_string());
+    }
+    if download
+        .get("directory")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .is_none()
+    {
+        return Err("file_transfer download requires directory".to_string());
+    }
+    reject_nonempty_string_array(
+        download.get("allowedDirectories"),
+        "file_transfer download allowedDirectories",
+    )?;
+    if download.get("maxBytes").and_then(Value::as_u64) == Some(0) {
+        return Err("file_transfer download maxBytes must be positive".to_string());
+    }
+    Ok(())
+}
+
+fn reject_nonempty_string_array(value: Option<&Value>, label: &str) -> Result<(), String> {
+    let valid = value
+        .and_then(Value::as_array)
+        .filter(|items| {
+            !items.is_empty()
+                && items
+                    .iter()
+                    .all(|item| item.as_str().is_some_and(|text| !text.trim().is_empty()))
+        })
+        .is_some();
+    if valid {
+        Ok(())
+    } else {
+        Err(format!("{label} must be a nonempty string array"))
+    }
 }
 
 fn validate_bounded_evaluate_service_request(
@@ -4227,6 +4713,27 @@ mod tests {
     }
 
     #[test]
+    fn service_request_command_maps_remote_view_open_params() {
+        let command = service_request_command(
+            r##"{"action":"remote_view_open","params":{"url":"https://www.linkedin.com/","routePoolEntryId":"pool-a","dryRun":true,"routeDescriptor":{"dashboardEmbedUrl":"https://dashboard.example/guacamole/#/client/route-a"}},"serviceName":"AuraCall","agentName":"codex","taskName":"authenticateLinkedIn","runtimeProfile":"stealthcdp-default"}"##,
+        )
+        .unwrap();
+
+        assert_eq!(command["action"], "remote_view_open");
+        assert_eq!(command["url"], "https://www.linkedin.com/");
+        assert_eq!(command["routePoolEntryId"], "pool-a");
+        assert_eq!(command["dryRun"], true);
+        assert_eq!(command["serviceName"], "AuraCall");
+        assert_eq!(command["agentName"], "codex");
+        assert_eq!(command["taskName"], "authenticateLinkedIn");
+        assert_eq!(command["runtimeProfile"], "stealthcdp-default");
+        assert_eq!(
+            command["routeDescriptor"]["dashboardEmbedUrl"],
+            "https://dashboard.example/guacamole/#/client/route-a"
+        );
+    }
+
+    #[test]
     fn service_request_relay_session_routes_view_focus_to_requested_daemon_session() {
         let body = r##"{"action":"view_focus","params":{"sessionName":"odollo-carrier-ups","targetId":"target-1"},"serviceName":"agent-browser-dashboard"}"##;
         let command = service_request_command(body).unwrap();
@@ -4417,14 +4924,197 @@ mod tests {
     }
 
     #[test]
+    fn service_request_command_rejects_unbound_probe() {
+        let err = service_request_command(
+            r##"{"action":"probe","serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","probe":{"detectors":[{"id":"title","type":"url_title"}]},"timeoutMs":1000,"maxReturnBytes":128}"##,
+        )
+        .expect_err("probe without service tab handle should fail");
+
+        assert!(err.contains("probe requires serviceTabHandle"));
+    }
+
+    #[test]
+    fn service_request_command_rejects_unbounded_probe() {
+        let err = service_request_command(
+            r##"{"action":"probe","serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","serviceTabHandle":{"browserId":"session:default","sessionName":"default","tabId":"target:target-1","targetId":"target-1","profileOrigin":"agent_browser_owned","leaseHeartbeatExpected":true,"traceFilter":{"browserId":"session:default","profileId":null,"sessionId":"default"},"valid":true},"probe":{"detectors":[{"id":"title","type":"url_title"}]},"timeoutMs":1000}"##,
+        )
+        .expect_err("probe without maxReturnBytes should fail");
+
+        assert!(err.contains("maxReturnBytes"));
+    }
+
+    #[test]
+    fn service_request_command_rejects_unbound_tab_handle_refresh() {
+        let err = service_request_command(
+            r##"{"action":"tab_handle_refresh","serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","repairPolicy":"reject_only"}"##,
+        )
+        .expect_err("tab_handle_refresh without service tab handle should fail");
+
+        assert!(err.contains("tab_handle_refresh requires serviceTabHandle"));
+    }
+
+    #[test]
+    fn service_request_command_rejects_unknown_tab_handle_refresh_policy() {
+        let err = service_request_command(
+            r##"{"action":"tab_handle_refresh","serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","serviceTabHandle":{"browserId":"session:default","sessionName":"default","tabId":"target:target-1","targetId":"target-1","profileOrigin":"agent_browser_owned","leaseHeartbeatExpected":true,"traceFilter":{"browserId":"session:default","profileId":null,"sessionId":"default"},"valid":true},"repairPolicy":"surprise_me"}"##,
+        )
+        .expect_err("unknown tab_handle_refresh repair policy should fail");
+
+        assert!(err.contains("repairPolicy"));
+    }
+
+    #[test]
+    fn service_request_command_forwards_tab_handle_refresh_options() {
+        let command = service_request_command(
+            r##"{"action":"tab_handle_refresh","serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","serviceTabHandle":{"browserId":"session:default","sessionName":"default","tabId":"target:target-1","targetId":"target-1","profileOrigin":"agent_browser_owned","leaseHeartbeatExpected":true,"traceFilter":{"browserId":"session:default","profileId":null,"sessionId":"default"},"valid":true},"repairPolicy":"open_if_missing","url":"https://example.com/recover","desiredUrl":"https://example.com/desired"}"##,
+        )
+        .unwrap();
+
+        assert_eq!(command["action"], "tab_handle_refresh");
+        assert_eq!(command["repairPolicy"], "open_if_missing");
+        assert_eq!(command["url"], "https://example.com/recover");
+        assert_eq!(command["desiredUrl"], "https://example.com/desired");
+    }
+
+    #[test]
+    fn service_request_command_rejects_unbound_ui_action() {
+        let err = service_request_command(
+            r##"{"action":"ui_action","serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","uiAction":{"steps":[{"id":"find-main","type":"find","selector":"main"}]},"timeoutMs":1000}"##,
+        )
+        .expect_err("ui_action without service tab handle should fail");
+
+        assert!(err.contains("ui_action requires serviceTabHandle"));
+    }
+
+    #[test]
+    fn service_request_command_rejects_unbounded_ui_action() {
+        let err = service_request_command(
+            r##"{"action":"ui_action","serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","serviceTabHandle":{"browserId":"session:default","sessionName":"default","tabId":"target:target-1","targetId":"target-1","profileOrigin":"agent_browser_owned","leaseHeartbeatExpected":true,"traceFilter":{"browserId":"session:default","profileId":null,"sessionId":"default"},"valid":true},"uiAction":{"steps":[{"id":"find-main","type":"find","selector":"main"}]}}"##,
+        )
+        .expect_err("ui_action without timeout should fail");
+
+        assert!(err.contains("positive timeoutMs"));
+    }
+
+    #[test]
+    fn service_request_command_forwards_ui_action_recipe() {
+        let command = service_request_command(
+            r##"{"action":"ui_action","serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","serviceTabHandle":{"browserId":"session:default","sessionName":"default","tabId":"target:target-1","targetId":"target-1","profileOrigin":"agent_browser_owned","leaseHeartbeatExpected":true,"traceFilter":{"browserId":"session:default","profileId":null,"sessionId":"default"},"valid":true},"uiAction":{"recipeId":"generic-ui","steps":[{"id":"find-main","type":"find","selector":"main"}]},"timeoutMs":1000,"maxTextBytes":256}"##,
+        )
+        .unwrap();
+
+        assert_eq!(command["action"], "ui_action");
+        assert_eq!(command["uiAction"]["recipeId"], "generic-ui");
+        assert_eq!(command["timeoutMs"], 1000);
+        assert_eq!(command["maxTextBytes"], 256);
+        assert_eq!(command["serviceTabHandle"]["tabId"], "target:target-1");
+    }
+
+    #[test]
+    fn service_request_command_rejects_unbound_network_capture() {
+        let err = service_request_command(
+            r##"{"action":"network_capture","serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","networkCapture":{"maxEvents":2},"timeoutMs":1000}"##,
+        )
+        .expect_err("network_capture without service tab handle should fail");
+
+        assert!(err.contains("network_capture requires serviceTabHandle"));
+    }
+
+    #[test]
+    fn service_request_command_rejects_unbounded_network_capture_body() {
+        let err = service_request_command(
+            r##"{"action":"network_capture","serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","serviceTabHandle":{"browserId":"session:default","sessionName":"default","tabId":"target:target-1","targetId":"target-1","profileOrigin":"agent_browser_owned","leaseHeartbeatExpected":true,"traceFilter":{"browserId":"session:default","profileId":null,"sessionId":"default"},"valid":true},"networkCapture":{"maxEvents":2,"captureBodies":true},"timeoutMs":1000}"##,
+        )
+        .expect_err("network_capture body capture without maxBodyBytes should fail");
+
+        assert!(err.contains("maxBodyBytes"));
+    }
+
+    #[test]
+    fn service_request_command_forwards_network_capture_recipe() {
+        let command = service_request_command(
+            r##"{"action":"network_capture","serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","serviceTabHandle":{"browserId":"session:default","sessionName":"default","tabId":"target:target-1","targetId":"target-1","profileOrigin":"agent_browser_owned","leaseHeartbeatExpected":true,"traceFilter":{"browserId":"session:default","profileId":null,"sessionId":"default"},"valid":true},"networkCapture":{"recipeId":"generic-network","urlPatterns":["/api/data"],"methods":["GET"],"status":"2xx","maxEvents":2,"captureBodies":true,"maxBodyBytes":128},"timeoutMs":1000,"maxBodyBytes":128}"##,
+        )
+        .unwrap();
+
+        assert_eq!(command["action"], "network_capture");
+        assert_eq!(command["networkCapture"]["recipeId"], "generic-network");
+        assert_eq!(command["networkCapture"]["maxEvents"], 2);
+        assert_eq!(command["maxBodyBytes"], 128);
+        assert_eq!(command["serviceTabHandle"]["tabId"], "target:target-1");
+    }
+
+    #[test]
+    fn service_request_command_rejects_unbound_file_transfer() {
+        let err = service_request_command(
+            r##"{"action":"file_transfer","serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","fileTransfer":{"upload":{"selector":"#file","files":["/tmp/report.txt"],"allowedPaths":["/tmp"],"maxFiles":1}},"timeoutMs":1000}"##,
+        )
+        .expect_err("file_transfer without service tab handle should fail");
+
+        assert!(err.contains("file_transfer requires serviceTabHandle"));
+    }
+
+    #[test]
+    fn service_request_command_rejects_unbounded_file_transfer_upload() {
+        let err = service_request_command(
+            r##"{"action":"file_transfer","serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","serviceTabHandle":{"browserId":"session:default","sessionName":"default","tabId":"target:target-1","targetId":"target-1","profileOrigin":"agent_browser_owned","leaseHeartbeatExpected":true,"traceFilter":{"browserId":"session:default","profileId":null,"sessionId":"default"},"valid":true},"fileTransfer":{"upload":{"selector":"#file","files":["/tmp/report.txt"],"maxFiles":1}},"timeoutMs":1000}"##,
+        )
+        .expect_err("file_transfer upload without allowedPaths should fail");
+
+        assert!(err.contains("allowedPaths"));
+    }
+
+    #[test]
+    fn service_request_command_forwards_file_transfer_recipe() {
+        let command = service_request_command(
+            r##"{"action":"file_transfer","serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","serviceTabHandle":{"browserId":"session:default","sessionName":"default","tabId":"target:target-1","targetId":"target-1","profileOrigin":"agent_browser_owned","leaseHeartbeatExpected":true,"traceFilter":{"browserId":"session:default","profileId":null,"sessionId":"default"},"valid":true},"fileTransfer":{"recipeId":"generic-file-transfer","upload":{"labelText":"Upload report","files":["/tmp/report.txt"],"allowedPaths":["/tmp"],"maxFiles":1},"download":{"selector":"#download","directory":"/tmp/downloads","allowedDirectories":["/tmp"],"expectedFileName":"report.txt","maxBytes":1024}},"timeoutMs":1000,"captureEvidenceOnFailure":true}"##,
+        )
+        .unwrap();
+
+        assert_eq!(command["action"], "file_transfer");
+        assert_eq!(command["fileTransfer"]["recipeId"], "generic-file-transfer");
+        assert_eq!(command["fileTransfer"]["upload"]["maxFiles"], 1);
+        assert_eq!(command["fileTransfer"]["download"]["maxBytes"], 1024);
+        assert_eq!(command["captureEvidenceOnFailure"], true);
+        assert_eq!(command["serviceTabHandle"]["tabId"], "target:target-1");
+    }
+
+    #[test]
+    fn service_request_command_forwards_probe_recipe() {
+        let command = service_request_command(
+            r##"{"action":"probe","serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","targetServiceId":"acs","serviceTabHandle":{"browserId":"session:default","sessionName":"default","tabId":"target:target-1","targetId":"target-1","profileOrigin":"agent_browser_owned","leaseHeartbeatExpected":true,"traceFilter":{"browserId":"session:default","profileId":null,"sessionId":"default"},"valid":true},"probe":{"expectedIdentity":"acct@example.test","detectors":[{"id":"title","type":"url_title"},{"id":"account","type":"selector_text","selector":"[data-account]"}],"recordFreshness":{"targetServiceId":"acs","accountId":"acct@example.test","profileId":"journal-acs"}},"timeoutMs":1000,"maxReturnBytes":256}"##,
+        )
+        .unwrap();
+
+        assert_eq!(command["action"], "probe");
+        assert_eq!(command["targetServiceId"], "acs");
+        assert_eq!(command["timeoutMs"], 1000);
+        assert_eq!(command["maxReturnBytes"], 256);
+        assert_eq!(command["probe"]["detectors"][1]["type"], "selector_text");
+        assert_eq!(
+            command["probe"]["recordFreshness"]["accountId"],
+            "acct@example.test"
+        );
+    }
+
+    #[test]
     fn service_request_command_accepts_contract_actions() {
         for action in SERVICE_REQUEST_ACTIONS {
             let body = if matches!(
                 *action,
-                "cdp_attach" | "cdp_detach" | "evaluate" | "diagnostics"
+                "external_byop_adopt"
+                    | "cdp_attach"
+                    | "cdp_detach"
+                    | "evaluate"
+                    | "diagnostics"
+                    | "probe"
+                    | "tab_handle_refresh"
+                    | "ui_action"
+                    | "network_capture"
+                    | "file_transfer"
             ) {
                 format!(
-                    r##"{{"action":"{}","params":{{"action":"ignored","id":"ignored"}},"serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","cdpAttachmentAllowed":true,"serviceTabHandle":{{"browserId":"session:default","sessionName":"default","tabId":"target:target-1","targetId":"target-1","profileOrigin":"agent_browser_owned","leaseHeartbeatExpected":true,"traceFilter":{{"browserId":"session:default","profileId":null,"sessionId":"default"}},"valid":true}},"script":"document.title","timeoutMs":1000,"maxReturnBytes":128}}"##,
+                    r##"{{"action":"{}","params":{{"action":"ignored","id":"ignored"}},"serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","runtimeProfile":"external-work","cdpPort":9222,"cdpAttachmentAllowed":true,"serviceTabHandle":{{"browserId":"session:default","sessionName":"default","tabId":"target:target-1","targetId":"target-1","profileOrigin":"agent_browser_owned","leaseHeartbeatExpected":true,"traceFilter":{{"browserId":"session:default","profileId":null,"sessionId":"default"}},"valid":true}},"script":"document.title","timeoutMs":1000,"maxReturnBytes":128,"maxTextBytes":128,"maxBodyBytes":128,"probe":{{"detectors":[{{"id":"title","type":"url_title"}}]}},"uiAction":{{"steps":[{{"id":"find-main","type":"find","selector":"main"}}]}},"networkCapture":{{"maxEvents":1}},"fileTransfer":{{"upload":{{"selector":"#file","files":["/tmp/report.txt"],"allowedPaths":["/tmp"],"maxFiles":1}}}}}}"##,
                     action
                 )
             } else {
@@ -5205,7 +5895,7 @@ fn content_type_for_dashboard_asset(ext: &str) -> &'static str {
 
 #[cfg(test)]
 mod dashboard_asset_tests {
-    use super::{content_type_for_dashboard_asset, serve_embedded_file};
+    use super::{content_type_for_dashboard_asset, runtime_manifest_json, serve_embedded_file};
 
     fn assert_dashboard_route_body(body: &str, expected_section: &str) {
         if body.contains("Dashboard not built.") {
@@ -5254,5 +5944,35 @@ mod dashboard_asset_tests {
             content_type_for_dashboard_asset("js"),
             "application/javascript; charset=utf-8"
         );
+    }
+
+    #[test]
+    fn runtime_manifest_exposes_dashboard_and_feature_contract() {
+        let manifest = runtime_manifest_json();
+
+        assert_eq!(
+            manifest["schemaVersion"],
+            "agent-browser.runtime-manifest.v1"
+        );
+        assert_eq!(manifest["packageVersion"], env!("CARGO_PKG_VERSION"));
+        assert_eq!(manifest["serviceContractVersion"], "service-ui-runtime.v1");
+        assert!(manifest["dashboard"]["assetCount"].as_u64().unwrap_or(0) > 0);
+        assert_eq!(
+            manifest["dashboard"]["sha256"]
+                .as_str()
+                .unwrap_or_default()
+                .len(),
+            64
+        );
+        assert!(manifest["supportedUiFeatures"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|feature| feature.as_str() == Some("workspace.detectedBrowsers")));
+        assert!(manifest["supportedUiFeatures"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|feature| feature.as_str() == Some("workspace.noRetainedLiveRail")));
     }
 }

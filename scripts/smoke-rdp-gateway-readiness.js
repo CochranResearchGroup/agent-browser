@@ -10,6 +10,8 @@ import { connect } from 'node:net';
 const requireHtml5Client = process.argv.includes('--require-html5-client');
 loadAgentBrowserEnv();
 const viewUrl = process.env.AGENT_BROWSER_REMOTE_VIEW_URL || '';
+const displayRangeStart = Number.parseInt(process.env.AGENT_BROWSER_PRIVATE_DISPLAY_RANGE_START || '90', 10);
+const displayRangeEnd = Number.parseInt(process.env.AGENT_BROWSER_PRIVATE_DISPLAY_RANGE_END || '129', 10);
 
 function commandExists(command) {
   const result = spawnSync('sh', ['-lc', `command -v ${command} || { for candidate in /usr/sbin/${command} /usr/local/sbin/${command}; do [ -x "$candidate" ] && printf '%s\\n' "$candidate" && exit 0; done; exit 1; }`], {
@@ -87,6 +89,68 @@ function httpCheck(url, timeoutMs = 3000) {
   });
 }
 
+function readLockPid(path) {
+  if (!existsSync(path)) return null;
+  const value = readFileSync(path, 'utf8').trim();
+  const pid = Number.parseInt(value, 10);
+  return Number.isInteger(pid) && pid > 0 ? pid : null;
+}
+
+function pidMatchesXDisplay(pid, display) {
+  if (!pid) return false;
+  const cmdlinePath = `/proc/${pid}/cmdline`;
+  if (!existsSync(cmdlinePath)) return false;
+  const args = readFileSync(cmdlinePath)
+    .toString('utf8')
+    .split('\0')
+    .filter(Boolean);
+  const displayArg = `:${display}`;
+  const hasDisplay = args.includes(displayArg);
+  const hasXServer = args.some((arg) => /(^|\/)(Xvfb|Xorg|Xwayland)$/.test(arg));
+  return hasDisplay && hasXServer;
+}
+
+function privateDisplayReadiness() {
+  const displays = [];
+  for (let display = displayRangeStart; display <= displayRangeEnd; display += 1) {
+    const socketPath = `/tmp/.X11-unix/X${display}`;
+    const lockPath = `/tmp/.X${display}-lock`;
+    const socketExists = existsSync(socketPath);
+    const lockExists = existsSync(lockPath);
+    const lockPid = readLockPid(lockPath);
+    let status = 'free';
+    if (socketExists) {
+      status = 'active_socket';
+    } else if (lockPid && pidMatchesXDisplay(lockPid, display)) {
+      status = 'active_x_process';
+    } else if (lockPid) {
+      status = 'stale_lock_reused_pid';
+    } else if (lockExists) {
+      status = 'stale_lock_no_socket';
+    }
+    displays.push({
+      display: `:${display}`,
+      status,
+      lockPid,
+      socketPath: socketExists ? socketPath : null,
+      lockPath: lockExists ? lockPath : null,
+    });
+  }
+  const stale = displays.filter((display) => display.status.startsWith('stale_lock_'));
+  const active = displays.filter((display) => display.status === 'active_socket' || display.status === 'active_x_process');
+  const free = displays.filter((display) => display.status === 'free');
+  return {
+    range: `:${displayRangeStart}-:${displayRangeEnd}`,
+    status: free.length > 0 || stale.length > 0 ? 'ready' : 'blocked',
+    freeCount: free.length,
+    staleLockCount: stale.length,
+    activeCount: active.length,
+    firstAvailableDisplay: free[0]?.display || stale[0]?.display || null,
+    staleDisplays: stale.map((display) => display.display),
+    displays,
+  };
+}
+
 const commands = {
   guacd: commandExists('guacd'),
   xrdp: commandExists('xrdp'),
@@ -96,6 +160,7 @@ const commands = {
 const guacdTcp = await tcpCheck('127.0.0.1', 4822);
 const xrdpTcp = await tcpCheck('127.0.0.1', 3389);
 const html5Client = viewUrl ? await httpCheck(viewUrl) : { ok: false, url: null, error: 'AGENT_BROWSER_REMOTE_VIEW_URL is unset' };
+const privateDisplays = privateDisplayReadiness();
 const backendReady = Boolean(commands.guacd && commands.xrdp && commands.xrdpSesman && commands.xfreerdp && guacdTcp.ok && xrdpTcp.ok);
 const ready = backendReady && (!requireHtml5Client || html5Client.ok);
 const readinessComponents = [
@@ -126,6 +191,15 @@ const readinessComponents = [
     evidence: `guacd tcp=${guacdTcp.ok ? 'ok' : guacdTcp.error}; xrdp tcp=${xrdpTcp.ok ? 'ok' : xrdpTcp.error}`,
     nextAction: guacdTcp.ok && xrdpTcp.ok ? 'none' : 'inspect_backend_tcp',
     recovery: guacdTcp.ok && xrdpTcp.ok ? 'Backend TCP listeners are reachable.' : 'Inspect local firewall, service status, and listener bindings for guacd and xrdp.',
+  },
+  {
+    component: 'private_display_allocator',
+    status: privateDisplays.status,
+    evidence: `${privateDisplays.range} free=${privateDisplays.freeCount} stale_locks=${privateDisplays.staleLockCount} active=${privateDisplays.activeCount} first_available=${privateDisplays.firstAvailableDisplay || 'none'}`,
+    nextAction: privateDisplays.status === 'ready' ? 'none' : 'clear_stale_display_locks_or_expand_allocator_range',
+    recovery: privateDisplays.status === 'ready'
+      ? 'Private display allocation has a free or safely stale candidate.'
+      : 'Clear stale /tmp/.X*-lock files in the allocator range after confirming no matching /tmp/.X11-unix/X* socket exists, or expand the private display allocator range.',
   },
   {
     component: 'guacamole_web_app',
@@ -175,6 +249,7 @@ const result = {
     xrdp: xrdpTcp,
   },
   html5Client,
+  privateDisplays,
   viewStream: {
     provider: 'rdp_gateway',
     url: viewUrl || null,

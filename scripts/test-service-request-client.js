@@ -4,13 +4,21 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 import {
+  attachServiceTabCdp,
   createServiceControllerLeaseTakeoverRequest,
   createServiceCdpAttachRequest,
   createServiceCdpDetachRequest,
   createServiceCdpFreeLaunchRequest,
   createServiceDiagnosticsRequest,
   createServiceEvaluateRequest,
+  createServiceFileTransferRequest,
+  createServiceNetworkCaptureRequest,
+  createServiceProbeRequest,
+  createServiceUiActionRequest,
+  createServiceTabHandleRefreshRequest,
+  createServiceTabHandleReleaseRequest,
   createServiceRemoteViewRouteCheckoutRequest,
+  createServiceRemoteViewOpenRequest,
   createServiceRemoteViewRouteReleaseRequest,
   createServiceRoutePoolRepairRequest,
   createServiceRequest,
@@ -20,10 +28,19 @@ import {
   createServiceViewerLeaseHeartbeatRequest,
   createServiceViewerLeaseReleaseRequest,
   createServiceViewerLeaseRequest,
+  evaluateServiceTab,
   getServiceTabHandle,
+  getServiceTabDiagnostics,
   heartbeatServiceViewerLease,
   isServiceCdpFreeActionAvailable,
   postServiceRequest,
+  probeServiceTab,
+  requestServiceFileTransfer,
+  captureServiceNetwork,
+  requestServiceUiAction,
+  refreshServiceTabHandle,
+  runServiceUiAction,
+  releaseServiceTabHandle,
   releaseServiceViewerLease,
   requireServiceTabHandle,
   requestServiceCdpAttach,
@@ -31,10 +48,17 @@ import {
   requestServiceCdpFreeLaunch,
   requestServiceDiagnostics,
   requestServiceEvaluate,
+  requestServiceNetworkCapture,
+  requestServiceProbe,
+  requestServiceTabHandleRefresh,
+  requestServiceTabHandleRelease,
   requestServiceRemoteViewRouteCheckout,
+  requestServiceRemoteViewOpen,
   requestServiceRoutePoolRepair,
   requestServiceTab,
+  requestServiceTabFromAccessPlan,
   requestServiceViewerLease,
+  transferServiceFiles,
   SERVICE_REQUEST_ACTIONS,
   summarizeServiceCdpFreeLaunchAvailability,
   takeoverServiceControllerLease,
@@ -460,6 +484,29 @@ async function main() {
       },
     },
   };
+  const sharedProfileAccessPlan = {
+    decision: {
+      profileReuse: {
+        sharedAcquisition: {
+          policy: 'shared_browser_tabs',
+          mode: 'tab_new',
+          browserId: 'browser-shared',
+          sessionName: 'shared-session',
+          requiresRouteHints: true,
+        },
+      },
+      serviceRequest: {
+        request: {
+          serviceName: 'AuraCall',
+          agentName: 'auracall-agent',
+          taskName: 'openSharedTab',
+          targetServiceIds: ['chatgpt'],
+          profileLeasePolicy: 'wait',
+          action: 'tab_new',
+        },
+      },
+    },
+  };
   assert.deepEqual(
     createServiceTabRequestFromAccessPlan(accessPlan, {
       monitorRunDueSummary: {
@@ -494,6 +541,44 @@ async function main() {
         url: 'https://example.com/planned',
       },
       jobTimeoutMs: 60_000,
+    },
+  );
+  assert.deepEqual(
+    createServiceTabRequestFromAccessPlan(sharedProfileAccessPlan, {
+      url: 'https://chatgpt.com/',
+    }),
+    {
+      serviceName: 'AuraCall',
+      agentName: 'auracall-agent',
+      taskName: 'openSharedTab',
+      targetServiceIds: ['chatgpt'],
+      profileLeasePolicy: 'wait',
+      browserId: 'browser-shared',
+      sessionName: 'shared-session',
+      action: 'tab_new',
+      params: {
+        url: 'https://chatgpt.com/',
+      },
+    },
+  );
+  assert.deepEqual(
+    createServiceTabRequestFromAccessPlan(sharedProfileAccessPlan, {
+      browserId: 'browser-override',
+      sessionName: 'override-session',
+      url: 'https://chatgpt.com/',
+    }),
+    {
+      serviceName: 'AuraCall',
+      agentName: 'auracall-agent',
+      taskName: 'openSharedTab',
+      targetServiceIds: ['chatgpt'],
+      profileLeasePolicy: 'wait',
+      browserId: 'browser-override',
+      sessionName: 'override-session',
+      action: 'tab_new',
+      params: {
+        url: 'https://chatgpt.com/',
+      },
     },
   );
   assert.throws(
@@ -874,6 +959,14 @@ async function main() {
   });
   assert.equal(cdpAttachRecorder.calls[0].body.action, 'cdp_attach');
   assert.deepEqual(cdpAttachRecorder.calls[0].body.serviceTabHandle, tabHandle);
+  const cdpAttachAliasRecorder = createFetchRecorder({ success: true, data: { attached: true } });
+  await attachServiceTabCdp({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: cdpAttachAliasRecorder.fetch,
+    serviceTabHandle: tabHandle,
+    cdpAttachmentAllowed: true,
+  });
+  assert.equal(cdpAttachAliasRecorder.calls[0].body.action, 'cdp_attach');
   const cdpDetachRecorder = createFetchRecorder({
     success: true,
     data: {
@@ -970,6 +1063,16 @@ async function main() {
   assert.equal(evaluateRecorder.calls[0].body.script, 'document.title');
   assert.equal(evaluateRecorder.calls[0].body.returnByValue, true);
   assert.deepEqual(evaluateRecorder.calls[0].body.serviceTabHandle, tabHandle);
+  const evaluateAliasRecorder = createFetchRecorder({ success: true, data: { ok: true } });
+  await evaluateServiceTab({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: evaluateAliasRecorder.fetch,
+    serviceTabHandle: tabHandle,
+    script: 'document.title',
+    timeoutMs: 1000,
+    maxReturnBytes: 128,
+  });
+  assert.equal(evaluateAliasRecorder.calls[0].body.action, 'evaluate');
   assert.deepEqual(
     createServiceDiagnosticsRequest({
       serviceName: 'JournalDownloader',
@@ -1032,6 +1135,485 @@ async function main() {
   assert.equal(diagnosticsRecorder.calls[0].body.action, 'diagnostics');
   assert.equal(diagnosticsRecorder.calls[0].body.maxConsoleEntries, 5);
   assert.deepEqual(diagnosticsRecorder.calls[0].body.serviceTabHandle, tabHandle);
+  const diagnosticsAliasRecorder = createFetchRecorder({ success: true, data: { ok: true } });
+  await getServiceTabDiagnostics({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: diagnosticsAliasRecorder.fetch,
+    serviceTabHandle: tabHandle,
+  });
+  assert.equal(diagnosticsAliasRecorder.calls[0].body.action, 'diagnostics');
+  const probeRecipe = {
+    detectors: [
+      { id: 'title', type: 'url_title' },
+      { id: 'identity', type: 'selector_text', selector: '[data-account]' },
+    ],
+    expectedIdentity: 'acct@example.test',
+    recordFreshness: {
+      targetServiceId: 'acs',
+      accountId: 'acct@example.test',
+      profileId: 'journal-acs',
+    },
+  };
+  assert.deepEqual(
+    createServiceProbeRequest({
+      serviceName: 'JournalDownloader',
+      agentName: 'article-probe-agent',
+      taskName: 'probeACSwebsite',
+      serviceTabHandle: tabHandle,
+      probe: probeRecipe,
+      timeoutMs: 1000,
+      maxReturnBytes: 256,
+    }),
+    {
+      serviceName: 'JournalDownloader',
+      agentName: 'article-probe-agent',
+      taskName: 'probeACSwebsite',
+      action: 'probe',
+      browserId: 'session:acs',
+      sessionName: 'acs',
+      targetId: 'target-1',
+      timeoutMs: 1000,
+      maxReturnBytes: 256,
+      serviceTabHandle: tabHandle,
+      probe: probeRecipe,
+    },
+  );
+  assert.throws(
+    () =>
+      createServiceProbeRequest({
+        serviceTabHandle: tabHandle,
+        probe: {},
+        timeoutMs: 1000,
+        maxReturnBytes: 128,
+      }),
+    /probe.detectors array/,
+  );
+  assert.throws(
+    () =>
+      createServiceProbeRequest({
+        serviceTabHandle: {
+          ...tabHandle,
+          valid: false,
+          staleReason: 'tab_closed',
+        },
+        probe: { detectors: [{ id: 'title', type: 'url_title' }] },
+        timeoutMs: 1000,
+        maxReturnBytes: 128,
+      }),
+    /service tab handle is stale: tab_closed/,
+  );
+  const probeRecorder = createFetchRecorder({
+    success: true,
+    data: {
+      ok: true,
+      action: 'probe',
+      observedAt: '2026-06-14T00:00:00Z',
+      identity: { confidence: 'high', detectedIdentity: 'acct@example.test' },
+      detectors: [{ id: 'title', type: 'url_title', ok: true }],
+      serviceTabHandle: tabHandle,
+    },
+  });
+  await requestServiceProbe({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: probeRecorder.fetch,
+    serviceTabHandle: tabHandle,
+    probe: probeRecipe,
+    timeoutMs: 1000,
+    maxReturnBytes: 256,
+  });
+  assert.equal(probeRecorder.calls[0].body.action, 'probe');
+  assert.deepEqual(probeRecorder.calls[0].body.probe, probeRecipe);
+  assert.equal(probeRecorder.calls[0].body.timeoutMs, 1000);
+  assert.equal(probeRecorder.calls[0].body.maxReturnBytes, 256);
+  const probeAliasRecorder = createFetchRecorder({ success: true, data: { ok: true } });
+  await probeServiceTab({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: probeAliasRecorder.fetch,
+    serviceTabHandle: tabHandle,
+    probe: { detectors: [{ id: 'title', type: 'url_title' }] },
+    timeoutMs: 1000,
+    maxReturnBytes: 128,
+  });
+  assert.equal(probeAliasRecorder.calls[0].body.action, 'probe');
+  const uiAction = {
+    recipeId: 'generic-ui',
+    steps: [
+      { id: 'find-main', type: 'find', selector: 'main' },
+      { id: 'fill-query', type: 'fill', selector: '#query', value: 'search text' },
+    ],
+  };
+  assert.deepEqual(
+    createServiceUiActionRequest({
+      serviceName: 'JournalDownloader',
+      agentName: 'article-probe-agent',
+      taskName: 'probeACSwebsite',
+      serviceTabHandle: tabHandle,
+      uiAction,
+      timeoutMs: 1000,
+      maxTextBytes: 256,
+    }),
+    {
+      serviceName: 'JournalDownloader',
+      agentName: 'article-probe-agent',
+      taskName: 'probeACSwebsite',
+      action: 'ui_action',
+      browserId: 'session:acs',
+      sessionName: 'acs',
+      targetId: 'target-1',
+      timeoutMs: 1000,
+      maxTextBytes: 256,
+      serviceTabHandle: tabHandle,
+      uiAction,
+    },
+  );
+  assert.throws(
+    () =>
+      createServiceUiActionRequest({
+        serviceTabHandle: tabHandle,
+        uiAction: { steps: [] },
+        timeoutMs: 1000,
+      }),
+    /uiAction\.steps/,
+  );
+  assert.throws(
+    () =>
+      createServiceUiActionRequest({
+        serviceTabHandle: { ...tabHandle, valid: false, staleReason: 'tab_closed' },
+        uiAction,
+        timeoutMs: 1000,
+      }),
+    /service tab handle is stale: tab_closed/,
+  );
+  const uiActionRecorder = createFetchRecorder({
+    success: true,
+    data: { ok: true, action: 'ui_action', steps: [{ id: 'find-main', ok: true }] },
+  });
+  await requestServiceUiAction({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: uiActionRecorder.fetch,
+    serviceTabHandle: tabHandle,
+    uiAction,
+    timeoutMs: 1000,
+  });
+  assert.equal(uiActionRecorder.calls[0].body.action, 'ui_action');
+  assert.deepEqual(uiActionRecorder.calls[0].body.uiAction, uiAction);
+  const uiActionAliasRecorder = createFetchRecorder({ success: true, data: { ok: true } });
+  await runServiceUiAction({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: uiActionAliasRecorder.fetch,
+    serviceTabHandle: tabHandle,
+    uiAction,
+    timeoutMs: 1000,
+  });
+  assert.equal(uiActionAliasRecorder.calls[0].body.action, 'ui_action');
+  const networkCapture = {
+    recipeId: 'generic-network',
+    urlPatterns: ['/api/data'],
+    methods: ['GET'],
+    resourceTypes: ['Fetch', 'XHR'],
+    status: '2xx',
+    maxEvents: 2,
+  };
+  assert.deepEqual(
+    createServiceNetworkCaptureRequest({
+      serviceName: 'JournalDownloader',
+      agentName: 'article-probe-agent',
+      taskName: 'probeACSwebsite',
+      serviceTabHandle: tabHandle,
+      networkCapture,
+      timeoutMs: 2000,
+    }),
+    {
+      serviceName: 'JournalDownloader',
+      agentName: 'article-probe-agent',
+      taskName: 'probeACSwebsite',
+      action: 'network_capture',
+      browserId: 'session:acs',
+      sessionName: 'acs',
+      targetId: 'target-1',
+      timeoutMs: 2000,
+      serviceTabHandle: tabHandle,
+      networkCapture,
+    },
+  );
+  assert.throws(
+    () =>
+      createServiceNetworkCaptureRequest({
+        serviceTabHandle: tabHandle,
+        networkCapture: { maxEvents: 0 },
+        timeoutMs: 1000,
+      }),
+    /networkCapture\.maxEvents/,
+  );
+  assert.throws(
+    () =>
+      createServiceNetworkCaptureRequest({
+        serviceTabHandle: tabHandle,
+        networkCapture: { maxEvents: 1, captureBodies: true },
+        timeoutMs: 1000,
+      }),
+    /maxBodyBytes/,
+  );
+  assert.throws(
+    () =>
+      createServiceNetworkCaptureRequest({
+        serviceTabHandle: { ...tabHandle, valid: false, staleReason: 'tab_closed' },
+        networkCapture,
+        timeoutMs: 1000,
+      }),
+    /service tab handle is stale: tab_closed/,
+  );
+  const networkCaptureRecorder = createFetchRecorder({
+    success: true,
+    data: { ok: true, action: 'network_capture', events: [] },
+  });
+  await requestServiceNetworkCapture({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: networkCaptureRecorder.fetch,
+    serviceTabHandle: tabHandle,
+    networkCapture: { ...networkCapture, captureBodies: true, maxBodyBytes: 128 },
+    timeoutMs: 1000,
+  });
+  assert.equal(networkCaptureRecorder.calls[0].body.action, 'network_capture');
+  assert.equal(networkCaptureRecorder.calls[0].body.maxBodyBytes, 128);
+  const networkCaptureAliasRecorder = createFetchRecorder({ success: true, data: { ok: true } });
+  await captureServiceNetwork({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: networkCaptureAliasRecorder.fetch,
+    serviceTabHandle: tabHandle,
+    networkCapture,
+    timeoutMs: 1000,
+  });
+  assert.equal(networkCaptureAliasRecorder.calls[0].body.action, 'network_capture');
+  const fileTransfer = {
+    recipeId: 'generic-file-transfer',
+    upload: {
+      labelText: 'Upload report',
+      files: ['/tmp/report.txt'],
+      allowedPaths: ['/tmp'],
+      maxFiles: 1,
+    },
+    download: {
+      selector: '#download',
+      directory: '/tmp/downloads',
+      allowedDirectories: ['/tmp'],
+      expectedFileName: 'report.txt',
+      maxBytes: 1024,
+    },
+  };
+  assert.deepEqual(
+    createServiceFileTransferRequest({
+      serviceName: 'JournalDownloader',
+      agentName: 'article-probe-agent',
+      taskName: 'probeACSwebsite',
+      serviceTabHandle: tabHandle,
+      fileTransfer,
+      timeoutMs: 2000,
+    }),
+    {
+      serviceName: 'JournalDownloader',
+      agentName: 'article-probe-agent',
+      taskName: 'probeACSwebsite',
+      action: 'file_transfer',
+      browserId: 'session:acs',
+      sessionName: 'acs',
+      targetId: 'target-1',
+      timeoutMs: 2000,
+      serviceTabHandle: tabHandle,
+      fileTransfer,
+    },
+  );
+  assert.throws(
+    () =>
+      createServiceFileTransferRequest({
+        serviceTabHandle: tabHandle,
+        fileTransfer: { upload: { selector: '#file', files: ['/tmp/a.txt'], maxFiles: 1 } },
+        timeoutMs: 1000,
+      }),
+    /allowedPaths/,
+  );
+  assert.throws(
+    () =>
+      createServiceFileTransferRequest({
+        serviceTabHandle: tabHandle,
+        fileTransfer: {
+          upload: {
+            selector: '#file',
+            files: ['/tmp/a.txt', '/tmp/b.txt'],
+            allowedPaths: ['/tmp'],
+            maxFiles: 1,
+          },
+        },
+        timeoutMs: 1000,
+      }),
+    /maxFiles/,
+  );
+  assert.throws(
+    () =>
+      createServiceFileTransferRequest({
+        serviceTabHandle: tabHandle,
+        fileTransfer: { download: { selector: '#download', directory: '/tmp/downloads' } },
+        timeoutMs: 1000,
+      }),
+    /allowedDirectories/,
+  );
+  assert.throws(
+    () =>
+      createServiceFileTransferRequest({
+        serviceTabHandle: { ...tabHandle, valid: false, staleReason: 'tab_closed' },
+        fileTransfer,
+        timeoutMs: 1000,
+      }),
+    /service tab handle is stale: tab_closed/,
+  );
+  const fileTransferRecorder = createFetchRecorder({
+    success: true,
+    data: { ok: true, action: 'file_transfer', upload: { uploaded: 1 } },
+  });
+  await requestServiceFileTransfer({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: fileTransferRecorder.fetch,
+    serviceTabHandle: tabHandle,
+    fileTransfer,
+    timeoutMs: 1000,
+  });
+  assert.equal(fileTransferRecorder.calls[0].body.action, 'file_transfer');
+  assert.deepEqual(fileTransferRecorder.calls[0].body.fileTransfer, fileTransfer);
+  const fileTransferAliasRecorder = createFetchRecorder({ success: true, data: { ok: true } });
+  await transferServiceFiles({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: fileTransferAliasRecorder.fetch,
+    serviceTabHandle: tabHandle,
+    fileTransfer,
+    timeoutMs: 1000,
+  });
+  assert.equal(fileTransferAliasRecorder.calls[0].body.action, 'file_transfer');
+  assert.deepEqual(
+    createServiceTabHandleRefreshRequest({
+      serviceName: 'JournalDownloader',
+      agentName: 'article-probe-agent',
+      taskName: 'probeACSwebsite',
+      serviceTabHandle: tabHandle,
+      repairPolicy: 'open_if_missing',
+      url: 'https://example.com/recover',
+    }),
+    {
+      serviceName: 'JournalDownloader',
+      agentName: 'article-probe-agent',
+      taskName: 'probeACSwebsite',
+      action: 'tab_handle_refresh',
+      browserId: 'session:acs',
+      sessionName: 'acs',
+      targetId: 'target-1',
+      repairPolicy: 'open_if_missing',
+      url: 'https://example.com/recover',
+      serviceTabHandle: tabHandle,
+    },
+  );
+  const staleTabHandle = { ...tabHandle, valid: false, staleReason: 'tab_closed' };
+  assert.deepEqual(
+    createServiceTabHandleRefreshRequest({
+      serviceTabHandle: staleTabHandle,
+      repairPolicy: 'open_if_missing',
+      desiredUrl: 'https://example.com/recover',
+    }),
+    {
+      action: 'tab_handle_refresh',
+      browserId: 'session:acs',
+      sessionName: 'acs',
+      targetId: 'target-1',
+      repairPolicy: 'open_if_missing',
+      desiredUrl: 'https://example.com/recover',
+      serviceTabHandle: staleTabHandle,
+    },
+  );
+  assert.throws(
+    () =>
+      createServiceTabHandleRefreshRequest({
+        serviceTabHandle: tabHandle,
+        repairPolicy: 'surprise_me',
+      }),
+    /repairPolicy/,
+  );
+  const refreshRecorder = createFetchRecorder({
+    success: true,
+    data: {
+      ok: true,
+      action: 'tab_handle_refresh',
+      refreshed: true,
+      decision: 'exact_handle_still_valid',
+      serviceTabHandle: tabHandle,
+    },
+  });
+  await requestServiceTabHandleRefresh({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: refreshRecorder.fetch,
+    serviceTabHandle: tabHandle,
+    repairPolicy: 'reject_only',
+  });
+  assert.equal(refreshRecorder.calls[0].body.action, 'tab_handle_refresh');
+  assert.equal(refreshRecorder.calls[0].body.repairPolicy, 'reject_only');
+  const refreshAliasRecorder = createFetchRecorder({ success: true, data: { ok: true } });
+  await refreshServiceTabHandle({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: refreshAliasRecorder.fetch,
+    serviceTabHandle: tabHandle,
+    repairPolicy: 'reuse_compatible',
+  });
+  assert.equal(refreshAliasRecorder.calls[0].body.action, 'tab_handle_refresh');
+  assert.deepEqual(
+    createServiceTabHandleReleaseRequest({
+      serviceName: 'JournalDownloader',
+      agentName: 'article-probe-agent',
+      taskName: 'releaseACSwebsite',
+      serviceTabHandle: tabHandle,
+    }),
+    {
+      serviceName: 'JournalDownloader',
+      agentName: 'article-probe-agent',
+      taskName: 'releaseACSwebsite',
+      action: 'tab_handle_release',
+      browserId: 'session:acs',
+      sessionName: 'acs',
+      targetId: 'target-1',
+      serviceTabHandle: tabHandle,
+    },
+  );
+  assert.deepEqual(
+    createServiceTabHandleReleaseRequest({
+      serviceTabHandle: staleTabHandle,
+    }),
+    {
+      action: 'tab_handle_release',
+      browserId: 'session:acs',
+      sessionName: 'acs',
+      targetId: 'target-1',
+      serviceTabHandle: staleTabHandle,
+    },
+  );
+  const releaseRecorder = createFetchRecorder({
+    success: true,
+    data: {
+      ok: true,
+      action: 'tab_handle_release',
+      released: true,
+      browserProcessPreserved: true,
+      sessionRoutePreserved: true,
+    },
+  });
+  await requestServiceTabHandleRelease({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: releaseRecorder.fetch,
+    serviceTabHandle: tabHandle,
+  });
+  assert.equal(releaseRecorder.calls[0].body.action, 'tab_handle_release');
+  const releaseAliasRecorder = createFetchRecorder({ success: true, data: { ok: true } });
+  await releaseServiceTabHandle({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: releaseAliasRecorder.fetch,
+    serviceTabHandle: tabHandle,
+  });
+  assert.equal(releaseAliasRecorder.calls[0].body.action, 'tab_handle_release');
   assert.deepEqual(tabRecorder.calls[0].body, {
     serviceName: 'JournalDownloader',
     agentName: 'article-probe-agent',
@@ -1044,6 +1626,20 @@ async function main() {
       url: 'https://example.com/new',
     },
   });
+  const tabAliasRecorder = createFetchRecorder({
+    success: true,
+    data: {
+      serviceTabHandle: tabHandle,
+    },
+  });
+  await requestServiceTabFromAccessPlan({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: tabAliasRecorder.fetch,
+    accessPlan,
+    url: 'https://example.com/alias',
+  });
+  assert.equal(tabAliasRecorder.calls[0].body.action, 'tab_new');
+  assert.equal(tabAliasRecorder.calls[0].body.params.url, 'https://example.com/alias');
   const cdpFreeLaunchRecorder = createFetchRecorder({
     success: true,
     data: {
@@ -1286,6 +1882,56 @@ async function main() {
     frameUrl: 'https://guac.example/#/client/route-a',
   });
 
+  const routeOpenRequest = createServiceRemoteViewOpenRequest({
+    serviceName: 'agent-browser-dashboard',
+    agentName: 'operator',
+    taskName: 'route-open',
+    displayAllocationId: 'display-a',
+    routePoolEntryId: 'pool-a',
+    routePoolEntry: {
+      id: 'pool-a',
+      routeId: 'route-a',
+      frameUrl: 'https://guac.example/#/client/route-a',
+    },
+    routePool: [
+      {
+        id: 'pool-a',
+        routeId: 'route-a',
+      },
+    ],
+    routeId: 'route-a',
+    browserId: 'session:rdp-a',
+    sessionName: 'rdp-a',
+    streamId: 'remote-headed-view',
+    provider: 'rdp_gateway',
+    frameUrl: 'https://guac.example/#/client/route-a',
+    url: 'https://www.linkedin.com/',
+  });
+  assert.equal(routeOpenRequest.action, 'remote_view_open');
+  assert.equal(routeOpenRequest.serviceName, 'agent-browser-dashboard');
+  assert.deepEqual(routeOpenRequest.params, {
+    displayAllocationId: 'display-a',
+    routeId: 'route-a',
+    routePoolEntryId: 'pool-a',
+    routePoolEntry: {
+      id: 'pool-a',
+      routeId: 'route-a',
+      frameUrl: 'https://guac.example/#/client/route-a',
+    },
+    routePool: [
+      {
+        id: 'pool-a',
+        routeId: 'route-a',
+      },
+    ],
+    browserId: 'session:rdp-a',
+    sessionName: 'rdp-a',
+    streamId: 'remote-headed-view',
+    provider: 'rdp_gateway',
+    frameUrl: 'https://guac.example/#/client/route-a',
+    url: 'https://www.linkedin.com/',
+  });
+
   const routeReleaseRequest = createServiceRemoteViewRouteReleaseRequest({
     serviceName: 'agent-browser-dashboard',
     routeId: 'route-a',
@@ -1374,6 +2020,50 @@ async function main() {
   assert.deepEqual(remoteViewWorkflow.calls[0].body.params, {
     displayAllocationId: 'display-a',
     routeId: 'route-a',
+  });
+
+  const remoteViewOpenWorkflow = createFetchRecorder({
+    success: true,
+    data: {
+      status: 'opened',
+      routeId: 'route-a',
+      displayAllocationId: 'display-a',
+    },
+  });
+  await requestServiceRemoteViewOpen({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: remoteViewOpenWorkflow.fetch,
+    displayAllocationId: 'display-a',
+    routeId: 'route-a',
+    routePoolEntry: {
+      id: 'pool-a',
+      routeId: 'route-a',
+      frameUrl: 'https://guac.example/#/client/route-a',
+    },
+    routePool: [
+      {
+        id: 'pool-a',
+        routeId: 'route-a',
+      },
+    ],
+    url: 'https://www.linkedin.com/',
+  });
+  assert.equal(remoteViewOpenWorkflow.calls[0].body.action, 'remote_view_open');
+  assert.deepEqual(remoteViewOpenWorkflow.calls[0].body.params, {
+    displayAllocationId: 'display-a',
+    routeId: 'route-a',
+    routePoolEntry: {
+      id: 'pool-a',
+      routeId: 'route-a',
+      frameUrl: 'https://guac.example/#/client/route-a',
+    },
+    routePool: [
+      {
+        id: 'pool-a',
+        routeId: 'route-a',
+      },
+    ],
+    url: 'https://www.linkedin.com/',
   });
 
   const routePoolRepairWorkflow = createFetchRecorder({

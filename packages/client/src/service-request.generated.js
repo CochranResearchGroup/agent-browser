@@ -4,10 +4,17 @@
 export const SERVICE_REQUEST_ACTIONS = [
   "navigate",
   "cdp_free_launch",
+  "external_byop_adopt",
   "cdp_attach",
   "cdp_detach",
   "evaluate",
   "diagnostics",
+  "probe",
+  "tab_handle_refresh",
+  "tab_handle_release",
+  "ui_action",
+  "network_capture",
+  "file_transfer",
   "back",
   "forward",
   "reload",
@@ -16,6 +23,8 @@ export const SERVICE_REQUEST_ACTIONS = [
   "tab_close",
   "view_focus",
   "view_takeover",
+  "remote_view_open",
+  "service_remote_view_route_preflight",
   "service_remote_view_route_checkout",
   "service_remote_view_route_release",
   "service_route_pool_repair",
@@ -99,6 +108,7 @@ export const SERVICE_REQUEST_STRING_FIELDS = [
   "script",
   "expression",
   "screenshotDir",
+  "repairPolicy",
   "browserBuild",
   "displayIsolation",
   "serviceName",
@@ -110,8 +120,11 @@ export const SERVICE_REQUEST_STRING_FIELDS = [
   "loginId",
   "accountId",
   "url",
+  "desiredUrl",
   "profile",
+  "profileId",
   "runtimeProfile",
+  "cdpUrl",
   "browserId",
   "sessionName"
 ];
@@ -129,9 +142,12 @@ export const SERVICE_REQUEST_INTEGER_FIELDS = [
   "profileLeaseWaitTimeoutMs",
   "timeoutMs",
   "maxReturnBytes",
+  "maxTextBytes",
+  "maxBodyBytes",
   "maxConsoleEntries",
   "maxErrorEntries",
-  "maxRequestEntries"
+  "maxRequestEntries",
+  "cdpPort"
 ];
 
 export const SERVICE_REQUEST_BOOLEAN_FIELDS = [
@@ -149,7 +165,11 @@ export const SERVICE_REQUEST_BOOLEAN_FIELDS = [
 
 export const SERVICE_REQUEST_OBJECT_FIELDS = [
   "monitorRunDueSummary",
-  "serviceTabHandle"
+  "serviceTabHandle",
+  "probe",
+  "uiAction",
+  "networkCapture",
+  "fileTransfer"
 ];
 
 export const SERVICE_REQUEST_MCP_TOOL_NAME = "service_request";

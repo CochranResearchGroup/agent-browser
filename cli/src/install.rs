@@ -1,5 +1,6 @@
 use crate::color;
 use crate::flags::{launch_config_status, Flags};
+use crate::native::stream::runtime_manifest_json;
 use serde_json::json;
 use std::fs;
 use std::io::{self, Read, Write};
@@ -955,6 +956,18 @@ pub fn run_install_doctor(flags: &Flags) {
         report.pointer("/data/remoteViewPrivileges/ready"),
     );
     print_doctor_field(
+        "dashboard runtime contract",
+        report.pointer("/data/dashboardRuntime/serviceContractVersion"),
+    );
+    print_doctor_field(
+        "dashboard runtime sha",
+        report.pointer("/data/dashboardRuntime/dashboard/sha256"),
+    );
+    print_doctor_field(
+        "dashboard runtime executable",
+        report.pointer("/data/dashboardRuntime/executable/sha256"),
+    );
+    print_doctor_field(
         "remote-view helper",
         report.pointer("/data/remoteViewPrivileges/helperPath"),
     );
@@ -1004,6 +1017,7 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
     let workspace_binary = binary_fingerprint(find_workspace_binary());
     let launch_config = launch_config_status(flags);
     let remote_view_privileges = remote_view_privilege_status();
+    let dashboard_runtime = runtime_manifest_json();
     let service = service_status_probe();
     let service_resources = service_resources_probe();
     let issues = install_doctor_issues(
@@ -1028,6 +1042,7 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
             "service": service,
             "serviceResources": service_resources,
             "remoteViewPrivileges": remote_view_privileges,
+            "dashboardRuntime": dashboard_runtime,
             "issues": issues,
         }
     })
@@ -2021,6 +2036,31 @@ mod tests {
             writer.finish().unwrap();
         }
         cursor.into_inner()
+    }
+
+    #[test]
+    fn install_doctor_dashboard_runtime_manifest_shape_stays_public_safe() {
+        let runtime = runtime_manifest_json();
+
+        assert_eq!(
+            runtime["schemaVersion"],
+            "agent-browser.runtime-manifest.v1"
+        );
+        assert_eq!(runtime["serviceContractVersion"], "service-ui-runtime.v1");
+        assert!(runtime["dashboard"]["assetCount"].as_u64().unwrap_or(0) > 0);
+        assert!(runtime["dashboard"]["sha256"]
+            .as_str()
+            .is_some_and(|value| value.len() == 64));
+        assert!(runtime["supportedUiFeatures"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|feature| feature == "workspace.detectedBrowsers"));
+        assert!(runtime["supportedUiFeatures"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|feature| feature == "workspace.noRetainedLiveRail"));
     }
 
     #[test]

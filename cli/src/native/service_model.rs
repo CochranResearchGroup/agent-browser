@@ -4,6 +4,7 @@
 //! and MCP surfaces are wired to runtime behavior. Keep them serializable and
 //! conservative so future clients can depend on stable field names.
 
+use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -648,6 +649,7 @@ pub fn assert_service_remote_view_route_record_contract(value: &serde_json::Valu
             "routeTemplate",
             "frameUrl",
             "externalUrl",
+            "routeDescriptor",
             "readOnly",
             "controlInput",
             "providerMode",
@@ -667,6 +669,7 @@ pub fn assert_service_remote_view_route_record_contract(value: &serde_json::Valu
             "route_template",
             "frame_url",
             "external_url",
+            "route_descriptor",
             "read_only",
             "control_input",
             "provider_mode",
@@ -696,6 +699,7 @@ pub fn assert_service_route_pool_entry_record_contract(value: &serde_json::Value
             "connectionName",
             "frameUrl",
             "externalUrl",
+            "routeDescriptor",
             "target",
             "providerMode",
             "state",
@@ -708,6 +712,7 @@ pub fn assert_service_route_pool_entry_record_contract(value: &serde_json::Value
             "connection_name",
             "frame_url",
             "external_url",
+            "route_descriptor",
             "provider_mode",
             "current_route_allocation_id",
         ],
@@ -1929,6 +1934,8 @@ pub fn assert_service_reconcile_response_contract(value: &serde_json::Value) {
             "reconciled",
             "browserCount",
             "changedBrowsers",
+            "expiredSessionLeases",
+            "expiredSessionLeaseCount",
             "service_state",
         ],
         &["browser_count", "changed_browsers"],
@@ -1936,6 +1943,8 @@ pub fn assert_service_reconcile_response_contract(value: &serde_json::Value) {
     assert!(value["reconciled"].is_boolean());
     assert!(value["browserCount"].is_u64());
     assert!(value["changedBrowsers"].is_u64());
+    assert!(value["expiredSessionLeases"].is_array());
+    assert!(value["expiredSessionLeaseCount"].is_u64());
     assert!(value["service_state"].is_object());
 }
 
@@ -2377,6 +2386,47 @@ impl ServiceState {
             .collect();
     }
 
+    /// Expire active session leases whose `expiresAt` is at or before `observed_at`.
+    ///
+    /// Expiry is explicit instead of hidden inside `refresh_derived_views()` so
+    /// snapshot reads stay deterministic. The retained browser and tab records
+    /// are preserved while the expired session is removed from active browser
+    /// ownership.
+    pub fn expire_stale_session_leases(&mut self, observed_at: &str) -> Vec<String> {
+        let expired_session_ids =
+            self.sessions
+                .iter()
+                .filter(|(_, session)| {
+                    !is_inactive_lease(session.lease)
+                        && session.expires_at.as_deref().is_some_and(|expires_at| {
+                            service_timestamp_is_due(expires_at, observed_at)
+                        })
+                })
+                .map(|(id, _)| id.clone())
+                .collect::<Vec<_>>();
+        if expired_session_ids.is_empty() {
+            return expired_session_ids;
+        }
+
+        let expired_session_id_set = expired_session_ids
+            .iter()
+            .cloned()
+            .collect::<BTreeSet<String>>();
+        for session_id in &expired_session_ids {
+            if let Some(session) = self.sessions.get_mut(session_id) {
+                session.lease = LeaseState::Expired;
+                session.last_lease_observed_at = Some(observed_at.to_string());
+            }
+        }
+        for browser in self.browsers.values_mut() {
+            browser
+                .active_session_ids
+                .retain(|session_id| !expired_session_id_set.contains(session_id));
+        }
+        self.refresh_derived_views();
+        expired_session_ids
+    }
+
     /// Refresh service-owned tab handles before API, MCP, CLI, or trace exposure.
     pub fn refresh_service_tab_handles(&mut self) {
         let tab_ids = self.tabs.keys().cloned().collect::<Vec<_>>();
@@ -2428,7 +2478,8 @@ impl ServiceState {
         let cleanup_policy = session.map(|session| session.cleanup);
         let lease_state = session.map(|session| session.lease);
         let job_id = self.latest_job_id_for_tab(tab_id);
-        let stale_reason = service_tab_handle_stale_reason(tab, browser);
+        let stale_reason = service_tab_handle_stale_reason(tab, browser)
+            .or_else(|| service_tab_handle_lease_stale_reason(lease_state));
 
         Some(ServiceTabHandle {
             browser_id: tab.browser_id.clone(),
@@ -2449,6 +2500,9 @@ impl ServiceState {
                 browser_id: Some(tab.browser_id.clone()),
                 profile_id: profile_id_from_tab_handle_context(self, tab, browser),
                 session_id: session_id.clone(),
+                service_name: session.and_then(|session| session.service_name.clone()),
+                agent_name: session.and_then(|session| session.agent_name.clone()),
+                task_name: session.and_then(|session| session.task_name.clone()),
             },
             valid: stale_reason.is_none(),
             stale_reason,
@@ -2494,6 +2548,24 @@ fn service_job_sort_key(job: &ServiceJob) -> &str {
         .or(job.started_at.as_deref())
         .or(job.submitted_at.as_deref())
         .unwrap_or("")
+}
+
+fn service_timestamp_is_due(candidate: &str, observed_at: &str) -> bool {
+    let Ok(candidate) = DateTime::parse_from_rfc3339(candidate) else {
+        return false;
+    };
+    let Ok(observed_at) = DateTime::parse_from_rfc3339(observed_at) else {
+        return false;
+    };
+    candidate <= observed_at
+}
+
+fn service_tab_handle_lease_stale_reason(lease_state: Option<LeaseState>) -> Option<String> {
+    match lease_state {
+        Some(LeaseState::Released) => Some("lease_released".to_string()),
+        Some(LeaseState::Expired) => Some("lease_expired".to_string()),
+        Some(LeaseState::Shared | LeaseState::Exclusive | LeaseState::HumanTakeover) | None => None,
+    }
 }
 
 fn service_tab_handle_stale_reason(
@@ -3653,6 +3725,9 @@ fn derive_service_incidents(state: &ServiceState) -> Vec<ServiceIncident> {
     for incident in derive_remote_view_incidents(state) {
         grouped.insert(incident.id.clone(), incident);
     }
+    for incident in derive_shared_profile_coordination_incidents(state) {
+        grouped.insert(incident.id.clone(), incident);
+    }
 
     let event_timestamps: BTreeMap<&str, &str> = state
         .events
@@ -3785,6 +3860,16 @@ fn classify_incident_escalation(
             ServiceIncidentSeverity::Error,
             ServiceIncidentEscalation::ServiceTriage,
             "Inspect remote-view route readiness, display allocation state, provider auth, and route-pool availability before reopening the workspace view.",
+        ),
+        _ if incident.latest_kind == "profile_lease_conflict" => (
+            ServiceIncidentSeverity::Warning,
+            ServiceIncidentEscalation::ServiceTriage,
+            "Inspect the retained profile holder and route new clients through the existing browser session or release the stale holder.",
+        ),
+        _ if incident.latest_kind == "shared_tab_abandoned" => (
+            ServiceIncidentSeverity::Warning,
+            ServiceIncidentEscalation::ServiceTriage,
+            "Inspect the shared tab handle, release or refresh the affected client tab, then prune closed retained tab records when safe.",
         ),
         _ if incident.state == ServiceIncidentState::Service => (
             ServiceIncidentSeverity::Error,
@@ -3956,6 +4041,82 @@ fn service_job_incident_timestamp(job: &ServiceJob) -> &str {
         .or(job.started_at.as_deref())
         .or(job.submitted_at.as_deref())
         .unwrap_or("")
+}
+
+fn derive_shared_profile_coordination_incidents(state: &ServiceState) -> Vec<ServiceIncident> {
+    let mut incidents = Vec::new();
+
+    for session in state
+        .sessions
+        .values()
+        .filter(|session| !is_inactive_lease(session.lease))
+    {
+        if !session.profile_lease_conflict_session_ids.is_empty() {
+            let profile_id = session.profile_id.as_deref().unwrap_or("unknown-profile");
+            incidents.push(ServiceIncident {
+                id: format!("profile-lease-conflict:{}", session.id),
+                browser_id: session.browser_ids.first().cloned(),
+                label: format!("Profile lease conflict {}", profile_id),
+                state: ServiceIncidentState::Service,
+                latest_timestamp: session_timestamp(session),
+                latest_message: format!(
+                    "Session '{}' conflicts with profile holder session(s) {} for profile '{}'",
+                    session.id,
+                    session.profile_lease_conflict_session_ids.join(", "),
+                    profile_id
+                ),
+                latest_kind: "profile_lease_conflict".to_string(),
+                ..ServiceIncident::default()
+            });
+        }
+
+        for tab_id in &session.tab_ids {
+            let Some((browser_id, reason)) = abandoned_shared_tab_reason(state, session, tab_id)
+            else {
+                continue;
+            };
+            incidents.push(ServiceIncident {
+                id: format!("shared-tab-abandoned:{}:{}", session.id, tab_id),
+                browser_id,
+                label: format!("Shared tab {}", tab_id),
+                state: ServiceIncidentState::Service,
+                latest_timestamp: session_timestamp(session),
+                latest_message: format!(
+                    "Active session '{}' still references shared tab '{}' that is {}",
+                    session.id, tab_id, reason
+                ),
+                latest_kind: "shared_tab_abandoned".to_string(),
+                ..ServiceIncident::default()
+            });
+        }
+    }
+
+    incidents
+}
+
+fn abandoned_shared_tab_reason(
+    state: &ServiceState,
+    session: &BrowserSession,
+    tab_id: &str,
+) -> Option<(Option<String>, &'static str)> {
+    let Some(tab) = state.tabs.get(tab_id) else {
+        return Some((session.browser_ids.first().cloned(), "missing"));
+    };
+    let reason = match tab.lifecycle {
+        TabLifecycle::Closed => "closed",
+        TabLifecycle::Crashed => "crashed",
+        _ => return None,
+    };
+    Some((Some(tab.browser_id.clone()), reason))
+}
+
+fn session_timestamp(session: &BrowserSession) -> String {
+    session
+        .last_lease_observed_at
+        .as_deref()
+        .or(session.created_at.as_deref())
+        .unwrap_or("")
+        .to_string()
 }
 
 fn derive_remote_view_incidents(state: &ServiceState) -> Vec<ServiceIncident> {
@@ -4182,29 +4343,7 @@ fn route_pool_entry_targets_allocation(
     entry: &RoutePoolEntry,
     allocation: &DisplayAllocation,
 ) -> bool {
-    if let Some(target_allocation_id) = route_pool_target_string(entry, "displayAllocationId") {
-        return target_allocation_id == allocation.id;
-    }
-    if let Some(target_browser_id) = route_pool_target_string(entry, "browserId") {
-        return allocation.owner_browser_id.as_deref() == Some(target_browser_id.as_str());
-    }
-    if let Some(target_session_id) = route_pool_target_string(entry, "sessionId") {
-        return allocation.owner_session_id.as_deref() == Some(target_session_id.as_str());
-    }
-    if let Some(target_display_name) = route_pool_target_string(entry, "displayName") {
-        return allocation.display_name.as_deref() == Some(target_display_name.as_str());
-    }
-    true
-}
-
-fn route_pool_target_string(entry: &RoutePoolEntry, key: &str) -> Option<String> {
-    entry
-        .target
-        .get(key)
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
+    super::remote_view::route_pool_entry_matches_display(entry, &allocation.id, Some(allocation))
 }
 
 fn remote_view_route_timestamp(route: &RemoteViewRoute, state: &ServiceState) -> String {
@@ -4619,6 +4758,7 @@ pub struct RemoteViewRoute {
     pub route_template: Option<String>,
     pub frame_url: Option<String>,
     pub external_url: Option<String>,
+    pub route_descriptor: Option<Value>,
     pub read_only: bool,
     pub control_input: Option<ControlInputProvider>,
     pub provider_mode: String,
@@ -4643,6 +4783,7 @@ impl Default for RemoteViewRoute {
             route_template: None,
             frame_url: None,
             external_url: None,
+            route_descriptor: None,
             read_only: false,
             control_input: Some(ControlInputProvider::ManualAttachedDesktop),
             provider_mode: "unknown".to_string(),
@@ -4666,6 +4807,7 @@ pub struct RoutePoolEntry {
     pub connection_name: Option<String>,
     pub frame_url: Option<String>,
     pub external_url: Option<String>,
+    pub route_descriptor: Option<Value>,
     pub target: Value,
     pub provider_mode: String,
     pub state: String,
@@ -4683,6 +4825,7 @@ impl Default for RoutePoolEntry {
             connection_name: None,
             frame_url: None,
             external_url: None,
+            route_descriptor: None,
             target: Value::Object(Default::default()),
             provider_mode: "unknown".to_string(),
             state: "unknown".to_string(),
@@ -4912,6 +5055,9 @@ pub struct ServiceTabHandleTraceFilter {
     pub browser_id: Option<String>,
     pub profile_id: Option<String>,
     pub session_id: Option<String>,
+    pub service_name: Option<String>,
+    pub agent_name: Option<String>,
+    pub task_name: Option<String>,
 }
 
 /// Queued or completed service work item.
@@ -5244,6 +5390,9 @@ pub struct ViewStream {
     /// Direct stream URL for external windows or popout viewers.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub external_url: Option<String>,
+    /// Structured remote-view route URLs by audience.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub route_descriptor: Option<Value>,
     /// Service-owned route id for providers that multiplex viewer routes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub route_id: Option<String>,
@@ -5284,6 +5433,7 @@ impl Default for ViewStream {
             url: None,
             frame_url: None,
             external_url: None,
+            route_descriptor: None,
             route_id: None,
             display_allocation_id: None,
             connection_id: None,
@@ -6831,6 +6981,8 @@ mod tests {
                 "reconciled",
                 "browserCount",
                 "changedBrowsers",
+                "expiredSessionLeases",
+                "expiredSessionLeaseCount",
                 "service_state",
             ],
         );
@@ -6839,6 +6991,8 @@ mod tests {
             "reconciled": true,
             "browserCount": 1,
             "changedBrowsers": 1,
+            "expiredSessionLeases": [],
+            "expiredSessionLeaseCount": 0,
             "service_state": {
                 "profiles": {},
                 "browsers": {},
@@ -8246,6 +8400,9 @@ mod tests {
                 "session-1".to_string(),
                 BrowserSession {
                     id: "session-1".to_string(),
+                    service_name: Some("service-a".to_string()),
+                    agent_name: Some("agent-a".to_string()),
+                    task_name: Some("task-a".to_string()),
                     profile_id: Some("profile-1".to_string()),
                     lease: LeaseState::Exclusive,
                     cleanup: SessionCleanupPolicy::CloseTabs,
@@ -8303,6 +8460,12 @@ mod tests {
         assert_eq!(handle.lease_state, Some(LeaseState::Exclusive));
         assert_eq!(handle.cleanup_policy, Some(SessionCleanupPolicy::CloseTabs));
         assert_eq!(handle.job_id.as_deref(), Some("job-tab"));
+        assert_eq!(
+            handle.trace_filter.service_name.as_deref(),
+            Some("service-a")
+        );
+        assert_eq!(handle.trace_filter.agent_name.as_deref(), Some("agent-a"));
+        assert_eq!(handle.trace_filter.task_name.as_deref(), Some("task-a"));
         assert!(handle.valid);
         assert_eq!(handle.stale_reason, None);
         assert_eq!(
@@ -8316,6 +8479,279 @@ mod tests {
             .unwrap();
         assert!(!stale.valid);
         assert_eq!(stale.stale_reason.as_deref(), Some("tab_closed"));
+    }
+
+    #[test]
+    fn shared_profile_coordination_derives_incidents_for_conflicts_and_abandoned_tabs() {
+        let mut state = ServiceState {
+            browsers: BTreeMap::from([(
+                "browser-1".to_string(),
+                BrowserProcess {
+                    id: "browser-1".to_string(),
+                    profile_id: Some("shared-profile".to_string()),
+                    health: BrowserHealth::Ready,
+                    active_session_ids: vec!["shared-session".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "shared-session".to_string(),
+                BrowserSession {
+                    id: "shared-session".to_string(),
+                    profile_id: Some("shared-profile".to_string()),
+                    lease: LeaseState::Shared,
+                    browser_ids: vec!["browser-1".to_string()],
+                    tab_ids: vec![
+                        "tab-closed".to_string(),
+                        "tab-missing".to_string(),
+                        "tab-ready".to_string(),
+                    ],
+                    profile_lease_conflict_session_ids: vec!["holder-session".to_string()],
+                    last_lease_observed_at: Some("2026-06-19T22:45:00Z".to_string()),
+                    ..BrowserSession::default()
+                },
+            )]),
+            tabs: BTreeMap::from([
+                (
+                    "tab-closed".to_string(),
+                    BrowserTab {
+                        id: "tab-closed".to_string(),
+                        browser_id: "browser-1".to_string(),
+                        lifecycle: TabLifecycle::Closed,
+                        owner_session_id: Some("shared-session".to_string()),
+                        ..BrowserTab::default()
+                    },
+                ),
+                (
+                    "tab-ready".to_string(),
+                    BrowserTab {
+                        id: "tab-ready".to_string(),
+                        browser_id: "browser-1".to_string(),
+                        lifecycle: TabLifecycle::Ready,
+                        owner_session_id: Some("shared-session".to_string()),
+                        ..BrowserTab::default()
+                    },
+                ),
+            ]),
+            ..ServiceState::default()
+        };
+
+        state.refresh_derived_views();
+
+        let incidents = state
+            .incidents
+            .iter()
+            .map(|incident| (incident.id.as_str(), incident))
+            .collect::<BTreeMap<_, _>>();
+        let conflict = incidents
+            .get("profile-lease-conflict:shared-session")
+            .unwrap();
+        assert_eq!(conflict.browser_id.as_deref(), Some("browser-1"));
+        assert_eq!(conflict.latest_kind, "profile_lease_conflict");
+        assert_eq!(conflict.state, ServiceIncidentState::Active);
+        assert_eq!(conflict.severity, ServiceIncidentSeverity::Warning);
+        assert_eq!(
+            conflict.escalation,
+            ServiceIncidentEscalation::ServiceTriage
+        );
+        assert!(conflict.latest_message.contains("holder-session"));
+        assert!(conflict
+            .recommended_action
+            .contains("retained profile holder"));
+        assert_service_incident_record_contract(&serde_json::to_value(conflict).unwrap());
+
+        let closed_tab = incidents
+            .get("shared-tab-abandoned:shared-session:tab-closed")
+            .unwrap();
+        assert_eq!(closed_tab.browser_id.as_deref(), Some("browser-1"));
+        assert_eq!(closed_tab.latest_kind, "shared_tab_abandoned");
+        assert_eq!(closed_tab.severity, ServiceIncidentSeverity::Warning);
+        assert!(closed_tab.latest_message.contains("closed"));
+        assert_service_incident_record_contract(&serde_json::to_value(closed_tab).unwrap());
+
+        let missing_tab = incidents
+            .get("shared-tab-abandoned:shared-session:tab-missing")
+            .unwrap();
+        assert_eq!(missing_tab.browser_id.as_deref(), Some("browser-1"));
+        assert_eq!(missing_tab.latest_kind, "shared_tab_abandoned");
+        assert!(missing_tab.latest_message.contains("missing"));
+
+        assert!(!incidents.contains_key("shared-tab-abandoned:shared-session:tab-ready"));
+    }
+
+    #[test]
+    fn expire_stale_session_leases_preserves_browser_and_marks_handles_stale() {
+        let mut state = ServiceState {
+            browsers: BTreeMap::from([(
+                "browser-1".to_string(),
+                BrowserProcess {
+                    id: "browser-1".to_string(),
+                    profile_id: Some("shared-profile".to_string()),
+                    health: BrowserHealth::Ready,
+                    active_session_ids: vec![
+                        "expired-session".to_string(),
+                        "fresh-session".to_string(),
+                        "invalid-session".to_string(),
+                        "released-session".to_string(),
+                    ],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            sessions: BTreeMap::from([
+                (
+                    "expired-session".to_string(),
+                    BrowserSession {
+                        id: "expired-session".to_string(),
+                        profile_id: Some("shared-profile".to_string()),
+                        lease: LeaseState::Shared,
+                        browser_ids: vec!["browser-1".to_string()],
+                        tab_ids: vec!["tab-expired".to_string()],
+                        expires_at: Some("2026-06-19T22:44:59Z".to_string()),
+                        ..BrowserSession::default()
+                    },
+                ),
+                (
+                    "fresh-session".to_string(),
+                    BrowserSession {
+                        id: "fresh-session".to_string(),
+                        profile_id: Some("shared-profile".to_string()),
+                        lease: LeaseState::Shared,
+                        browser_ids: vec!["browser-1".to_string()],
+                        tab_ids: vec!["tab-fresh".to_string()],
+                        expires_at: Some("2026-06-19T22:45:01Z".to_string()),
+                        ..BrowserSession::default()
+                    },
+                ),
+                (
+                    "invalid-session".to_string(),
+                    BrowserSession {
+                        id: "invalid-session".to_string(),
+                        profile_id: Some("shared-profile".to_string()),
+                        lease: LeaseState::Exclusive,
+                        browser_ids: vec!["browser-1".to_string()],
+                        tab_ids: vec!["tab-invalid".to_string()],
+                        expires_at: Some("not-a-timestamp".to_string()),
+                        ..BrowserSession::default()
+                    },
+                ),
+                (
+                    "released-session".to_string(),
+                    BrowserSession {
+                        id: "released-session".to_string(),
+                        profile_id: Some("shared-profile".to_string()),
+                        lease: LeaseState::Released,
+                        browser_ids: vec!["browser-1".to_string()],
+                        tab_ids: vec!["tab-released".to_string()],
+                        expires_at: Some("2026-06-19T22:44:00Z".to_string()),
+                        ..BrowserSession::default()
+                    },
+                ),
+            ]),
+            tabs: BTreeMap::from([
+                (
+                    "tab-expired".to_string(),
+                    BrowserTab {
+                        id: "tab-expired".to_string(),
+                        browser_id: "browser-1".to_string(),
+                        lifecycle: TabLifecycle::Ready,
+                        owner_session_id: Some("expired-session".to_string()),
+                        ..BrowserTab::default()
+                    },
+                ),
+                (
+                    "tab-fresh".to_string(),
+                    BrowserTab {
+                        id: "tab-fresh".to_string(),
+                        browser_id: "browser-1".to_string(),
+                        lifecycle: TabLifecycle::Ready,
+                        owner_session_id: Some("fresh-session".to_string()),
+                        ..BrowserTab::default()
+                    },
+                ),
+                (
+                    "tab-invalid".to_string(),
+                    BrowserTab {
+                        id: "tab-invalid".to_string(),
+                        browser_id: "browser-1".to_string(),
+                        lifecycle: TabLifecycle::Ready,
+                        owner_session_id: Some("invalid-session".to_string()),
+                        ..BrowserTab::default()
+                    },
+                ),
+                (
+                    "tab-released".to_string(),
+                    BrowserTab {
+                        id: "tab-released".to_string(),
+                        browser_id: "browser-1".to_string(),
+                        lifecycle: TabLifecycle::Ready,
+                        owner_session_id: Some("released-session".to_string()),
+                        ..BrowserTab::default()
+                    },
+                ),
+            ]),
+            ..ServiceState::default()
+        };
+
+        let expired = state.expire_stale_session_leases("2026-06-19T22:45:00Z");
+
+        assert_eq!(expired, vec!["expired-session".to_string()]);
+        assert_eq!(state.sessions["expired-session"].lease, LeaseState::Expired);
+        assert_eq!(
+            state.sessions["expired-session"]
+                .last_lease_observed_at
+                .as_deref(),
+            Some("2026-06-19T22:45:00Z")
+        );
+        assert_eq!(state.sessions["fresh-session"].lease, LeaseState::Shared);
+        assert_eq!(
+            state.sessions["invalid-session"].lease,
+            LeaseState::Exclusive
+        );
+        assert_eq!(
+            state.sessions["released-session"].lease,
+            LeaseState::Released
+        );
+        assert_eq!(
+            state.browsers["browser-1"].active_session_ids,
+            vec![
+                "fresh-session".to_string(),
+                "invalid-session".to_string(),
+                "released-session".to_string()
+            ]
+        );
+        assert_eq!(state.browsers["browser-1"].health, BrowserHealth::Ready);
+        assert_eq!(
+            state.tabs["tab-expired"]
+                .service_tab_handle
+                .as_ref()
+                .unwrap()
+                .stale_reason
+                .as_deref(),
+            Some("lease_expired")
+        );
+        assert!(
+            state.tabs["tab-fresh"]
+                .service_tab_handle
+                .as_ref()
+                .unwrap()
+                .valid
+        );
+        assert!(
+            state.tabs["tab-invalid"]
+                .service_tab_handle
+                .as_ref()
+                .unwrap()
+                .valid
+        );
+        assert_eq!(
+            state.tabs["tab-released"]
+                .service_tab_handle
+                .as_ref()
+                .unwrap()
+                .stale_reason
+                .as_deref(),
+            Some("lease_released")
+        );
     }
 
     #[test]

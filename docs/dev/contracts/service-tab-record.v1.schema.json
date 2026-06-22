@@ -85,6 +85,18 @@
         },
         "sessionId": {
           "type": ["string", "null"]
+        },
+        "serviceName": {
+          "type": ["string", "null"],
+          "description": "Calling service label that owns the tab evidence context, when known."
+        },
+        "agentName": {
+          "type": ["string", "null"],
+          "description": "Calling agent label that owns the tab evidence context, when known."
+        },
+        "taskName": {
+          "type": ["string", "null"],
+          "description": "Calling task label that owns the tab evidence context, when known."
         }
       },
       "additionalProperties": true

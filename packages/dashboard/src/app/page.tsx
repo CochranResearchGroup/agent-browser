@@ -40,6 +40,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import {
+  AlertTriangle,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
@@ -68,6 +69,34 @@ type DashboardAuthStatus = {
   authenticated: boolean;
   user?: DashboardAuthUser | null;
 };
+
+type RuntimeManifest = {
+  schemaVersion?: string;
+  packageVersion?: string;
+  serviceContractVersion?: string;
+  supportedUiFeatures?: string[];
+  dashboard?: {
+    sha256?: string;
+    assetCount?: number;
+  };
+  executable?: {
+    path?: string | null;
+    sha256?: string | null;
+  };
+};
+
+type RuntimeManifestState = {
+  loading: boolean;
+  manifest: RuntimeManifest | null;
+  issue: string | null;
+};
+
+const REQUIRED_RUNTIME_FEATURES = [
+  "workspace.detectedBrowsers",
+  "workspace.noRetainedLiveRail",
+] as const;
+
+const REQUIRED_RUNTIME_CONTRACT = "service-ui-runtime.v1";
 
 function dashboardSectionFromPath(pathname: string): DashboardSection {
   const segments = pathname.split("/").filter(Boolean);
@@ -102,6 +131,24 @@ function readStoredBoolean(key: string, fallback: boolean): boolean {
 function writeStoredBoolean(key: string, value: boolean): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(key, String(value));
+}
+
+function runtimeManifestIssue(manifest: RuntimeManifest): string | null {
+  if (manifest.schemaVersion !== "agent-browser.runtime-manifest.v1") {
+    return "The installed binary is not reporting the dashboard runtime manifest contract.";
+  }
+  if (manifest.serviceContractVersion !== REQUIRED_RUNTIME_CONTRACT) {
+    return `The installed binary reports ${manifest.serviceContractVersion || "no runtime contract"}; this UI expects ${REQUIRED_RUNTIME_CONTRACT}.`;
+  }
+  if (!manifest.dashboard?.sha256) {
+    return "The installed binary did not report an embedded dashboard bundle identity.";
+  }
+  const features = new Set(manifest.supportedUiFeatures ?? []);
+  const missing = REQUIRED_RUNTIME_FEATURES.filter((feature) => !features.has(feature));
+  if (missing.length > 0) {
+    return `The installed binary is missing UI feature support: ${missing.join(", ")}.`;
+  }
+  return null;
 }
 
 export default function DashboardPage({
@@ -262,6 +309,25 @@ function DashboardLoginScreen({
   );
 }
 
+function RuntimeManifestNotice({ state }: { state: RuntimeManifestState }) {
+  if (!state.issue) return null;
+  return (
+    <div
+      className="dashboard-runtime-notice"
+      role="status"
+      data-runtime-manifest-warning="true"
+    >
+      <AlertTriangle className="size-4 shrink-0" />
+      <div className="min-w-0">
+        <p>Runtime contract drift</p>
+        <span>
+          {state.issue} Run <code>pnpm publish:local-dashboard -- --expect-marker "&lt;changed-ui-marker&gt;" --json</code>.
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function DashboardExperience({
   initialSection = "overview",
   user,
@@ -290,6 +356,11 @@ function DashboardExperience({
   const [serviceInspectorActions, setServiceInspectorActions] = useState<ServiceInspectorActions>({});
   const [hasWorkspaceViewportRoute, setHasWorkspaceViewportRoute] = useState(() => readWorkspaceViewportRoute());
   const [sidePanelTab, setSidePanelTab] = useState<RightPaneTab>("chat");
+  const [runtimeManifest, setRuntimeManifest] = useState<RuntimeManifestState>({
+    loading: true,
+    manifest: null,
+    issue: null,
+  });
   const activePort = useAtomValue(activePortAtom);
   useStreamSync(activePort);
   useSessionsSync();
@@ -339,6 +410,37 @@ function DashboardExperience({
       setMobilePanel(activeSection);
     }
   }, [activeSection]);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch("/api/runtime/manifest", { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const manifest = await response.json() as RuntimeManifest;
+        if (!cancelled) {
+          setRuntimeManifest({
+            loading: false,
+            manifest,
+            issue: runtimeManifestIssue(manifest),
+          });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : String(error);
+          setRuntimeManifest({
+            loading: false,
+            manifest: null,
+            issue: `The dashboard could not read the installed binary runtime manifest (${message}).`,
+          });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const openRightPane = useCallback(() => {
     setRightPaneCollapsed(false);
@@ -472,11 +574,22 @@ function DashboardExperience({
       </TabsContent>
     </Tabs>
   );
+  const runtimeNotice = runtimeManifest.issue ? (
+    <RuntimeManifestNotice state={runtimeManifest} />
+  ) : null;
+  const appShellProps = {
+    activeSection,
+    onSectionChange: changeDashboardSection,
+    onNewSessionRequest: openNewSession,
+    authenticatedUser: user.displayName || user.username,
+    onLogout,
+    runtimeNotice,
+  };
 
   if (isDesktop) {
     if (!hasSessions && activeSection !== "service" && !hasWorkspaceViewportRoute) {
       return (
-        <AppShell activeSection={activeSection} onSectionChange={changeDashboardSection} onNewSessionRequest={openNewSession} authenticatedUser={user.displayName || user.username} onLogout={onLogout}>
+        <AppShell {...appShellProps}>
           <ResizablePanelGroup
             orientation="horizontal"
             className="dashboard-panel-grid"
@@ -525,7 +638,7 @@ function DashboardExperience({
 
     if (!hasSessions && activeSection === "service") {
       return (
-        <AppShell activeSection={activeSection} onSectionChange={changeDashboardSection} onNewSessionRequest={openNewSession} authenticatedUser={user.displayName || user.username} onLogout={onLogout}>
+        <AppShell {...appShellProps}>
           <ResizablePanelGroup
             orientation="horizontal"
             className="dashboard-panel-grid"
@@ -568,7 +681,7 @@ function DashboardExperience({
     }
 
     return (
-      <AppShell activeSection={activeSection} onSectionChange={changeDashboardSection} onNewSessionRequest={openNewSession} authenticatedUser={user.displayName || user.username} onLogout={onLogout}>
+      <AppShell {...appShellProps}>
         <ResizablePanelGroup
           orientation="horizontal"
           className="dashboard-panel-grid"
@@ -608,7 +721,7 @@ function DashboardExperience({
   }
 
   return (
-    <AppShell activeSection={activeSection} onSectionChange={changeDashboardSection} onNewSessionRequest={openNewSession} authenticatedUser={user.displayName || user.username} onLogout={onLogout}>
+    <AppShell {...appShellProps}>
       <Tabs
         value={mobilePanel}
         onValueChange={(value) => {

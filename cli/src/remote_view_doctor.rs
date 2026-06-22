@@ -38,6 +38,7 @@ fn parse_doctor_args(clean: &[String]) -> DoctorArgs {
 }
 
 fn remote_view_doctor_report(args: &DoctorArgs) -> Value {
+    let script_root = remote_view_script_root();
     let install = run_json_command(
         current_agent_browser_command(),
         &["install", "doctor", "--json"],
@@ -45,21 +46,27 @@ fn remote_view_doctor_report(args: &DoctorArgs) -> Value {
     );
     let route_pool_args = if args.allow_shared_target {
         vec![
-            "scripts/smoke-rdp-guac-route-pool-readiness.js",
+            "smoke-rdp-guac-route-pool-readiness.js",
             "--report-only",
             "--allow-shared-target",
         ]
     } else {
-        vec![
-            "scripts/smoke-rdp-guac-route-pool-readiness.js",
-            "--report-only",
-        ]
+        vec!["smoke-rdp-guac-route-pool-readiness.js", "--report-only"]
     };
-    let route_pool = run_json_command("node".to_string(), &route_pool_args, Some(repo_root()));
+    let route_pool = run_json_command(
+        "node".to_string(),
+        &script_args(&script_root, &route_pool_args),
+        Some(script_root.clone()),
+    );
+    let rdp_gateway = run_json_command(
+        "node".to_string(),
+        &script_args(&script_root, &["smoke-rdp-gateway-readiness.js"]),
+        Some(script_root.clone()),
+    );
     let route_displays = run_json_command(
         "node".to_string(),
-        &["scripts/inspect-rdp-route-displays.js"],
-        Some(repo_root()),
+        &script_args(&script_root, &["inspect-rdp-route-displays.js"]),
+        Some(script_root.clone()),
     );
     let xrdp = inspect_xrdp();
     let users = inspect_rdp_users();
@@ -68,24 +75,30 @@ fn remote_view_doctor_report(args: &DoctorArgs) -> Value {
     let display_access = inspect_route_display_access(&route_displays);
     let viewer_prerequisites = inspect_viewer_prerequisites();
     let many_to_many = many_to_many_status(
+        &rdp_gateway,
         &route_pool,
         &route_displays,
         &display_access,
         &viewer_prerequisites,
     );
-    let next_action = recommend_next_action(
-        &install,
-        &route_pool,
-        &route_displays,
-        &display_access,
-        &viewer_prerequisites,
-        &users,
-        &privileges,
-    );
+    let remote_control =
+        remote_control_status(&install, &rdp_gateway, &route_pool, &route_displays);
+    let dashboard_runtime = dashboard_runtime_from_install(&install);
+    let next_action = recommend_next_action(RecommendationContext {
+        install: &install,
+        rdp_gateway: &rdp_gateway,
+        route_pool: &route_pool,
+        route_displays: &route_displays,
+        display_access: &display_access,
+        viewer_prerequisites: &viewer_prerequisites,
+        users: &users,
+        privileges: &privileges,
+    });
     let next_command = recommend_next_command(&next_action);
     let drift = drift_findings(&users, &config);
     let issues = remote_view_issues(RemoteViewIssueContext {
         install: &install,
+        rdp_gateway: &rdp_gateway,
         route_pool: &route_pool,
         route_displays: &route_displays,
         display_access: &display_access,
@@ -102,6 +115,7 @@ fn remote_view_doctor_report(args: &DoctorArgs) -> Value {
             "install": install,
             "runtime": inspect_runtime(),
             "network": inspect_network(),
+            "rdpGateway": rdp_gateway,
             "rdpHost": {
                 "xrdp": xrdp,
                 "users": users,
@@ -112,11 +126,14 @@ fn remote_view_doctor_report(args: &DoctorArgs) -> Value {
                 "routePool": route_pool,
                 "routeDisplays": route_displays,
             },
+            "remoteControl": remote_control,
+            "dashboardRuntime": dashboard_runtime,
             "manyToMany": many_to_many,
             "viewerPrerequisites": viewer_prerequisites,
             "config": config,
             "drift": drift,
             "issues": issues,
+            "scriptRoot": script_root.display().to_string(),
             "stateSources": state_sources(),
             "nextAction": next_action,
             "nextCommand": next_command,
@@ -124,8 +141,92 @@ fn remote_view_doctor_report(args: &DoctorArgs) -> Value {
     })
 }
 
-fn repo_root() -> PathBuf {
-    env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+const REMOTE_VIEW_HELPER_SCRIPTS: [&str; 3] = [
+    "smoke-rdp-guac-route-pool-readiness.js",
+    "smoke-rdp-gateway-readiness.js",
+    "inspect-rdp-route-displays.js",
+];
+
+fn remote_view_script_root() -> PathBuf {
+    find_remote_view_script_root().unwrap_or_else(|| {
+        env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join("scripts")
+    })
+}
+
+fn find_remote_view_script_root() -> Option<PathBuf> {
+    if let Ok(cwd) = env::current_dir() {
+        if let Some(root) = find_script_root_in_ancestors(&cwd) {
+            return Some(root);
+        }
+    }
+
+    if let Ok(exe) = env::current_exe() {
+        let exe = fs::canonicalize(&exe).unwrap_or(exe);
+        if let Some(parent) = exe.parent() {
+            if let Some(root) = find_script_root_in_ancestors(parent) {
+                return Some(root);
+            }
+        }
+    }
+
+    if let Some(home) = dirs::home_dir() {
+        let pnpm_global_package =
+            home.join(".local/share/pnpm/global/5/node_modules/agent-browser");
+        if let Some(root) = normalize_script_root_candidate(&pnpm_global_package) {
+            return Some(root);
+        }
+    }
+
+    if let Some(manifest_dir) = option_env!("CARGO_MANIFEST_DIR") {
+        let manifest_path = Path::new(manifest_dir);
+        let repo_candidate = manifest_path.parent().unwrap_or(manifest_path);
+        if let Some(root) = normalize_script_root_candidate(repo_candidate) {
+            return Some(root);
+        }
+    }
+
+    None
+}
+
+fn find_script_root_in_ancestors(path: &Path) -> Option<PathBuf> {
+    for ancestor in path.ancestors() {
+        if let Some(root) = normalize_script_root_candidate(ancestor) {
+            return Some(root);
+        }
+    }
+    None
+}
+
+fn normalize_script_root_candidate(candidate: &Path) -> Option<PathBuf> {
+    if has_remote_view_helper_scripts(candidate) {
+        return Some(candidate.to_path_buf());
+    }
+    let scripts = candidate.join("scripts");
+    if has_remote_view_helper_scripts(&scripts) {
+        return Some(scripts);
+    }
+    None
+}
+
+fn has_remote_view_helper_scripts(candidate: &Path) -> bool {
+    REMOTE_VIEW_HELPER_SCRIPTS
+        .iter()
+        .all(|script| candidate.join(script).is_file())
+}
+
+fn script_args(script_root: &Path, args: &[&str]) -> Vec<String> {
+    args.iter()
+        .enumerate()
+        .map(|(index, arg)| {
+            if index == 0 {
+                script_root.join(arg).display().to_string()
+            } else {
+                (*arg).to_string()
+            }
+        })
+        .collect()
 }
 
 fn current_agent_browser_command() -> String {
@@ -135,9 +236,13 @@ fn current_agent_browser_command() -> String {
         .unwrap_or_else(|| "agent-browser".to_string())
 }
 
-fn run_json_command(command: String, args: &[&str], cwd: Option<PathBuf>) -> Value {
+fn run_json_command<S: AsRef<str>>(command: String, args: &[S], cwd: Option<PathBuf>) -> Value {
     let mut child = Command::new(&command);
-    child.args(args);
+    let args = args
+        .iter()
+        .map(|arg| arg.as_ref().to_string())
+        .collect::<Vec<_>>();
+    child.args(&args);
     if let Some(cwd) = cwd {
         child.current_dir(cwd);
     }
@@ -532,11 +637,14 @@ fn parse_ini_value(text: &str, section: &str, key: &str) -> Option<String> {
 }
 
 fn many_to_many_status(
+    rdp_gateway: &Value,
     route_pool: &Value,
     route_displays: &Value,
     display_access: &Value,
     viewer_prerequisites: &Value,
 ) -> Value {
+    let private_display_allocator_ready =
+        readiness_component_ready(rdp_gateway, "private_display_allocator");
     let route_pool_ready = nested_bool(route_pool, &["data", "success"]);
     let display_ready = nested_bool(route_displays, &["data", "success"]);
     let display_access_ready = display_access
@@ -562,12 +670,147 @@ fn many_to_many_status(
     };
     json!({
         "status": status,
+        "privateDisplayAllocatorReady": private_display_allocator_ready,
         "routePoolReady": route_pool_ready,
         "routeDisplaysReady": display_ready,
         "routeDisplayAccessReady": display_access_ready,
         "viewerPrerequisitesReady": viewer_prerequisites_ready,
         "simultaneousViewingReady": route_pool_ready && display_ready && display_access_ready && viewer_prerequisites_ready,
     })
+}
+
+fn remote_control_status(
+    install: &Value,
+    rdp_gateway: &Value,
+    route_pool: &Value,
+    route_displays: &Value,
+) -> Value {
+    let install_ready = nested_bool(install, &["success"]);
+    let route_pool_ready = nested_bool(route_pool, &["data", "success"]);
+    let rdp_gateway_ready = nested_bool(rdp_gateway, &["data", "success"]);
+    let private_display_allocator_ready =
+        readiness_component_ready(rdp_gateway, "private_display_allocator");
+    let route_entry = route_pool
+        .pointer("/data/routePoolJson/0")
+        .cloned()
+        .unwrap_or(Value::Null);
+    let route_id = route_entry
+        .get("routeId")
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    let route_pool_entry_id = route_entry
+        .get("id")
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    let frame_url = route_entry
+        .get("frameUrl")
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    let external_url = route_entry
+        .get("externalUrl")
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    let display_name = selected_single_route_display(route_displays, &route_entry);
+    let display_access = display_name
+        .as_deref()
+        .map(run_display_access_probe)
+        .unwrap_or_else(|| {
+            json!({
+                "available": false,
+                "success": false,
+                "exitCode": null,
+                "stdout": "",
+                "stderr": "no selected route display"
+            })
+        });
+    let route_url_ready = frame_url.is_some() || external_url.is_some();
+    let display_ready = display_name.is_some();
+    let display_access_ready = display_access
+        .get("success")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let ready = install_ready
+        && route_pool_ready
+        && rdp_gateway_ready
+        && private_display_allocator_ready
+        && route_url_ready
+        && display_ready
+        && display_access_ready;
+    let status = if ready {
+        "ready"
+    } else if route_pool_ready && rdp_gateway_ready && route_url_ready && display_ready {
+        "needs_display_access"
+    } else if route_pool_ready && rdp_gateway_ready && route_url_ready {
+        "needs_route_display"
+    } else if route_pool_ready && rdp_gateway_ready {
+        "needs_route_url"
+    } else {
+        "blocked"
+    };
+    let next_action = if ready {
+        "run_remote_view_open_live_gate".to_string()
+    } else if !install_ready {
+        "repair_install_drift".to_string()
+    } else if !rdp_gateway_ready {
+        "run_rdp_gateway_readiness".to_string()
+    } else if !route_pool_ready {
+        first_failed_route_pool_next_action(route_pool).unwrap_or_else(|| {
+            "repair_or_sync_guacamole_route_pool_before_creating_more_users".to_string()
+        })
+    } else if !route_url_ready {
+        "repair_guacamole_route_url".to_string()
+    } else if !display_ready {
+        "open_or_select_single_rdp_route_display".to_string()
+    } else if !display_access_ready {
+        "grant_route_display_access".to_string()
+    } else {
+        "agent_browser_remote_control_recheck".to_string()
+    };
+    json!({
+        "status": status,
+        "ready": ready,
+        "installReady": install_ready,
+        "rdpGatewayReady": rdp_gateway_ready,
+        "privateDisplayAllocatorReady": private_display_allocator_ready,
+        "routePoolReady": route_pool_ready,
+        "routeUrlReady": route_url_ready,
+        "routeDisplayReady": display_ready,
+        "routeDisplayAccessReady": display_access_ready,
+        "routePoolEntryId": route_pool_entry_id,
+        "routeId": route_id,
+        "displayName": display_name,
+        "frameUrl": frame_url,
+        "externalUrl": external_url,
+        "displayAccess": display_access,
+        "nextAction": next_action,
+        "liveGateCommand": "pnpm test:remote-view-open-live",
+        "scope": "single_route_remote_control",
+    })
+}
+
+fn selected_single_route_display(route_displays: &Value, route_entry: &Value) -> Option<String> {
+    if let Some(display) = route_entry
+        .pointer("/target/displayName")
+        .and_then(Value::as_str)
+    {
+        if !display.trim().is_empty() {
+            return Some(display.trim().to_string());
+        }
+    }
+    for pointer in [
+        "/data/routes/A/displayName",
+        "/data/routes/B/displayName",
+        "/data/existingUserRoutes/0/displayName",
+        "/data/routeSpecificUsers/A/displayName",
+        "/data/routeSpecificUsers/B/displayName",
+    ] {
+        if let Some(display) = route_displays.pointer(pointer).and_then(Value::as_str) {
+            if !display.trim().is_empty() {
+                return Some(display.trim().to_string());
+            }
+        }
+    }
+    None
 }
 
 fn nested_bool(value: &Value, path: &[&str]) -> bool {
@@ -578,19 +821,64 @@ fn nested_bool(value: &Value, path: &[&str]) -> bool {
     current.as_bool().unwrap_or(false)
 }
 
-fn recommend_next_action(
-    install: &Value,
-    route_pool: &Value,
-    route_displays: &Value,
-    display_access: &Value,
-    viewer_prerequisites: &Value,
-    users: &Value,
-    privileges: &Value,
-) -> String {
+fn first_failed_route_pool_next_action(route_pool: &Value) -> Option<String> {
+    route_pool
+        .pointer("/data/readiness/components")
+        .and_then(Value::as_array)
+        .and_then(|components| {
+            components.iter().find_map(|component| {
+                let status = component
+                    .get("status")
+                    .and_then(Value::as_str)
+                    .unwrap_or("unknown");
+                if status == "ready" {
+                    return None;
+                }
+                component
+                    .get("nextAction")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(ToString::to_string)
+            })
+        })
+}
+
+struct RecommendationContext<'a> {
+    install: &'a Value,
+    rdp_gateway: &'a Value,
+    route_pool: &'a Value,
+    route_displays: &'a Value,
+    display_access: &'a Value,
+    viewer_prerequisites: &'a Value,
+    users: &'a Value,
+    privileges: &'a Value,
+}
+
+fn recommend_next_action(context: RecommendationContext<'_>) -> String {
+    let RecommendationContext {
+        install,
+        rdp_gateway,
+        route_pool,
+        route_displays,
+        display_access,
+        viewer_prerequisites,
+        users,
+        privileges,
+    } = context;
     if !nested_bool(install, &["success"]) {
         return "repair_install_drift".to_string();
     }
+    if !nested_bool(rdp_gateway, &["available"]) {
+        return "run_rdp_gateway_readiness".to_string();
+    }
+    if !readiness_component_ready(rdp_gateway, "private_display_allocator") {
+        return "clear_stale_private_display_locks_or_expand_allocator_range".to_string();
+    }
     if !nested_bool(route_pool, &["data", "success"]) {
+        if let Some(next_action) = first_failed_route_pool_next_action(route_pool) {
+            return next_action;
+        }
         return "repair_or_sync_guacamole_route_pool_before_creating_more_users".to_string();
     }
     if !nested_bool(route_displays, &["data", "success"]) {
@@ -674,20 +962,35 @@ fn recommend_next_command(next_action: &str) -> Value {
             "requiresInteractiveSudo": false,
             "why": "Inspect the current Guacamole route-pool state before mutating users or records."
         }),
+        "repair_guacamole_admin_credentials" => json!({
+            "command": "pnpm test:rdp-guac-route-pool-readiness -- --report-only",
+            "requiresInteractiveSudo": false,
+            "why": "The Guacamole token endpoint rejected the configured credentials; repair the agent-browser Guacamole secret file before opening route clients."
+        }),
+        "run_rdp_gateway_readiness" => json!({
+            "command": "pnpm test:rdp-gateway-readiness-live",
+            "requiresInteractiveSudo": false,
+            "why": "Inspect local RDP gateway services and private display allocator state before route-pool or launch work."
+        }),
+        "clear_stale_private_display_locks_or_expand_allocator_range" => json!({
+            "command": "agent-browser doctor remote-view --json",
+            "requiresInteractiveSudo": false,
+            "why": "The private display allocator is blocked; inspect stale /tmp/.X*-lock evidence before launching hidden remote-headed browsers."
+        }),
         "existing_agent_browser_rdp_routes_collapsed_to_one_display_use_route_specific_user_or_xrdp_policy_isolation" => json!({
             "command": "pnpm setup:rdp-guac-route-pool",
             "requiresInteractiveSudo": true,
             "why": "The existing-user Guacamole route shape already collapsed to one XRDP display; create the explicit isolated route users from an interactive terminal."
         }),
         "open_route_specific_rdp_sessions_then_rerun_doctor" => json!({
-            "command": "pnpm inspect:rdp-route-displays",
+            "command": "pnpm open:rdp-route-displays",
             "requiresInteractiveSudo": false,
-            "why": "Route-specific users exist; open both route-specific Guacamole connections, then inspect whether XRDP allocated distinct displays."
+            "why": "Route-specific users exist; open both Guacamole route clients, authenticate them, then inspect whether XRDP allocated distinct displays."
         }),
         "open_two_rdp_route_sessions_for_existing_agent_browser_rdp_user_then_rerun_doctor" => json!({
-            "command": "pnpm inspect:rdp-route-displays",
+            "command": "pnpm open:rdp-route-displays",
             "requiresInteractiveSudo": false,
-            "why": "Open both existing-user Guacamole route sessions, then inspect whether XRDP allocated distinct displays."
+            "why": "Open both existing-user Guacamole route clients, authenticate them, then inspect whether XRDP allocated distinct displays."
         }),
         "install_privileged_helper_then_grant_route_display_access" => json!({
             "command": "pnpm install:privileges -- --apply && newgrp agent-browser",
@@ -734,6 +1037,7 @@ fn recommend_next_command(next_action: &str) -> Value {
 
 struct RemoteViewIssueContext<'a> {
     install: &'a Value,
+    rdp_gateway: &'a Value,
     route_pool: &'a Value,
     route_displays: &'a Value,
     display_access: &'a Value,
@@ -747,6 +1051,7 @@ fn remote_view_issues(context: RemoteViewIssueContext<'_>) -> Vec<Value> {
     let mut issues = Vec::new();
     let RemoteViewIssueContext {
         install,
+        rdp_gateway,
         route_pool,
         route_displays,
         display_access,
@@ -824,8 +1129,9 @@ fn remote_view_issues(context: RemoteViewIssueContext<'_>) -> Vec<Value> {
                 .get("recovery")
                 .and_then(Value::as_str)
                 .unwrap_or("repair the Guacamole route-pool prerequisite, then rerun doctor");
+            let issue_code = route_pool_component_issue_code(name, status);
             issues.push(remote_view_issue(
-                &format!("route_pool_{name}_{status}").replace(':', "_"),
+                &issue_code,
                 component
                     .get("evidence")
                     .and_then(Value::as_str)
@@ -842,6 +1148,54 @@ fn remote_view_issues(context: RemoteViewIssueContext<'_>) -> Vec<Value> {
                 "run pnpm test:rdp-guac-route-pool-readiness -- --report-only and repair the first blocked component",
                 false,
                 "route_pool",
+            ));
+        }
+    }
+
+    if !nested_bool(rdp_gateway, &["available"]) {
+        issues.push(remote_view_issue(
+            "rdp_gateway_readiness_unavailable",
+            "the RDP gateway readiness helper could not be run",
+            "run pnpm test:rdp-gateway-readiness-live from the repo root",
+            false,
+            "run_rdp_gateway_readiness",
+        ));
+    } else {
+        for component in rdp_gateway
+            .pointer("/data/readiness/components")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+        {
+            let name = component
+                .get("component")
+                .and_then(Value::as_str)
+                .unwrap_or("rdp_gateway");
+            if name != "private_display_allocator" {
+                continue;
+            }
+            let status = component
+                .get("status")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown");
+            if status == "ready" {
+                continue;
+            }
+            issues.push(remote_view_issue(
+                &format!("rdp_gateway_{name}_{status}"),
+                component
+                    .get("evidence")
+                    .and_then(Value::as_str)
+                    .unwrap_or("private display allocator is not ready"),
+                component
+                    .get("recovery")
+                    .and_then(Value::as_str)
+                    .unwrap_or("clear stale private display locks or expand the allocator range"),
+                false,
+                component
+                    .get("nextAction")
+                    .and_then(Value::as_str)
+                    .unwrap_or("clear_stale_private_display_locks_or_expand_allocator_range"),
             ));
         }
     }
@@ -1006,6 +1360,15 @@ fn remote_view_issues(context: RemoteViewIssueContext<'_>) -> Vec<Value> {
     issues
 }
 
+fn route_pool_component_issue_code(component_name: &str, status: &str) -> String {
+    match component_name {
+        "guacamole_schema" => "guacamole_schema_missing".to_string(),
+        "guacamole_login" => "guacamole_login_failed".to_string(),
+        "guacamole_connection_permissions" => "guacamole_connection_permission_missing".to_string(),
+        _ => format!("route_pool_{component_name}_{status}").replace(':', "_"),
+    }
+}
+
 fn remote_view_issue(
     code: &str,
     message: &str,
@@ -1073,6 +1436,7 @@ fn drift_findings(users: &Value, config: &Value) -> Vec<Value> {
 fn state_sources() -> Vec<Value> {
     vec![
         json!({"source": "agent-browser install doctor", "kind": "install"}),
+        json!({"source": "scripts/smoke-rdp-gateway-readiness.js", "kind": "rdp-gateway"}),
         json!({"source": "scripts/smoke-rdp-guac-route-pool-readiness.js --report-only", "kind": "guacamole"}),
         json!({"source": "scripts/inspect-rdp-route-displays.js", "kind": "rdp-displays"}),
         json!({"source": "xdpyinfo with route display names", "kind": "rdp-display-access"}),
@@ -1174,6 +1538,10 @@ fn print_remote_view_doctor_report(report: &Value) {
     );
     println!("status: {}", display_value(&data["status"]));
     println!(
+        "private display allocator ready: {}",
+        display_value(&data["manyToMany"]["privateDisplayAllocatorReady"])
+    );
+    println!(
         "route pool ready: {}",
         display_value(&data["manyToMany"]["routePoolReady"])
     );
@@ -1186,8 +1554,40 @@ fn print_remote_view_doctor_report(report: &Value) {
         display_value(&data["manyToMany"]["routeDisplayAccessReady"])
     );
     println!(
+        "single-route remote control ready: {}",
+        display_value(&data["remoteControl"]["ready"])
+    );
+    println!(
+        "single-route display: {}",
+        display_value(&data["remoteControl"]["displayName"])
+    );
+    println!(
+        "single-route external URL: {}",
+        display_value(&data["remoteControl"]["externalUrl"])
+    );
+    println!(
+        "dashboard runtime contract: {}",
+        display_value(&data["dashboardRuntime"]["serviceContractVersion"])
+    );
+    println!(
+        "dashboard runtime sha: {}",
+        display_value(&data["dashboardRuntime"]["dashboard"]["sha256"])
+    );
+    println!(
+        "dashboard runtime executable: {}",
+        display_value(&data["dashboardRuntime"]["executable"]["sha256"])
+    );
+    println!(
         "simultaneous viewing ready: {}",
         display_value(&data["manyToMany"]["simultaneousViewingReady"])
+    );
+    println!(
+        "guacamole local embed ready: {}",
+        display_value(&data["guacamole"]["routePool"]["data"]["guacamole"]["localEmbedReady"])
+    );
+    println!(
+        "guacamole public operator ready: {}",
+        display_value(&data["guacamole"]["routePool"]["data"]["guacamole"]["publicOperatorReady"])
     );
     println!("next action: {}", display_value(&data["nextAction"]));
     println!(
@@ -1256,6 +1656,32 @@ fn print_remote_view_doctor_report(report: &Value) {
     }
 }
 
+fn dashboard_runtime_from_install(install: &Value) -> Value {
+    install
+        .pointer("/data/data/dashboardRuntime")
+        .cloned()
+        .unwrap_or_else(|| {
+            json!({
+                "available": false,
+                "reason": "install doctor did not report dashboard runtime manifest",
+            })
+        })
+}
+
+fn readiness_component_ready(value: &Value, component_name: &str) -> bool {
+    value
+        .pointer("/data/readiness/components")
+        .and_then(Value::as_array)
+        .and_then(|components| {
+            components.iter().find(|component| {
+                component.get("component").and_then(Value::as_str) == Some(component_name)
+            })
+        })
+        .and_then(|component| component.get("status"))
+        .and_then(Value::as_str)
+        == Some("ready")
+}
+
 fn display_value(value: &Value) -> String {
     match value {
         Value::String(value) => value.clone(),
@@ -1269,6 +1695,122 @@ fn display_value(value: &Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn ready_rdp_gateway() -> Value {
+        json!({
+            "available": true,
+            "data": {
+                "readiness": {
+                    "components": [
+                        {
+                            "component": "private_display_allocator",
+                            "status": "ready"
+                        }
+                    ]
+                }
+            }
+        })
+    }
+
+    fn unique_temp_dir(name: &str) -> PathBuf {
+        let mut path = env::temp_dir();
+        path.push(format!(
+            "agent-browser-remote-view-doctor-{name}-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&path);
+        path
+    }
+
+    fn write_remote_view_helper_scripts(script_root: &Path) {
+        fs::create_dir_all(script_root).unwrap();
+        for script in REMOTE_VIEW_HELPER_SCRIPTS {
+            fs::write(script_root.join(script), "console.log('{}');\n").unwrap();
+        }
+    }
+
+    #[test]
+    fn dashboard_runtime_from_install_lifts_manifest() {
+        let install = json!({
+            "available": true,
+            "data": {
+                "success": true,
+                "data": {
+                    "dashboardRuntime": {
+                        "schemaVersion": "agent-browser.runtime-manifest.v1",
+                        "serviceContractVersion": "service-ui-runtime.v1",
+                        "dashboard": {"sha256": "abc"},
+                        "executable": {"sha256": "def"}
+                    }
+                }
+            }
+        });
+
+        let runtime = dashboard_runtime_from_install(&install);
+
+        assert_eq!(
+            runtime["schemaVersion"],
+            "agent-browser.runtime-manifest.v1"
+        );
+        assert_eq!(runtime["serviceContractVersion"], "service-ui-runtime.v1");
+        assert_eq!(runtime["dashboard"]["sha256"], "abc");
+        assert_eq!(runtime["executable"]["sha256"], "def");
+    }
+
+    #[test]
+    fn dashboard_runtime_from_install_reports_unavailable_when_missing() {
+        let runtime = dashboard_runtime_from_install(&json!({"success": true}));
+
+        assert_eq!(runtime["available"], false);
+        assert_eq!(
+            runtime["reason"],
+            "install doctor did not report dashboard runtime manifest"
+        );
+    }
+
+    #[test]
+    fn normalizes_repo_root_to_remote_view_script_root() {
+        let root = unique_temp_dir("repo-root");
+        let scripts = root.join("scripts");
+        write_remote_view_helper_scripts(&scripts);
+
+        let resolved = normalize_script_root_candidate(&root).unwrap();
+        assert_eq!(resolved, scripts);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn accepts_direct_remote_view_script_root() {
+        let scripts = unique_temp_dir("direct-scripts");
+        write_remote_view_helper_scripts(&scripts);
+
+        let resolved = normalize_script_root_candidate(&scripts).unwrap();
+        assert_eq!(resolved, scripts);
+
+        let _ = fs::remove_dir_all(resolved);
+    }
+
+    #[test]
+    fn script_args_use_absolute_helper_path_without_cwd_dependent_prefix() {
+        let script_root = PathBuf::from("/tmp/agent-browser-scripts");
+        let args = script_args(
+            &script_root,
+            &[
+                "smoke-rdp-guac-route-pool-readiness.js",
+                "--report-only",
+                "--allow-shared-target",
+            ],
+        );
+        assert_eq!(
+            args,
+            vec![
+                "/tmp/agent-browser-scripts/smoke-rdp-guac-route-pool-readiness.js".to_string(),
+                "--report-only".to_string(),
+                "--allow-shared-target".to_string(),
+            ]
+        );
+    }
 
     #[test]
     fn parse_env_keys_ignores_comments_and_values() {
@@ -1310,6 +1852,7 @@ MaxSessions=50
     #[test]
     fn recommend_next_action_reuses_existing_rdp_user_before_route_users() {
         let route_pool = json!({"data": {"success": true}});
+        let rdp_gateway = ready_rdp_gateway();
         let install = json!({"success": true});
         let route_displays = json!({"data": {"success": false}});
         let display_access = json!({"ready": false});
@@ -1323,15 +1866,16 @@ MaxSessions=50
             ]
         });
         assert_eq!(
-            recommend_next_action(
-                &install,
-                &route_pool,
-                &route_displays,
-                &display_access,
-                &viewer_prerequisites,
-                &users,
-                &privileges
-            ),
+            recommend_next_action(RecommendationContext {
+                install: &install,
+                rdp_gateway: &rdp_gateway,
+                route_pool: &route_pool,
+                route_displays: &route_displays,
+                display_access: &display_access,
+                viewer_prerequisites: &viewer_prerequisites,
+                users: &users,
+                privileges: &privileges,
+            }),
             "open_two_rdp_route_sessions_for_existing_agent_browser_rdp_user_then_rerun_doctor"
         );
     }
@@ -1346,8 +1890,48 @@ MaxSessions=50
     }
 
     #[test]
+    fn recommend_next_action_promotes_route_pool_component_action() {
+        let route_pool = json!({
+            "data": {
+                "success": false,
+                "readiness": {
+                    "components": [
+                        {"component": "guacamole_web", "status": "ready"},
+                        {
+                            "component": "guacamole_login",
+                            "status": "failed",
+                            "nextAction": "repair_guacamole_admin_credentials"
+                        }
+                    ]
+                }
+            }
+        });
+        let rdp_gateway = ready_rdp_gateway();
+        let install = json!({"success": true});
+        let route_displays = json!({"data": {"success": false}});
+        let display_access = json!({"ready": false});
+        let viewer_prerequisites = json!({"ready": true});
+        let privileges = json!({"ready": false});
+        let users = json!({"entries": []});
+        assert_eq!(
+            recommend_next_action(RecommendationContext {
+                install: &install,
+                rdp_gateway: &rdp_gateway,
+                route_pool: &route_pool,
+                route_displays: &route_displays,
+                display_access: &display_access,
+                viewer_prerequisites: &viewer_prerequisites,
+                users: &users,
+                privileges: &privileges,
+            }),
+            "repair_guacamole_admin_credentials"
+        );
+    }
+
+    #[test]
     fn recommend_next_action_opens_route_specific_sessions_after_users_exist() {
         let route_pool = json!({"data": {"success": true}});
+        let rdp_gateway = ready_rdp_gateway();
         let install = json!({"success": true});
         let route_displays = json!({"data": {"success": false}});
         let display_access = json!({"ready": false});
@@ -1361,22 +1945,36 @@ MaxSessions=50
             ]
         });
         assert_eq!(
-            recommend_next_action(
-                &install,
-                &route_pool,
-                &route_displays,
-                &display_access,
-                &viewer_prerequisites,
-                &users,
-                &privileges
-            ),
+            recommend_next_action(RecommendationContext {
+                install: &install,
+                rdp_gateway: &rdp_gateway,
+                route_pool: &route_pool,
+                route_displays: &route_displays,
+                display_access: &display_access,
+                viewer_prerequisites: &viewer_prerequisites,
+                users: &users,
+                privileges: &privileges,
+            }),
             "open_route_specific_rdp_sessions_then_rerun_doctor"
         );
     }
 
     #[test]
+    fn recommend_next_command_opens_guacamole_route_clients() {
+        for next_action in [
+            "open_route_specific_rdp_sessions_then_rerun_doctor",
+            "open_two_rdp_route_sessions_for_existing_agent_browser_rdp_user_then_rerun_doctor",
+        ] {
+            let command = recommend_next_command(next_action);
+            assert_eq!(command["command"], "pnpm open:rdp-route-displays");
+            assert_eq!(command["requiresInteractiveSudo"], false);
+        }
+    }
+
+    #[test]
     fn recommend_next_action_installs_helper_before_display_access_grant() {
         let route_pool = json!({"data": {"success": true}});
+        let rdp_gateway = ready_rdp_gateway();
         let install = json!({"success": true});
         let route_displays = json!({"data": {"success": true}});
         let display_access = json!({"ready": false});
@@ -1384,15 +1982,16 @@ MaxSessions=50
         let privileges = json!({"ready": false});
         let users = json!({"entries": []});
         assert_eq!(
-            recommend_next_action(
-                &install,
-                &route_pool,
-                &route_displays,
-                &display_access,
-                &viewer_prerequisites,
-                &users,
-                &privileges
-            ),
+            recommend_next_action(RecommendationContext {
+                install: &install,
+                rdp_gateway: &rdp_gateway,
+                route_pool: &route_pool,
+                route_displays: &route_displays,
+                display_access: &display_access,
+                viewer_prerequisites: &viewer_prerequisites,
+                users: &users,
+                privileges: &privileges,
+            }),
             "install_privileged_helper_then_grant_route_display_access"
         );
     }
@@ -1400,6 +1999,7 @@ MaxSessions=50
     #[test]
     fn recommend_next_action_grants_display_access_after_helper_ready() {
         let route_pool = json!({"data": {"success": true}});
+        let rdp_gateway = ready_rdp_gateway();
         let install = json!({"success": true});
         let route_displays = json!({"data": {"success": true}});
         let display_access = json!({"ready": false});
@@ -1407,15 +2007,16 @@ MaxSessions=50
         let privileges = json!({"ready": true});
         let users = json!({"entries": []});
         assert_eq!(
-            recommend_next_action(
-                &install,
-                &route_pool,
-                &route_displays,
-                &display_access,
-                &viewer_prerequisites,
-                &users,
-                &privileges
-            ),
+            recommend_next_action(RecommendationContext {
+                install: &install,
+                rdp_gateway: &rdp_gateway,
+                route_pool: &route_pool,
+                route_displays: &route_displays,
+                display_access: &display_access,
+                viewer_prerequisites: &viewer_prerequisites,
+                users: &users,
+                privileges: &privileges,
+            }),
             "grant_route_display_access"
         );
     }
@@ -1423,6 +2024,7 @@ MaxSessions=50
     #[test]
     fn recommend_next_action_installs_helper_after_viewing_is_ready() {
         let route_pool = json!({"data": {"success": true}});
+        let rdp_gateway = ready_rdp_gateway();
         let install = json!({"success": true});
         let route_displays = json!({"data": {"success": true}});
         let display_access = json!({"ready": true});
@@ -1430,15 +2032,16 @@ MaxSessions=50
         let privileges = json!({"ready": false});
         let users = json!({"entries": []});
         assert_eq!(
-            recommend_next_action(
-                &install,
-                &route_pool,
-                &route_displays,
-                &display_access,
-                &viewer_prerequisites,
-                &users,
-                &privileges
-            ),
+            recommend_next_action(RecommendationContext {
+                install: &install,
+                rdp_gateway: &rdp_gateway,
+                route_pool: &route_pool,
+                route_displays: &route_displays,
+                display_access: &display_access,
+                viewer_prerequisites: &viewer_prerequisites,
+                users: &users,
+                privileges: &privileges,
+            }),
             "install_privileged_helper_for_recurring_desktop_setup"
         );
     }
@@ -1446,10 +2049,12 @@ MaxSessions=50
     #[test]
     fn many_to_many_requires_route_display_access() {
         let route_pool = json!({"data": {"success": true}});
+        let rdp_gateway = ready_rdp_gateway();
         let route_displays = json!({"data": {"success": true}});
         let display_access = json!({"ready": false});
         let viewer_prerequisites = json!({"ready": true});
         let status = many_to_many_status(
+            &rdp_gateway,
             &route_pool,
             &route_displays,
             &display_access,
@@ -1457,5 +2062,83 @@ MaxSessions=50
         );
         assert_eq!(status["status"], "needs_display_access");
         assert_eq!(status["simultaneousViewingReady"], false);
+    }
+
+    #[test]
+    fn route_pool_component_issue_codes_use_remote_view_taxonomy() {
+        assert_eq!(
+            route_pool_component_issue_code("guacamole_schema", "failed"),
+            "guacamole_schema_missing"
+        );
+        assert_eq!(
+            route_pool_component_issue_code("guacamole_connection_permissions", "blocked"),
+            "guacamole_connection_permission_missing"
+        );
+        assert_eq!(
+            route_pool_component_issue_code("guacamole_login", "failed"),
+            "guacamole_login_failed"
+        );
+        assert_eq!(
+            route_pool_component_issue_code("rdp_backend_tcp:1", "failed"),
+            "route_pool_rdp_backend_tcp_1_failed"
+        );
+    }
+
+    #[test]
+    fn remote_view_issues_reports_guacamole_schema_and_permission_taxonomy() {
+        let install = json!({"success": true});
+        let rdp_gateway = ready_rdp_gateway();
+        let route_pool = json!({
+            "available": true,
+            "data": {
+                "success": false,
+                "readiness": {
+                    "components": [
+                        {
+                            "component": "guacamole_schema",
+                            "status": "failed",
+                            "evidence": "missing Guacamole table(s): guacamole_connection_permission",
+                            "nextAction": "initialize_guacamole_schema",
+                            "recovery": "Run pnpm ensure:rdp-guac-postgres -- --apply to repair an empty initialized Guacamole PostgreSQL database before validating route-pool entries."
+                        },
+                        {
+                            "component": "guacamole_connection_permissions",
+                            "status": "blocked",
+                            "evidence": "missing READ permission for Guacamole connection id(s): 1",
+                            "nextAction": "repair_guacamole_connection_permissions",
+                            "recovery": "Grant READ permission on every selected Guacamole route connection before treating the route pool as ready."
+                        }
+                    ]
+                }
+            }
+        });
+        let route_displays = json!({"data": {"success": false}});
+        let display_access = json!({"ready": false});
+        let viewer_prerequisites = json!({"ready": true});
+        let users = json!({"entries": []});
+        let privileges = json!({
+            "groupExists": true,
+            "userInGroup": true,
+            "helperExists": true,
+            "sudoersExists": true,
+            "helperCheck": {"success": true}
+        });
+        let issues = remote_view_issues(RemoteViewIssueContext {
+            install: &install,
+            rdp_gateway: &rdp_gateway,
+            route_pool: &route_pool,
+            route_displays: &route_displays,
+            display_access: &display_access,
+            viewer_prerequisites: &viewer_prerequisites,
+            users: &users,
+            privileges: &privileges,
+            next_action: "repair_or_sync_guacamole_route_pool_before_creating_more_users",
+        });
+        let codes = issues
+            .iter()
+            .filter_map(|issue| issue.get("code").and_then(Value::as_str))
+            .collect::<Vec<_>>();
+        assert!(codes.contains(&"guacamole_schema_missing"));
+        assert!(codes.contains(&"guacamole_connection_permission_missing"));
     }
 }

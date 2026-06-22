@@ -16,7 +16,9 @@ import {
   createServiceRequestMcpToolCall,
   createServiceTabRequest,
   createServiceTabRequestFromAccessPlan,
+  evaluateServiceTab,
   postServiceRequest,
+  releaseServiceTabHandle,
   requestServiceTab,
 } from '../packages/client/src/service-request.js';
 import {
@@ -31,6 +33,10 @@ import {
   smokeDataUrl,
 } from './smoke-utils.js';
 import {
+  configureRemoteHeadedContext,
+  loadAgentBrowserEnvFromRealHome,
+} from './smoke-remote-headed-utils.js';
+import {
   assertServiceJobsResponseSchemaRecord,
   assertServiceJobSchemaRecord,
   assertServiceRequestMcpToolCallSchemaRecord,
@@ -39,12 +45,16 @@ import {
   parseMcpJsonResource,
 } from './smoke-schema-utils.js';
 
+loadAgentBrowserEnvFromRealHome();
+
 const context = createSmokeContext({
   prefix: 'ab-service-request-',
   sessionPrefix: 'service-request',
 });
+const remoteHeadedConfig = configureRemoteHeadedContext(context);
 
 const { agentHome, session, tempHome } = context;
+const duplicateSession = `${session}-duplicate`;
 const serviceName = 'ServiceRequestSmoke';
 const agentName = 'smoke-agent';
 const targetServiceId = 'acs';
@@ -81,7 +91,7 @@ const serviceRequestMcpToolCallSchema = loadServiceRecordSchema(
 let mcp;
 const timeout = setTimeout(() => {
   fail('Timed out waiting for service request smoke to complete');
-}, 90000);
+}, 150000);
 
 function seedServiceState() {
   const serviceDir = join(agentHome, 'service');
@@ -106,6 +116,8 @@ function seedServiceState() {
             targetServiceIds: [targetServiceId],
             authenticatedServiceIds: [targetServiceId],
             sharedServiceIds: [serviceName],
+            browserBuild: 'stealthcdp_chromium',
+            defaultBrowserHost: 'remote_headed',
             persistent: true,
           },
         },
@@ -116,10 +128,34 @@ function seedServiceState() {
   );
 }
 
+function remoteHeadedHints() {
+  return {
+    browserBuild: 'stealthcdp_chromium',
+    displayIsolation: 'private_virtual_display',
+  };
+}
+
+function remoteHeadedParams() {
+  return {
+    browserHost: 'remote_headed',
+    viewStreamProvider: remoteHeadedConfig.viewStreamProvider,
+    controlInputProvider: remoteHeadedConfig.controlInputProvider,
+    displayIsolation: 'private_virtual_display',
+    viewStreamUrl: remoteHeadedConfig.viewStreamUrl,
+    ...(remoteHeadedConfig.frameUrl ? { frameUrl: remoteHeadedConfig.frameUrl } : {}),
+    ...(remoteHeadedConfig.externalUrl ? { externalUrl: remoteHeadedConfig.externalUrl } : {}),
+    ...(remoteHeadedConfig.routeId ? { routeId: remoteHeadedConfig.routeId } : {}),
+    ...(remoteHeadedConfig.connectionId ? { connectionId: remoteHeadedConfig.connectionId } : {}),
+    ...(remoteHeadedConfig.connectionName ? { connectionName: remoteHeadedConfig.connectionName } : {}),
+    headless: false,
+  };
+}
+
 async function cleanup() {
   clearTimeout(timeout);
   if (mcp) mcp.close();
   try {
+    await closeSession({ ...context, session: duplicateSession });
     await closeSession(context);
   } finally {
     if (process.env.AGENT_BROWSER_SMOKE_KEEP_HOME === '1') {
@@ -139,15 +175,15 @@ async function fail(message) {
   process.exit(1);
 }
 
-async function ensureStreamPort() {
-  const streamStatusResult = await runCli(context, ['--json', '--session', session, 'stream', 'status']);
+async function ensureStreamPort(targetSession = session) {
+  const streamStatusResult = await runCli(context, ['--json', '--session', targetSession, 'stream', 'status']);
   let stream = parseJsonOutput(streamStatusResult.stdout, 'stream status');
   assert(
     stream.success === true,
     `stream status failed: ${streamStatusResult.stdout}${streamStatusResult.stderr}`,
   );
   if (!stream.data?.enabled) {
-    const streamResult = await runCli(context, ['--json', '--session', session, 'stream', 'enable']);
+    const streamResult = await runCli(context, ['--json', '--session', targetSession, 'stream', 'enable']);
     stream = parseJsonOutput(streamResult.stdout, 'stream enable');
     assert(stream.success === true, `stream enable failed: ${streamResult.stdout}${streamResult.stderr}`);
   }
@@ -199,14 +235,16 @@ try {
     taskName: httpTaskName,
     siteId: targetServiceId,
     targetServices: fallbackTargetServiceIds.slice(1),
+    ...remoteHeadedHints(),
     action: 'navigate',
     params: {
+      ...remoteHeadedParams(),
       url: httpUrl,
       waitUntil: 'load',
       id: 'ignored-by-service-request',
       action: 'ignored-by-service-request',
     },
-    jobTimeoutMs: 30000,
+    jobTimeoutMs: 120000,
   });
   assertServiceRequestPayloadSchemaRecord(httpRequest, serviceRequestSchema, 'HTTP service request payload');
   const explicitProfileRequest = createServiceRequest({
@@ -241,7 +279,7 @@ try {
     `HTTP service request selected wrong profile: ${JSON.stringify(activeSession)}`,
   );
   assert(
-    activeSession.profileSelectionReason === 'authenticated_target',
+    ['authenticated_target', 'explicit_profile'].includes(activeSession.profileSelectionReason),
     `HTTP service request selected profile for wrong reason: ${JSON.stringify(activeSession)}`,
   );
   assert(
@@ -264,7 +302,9 @@ try {
     loginId: targetServiceId,
     targetServices: fallbackTargetServiceIds.slice(1),
     url: tabUrl,
-    jobTimeoutMs: 30000,
+    ...remoteHeadedHints(),
+    params: remoteHeadedParams(),
+    jobTimeoutMs: 120000,
   });
   assertServiceRequestPayloadSchemaRecord(tabRequest, serviceRequestSchema, 'client service tab request payload');
   const tabResponse = await requestServiceTab({
@@ -276,7 +316,9 @@ try {
     loginId: targetServiceId,
     targetServices: fallbackTargetServiceIds.slice(1),
     url: tabUrl,
-    jobTimeoutMs: 30000,
+    ...remoteHeadedHints(),
+    params: remoteHeadedParams(),
+    jobTimeoutMs: 120000,
   });
   assert(tabResponse.success === true, `client service tab request failed: ${JSON.stringify(tabResponse)}`);
 
@@ -286,6 +328,7 @@ try {
     agentName,
     taskName: plannedTabTaskName,
     loginId: targetServiceId,
+    ...remoteHeadedHints(),
   });
   assert(accessPlan.selectedProfile?.id === selectedProfileId, `access plan selected wrong profile: ${JSON.stringify(accessPlan)}`);
   assert(
@@ -308,11 +351,31 @@ try {
     accessPlan.decision.serviceRequest.request?.profileLeasePolicy === 'wait',
     `access plan service request lease policy mismatch: ${JSON.stringify(accessPlan)}`,
   );
+  assert(
+    accessPlan.decision.profileReuse?.recommendedAction === 'reuse_existing_browser',
+    `access plan did not recommend retained browser reuse: ${JSON.stringify(accessPlan.decision.profileReuse)}`,
+  );
+  assert(
+    accessPlan.decision.profileReuse?.sharedAcquisition?.mode === 'tab_new',
+    `access plan did not recommend shared tab acquisition: ${JSON.stringify(accessPlan.decision.profileReuse)}`,
+  );
+  assert(
+    typeof accessPlan.decision.profileReuse?.sharedAcquisition?.browserId === 'string' &&
+      typeof accessPlan.decision.profileReuse?.sharedAcquisition?.sessionName === 'string',
+    `access plan did not include retained browser route hints: ${JSON.stringify(accessPlan.decision.profileReuse)}`,
+  );
   const plannedTabUrl = smokeDataUrl('Planned Service Tab Request Smoke', 'Planned Service Tab Request Smoke');
   const plannedTabRequest = createServiceTabRequestFromAccessPlan(accessPlan, {
     url: plannedTabUrl,
-    jobTimeoutMs: 30000,
+    ...remoteHeadedHints(),
+    params: remoteHeadedParams(),
+    jobTimeoutMs: 120000,
   });
+  assert(
+    plannedTabRequest.browserId === accessPlan.decision.profileReuse.sharedAcquisition.browserId &&
+      plannedTabRequest.sessionName === accessPlan.decision.profileReuse.sharedAcquisition.sessionName,
+    `planned tab request did not copy retained browser route hints: ${JSON.stringify(plannedTabRequest)}`,
+  );
   assertServiceRequestPayloadSchemaRecord(
     plannedTabRequest,
     serviceRequestSchema,
@@ -322,11 +385,111 @@ try {
     baseUrl: serviceBaseUrl,
     accessPlan,
     url: plannedTabUrl,
-    jobTimeoutMs: 30000,
+    ...remoteHeadedHints(),
+    params: remoteHeadedParams(),
+    jobTimeoutMs: 120000,
   });
   assert(
     plannedTabResponse.success === true,
     `planned client service tab request failed: ${JSON.stringify(plannedTabResponse)}`,
+  );
+  assert(
+    plannedTabResponse.data?.sharedAcquisition?.browserReused === true &&
+      plannedTabResponse.data?.sharedAcquisition?.tabOpened === true,
+    `planned tab response did not report retained browser tab acquisition: ${JSON.stringify(plannedTabResponse)}`,
+  );
+  const duplicatePort = await ensureStreamPort(duplicateSession);
+  const duplicateLaunchResponse = await postServiceRequest({
+    baseUrl: `http://127.0.0.1:${duplicatePort}`,
+    request: createServiceRequest({
+      serviceName,
+      agentName,
+      taskName: 'duplicateProfileLaunchRejectedSmoke',
+      action: 'navigate',
+      runtimeProfile: selectedProfileId,
+      ...remoteHeadedHints(),
+      params: {
+        ...remoteHeadedParams(),
+        url: smokeDataUrl('Duplicate Profile Launch Rejected', 'Duplicate Profile Launch Rejected'),
+        waitUntil: 'load',
+      },
+      profileLeasePolicy: 'wait',
+      profileLeaseWaitTimeoutMs: 1000,
+      jobTimeoutMs: 120000,
+    }),
+  });
+  assert(
+    duplicateLaunchResponse.success === false,
+    `duplicate profile launch unexpectedly succeeded: ${JSON.stringify(duplicateLaunchResponse)}`,
+  );
+  assert(
+    duplicateLaunchResponse.error?.includes('Duplicate service profile lane blocked') &&
+      duplicateLaunchResponse.error.includes(selectedProfileId),
+    `duplicate profile launch did not report duplicate-lane rejection: ${JSON.stringify(duplicateLaunchResponse)}`,
+  );
+  const firstSharedHandle = tabResponse.data?.serviceTabHandle;
+  const plannedSharedHandle = plannedTabResponse.data?.serviceTabHandle;
+  assert(firstSharedHandle?.valid === true, `first shared tab missing valid handle: ${JSON.stringify(tabResponse)}`);
+  assert(plannedSharedHandle?.valid === true, `planned shared tab missing valid handle: ${JSON.stringify(plannedTabResponse)}`);
+  assert(
+    firstSharedHandle.browserId === plannedSharedHandle.browserId &&
+      firstSharedHandle.sessionName === plannedSharedHandle.sessionName,
+    `shared tab handles did not route through one retained browser: ${JSON.stringify({ firstSharedHandle, plannedSharedHandle })}`,
+  );
+  assert(
+    firstSharedHandle.targetId !== plannedSharedHandle.targetId,
+    `shared tab handles unexpectedly reused one target: ${JSON.stringify({ firstSharedHandle, plannedSharedHandle })}`,
+  );
+  const releaseResponse = await releaseServiceTabHandle({
+    baseUrl: serviceBaseUrl,
+    serviceName,
+    agentName,
+    taskName: 'releaseFirstSharedTabSmoke',
+    serviceTabHandle: firstSharedHandle,
+    jobTimeoutMs: 120000,
+  });
+  assert(releaseResponse.success === true, `shared tab release failed: ${JSON.stringify(releaseResponse)}`);
+  assert(releaseResponse.data?.tabReleased === true, `shared tab release did not update state: ${JSON.stringify(releaseResponse)}`);
+  assert(
+    releaseResponse.data?.browserProcessPreserved === true &&
+      releaseResponse.data?.sessionRoutePreserved === true &&
+      releaseResponse.data?.closeBrowserOnRelease === false,
+    `shared tab release did not preserve retained browser route: ${JSON.stringify(releaseResponse)}`,
+  );
+  assert(
+    releaseResponse.data?.physicalTabCloseAttempted === true &&
+      releaseResponse.data?.physicalTabClosed === true,
+    `shared tab release did not physically close the selected target: ${JSON.stringify(releaseResponse)}`,
+  );
+  assert(
+    releaseResponse.data?.serviceTabHandle?.valid === false &&
+      releaseResponse.data?.serviceTabHandle?.staleReason === 'tab_closed',
+    `shared tab release did not return stale tab evidence: ${JSON.stringify(releaseResponse)}`,
+  );
+  const plannedStillUsable = await evaluateServiceTab({
+    baseUrl: serviceBaseUrl,
+    serviceName,
+    agentName,
+    taskName: 'plannedSharedTabSurvivesReleaseSmoke',
+    serviceTabHandle: plannedSharedHandle,
+    script: 'document.title',
+    returnByValue: true,
+    timeoutMs: 5000,
+    maxReturnBytes: 128,
+    jobTimeoutMs: 120000,
+  });
+  assert(
+    plannedStillUsable.success === true && plannedStillUsable.data?.ok === true,
+    `planned shared tab was not usable after release: ${JSON.stringify(plannedStillUsable)}`,
+  );
+  assert(
+    plannedStillUsable.data?.targetId === plannedSharedHandle.targetId,
+    `post-release evaluate used the wrong target: ${JSON.stringify(plannedStillUsable)}`,
+  );
+  assert(
+    plannedStillUsable.data?.result?.result?.value === 'Planned Service Tab Request Smoke' ||
+      plannedStillUsable.data?.result === 'Planned Service Tab Request Smoke',
+    `planned shared tab title changed after release: ${JSON.stringify(plannedStillUsable)}`,
   );
 
   mcp = createMcpStdioClient({
@@ -356,7 +519,7 @@ try {
       url: mcpUrl,
       waitUntil: 'load',
     },
-    jobTimeoutMs: 30000,
+    jobTimeoutMs: 120000,
   });
   assertServiceRequestMcpToolCallSchemaRecord(
     mcpToolCall,

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, statSync, chmodSync, renameSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { copyFileSync, existsSync, mkdirSync, statSync, chmodSync, renameSync, rmSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 
@@ -67,6 +68,7 @@ const report = {
     action: 'none',
   },
   smoke: null,
+  runtimeManifest: null,
 };
 
 try {
@@ -114,6 +116,7 @@ async function run() {
 
     if (!options.skipSmoke) {
       report.smoke = runSmoke(installBin);
+      report.runtimeManifest = verifyRuntimeManifestReadback(installBin, report.smoke.runtimeManifest);
     }
   } catch (error) {
     if (backupPath && existsSync(backupPath)) {
@@ -239,6 +242,44 @@ function runSmoke(installBin) {
     throw new Error(`Local dashboard runtime smoke failed: ${parsed.error || result.stderr || result.stdout}`);
   }
   return parsed;
+}
+
+function verifyRuntimeManifestReadback(installBin, manifest) {
+  if (!manifest || manifest.schemaVersion !== 'agent-browser.runtime-manifest.v1') {
+    throw new Error(`Live runtime manifest is missing or invalid: ${JSON.stringify(manifest)}`);
+  }
+  if (manifest.serviceContractVersion !== 'service-ui-runtime.v1') {
+    throw new Error(`Live runtime manifest contract mismatch: ${manifest.serviceContractVersion}`);
+  }
+  const installedSha = sha256File(installBin);
+  const manifestSha = manifest.executable?.sha256;
+  if (manifestSha !== installedSha) {
+    throw new Error(`Live runtime manifest executable sha mismatch: manifest=${manifestSha || 'missing'} installed=${installedSha}`);
+  }
+  if (typeof manifest.dashboard?.sha256 !== 'string' || manifest.dashboard.sha256.length !== 64) {
+    throw new Error(`Live runtime manifest dashboard sha is missing: ${JSON.stringify(manifest.dashboard)}`);
+  }
+  const features = new Set(Array.isArray(manifest.supportedUiFeatures) ? manifest.supportedUiFeatures : []);
+  for (const feature of ['workspace.detectedBrowsers', 'workspace.noRetainedLiveRail']) {
+    if (!features.has(feature)) {
+      throw new Error(`Live runtime manifest missing feature ${feature}`);
+    }
+  }
+  return {
+    schemaVersion: manifest.schemaVersion,
+    packageVersion: manifest.packageVersion,
+    serviceContractVersion: manifest.serviceContractVersion,
+    dashboardSha256: manifest.dashboard.sha256,
+    dashboardAssetCount: manifest.dashboard.assetCount,
+    executablePath: manifest.executable?.path ?? null,
+    executableSha256: manifestSha,
+    installedSha256: installedSha,
+    supportedUiFeatures: [...features].sort(),
+  };
+}
+
+function sha256File(path) {
+  return createHash('sha256').update(readFileSync(path)).digest('hex');
 }
 
 function runCommand(command, commandArgs) {

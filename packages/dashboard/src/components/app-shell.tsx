@@ -91,6 +91,7 @@ export function AppShell({
   onNewSessionRequest,
   authenticatedUser,
   onLogout,
+  runtimeNotice,
   children,
 }: {
   activeSection?: DashboardSection;
@@ -98,6 +99,7 @@ export function AppShell({
   onNewSessionRequest?: () => void;
   authenticatedUser?: string;
   onLogout?: () => void;
+  runtimeNotice?: ReactNode;
   children: ReactNode;
 }) {
   const sessions = useAtomValue(sessionsAtom);
@@ -255,7 +257,10 @@ export function AppShell({
         </div>
       </header>
 
-      <main className="dashboard-main">{children}</main>
+      <main className="dashboard-main">
+        {runtimeNotice}
+        {children}
+      </main>
     </div>
   );
 }

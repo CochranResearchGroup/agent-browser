@@ -81,6 +81,8 @@ const SERVICE_BROWSER_CAPABILITY_PREFER_USAGE: &str = "service browser-capabilit
 
 const SERVICE_ACCESS_PLAN_USAGE: &str = "service access-plan [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--site-policy-id <id>] [--challenge-id <id>] [--readiness-profile-id <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--browser-host <local_headless|local_headed|docker_headed|remote_headed|cloud_provider|attached_existing>] [--view-stream-provider <cdp_screencast|chrome_tab_webrtc|virtual_display_webrtc|novnc|rdp_gateway|external_url>] [--control-input-provider <cdp_input|webrtc_input|vnc_input|manual_attached_desktop>] [--display-isolation <private_virtual_display|shared_display|ambient_display>]";
 
+const REMOTE_VIEW_OPEN_USAGE: &str = "remote-view open [url] [--url <url>] [--runtime-profile <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--provider <rdp_gateway>] [--profile <path>] [--route-pool-entry-id <id>] [--route-pool-entry-json <json>] [--route-id <id>] [--display <name>] [--display-allocation-id <id>] [--browser-id <id>] [--session-name <name>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--dry-run]";
+
 fn parse_service_access_plan(
     id: String,
     rest: &[&str],
@@ -312,6 +314,26 @@ fn parse_service_access_plan(
             }
         }
         i += 1;
+    }
+    if flags.cli_browser_host && cmd.get("browserHost").is_none() {
+        if let Some(browser_host) = flags.browser_host.as_deref() {
+            cmd["browserHost"] = json!(browser_host);
+        }
+    }
+    if flags.cli_view_stream_provider && cmd.get("viewStreamProvider").is_none() {
+        if let Some(view_stream_provider) = flags.view_stream_provider.as_deref() {
+            cmd["viewStreamProvider"] = json!(view_stream_provider);
+        }
+    }
+    if flags.cli_control_input_provider && cmd.get("controlInputProvider").is_none() {
+        if let Some(control_input_provider) = flags.control_input_provider.as_deref() {
+            cmd["controlInputProvider"] = json!(control_input_provider);
+        }
+    }
+    if flags.cli_display_isolation && cmd.get("displayIsolation").is_none() {
+        if let Some(display_isolation) = flags.display_isolation.as_deref() {
+            cmd["displayIsolation"] = json!(display_isolation);
+        }
     }
     Ok(cmd)
 }
@@ -815,6 +837,214 @@ fn required_next(
             message: format!("Missing value for {}", flag),
             usage,
         })
+}
+
+fn parse_remote_view_open(id: String, rest: &[&str], flags: &Flags) -> Result<Value, ParseError> {
+    let mut cmd = json!({
+        "id": id,
+        "action": "remote_view_open",
+        "browserHost": "remote_headed",
+        "viewStreamProvider": "rdp_gateway",
+        "controlInput": "manual_attached_desktop",
+    });
+    if let Some(runtime_profile) = flags.runtime_profile.as_ref() {
+        cmd["runtimeProfile"] = json!(runtime_profile);
+    }
+    if let Some(profile) = flags.profile.as_ref() {
+        cmd["profile"] = json!(profile);
+    }
+    if let Some(display_isolation) = flags.display_isolation.as_ref() {
+        cmd["displayIsolation"] = json!(display_isolation);
+    }
+    if let Some(browser_host) = flags.browser_host.as_ref() {
+        cmd["browserHost"] = json!(browser_host);
+    }
+    if let Some(provider) = flags.view_stream_provider.as_ref() {
+        cmd["viewStreamProvider"] = json!(provider);
+        cmd["provider"] = json!(provider);
+    }
+    if flags.cli_provider {
+        if let Some(provider) = flags.provider.as_ref() {
+            match provider.as_str() {
+                "rdp_gateway" => {
+                    cmd["viewStreamProvider"] = json!(provider);
+                    cmd["provider"] = json!(provider);
+                }
+                _ => {
+                    return Err(ParseError::InvalidValue {
+                        message: format!(
+                            "Invalid --provider value for remote-view open: {}",
+                            provider
+                        ),
+                        usage: REMOTE_VIEW_OPEN_USAGE,
+                    });
+                }
+            }
+        }
+    }
+    if let Some(control_input) = flags.control_input_provider.as_ref() {
+        cmd["controlInput"] = json!(control_input);
+    }
+
+    let mut positional_url: Option<String> = None;
+    let mut i = 1;
+    while i < rest.len() {
+        match rest[i] {
+            "--url" => {
+                let value = required_next(rest, i, "--url", REMOTE_VIEW_OPEN_USAGE)?;
+                cmd["url"] = json!(normalize_cli_url(&value));
+                i += 1;
+            }
+            "--runtime-profile" => {
+                let value = required_next(rest, i, "--runtime-profile", REMOTE_VIEW_OPEN_USAGE)?;
+                cmd["runtimeProfile"] = json!(value);
+                i += 1;
+            }
+            "--browser-build" => {
+                let value = required_next(rest, i, "--browser-build", REMOTE_VIEW_OPEN_USAGE)?;
+                match crate::native::service_model::BrowserBuild::parse_label(&value) {
+                    Some(_) => cmd["browserBuild"] = json!(value),
+                    None => {
+                        return Err(ParseError::InvalidValue {
+                            message: format!("Invalid --browser-build value: {}", value),
+                            usage: REMOTE_VIEW_OPEN_USAGE,
+                        });
+                    }
+                }
+                i += 1;
+            }
+            "--provider" => {
+                let value = required_next(rest, i, "--provider", REMOTE_VIEW_OPEN_USAGE)?;
+                match value.as_str() {
+                    "rdp_gateway" => {
+                        cmd["viewStreamProvider"] = json!(value);
+                        cmd["provider"] = json!(value);
+                    }
+                    _ => {
+                        return Err(ParseError::InvalidValue {
+                            message: format!(
+                                "Invalid --provider value for remote-view open: {}",
+                                value
+                            ),
+                            usage: REMOTE_VIEW_OPEN_USAGE,
+                        });
+                    }
+                }
+                i += 1;
+            }
+            "--profile" => {
+                let value = required_next(rest, i, "--profile", REMOTE_VIEW_OPEN_USAGE)?;
+                cmd["profile"] = json!(value);
+                i += 1;
+            }
+            "--route-pool-entry-id" | "--pool-entry-id" => {
+                let value =
+                    required_next(rest, i, "--route-pool-entry-id", REMOTE_VIEW_OPEN_USAGE)?;
+                cmd["routePoolEntryId"] = json!(value);
+                i += 1;
+            }
+            "--route-pool-entry-json" => {
+                let value =
+                    required_next(rest, i, "--route-pool-entry-json", REMOTE_VIEW_OPEN_USAGE)?;
+                let entry = serde_json::from_str::<Value>(&value).map_err(|err| {
+                    ParseError::InvalidValue {
+                        message: format!("Invalid --route-pool-entry-json value: {}", err),
+                        usage: REMOTE_VIEW_OPEN_USAGE,
+                    }
+                })?;
+                if let Some(entry_id) = entry.get("id").and_then(Value::as_str) {
+                    cmd["routePoolEntryId"] = json!(entry_id);
+                }
+                cmd["routePoolEntry"] = entry;
+                i += 1;
+            }
+            "--route-id" | "--remote-view-route-id" => {
+                let value = required_next(rest, i, "--route-id", REMOTE_VIEW_OPEN_USAGE)?;
+                cmd["routeId"] = json!(value);
+                i += 1;
+            }
+            "--display" | "--remote-headed-display" => {
+                let value = required_next(rest, i, "--display", REMOTE_VIEW_OPEN_USAGE)?;
+                cmd["remoteHeadedDisplay"] = json!(value);
+                i += 1;
+            }
+            "--display-allocation-id" => {
+                let value =
+                    required_next(rest, i, "--display-allocation-id", REMOTE_VIEW_OPEN_USAGE)?;
+                cmd["displayAllocationId"] = json!(value);
+                i += 1;
+            }
+            "--browser-id" => {
+                let value = required_next(rest, i, "--browser-id", REMOTE_VIEW_OPEN_USAGE)?;
+                cmd["browserId"] = json!(value);
+                i += 1;
+            }
+            "--session-name" => {
+                let value = required_next(rest, i, "--session-name", REMOTE_VIEW_OPEN_USAGE)?;
+                cmd["sessionName"] = json!(value);
+                i += 1;
+            }
+            "--service-name" => {
+                let value = required_next(rest, i, "--service-name", REMOTE_VIEW_OPEN_USAGE)?;
+                cmd["serviceName"] = json!(value);
+                i += 1;
+            }
+            "--agent-name" => {
+                let value = required_next(rest, i, "--agent-name", REMOTE_VIEW_OPEN_USAGE)?;
+                cmd["agentName"] = json!(value);
+                i += 1;
+            }
+            "--task-name" => {
+                let value = required_next(rest, i, "--task-name", REMOTE_VIEW_OPEN_USAGE)?;
+                cmd["taskName"] = json!(value);
+                i += 1;
+            }
+            "--dry-run" => {
+                cmd["dryRun"] = json!(true);
+            }
+            value if value.starts_with('-') => {
+                return Err(ParseError::InvalidValue {
+                    message: format!("Unknown flag for remote-view open: {}", value),
+                    usage: REMOTE_VIEW_OPEN_USAGE,
+                });
+            }
+            value => {
+                if positional_url.is_some() {
+                    return Err(ParseError::InvalidValue {
+                        message: format!(
+                            "Unexpected positional argument for remote-view open: {}",
+                            value
+                        ),
+                        usage: REMOTE_VIEW_OPEN_USAGE,
+                    });
+                }
+                positional_url = Some(normalize_cli_url(value));
+            }
+        }
+        i += 1;
+    }
+    if cmd.get("url").and_then(Value::as_str).is_none() {
+        if let Some(url) = positional_url {
+            cmd["url"] = json!(url);
+        }
+    }
+    Ok(cmd)
+}
+
+fn normalize_cli_url(value: &str) -> String {
+    let url_lower = value.to_lowercase();
+    if url_lower.starts_with("http://")
+        || url_lower.starts_with("https://")
+        || url_lower.starts_with("about:")
+        || url_lower.starts_with("data:")
+        || url_lower.starts_with("file:")
+        || url_lower.starts_with("chrome-extension://")
+        || url_lower.starts_with("chrome://")
+    {
+        value.to_string()
+    } else {
+        format!("https://{}", value)
+    }
 }
 
 fn browser_preference_binding_id(
@@ -1763,6 +1993,18 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
             None => Err(ParseError::MissingArguments {
                 context: "stream".to_string(),
                 usage: "stream <enable|disable|status>",
+            }),
+        },
+
+        "remote-view" | "remote_view" => match rest.first().copied() {
+            Some("open") => parse_remote_view_open(id, &rest, flags),
+            Some(sub) => Err(ParseError::UnknownSubcommand {
+                subcommand: sub.to_string(),
+                valid_options: &["open"],
+            }),
+            None => Err(ParseError::MissingArguments {
+                context: "remote-view".to_string(),
+                usage: "remote-view <open>",
             }),
         },
 
@@ -4802,6 +5044,7 @@ mod tests {
             cli_headed: false,
             cli_leave_open: false,
             cli_runtime_profile: false,
+            cli_provider: false,
             cli_browser_host: false,
             cli_view_stream_provider: false,
             cli_control_input_provider: false,
@@ -6862,6 +7105,60 @@ mod tests {
         assert_eq!(cmd["controlInputProvider"], "manual_attached_desktop");
         assert_eq!(cmd["displayIsolation"], "private_virtual_display");
         assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_access_plan_preserves_global_remote_view_flags_after_cleaning() {
+        let raw = args("service access-plan --service-name CanvaCLI --login-id canva --browser-host remote_headed --view-stream-provider rdp_gateway --control-input-provider manual_attached_desktop --display-isolation private_virtual_display");
+        let flags = crate::flags::parse_flags(&raw);
+        let clean = crate::flags::clean_args(&raw);
+        let cmd = parse_command(&clean, &flags).unwrap();
+
+        assert_eq!(cmd["action"], "service_access_plan");
+        assert_eq!(cmd["serviceName"], "CanvaCLI");
+        assert_eq!(cmd["loginId"], "canva");
+        assert_eq!(cmd["browserHost"], "remote_headed");
+        assert_eq!(cmd["viewStreamProvider"], "rdp_gateway");
+        assert_eq!(cmd["controlInputProvider"], "manual_attached_desktop");
+        assert_eq!(cmd["displayIsolation"], "private_virtual_display");
+    }
+
+    #[test]
+    fn test_remote_view_open_builds_route_bound_service_action() {
+        let raw = args("--runtime-profile stealthcdp-default --display-isolation shared_display remote-view open linkedin.com --browser-build stealthcdp_chromium --provider rdp_gateway --route-pool-entry-id pool-a --service-name AuraCall --agent-name codex --task-name authenticateLinkedIn --dry-run");
+        let flags = crate::flags::parse_flags(&raw);
+        let clean = crate::flags::clean_args(&raw);
+        let cmd = parse_command(&clean, &flags).unwrap();
+
+        assert_eq!(cmd["action"], "remote_view_open");
+        assert_eq!(cmd["url"], "https://linkedin.com");
+        assert_eq!(cmd["runtimeProfile"], "stealthcdp-default");
+        assert_eq!(cmd["browserBuild"], "stealthcdp_chromium");
+        assert_eq!(cmd["browserHost"], "remote_headed");
+        assert_eq!(cmd["viewStreamProvider"], "rdp_gateway");
+        assert_eq!(cmd["provider"], "rdp_gateway");
+        assert_eq!(cmd["controlInput"], "manual_attached_desktop");
+        assert_eq!(cmd["displayIsolation"], "shared_display");
+        assert_eq!(cmd["routePoolEntryId"], "pool-a");
+        assert_eq!(cmd["serviceName"], "AuraCall");
+        assert_eq!(cmd["agentName"], "codex");
+        assert_eq!(cmd["taskName"], "authenticateLinkedIn");
+        assert_eq!(cmd["dryRun"], true);
+    }
+
+    #[test]
+    fn test_remote_view_open_accepts_inline_route_pool_entry_json() {
+        let raw = args(
+            r#"remote-view open https://www.linkedin.com/ --display :10 --route-pool-entry-json {"id":"guacamole-rdp-a","routeId":"guacamole:1","frameUrl":"http://127.0.0.1:8092/guacamole/#/client/route-a","target":{"hostname":"host.docker.internal"},"state":"available"} --dry-run"#,
+        );
+        let cmd = parse_command(&raw, &default_flags()).unwrap();
+
+        assert_eq!(cmd["action"], "remote_view_open");
+        assert_eq!(cmd["url"], "https://www.linkedin.com/");
+        assert_eq!(cmd["remoteHeadedDisplay"], ":10");
+        assert_eq!(cmd["routePoolEntryId"], "guacamole-rdp-a");
+        assert_eq!(cmd["routePoolEntry"]["routeId"], "guacamole:1");
+        assert_eq!(cmd["dryRun"], true);
     }
 
     #[test]

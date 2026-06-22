@@ -350,18 +350,21 @@ pub fn apply_browser_health_observation(
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServiceReconcileSummary {
     pub browser_count: usize,
     pub changed_browsers: usize,
+    pub expired_session_leases: Vec<String>,
 }
 
 pub async fn reconcile_service_state(state: &mut ServiceState) -> ServiceReconcileSummary {
     let before = state.clone();
+    let reconciled_at = current_timestamp();
     refresh_persisted_browser_health(state).await;
     let merged_duplicate_browsers = merge_duplicate_live_browser_records(state);
     reconcile_live_browser_targets(state).await;
     let remote_view_repair = reconcile_remote_view_state(state);
+    let expired_session_leases = state.expire_stale_session_leases(reconciled_at.as_str());
     state.refresh_service_tab_handles();
     record_health_transition_events(state, &before);
     record_tab_lifecycle_events(state, &before);
@@ -372,9 +375,10 @@ pub async fn reconcile_service_state(state: &mut ServiceState) -> ServiceReconci
     let summary = ServiceReconcileSummary {
         browser_count: state.browsers.len(),
         changed_browsers,
+        expired_session_leases,
     };
     state.reconciliation = Some(ServiceReconciliationSnapshot {
-        last_reconciled_at: Some(current_timestamp()),
+        last_reconciled_at: Some(reconciled_at),
         last_error: None,
         browser_count: summary.browser_count,
         changed_browsers: summary.changed_browsers,
@@ -392,6 +396,8 @@ pub async fn reconcile_service_state(state: &mut ServiceState) -> ServiceReconci
                 "changedBrowsers": summary.changed_browsers,
                 "removedTerminatedBrowsers": removed_terminated_browsers,
                 "mergedDuplicateBrowsers": merged_duplicate_browsers,
+                "expiredSessionLeases": summary.expired_session_leases.clone(),
+                "expiredSessionLeaseCount": summary.expired_session_leases.len(),
                 "tabCount": state.tabs.len(),
                 "changedTabs": changed_tab_count(state, &before),
                 "remoteView": {
@@ -4443,6 +4449,83 @@ mod tests {
         );
         assert!(!state.browsers.contains_key("browser-1"));
         assert_eq!(state.events[1].kind, ServiceEventKind::Reconciliation);
+    }
+
+    #[tokio::test]
+    async fn reconcile_expires_stale_session_leases_with_response_evidence() {
+        let mut state = service_state_with_browser(BrowserProcess {
+            id: "browser-1".to_string(),
+            health: BrowserHealth::Launching,
+            active_session_ids: vec!["expired-session".to_string(), "fresh-session".to_string()],
+            ..BrowserProcess::default()
+        });
+        state.sessions.insert(
+            "expired-session".to_string(),
+            BrowserSession {
+                id: "expired-session".to_string(),
+                lease: LeaseState::Shared,
+                browser_ids: vec!["browser-1".to_string()],
+                tab_ids: vec!["tab-expired".to_string()],
+                expires_at: Some("2026-01-01T00:00:00Z".to_string()),
+                ..BrowserSession::default()
+            },
+        );
+        state.sessions.insert(
+            "fresh-session".to_string(),
+            BrowserSession {
+                id: "fresh-session".to_string(),
+                lease: LeaseState::Shared,
+                browser_ids: vec!["browser-1".to_string()],
+                tab_ids: vec!["tab-fresh".to_string()],
+                expires_at: Some("2999-01-01T00:00:00Z".to_string()),
+                ..BrowserSession::default()
+            },
+        );
+        state.tabs.insert(
+            "tab-expired".to_string(),
+            BrowserTab {
+                id: "tab-expired".to_string(),
+                browser_id: "browser-1".to_string(),
+                lifecycle: TabLifecycle::Ready,
+                owner_session_id: Some("expired-session".to_string()),
+                ..BrowserTab::default()
+            },
+        );
+        state.tabs.insert(
+            "tab-fresh".to_string(),
+            BrowserTab {
+                id: "tab-fresh".to_string(),
+                browser_id: "browser-1".to_string(),
+                lifecycle: TabLifecycle::Ready,
+                owner_session_id: Some("fresh-session".to_string()),
+                ..BrowserTab::default()
+            },
+        );
+
+        let summary = reconcile_service_state(&mut state).await;
+
+        assert_eq!(
+            summary.expired_session_leases,
+            vec!["expired-session".to_string()]
+        );
+        assert_eq!(state.sessions["expired-session"].lease, LeaseState::Expired);
+        assert_eq!(state.sessions["fresh-session"].lease, LeaseState::Shared);
+        assert!(state.browsers.contains_key("browser-1"));
+        assert_eq!(
+            state.browsers["browser-1"].active_session_ids,
+            vec!["fresh-session".to_string()]
+        );
+        assert!(state.tabs.contains_key("tab-expired"));
+        let reconciliation = state.events.last().unwrap();
+        assert_eq!(reconciliation.kind, ServiceEventKind::Reconciliation);
+        assert_eq!(
+            reconciliation.details.as_ref().unwrap()["expiredSessionLeases"],
+            serde_json::json!(["expired-session"])
+        );
+        assert_eq!(
+            reconciliation.details.as_ref().unwrap()["expiredSessionLeaseCount"],
+            1
+        );
     }
 
     #[tokio::test]

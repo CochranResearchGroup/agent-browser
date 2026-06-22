@@ -24,6 +24,8 @@ const displayIsolationSet = new Set([
  * @typedef {import('./service-request.generated.js').ServiceRequestResponse} ServiceRequestResponse
  * @typedef {import('./service-request.generated.js').ServiceCdpFreeLaunchAvailability} ServiceCdpFreeLaunchAvailability
  * @typedef {import('./service-request.generated.js').ServiceCdpFreeLaunchData} ServiceCdpFreeLaunchData
+ * @typedef {import('./service-request.generated.js').ServiceExternalByopAdoptRequestHttpOptions} ServiceExternalByopAdoptRequestHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceExternalByopAdoptRequestOptions} ServiceExternalByopAdoptRequestOptions
  * @typedef {import('./service-request.generated.js').ServiceCdpAttachRequestHttpOptions} ServiceCdpAttachRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceCdpAttachRequestOptions} ServiceCdpAttachRequestOptions
  * @typedef {import('./service-request.generated.js').ServiceCdpDetachRequestHttpOptions} ServiceCdpDetachRequestHttpOptions
@@ -32,6 +34,18 @@ const displayIsolationSet = new Set([
  * @typedef {import('./service-request.generated.js').ServiceEvaluateRequestOptions} ServiceEvaluateRequestOptions
  * @typedef {import('./service-request.generated.js').ServiceDiagnosticsRequestHttpOptions} ServiceDiagnosticsRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceDiagnosticsRequestOptions} ServiceDiagnosticsRequestOptions
+ * @typedef {import('./service-request.generated.js').ServiceProbeRequestHttpOptions} ServiceProbeRequestHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceProbeRequestOptions} ServiceProbeRequestOptions
+ * @typedef {import('./service-request.generated.js').ServiceUiActionRequestHttpOptions} ServiceUiActionRequestHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceUiActionRequestOptions} ServiceUiActionRequestOptions
+ * @typedef {import('./service-request.generated.js').ServiceNetworkCaptureRequestHttpOptions} ServiceNetworkCaptureRequestHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceNetworkCaptureRequestOptions} ServiceNetworkCaptureRequestOptions
+ * @typedef {import('./service-request.generated.js').ServiceFileTransferRequestHttpOptions} ServiceFileTransferRequestHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceFileTransferRequestOptions} ServiceFileTransferRequestOptions
+ * @typedef {import('./service-request.generated.js').ServiceTabHandleRefreshHttpOptions} ServiceTabHandleRefreshHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceTabHandleRefreshOptions} ServiceTabHandleRefreshOptions
+ * @typedef {import('./service-request.generated.js').ServiceTabHandleReleaseHttpOptions} ServiceTabHandleReleaseHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceTabHandleReleaseOptions} ServiceTabHandleReleaseOptions
  * @typedef {import('./service-request.generated.js').ServiceTabAccessPlan} ServiceTabAccessPlan
  * @typedef {import('./service-request.generated.js').ServiceCdpFreeLaunchRequestHttpOptions} ServiceCdpFreeLaunchRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceCdpFreeLaunchRequestOptions} ServiceCdpFreeLaunchRequestOptions
@@ -234,6 +248,24 @@ export function requireServiceTabHandle(response) {
 }
 
 /**
+ * Extract a service-owned tab handle for refresh. Unlike requireServiceTabHandle,
+ * this accepts stale handles so the daemon can classify or repair them.
+ *
+ * @param {unknown} response
+ * @returns {ServiceTabHandle}
+ */
+function requireRefreshableServiceTabHandle(response) {
+  const handle = getServiceTabHandle(response);
+  if (!handle) {
+    throw new TypeError('service tab handle refresh request requires serviceTabHandle');
+  }
+  if (typeof handle.tabId !== 'string' || handle.tabId.length === 0) {
+    throw new TypeError('service tab handle refresh request requires serviceTabHandle.tabId');
+  }
+  return handle;
+}
+
+/**
  * Builds a headed no-DevTools launch request for CDP-sensitive services.
  *
  * @param {ServiceCdpFreeLaunchRequestOptions} input
@@ -279,6 +311,49 @@ export function createServiceCdpFreeLaunchRequest(input) {
     ...(allowMonitorFreshnessRisk === true ? { allowMonitorFreshnessRisk: true } : {}),
     ...(url !== undefined ? { url } : {}),
     ...(Object.keys(launchParams).length > 0 ? { params: launchParams } : {}),
+  });
+}
+
+/**
+ * Builds an explicit adoption request for a registered external_byop profile
+ * and caller-supplied Chrome DevTools endpoint.
+ *
+ * @param {ServiceExternalByopAdoptRequestOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceExternalByopAdoptRequest(input) {
+  assertPlainObject(input, 'external BYOP adopt request');
+  const { profileId, runtimeProfile, cdpUrl, cdpPort, url, params, ...request } = input;
+  const effectiveProfileId = runtimeProfile ?? profileId;
+  if (typeof effectiveProfileId !== 'string' || effectiveProfileId.trim().length === 0) {
+    throw new TypeError('external BYOP adopt request requires runtimeProfile or profileId');
+  }
+  if (cdpUrl !== undefined && typeof cdpUrl !== 'string') {
+    throw new TypeError('external BYOP adopt request cdpUrl must be a string');
+  }
+  if (cdpPort !== undefined && (!Number.isInteger(cdpPort) || cdpPort < 1)) {
+    throw new TypeError('external BYOP adopt request cdpPort must be a positive integer');
+  }
+  const hasCdpUrl = typeof cdpUrl === 'string' && cdpUrl.trim().length > 0;
+  const hasCdpPort = cdpPort !== undefined;
+  if (hasCdpUrl === hasCdpPort) {
+    throw new TypeError('external BYOP adopt request requires exactly one of cdpUrl or cdpPort');
+  }
+  if (url !== undefined && typeof url !== 'string') {
+    throw new TypeError('external BYOP adopt request url must be a string');
+  }
+  if (params !== undefined) {
+    assertPlainObject(params, 'external BYOP adopt request params');
+  }
+  return createServiceRequest({
+    ...request,
+    action: 'external_byop_adopt',
+    runtimeProfile: effectiveProfileId,
+    ...(profileId !== undefined ? { profileId } : {}),
+    ...(hasCdpUrl ? { cdpUrl } : {}),
+    ...(hasCdpPort ? { cdpPort } : {}),
+    ...(url !== undefined ? { url } : {}),
+    ...(params !== undefined ? { params } : {}),
   });
 }
 
@@ -425,6 +500,382 @@ export function createServiceDiagnosticsRequest(input) {
     ...(targetId !== undefined && targetId !== null ? { targetId } : {}),
     serviceTabHandle: handle,
     ...(params !== undefined ? { params } : {}),
+  });
+}
+
+/**
+ * Builds a provider-neutral probe request against a leased service tab.
+ *
+ * @param {ServiceProbeRequestOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceProbeRequest(input) {
+  assertPlainObject(input, 'service probe request');
+  const { serviceTabHandle, probe, params, ...request } = input;
+  const handle = requireServiceTabHandle({ serviceTabHandle });
+  assertPlainObject(probe, 'service probe request probe');
+  if (params !== undefined) {
+    assertPlainObject(params, 'service probe request params');
+  }
+  const probeRecord = /** @type {Record<string, unknown>} */ (probe);
+  const detectors = probeRecord.detectors;
+  if (!Array.isArray(detectors) || detectors.length === 0) {
+    throw new TypeError('service probe request requires probe.detectors array');
+  }
+  const timeoutMs = request.timeoutMs ?? probeRecord.timeoutMs;
+  const maxReturnBytes = request.maxReturnBytes ?? probeRecord.maxReturnBytes;
+  if (!Number.isInteger(timeoutMs) || Number(timeoutMs) < 1) {
+    throw new TypeError('service probe request requires positive timeoutMs');
+  }
+  if (!Number.isInteger(maxReturnBytes) || Number(maxReturnBytes) < 1) {
+    throw new TypeError('service probe request requires positive maxReturnBytes');
+  }
+  if (!handle.targetId) {
+    throw new TypeError('service probe request requires serviceTabHandle.targetId');
+  }
+  const recordFreshness = /** @type {Record<string, unknown> | undefined} */ (probeRecord.recordFreshness);
+  if (recordFreshness !== undefined) {
+    assertPlainObject(recordFreshness, 'service probe request probe.recordFreshness');
+    if (typeof recordFreshness.targetServiceId !== 'string' || recordFreshness.targetServiceId.length === 0) {
+      throw new TypeError('service probe request probe.recordFreshness requires targetServiceId');
+    }
+    if (typeof recordFreshness.accountId !== 'string' || recordFreshness.accountId.length === 0) {
+      throw new TypeError('service probe request probe.recordFreshness requires accountId');
+    }
+  }
+  const sessionName = request.sessionName ?? handle.sessionName ?? handle.ownerSessionId;
+  const targetId = request.targetId ?? handle.targetId;
+  return createServiceRequest({
+    ...request,
+    action: 'probe',
+    browserId: request.browserId ?? handle.browserId,
+    ...(sessionName !== undefined && sessionName !== null ? { sessionName } : {}),
+    targetId,
+    timeoutMs: Number(timeoutMs),
+    maxReturnBytes: Number(maxReturnBytes),
+    serviceTabHandle: handle,
+    probe,
+    ...(params !== undefined ? { params } : {}),
+  });
+}
+
+/**
+ * Builds a provider-neutral UI action recipe request against a leased service tab.
+ *
+ * @param {ServiceUiActionRequestOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceUiActionRequest(input) {
+  assertPlainObject(input, 'service UI action request');
+  const { serviceTabHandle, uiAction, params, ...request } = input;
+  const handle = requireServiceTabHandle({ serviceTabHandle });
+  assertPlainObject(uiAction, 'service UI action request uiAction');
+  if (params !== undefined) {
+    assertPlainObject(params, 'service UI action request params');
+  }
+  const uiActionRecord = /** @type {Record<string, unknown>} */ (uiAction);
+  const steps = uiActionRecord.steps;
+  if (!Array.isArray(steps) || steps.length === 0) {
+    throw new TypeError('service UI action request requires uiAction.steps array');
+  }
+  const timeoutMs = request.timeoutMs ?? uiActionRecord.timeoutMs;
+  if (!Number.isInteger(timeoutMs) || Number(timeoutMs) < 1) {
+    throw new TypeError('service UI action request requires positive timeoutMs');
+  }
+  const maxTextBytes = request.maxTextBytes ?? uiActionRecord.maxTextBytes;
+  if (maxTextBytes !== undefined && (!Number.isInteger(maxTextBytes) || Number(maxTextBytes) < 1)) {
+    throw new TypeError('service UI action request maxTextBytes must be positive when supplied');
+  }
+  if (!handle.targetId) {
+    throw new TypeError('service UI action request requires serviceTabHandle.targetId');
+  }
+  const sessionName = request.sessionName ?? handle.sessionName ?? handle.ownerSessionId;
+  const targetId = request.targetId ?? handle.targetId;
+  return createServiceRequest({
+    ...request,
+    action: 'ui_action',
+    browserId: request.browserId ?? handle.browserId,
+    ...(sessionName !== undefined && sessionName !== null ? { sessionName } : {}),
+    targetId,
+    timeoutMs: Number(timeoutMs),
+    ...(maxTextBytes !== undefined ? { maxTextBytes: Number(maxTextBytes) } : {}),
+    serviceTabHandle: handle,
+    uiAction,
+    ...(params !== undefined ? { params } : {}),
+  });
+}
+
+/**
+ * Builds a provider-neutral network evidence capture request against a leased service tab.
+ *
+ * @param {ServiceNetworkCaptureRequestOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceNetworkCaptureRequest(input) {
+  assertPlainObject(input, 'service network capture request');
+  const { serviceTabHandle, networkCapture, params, ...request } = input;
+  const handle = requireServiceTabHandle({ serviceTabHandle });
+  assertPlainObject(networkCapture, 'service network capture request networkCapture');
+  if (params !== undefined) {
+    assertPlainObject(params, 'service network capture request params');
+  }
+  const networkCaptureRecord = /** @type {Record<string, unknown>} */ (networkCapture);
+  const timeoutMs = request.timeoutMs ?? networkCaptureRecord.timeoutMs ?? networkCaptureRecord.maxDurationMs;
+  if (!Number.isInteger(timeoutMs) || Number(timeoutMs) < 1) {
+    throw new TypeError('service network capture request requires positive timeoutMs');
+  }
+  const maxEvents = networkCaptureRecord.maxEvents;
+  if (!Number.isInteger(maxEvents) || Number(maxEvents) < 1) {
+    throw new TypeError('service network capture request requires positive networkCapture.maxEvents');
+  }
+  const captureBodies = networkCaptureRecord.captureBodies === true;
+  const maxBodyBytes = request.maxBodyBytes ?? networkCaptureRecord.maxBodyBytes;
+  if (captureBodies && (!Number.isInteger(maxBodyBytes) || Number(maxBodyBytes) < 1)) {
+    throw new TypeError('service network capture request captureBodies requires positive maxBodyBytes');
+  }
+  if (maxBodyBytes !== undefined && (!Number.isInteger(maxBodyBytes) || Number(maxBodyBytes) < 1)) {
+    throw new TypeError('service network capture request maxBodyBytes must be positive when supplied');
+  }
+  if (!handle.targetId) {
+    throw new TypeError('service network capture request requires serviceTabHandle.targetId');
+  }
+  const sessionName = request.sessionName ?? handle.sessionName ?? handle.ownerSessionId;
+  const targetId = request.targetId ?? handle.targetId;
+  return createServiceRequest({
+    ...request,
+    action: 'network_capture',
+    browserId: request.browserId ?? handle.browserId,
+    ...(sessionName !== undefined && sessionName !== null ? { sessionName } : {}),
+    targetId,
+    timeoutMs: Number(timeoutMs),
+    ...(maxBodyBytes !== undefined ? { maxBodyBytes: Number(maxBodyBytes) } : {}),
+    serviceTabHandle: handle,
+    networkCapture,
+    ...(params !== undefined ? { params } : {}),
+  });
+}
+
+/**
+ * Builds a provider-neutral file input and download capture request against a leased service tab.
+ *
+ * @param {ServiceFileTransferRequestOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceFileTransferRequest(input) {
+  assertPlainObject(input, 'service file transfer request');
+  const { serviceTabHandle, fileTransfer, params, ...request } = input;
+  const handle = requireServiceTabHandle({ serviceTabHandle });
+  assertPlainObject(fileTransfer, 'service file transfer request fileTransfer');
+  if (params !== undefined) {
+    assertPlainObject(params, 'service file transfer request params');
+  }
+  const fileTransferRecord = /** @type {Record<string, unknown>} */ (fileTransfer);
+  const timeoutMs = request.timeoutMs ?? fileTransferRecord.timeoutMs;
+  if (!Number.isInteger(timeoutMs) || Number(timeoutMs) < 1) {
+    throw new TypeError('service file transfer request requires positive timeoutMs');
+  }
+  if (fileTransferRecord.upload === undefined && fileTransferRecord.download === undefined) {
+    throw new TypeError('service file transfer request requires upload or download recipe');
+  }
+  if (fileTransferRecord.upload !== undefined) {
+    assertFileTransferUploadRecipe(fileTransferRecord.upload);
+  }
+  if (fileTransferRecord.download !== undefined) {
+    assertFileTransferDownloadRecipe(fileTransferRecord.download);
+  }
+  if (!handle.targetId) {
+    throw new TypeError('service file transfer request requires serviceTabHandle.targetId');
+  }
+  const sessionName = request.sessionName ?? handle.sessionName ?? handle.ownerSessionId;
+  const targetId = request.targetId ?? handle.targetId;
+  return createServiceRequest({
+    ...request,
+    action: 'file_transfer',
+    browserId: request.browserId ?? handle.browserId,
+    ...(sessionName !== undefined && sessionName !== null ? { sessionName } : {}),
+    targetId,
+    timeoutMs: Number(timeoutMs),
+    serviceTabHandle: handle,
+    fileTransfer,
+    ...(params !== undefined ? { params } : {}),
+  });
+}
+
+/**
+ * @param {unknown} upload
+ */
+function assertFileTransferUploadRecipe(upload) {
+  assertPlainObject(upload, 'service file transfer upload');
+  const record = /** @type {Record<string, unknown>} */ (upload);
+  if (typeof record.selector !== 'string' && typeof record.labelText !== 'string' && typeof record.label !== 'string') {
+    throw new TypeError('service file transfer upload requires selector or labelText');
+  }
+  const files = record.files;
+  if (!Array.isArray(files) || files.length === 0 || files.some((file) => typeof file !== 'string' || file.length === 0)) {
+    throw new TypeError('service file transfer upload requires files array');
+  }
+  const maxFiles = record.maxFiles;
+  if (!Number.isInteger(maxFiles) || Number(maxFiles) < 1) {
+    throw new TypeError('service file transfer upload requires positive maxFiles');
+  }
+  if (files.length > Number(maxFiles)) {
+    throw new TypeError('service file transfer upload file count exceeds maxFiles');
+  }
+  assertNonemptyStringArray(record.allowedPaths, 'service file transfer upload allowedPaths');
+}
+
+/**
+ * @param {unknown} download
+ */
+function assertFileTransferDownloadRecipe(download) {
+  assertPlainObject(download, 'service file transfer download');
+  const record = /** @type {Record<string, unknown>} */ (download);
+  if (typeof record.selector !== 'string' || record.selector.length === 0) {
+    throw new TypeError('service file transfer download requires selector');
+  }
+  if (typeof record.directory !== 'string' || record.directory.length === 0) {
+    throw new TypeError('service file transfer download requires directory');
+  }
+  assertNonemptyStringArray(record.allowedDirectories, 'service file transfer download allowedDirectories');
+  if (record.maxBytes !== undefined && (!Number.isInteger(record.maxBytes) || Number(record.maxBytes) < 1)) {
+    throw new TypeError('service file transfer download maxBytes must be positive when supplied');
+  }
+}
+
+/**
+ * @param {unknown} value
+ * @param {string} label
+ */
+function assertNonemptyStringArray(value, label) {
+  if (!Array.isArray(value) || value.length === 0 || value.some((item) => typeof item !== 'string' || item.length === 0)) {
+    throw new TypeError(`${label} must be a nonempty string array`);
+  }
+}
+
+/**
+ * Builds a generic service-tab-handle refresh request.
+ *
+ * @param {ServiceTabHandleRefreshOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceTabHandleRefreshRequest(input) {
+  assertPlainObject(input, 'service tab handle refresh request');
+  const { serviceTabHandle, params, ...request } = input;
+  const handle = requireRefreshableServiceTabHandle({ serviceTabHandle });
+  if (params !== undefined) {
+    assertPlainObject(params, 'service tab handle refresh request params');
+  }
+  const repairPolicy = request.repairPolicy ?? 'reject_only';
+  if (!['reject_only', 'reuse_compatible', 'open_if_missing'].includes(repairPolicy)) {
+    throw new TypeError(
+      'service tab handle refresh request repairPolicy must be reject_only, reuse_compatible, or open_if_missing',
+    );
+  }
+  const sessionName = request.sessionName ?? handle.sessionName ?? handle.ownerSessionId;
+  const targetId = request.targetId ?? handle.targetId;
+  return createServiceRequest({
+    ...request,
+    action: 'tab_handle_refresh',
+    browserId: request.browserId ?? handle.browserId,
+    ...(sessionName !== undefined && sessionName !== null ? { sessionName } : {}),
+    ...(targetId !== undefined && targetId !== null ? { targetId } : {}),
+    repairPolicy,
+    serviceTabHandle: handle,
+    ...(params !== undefined ? { params } : {}),
+  });
+}
+
+/**
+ * Builds a generic service-tab-handle release request.
+ *
+ * @param {ServiceTabHandleReleaseOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceTabHandleReleaseRequest(input) {
+  assertPlainObject(input, 'service tab handle release request');
+  const { serviceTabHandle, params, ...request } = input;
+  const handle = requireRefreshableServiceTabHandle({ serviceTabHandle });
+  if (params !== undefined) {
+    assertPlainObject(params, 'service tab handle release request params');
+  }
+  const sessionName = request.sessionName ?? handle.sessionName ?? handle.ownerSessionId;
+  const targetId = request.targetId ?? handle.targetId;
+  return createServiceRequest({
+    ...request,
+    action: 'tab_handle_release',
+    browserId: request.browserId ?? handle.browserId,
+    ...(sessionName !== undefined && sessionName !== null ? { sessionName } : {}),
+    ...(targetId !== undefined && targetId !== null ? { targetId } : {}),
+    serviceTabHandle: handle,
+    ...(params !== undefined ? { params } : {}),
+  });
+}
+
+/**
+ * @param {ServiceRemoteViewRouteCheckoutOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceRemoteViewRoutePreflightRequest(input) {
+  assertPlainObject(input, 'remote-view route preflight request');
+  const { params, ...request } = input;
+  const preflightParams = mergeParams(params, request, [
+    'displayAllocationId',
+    'routeId',
+    'remoteViewRouteId',
+    'routePoolEntryId',
+    'routePoolEntry',
+    'routePool',
+    'browserId',
+    'sessionName',
+    'streamId',
+    'provider',
+    'providerMode',
+    'frameUrl',
+    'externalUrl',
+    'connectionId',
+    'connectionName',
+  ]);
+  return createServiceRequest({
+    ...request,
+    action: 'service_remote_view_route_preflight',
+    params: preflightParams,
+  });
+}
+
+/**
+ * @param {ServiceRemoteViewRouteCheckoutOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceRemoteViewOpenRequest(input) {
+  assertPlainObject(input, 'remote-view open request');
+  const { params, ...request } = input;
+  const openParams = mergeParams(params, request, [
+    'displayAllocationId',
+    'routeId',
+    'remoteViewRouteId',
+    'routePoolEntryId',
+    'routePoolEntry',
+    'routePool',
+    'browserId',
+    'sessionName',
+    'streamId',
+    'provider',
+    'providerMode',
+    'frameUrl',
+    'externalUrl',
+    'connectionId',
+    'connectionName',
+    'routeDescriptor',
+    'remoteHeadedDisplay',
+    'display',
+    'displayName',
+    'url',
+    'dryRun',
+  ]);
+  return createServiceRequest({
+    ...request,
+    action: 'remote_view_open',
+    params: openParams,
   });
 }
 
@@ -597,6 +1048,16 @@ export async function requestServiceTab({ baseUrl, fetch = globalThis.fetch, sig
 }
 
 /**
+ * Request a service-owned tab from an access-plan response.
+ *
+ * @param {ServiceTabRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function requestServiceTabFromAccessPlan(options) {
+  return requestServiceTab(options);
+}
+
+/**
  * @param {ServiceCdpFreeLaunchRequestHttpOptions} options
  * @returns {Promise<ServiceRequestResponse>}
  */
@@ -610,6 +1071,21 @@ export async function requestServiceCdpFreeLaunch({ baseUrl, fetch = globalThis.
 }
 
 /**
+ * @param {ServiceExternalByopAdoptRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function requestServiceExternalByopAdopt({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceExternalByopAdoptRequest(request),
+  });
+}
+
+export const adoptExternalByopBrowser = requestServiceExternalByopAdopt;
+
+/**
  * @param {ServiceCdpAttachRequestHttpOptions} options
  * @returns {Promise<ServiceRequestResponse>}
  */
@@ -620,6 +1096,16 @@ export async function requestServiceCdpAttach({ baseUrl, fetch = globalThis.fetc
     signal,
     request: createServiceCdpAttachRequest(request),
   });
+}
+
+/**
+ * Attach to a service-owned tab through the policy-gated CDP descriptor path.
+ *
+ * @param {ServiceCdpAttachRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function attachServiceTabCdp(options) {
+  return requestServiceCdpAttach(options);
 }
 
 /**
@@ -649,6 +1135,16 @@ export async function requestServiceEvaluate({ baseUrl, fetch = globalThis.fetch
 }
 
 /**
+ * Run bounded JavaScript against a leased service tab handle.
+ *
+ * @param {ServiceEvaluateRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function evaluateServiceTab(options) {
+  return requestServiceEvaluate(options);
+}
+
+/**
  * @param {ServiceDiagnosticsRequestHttpOptions} options
  * @returns {Promise<ServiceRequestResponse>}
  */
@@ -658,6 +1154,178 @@ export async function requestServiceDiagnostics({ baseUrl, fetch = globalThis.fe
     fetch,
     signal,
     request: createServiceDiagnosticsRequest(request),
+  });
+}
+
+/**
+ * Collect compact diagnostics for a leased service tab handle.
+ *
+ * @param {ServiceDiagnosticsRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function getServiceTabDiagnostics(options) {
+  return requestServiceDiagnostics(options);
+}
+
+/**
+ * @param {ServiceProbeRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function requestServiceProbe({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceProbeRequest(request),
+  });
+}
+
+/**
+ * Run a provider-neutral probe against a leased service tab handle.
+ *
+ * @param {ServiceProbeRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function probeServiceTab(options) {
+  return requestServiceProbe(options);
+}
+
+/**
+ * @param {ServiceUiActionRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function requestServiceUiAction({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceUiActionRequest(request),
+  });
+}
+
+/**
+ * Run a provider-neutral UI action recipe against a leased service tab handle.
+ *
+ * @param {ServiceUiActionRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function runServiceUiAction(options) {
+  return requestServiceUiAction(options);
+}
+
+/**
+ * @param {ServiceNetworkCaptureRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function requestServiceNetworkCapture({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceNetworkCaptureRequest(request),
+  });
+}
+
+/**
+ * Capture capped provider-neutral network evidence for a leased service tab handle.
+ *
+ * @param {ServiceNetworkCaptureRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function captureServiceNetwork(options) {
+  return requestServiceNetworkCapture(options);
+}
+
+/**
+ * @param {ServiceFileTransferRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function requestServiceFileTransfer({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceFileTransferRequest(request),
+  });
+}
+
+/**
+ * Run a provider-neutral file input or download capture recipe against a leased service tab handle.
+ *
+ * @param {ServiceFileTransferRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function transferServiceFiles(options) {
+  return requestServiceFileTransfer(options);
+}
+
+/**
+ * @param {ServiceTabHandleRefreshHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function requestServiceTabHandleRefresh({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceTabHandleRefreshRequest(request),
+  });
+}
+
+/**
+ * Refresh, repair, or reject a leased service tab handle through agent-browser.
+ *
+ * @param {ServiceTabHandleRefreshHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function refreshServiceTabHandle(options) {
+  return requestServiceTabHandleRefresh(options);
+}
+
+/**
+ * @param {ServiceTabHandleReleaseHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function requestServiceTabHandleRelease({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceTabHandleReleaseRequest(request),
+  });
+}
+
+/**
+ * Release a leased service tab handle while preserving the retained browser.
+ *
+ * @param {ServiceTabHandleReleaseHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function releaseServiceTabHandle(options) {
+  return requestServiceTabHandleRelease(options);
+}
+
+/**
+ * @param {ServiceRemoteViewRouteCheckoutHttpOptions} options
+ */
+export async function requestServiceRemoteViewRoutePreflight({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceRemoteViewRoutePreflightRequest(request),
+  });
+}
+
+/**
+ * @param {ServiceRemoteViewRouteCheckoutHttpOptions} options
+ */
+export async function requestServiceRemoteViewOpen({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceRemoteViewOpenRequest(request),
   });
 }
 
@@ -823,7 +1491,45 @@ function accessPlanServiceTabRequest(accessPlan, options = {}) {
   }
 
   const { action: _action, ...tabRequest } = requestRecord;
+  const sharedAcquisition = accessPlanSharedTabAcquisition(decisionRecord);
+  if (sharedAcquisition) {
+    if (tabRequest.browserId === undefined) {
+      tabRequest.browserId = sharedAcquisition.browserId;
+    }
+    if (tabRequest.sessionName === undefined) {
+      tabRequest.sessionName = sharedAcquisition.sessionName;
+    }
+  }
   return tabRequest;
+}
+
+/**
+ * @param {Record<string, unknown>} decision
+ * @returns {{ browserId: string, sessionName: string } | null}
+ */
+function accessPlanSharedTabAcquisition(decision) {
+  const profileReuse = decision.profileReuse;
+  if (!profileReuse || typeof profileReuse !== 'object' || Array.isArray(profileReuse)) {
+    return null;
+  }
+  const sharedAcquisition = /** @type {Record<string, unknown>} */ (profileReuse).sharedAcquisition;
+  if (
+    !sharedAcquisition ||
+    typeof sharedAcquisition !== 'object' ||
+    Array.isArray(sharedAcquisition)
+  ) {
+    return null;
+  }
+  const acquisitionRecord = /** @type {Record<string, unknown>} */ (sharedAcquisition);
+  if (acquisitionRecord.mode !== 'tab_new') {
+    return null;
+  }
+  const browserId = acquisitionRecord.browserId;
+  const sessionName = acquisitionRecord.sessionName;
+  if (typeof browserId !== 'string' || typeof sessionName !== 'string') {
+    return null;
+  }
+  return { browserId, sessionName };
 }
 
 /**

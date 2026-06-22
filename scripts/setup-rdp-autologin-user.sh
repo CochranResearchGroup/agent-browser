@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 USER_NAME="${AGENT_BROWSER_RDP_USERNAME:-agent-browser-rdp}"
 GUAC_DIR="${AGENT_BROWSER_GUACAMOLE_DIR:-$HOME/.agent-browser/guacamole}"
 SECRET_FILE="${AGENT_BROWSER_GUACAMOLE_SECRET_FILE:-$HOME/.agent-browser/secrets/guacamole.env}"
@@ -20,6 +21,10 @@ if ! command -v python3 >/dev/null 2>&1; then
   echo "python3 is required" >&2
   exit 1
 fi
+
+ensure_guacamole_postgres() {
+  bash "$SCRIPT_DIR/ensure-rdp-guac-postgres.sh" --apply
+}
 
 PASSWORD="$(python3 - <<'PY'
 import secrets
@@ -73,6 +78,8 @@ lines.append(f"XRDP_AGENT_BROWSER_PASSWORD={password}")
 path.write_text("\n".join(lines) + "\n")
 path.chmod(0o600)
 PY
+
+ensure_guacamole_postgres
 
 SQL="$(python3 - "$CONNECTION_ID" "$USER_NAME" "$PASSWORD" <<'PY'
 import sys

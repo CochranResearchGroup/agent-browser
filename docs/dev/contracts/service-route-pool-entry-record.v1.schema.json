@@ -47,6 +47,34 @@
     "externalUrl": {
       "type": ["string", "null"]
     },
+    "routeDescriptor": {
+      "type": ["object", "null"],
+      "description": "Structured remote-view route URLs by audience. localEmbedUrl is for local dashboard iframe embedding, publicOperatorUrl is for remote operator ingress, dashboardEmbedUrl is the preferred dashboard route, healthUrl is used for readiness probes, and externalUrl is a backward-compatible human handoff URL.",
+      "properties": {
+        "localEmbedUrl": {
+          "type": ["string", "null"]
+        },
+        "publicOperatorUrl": {
+          "type": ["string", "null"]
+        },
+        "dashboardEmbedUrl": {
+          "type": ["string", "null"]
+        },
+        "healthUrl": {
+          "type": ["string", "null"]
+        },
+        "externalUrl": {
+          "type": ["string", "null"]
+        },
+        "embeddingPolicy": {
+          "type": ["string", "null"]
+        },
+        "providerMode": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": true
+    },
     "target": {
       "type": "object",
       "properties": {

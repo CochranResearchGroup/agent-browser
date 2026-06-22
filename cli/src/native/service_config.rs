@@ -124,6 +124,8 @@ pub struct ProfileFreshnessUpdate {
     pub site_id: Option<String>,
     pub target_service_id: Option<String>,
     pub target_service_ids: Vec<String>,
+    pub account_id: Option<String>,
+    pub account_ids: Vec<String>,
     #[serde(default = "default_freshness_readiness_state")]
     pub readiness_state: ProfileReadinessState,
     pub readiness_evidence: Option<String>,
@@ -404,6 +406,23 @@ pub fn update_profile_freshness(
                 *existing = row;
             } else {
                 profile.target_readiness.push(row);
+            }
+        }
+
+        for account_id in unique_non_empty_strings(
+            update
+                .account_ids
+                .iter()
+                .cloned()
+                .chain(update.account_id.iter().cloned())
+                .collect(),
+        ) {
+            if !profile
+                .account_ids
+                .iter()
+                .any(|existing| existing == &account_id)
+            {
+                profile.account_ids.push(account_id);
             }
         }
 

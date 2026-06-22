@@ -86,6 +86,11 @@ const FAILED_READINESS_STATES = new Set([
   "failed",
   "missing",
   "refused",
+  "browser_display_mismatch",
+  "browser_window_not_visible",
+  "dashboard_embed_not_routable",
+  "route_display_missing",
+  "terminal_only_route",
   "unavailable",
   "unhealthy",
 ]);
