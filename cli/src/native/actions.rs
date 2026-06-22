@@ -44,7 +44,7 @@ use super::recording::{self, RecordingState};
 use super::remote_view::{
     build_route_binding, compact_json, display_allocation_id_for_route_pool_entry, readiness_state,
     resolve_route_pool_entry_id, route_binding_readiness, route_display_content,
-    route_pool_request_diagnostic, visible_browser_window_proof,
+    route_pool_entry_matches_display, route_pool_request_diagnostic, visible_browser_window_proof,
 };
 use super::screenshot::{self, ScreenshotOptions};
 use super::service_access::{service_access_plan_for_state, ServiceAccessPlanRequest};
@@ -11377,6 +11377,7 @@ fn service_remote_view_route_binding_from_state(
     cmd: &Value,
     state: &ServiceState,
     browser_id: &str,
+    session_id: &str,
 ) -> Result<super::remote_view::RemoteViewRouteBinding, String> {
     let inline_route_pool_entry = inline_route_pool_entry_from_command(cmd)?;
     let provider = optional_command_string(cmd, "provider")
@@ -11473,14 +11474,27 @@ fn service_remote_view_route_binding_from_state(
             "service_remote_view_route_preflight requires displayAllocationId, a browser with displayAllocationId, or an available route pool entry".to_string()
         })?;
     let existing_display_allocation = state.display_allocations.get(&display_allocation_id);
-    let selected_route_pool_entry_id = resolve_route_pool_entry_id(
+    let selected_route_pool_entry_id = if let Some(id) = checked_out_route_pool_entry_id_for_owner(
         state,
         route_pool_entry_id.as_deref(),
         requested_route_id.as_deref(),
         &display_allocation_id,
         existing_display_allocation,
+        browser_id,
+        session_id,
         provider,
-    )?;
+    ) {
+        Some(id)
+    } else {
+        resolve_route_pool_entry_id(
+            state,
+            route_pool_entry_id.as_deref(),
+            requested_route_id.as_deref(),
+            &display_allocation_id,
+            existing_display_allocation,
+            provider,
+        )?
+    };
     let pool_entry = if let Some(id) = selected_route_pool_entry_id.as_ref() {
         inline_route_pool_entry
             .as_ref()
@@ -11519,15 +11533,28 @@ fn service_remote_view_route_binding_from_state(
         let reusable_route_id = requested_route_id
             .as_deref()
             .or_else(|| (!entry.route_id.trim().is_empty()).then_some(entry.route_id.as_str()));
-        let entry_available = entry.state == "available"
-            || entry.readiness.as_ref().is_some_and(|readiness| {
-                readiness
-                    .get("state")
-                    .and_then(Value::as_str)
-                    .is_some_and(|state| state.trim() == "ready")
-                    || readiness_state(readiness).as_deref() == Some("ready")
+        let same_owner_checked_out = entry.state == "checked_out"
+            && entry.current_route_allocation_id.as_deref() == reusable_route_id
+            && reusable_route_id.is_some_and(|route_id| {
+                checked_out_route_matches_owner(
+                    state,
+                    route_id,
+                    browser_id,
+                    session_id,
+                    &display_allocation_id,
+                )
             });
-        if !entry_available && entry.current_route_allocation_id.as_deref() != reusable_route_id {
+        let entry_available = entry.state == "available"
+            || same_owner_checked_out
+            || (entry.state != "checked_out"
+                && entry.readiness.as_ref().is_some_and(|readiness| {
+                    readiness
+                        .get("state")
+                        .and_then(Value::as_str)
+                        .is_some_and(|state| state.trim() == "ready")
+                        || readiness_state(readiness).as_deref() == Some("ready")
+                }));
+        if !entry_available {
             return Err(format!(
                 "route_pool_entry_unavailable: route pool entry '{}' is not available for checkout; diagnostic={}",
                 entry.id,
@@ -11549,6 +11576,66 @@ fn service_remote_view_route_binding_from_state(
         requested_route_id.as_deref(),
         provider,
     )
+}
+
+fn checked_out_route_matches_owner(
+    state: &ServiceState,
+    route_id: &str,
+    browser_id: &str,
+    session_id: &str,
+    display_allocation_id: &str,
+) -> bool {
+    state.remote_view_routes.get(route_id).is_some_and(|route| {
+        route.state == "ready"
+            && route.display_allocation_id.as_deref() == Some(display_allocation_id)
+            && route.browser_id.as_deref() == Some(browser_id)
+            && route.session_id.as_deref() == Some(session_id)
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn checked_out_route_pool_entry_id_for_owner(
+    state: &ServiceState,
+    requested_pool_entry_id: Option<&str>,
+    requested_route_id: Option<&str>,
+    display_allocation_id: &str,
+    allocation: Option<&DisplayAllocation>,
+    browser_id: &str,
+    session_id: &str,
+    provider: ViewStreamProvider,
+) -> Option<String> {
+    state
+        .route_pool
+        .values()
+        .filter(|entry| entry.provider == provider)
+        .filter(|entry| {
+            requested_pool_entry_id
+                .map(|id| entry.id == id)
+                .unwrap_or(true)
+        })
+        .filter(|entry| {
+            requested_route_id
+                .map(|route_id| entry.route_id == route_id)
+                .unwrap_or(true)
+        })
+        .filter(|entry| entry.state == "checked_out")
+        .filter(|entry| route_pool_entry_matches_display(entry, display_allocation_id, allocation))
+        .find(|entry| {
+            let route_id = entry
+                .current_route_allocation_id
+                .as_deref()
+                .or_else(|| (!entry.route_id.trim().is_empty()).then_some(entry.route_id.as_str()));
+            route_id.is_some_and(|route_id| {
+                checked_out_route_matches_owner(
+                    state,
+                    route_id,
+                    browser_id,
+                    session_id,
+                    display_allocation_id,
+                )
+            })
+        })
+        .map(|entry| entry.id.clone())
 }
 
 fn checked_out_route_display_allocation_id(
@@ -11690,8 +11777,12 @@ async fn handle_remote_view_open(cmd: &Value, state: &mut DaemonState) -> Result
     if let Some(entry) = inline_route_pool_entry_from_command(cmd)? {
         service_state.route_pool.insert(entry.id.clone(), entry);
     }
-    let route_binding =
-        service_remote_view_route_binding_from_state(cmd, &service_state, &browser_id)?;
+    let route_binding = service_remote_view_route_binding_from_state(
+        cmd,
+        &service_state,
+        &browser_id,
+        &session_id,
+    )?;
     let launch_command = remote_view_open_launch_command(cmd, &route_binding);
     let tab_command = remote_view_open_tab_command(cmd, &browser_id, &session_id);
     let mut checkout_command =
@@ -12236,7 +12327,8 @@ async fn handle_service_remote_view_route_preflight(
         .unwrap_or_else(|| daemon_state.session_id.clone());
     let repository = LockedServiceStateRepository::default_json()?;
     let state = repository.load_snapshot()?;
-    let route_binding = service_remote_view_route_binding_from_state(cmd, &state, &browser_id)?;
+    let route_binding =
+        service_remote_view_route_binding_from_state(cmd, &state, &browser_id, &session_id)?;
 
     Ok(json!({
         "status": "preflight_ready",
@@ -12266,7 +12358,8 @@ async fn handle_service_remote_view_route_checkout(
 
     repository.mutate(|state| {
         let inline_route_pool_entry = inline_route_pool_entry_from_command(cmd)?;
-        let route_binding = service_remote_view_route_binding_from_state(cmd, state, &browser_id)?;
+        let route_binding =
+            service_remote_view_route_binding_from_state(cmd, state, &browser_id, &session_id)?;
         let display_allocation_id = route_binding.display_allocation_id.clone();
         let existing_display_allocation = state
             .display_allocations
@@ -26058,6 +26151,105 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("route_pool_not_ready"));
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn test_remote_view_route_checkout_reuses_checked_out_same_owner() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_socket_dir("remote-view-route-pool-reuse-owner-home");
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+        store
+            .save(&ServiceState {
+                display_allocations: BTreeMap::from([(
+                    "remote-view-display:12".to_string(),
+                    DisplayAllocation {
+                        id: "remote-view-display:12".to_string(),
+                        display_name: Some(":12".to_string()),
+                        display_isolation: "shared_display".to_string(),
+                        owner_browser_id: Some("session:repeat".to_string()),
+                        owner_session_id: Some("repeat".to_string()),
+                        state: "ready".to_string(),
+                        ..DisplayAllocation::default()
+                    },
+                )]),
+                route_pool: BTreeMap::from([(
+                    "pool-b".to_string(),
+                    RoutePoolEntry {
+                        id: "pool-b".to_string(),
+                        route_id: "route-b".to_string(),
+                        frame_url: Some("https://dashboard.example/guacamole/#/client/route-b".to_string()),
+                        external_url: Some("https://guac.example/#/client/route-b".to_string()),
+                        route_descriptor: Some(json!({
+                            "dashboardEmbedUrl": "https://dashboard.example/guacamole/#/client/route-b",
+                            "publicOperatorUrl": "https://guac.example/#/client/route-b",
+                        })),
+                        target: json!({ "displayName": ":12" }),
+                        state: "checked_out".to_string(),
+                        current_route_allocation_id: Some("route-b".to_string()),
+                        readiness: Some(json!({ "state": "ready" })),
+                        ..RoutePoolEntry::default()
+                    },
+                )]),
+                remote_view_routes: BTreeMap::from([(
+                    "route-b".to_string(),
+                    RemoteViewRoute {
+                        id: "route-b".to_string(),
+                        display_allocation_id: Some("remote-view-display:12".to_string()),
+                        browser_id: Some("session:repeat".to_string()),
+                        session_id: Some("repeat".to_string()),
+                        state: "ready".to_string(),
+                        ..RemoteViewRoute::default()
+                    },
+                )]),
+                browsers: BTreeMap::from([(
+                    "session:repeat".to_string(),
+                    BrowserProcess {
+                        id: "session:repeat".to_string(),
+                        host: ServiceBrowserHost::RemoteHeaded,
+                        health: ServiceBrowserHealth::Ready,
+                        display_allocation_id: Some("remote-view-display:12".to_string()),
+                        ..BrowserProcess::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+        let mut state = DaemonState::new();
+
+        let repeat = execute_command(
+            &json!({
+                "action": "service_remote_view_route_checkout",
+                "displayAllocationId": "remote-view-display:12",
+                "routeId": "route-b",
+                "browserId": "session:repeat",
+                "sessionName": "repeat"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(repeat["success"], true, "repeat checkout failed: {repeat}");
+        assert_eq!(repeat["data"]["routeId"], "route-b");
+        assert_eq!(repeat["data"]["routePoolEntryId"], "pool-b");
+
+        let wrong_owner = execute_command(
+            &json!({
+                "action": "service_remote_view_route_checkout",
+                "displayAllocationId": "remote-view-display:12",
+                "routeId": "route-b",
+                "browserId": "session:other",
+                "sessionName": "other"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(wrong_owner["success"], false);
+        assert!(wrong_owner["error"]
+            .as_str()
+            .unwrap()
+            .contains("route_pool_unavailable"));
         let _ = fs::remove_dir_all(&home);
     }
 

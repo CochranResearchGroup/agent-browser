@@ -2,11 +2,12 @@
 
 import { spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { requestServiceRemoteViewOpen } from '../packages/client/src/service-request.js';
+import { buildAudit } from './audit-route-handoff.js';
 import { assert, parseJsonOutput } from './smoke-utils.js';
 import { loadAgentBrowserEnvFromRealHome } from './smoke-remote-headed-utils.js';
 
@@ -14,7 +15,8 @@ loadAgentBrowserEnvFromRealHome();
 
 const serviceName = process.env.AGENT_BROWSER_REMOTE_VIEW_OPEN_SERVICE_NAME || 'RemoteViewOpenLiveSmoke';
 const agentName = process.env.AGENT_BROWSER_REMOTE_VIEW_OPEN_AGENT_NAME || 'smoke-agent';
-const runtimeProfile = process.env.AGENT_BROWSER_REMOTE_VIEW_OPEN_RUNTIME_PROFILE || 'stealthcdp-default';
+const daemonSession = process.env.AGENT_BROWSER_REMOTE_VIEW_OPEN_DAEMON_SESSION || `remote-view-open-live-${process.pid}`;
+const runtimeProfile = process.env.AGENT_BROWSER_REMOTE_VIEW_OPEN_RUNTIME_PROFILE || `${daemonSession}-profile`;
 const useFixture = process.argv.includes('--fixture') || process.env.AGENT_BROWSER_REMOTE_VIEW_OPEN_FIXTURE === '1';
 const displayName = process.env.AGENT_BROWSER_REMOTE_VIEW_OPEN_DISPLAY || ':10';
 const displayIsolation = process.env.AGENT_BROWSER_REMOTE_VIEW_OPEN_DISPLAY_ISOLATION || 'shared_display';
@@ -37,6 +39,7 @@ function writeTextArtifact(name, value) {
 
 function createFixtureServer() {
   const marker = `REMOTE VIEW OPEN FIXTURE ${process.pid}`;
+  const ocrMarker = 'REMOTE VIEW OPEN FIXTURE';
   const html = [
     '<!doctype html>',
     '<html>',
@@ -61,6 +64,7 @@ function createFixtureServer() {
       const address = server.address();
       resolve({
         marker,
+        ocrMarker,
         targetUrl: `http://127.0.0.1:${address.port}/`,
         close: () => new Promise((done) => server.close(done)),
       });
@@ -106,7 +110,21 @@ function run(command, args, label, { allowFailure = false, timeoutMs = 120000 } 
 }
 
 function runAgentJson(args, label, timeoutMs = 120000) {
-  const result = run(agentBrowser, ['--json', ...args], label, { timeoutMs });
+  let result = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    result = run(agentBrowser, ['--session', daemonSession, '--json', ...args], label, {
+      allowFailure: true,
+      timeoutMs,
+    });
+    if (result.status === 0) break;
+    const output = `${result.stdout}${result.stderr}`;
+    if (!output.includes('Daemon failed to start') || attempt === 3) break;
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1500 * attempt);
+  }
+  assert(
+    result?.status === 0,
+    `${label} failed: ${agentBrowser} --session ${daemonSession} --json ${args.join(' ')}\n${result?.stdout ?? ''}${result?.stderr ?? ''}`,
+  );
   return parseJsonOutput(result.stdout, label);
 }
 
@@ -125,16 +143,24 @@ function routePoolReadiness() {
   return parsed;
 }
 
-function selectRouteEntry(report) {
+function selectRouteEntry(report, serviceStatus = null) {
   assert(report.success === true, `route pool readiness is not green: ${JSON.stringify(report)}`);
   const entries = report.routePoolJson;
   assert(Array.isArray(entries) && entries.length > 0, `route pool readiness did not return entries: ${JSON.stringify(report)}`);
+  const liveRoutePool = serviceStatus?.data?.service_state?.routePool || serviceStatus?.data?.routePool || {};
   const selectedId = envValue('AGENT_BROWSER_REMOTE_VIEW_OPEN_ROUTE_POOL_ENTRY_ID');
-  const selected = selectedId ? entries.find((entry) => entry?.id === selectedId || entry?.routeId === selectedId) : entries[0];
+  const isAvailable = (entry) => {
+    const live = liveRoutePool[entry?.id];
+    return !live || !live.state || live.state === 'available';
+  };
+  const selected = selectedId
+    ? entries.find((entry) => entry?.id === selectedId || entry?.routeId === selectedId)
+    : entries.find(isAvailable) ?? entries[0];
   assert(selected, `selected route-pool entry ${selectedId} was not found in readiness output`);
+  assert(isAvailable(selected), `selected route-pool entry ${selected.id} is not available in service state: ${JSON.stringify(liveRoutePool[selected.id])}`);
   assert(selected.routeId || selected.connectionId, `selected route-pool entry is missing route identity: ${JSON.stringify(selected)}`);
   assert(selected.frameUrl || selected.externalUrl, `selected route-pool entry is missing route URL: ${JSON.stringify(selected)}`);
-  return { entries, selected };
+  return { entries, selected, liveRoutePool };
 }
 
 function displayNameForRoute(routeEntry) {
@@ -195,6 +221,31 @@ function remoteViewOpenCliArgs(routeEntry, taskName, targetUrl) {
     displayIsolationForRoute(routeEntry),
     '--route-pool-entry-json',
     JSON.stringify(routeEntry),
+    '--service-name',
+    serviceName,
+    '--agent-name',
+    agentName,
+    '--task-name',
+    taskName,
+  ];
+}
+
+function remoteViewOpenRepeatCliArgs(routeEntry, openedIds, taskName, targetUrl) {
+  const routeDisplayName = displayNameForRoute(routeEntry);
+  return [
+    'remote-view',
+    'open',
+    targetUrl,
+    '--runtime-profile',
+    runtimeProfile,
+    '--display',
+    routeDisplayName,
+    '--display-isolation',
+    displayIsolationForRoute(routeEntry),
+    '--route-id',
+    openedIds.routeId,
+    '--display-allocation-id',
+    openedIds.displayAllocationId,
     '--service-name',
     serviceName,
     '--agent-name',
@@ -291,6 +342,86 @@ function assertX11BrowserWindowPid(display, browserPid) {
   return matchingWindow;
 }
 
+function normalizedWords(value) {
+  return value
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function ocrMarkerSatisfied(text, expectedMarker) {
+  const ocrWords = new Set(normalizedWords(text));
+  const expectedWords = normalizedWords(expectedMarker);
+  return expectedWords.every((word) => ocrWords.has(word));
+}
+
+function assertRouteDisplayOcr(display, expectedMarker) {
+  assert(commandExists('import'), 'ImageMagick import is required for route-display OCR proof');
+  assert(commandExists('convert'), 'ImageMagick convert is required for route-display OCR proof');
+  assert(commandExists('tesseract'), 'tesseract is required for route-display OCR proof');
+  const screenshotPath = join(artifactDir, 'route-display-root.png');
+  const grayPath = join(artifactDir, 'route-display-root-gray.png');
+  const ocrBasePath = join(artifactDir, 'route-display-root-ocr');
+  const ocrTextPath = `${ocrBasePath}.txt`;
+  run('import', ['-display', display, '-window', 'root', screenshotPath], 'route display screenshot', {
+    timeoutMs: 60000,
+  });
+  run('convert', [screenshotPath, '-colorspace', 'Gray', grayPath], 'route display screenshot normalize', {
+    timeoutMs: 60000,
+  });
+  run('tesseract', [grayPath, ocrBasePath, '--psm', '6'], 'route display OCR', {
+    timeoutMs: 60000,
+  });
+  const text = existsSync(ocrTextPath) ? readFileSync(ocrTextPath, 'utf8') : '';
+  writeTextArtifact('route-display-root-ocr-normalized.txt', text.replace(/\s+/g, ' ').trim());
+  assert(
+    ocrMarkerSatisfied(text, expectedMarker),
+    `route display OCR did not prove fixture marker ${expectedMarker}. OCR text: ${text}`,
+  );
+  return {
+    screenshotPath,
+    grayPath,
+    ocrTextPath,
+    textPreview: text.replace(/\s+/g, ' ').trim().slice(0, 240),
+  };
+}
+
+function assertRouteHandoffAudit(serviceStatus, expected, label) {
+  const audit = buildAudit({
+    source: { kind: 'live-smoke', path: 'scripts/smoke-remote-view-open-live.js' },
+    serviceStatus,
+    remoteViewDoctor: null,
+    collectionErrors: [],
+  });
+  writeArtifact(`${label}-route-handoff-audit.json`, audit);
+  const rows = audit.rows.filter((row) =>
+    row.routeId === expected.routeId &&
+    row.displayAllocationId === expected.displayAllocationId,
+  );
+  assert(rows.length > 0, `${label} route-handoff audit missed route/display ${JSON.stringify(expected)}`);
+  const readyRow = rows.find((row) => row.classification === 'route_bound_ready');
+  assert(readyRow, `${label} route-handoff audit did not report route_bound_ready: ${JSON.stringify(rows)}`);
+  assert(
+    readyRow.visualState === 'browser_window_visible',
+    `${label} route-handoff audit did not retain browser-window proof: ${JSON.stringify(readyRow)}`,
+  );
+  assert(
+    readyRow.streamProvider === 'rdp_gateway',
+    `${label} route-handoff audit row is not bound to rdp_gateway: ${JSON.stringify(readyRow)}`,
+  );
+  return readyRow;
+}
+
+function cleanupLiveSession() {
+  if (process.env.AGENT_BROWSER_REMOTE_VIEW_OPEN_PRESERVE === '1') return;
+  run(agentBrowser, ['--session', daemonSession, '--json', 'close'], 'cleanup live session', {
+    allowFailure: true,
+    timeoutMs: 60000,
+  });
+}
+
 async function ensureStreamBaseUrl() {
   const status = runAgentJson(['stream', 'status'], 'stream status');
   if (!status.data?.enabled) {
@@ -309,10 +440,15 @@ async function main() {
   const fixture = useFixture ? await createFixtureServer() : null;
   const targetUrl = fixture?.targetUrl || process.env.AGENT_BROWSER_REMOTE_VIEW_OPEN_URL || 'https://www.linkedin.com/';
   const readiness = routePoolReadiness();
-  const { entries, selected } = selectRouteEntry(readiness);
+  const preOpenStatus = runAgentJson(['service', 'status'], 'pre-open service status');
+  const { entries, selected, liveRoutePool } = selectRouteEntry(readiness, preOpenStatus);
   const routeDisplayName = displayNameForRoute(selected);
   const routeDisplayIsolation = displayIsolationForRoute(selected);
   writeArtifact('route-pool-readiness.json', readiness);
+  writeArtifact('pre-open-route-pool-state.json', {
+    selectedRoutePoolEntryId: selected.id,
+    liveRoutePool,
+  });
 
   try {
     const first = runAgentJson(
@@ -324,7 +460,7 @@ async function main() {
     writeArtifact('cli-first.json', first);
 
     const repeat = runAgentJson(
-      remoteViewOpenCliArgs(selected, 'remoteViewOpenLiveCliRepeat', targetUrl),
+      remoteViewOpenRepeatCliArgs(selected, firstIds, 'remoteViewOpenLiveCliRepeat', targetUrl),
       'remote-view open CLI repeat',
       180000,
     );
@@ -386,20 +522,24 @@ async function main() {
 
     const serviceStatus = runAgentJson(['service', 'status'], 'service status');
     const records = assertServiceState(serviceStatus, httpIds, 'post-open');
+    const auditRow = assertRouteHandoffAudit(serviceStatus, httpIds, 'post-open');
     writeArtifact('service-state-proof.json', {
       route: records.route,
       browser: records.browser,
       allocation: records.allocation,
       stream: records.stream,
+      auditRow,
     });
 
     assertXwininfo(routeDisplayName);
     const matchingWindow = assertX11BrowserWindowPid(routeDisplayName, records.browser.pid);
+    const ocrProof = fixture ? assertRouteDisplayOcr(routeDisplayName, fixture.ocrMarker) : null;
 
     const summary = {
       success: true,
       artifactDir,
       command: agentBrowser,
+      daemonSession,
       runtimeProfile,
       displayName: routeDisplayName,
       fixture: Boolean(fixture),
@@ -412,11 +552,15 @@ async function main() {
       url: url.data.url,
       x11WindowId: matchingWindow.id,
       x11WindowPid: matchingWindow.pid,
+      routeHandoffClassification: auditRow.classification,
+      routeHandoffVisualState: auditRow.visualState,
+      ocrProof,
     };
     writeArtifact('summary.json', summary);
     console.log(JSON.stringify(summary, null, 2));
   } finally {
     await fixture?.close();
+    cleanupLiveSession();
   }
 }
 

@@ -87,6 +87,13 @@ function selectRecommendations(files, base) {
     );
   }
 
+  if (files.some(isRouteConfusionGateSurface)) {
+    add(
+      'pnpm test:route-confusion-gates',
+      'route handoff parser, route-pool, profile-lock, dashboard proof, service-client, or live-gate surface changed',
+    );
+  }
+
   const focusedRustTests = focusedRustTestCommands(files);
   if (focusedRustTests.length > 0) {
     for (const { command, reason } of focusedRustTests) {
@@ -291,6 +298,27 @@ function isCdpTabStreamingSurface(file) {
     file === 'packages/dashboard/src/lib/service-view-streams.ts' ||
     file === 'packages/dashboard/src/components/service-panel.tsx' ||
     file === 'scripts/smoke-service-cdp-tab-streaming-live.js'
+  );
+}
+
+function isRouteConfusionGateSurface(file) {
+  return (
+    file === 'cli/src/commands.rs' ||
+    file === 'cli/src/native/actions.rs' ||
+    file === 'cli/src/native/cdp/chrome.rs' ||
+    file === 'cli/src/native/remote_view.rs' ||
+    file === 'scripts/audit-route-handoff.js' ||
+    file === 'scripts/test-route-handoff-audit.js' ||
+    file === 'scripts/test-route-confusion-gates.js' ||
+    file === 'scripts/smoke-remote-view-open-live.js' ||
+    file === 'packages/client/src/service-request.js' ||
+    file === 'packages/client/src/service-request.generated.d.ts' ||
+    file === 'scripts/test-service-request-client.js' ||
+    file === 'packages/dashboard/src/lib/service-workspaces.ts' ||
+    file === 'packages/dashboard/src/lib/service-view-streams.ts' ||
+    file === 'packages/dashboard/src/lib/workspace-viewport-state.ts' ||
+    file === 'scripts/test-dashboard-workspace-nodes.js' ||
+    file === 'scripts/test-dashboard-view-streams.js'
   );
 }
 

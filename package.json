@@ -46,6 +46,7 @@
     "test:dashboard-workspace-navigator": "node scripts/test-dashboard-workspace-navigator.js",
     "test:local-runtime-convergence": "node scripts/test-local-runtime-convergence.js",
     "test:route-handoff-audit": "node scripts/test-route-handoff-audit.js",
+    "test:route-confusion-gates": "node scripts/test-route-confusion-gates.js",
     "test:dashboard-launcher-eligibility": "node --no-warnings --experimental-strip-types scripts/test-dashboard-launcher-eligibility.js",
     "test:dashboard-profile-allocation": "node --no-warnings --experimental-strip-types scripts/test-dashboard-profile-allocation.js",
     "test:service-api-mcp-parity": "node scripts/check-service-api-mcp-parity.js",

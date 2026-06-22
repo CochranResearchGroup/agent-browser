@@ -1829,3 +1829,52 @@ Result:
 - P43 remains open for Slice H. The next gate needs no-launch route-confusion
   fixtures and an OCR-backed live route proof that fails on terminal-only
   route displays.
+
+## Turn 43 | 2026-06-22
+
+Scope: execute P43 Slice H live gates and close the route-handoff confusion
+audit lane.
+
+Actions:
+
+- Added `pnpm test:route-confusion-gates` as the focused no-launch gate for
+  route-handoff confusion regressions.
+- Covered wrong flag placement, named-session route-pool mismatch,
+  same-owner route-pool repeat checkout, known-owner profile-lock messaging,
+  direct remote-headed audit classification, and dashboard missing-proof plus
+  terminal-only row classification.
+- Updated validation selection so route, dashboard stream, service-client, and
+  remote-view command changes recommend the route-confusion gate.
+- Strengthened the live `remote-view open` fixture smoke with isolated daemon
+  session and runtime profile defaults, bounded daemon-start retry, available
+  route-pool selection, repeat handoff through the first route/display
+  identity, route-handoff audit assertion, and OCR of the route display.
+- Fixed the route-pool checkout resolver so an already checked-out route is
+  reusable only for the same ready route, browser, session, and display
+  allocation. Other owners still receive `route_pool_unavailable`.
+- Marked P43 complete in the plan and roadmap.
+
+Validation run:
+
+- `git diff --check`
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `node scripts/dev/select-validation.js --base HEAD --json`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `cargo test --manifest-path cli/Cargo.toml cdp_screencast_view_stream -- --nocapture`
+- `pnpm test:route-confusion-gates`
+- `AGENT_BROWSER_COMMAND=/home/ecochran76/workspace.local/agent-browser/cli/target/debug/agent-browser pnpm test:remote-view-open-fixture-live`
+- `pnpm test:service-cdp-tab-streaming-live`
+
+Result:
+
+- Diff hygiene, Rust formatting, validation selector JSON, clippy, no-launch
+  CDP stream regressions, and the route-confusion gate passed.
+- The OCR-backed live route gate passed with artifact directory
+  `/tmp/agent-browser-remote-view-open-live-2026-06-22T16-23-29-784Z`,
+  route `guacamole:5`, display allocation `remote-view-display:12`,
+  route-handoff classification `route_bound_ready`, visual state
+  `browser_window_visible`, and fixture text
+  `REMOTE VIEW OPEN FIXTURE 3815575`.
+- `pnpm test:service-cdp-tab-streaming-live` was retried twice and failed
+  before CDP validation at the known temporary-daemon startup boundary:
+  `Daemon failed to start`.

@@ -611,12 +611,14 @@ non-owned browser addressability into agent-browser lifecycle ownership.
 
 ## P43 | Route Handoff Confusion Audit
 
-State: IN PROGRESS
-Current state: P43 is the active audit lane for the Facebook remote-view
-incident where the route infrastructure was ready and CDP targets existed, but
-the dashboard still presented terminal-only Guacamole views for active browser
-rows. Slice G is complete; the remaining work is the repeatable no-launch and
-live gate layer.
+State: COMPLETE
+Current state: P43 closed the Facebook remote-view incident class where route
+infrastructure was ready and CDP targets existed, but the dashboard still
+presented terminal-only Guacamole views for active browser rows. The lane now
+has route-handoff audit output, parser-safe one-line CLI guidance, route-pool
+and profile-lock diagnostics, row-bound operator-visible proof, dashboard proof
+gating, downstream client proof enforcement, and repeatable no-launch plus OCR
+live gates.
 
 ### Current State
 
@@ -652,6 +654,18 @@ live gate layer.
   require `operatorVisible.state=ready` before non-dry-run handoff success,
   expose a compact route, tab, profile, and visual-proof summary helper, and
   keep infrastructure-only readiness as an explicit caller opt-in.
+- Slice H is complete. `pnpm test:route-confusion-gates` now preserves the
+  parser, route-pool, profile-lock, route-handoff audit, and dashboard
+  proof-classification cases. `pnpm validation:select -- --base <ref>`
+  recommends that gate for route, dashboard stream, service-client, and
+  remote-view command surfaces.
+- The OCR-backed live route gate now opens a neutral fixture URL through
+  `remote-view open`, verifies route-handoff audit classification
+  `route_bound_ready`, verifies visual state `browser_window_visible`, and
+  OCRs the route display for the unique fixture marker.
+- Slice H fixed repeat route-pool checkout for same-owner route-bound handoffs:
+  a checked-out route-pool entry is reusable only when the ready retained route
+  belongs to the same browser, session, and display allocation.
 - `last30days` now calls the route-bound `agent-browser remote-view open`
   one-liner for Facebook, uses the `last30days-facebook` runtime profile, and
   rejects missing-proof, CDP-only, or terminal-only Guacamole/RDP handoff
@@ -662,8 +676,8 @@ live gate layer.
   `last30days-facebook`, display `:11`, and generic `rdp_gateway` stream
   metadata, plus a separate LitScout browser on display `:93` with multiple
   `127.0.0.1` tabs.
-- The current gap is not binary convergence. P42 remains green. The gap is
-  route, browser, tab, stream, and operator-visible proof convergence.
+- The P43 route, browser, tab, stream, and operator-visible proof convergence
+  gap is closed.
 
 ### Evidence
 
@@ -675,10 +689,20 @@ live gate layer.
 - CodeGraph inspection identified the route-binding path in
   `cli/src/native/actions.rs` and the dashboard stream helper in
   `packages/dashboard/src/lib/service-view-streams.ts` as the key audit joins.
+- Live OCR proof on 2026-06-22 passed with artifact directory
+  `/tmp/agent-browser-remote-view-open-live-2026-06-22T16-23-29-784Z`,
+  route `guacamole:5`, display allocation `remote-view-display:12`,
+  route-handoff classification `route_bound_ready`, visual state
+  `browser_window_visible`, and fixture text
+  `REMOTE VIEW OPEN FIXTURE 3815575`.
+- `pnpm test:service-cdp-tab-streaming-live` was retried twice and remained
+  blocked before CDP validation by the existing temporary-daemon startup race:
+  `Daemon failed to start`.
 
 ### Next Recommendation
 
-Execute P43 Slice H next. Add the no-launch route-confusion fixtures and the
-OCR-backed live route gate so terminal-only route displays fail before an agent
-or downstream tool can report Facebook or any other Guacamole/RDP handoff as
-successful.
+Open the next lane on the temporary-daemon startup race that still blocks
+`pnpm test:service-cdp-tab-streaming-live` and other temp-session live smokes.
+Keep it separate from P43: the route-bound Guacamole/RDP handoff contract now
+has row-bound proof, downstream enforcement, no-launch fixtures, and OCR live
+coverage.

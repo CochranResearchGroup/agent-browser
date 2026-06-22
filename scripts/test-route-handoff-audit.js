@@ -91,6 +91,27 @@ const fixture = {
               },
             ],
           }),
+          'session:proof-missing': browser('session:proof-missing', {
+            displayName: ':13',
+            displayAllocationId: 'remote-view-display:13',
+            tabHandles: [
+              {
+                tabId: 'target:proof-missing',
+                title: 'Ready route proof missing',
+                url: 'https://example.com/proof-missing',
+              },
+            ],
+            viewStreams: [
+              {
+                id: 'proof-missing-stream',
+                provider: 'rdp_gateway',
+                displayAllocationId: 'remote-view-display:13',
+                routeId: 'guacamole:5',
+                url: 'https://agent-browser.example/guacamole/',
+                controlInput: 'manual_attached_desktop',
+              },
+            ],
+          }),
           'session:stale': browser('session:stale', {
             health: 'process_exited',
             displayAllocationId: 'remote-view-display:stale',
@@ -136,6 +157,12 @@ const fixture = {
             displayName: ':12',
             ownerBrowserId: 'session:terminal',
           },
+          'remote-view-display:13': {
+            id: 'remote-view-display:13',
+            state: 'ready',
+            displayName: ':13',
+            ownerBrowserId: 'session:proof-missing',
+          },
           'remote-view-display:stale': {
             id: 'remote-view-display:stale',
             state: 'released',
@@ -180,6 +207,14 @@ const fixture = {
               },
             },
           },
+          'guacamole:5': {
+            id: 'guacamole:5',
+            state: 'ready',
+            browserId: 'session:proof-missing',
+            displayAllocationId: 'remote-view-display:13',
+            connectionId: '5',
+            provider: 'rdp_gateway',
+          },
         },
         routePool: {
           'guacamole-rdp-a': {
@@ -193,6 +228,12 @@ const fixture = {
             routeId: 'guacamole:4',
             currentRouteAllocationId: 'guacamole:4',
             connectionId: '4',
+          },
+          'guacamole-rdp-c': {
+            id: 'guacamole-rdp-c',
+            routeId: 'guacamole:5',
+            currentRouteAllocationId: 'guacamole:5',
+            connectionId: '5',
           },
         },
         viewerLeases: {
@@ -230,6 +271,7 @@ try {
   assert(rowByBrowser(audit, 'session:facebook')?.classification === 'route_bound_ready', 'Facebook row should be route_bound_ready');
   assert(rowByBrowser(audit, 'session:litscout')?.classification === 'direct_remote_headed', 'LitScout row should be direct_remote_headed');
   assert(rowByBrowser(audit, 'session:terminal')?.classification === 'route_bound_terminal_only', 'Terminal row should be route_bound_terminal_only');
+  assert(rowByBrowser(audit, 'session:proof-missing')?.classification === 'route_bound_proof_missing', 'Ready route without visual proof should be route_bound_proof_missing');
   assert(rowByBrowser(audit, 'session:stale')?.classification === 'stale_or_retained', 'Stale row should be stale_or_retained');
   assert(rowByBrowser(audit, 'foreign:auracall')?.classification === 'foreign_cdp', 'Foreign row should be foreign_cdp');
 
@@ -241,7 +283,7 @@ try {
   assert(result.status === 0, `fixture CLI failed: ${result.stdout}${result.stderr}`);
   const cliAudit = parseJsonOutput(result.stdout, 'route handoff audit fixture CLI');
   assert(cliAudit.success === true, `fixture CLI did not report success: ${result.stdout}`);
-  assert(cliAudit.data?.rows?.length === 5, `fixture CLI returned wrong row count: ${result.stdout}`);
+  assert(cliAudit.data?.rows?.length === 6, `fixture CLI returned wrong row count: ${result.stdout}`);
   assert(
     cliAudit.data?.summary?.route_bound_terminal_only === 1,
     `fixture CLI did not summarize terminal-only row: ${result.stdout}`,

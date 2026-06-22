@@ -1,7 +1,7 @@
 # Route Handoff Confusion Audit Plan
 
 Date: 2026-06-22
-State: PLANNED
+State: COMPLETED
 Lane: P43
 Depends On:
 - `docs/dev/plans/0039-2026-06-20-remote-control-ready-command-plan.md`
@@ -389,6 +389,13 @@ Acceptance:
 
 Goal: preserve the fixed behavior with repeatable no-launch and live tests.
 
+Slice progress: done on 2026-06-22. The fixed behavior is now covered by a
+single no-launch route-confusion gate plus an OCR-backed live route gate. This
+slice also found and fixed one remaining route resolver bug: a repeat
+`remote-view open` for the same browser/session/display could be blocked by a
+checked-out route-pool entry even when that checked-out route was already owned
+by the same handoff.
+
 Deliverables:
 
 - Add no-launch fixtures for:
@@ -408,6 +415,38 @@ Acceptance:
 - `pnpm validation:select -- --base <ref>` recommends the focused gates when
   route, dashboard stream, service client, or remote-view command files change.
 - The live route gate fails if the route shows a terminal-only screen.
+
+Completed on 2026-06-22:
+
+- Added `scripts/test-route-confusion-gates.js` and package command
+  `pnpm test:route-confusion-gates`.
+- The gate covers wrong flag placement, named-session route-pool mismatch,
+  same-owner route-pool repeat checkout, known-owner profile-lock messaging,
+  direct remote-headed route-handoff audit classification, and dashboard
+  missing-proof plus terminal-only route rows.
+- Updated `pnpm validation:select -- --base <ref>` to recommend the route
+  confusion gate when route, dashboard stream, service-client, or remote-view
+  command surfaces change.
+- Strengthened `scripts/test-route-handoff-audit.js` with a ready route that
+  has no current visual proof and must classify as `route_bound_proof_missing`.
+- Hardened `scripts/smoke-remote-view-open-live.js` so the live gate uses an
+  isolated daemon session and runtime profile, retries only daemon-start races,
+  selects an actually available route-pool entry, repeats the handoff through
+  the first route/display identity, writes the route-handoff audit artifact,
+  and OCRs the route display for a unique neutral fixture marker.
+- Fixed route-pool checkout reuse in `cli/src/native/actions.rs` so a
+  checked-out route-pool entry is reusable only when the retained route is
+  ready and belongs to the same browser, session, and display allocation. A
+  different owner still receives `route_pool_unavailable`.
+- OCR-backed live proof on 2026-06-22 passed against the debug binary with
+  artifact directory
+  `/tmp/agent-browser-remote-view-open-live-2026-06-22T16-23-29-784Z`,
+  route `guacamole:5`, display allocation `remote-view-display:12`,
+  classification `route_bound_ready`, visual state `browser_window_visible`,
+  and fixture text `REMOTE VIEW OPEN FIXTURE 3815575`.
+- `pnpm test:service-cdp-tab-streaming-live` was retried twice and remained
+  blocked before CDP validation by the existing temporary-daemon startup race:
+  `Daemon failed to start`.
 
 ## Initial Audit Questions
 
@@ -438,3 +477,8 @@ P43 can close when:
   handoff success;
 - an OCR-backed live route gate fails on terminal-only output and passes on a
   browser-visible route.
+
+Status on 2026-06-22: all P43 closeout criteria are satisfied. The remaining
+known live-smoke gap is the broader temporary-daemon startup race seen by
+`pnpm test:service-cdp-tab-streaming-live`, which did not exercise the Slice H
+route handoff path.
