@@ -4,7 +4,8 @@ use serde_json::{json, Map, Value};
 
 use crate::connection::{send_command, Response};
 use crate::native::service_access::{
-    parse_service_access_plan_query, service_access_plan_for_state,
+    apply_shared_profile_route_hints_for_service_request, parse_service_access_plan_query,
+    service_access_plan_for_state,
 };
 use crate::native::service_activity::service_incident_activity_response;
 use crate::native::service_contracts::{
@@ -12,8 +13,8 @@ use crate::native::service_contracts::{
     SERVICE_ACCESS_PLAN_MCP_TOOL_NAME, SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME,
     SERVICE_BROWSER_CAPABILITY_REGISTRY_RESOURCE, SERVICE_CONTRACTS_RESOURCE,
     SERVICE_DISPLAY_ALLOCATIONS_MCP_RESOURCE, SERVICE_PROFILE_SEEDING_HANDOFF_UPDATE_MCP_TOOL_NAME,
-    SERVICE_REMOTE_VIEW_ROUTES_MCP_RESOURCE, SERVICE_REQUEST_ACTIONS,
-    SERVICE_ROUTE_POOL_MCP_RESOURCE, SERVICE_VIEWER_LEASES_MCP_RESOURCE,
+    SERVICE_REMOTE_VIEW_ROUTES_MCP_RESOURCE, SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME,
+    SERVICE_REQUEST_ACTIONS, SERVICE_ROUTE_POOL_MCP_RESOURCE, SERVICE_VIEWER_LEASES_MCP_RESOURCE,
 };
 use crate::native::service_incidents::{
     service_incident_summary, service_incidents_response, ServiceIncidentFilters,
@@ -39,7 +40,7 @@ const CHALLENGES_RESOURCE: &str = "agent-browser://challenges";
 const INCIDENTS_RESOURCE: &str = "agent-browser://incidents";
 const INCIDENT_ACTIVITY_PREFIX: &str = "agent-browser://incidents/";
 const INCIDENT_ACTIVITY_SUFFIX: &str = "/activity";
-const ACCESS_PLAN_TEMPLATE: &str = "agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,browserBuild,browserHost,viewStreamProvider,controlInputProvider,displayIsolation}";
+const ACCESS_PLAN_TEMPLATE: &str = "agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,runtimeProfile,browserBuild,browserHost,viewStreamProvider,controlInputProvider,displayIsolation}";
 const PROFILE_LOOKUP_RESOURCE: &str = "agent-browser://profiles/lookup";
 const PROFILE_LOOKUP_TEMPLATE: &str = "agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId,browserBuild}";
 const PROFILE_ALLOCATION_TEMPLATE: &str = "agent-browser://profiles/{profile_id}/allocation";
@@ -934,7 +935,7 @@ fn service_mcp_tools() -> Vec<Value> {
                     },
                     "repairPolicy": {
                         "type": "string",
-                        "enum": ["reject_only", "reuse_compatible", "open_if_missing"],
+                        "enum": ["reject_only", "reuse_compatible", "open_if_missing", "replace_duplicates"],
                         "description": "Repair policy for action=tab_handle_refresh."
                     },
                     "includeScreenshot": {
@@ -964,6 +965,42 @@ fn service_mcp_tools() -> Vec<Value> {
                         "type": "string",
                         "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"],
                         "description": "Optional browser-build preference for profile selection and launch routing."
+                    },
+                    "browserHost": {
+                        "type": "string",
+                        "enum": ["local_headless", "local_headed", "docker_headed", "remote_headed", "cloud_provider", "attached_existing"],
+                        "description": "Optional browser-host constraint used by access-plan shared-profile routing."
+                    },
+                    "viewStreamProvider": {
+                        "type": "string",
+                        "enum": ["cdp_screencast", "chrome_tab_webrtc", "virtual_display_webrtc", "novnc", "rdp_gateway", "external_url"],
+                        "description": "Optional view-stream constraint used by access-plan shared-profile routing."
+                    },
+                    "controlInputProvider": {
+                        "type": "string",
+                        "enum": ["cdp_input", "webrtc_input", "vnc_input", "manual_attached_desktop"],
+                        "description": "Optional control-input constraint used by access-plan shared-profile routing."
+                    },
+                    "displayIsolation": {
+                        "type": "string",
+                        "description": "Optional display-isolation constraint, for example private_virtual_display."
+                    },
+                    "profile": {
+                        "type": "string",
+                        "description": "Explicit custom user-data directory."
+                    },
+                    "profileId": {
+                        "type": "string",
+                        "description": "Explicit managed runtime profile id alias."
+                    },
+                    "runtimeProfile": {
+                        "type": "string",
+                        "description": "Explicit managed runtime profile id."
+                    },
+                    "profileClass": {
+                        "type": "string",
+                        "enum": ["default", "managed_one_time", "durable_named", "operator_supplied"],
+                        "description": "Product-level profile class copied from access-plan serviceRequest output."
                     },
                     "serviceName": {
                         "type": "string",
@@ -1012,6 +1049,19 @@ fn service_mcp_tools() -> Vec<Value> {
                         "type": "array",
                         "items": { "type": "string" },
                         "description": "Login identity aliases for targetServiceIds."
+                    },
+                    "accountId": {
+                        "type": "string",
+                        "description": "Account identity for profile selection."
+                    },
+                    "accountIds": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Account identities for profile selection."
+                    },
+                    "url": {
+                        "type": "string",
+                        "description": "Target URL used for site-policy aware profile selection."
                     }
                 },
                 "required": ["action"]
@@ -1921,6 +1971,104 @@ fn service_mcp_tools() -> Vec<Value> {
                     }
                 },
                 "required": ["browserBuild"]
+            }
+        }),
+        json!({
+            "name": SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME,
+            "title": "Preflight remote-view route readiness",
+            "description": "Evaluate the retained RDP/Guacamole remote-view route readiness evidence without launching Chrome. Use this before remote_view_open to inspect route URL, Guacamole, RDP backend, display access, and route desktop readiness.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "displayAllocationId": {
+                        "type": "string",
+                        "description": "Requested display allocation id."
+                    },
+                    "routeId": {
+                        "type": "string",
+                        "description": "Requested remote-view route id."
+                    },
+                    "remoteViewRouteId": {
+                        "type": "string",
+                        "description": "Requested remote-view route id alias."
+                    },
+                    "routePoolEntryId": {
+                        "type": "string",
+                        "description": "Requested route-pool entry id."
+                    },
+                    "browserId": {
+                        "type": "string",
+                        "description": "Browser id used to select or label route ownership."
+                    },
+                    "sessionName": {
+                        "type": "string",
+                        "description": "Daemon session name used to select or label route ownership."
+                    },
+                    "streamId": {
+                        "type": "string",
+                        "description": "View stream id."
+                    },
+                    "provider": {
+                        "type": "string",
+                        "description": "Remote-view provider id, for example guacamole."
+                    },
+                    "providerMode": {
+                        "type": "string",
+                        "description": "Provider mode such as simultaneous_view."
+                    },
+                    "frameUrl": {
+                        "type": "string",
+                        "description": "Embedded Guacamole frame URL."
+                    },
+                    "externalUrl": {
+                        "type": "string",
+                        "description": "External operator URL."
+                    },
+                    "connectionId": {
+                        "type": "string",
+                        "description": "Provider connection id."
+                    },
+                    "connectionName": {
+                        "type": "string",
+                        "description": "Provider connection name."
+                    },
+                    "routeDescriptor": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "description": "Inline route descriptor."
+                    },
+                    "routePoolEntry": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "description": "Inline route-pool entry to preflight without persisted state."
+                    },
+                    "routePool": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                        },
+                        "description": "Inline route-pool entries to preflight without persisted state."
+                    },
+                    "serviceName": {
+                        "type": "string",
+                        "description": "Calling service name, for example JournalDownloader."
+                    },
+                    "agentName": {
+                        "type": "string",
+                        "description": "Calling agent name."
+                    },
+                    "taskName": {
+                        "type": "string",
+                        "description": "Calling task name, for example probeACSwebsite."
+                    },
+                    "jobTimeoutMs": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Service worker job timeout in milliseconds."
+                    }
+                }
             }
         }),
         json!({
@@ -4593,7 +4741,10 @@ fn call_service_mcp_tool(
         SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME => {
             call_service_browser_capability_preflight(arguments, session)
         }
-        "service_request" => call_service_request(arguments, session),
+        SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME => {
+            call_service_remote_view_route_preflight(arguments, session)
+        }
+        "service_request" => call_service_request(arguments, session, configured_service_state),
         "browser_command" => call_browser_command(arguments, session),
         "browser_navigate" => call_browser_navigate(arguments, session),
         "browser_requests" => call_browser_requests(arguments, session),
@@ -5191,6 +5342,22 @@ fn call_service_browser_capability_preflight(
     )
 }
 
+fn call_service_remote_view_route_preflight(
+    arguments: &Value,
+    session: &str,
+) -> Result<Value, JsonRpcError> {
+    let context = ServiceToolContext::from_arguments(arguments)?;
+    let trace = context.trace();
+    let command = service_remote_view_route_preflight_command(arguments, &context)?;
+
+    send_queued_tool_command(
+        SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME,
+        session,
+        trace,
+        command,
+    )
+}
+
 fn call_service_job_cancel(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
     let job_id = arguments
         .get("jobId")
@@ -5246,7 +5413,15 @@ fn call_browser_command(arguments: &Value, session: &str) -> Result<Value, JsonR
     send_queued_tool_command("browser_command", session, trace, command)
 }
 
+#[cfg(test)]
 fn service_request_command(arguments: &Value) -> Result<(Value, Value), JsonRpcError> {
+    service_request_command_with_state(arguments, None)
+}
+
+fn service_request_command_with_state(
+    arguments: &Value,
+    service_state: Option<&ServiceState>,
+) -> Result<(Value, Value), JsonRpcError> {
     let action = required_string_argument(arguments, "action")?;
     if !BROWSER_COMMAND_ALLOWED_ACTIONS.contains(&action) {
         return Err(JsonRpcError::invalid_params(&format!(
@@ -5281,6 +5456,10 @@ fn service_request_command(arguments: &Value) -> Result<(Value, Value), JsonRpcE
         command["id"] = json!(new_id);
     }
     context.apply_target_profile_hints(&mut command);
+    if let Some(service_state) = service_state {
+        apply_shared_profile_route_hints_for_service_request(service_state, &mut command)
+            .map_err(|err| JsonRpcError::invalid_params(&err))?;
+    }
     Ok((trace, command))
 }
 
@@ -5623,10 +5802,10 @@ fn reject_tab_handle_refresh_request(action: &str, arguments: &Value) -> Result<
     if let Some(policy) = arguments.get("repairPolicy").and_then(Value::as_str) {
         if !matches!(
             policy,
-            "reject_only" | "reuse_compatible" | "open_if_missing"
+            "reject_only" | "reuse_compatible" | "open_if_missing" | "replace_duplicates"
         ) {
             return Err(JsonRpcError::invalid_params(
-                "tab_handle_refresh repairPolicy must be reject_only, reuse_compatible, or open_if_missing",
+                "tab_handle_refresh repairPolicy must be reject_only, reuse_compatible, open_if_missing, or replace_duplicates",
             ));
         }
     }
@@ -5938,8 +6117,19 @@ fn reject_nonempty_string_array(value: Option<&Value>, label: &str) -> Result<()
     }
 }
 
-fn call_service_request(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
-    let (trace, command) = service_request_command(arguments)?;
+fn call_service_request(
+    arguments: &Value,
+    session: &str,
+    configured_service_state: &ServiceState,
+) -> Result<Value, JsonRpcError> {
+    let mut state = load_default_service_state_snapshot().map_err(|err| JsonRpcError {
+        code: -32603,
+        message: "Internal error",
+        data: Some(json!({ "message": err, "tool": "service_request" })),
+    })?;
+    state.overlay_configured_entities(configured_service_state.clone());
+    state.refresh_profile_readiness();
+    let (trace, command) = service_request_command_with_state(arguments, Some(&state))?;
     send_queued_tool_command("service_request", session, trace, command)
 }
 
@@ -7680,6 +7870,60 @@ fn service_browser_capability_preflight_command(
         command["cdpAttachmentAllowed"] = json!(false);
     }
     apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
+    Ok(command)
+}
+
+fn service_remote_view_route_preflight_command(
+    arguments: &Value,
+    context: &ServiceToolContext<'_>,
+) -> Result<Value, JsonRpcError> {
+    let mut command = json!({
+        "id": format!("mcp-service-remote-view-route-preflight-{}", uuid::Uuid::new_v4()),
+        "action": "service_remote_view_route_preflight",
+    });
+    let mut params = Map::new();
+
+    for name in [
+        "displayAllocationId",
+        "routeId",
+        "remoteViewRouteId",
+        "routePoolEntryId",
+        "streamId",
+        "viewStreamProvider",
+        "provider",
+        "providerMode",
+        "frameUrl",
+        "externalUrl",
+        "connectionId",
+        "connectionName",
+    ] {
+        if let Some(value) = optional_string_argument(arguments, name)? {
+            params.insert(name.to_string(), json!(value));
+        }
+    }
+    for name in ["routeDescriptor", "routePoolEntry", "routePool"] {
+        if let Some(value) = arguments.get(name) {
+            params.insert(name.to_string(), value.clone());
+        }
+    }
+    if let Some(browser_id) = context.browser_id {
+        command["browserId"] = json!(browser_id);
+    }
+    if let Some(session_name) = context.session_name {
+        command["sessionName"] = json!(session_name);
+    }
+    if let Some(job_timeout_ms) = context.job_timeout_ms {
+        command["jobTimeoutMs"] = json!(job_timeout_ms);
+    }
+    apply_service_trace_fields(
+        &mut command,
+        context.service_name,
+        context.agent_name,
+        context.task_name,
+    );
+    if !params.is_empty() {
+        command["params"] = Value::Object(params);
+    }
     Ok(command)
 }
 
@@ -9771,6 +10015,15 @@ struct ServiceToolContext<'a> {
     login_id: Option<&'a str>,
     site_ids: Option<&'a [Value]>,
     login_ids: Option<&'a [Value]>,
+    profile: Option<&'a str>,
+    profile_id: Option<&'a str>,
+    runtime_profile: Option<&'a str>,
+    profile_class: Option<&'a str>,
+    browser_build: Option<&'a str>,
+    browser_host: Option<&'a str>,
+    view_stream_provider: Option<&'a str>,
+    control_input_provider: Option<&'a str>,
+    display_isolation: Option<&'a str>,
     browser_id: Option<&'a str>,
     session_name: Option<&'a str>,
     target_id: Option<&'a str>,
@@ -9825,6 +10078,15 @@ impl<'a> ServiceToolContext<'a> {
             login_id: optional_string_argument(arguments, "loginId")?,
             site_ids: optional_string_value_array_argument(arguments, "siteIds")?,
             login_ids: optional_string_value_array_argument(arguments, "loginIds")?,
+            profile: optional_string_argument(arguments, "profile")?,
+            profile_id: optional_string_argument(arguments, "profileId")?,
+            runtime_profile: optional_string_argument(arguments, "runtimeProfile")?,
+            profile_class: optional_string_argument(arguments, "profileClass")?,
+            browser_build: optional_string_argument(arguments, "browserBuild")?,
+            browser_host: optional_string_argument(arguments, "browserHost")?,
+            view_stream_provider: optional_string_argument(arguments, "viewStreamProvider")?,
+            control_input_provider: optional_string_argument(arguments, "controlInputProvider")?,
+            display_isolation: optional_string_argument(arguments, "displayIsolation")?,
             browser_id: optional_string_argument(arguments, "browserId")?,
             session_name: optional_string_argument(arguments, "sessionName")?,
             target_id: optional_string_argument(arguments, "targetId")?,
@@ -9902,6 +10164,33 @@ impl<'a> ServiceToolContext<'a> {
         }
         if let Some(login_ids) = self.login_ids {
             command["loginIds"] = json!(login_ids);
+        }
+        if let Some(profile) = self.profile {
+            command["profile"] = json!(profile);
+        }
+        if let Some(profile_id) = self.profile_id {
+            command["profileId"] = json!(profile_id);
+        }
+        if let Some(runtime_profile) = self.runtime_profile {
+            command["runtimeProfile"] = json!(runtime_profile);
+        }
+        if let Some(profile_class) = self.profile_class {
+            command["profileClass"] = json!(profile_class);
+        }
+        if let Some(browser_build) = self.browser_build {
+            command["browserBuild"] = json!(browser_build);
+        }
+        if let Some(browser_host) = self.browser_host {
+            command["browserHost"] = json!(browser_host);
+        }
+        if let Some(view_stream_provider) = self.view_stream_provider {
+            command["viewStreamProvider"] = json!(view_stream_provider);
+        }
+        if let Some(control_input_provider) = self.control_input_provider {
+            command["controlInputProvider"] = json!(control_input_provider);
+        }
+        if let Some(display_isolation) = self.display_isolation {
+            command["displayIsolation"] = json!(display_isolation);
         }
         if let Some(browser_id) = self.browser_id {
             command["browserId"] = json!(browser_id);
@@ -10023,19 +10312,46 @@ fn send_queued_tool_command(
     if tool_name.starts_with("browser_") {
         copy_target_profile_hints(&trace, &mut command);
     }
-    let response = send_command(command, session).map_err(|err| JsonRpcError {
+    let relay_session = queued_tool_command_session(tool_name, session, &command);
+    let response = send_command(command, &relay_session).map_err(|err| JsonRpcError {
         code: -32603,
         message: "Internal error",
         data: Some(json!({
             "message": err,
-            "session": session,
+            "session": relay_session,
             "tool": tool_name,
             "trace": trace.clone(),
         })),
     })?;
     Ok(tool_response_from_daemon(
-        tool_name, session, trace, response,
+        tool_name,
+        &relay_session,
+        trace,
+        response,
     ))
+}
+
+fn queued_tool_command_session(tool_name: &str, default_session: &str, command: &Value) -> String {
+    if tool_name != "service_request" {
+        return default_session.to_string();
+    }
+    for value in [command.get("sessionName"), command.get("browserId")] {
+        if let Some(session_name) = service_request_session_candidate(value) {
+            return session_name;
+        }
+    }
+    default_session.to_string()
+}
+
+fn service_request_session_candidate(value: Option<&Value>) -> Option<String> {
+    let text = value
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?;
+    if let Some(session_name) = text.strip_prefix("session:") {
+        return (!session_name.is_empty()).then(|| session_name.to_string());
+    }
+    Some(text.to_string())
 }
 
 fn copy_target_profile_hints(source: &Value, command: &mut Value) {
@@ -12374,11 +12690,18 @@ mod tests {
             .iter()
             .find(|tool| tool["name"] == "service_request")
             .expect("service_request schema should be listed");
+        let route_preflight = tools
+            .iter()
+            .find(|tool| tool["name"] == SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME)
+            .expect("service_remote_view_route_preflight schema should be listed");
 
         assert_eq!(
             service_request["inputSchema"]["properties"]["action"]["enum"],
             json!(SERVICE_REQUEST_ACTIONS)
         );
+        assert!(route_preflight["inputSchema"]["properties"]["routeId"].is_object());
+        assert!(route_preflight["inputSchema"]["properties"]["frameUrl"].is_object());
+        assert!(route_preflight["inputSchema"]["properties"]["jobTimeoutMs"].is_object());
         assert!(service_request["inputSchema"]["properties"]["blockedByManualAction"].is_object());
         assert!(service_request["inputSchema"]["properties"]["manualSeedingRequired"].is_object());
         assert!(service_request["inputSchema"]["properties"]["allowManualAction"].is_object());
@@ -12395,6 +12718,7 @@ mod tests {
         assert!(service_request["inputSchema"]["properties"]["targetId"].is_object());
         assert!(service_request["inputSchema"]["properties"]["browserId"].is_object());
         assert!(service_request["inputSchema"]["properties"]["sessionName"].is_object());
+        assert!(service_request["inputSchema"]["properties"]["profileClass"].is_object());
         assert!(service_request["inputSchema"]["properties"]["includeScreenshot"].is_object());
         assert!(service_request["inputSchema"]["properties"]["screenshotDir"].is_object());
         assert!(service_request["inputSchema"]["properties"]["maxConsoleEntries"].is_object());
@@ -12494,6 +12818,35 @@ mod tests {
                 .as_str()
                 .is_some_and(|id| id.starts_with("mcp-service-request-")));
         }
+    }
+
+    #[test]
+    fn service_remote_view_route_preflight_command_maps_arguments() {
+        let arguments = json!({
+            "routeId": "guac-1",
+            "displayAllocationId": "display-1",
+            "browserId": "session:abc",
+            "sessionName": "abc",
+            "frameUrl": "http://127.0.0.1/guacamole/#/client/1",
+            "jobTimeoutMs": 2500,
+            "serviceName": "RemoteView",
+            "agentName": "codex",
+            "taskName": "preflight"
+        });
+        let context = ServiceToolContext::from_arguments(&arguments).unwrap();
+        let command = service_remote_view_route_preflight_command(&arguments, &context).unwrap();
+
+        assert_eq!(command["action"], "service_remote_view_route_preflight");
+        assert_eq!(command["browserId"], "session:abc");
+        assert_eq!(command["sessionName"], "abc");
+        assert_eq!(command["jobTimeoutMs"], 2500);
+        assert_eq!(command["serviceName"], "RemoteView");
+        assert_eq!(command["params"]["routeId"], "guac-1");
+        assert_eq!(command["params"]["displayAllocationId"], "display-1");
+        assert_eq!(
+            command["params"]["frameUrl"],
+            "http://127.0.0.1/guacamole/#/client/1"
+        );
     }
 
     #[test]
@@ -13108,6 +13461,7 @@ mod tests {
             "taskName": "probeACSwebsite",
             "siteId": "acs",
             "loginIds": ["orcid"],
+            "profileClass": "durable_named",
             "browserId": "session:acs-browser",
             "sessionName": "acs-browser",
             "allowDuplicateProfileLane": true,
@@ -13129,12 +13483,92 @@ mod tests {
         assert_eq!(command["taskName"], "probeACSwebsite");
         assert_eq!(command["siteId"], "acs");
         assert_eq!(command["loginIds"][0], "orcid");
+        assert_eq!(command["profileClass"], "durable_named");
         assert_eq!(command["browserId"], "session:acs-browser");
         assert_eq!(command["sessionName"], "acs-browser");
         assert_eq!(command["allowDuplicateProfileLane"], true);
         assert_eq!(command["jobTimeoutMs"], 1000);
         assert_eq!(command["profileLeasePolicy"], "wait");
         assert_eq!(command["profileLeaseWaitTimeoutMs"], 2500);
+    }
+
+    #[test]
+    fn service_request_command_applies_shared_profile_route_hints() {
+        use std::collections::BTreeMap;
+
+        use crate::native::service_model::{
+            BrowserHealth, BrowserHost, BrowserProcess, BrowserProfile, ControlInputProvider,
+            ViewStream, ViewStreamProvider,
+        };
+
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "shared-social".to_string(),
+                BrowserProfile {
+                    id: "shared-social".to_string(),
+                    name: "Shared social".to_string(),
+                    target_service_ids: vec!["x".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                "browser-social".to_string(),
+                BrowserProcess {
+                    id: "browser-social".to_string(),
+                    profile_id: Some("shared-social".to_string()),
+                    host: BrowserHost::RemoteHeaded,
+                    health: BrowserHealth::Ready,
+                    display_isolation: Some("private_virtual_display".to_string()),
+                    view_streams: vec![ViewStream {
+                        provider: ViewStreamProvider::RdpGateway,
+                        control_input: Some(ControlInputProvider::ManualAttachedDesktop),
+                        ..ViewStream::default()
+                    }],
+                    active_session_ids: vec!["operator-social".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let (_, command) = service_request_command_with_state(
+            &json!({
+                "action": "tab_new",
+                "runtimeProfile": "shared-social",
+                "siteId": "x",
+                "browserHost": "remote_headed",
+                "viewStreamProvider": "rdp_gateway",
+                "controlInputProvider": "manual_attached_desktop",
+                "displayIsolation": "private_virtual_display",
+            }),
+            Some(&state),
+        )
+        .unwrap();
+
+        assert_eq!(command["runtimeProfile"], "shared-social");
+        assert_eq!(command["browserId"], "browser-social");
+        assert_eq!(command["sessionName"], "operator-social");
+        assert_eq!(
+            queued_tool_command_session("service_request", "AgentBrowserDashboard", &command),
+            "operator-social"
+        );
+    }
+
+    #[test]
+    fn service_request_tool_session_uses_browser_id_route_hint() {
+        let command = json!({
+            "action": "tab_new",
+            "browserId": "session:operator-social",
+        });
+
+        assert_eq!(
+            queued_tool_command_session("service_request", "AgentBrowserDashboard", &command),
+            "operator-social"
+        );
+        assert_eq!(
+            queued_tool_command_session("browser_navigate", "AgentBrowserDashboard", &command),
+            "AgentBrowserDashboard"
+        );
     }
 
     #[test]

@@ -5,6 +5,8 @@ pub mod auth;
 #[allow(dead_code)]
 pub mod browser;
 #[allow(dead_code)]
+pub mod browser_session_authority;
+#[allow(dead_code)]
 pub mod cancellation;
 #[allow(dead_code)]
 pub mod cdp;
@@ -32,6 +34,16 @@ pub mod providers;
 pub mod recording;
 #[allow(dead_code)]
 pub mod remote_view;
+#[allow(dead_code)]
+pub mod remote_view_attachability;
+#[allow(dead_code)]
+pub mod remote_view_finalization;
+#[allow(dead_code)]
+pub mod remote_view_handoff;
+#[allow(dead_code)]
+pub mod remote_view_lease;
+#[allow(dead_code)]
+pub mod remote_view_proof;
 #[allow(dead_code)]
 pub mod screenshot;
 #[allow(dead_code)]

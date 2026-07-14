@@ -9,6 +9,7 @@ use tokio::sync::{mpsc, oneshot};
 use super::actions::{
     execute_command, service_profile_lease_gate, DaemonState, ServiceProfileLeaseGate,
 };
+use super::browser_session_authority::browser_session_authority_snapshot;
 use super::cancellation::CancellationToken as RunningJobCancel;
 use super::service_health::{
     apply_browser_health_observation, browser_health_observation_details,
@@ -20,11 +21,12 @@ use super::service_jobs::{
     cancel_persisted_service_job, load_service_job_in_repository, mutate_persisted_service_jobs,
 };
 use super::service_model::{
-    service_profile_allocations, BrowserHealth as ServiceBrowserHealth,
-    BrowserHost as ServiceBrowserHost, BrowserProcess, ControlPlaneSnapshot, JobControlPlaneMode,
-    JobPriority, JobState, JobTarget, ServiceActor, ServiceEvent, ServiceEventKind, ServiceJob,
-    ServiceState, SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
-    SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
+    retained_display_allocation_summary, service_profile_allocations,
+    BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
+    ControlPlaneSnapshot, JobControlPlaneMode, JobPriority, JobState, JobTarget, ServiceActor,
+    ServiceEvent, ServiceEventKind, ServiceJob, ServiceState,
+    SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
+    SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
 };
 use super::service_monitors::{
     persisted_due_monitor_work_pending, SERVICE_MONITORS_RUN_DUE_ACTION,
@@ -201,6 +203,8 @@ impl ControlPlaneHandle {
         reconcile_service_state(&mut service_state).await;
         persist_reconciled_service_state(&before, &service_state);
         let profile_allocations = service_profile_allocations(&service_state);
+        let retained_display_allocations = retained_display_allocation_summary(&service_state);
+        let browser_session_authority = browser_session_authority_snapshot(&service_state);
 
         json!({
             "id": id,
@@ -208,6 +212,8 @@ impl ControlPlaneHandle {
             "data": {
                 "control_plane": self.status_payload(waiting_profile_lease_job_count),
                 "profileAllocations": profile_allocations,
+                "retainedDisplayAllocations": retained_display_allocations,
+                "browserSessionAuthority": browser_session_authority,
                 "launchConfig": launch_config,
                 "service_state": service_state,
             },
@@ -514,6 +520,7 @@ fn persist_process_exited_browser_health_in_repository(
                 .unwrap_or_default(),
             last_error,
             last_health_observation: None,
+            attachability: None,
         };
         let observation_details = browser_health_observation_details(&browser, None);
         apply_browser_health_observation(&mut browser, Some(&observation_details));
@@ -2035,6 +2042,18 @@ mod tests {
         );
         assert_eq!(
             response
+                .pointer("/data/browserSessionAuthority/schemaVersion")
+                .and_then(|v| v.as_u64()),
+            Some(1)
+        );
+        assert_eq!(
+            response
+                .pointer("/data/browserSessionAuthority/summary/modeledBrowserCount")
+                .and_then(|v| v.as_u64()),
+            Some(0)
+        );
+        assert_eq!(
+            response
                 .pointer("/data/profileAllocations/0/profileId")
                 .and_then(|v| v.as_str()),
             Some("work")
@@ -2481,10 +2500,7 @@ mod tests {
         handle.shutdown().await;
 
         let persisted = store.load().unwrap();
-        assert_eq!(
-            persisted.browsers["browser-1"].health,
-            crate::native::service_model::BrowserHealth::Unreachable
-        );
+        assert!(!persisted.browsers.contains_key("browser-1"));
         assert!(persisted.events.iter().any(|event| {
             event.kind == crate::native::service_model::ServiceEventKind::BrowserHealthChanged
                 && event.browser_id.as_deref() == Some("browser-1")
@@ -2495,7 +2511,7 @@ mod tests {
                 .as_ref()
                 .map(|snapshot| snapshot.browser_count)
                 .unwrap_or_default()
-                >= 1
+                == 0
         );
         assert!(persisted
             .reconciliation

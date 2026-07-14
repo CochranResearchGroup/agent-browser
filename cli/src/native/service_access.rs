@@ -9,6 +9,7 @@ use std::collections::BTreeSet;
 
 use chrono::{DateTime, Utc};
 use serde_json::{json, Map, Value};
+use sha2::{Digest, Sha256};
 
 use super::service_contracts::SERVICE_REQUEST_ACTIONS;
 use super::service_lifecycle::{select_service_profile_for_request, ProfileSelectionRequest};
@@ -34,6 +35,7 @@ pub(crate) struct ServiceAccessPlanRequest {
     pub(crate) site_policy_id: Option<String>,
     pub(crate) challenge_id: Option<String>,
     pub(crate) readiness_profile_id: Option<String>,
+    pub(crate) runtime_profile: Option<String>,
     pub(crate) browser_build: Option<BrowserBuild>,
     pub(crate) browser_build_explicit: bool,
     pub(crate) browser_host: Option<BrowserHost>,
@@ -94,6 +96,10 @@ pub(crate) fn parse_service_access_plan_query(
             }
             "readinessProfileId" | "readiness_profile_id" | "readiness-profile-id" => {
                 request.readiness_profile_id = non_empty(value);
+            }
+            "runtimeProfile" | "runtime_profile" | "runtime-profile" | "profileId"
+            | "profile_id" | "profile-id" => {
+                request.runtime_profile = non_empty(value);
             }
             "browserBuild" | "browser_build" | "browser-build" => {
                 request.browser_build = parse_browser_build(&value)?;
@@ -161,10 +167,17 @@ pub(crate) fn service_access_plan_for_state(
     }
     let profile_request = request.profile_selection_request();
     let selection = select_service_profile_for_request(service_state, &profile_request);
-    let selected_profile = selection
-        .as_ref()
-        .and_then(|selection| service_state.profiles.get(&selection.profile_id))
-        .cloned();
+    let selected_profile = request
+        .runtime_profile
+        .as_deref()
+        .and_then(|profile_id| service_state.profiles.get(profile_id))
+        .cloned()
+        .or_else(|| {
+            selection
+                .as_ref()
+                .and_then(|selection| service_state.profiles.get(&selection.profile_id))
+                .cloned()
+        });
     let readiness_id = request.readiness_profile_id.clone().or_else(|| {
         selection
             .as_ref()
@@ -238,6 +251,7 @@ pub(crate) fn service_access_plan_for_state(
             "sitePolicyId": request.site_policy_id,
             "challengeId": request.challenge_id,
             "readinessProfileId": request.readiness_profile_id,
+            "runtimeProfile": request.runtime_profile,
             "browserBuild": request.browser_build,
             "browserHost": request.browser_host,
             "viewStreamProvider": request.view_stream_provider,
@@ -836,6 +850,8 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         &launch_posture.value,
         manual_seeding_required,
     );
+    let one_time_profile_recommendation =
+        access_plan_one_time_profile_recommendation(request, selected_profile, service_state);
     let manual_action_required = manual_seeding_required || waiting_for_human || failed_challenge;
     let freshness_update = freshness_update_decision(
         selected_profile,
@@ -864,6 +880,20 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
     }
     if profile_readiness_probe_due {
         reasons.push("profile_readiness_probe_due");
+    }
+    if one_time_profile_recommendation
+        .get("state")
+        .and_then(Value::as_str)
+        == Some("planned")
+    {
+        reasons.push("managed_one_time_profile_planned");
+    }
+    if one_time_profile_recommendation
+        .get("state")
+        .and_then(Value::as_str)
+        == Some("warning")
+    {
+        reasons.push("operator_supplied_one_time_profile_warning");
     }
     if let Some(site_policy) = site_policy {
         reasons.push("site_policy_selected");
@@ -918,15 +948,16 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
     } else {
         "use_selected_profile"
     };
-    let service_request = service_request_decision(
-        input.request,
+    let service_request = service_request_decision(ServiceRequestDecisionInput {
+        request: input.request,
         selected_profile,
-        policy_denies || denied_challenge,
+        denied: policy_denies || denied_challenge,
         manual_seeding_required,
         manual_action_required,
-        &launch_posture.value,
-        &profile_reuse,
-    );
+        launch_posture: &launch_posture.value,
+        profile_reuse: &profile_reuse,
+        one_time_profile_recommendation: &one_time_profile_recommendation,
+    });
     let post_seeding_probe = post_seeding_probe_decision(
         input.request,
         selected_profile,
@@ -949,6 +980,7 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         "browserHost": launch_posture.browser_host,
         "launchPosture": launch_posture.value,
         "profileReuse": profile_reuse,
+        "oneTimeProfileRecommendation": one_time_profile_recommendation,
         "interactionMode": site_policy.map(|policy| policy.interaction_mode),
         "interactionRisk": interaction_decision.interaction_risk,
         "pacing": interaction_decision.pacing,
@@ -973,6 +1005,220 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         "hasNamingWarning": !naming_warnings.is_empty(),
         "reasons": reasons,
     })
+}
+
+/// Apply access-plan shared-profile route hints to tab-opening service requests.
+///
+/// HTTP and MCP adapters both call this before relay so the access planner stays
+/// authoritative for selecting the compatible retained browser.
+pub(crate) fn apply_shared_profile_route_hints_for_service_request(
+    service_state: &ServiceState,
+    command: &mut Value,
+) -> Result<(), String> {
+    if command.get("action").and_then(Value::as_str) != Some("tab_new") {
+        return Ok(());
+    }
+    if service_request_has_route_hint(command)
+        || command
+            .get("allowDuplicateProfileLane")
+            .and_then(Value::as_bool)
+            == Some(true)
+    {
+        return Ok(());
+    }
+
+    let request = service_access_plan_request_from_service_command(command)?;
+    let plan = service_access_plan_for_state(service_state, request);
+    let profile_reuse = &plan["decision"]["profileReuse"];
+    if profile_reuse
+        .get("recommendedAction")
+        .and_then(Value::as_str)
+        != Some("reuse_existing_browser")
+    {
+        return Ok(());
+    }
+
+    let Some(browser_id) = profile_reuse
+        .get("reusableBrowserId")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+    else {
+        return Ok(());
+    };
+    let Some(session_name) = profile_reuse
+        .get("reusableSessionName")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+    else {
+        return Ok(());
+    };
+
+    command["browserId"] = json!(browser_id);
+    command["sessionName"] = json!(session_name);
+    Ok(())
+}
+
+fn service_request_has_route_hint(command: &Value) -> bool {
+    ["browserId", "sessionName"].iter().any(|key| {
+        command
+            .get(*key)
+            .and_then(Value::as_str)
+            .is_some_and(|value| !value.trim().is_empty())
+    })
+}
+
+fn service_access_plan_request_from_service_command(
+    command: &Value,
+) -> Result<ServiceAccessPlanRequest, String> {
+    let mut params = Vec::new();
+    for key in [
+        "serviceName",
+        "agentName",
+        "taskName",
+        "targetServiceId",
+        "targetService",
+        "targetServiceIds",
+        "targetServices",
+        "siteId",
+        "siteIds",
+        "loginId",
+        "loginIds",
+        "accountId",
+        "accountIds",
+        "runtimeProfile",
+        "profileId",
+        "browserBuild",
+        "browserHost",
+        "viewStreamProvider",
+        "controlInputProvider",
+        "displayIsolation",
+    ] {
+        append_service_command_access_param(&mut params, key, command.get(key));
+    }
+    let target_url = command.get("url").or_else(|| command.get("desiredUrl"));
+    append_service_command_access_param(&mut params, "url", target_url);
+    parse_service_access_plan_query(params)
+}
+
+fn append_service_command_access_param(
+    params: &mut Vec<(String, String)>,
+    key: &str,
+    value: Option<&Value>,
+) {
+    let Some(value) = value else {
+        return;
+    };
+    if let Some(value) = value.as_str().filter(|value| !value.trim().is_empty()) {
+        params.push((key.to_string(), value.to_string()));
+        return;
+    }
+    if let Some(items) = value.as_array() {
+        let value = items
+            .iter()
+            .filter_map(Value::as_str)
+            .filter(|item| !item.trim().is_empty())
+            .collect::<Vec<_>>()
+            .join(",");
+        if !value.is_empty() {
+            params.push((key.to_string(), value));
+        }
+    }
+}
+
+fn access_plan_one_time_profile_recommendation(
+    request: &ServiceAccessPlanRequest,
+    selected_profile: Option<&BrowserProfile>,
+    service_state: &ServiceState,
+) -> Value {
+    if !access_plan_looks_like_one_time_operator_handoff(request) {
+        return Value::Null;
+    }
+    if selected_profile.is_some() {
+        return Value::Null;
+    }
+    let recommended_profile_id = access_plan_managed_one_time_profile_id(request);
+    if let Some(runtime_profile) = request.runtime_profile.as_deref() {
+        if service_state.profiles.contains_key(runtime_profile) {
+            return Value::Null;
+        }
+        return json!({
+            "state": "warning",
+            "code": "arbitrary_runtime_profile_for_one_time_handoff",
+            "requestedRuntimeProfile": runtime_profile,
+            "profileClass": "operator_supplied",
+            "recommendedProfileClass": "managed_one_time",
+            "recommendedProfileId": recommended_profile_id,
+            "runtimeProfile": runtime_profile,
+            "message": "This access plan looks like a one-time operator handoff but it supplied an unknown runtime profile. Prefer the managed one-time task profile so retries reuse one lane and cleanup can remove abandoned task state safely.",
+        });
+    }
+    json!({
+        "state": "planned",
+        "code": "managed_one_time_profile_planned",
+        "profileClass": "managed_one_time",
+        "profileOrigin": "agent_browser_owned",
+        "recommendedProfileId": recommended_profile_id,
+        "runtimeProfile": recommended_profile_id,
+        "persistent": false,
+        "message": "This access plan looks like a one-time operator handoff and no durable profile was selected, so the generated service request uses a deterministic managed one-time task profile.",
+    })
+}
+
+fn access_plan_looks_like_one_time_operator_handoff(request: &ServiceAccessPlanRequest) -> bool {
+    if request.view_stream_provider != Some(ViewStreamProvider::RdpGateway) {
+        return false;
+    }
+    if request.control_input_provider != Some(ControlInputProvider::ManualAttachedDesktop) {
+        return false;
+    }
+    if request.browser_host != Some(BrowserHost::RemoteHeaded) {
+        return false;
+    }
+    let text = [
+        request.service_name.as_deref(),
+        request.agent_name.as_deref(),
+        request.task_name.as_deref(),
+        request.target_url.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    .chain(request.target_service_ids.iter().map(String::as_str))
+    .collect::<Vec<_>>()
+    .join(" ")
+    .to_ascii_lowercase();
+    [
+        "temporary",
+        "temp",
+        "one-time",
+        "one_time",
+        "login",
+        "payment",
+        "challenge",
+        "sosdirect",
+        "templogin",
+    ]
+    .iter()
+    .any(|needle| text.contains(needle))
+}
+
+fn access_plan_managed_one_time_profile_id(request: &ServiceAccessPlanRequest) -> String {
+    let seed = [
+        request.service_name.as_deref().unwrap_or("service"),
+        request.agent_name.as_deref().unwrap_or("agent"),
+        request.task_name.as_deref().unwrap_or("task"),
+        request.target_url.as_deref().unwrap_or("url"),
+    ]
+    .join("|")
+    .to_ascii_lowercase();
+    let mut hasher = Sha256::new();
+    hasher.update(seed.as_bytes());
+    let digest = hasher.finalize();
+    let suffix = digest
+        .iter()
+        .take(6)
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    format!("managed-one-time-{suffix}")
 }
 
 fn profile_reuse_decision(
@@ -1704,16 +1950,41 @@ fn shell_arg(value: &str) -> String {
 }
 
 /// Describe the queued browser-control handoff clients should use after planning.
-fn service_request_decision(
-    request: &ServiceAccessPlanRequest,
-    selected_profile: Option<&BrowserProfile>,
+struct ServiceRequestDecisionInput<'a> {
+    request: &'a ServiceAccessPlanRequest,
+    selected_profile: Option<&'a BrowserProfile>,
     denied: bool,
     manual_seeding_required: bool,
     manual_action_required: bool,
-    launch_posture: &Value,
-    profile_reuse: &Value,
-) -> Value {
+    launch_posture: &'a Value,
+    profile_reuse: &'a Value,
+    one_time_profile_recommendation: &'a Value,
+}
+
+fn service_request_decision(input: ServiceRequestDecisionInput<'_>) -> Value {
+    let request = input.request;
+    let selected_profile = input.selected_profile;
+    let launch_posture = input.launch_posture;
+    let profile_reuse = input.profile_reuse;
+    let one_time_profile_recommendation = input.one_time_profile_recommendation;
     let selected_profile_id = selected_profile.map(|profile| profile.id.clone());
+    let recommended_runtime_profile = one_time_profile_recommendation
+        .get("runtimeProfile")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let effective_runtime_profile = selected_profile_id
+        .clone()
+        .or_else(|| request.runtime_profile.clone())
+        .or(recommended_runtime_profile);
+    let effective_profile_class = selected_profile
+        .map(|profile| json!(profile.profile_class))
+        .or_else(|| one_time_profile_recommendation.get("profileClass").cloned())
+        .or_else(|| {
+            request
+                .runtime_profile
+                .as_ref()
+                .map(|_| json!("operator_supplied"))
+        });
     let requires_cdp_free = launch_posture
         .get("requiresCdpFree")
         .and_then(Value::as_bool)
@@ -1723,10 +1994,11 @@ fn service_request_decision(
         .and_then(Value::as_bool)
         .unwrap_or(!requires_cdp_free);
     let blocked_by_cdp_free = requires_cdp_free && !cdp_attachment_allowed;
+    let has_profile_lane = effective_runtime_profile.is_some();
     let available =
-        selected_profile_id.is_some() && !denied && !manual_action_required && !blocked_by_cdp_free;
+        has_profile_lane && !input.denied && !input.manual_action_required && !blocked_by_cdp_free;
     let recommended_after_manual_action =
-        selected_profile_id.is_some() && !denied && manual_action_required && !blocked_by_cdp_free;
+        has_profile_lane && !input.denied && input.manual_action_required && !blocked_by_cdp_free;
     let mut service_request = Map::new();
     service_request.insert("action".to_string(), json!("tab_new"));
     if let Some(service_name) = request.service_name.as_ref() {
@@ -1753,11 +2025,13 @@ fn service_request_decision(
     if let Some(browser_build) = launch_posture.get("browserBuild") {
         service_request.insert("browserBuild".to_string(), browser_build.clone());
     }
+    if let Some(runtime_profile) = effective_runtime_profile.as_deref() {
+        service_request.insert("runtimeProfile".to_string(), json!(runtime_profile));
+    }
+    if let Some(profile_class) = effective_profile_class.clone() {
+        service_request.insert("profileClass".to_string(), profile_class);
+    }
     if let Some(selected_profile) = selected_profile {
-        service_request.insert(
-            "runtimeProfile".to_string(),
-            json!(selected_profile.id.clone()),
-        );
         if let Some(user_data_dir) = selected_profile
             .user_data_dir
             .as_deref()
@@ -1787,10 +2061,10 @@ fn service_request_decision(
             service_request.insert("sessionName".to_string(), json!(session_name));
         }
     }
-    if manual_action_required {
+    if input.manual_action_required {
         service_request.insert("blockedByManualAction".to_string(), json!(true));
     }
-    if manual_seeding_required {
+    if input.manual_seeding_required {
         service_request.insert("manualSeedingRequired".to_string(), json!(true));
     }
     if requires_cdp_free {
@@ -1835,14 +2109,17 @@ fn service_request_decision(
     json!({
         "available": available,
         "recommendedAfterManualAction": recommended_after_manual_action,
-        "blockedByManualAction": manual_action_required,
+        "blockedByManualAction": input.manual_action_required,
         "blockedByCdpFree": blocked_by_cdp_free,
-        "blockedByPolicy": denied,
+        "blockedByPolicy": input.denied,
         "requiresCdpFree": requires_cdp_free,
         "cdpAttachmentAllowed": cdp_attachment_allowed,
         "action": "tab_new",
         "selectedProfileId": selected_profile_id,
+        "runtimeProfile": effective_runtime_profile,
+        "profileClass": effective_profile_class,
         "profileLeasePolicy": "wait",
+        "oneTimeProfileRecommendation": one_time_profile_recommendation,
         "cdpFreeAvailability": cdp_free_command_availability(blocked_by_cdp_free),
         "request": Value::Object(service_request),
         "http": {
@@ -3301,6 +3578,139 @@ mod tests {
     }
 
     #[test]
+    fn service_access_plan_plans_managed_one_time_profile_for_operator_handoff() {
+        let plan = service_access_plan_for_state(
+            &ServiceState::default(),
+            ServiceAccessPlanRequest {
+                service_name: Some("sosdirect".to_string()),
+                agent_name: Some("codex".to_string()),
+                task_name: Some("temporary-login-payment".to_string()),
+                target_url: Some(
+                    "https://direct.sos.state.tx.us/acct/acct-templogin.asp".to_string(),
+                ),
+                browser_build: Some(BrowserBuild::StockChrome),
+                browser_build_explicit: true,
+                browser_host: Some(BrowserHost::RemoteHeaded),
+                view_stream_provider: Some(ViewStreamProvider::RdpGateway),
+                control_input_provider: Some(ControlInputProvider::ManualAttachedDesktop),
+                display_isolation: Some("private_virtual_display".to_string()),
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+        let runtime_profile = plan["decision"]["oneTimeProfileRecommendation"]["runtimeProfile"]
+            .as_str()
+            .expect("runtime profile");
+
+        assert_eq!(
+            plan["decision"]["oneTimeProfileRecommendation"]["state"],
+            "planned"
+        );
+        assert_eq!(
+            plan["decision"]["oneTimeProfileRecommendation"]["profileClass"],
+            "managed_one_time"
+        );
+        assert!(runtime_profile.starts_with("managed-one-time-"));
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["runtimeProfile"],
+            runtime_profile
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["profileClass"],
+            "managed_one_time"
+        );
+        assert_eq!(plan["decision"]["serviceRequest"]["available"], true);
+        assert_eq!(plan["decision"]["profileId"], Value::Null);
+    }
+
+    #[test]
+    fn service_access_plan_warns_on_arbitrary_one_time_runtime_profile() {
+        let plan = service_access_plan_for_state(
+            &ServiceState::default(),
+            ServiceAccessPlanRequest {
+                service_name: Some("sosdirect".to_string()),
+                agent_name: Some("codex".to_string()),
+                task_name: Some("temporary-login-payment".to_string()),
+                target_url: Some(
+                    "https://direct.sos.state.tx.us/acct/acct-templogin.asp".to_string(),
+                ),
+                runtime_profile: Some("tx-sos-temp-stock-b".to_string()),
+                browser_build: Some(BrowserBuild::StockChrome),
+                browser_build_explicit: true,
+                browser_host: Some(BrowserHost::RemoteHeaded),
+                view_stream_provider: Some(ViewStreamProvider::RdpGateway),
+                control_input_provider: Some(ControlInputProvider::ManualAttachedDesktop),
+                display_isolation: Some("private_virtual_display".to_string()),
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(
+            plan["decision"]["oneTimeProfileRecommendation"]["state"],
+            "warning"
+        );
+        assert_eq!(
+            plan["decision"]["oneTimeProfileRecommendation"]["requestedRuntimeProfile"],
+            "tx-sos-temp-stock-b"
+        );
+        assert_eq!(
+            plan["decision"]["oneTimeProfileRecommendation"]["recommendedProfileClass"],
+            "managed_one_time"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["runtimeProfile"],
+            "tx-sos-temp-stock-b"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["profileClass"],
+            "operator_supplied"
+        );
+    }
+
+    #[test]
+    fn service_access_plan_selects_explicit_known_runtime_profile() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "known-temp".to_string(),
+                BrowserProfile {
+                    id: "known-temp".to_string(),
+                    name: "Known temp".to_string(),
+                    user_data_dir: Some("/tmp/known-temp-profile".to_string()),
+                    ..BrowserProfile::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                service_name: Some("sosdirect".to_string()),
+                agent_name: Some("codex".to_string()),
+                task_name: Some("temporary-login-payment".to_string()),
+                target_url: Some(
+                    "https://direct.sos.state.tx.us/acct/acct-templogin.asp".to_string(),
+                ),
+                runtime_profile: Some("known-temp".to_string()),
+                browser_host: Some(BrowserHost::RemoteHeaded),
+                view_stream_provider: Some(ViewStreamProvider::RdpGateway),
+                control_input_provider: Some(ControlInputProvider::ManualAttachedDesktop),
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(plan["query"]["runtimeProfile"], "known-temp");
+        assert_eq!(plan["selectedProfile"]["id"], "known-temp");
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["runtimeProfile"],
+            "known-temp"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["profile"],
+            "/tmp/known-temp-profile"
+        );
+        assert!(plan["decision"]["oneTimeProfileRecommendation"].is_null());
+    }
+
+    #[test]
     fn service_access_plan_reports_missing_caller_labels() {
         let plan = service_access_plan_for_state(
             &ServiceState::default(),
@@ -3793,6 +4203,53 @@ mod tests {
             .as_array()
             .unwrap()
             .contains(&json!("duplicate_live_browsers_for_profile")));
+    }
+
+    #[test]
+    fn service_request_route_hints_reuse_compatible_live_browser() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "x-social".to_string(),
+                BrowserProfile {
+                    id: "x-social".to_string(),
+                    name: "X social".to_string(),
+                    target_service_ids: vec!["x".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                "browser-x".to_string(),
+                BrowserProcess {
+                    id: "browser-x".to_string(),
+                    profile_id: Some("x-social".to_string()),
+                    host: BrowserHost::RemoteHeaded,
+                    health: BrowserHealth::Ready,
+                    display_isolation: Some("private_virtual_display".to_string()),
+                    view_streams: vec![ViewStream {
+                        provider: ViewStreamProvider::RdpGateway,
+                        control_input: Some(ControlInputProvider::ManualAttachedDesktop),
+                        ..ViewStream::default()
+                    }],
+                    active_session_ids: vec!["operator-x".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let mut command = json!({
+            "action": "tab_new",
+            "runtimeProfile": "x-social",
+            "siteId": "x",
+            "browserHost": "remote_headed",
+            "viewStreamProvider": "rdp_gateway",
+            "controlInputProvider": "manual_attached_desktop",
+            "displayIsolation": "private_virtual_display",
+        });
+
+        apply_shared_profile_route_hints_for_service_request(&state, &mut command).unwrap();
+
+        assert_eq!(command["browserId"], "browser-x");
+        assert_eq!(command["sessionName"], "operator-x");
     }
 
     #[test]

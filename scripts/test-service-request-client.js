@@ -61,6 +61,7 @@ import {
   requestServiceTabFromAccessPlan,
   requestServiceViewerLease,
   requireServiceRemoteViewOpenOperatorVisible,
+  summarizeServiceSharedProfileAcquisition,
   summarizeServiceRemoteViewOpenProof,
   transferServiceFiles,
   SERVICE_REQUEST_ACTIONS,
@@ -491,12 +492,20 @@ async function main() {
   const sharedProfileAccessPlan = {
     decision: {
       profileReuse: {
+        recommendedAction: 'reuse_existing_browser',
+        profileProcessPolicy: 'exclusive_process',
+        clientSharingPolicy: 'shared_browser_tabs',
+        defaultAcquisition: 'tab_new',
+        duplicateProcessPolicy: 'reject_duplicate_process',
+        selectedProfileId: 'last30days-facebook',
         sharedAcquisition: {
           policy: 'shared_browser_tabs',
           mode: 'tab_new',
           browserId: 'browser-shared',
           sessionName: 'shared-session',
           requiresRouteHints: true,
+          routeHintFields: ['browserId', 'sessionName'],
+          duplicateProcessPolicy: 'reject_duplicate_process',
         },
       },
       serviceRequest: {
@@ -505,6 +514,8 @@ async function main() {
           agentName: 'auracall-agent',
           taskName: 'openSharedTab',
           targetServiceIds: ['chatgpt'],
+          runtimeProfile: 'last30days-facebook',
+          profileId: 'last30days-facebook',
           profileLeasePolicy: 'wait',
           action: 'tab_new',
         },
@@ -556,6 +567,8 @@ async function main() {
       agentName: 'auracall-agent',
       taskName: 'openSharedTab',
       targetServiceIds: ['chatgpt'],
+      runtimeProfile: 'last30days-facebook',
+      profileId: 'last30days-facebook',
       profileLeasePolicy: 'wait',
       browserId: 'browser-shared',
       sessionName: 'shared-session',
@@ -576,6 +589,8 @@ async function main() {
       agentName: 'auracall-agent',
       taskName: 'openSharedTab',
       targetServiceIds: ['chatgpt'],
+      runtimeProfile: 'last30days-facebook',
+      profileId: 'last30days-facebook',
       profileLeasePolicy: 'wait',
       browserId: 'browser-override',
       sessionName: 'override-session',
@@ -585,6 +600,29 @@ async function main() {
       },
     },
   );
+  assert.deepEqual(summarizeServiceSharedProfileAcquisition(sharedProfileAccessPlan), {
+    available: true,
+    recommendedAction: 'reuse_existing_browser',
+    acquisitionMode: 'tab_new',
+    requestedProfile: 'last30days-facebook',
+    plannedProfile: 'last30days-facebook',
+    runtimeProfile: 'last30days-facebook',
+    profileId: 'last30days-facebook',
+    browserId: 'browser-shared',
+    sessionName: 'shared-session',
+    tabId: null,
+    targetId: null,
+    browserReused: true,
+    tabOpened: null,
+    profileProcessPolicy: 'exclusive_process',
+    clientSharingPolicy: 'shared_browser_tabs',
+    duplicateProcessPolicy: 'reject_duplicate_process',
+    requiresRouteHints: true,
+    routeHintFields: ['browserId', 'sessionName'],
+    serviceTabHandle: null,
+    summary:
+      'shared_profile_acquisition available=true mode=tab_new requestedProfile=last30days-facebook plannedProfile=last30days-facebook browser=browser-shared session=shared-session tab=missing duplicateProcessPolicy=reject_duplicate_process routeHints=true',
+  });
   assert.throws(
     () =>
       createServiceTabRequestFromAccessPlan(manualSeedingAccessPlan, {
@@ -1518,7 +1556,7 @@ async function main() {
   assert.deepEqual(
     createServiceTabHandleRefreshRequest({
       serviceTabHandle: staleTabHandle,
-      repairPolicy: 'open_if_missing',
+      repairPolicy: 'replace_duplicates',
       desiredUrl: 'https://example.com/recover',
     }),
     {
@@ -1526,7 +1564,7 @@ async function main() {
       browserId: 'session:acs',
       sessionName: 'acs',
       targetId: 'target-1',
-      repairPolicy: 'open_if_missing',
+      repairPolicy: 'replace_duplicates',
       desiredUrl: 'https://example.com/recover',
       serviceTabHandle: staleTabHandle,
     },
@@ -1644,6 +1682,120 @@ async function main() {
   });
   assert.equal(tabAliasRecorder.calls[0].body.action, 'tab_new');
   assert.equal(tabAliasRecorder.calls[0].body.params.url, 'https://example.com/alias');
+  const sharedProfileTabResponse = {
+    success: true,
+    data: {
+      runtimeProfile: 'last30days-facebook',
+      profileId: 'last30days-facebook',
+      browserId: 'browser-shared',
+      sessionId: 'shared-session',
+      targetId: 'target-shared',
+      sharedAcquisition: {
+        mode: 'tab_new',
+        browserId: 'browser-shared',
+        sessionName: 'shared-session',
+        browserReused: true,
+        tabOpened: true,
+        duplicateProcessPolicy: 'reject_duplicate_process',
+      },
+      serviceTabHandle: {
+        ...tabHandle,
+        browserId: 'browser-shared',
+        sessionName: 'shared-session',
+        tabId: 'target-shared',
+        targetId: 'target-shared',
+        profileId: 'last30days-facebook',
+      },
+    },
+  };
+  assert.deepEqual(summarizeServiceSharedProfileAcquisition(sharedProfileTabResponse), {
+    available: true,
+    recommendedAction: 'reuse_existing_browser',
+    acquisitionMode: 'tab_new',
+    requestedProfile: 'last30days-facebook',
+    plannedProfile: 'last30days-facebook',
+    runtimeProfile: 'last30days-facebook',
+    profileId: 'last30days-facebook',
+    browserId: 'browser-shared',
+    sessionName: 'shared-session',
+    tabId: 'target-shared',
+    targetId: 'target-shared',
+    browserReused: true,
+    tabOpened: true,
+    profileProcessPolicy: null,
+    clientSharingPolicy: null,
+    duplicateProcessPolicy: 'reject_duplicate_process',
+    requiresRouteHints: true,
+    routeHintFields: [],
+    serviceTabHandle: sharedProfileTabResponse.data.serviceTabHandle,
+    summary:
+      'shared_profile_acquisition available=true mode=tab_new requestedProfile=last30days-facebook plannedProfile=last30days-facebook browser=browser-shared session=shared-session tab=target-shared duplicateProcessPolicy=reject_duplicate_process routeHints=true',
+  });
+  const routeBoundRemoteViewResponse = {
+    success: true,
+    data: {
+      status: 'opened',
+      intent: {
+        runtime_profile: 'last30days-facebook',
+        browser_host: 'remote_headed',
+      },
+      browserId: 'session:social',
+      sessionName: 'social',
+      routeId: 'route-social',
+      displayAllocationId: 'display-social',
+      sharedAcquisition: {
+        policy: 'shared_browser_tabs',
+        mode: 'remote_view_open',
+        action: 'opened_route_bound_handoff',
+        recommendedAction: 'open_shared_profile_tab',
+        browserReused: true,
+        tabOpened: true,
+        duplicateProcessPolicy: 'reject_duplicate_process',
+        browserId: 'session:social',
+        sessionName: 'social',
+        profileId: 'last30days-facebook',
+        requestedProfile: 'last30days-facebook',
+        plannedProfile: 'last30days-facebook',
+        requiresRouteHints: true,
+        routeHintFields: ['browserId', 'sessionName', 'routeId', 'displayAllocationId'],
+      },
+      tab: {
+        targetId: 'target-x',
+        profileId: 'last30days-facebook',
+        serviceTabHandle: {
+          ...tabHandle,
+          browserId: 'session:social',
+          sessionName: 'social',
+          tabId: 'target:target-x',
+          targetId: 'target-x',
+          profileId: 'last30days-facebook',
+        },
+      },
+    },
+  };
+  assert.deepEqual(summarizeServiceSharedProfileAcquisition(routeBoundRemoteViewResponse), {
+    available: true,
+    recommendedAction: 'open_shared_profile_tab',
+    acquisitionMode: 'remote_view_open',
+    requestedProfile: 'last30days-facebook',
+    plannedProfile: 'last30days-facebook',
+    runtimeProfile: 'last30days-facebook',
+    profileId: 'last30days-facebook',
+    browserId: 'session:social',
+    sessionName: 'social',
+    tabId: 'target-x',
+    targetId: 'target-x',
+    browserReused: true,
+    tabOpened: true,
+    profileProcessPolicy: null,
+    clientSharingPolicy: 'shared_browser_tabs',
+    duplicateProcessPolicy: 'reject_duplicate_process',
+    requiresRouteHints: true,
+    routeHintFields: ['browserId', 'sessionName', 'routeId', 'displayAllocationId'],
+    serviceTabHandle: routeBoundRemoteViewResponse.data.tab.serviceTabHandle,
+    summary:
+      'shared_profile_acquisition available=true mode=remote_view_open requestedProfile=last30days-facebook plannedProfile=last30days-facebook browser=session:social session=social tab=target-x duplicateProcessPolicy=reject_duplicate_process routeHints=true',
+  });
   const cdpFreeLaunchRecorder = createFetchRecorder({
     success: true,
     data: {
@@ -1907,7 +2059,7 @@ async function main() {
     browserId: 'session:rdp-a',
     sessionName: 'rdp-a',
     streamId: 'remote-headed-view',
-    provider: 'rdp_gateway',
+    viewStreamProvider: 'rdp_gateway',
     frameUrl: 'https://guac.example/#/client/route-a',
     url: 'https://www.linkedin.com/',
   });
@@ -1931,7 +2083,7 @@ async function main() {
     browserId: 'session:rdp-a',
     sessionName: 'rdp-a',
     streamId: 'remote-headed-view',
-    provider: 'rdp_gateway',
+    viewStreamProvider: 'rdp_gateway',
     frameUrl: 'https://guac.example/#/client/route-a',
     url: 'https://www.linkedin.com/',
   });
@@ -2046,12 +2198,60 @@ async function main() {
         routeId: 'route-a',
         displayAllocationId: 'display-a',
         displayName: ':11',
+        target: {
+          state: 'ready',
+          targetId: 'target-facebook',
+          url: 'https://www.facebook.com/',
+          expectedUrl: 'https://www.facebook.com/',
+          urlReadiness: 'ready',
+          profileId: 'last30days-facebook',
+        },
+        components: {
+          route: {
+            state: 'ready',
+            routeId: 'route-a',
+            routePoolEntryId: 'pool-a',
+          },
+          display: {
+            state: 'ready',
+            displayAllocationId: 'display-a',
+            displayName: ':11',
+            contentState: 'browser_window_visible',
+          },
+          browser: {
+            state: 'ready',
+            browserId: 'session:rdp-a',
+            sessionName: 'rdp-a',
+            profileId: 'last30days-facebook',
+          },
+          tab: {
+            state: 'ready',
+            targetId: 'target-facebook',
+            url: 'https://www.facebook.com/',
+            expectedUrl: 'https://www.facebook.com/',
+            urlReadiness: 'ready',
+          },
+          stream: {
+            state: 'ready',
+            provider: 'rdp_gateway',
+          },
+          guacamole: {
+            state: 'ready',
+            frameUrl: 'https://guac.example/#/client/route-a',
+          },
+        },
         proof: {
           state: 'ready',
           displayContent: {
             state: 'browser_window_visible',
           },
         },
+      },
+      browserBuildProof: {
+        state: 'matched',
+        requestedBrowserBuild: 'stealthcdp_chromium',
+        selectedBrowserBuild: 'stealthcdp_chromium',
+        actualExecutablePath: '/opt/chromium-stealthcdp/chrome',
       },
     },
   });
@@ -2071,6 +2271,7 @@ async function main() {
         routeId: 'route-a',
       },
     ],
+    viewStreamProvider: 'rdp_gateway',
     url: 'https://www.linkedin.com/',
   });
   assert.equal(getServiceRemoteViewOpenOperatorVisible(remoteViewOpenResponse)?.state, 'ready');
@@ -2081,7 +2282,12 @@ async function main() {
   assert.equal(remoteViewOpenSummary.tabId, 'target-facebook');
   assert.equal(remoteViewOpenSummary.profileId, 'last30days-facebook');
   assert.equal(remoteViewOpenSummary.visualProof, 'browser_window_visible');
+  assert.equal(remoteViewOpenSummary.browserBuildState, 'matched');
+  assert.equal(remoteViewOpenSummary.requestedBrowserBuild, 'stealthcdp_chromium');
+  assert.equal(remoteViewOpenSummary.selectedBrowserBuild, 'stealthcdp_chromium');
+  assert.equal(remoteViewOpenSummary.actualExecutablePath, '/opt/chromium-stealthcdp/chrome');
   assert.match(remoteViewOpenSummary.summary, /operatorVisible=ready/);
+  assert.match(remoteViewOpenSummary.summary, /buildProof=matched/);
   assert.match(remoteViewOpenSummary.summary, /profile=last30days-facebook/);
   assert.equal(requireServiceRemoteViewOpenOperatorVisible(remoteViewOpenResponse)?.status, 'opened');
   assert.equal(remoteViewOpenWorkflow.calls[0].body.action, 'remote_view_open');
@@ -2100,8 +2306,228 @@ async function main() {
         routeId: 'route-a',
       },
     ],
+    viewStreamProvider: 'rdp_gateway',
     url: 'https://www.linkedin.com/',
   });
+
+  const wrongTabSummary = summarizeServiceRemoteViewOpenProof({
+    success: true,
+    data: {
+      status: 'opened',
+      routeId: 'route-a',
+      displayAllocationId: 'display-a',
+      browserId: 'session:rdp-a',
+      sessionName: 'rdp-a',
+      operatorVisible: {
+        state: 'wrong_tab',
+        routeId: 'route-a',
+        displayAllocationId: 'display-a',
+        browserId: 'session:rdp-a',
+        sessionName: 'rdp-a',
+        target: {
+          state: 'wrong_tab',
+          targetId: 'target-linkedin',
+          url: 'https://www.linkedin.com/',
+          expectedUrl: 'https://www.facebook.com/',
+          urlReadiness: 'wrong_tab',
+          profileId: 'last30days-facebook',
+        },
+        components: {
+          display: {
+            state: 'ready',
+            contentState: 'browser_window_visible',
+          },
+          tab: {
+            state: 'wrong_tab',
+            targetId: 'target-linkedin',
+            url: 'https://www.linkedin.com/',
+            expectedUrl: 'https://www.facebook.com/',
+            urlReadiness: 'wrong_tab',
+          },
+        },
+        proof: {
+          state: 'ready',
+          displayContent: { state: 'browser_window_visible' },
+        },
+      },
+    },
+  });
+  assert.equal(wrongTabSummary.ready, false);
+  assert.equal(wrongTabSummary.state, 'wrong_tab');
+  assert.equal(wrongTabSummary.tabId, 'target-linkedin');
+  assert.equal(wrongTabSummary.profileId, 'last30days-facebook');
+  assert.equal(wrongTabSummary.visualProof, 'browser_window_visible');
+  assert.equal(wrongTabSummary.failureReason, 'wrong_tab');
+  assert.match(wrongTabSummary.summary, /reason=wrong_tab/);
+
+  const guacamoleUnavailableSummary = summarizeServiceRemoteViewOpenProof({
+    success: true,
+    data: {
+      status: 'opened',
+      routeId: 'route-a',
+      displayAllocationId: 'display-a',
+      browserId: 'session:rdp-a',
+      sessionName: 'rdp-a',
+      operatorVisible: {
+        state: 'guacamole_route_unavailable',
+        routeId: 'route-a',
+        displayAllocationId: 'display-a',
+        browserId: 'session:rdp-a',
+        sessionName: 'rdp-a',
+        target: {
+          state: 'ready',
+          targetId: 'target-facebook',
+          url: 'https://www.facebook.com/',
+          expectedUrl: 'https://www.facebook.com/',
+          urlReadiness: 'ready',
+          profileId: 'last30days-facebook',
+        },
+        components: {
+          display: {
+            state: 'ready',
+            contentState: 'browser_window_visible',
+          },
+          tab: {
+            state: 'ready',
+            targetId: 'target-facebook',
+            url: 'https://www.facebook.com/',
+            expectedUrl: 'https://www.facebook.com/',
+            urlReadiness: 'ready',
+          },
+          guacamole: {
+            state: 'guacamole_route_unavailable',
+            readinessState: 'failed',
+            reason: 'local_embed_not_ready',
+            hasRouteUrl: false,
+          },
+        },
+        proof: {
+          state: 'ready',
+          displayContent: { state: 'browser_window_visible' },
+        },
+      },
+    },
+  });
+  assert.equal(guacamoleUnavailableSummary.ready, false);
+  assert.equal(guacamoleUnavailableSummary.state, 'guacamole_route_unavailable');
+  assert.equal(guacamoleUnavailableSummary.tabId, 'target-facebook');
+  assert.equal(guacamoleUnavailableSummary.profileId, 'last30days-facebook');
+  assert.equal(guacamoleUnavailableSummary.visualProof, 'browser_window_visible');
+  assert.equal(guacamoleUnavailableSummary.failureReason, 'guacamole_route_unavailable');
+  assert.match(guacamoleUnavailableSummary.summary, /reason=guacamole_route_unavailable/);
+
+  const cdpTargetUnavailableSummary = summarizeServiceRemoteViewOpenProof({
+    success: true,
+    data: {
+      status: 'opened',
+      routeId: 'route-a',
+      displayAllocationId: 'display-a',
+      browserId: 'session:rdp-a',
+      sessionName: 'rdp-a',
+      operatorVisible: {
+        state: 'cdp_target_unavailable',
+        routeId: 'route-a',
+        displayAllocationId: 'display-a',
+        browserId: 'session:rdp-a',
+        sessionName: 'rdp-a',
+        target: {
+          state: 'cdp_target_unavailable',
+          url: 'https://www.facebook.com/',
+          expectedUrl: 'https://www.facebook.com/',
+          urlReadiness: 'ready',
+          profileId: 'last30days-facebook',
+        },
+        components: {
+          display: {
+            state: 'ready',
+            contentState: 'browser_window_visible',
+          },
+          tab: {
+            state: 'cdp_target_unavailable',
+            url: 'https://www.facebook.com/',
+            expectedUrl: 'https://www.facebook.com/',
+            urlReadiness: 'ready',
+          },
+          guacamole: {
+            state: 'ready',
+            frameUrl: 'https://guac.example/#/client/route-a',
+          },
+        },
+        proof: {
+          state: 'ready',
+          displayContent: { state: 'browser_window_visible' },
+        },
+      },
+    },
+  });
+  assert.equal(cdpTargetUnavailableSummary.ready, false);
+  assert.equal(cdpTargetUnavailableSummary.state, 'cdp_target_unavailable');
+  assert.equal(cdpTargetUnavailableSummary.tabId, null);
+  assert.equal(cdpTargetUnavailableSummary.profileId, 'last30days-facebook');
+  assert.equal(cdpTargetUnavailableSummary.visualProof, 'browser_window_visible');
+  assert.equal(cdpTargetUnavailableSummary.failureReason, 'cdp_target_unavailable');
+  assert.match(cdpTargetUnavailableSummary.summary, /reason=cdp_target_unavailable/);
+
+  const staleRouteRecordSummary = summarizeServiceRemoteViewOpenProof({
+    success: true,
+    data: {
+      status: 'opened',
+      routeId: 'route-a',
+      displayAllocationId: 'display-a',
+      browserId: 'session:rdp-a',
+      sessionName: 'rdp-a',
+      operatorVisible: {
+        state: 'stale_route_record',
+        routeId: 'route-a',
+        displayAllocationId: 'display-a',
+        browserId: 'session:rdp-a',
+        sessionName: 'rdp-a',
+        target: {
+          state: 'ready',
+          targetId: 'target-facebook',
+          url: 'https://www.facebook.com/',
+          expectedUrl: 'https://www.facebook.com/',
+          urlReadiness: 'ready',
+          profileId: 'last30days-facebook',
+        },
+        components: {
+          route: {
+            state: 'stale_route_record',
+            routeId: 'route-a',
+            routePoolEntryId: 'pool-a',
+            routePoolEntryState: 'checked_out',
+            currentRouteAllocationId: 'route-missing',
+          },
+          display: {
+            state: 'ready',
+            contentState: 'browser_window_visible',
+          },
+          tab: {
+            state: 'ready',
+            targetId: 'target-facebook',
+            url: 'https://www.facebook.com/',
+            expectedUrl: 'https://www.facebook.com/',
+            urlReadiness: 'ready',
+          },
+          guacamole: {
+            state: 'ready',
+            frameUrl: 'https://guac.example/#/client/route-a',
+          },
+        },
+        proof: {
+          state: 'ready',
+          displayContent: { state: 'browser_window_visible' },
+        },
+      },
+    },
+  });
+  assert.equal(staleRouteRecordSummary.ready, false);
+  assert.equal(staleRouteRecordSummary.state, 'stale_route_record');
+  assert.equal(staleRouteRecordSummary.tabId, 'target-facebook');
+  assert.equal(staleRouteRecordSummary.profileId, 'last30days-facebook');
+  assert.equal(staleRouteRecordSummary.visualProof, 'browser_window_visible');
+  assert.equal(staleRouteRecordSummary.failureReason, 'stale_route_record');
+  assert.match(staleRouteRecordSummary.summary, /reason=stale_route_record/);
 
   const terminalOnlyRemoteViewOpenWorkflow = createFetchRecorder({
     success: true,

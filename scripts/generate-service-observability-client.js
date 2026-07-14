@@ -182,6 +182,7 @@ export interface ServiceProfileRecord {
   id: string;
   name: string;
   profileOrigin: 'agent_browser_owned' | 'external_byop' | 'external_observed' | string;
+  profileClass: 'default' | 'managed_one_time' | 'durable_named' | 'operator_supplied' | string;
   userDataDir: string | null;
   browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string | null;
   targetServiceIds: string[];
@@ -249,6 +250,7 @@ export interface ServiceProfileAllocation {
   profileId: string;
   profileName: string;
   profileOrigin: 'agent_browser_owned' | 'external_byop' | 'external_observed' | string;
+  profileClass: 'default' | 'managed_one_time' | 'durable_named' | 'operator_supplied' | string;
   allocation: string;
   keyring: string;
   browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string | null;
@@ -630,10 +632,65 @@ export interface ServiceControlPlaneStatus {
   [key: string]: unknown;
 }
 
+export interface ServiceRetainedDisplayAllocationSummary {
+  count: number;
+  applySafeCount: number;
+  retainedCount: number;
+  classCounts: Record<string, number>;
+  applySafeIds: string[];
+  retainedIds: string[];
+  candidateReasons: Record<string, unknown>;
+  explanation?: string;
+  cleanupCommand?: string;
+  [key: string]: unknown;
+}
+
+export interface ServiceBrowserSessionAuthoritySummary {
+  modeledBrowserCount: number;
+  viableBrowserCount: number;
+  attentionBrowserCount: number;
+  nonViableBrowserCount: number;
+  [key: string]: unknown;
+}
+
+export interface ServiceBrowserSessionResourcePressure {
+  state: string;
+  totalProcessCount: number;
+  correlatedProcessCount: number;
+  candidateCount: number;
+  protectedCount: number;
+  observedCount: number;
+  observedUnownedAgentBrowserProcessCount: number;
+  candidateRssBytes: number;
+  totalRssBytes: number;
+  reasons: string[];
+  [key: string]: unknown;
+}
+
+export interface ServiceBrowserSessionAuthorityVerdict {
+  key: string;
+  browserId: string;
+  state: string;
+  viable: boolean;
+  needsAttention: boolean;
+  reasons: string[];
+  [key: string]: unknown;
+}
+
+export interface ServiceBrowserSessionAuthoritySnapshot {
+  schemaVersion: number;
+  summary: ServiceBrowserSessionAuthoritySummary;
+  resourcePressure: ServiceBrowserSessionResourcePressure;
+  browserVerdicts: ServiceBrowserSessionAuthorityVerdict[];
+  [key: string]: unknown;
+}
+
 export interface ServiceStatusResponse {
   control_plane?: ServiceControlPlaneStatus;
   service_state: Record<string, unknown>;
   profileAllocations: ServiceProfileAllocation[];
+  retainedDisplayAllocations?: ServiceRetainedDisplayAllocationSummary;
+  browserSessionAuthority?: ServiceBrowserSessionAuthoritySnapshot;
   launchConfig?: {
     defaultBrowserBuild: string | null;
     stealthCdpChromiumRequired: boolean;
@@ -849,6 +906,32 @@ export interface ServiceRemoteViewRoutesResponse extends ServiceListResponse<Ser
   remoteViewRoutes: ServiceRemoteViewRouteRecord[];
 }
 
+export interface ServiceRemoteViewRoutePreflightResponse {
+  status: 'preflight_ready' | string;
+  preflightStatus: 'ready' | 'partial' | 'stale' | 'blocked' | string;
+  observedAt: string;
+  routeId?: string | null;
+  displayAllocationId?: string | null;
+  routePoolEntryId?: string | null;
+  browserId: string;
+  sessionName: string;
+  routeBinding: Record<string, unknown>;
+  acquisitionPlan: Record<string, unknown>;
+  fastPreflight: {
+    status: 'ready' | 'partial' | 'stale' | 'blocked' | string;
+    observedAt?: string | null;
+    noLaunch: true;
+    source?: string;
+    nextAction?: string;
+    components: Record<string, unknown>[];
+    blockers?: Record<string, unknown>[];
+    stale?: Record<string, unknown>[];
+    notChecked?: Record<string, unknown>[];
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 export interface ServiceRoutePoolResponse extends ServiceListResponse<ServiceRoutePoolEntryRecord> {
   routePool: ServiceRoutePoolEntryRecord[];
 }
@@ -890,6 +973,17 @@ export interface ServiceReconcileResponse {
   changedBrowsers: number;
   expiredSessionLeases: string[];
   expiredSessionLeaseCount: number;
+  remoteViewRepair: {
+    orphanedDisplayAllocations: number;
+    orphanedRoutes: number;
+    releasedViewerLeases: number;
+    expiredViewerLeases: number;
+    clearedControllerLeases: number;
+    repaired: number;
+    released: number;
+    skippedUnsafe: number;
+    [key: string]: unknown;
+  };
   service_state: Record<string, unknown>;
   [key: string]: unknown;
 }
@@ -1572,8 +1666,14 @@ export interface ServiceAccessPlanServiceRequest {
   action: 'tab_new';
   /** Profile selected by the planner, or null when no managed profile matched. */
   selectedProfileId: string | null;
+  /** Runtime profile selected, supplied, or recommended for the planned request. */
+  runtimeProfile: string | null;
+  /** Profile class associated with the planned runtime profile when known. */
+  profileClass: 'default' | 'managed_one_time' | 'durable_named' | 'operator_supplied' | string | null;
   /** Lease policy the planner recommends for service-owned queue coordination. */
   profileLeasePolicy: 'wait';
+  /** One-time profile recommendation copied from the access-plan decision. */
+  oneTimeProfileRecommendation: ServiceAccessPlanOneTimeProfileRecommendation | null;
   /** No-launch CDP-free command availability for clients preparing lifecycle-only work. */
   cdpFreeAvailability: ServiceAccessPlanCdpFreeAvailability;
   /** Copyable POST /api/service/request payload for the planned tab request. */
@@ -1603,6 +1703,20 @@ export interface ServiceAccessPlanServiceRequest {
     [key: string]: unknown;
   };
   requestFields: string[];
+  [key: string]: unknown;
+}
+
+export interface ServiceAccessPlanOneTimeProfileRecommendation {
+  state: 'planned' | 'warning' | string;
+  code: 'managed_one_time_profile_planned' | 'arbitrary_runtime_profile_for_one_time_handoff' | string;
+  runtimeProfile: string;
+  profileClass: 'managed_one_time' | 'operator_supplied' | string;
+  profileOrigin?: 'agent_browser_owned' | string;
+  requestedRuntimeProfile?: string;
+  recommendedProfileClass?: 'managed_one_time' | string;
+  recommendedProfileId?: string;
+  persistent?: boolean;
+  message?: string;
   [key: string]: unknown;
 }
 
@@ -1824,6 +1938,7 @@ export interface ServiceAccessPlanDecision {
   browserHost: string | null;
   launchPosture: ServiceAccessPlanLaunchPosture;
   profileReuse: ServiceAccessPlanProfileReuse;
+  oneTimeProfileRecommendation: ServiceAccessPlanOneTimeProfileRecommendation | null;
   interactionMode: string | null;
   challengePolicy: string | null;
   profileId: string | null;
@@ -2029,6 +2144,8 @@ export interface ServiceAccessPlanOptions extends ServiceProfileIdentityLookupOp
   sitePolicyId?: string;
   /** Optional challenge ID when planning around one retained challenge. */
   challengeId?: string;
+  /** Optional explicit runtime profile. Existing profiles win selection; unknown one-time profiles produce a managed-one-time recommendation warning. */
+  runtimeProfile?: string;
 }
 
 export interface ServiceProfileAcquisitionOptions extends ServiceAccessPlanOptions {
@@ -2150,6 +2267,7 @@ export interface ServiceAccessPlanQuery extends ServiceProfileLookupQuery {
   taskName: string | null;
   sitePolicyId: string | null;
   challengeId: string | null;
+  runtimeProfile: string | null;
   browserHost: 'local_headless' | 'local_headed' | 'docker_headed' | 'remote_headed' | 'cloud_provider' | 'attached_existing' | string | null;
   viewStreamProvider:
     | 'cdp_screencast'
@@ -2403,6 +2521,31 @@ export interface ServiceBrowserCapabilityPreflightOptions extends ServiceAccessP
   cdpAttachmentAllowed?: boolean;
 }
 
+export interface ServiceRemoteViewRoutePreflightOptions extends ServiceObservabilityHttpOptions {
+  displayAllocationId?: string;
+  routeId?: string;
+  remoteViewRouteId?: string;
+  routePoolEntryId?: string;
+  browserId?: string;
+  sessionName?: string;
+  streamId?: string;
+  viewStreamProvider?: string;
+  provider?: string;
+  providerMode?: string;
+  frameUrl?: string;
+  externalUrl?: string;
+  connectionId?: string;
+  connectionName?: string;
+  routeDescriptor?: Record<string, unknown>;
+  routePoolEntry?: Record<string, unknown>;
+  routePool?: Record<string, unknown>[];
+  serviceName?: string;
+  agentName?: string;
+  taskName?: string;
+  jobTimeoutMs?: number;
+  query?: Record<string, string | number | boolean | null | undefined>;
+}
+
 export interface ServiceMonitorMutationOptions extends ServiceIdOptions {
   monitor: Record<string, unknown>;
 }
@@ -2456,6 +2599,8 @@ export declare function getServiceContracts(options: ServiceObservabilityHttpOpt
 export declare function getServiceBrowserCapabilityRegistry(options: ServiceObservabilityHttpOptions): Promise<ServiceBrowserCapabilityRegistryResponse>;
 /** Evaluate browser capability launch gates without starting Chrome. */
 export declare function getServiceBrowserCapabilityPreflight(options: ServiceBrowserCapabilityPreflightOptions): Promise<ServiceBrowserCapabilityPreflightResponse>;
+/** Evaluate remote-view route readiness gates without launching Chrome. */
+export declare function getServiceRemoteViewRoutePreflight(options: ServiceRemoteViewRoutePreflightOptions): Promise<ServiceRemoteViewRoutePreflightResponse>;
 export declare function getServiceProfiles(options: ServiceQueryOptions): Promise<ServiceProfilesResponse>;
 export declare function getServiceProfileAllocation(options: ServiceIdOptions): Promise<ServiceProfileAllocationResponse>;
 /** Fetch the selected profile allocation advertised by an access-plan response. */

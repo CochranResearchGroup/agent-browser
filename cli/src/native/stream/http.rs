@@ -1,7 +1,7 @@
 use rust_embed::Embed;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
@@ -14,13 +14,14 @@ use crate::connection::resolve_port;
 use crate::connection::{attach_daemon_auth_token, get_socket_dir};
 use crate::flags::{launch_config_status, parse_flags};
 use crate::native::service_access::{
-    parse_service_access_plan_query, service_access_plan_for_state,
+    apply_shared_profile_route_hints_for_service_request, parse_service_access_plan_query,
+    service_access_plan_for_state,
 };
 use crate::native::service_config::refresh_persisted_profile_seeding_handoffs;
 use crate::native::service_contracts::{
     service_contracts_metadata, SERVICE_BROWSER_CAPABILITY_PREFLIGHT_HTTP_ROUTE,
-    SERVICE_BROWSER_CAPABILITY_REGISTRY_HTTP_ROUTE, SERVICE_REQUEST_ACTIONS,
-    SERVICE_REQUEST_HTTP_ROUTE,
+    SERVICE_BROWSER_CAPABILITY_REGISTRY_HTTP_ROUTE, SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_HTTP_ROUTE,
+    SERVICE_REQUEST_ACTIONS, SERVICE_REQUEST_HTTP_ROUTE,
 };
 use crate::native::service_lifecycle::{
     select_service_profile_for_request, ProfileSelectionRequest,
@@ -55,6 +56,13 @@ struct DashboardAssets;
 pub(super) const CORS_HEADERS: &str = "Access-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\n";
 
 pub(crate) fn runtime_manifest_json() -> Value {
+    static RUNTIME_MANIFEST: OnceLock<Value> = OnceLock::new();
+    RUNTIME_MANIFEST
+        .get_or_init(runtime_manifest_json_uncached)
+        .clone()
+}
+
+fn runtime_manifest_json_uncached() -> Value {
     let dashboard = dashboard_asset_manifest();
     let executable = executable_manifest();
     json!({
@@ -331,7 +339,8 @@ pub(super) async fn handle_http_request(
         }
 
         if path == SERVICE_REQUEST_HTTP_ROUTE {
-            let cmd = match service_request_command(body_str) {
+            let service_state = load_service_state();
+            let cmd = match service_request_command_with_state(body_str, Some(&service_state)) {
                 Ok(cmd) => cmd,
                 Err(err) => {
                     write_json_result(&mut stream, Err(err), "400 Bad Request").await;
@@ -636,6 +645,19 @@ pub(super) async fn handle_http_request(
 
     if method == "GET" && path == SERVICE_BROWSER_CAPABILITY_PREFLIGHT_HTTP_ROUTE {
         match service_browser_capability_preflight_command(query) {
+            Ok(cmd) => {
+                let result = relay_service_command(session_name, cmd).await;
+                write_json_result(&mut stream, result, "502 Bad Gateway").await;
+            }
+            Err(err) => {
+                write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+            }
+        }
+        return;
+    }
+
+    if method == "GET" && path == SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_HTTP_ROUTE {
+        match service_remote_view_route_preflight_command(query) {
             Ok(cmd) => {
                 let result = relay_service_command(session_name, cmd).await;
                 write_json_result(&mut stream, result, "502 Bad Gateway").await;
@@ -1561,6 +1583,13 @@ fn browser_body_command(action: &str, id_prefix: &str, body: &str) -> Result<Val
 }
 
 fn service_request_command(body: &str) -> Result<Value, String> {
+    service_request_command_with_state(body, None)
+}
+
+fn service_request_command_with_state(
+    body: &str,
+    service_state: Option<&ServiceState>,
+) -> Result<Value, String> {
     let request = if body.trim().is_empty() {
         json!({})
     } else {
@@ -1670,6 +1699,9 @@ fn service_request_command(body: &str) -> Result<Value, String> {
         "cdpAttachmentAllowed",
         "allowDuplicateProfileLane",
         "browserBuild",
+        "browserHost",
+        "viewStreamProvider",
+        "controlInputProvider",
         "displayIsolation",
         "serviceName",
         "agentName",
@@ -1689,6 +1721,7 @@ fn service_request_command(body: &str) -> Result<Value, String> {
         "profile",
         "profileId",
         "runtimeProfile",
+        "profileClass",
         "cdpUrl",
         "cdpPort",
         "browserId",
@@ -1703,6 +1736,7 @@ fn service_request_command(body: &str) -> Result<Value, String> {
         "maxTextBytes",
         "maxBodyBytes",
         "captureEvidenceOnFailure",
+        "args",
         "includeScreenshot",
         "screenshotDir",
         "maxConsoleEntries",
@@ -1717,6 +1751,9 @@ fn service_request_command(body: &str) -> Result<Value, String> {
         if let Some(value) = request.get(key) {
             command[key] = value.clone();
         }
+    }
+    if let Some(service_state) = service_state {
+        apply_shared_profile_route_hints_for_service_request(service_state, &mut command)?;
     }
     Ok(command)
 }
@@ -1741,6 +1778,14 @@ fn service_request_relay_session(default_session: &str, body: &str, command: &Va
             request.pointer("/browserId"),
             request.pointer("/serviceTabHandle/sessionName"),
             request.pointer("/serviceTabHandle/browserId"),
+        ] {
+            if let Some(session_name) = service_request_relay_session_candidate(value) {
+                return session_name;
+            }
+        }
+        for value in [
+            service_request_command_relay_hint(&request, command, "sessionName"),
+            service_request_command_relay_hint(&request, command, "browserId"),
         ] {
             if let Some(session_name) = service_request_relay_session_candidate(value) {
                 return session_name;
@@ -1782,6 +1827,18 @@ fn service_request_relay_session(default_session: &str, body: &str, command: &Va
     }
 
     default_session.to_string()
+}
+
+fn service_request_command_relay_hint<'a>(
+    request: &'a Value,
+    command: &'a Value,
+    key: &str,
+) -> Option<&'a Value> {
+    if request.pointer(&format!("/params/{key}")).is_some() {
+        None
+    } else {
+        command.get(key)
+    }
 }
 
 fn service_request_relay_session_candidate(value: Option<&Value>) -> Option<String> {
@@ -2089,10 +2146,10 @@ fn reject_tab_handle_refresh_request(
     if let Some(policy) = repair_policy.and_then(Value::as_str) {
         if !matches!(
             policy,
-            "reject_only" | "reuse_compatible" | "open_if_missing"
+            "reject_only" | "reuse_compatible" | "open_if_missing" | "replace_duplicates"
         ) {
             return Err(
-                "tab_handle_refresh repairPolicy must be reject_only, reuse_compatible, or open_if_missing"
+                "tab_handle_refresh repairPolicy must be reject_only, reuse_compatible, open_if_missing, or replace_duplicates"
                     .to_string(),
             );
         }
@@ -2677,6 +2734,110 @@ fn service_browser_capability_preflight_command(query: Option<&str>) -> Result<V
     Ok(cmd)
 }
 
+fn service_remote_view_route_preflight_command(query: Option<&str>) -> Result<Value, String> {
+    let mut params = Map::new();
+    let mut cmd = json!({
+        "id": format!("http-service-remote-view-route-preflight-{}", uuid::Uuid::new_v4()),
+        "action": "service_remote_view_route_preflight",
+    });
+
+    for (key, value) in query_params(query) {
+        match key.as_str() {
+            "displayAllocationId"
+            | "display_allocation_id"
+            | "display-allocation-id"
+            | "routeId"
+            | "route_id"
+            | "route-id"
+            | "remoteViewRouteId"
+            | "remote_view_route_id"
+            | "remote-view-route-id"
+            | "routePoolEntryId"
+            | "route_pool_entry_id"
+            | "route-pool-entry-id"
+            | "browserId"
+            | "browser_id"
+            | "browser-id"
+            | "sessionName"
+            | "session_name"
+            | "session-name"
+            | "streamId"
+            | "stream_id"
+            | "stream-id"
+            | "viewStreamProvider"
+            | "view_stream_provider"
+            | "view-stream-provider"
+            | "provider"
+            | "providerMode"
+            | "provider_mode"
+            | "provider-mode"
+            | "frameUrl"
+            | "frame_url"
+            | "frame-url"
+            | "externalUrl"
+            | "external_url"
+            | "external-url"
+            | "connectionId"
+            | "connection_id"
+            | "connection-id"
+            | "connectionName"
+            | "connection_name"
+            | "connection-name" => {
+                if let Some(value) = non_empty(value) {
+                    let field = key_to_camel_case(key.as_str());
+                    if matches!(field, "browserId" | "sessionName") {
+                        cmd[field] = json!(value);
+                    } else {
+                        params.insert(field.to_string(), json!(value));
+                    }
+                }
+            }
+            "routeDescriptor" | "route_descriptor" | "route-descriptor" | "routePoolEntry"
+            | "route_pool_entry" | "route-pool-entry" | "routePool" | "route_pool"
+            | "route-pool" => {
+                if let Some(value) = non_empty(value) {
+                    let field = key_to_camel_case(key.as_str());
+                    params.insert(
+                        field.to_string(),
+                        serde_json::from_str::<Value>(&value)
+                            .map_err(|err| format!("Invalid {} JSON: {}", key, err))?,
+                    );
+                }
+            }
+            "jobTimeoutMs" | "job_timeout_ms" | "job-timeout-ms" => {
+                cmd["jobTimeoutMs"] = json!(parse_positive_query_u64("jobTimeoutMs", &value)?);
+            }
+            "serviceName" | "service_name" | "service-name" => {
+                if let Some(value) = non_empty(value) {
+                    cmd["serviceName"] = json!(value);
+                }
+            }
+            "agentName" | "agent_name" | "agent-name" => {
+                if let Some(value) = non_empty(value) {
+                    cmd["agentName"] = json!(value);
+                }
+            }
+            "taskName" | "task_name" | "task-name" => {
+                if let Some(value) = non_empty(value) {
+                    cmd["taskName"] = json!(value);
+                }
+            }
+            "" => {}
+            _ => {
+                return Err(format!(
+                    "Unknown remote-view route preflight query parameter: {}",
+                    key
+                ))
+            }
+        }
+    }
+
+    if !params.is_empty() {
+        cmd["params"] = Value::Object(params);
+    }
+    Ok(cmd)
+}
+
 fn service_access_plan_response_for_state(
     query: Option<&str>,
     service_state: &ServiceState,
@@ -2909,6 +3070,28 @@ fn key_to_camel_case(key: &str) -> &str {
         "siteIds" | "site_ids" | "site-ids" => "siteIds",
         "loginId" | "login_id" | "login-id" => "loginId",
         "loginIds" | "login_ids" | "login-ids" => "loginIds",
+        "displayAllocationId" | "display_allocation_id" | "display-allocation-id" => {
+            "displayAllocationId"
+        }
+        "routeId" | "route_id" | "route-id" => "routeId",
+        "remoteViewRouteId" | "remote_view_route_id" | "remote-view-route-id" => {
+            "remoteViewRouteId"
+        }
+        "routePoolEntryId" | "route_pool_entry_id" | "route-pool-entry-id" => "routePoolEntryId",
+        "browserId" | "browser_id" | "browser-id" => "browserId",
+        "sessionName" | "session_name" | "session-name" => "sessionName",
+        "streamId" | "stream_id" | "stream-id" => "streamId",
+        "viewStreamProvider" | "view_stream_provider" | "view-stream-provider" => {
+            "viewStreamProvider"
+        }
+        "providerMode" | "provider_mode" | "provider-mode" => "providerMode",
+        "frameUrl" | "frame_url" | "frame-url" => "frameUrl",
+        "externalUrl" | "external_url" | "external-url" => "externalUrl",
+        "connectionId" | "connection_id" | "connection-id" => "connectionId",
+        "connectionName" | "connection_name" | "connection-name" => "connectionName",
+        "routeDescriptor" | "route_descriptor" | "route-descriptor" => "routeDescriptor",
+        "routePoolEntry" | "route_pool_entry" | "route-pool-entry" => "routePoolEntry",
+        "routePool" | "route_pool" | "route-pool" => "routePool",
         _ => key,
     }
 }
@@ -4686,7 +4869,7 @@ mod tests {
     #[test]
     fn service_request_command_maps_request_object() {
         let command = service_request_command(
-            r##"{"action":"navigate","params":{"url":"https://example.com","action":"ignored","id":"ignored"},"serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","siteId":"acs","loginIds":["orcid"],"browserBuild":"stealthcdp_chromium","displayIsolation":"private_virtual_display","runtimeProfile":"acs-profile","profile":"/tmp/acs-profile","browserId":"session:acs-browser","sessionName":"acs-browser","allowDuplicateProfileLane":true,"jobTimeoutMs":1000,"profileLeasePolicy":"wait","profileLeaseWaitTimeoutMs":2500}"##,
+            r##"{"action":"navigate","params":{"url":"https://example.com","action":"ignored","id":"ignored"},"serviceName":"JournalDownloader","agentName":"codex","taskName":"probeACSwebsite","siteId":"acs","loginIds":["orcid"],"browserBuild":"stealthcdp_chromium","displayIsolation":"private_virtual_display","runtimeProfile":"acs-profile","profile":"/tmp/acs-profile","profileClass":"durable_named","browserId":"session:acs-browser","sessionName":"acs-browser","allowDuplicateProfileLane":true,"args":["--no-sandbox"],"jobTimeoutMs":1000,"profileLeasePolicy":"wait","profileLeaseWaitTimeoutMs":2500}"##,
         )
         .unwrap();
 
@@ -4704,9 +4887,11 @@ mod tests {
         assert_eq!(command["displayIsolation"], "private_virtual_display");
         assert_eq!(command["runtimeProfile"], "acs-profile");
         assert_eq!(command["profile"], "/tmp/acs-profile");
+        assert_eq!(command["profileClass"], "durable_named");
         assert_eq!(command["browserId"], "session:acs-browser");
         assert_eq!(command["sessionName"], "acs-browser");
         assert_eq!(command["allowDuplicateProfileLane"], true);
+        assert_eq!(command["args"][0], "--no-sandbox");
         assert_eq!(command["jobTimeoutMs"], 1000);
         assert_eq!(command["profileLeasePolicy"], "wait");
         assert_eq!(command["profileLeaseWaitTimeoutMs"], 2500);
@@ -4788,6 +4973,56 @@ mod tests {
         assert_eq!(
             service_request_relay_session("AgentBrowserDashboard", body, &command),
             "odollo-carrier-ups"
+        );
+    }
+
+    #[test]
+    fn service_request_command_applies_shared_profile_route_hints() {
+        use std::collections::BTreeMap;
+
+        use crate::native::service_model::{
+            BrowserHealth, BrowserHost, BrowserProcess, ControlInputProvider, ViewStream,
+            ViewStreamProvider,
+        };
+
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "shared-social".to_string(),
+                BrowserProfile {
+                    id: "shared-social".to_string(),
+                    name: "Shared social".to_string(),
+                    target_service_ids: vec!["x".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                "browser-social".to_string(),
+                BrowserProcess {
+                    id: "browser-social".to_string(),
+                    profile_id: Some("shared-social".to_string()),
+                    host: BrowserHost::RemoteHeaded,
+                    health: BrowserHealth::Ready,
+                    display_isolation: Some("private_virtual_display".to_string()),
+                    view_streams: vec![ViewStream {
+                        provider: ViewStreamProvider::RdpGateway,
+                        control_input: Some(ControlInputProvider::ManualAttachedDesktop),
+                        ..ViewStream::default()
+                    }],
+                    active_session_ids: vec!["operator-social".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let body = r##"{"action":"tab_new","runtimeProfile":"shared-social","siteId":"x","browserHost":"remote_headed","viewStreamProvider":"rdp_gateway","controlInputProvider":"manual_attached_desktop","displayIsolation":"private_virtual_display"}"##;
+
+        let command = service_request_command_with_state(body, Some(&state)).unwrap();
+
+        assert_eq!(command["browserId"], "browser-social");
+        assert_eq!(command["sessionName"], "operator-social");
+        assert_eq!(
+            service_request_relay_session("AgentBrowserDashboard", body, &command),
+            "operator-social"
         );
     }
 
@@ -5135,6 +5370,26 @@ mod tests {
             assert_eq!(command["agentName"], "codex");
             assert_eq!(command["taskName"], "probeACSwebsite");
         }
+    }
+
+    #[test]
+    fn service_remote_view_route_preflight_command_maps_query() {
+        let command = service_remote_view_route_preflight_command(Some(
+            "routeId=guac-1&displayAllocationId=display-1&browserId=session%3Aabc&sessionName=abc&frameUrl=http%3A%2F%2F127.0.0.1%2Fguacamole%2F%23%2Fclient%2F1&jobTimeoutMs=2500&serviceName=RemoteView&agentName=codex&taskName=preflight",
+        ))
+        .unwrap();
+
+        assert_eq!(command["action"], "service_remote_view_route_preflight");
+        assert_eq!(command["browserId"], "session:abc");
+        assert_eq!(command["sessionName"], "abc");
+        assert_eq!(command["jobTimeoutMs"], 2500);
+        assert_eq!(command["serviceName"], "RemoteView");
+        assert_eq!(command["params"]["routeId"], "guac-1");
+        assert_eq!(command["params"]["displayAllocationId"], "display-1");
+        assert_eq!(
+            command["params"]["frameUrl"],
+            "http://127.0.0.1/guacamole/#/client/1"
+        );
     }
 
     #[test]

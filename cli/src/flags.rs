@@ -1247,6 +1247,7 @@ pub struct Flags {
     pub service_recovery_base_backoff_ms_source: BrowserRecoveryPolicyValueSource,
     pub service_recovery_max_backoff_ms_source: BrowserRecoveryPolicyValueSource,
     pub browser_build_manifest_status: BTreeMap<String, Value>,
+    pub browser_build: Option<String>,
     pub runtime_profile: Option<String>,
     pub headers: Option<String>,
     pub executable_path: Option<String>,
@@ -1305,6 +1306,7 @@ pub struct Flags {
     pub cli_download_path: bool,
     pub cli_headed: bool,
     pub cli_leave_open: bool,
+    pub cli_browser_build: bool,
     pub cli_runtime_profile: bool,
     pub cli_provider: bool,
     pub cli_browser_host: bool,
@@ -1584,6 +1586,7 @@ pub fn parse_flags(args: &[String]) -> Flags {
         service_recovery_base_backoff_ms_source,
         service_recovery_max_backoff_ms_source,
         browser_build_manifest_status,
+        browser_build: None,
         runtime_profile: env::var("AGENT_BROWSER_RUNTIME_PROFILE")
             .ok()
             .or(config.runtime_profile),
@@ -1696,6 +1699,7 @@ pub fn parse_flags(args: &[String]) -> Flags {
         cli_download_path: false,
         cli_headed: false,
         cli_leave_open: false,
+        cli_browser_build: false,
         cli_runtime_profile: false,
         cli_provider: false,
         cli_browser_host: false,
@@ -1747,6 +1751,21 @@ pub fn parse_flags(args: &[String]) -> Flags {
                 if let Some(s) = args.get(i + 1) {
                     flags.runtime_profile = Some(s.clone());
                     flags.cli_runtime_profile = true;
+                    i += 1;
+                }
+            }
+            "--browser-build" => {
+                if let Some(s) = args.get(i + 1) {
+                    if BrowserBuild::parse_label(s).is_some() {
+                        flags.browser_build = Some(s.clone());
+                        flags.cli_browser_build = true;
+                    } else {
+                        eprintln!(
+                            "{} --browser-build must be stock_chrome, stealthcdp_chromium, or cdp_free_headed; got {}",
+                            color::warning_indicator(),
+                            s
+                        );
+                    }
                     i += 1;
                 }
             }
@@ -2211,6 +2230,7 @@ pub fn clean_args(args: &[String]) -> Vec<String> {
     const GLOBAL_FLAGS_WITH_VALUE: &[&str] = &[
         "--session",
         "--runtime-profile",
+        "--browser-build",
         "--headers",
         "--executable-path",
         "--cdp",
@@ -2337,6 +2357,17 @@ mod tests {
             flags.headers,
             Some(r#"{"Authorization": "Bearer token"}"#.to_string())
         );
+    }
+
+    #[test]
+    fn test_parse_global_browser_build_flag() {
+        let input = args("--browser-build stealthcdp_chromium open example.com");
+        let flags = parse_flags(&input);
+        let clean = clean_args(&input);
+
+        assert_eq!(flags.browser_build.as_deref(), Some("stealthcdp_chromium"));
+        assert!(flags.cli_browser_build);
+        assert_eq!(clean, args("open example.com"));
     }
 
     #[test]

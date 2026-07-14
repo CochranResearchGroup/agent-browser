@@ -31,19 +31,19 @@ pub(crate) struct ProcessSample {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(default, rename_all = "camelCase")]
-struct ResourceCorrelation {
-    browser_id: Option<String>,
-    profile_id: Option<String>,
-    session_ids: Vec<String>,
-    display_allocation_id: Option<String>,
-    display_name: Option<String>,
-    cdp_port: Option<u16>,
-    profile_path: Option<String>,
+pub(crate) struct ResourceCorrelation {
+    pub(crate) browser_id: Option<String>,
+    pub(crate) profile_id: Option<String>,
+    pub(crate) session_ids: Vec<String>,
+    pub(crate) display_allocation_id: Option<String>,
+    pub(crate) display_name: Option<String>,
+    pub(crate) cdp_port: Option<u16>,
+    pub(crate) profile_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
-enum ResourceKind {
+pub(crate) enum ResourceKind {
     AgentBrowser,
     Browser,
     RemoteDisplay,
@@ -53,7 +53,7 @@ enum ResourceKind {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
-enum ResourceDisposition {
+pub(crate) enum ResourceDisposition {
     Protected,
     Candidate,
     #[default]
@@ -62,20 +62,20 @@ enum ResourceDisposition {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(default, rename_all = "camelCase")]
-struct ResourceRecord {
-    pid: u32,
-    ppid: Option<u32>,
-    process_group_id: Option<u32>,
-    executable: Option<String>,
-    command_preview: String,
-    kind: ResourceKind,
-    correlation: ResourceCorrelation,
-    rss_bytes: Option<u64>,
-    cpu_seconds: Option<u64>,
-    age_seconds: Option<u64>,
-    disposition: ResourceDisposition,
-    reasons: Vec<String>,
-    gc_action: Option<String>,
+pub(crate) struct ResourceRecord {
+    pub(crate) pid: u32,
+    pub(crate) ppid: Option<u32>,
+    pub(crate) process_group_id: Option<u32>,
+    pub(crate) executable: Option<String>,
+    pub(crate) command_preview: String,
+    pub(crate) kind: ResourceKind,
+    pub(crate) correlation: ResourceCorrelation,
+    pub(crate) rss_bytes: Option<u64>,
+    pub(crate) cpu_seconds: Option<u64>,
+    pub(crate) age_seconds: Option<u64>,
+    pub(crate) disposition: ResourceDisposition,
+    pub(crate) reasons: Vec<String>,
+    pub(crate) gc_action: Option<String>,
     candidate_identity: Option<GcCandidateIdentity>,
 }
 
@@ -95,19 +95,36 @@ struct GcCandidateIdentity {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(default, rename_all = "camelCase")]
-struct ResourceSummary {
-    total_processes: usize,
-    correlated_processes: usize,
-    candidate_count: usize,
-    protected_count: usize,
-    observed_count: usize,
-    candidate_rss_bytes: u64,
-    total_rss_bytes: u64,
+pub(crate) struct ResourceSummary {
+    pub(crate) total_processes: usize,
+    pub(crate) correlated_processes: usize,
+    pub(crate) candidate_count: usize,
+    pub(crate) protected_count: usize,
+    pub(crate) observed_count: usize,
+    pub(crate) candidate_rss_bytes: u64,
+    pub(crate) total_rss_bytes: u64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(default, rename_all = "camelCase")]
+pub(crate) struct ResourceAuthoritySnapshot {
+    pub(crate) summary: ResourceSummary,
+    pub(crate) resources: Vec<ResourceRecord>,
+    pub(crate) warnings: Vec<Value>,
+    pub(crate) collection_warnings: Vec<String>,
+    protects_dashboard_main_pid: bool,
 }
 
 pub(crate) fn service_resources_response(state: &ServiceState) -> Value {
     let (processes, collection_warnings) = collect_process_samples();
     service_resources_response_from_samples(state, processes, collection_warnings)
+}
+
+pub(crate) fn service_resource_authority_snapshot(
+    state: &ServiceState,
+) -> ResourceAuthoritySnapshot {
+    let (processes, collection_warnings) = collect_process_samples();
+    service_resource_authority_snapshot_from_samples(state, processes, collection_warnings)
 }
 
 pub(crate) fn service_resources_write_monitor_summary_response(
@@ -214,6 +231,28 @@ fn service_resources_response_from_samples(
     processes: Vec<ProcessSample>,
     collection_warnings: Vec<String>,
 ) -> Value {
+    let snapshot =
+        service_resource_authority_snapshot_from_samples(state, processes, collection_warnings);
+    json!({
+        "summary": snapshot.summary,
+        "resources": snapshot.resources,
+        "warnings": snapshot.warnings,
+        "policy": {
+            "protectsDashboardMainPid": snapshot.protects_dashboard_main_pid,
+            "protectsRetainedBrowserPids": true,
+            "protectsNamedManagedProfiles": true,
+            "temporaryProfileMinAgeSeconds": TEMP_PROFILE_MIN_AGE_SECONDS,
+            "reviewTokenTtlSeconds": GC_REVIEW_TOKEN_TTL_SECONDS,
+            "applySupported": true,
+        },
+    })
+}
+
+pub(crate) fn service_resource_authority_snapshot_from_samples(
+    state: &ServiceState,
+    processes: Vec<ProcessSample>,
+    collection_warnings: Vec<String>,
+) -> ResourceAuthoritySnapshot {
     let dashboard_main_pid = current_dashboard_main_pid();
     let mut records = processes
         .into_iter()
@@ -222,20 +261,14 @@ fn service_resources_response_from_samples(
     records.sort_by_key(|record| record.pid);
 
     let summary = summarize_resources(&records);
-    let warnings = resource_warnings(state, collection_warnings);
-    json!({
-        "summary": summary,
-        "resources": records,
-        "warnings": warnings,
-        "policy": {
-            "protectsDashboardMainPid": dashboard_main_pid.is_some(),
-            "protectsRetainedBrowserPids": true,
-            "protectsNamedManagedProfiles": true,
-            "temporaryProfileMinAgeSeconds": TEMP_PROFILE_MIN_AGE_SECONDS,
-            "reviewTokenTtlSeconds": GC_REVIEW_TOKEN_TTL_SECONDS,
-            "applySupported": true,
-        },
-    })
+    let warnings = resource_warnings(state, collection_warnings.clone());
+    ResourceAuthoritySnapshot {
+        summary,
+        resources: records,
+        warnings,
+        collection_warnings,
+        protects_dashboard_main_pid: dashboard_main_pid.is_some(),
+    }
 }
 
 fn resource_warnings(state: &ServiceState, collection_warnings: Vec<String>) -> Vec<Value> {

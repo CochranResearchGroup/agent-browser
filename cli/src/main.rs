@@ -1976,6 +1976,7 @@ fn main() {
     let use_real_keychain = env::var("AGENT_BROWSER_USE_REAL_KEYCHAIN")
         .is_ok_and(|v| !matches!(v.to_ascii_lowercase().as_str(), "0" | "false" | "no" | ""))
         || keychain_password.is_some();
+    let selected_runtime_profile = runtime_profile_name_for_launch(&flags);
     let live_runtime_status = if flags.cdp.is_none() && flags.provider.is_none() {
         live_runtime_status_for_flags(&flags)
     } else {
@@ -1988,7 +1989,7 @@ fn main() {
     let daemon_runtime_profile = live_runtime_status
         .as_ref()
         .map(|status| status.runtime_profile.as_str())
-        .or(flags.runtime_profile.as_deref());
+        .or(selected_runtime_profile.as_deref());
     let daemon_opts = DaemonOptions {
         headed: flags.headed,
         debug: flags.debug,

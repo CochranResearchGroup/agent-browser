@@ -214,6 +214,10 @@
           "remoteReadiness": {
             "description": "Optional remote-provider readiness payload for this stream.",
             "type": ["object", "array", "null"]
+          },
+          "attachability": {
+            "description": "Derived browser-first reattach state for RDP streams, including recommended action and route/display/proof agreement evidence.",
+            "type": ["object", "null"]
           }
         },
         "additionalProperties": true
@@ -231,6 +235,10 @@
       "items": {
         "$ref": "service-tab-record.v1.schema.json#/$defs/serviceTabHandle"
       }
+    },
+    "attachability": {
+      "description": "Derived browser-first reattach state for retained remote-headed browsers, including recommended action and route/display/proof agreement evidence.",
+      "type": ["object", "null"]
     },
     "lastError": {
       "type": ["string", "null"]

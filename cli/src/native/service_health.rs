@@ -7,6 +7,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use super::browser::BrowserShutdownOutcome;
+use super::remote_view_attachability::refresh_remote_view_attachability;
 use super::service_lifecycle::{upsert_service_profile_and_session, ServiceLaunchMetadata};
 use super::service_model::{
     BrowserHealth, BrowserHealthObservation, BrowserHost, BrowserProcess, BrowserSession,
@@ -355,6 +356,7 @@ pub struct ServiceReconcileSummary {
     pub browser_count: usize,
     pub changed_browsers: usize,
     pub expired_session_leases: Vec<String>,
+    pub remote_view_repair: RemoteViewReconcileRepair,
 }
 
 pub async fn reconcile_service_state(state: &mut ServiceState) -> ServiceReconcileSummary {
@@ -376,6 +378,7 @@ pub async fn reconcile_service_state(state: &mut ServiceState) -> ServiceReconci
         browser_count: state.browsers.len(),
         changed_browsers,
         expired_session_leases,
+        remote_view_repair,
     };
     state.reconciliation = Some(ServiceReconciliationSnapshot {
         last_reconciled_at: Some(reconciled_at),
@@ -400,13 +403,7 @@ pub async fn reconcile_service_state(state: &mut ServiceState) -> ServiceReconci
                 "expiredSessionLeaseCount": summary.expired_session_leases.len(),
                 "tabCount": state.tabs.len(),
                 "changedTabs": changed_tab_count(state, &before),
-                "remoteView": {
-                    "orphanedDisplayAllocations": remote_view_repair.orphaned_display_allocations,
-                    "orphanedRoutes": remote_view_repair.orphaned_routes,
-                    "releasedViewerLeases": remote_view_repair.released_viewer_leases,
-                    "expiredViewerLeases": remote_view_repair.expired_viewer_leases,
-                    "clearedControllerLeases": remote_view_repair.cleared_controller_leases,
-                },
+                "remoteView": summary.remote_view_repair.to_json(),
             })),
             ..new_service_event()
         },
@@ -689,6 +686,7 @@ pub fn persist_service_browser_record_in_repository(
                 .unwrap_or_default(),
             last_error,
             last_health_observation: None,
+            attachability: None,
         };
         upsert_browser_display_allocation(
             service_state,
@@ -728,6 +726,7 @@ pub fn persist_service_browser_record_in_repository(
             );
         }
         service_state.browsers.insert(id, browser);
+        refresh_remote_view_attachability(service_state);
         Ok(())
     })
 }
@@ -1017,6 +1016,7 @@ pub(crate) fn stale_browser_process_record(
             .unwrap_or_default(),
         last_error: Some(last_error),
         last_health_observation: None,
+        attachability: None,
     };
     mark_cdp_screencast_streams_unavailable(&mut browser, "browser_not_ready", health);
     browser
@@ -1055,9 +1055,6 @@ fn release_browser_display_allocation_after_close(
     session_id: &str,
     outcome: Option<&BrowserShutdownOutcome>,
 ) {
-    let Some(display_allocation_id) = browser.display_allocation_id.as_ref() else {
-        return;
-    };
     let (state, failure_class) = match outcome {
         Some(outcome) if outcome.os_degraded_possible() => {
             ("degraded", "browser_shutdown_force_kill_failed")
@@ -1066,6 +1063,53 @@ fn release_browser_display_allocation_after_close(
         _ => ("released", "operator_requested_close"),
     };
     let now = current_timestamp();
+    let mut display_allocation_ids = BTreeSet::new();
+    if let Some(display_allocation_id) = browser.display_allocation_id.as_ref() {
+        display_allocation_ids.insert(display_allocation_id.clone());
+    }
+    display_allocation_ids.extend(
+        service_state
+            .display_allocations
+            .iter()
+            .filter(|(_id, allocation)| {
+                allocation.owner_browser_id.as_deref() == Some(browser.id.as_str())
+                    || allocation.owner_session_id.as_deref() == Some(session_id)
+            })
+            .map(|(id, _allocation)| id.clone()),
+    );
+
+    for display_allocation_id in display_allocation_ids {
+        release_one_browser_display_allocation_after_close(
+            service_state,
+            browser,
+            session_id,
+            &display_allocation_id,
+            state,
+            failure_class,
+            &now,
+        );
+    }
+}
+
+fn release_one_browser_display_allocation_after_close(
+    service_state: &mut ServiceState,
+    browser: &BrowserProcess,
+    session_id: &str,
+    display_allocation_id: &str,
+    state: &str,
+    failure_class: &str,
+    now: &str,
+) {
+    let referenced_route_ids = service_state
+        .remote_view_routes
+        .iter()
+        .filter(|(_id, route)| {
+            route.display_allocation_id.as_deref() == Some(display_allocation_id)
+                && (route.browser_id.as_deref() == Some(browser.id.as_str())
+                    || route.session_id.as_deref() == Some(session_id))
+        })
+        .map(|(id, _route)| id.clone())
+        .collect::<Vec<_>>();
     let route_ids = {
         let Some(allocation) = service_state
             .display_allocations
@@ -1079,9 +1123,14 @@ fn release_browser_display_allocation_after_close(
             return;
         }
 
-        let route_ids = allocation.route_ids.clone();
+        let mut route_ids = allocation
+            .route_ids
+            .iter()
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        route_ids.extend(referenced_route_ids);
         allocation.state = state.to_string();
-        allocation.updated_at = Some(now.clone());
+        allocation.updated_at = Some(now.to_string());
         allocation.readiness = Some(serde_json::json!({
             "state": state,
             "reason": "operator_requested_close",
@@ -1091,12 +1140,12 @@ fn release_browser_display_allocation_after_close(
         if state == "released" {
             allocation.route_ids.clear();
         }
-        route_ids
+        route_ids.into_iter().collect::<Vec<_>>()
     };
     if state == "released" {
         for route_id in route_ids {
             if let Some(route) = service_state.remote_view_routes.get_mut(&route_id) {
-                if route.display_allocation_id.as_deref() == Some(display_allocation_id.as_str())
+                if route.display_allocation_id.as_deref() == Some(display_allocation_id)
                     && route.browser_id.as_deref() == Some(browser.id.as_str())
                 {
                     route.state = "released".to_string();
@@ -1447,12 +1496,36 @@ pub fn merge_reconciled_service_state(
     }
 
     for (id, reconciled_allocation) in &reconciled.display_allocations {
+        let target_released_after_reconcile_started = target
+            .display_allocations
+            .get(id)
+            .is_some_and(|allocation| {
+                allocation.state == "released"
+                    && before
+                        .display_allocations
+                        .get(id)
+                        .is_some_and(|before_allocation| before_allocation != allocation)
+            });
+        if target_released_after_reconcile_started {
+            continue;
+        }
         target
             .display_allocations
             .insert(id.clone(), reconciled_allocation.clone());
     }
 
     for (id, reconciled_route) in &reconciled.remote_view_routes {
+        let target_released_after_reconcile_started =
+            target.remote_view_routes.get(id).is_some_and(|route| {
+                route.state == "released"
+                    && before
+                        .remote_view_routes
+                        .get(id)
+                        .is_some_and(|before_route| before_route != route)
+            });
+        if target_released_after_reconcile_started {
+            continue;
+        }
         target
             .remote_view_routes
             .insert(id.clone(), reconciled_route.clone());
@@ -1465,6 +1538,18 @@ pub fn merge_reconciled_service_state(
     }
 
     for (id, reconciled_pool_entry) in &reconciled.route_pool {
+        let target_released_after_reconcile_started =
+            target.route_pool.get(id).is_some_and(|entry| {
+                entry.state == "available"
+                    && entry.current_route_allocation_id.is_none()
+                    && before
+                        .route_pool
+                        .get(id)
+                        .is_some_and(|before_entry| before_entry != entry)
+            });
+        if target_released_after_reconcile_started {
+            continue;
+        }
         target
             .route_pool
             .insert(id.clone(), reconciled_pool_entry.clone());
@@ -1589,12 +1674,27 @@ async fn reconcile_live_browser_targets(state: &mut ServiceState) {
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-struct RemoteViewReconcileRepair {
-    orphaned_display_allocations: usize,
-    orphaned_routes: usize,
-    released_viewer_leases: usize,
-    expired_viewer_leases: usize,
-    cleared_controller_leases: usize,
+pub struct RemoteViewReconcileRepair {
+    pub orphaned_display_allocations: usize,
+    pub orphaned_routes: usize,
+    pub released_viewer_leases: usize,
+    pub expired_viewer_leases: usize,
+    pub cleared_controller_leases: usize,
+}
+
+impl RemoteViewReconcileRepair {
+    pub fn to_json(self) -> serde_json::Value {
+        json!({
+            "orphanedDisplayAllocations": self.orphaned_display_allocations,
+            "orphanedRoutes": self.orphaned_routes,
+            "releasedViewerLeases": self.released_viewer_leases,
+            "expiredViewerLeases": self.expired_viewer_leases,
+            "clearedControllerLeases": self.cleared_controller_leases,
+            "repaired": self.orphaned_display_allocations + self.orphaned_routes,
+            "released": self.released_viewer_leases + self.expired_viewer_leases,
+            "skippedUnsafe": 0,
+        })
+    }
 }
 
 fn reconcile_remote_view_state(state: &mut ServiceState) -> RemoteViewReconcileRepair {
@@ -1781,11 +1881,29 @@ fn reconcile_remote_view_state(state: &mut ServiceState) -> RemoteViewReconcileR
             }
             if let Some(route_id) = stream.route_id.as_ref() {
                 if let Some(route) = state.remote_view_routes.get(route_id) {
-                    stream.remote_readiness = route.readiness.clone();
+                    if let Some(mut readiness) = route.readiness.clone() {
+                        let retained_display_content = stream
+                            .remote_readiness
+                            .as_ref()
+                            .and_then(|value| value.get("displayContent").cloned())
+                            .or_else(|| {
+                                stream
+                                    .readiness
+                                    .as_ref()
+                                    .and_then(|value| value.get("displayContent").cloned())
+                            });
+                        if readiness.get("displayContent").is_none() {
+                            if let Some(display_content) = retained_display_content {
+                                readiness["displayContent"] = display_content;
+                            }
+                        }
+                        stream.remote_readiness = Some(readiness);
+                    }
                 }
             }
         }
     }
+    refresh_remote_view_attachability(state);
 
     repair
 }
@@ -2732,6 +2850,105 @@ mod tests {
     }
 
     #[test]
+    fn merge_reconciled_service_state_preserves_newer_remote_view_release() {
+        let allocation_id = "remote-view-display:13".to_string();
+        let route_id = "guacamole:3".to_string();
+        let pool_entry_id = "guacamole-rdp-a".to_string();
+        let browser_id = "session:s12-cycle-03".to_string();
+        let session_id = "s12-cycle-03".to_string();
+
+        let before = ServiceState {
+            display_allocations: BTreeMap::from([(
+                allocation_id.clone(),
+                DisplayAllocation {
+                    id: allocation_id.clone(),
+                    owner_browser_id: Some(browser_id.clone()),
+                    owner_session_id: Some(session_id.clone()),
+                    state: "ready".to_string(),
+                    route_ids: vec![route_id.clone()],
+                    ..DisplayAllocation::default()
+                },
+            )]),
+            remote_view_routes: BTreeMap::from([(
+                route_id.clone(),
+                RemoteViewRoute {
+                    id: route_id.clone(),
+                    provider: ViewStreamProvider::RdpGateway,
+                    display_allocation_id: Some(allocation_id.clone()),
+                    browser_id: Some(browser_id.clone()),
+                    session_id: Some(session_id.clone()),
+                    state: "ready".to_string(),
+                    ..RemoteViewRoute::default()
+                },
+            )]),
+            route_pool: BTreeMap::from([(
+                pool_entry_id.clone(),
+                RoutePoolEntry {
+                    id: pool_entry_id.clone(),
+                    provider: ViewStreamProvider::RdpGateway,
+                    route_id: route_id.clone(),
+                    state: "checked_out".to_string(),
+                    current_route_allocation_id: Some(route_id.clone()),
+                    ..RoutePoolEntry::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let mut reconciled = before.clone();
+        reconciled
+            .display_allocations
+            .get_mut(&allocation_id)
+            .unwrap()
+            .state = "orphaned".to_string();
+        reconciled
+            .remote_view_routes
+            .get_mut(&route_id)
+            .unwrap()
+            .state = "orphaned".to_string();
+
+        let mut target = before.clone();
+        let target_allocation = target.display_allocations.get_mut(&allocation_id).unwrap();
+        target_allocation.state = "released".to_string();
+        target_allocation.route_ids.clear();
+        target_allocation.readiness = Some(serde_json::json!({
+            "state": "released",
+            "reason": "operator_requested_close",
+        }));
+
+        let target_route = target.remote_view_routes.get_mut(&route_id).unwrap();
+        target_route.state = "released".to_string();
+        target_route.last_provider_event = Some("route_released_after_browser_close".to_string());
+        target_route.readiness = Some(serde_json::json!({
+            "state": "released",
+            "reason": "browser_closed",
+        }));
+
+        let target_pool_entry = target.route_pool.get_mut(&pool_entry_id).unwrap();
+        target_pool_entry.state = "available".to_string();
+        target_pool_entry.current_route_allocation_id = None;
+
+        merge_reconciled_service_state(&mut target, &before, &reconciled);
+
+        assert_eq!(target.display_allocations[&allocation_id].state, "released");
+        assert!(target.display_allocations[&allocation_id]
+            .route_ids
+            .is_empty());
+        assert_eq!(target.remote_view_routes[&route_id].state, "released");
+        assert_eq!(
+            target.remote_view_routes[&route_id]
+                .last_provider_event
+                .as_deref(),
+            Some("route_released_after_browser_close")
+        );
+        assert_eq!(target.route_pool[&pool_entry_id].state, "available");
+        assert_eq!(
+            target.route_pool[&pool_entry_id].current_route_allocation_id,
+            None
+        );
+    }
+
+    #[test]
     fn merge_reconciled_service_state_removes_unchanged_terminated_records() {
         let before = ServiceState {
             browsers: BTreeMap::from([(
@@ -3337,6 +3554,89 @@ mod tests {
         assert_eq!(state.route_pool["pool-a"].current_route_allocation_id, None);
         assert_eq!(state.display_allocations[&allocation_b].state, "ready");
         assert_eq!(state.browsers[&browser_b].health, BrowserHealth::Ready);
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn close_releases_session_owned_route_after_process_exit_removed_browser() {
+        let home = temp_home("service-health-close-after-process-exit");
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+        let browser_id = "session:browser-a".to_string();
+        let allocation_id = "remote-view-display:13".to_string();
+        let route_id = "guacamole:3".to_string();
+        let pool_entry_id = "guacamole-rdp-a".to_string();
+        store
+            .save(&ServiceState {
+                display_allocations: BTreeMap::from([(
+                    allocation_id.clone(),
+                    DisplayAllocation {
+                        id: allocation_id.clone(),
+                        owner_browser_id: Some(browser_id.clone()),
+                        owner_session_id: Some("browser-a".to_string()),
+                        state: "orphaned".to_string(),
+                        route_ids: vec![route_id.clone()],
+                        ..DisplayAllocation::default()
+                    },
+                )]),
+                remote_view_routes: BTreeMap::from([(
+                    route_id.clone(),
+                    RemoteViewRoute {
+                        id: route_id.clone(),
+                        provider: ViewStreamProvider::RdpGateway,
+                        display_allocation_id: Some(allocation_id.clone()),
+                        browser_id: Some(browser_id.clone()),
+                        session_id: Some("browser-a".to_string()),
+                        state: "orphaned".to_string(),
+                        last_provider_event: Some("display_allocation_unavailable".to_string()),
+                        ..RemoteViewRoute::default()
+                    },
+                )]),
+                route_pool: BTreeMap::from([(
+                    pool_entry_id.clone(),
+                    RoutePoolEntry {
+                        id: pool_entry_id.clone(),
+                        provider: ViewStreamProvider::RdpGateway,
+                        route_id: route_id.clone(),
+                        state: "checked_out".to_string(),
+                        current_route_allocation_id: Some(route_id.clone()),
+                        ..RoutePoolEntry::default()
+                    },
+                )]),
+                ..ServiceState::default()
+            })
+            .unwrap();
+
+        persist_closed_browser_health_in_repository(
+            &repository,
+            "browser-a",
+            Some(&BrowserShutdownOutcome {
+                polite_close_attempted: true,
+                polite_close_succeeded: true,
+                ..BrowserShutdownOutcome::default()
+            }),
+        )
+        .unwrap();
+
+        let state = store.load().unwrap();
+        assert!(!state.browsers.contains_key(&browser_id));
+        assert_eq!(state.display_allocations[&allocation_id].state, "released");
+        assert!(state.display_allocations[&allocation_id]
+            .route_ids
+            .is_empty());
+        assert_eq!(state.remote_view_routes[&route_id].state, "released");
+        assert_eq!(
+            state.remote_view_routes[&route_id]
+                .last_provider_event
+                .as_deref(),
+            Some("route_released_after_browser_close")
+        );
+        assert_eq!(state.route_pool[&pool_entry_id].state, "available");
+        assert_eq!(
+            state.route_pool[&pool_entry_id].current_route_allocation_id,
+            None
+        );
 
         let _ = fs::remove_dir_all(&home);
     }

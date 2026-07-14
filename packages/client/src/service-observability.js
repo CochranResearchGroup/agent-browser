@@ -46,6 +46,8 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceBrowserCapabilityRegistryResponse} ServiceBrowserCapabilityRegistryResponse
  * @typedef {import('./service-observability.generated.js').ServiceBrowserCapabilityPreflightOptions} ServiceBrowserCapabilityPreflightOptions
  * @typedef {import('./service-observability.generated.js').ServiceBrowserCapabilityPreflightResponse} ServiceBrowserCapabilityPreflightResponse
+ * @typedef {import('./service-observability.generated.js').ServiceRemoteViewRoutePreflightOptions} ServiceRemoteViewRoutePreflightOptions
+ * @typedef {import('./service-observability.generated.js').ServiceRemoteViewRoutePreflightResponse} ServiceRemoteViewRoutePreflightResponse
  * @typedef {import('./service-observability.generated.js').ServiceBrowserPreferenceBindingOptions} ServiceBrowserPreferenceBindingOptions
  * @typedef {import('./service-observability.generated.js').ServiceBrowserPreferenceCommandOptions} ServiceBrowserPreferenceCommandOptions
  * @typedef {import('./service-observability.generated.js').ServiceBrowserPreferenceCommandSummary} ServiceBrowserPreferenceCommandSummary
@@ -174,6 +176,47 @@ export function getServiceBrowserCapabilityPreflight(options) {
       },
     },
     '/api/service/browser-capability/preflight',
+  );
+}
+
+/**
+ * Evaluate remote-view route readiness gates without launching Chrome.
+ *
+ * @param {ServiceRemoteViewRoutePreflightOptions} options
+ * @returns {Promise<ServiceRemoteViewRoutePreflightResponse>}
+ */
+export function getServiceRemoteViewRoutePreflight(options) {
+  return serviceGet(
+    {
+      ...options,
+      query: {
+        ...options.query,
+        displayAllocationId: options.displayAllocationId,
+        routeId: options.routeId,
+        remoteViewRouteId: options.remoteViewRouteId,
+        routePoolEntryId: options.routePoolEntryId,
+        browserId: options.browserId,
+        sessionName: options.sessionName,
+        streamId: options.streamId,
+        viewStreamProvider: options.viewStreamProvider,
+        provider: options.provider,
+        providerMode: options.providerMode,
+        frameUrl: options.frameUrl,
+        externalUrl: options.externalUrl,
+        connectionId: options.connectionId,
+        connectionName: options.connectionName,
+        routeDescriptor:
+          options.routeDescriptor === undefined ? undefined : JSON.stringify(options.routeDescriptor),
+        routePoolEntry:
+          options.routePoolEntry === undefined ? undefined : JSON.stringify(options.routePoolEntry),
+        routePool: options.routePool === undefined ? undefined : JSON.stringify(options.routePool),
+        serviceName: options.serviceName,
+        agentName: options.agentName,
+        taskName: options.taskName,
+        jobTimeoutMs: options.jobTimeoutMs,
+      },
+    },
+    '/api/service/remote-view/route-preflight',
   );
 }
 
@@ -570,6 +613,7 @@ export async function getServiceAccessPlan({
         targetServiceId: options.targetServiceId,
         accountId: options.accountId,
         browserBuild: options.browserBuild,
+        runtimeProfile: options.runtimeProfile,
         browserHost,
         viewStreamProvider,
         controlInputProvider,

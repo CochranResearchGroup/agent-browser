@@ -135,6 +135,14 @@ pub fn to_ai_friendly_error(error: &str) -> String {
         return "Another element is covering the target element. Try scrolling or closing overlays."
             .to_string();
     }
+    if lower.contains("display_access_grant_timeout")
+        || lower.contains("display_access_grant_failed")
+        || lower.contains("route_display_unavailable")
+        || lower.contains("route_pool_unavailable")
+        || lower.contains("operator-visible")
+    {
+        return error.to_string();
+    }
     if lower.contains("timeout") {
         return "Operation timed out. The page may still be loading or the element may not exist."
             .to_string();
@@ -999,6 +1007,39 @@ impl BrowserManager {
         if let Some(page) = self.pages.get_mut(self.active_page_index) {
             page.url = url.to_string();
         }
+    }
+
+    pub fn set_active_page_metadata(&mut self, url: Option<&str>, title: Option<&str>) {
+        if let Some(page) = self.pages.get_mut(self.active_page_index) {
+            if let Some(url) = url {
+                page.url = url.to_string();
+            }
+            if let Some(title) = title {
+                page.title = title.to_string();
+            }
+        }
+    }
+
+    pub fn set_page_metadata_for_target(
+        &mut self,
+        target_id: &str,
+        url: Option<&str>,
+        title: Option<&str>,
+    ) -> bool {
+        if let Some(page) = self
+            .pages
+            .iter_mut()
+            .find(|page| page.target_id == target_id)
+        {
+            if let Some(url) = url {
+                page.url = url.to_string();
+            }
+            if let Some(title) = title {
+                page.title = title.to_string();
+            }
+            return true;
+        }
+        false
     }
 
     /// Returns true if this manager was connected via CDP (as opposed to local launch).
@@ -2425,6 +2466,13 @@ mod tests {
             to_ai_friendly_error("Timeout waiting for element"),
             "Operation timed out. The page may still be loading or the element may not exist."
         );
+    }
+
+    #[test]
+    fn test_to_ai_friendly_error_preserves_remote_view_timeout_codes() {
+        let error =
+            "display_access_grant_timeout: route 'guacamole:1' display ':11' helper exceeded 2s";
+        assert_eq!(to_ai_friendly_error(error), error);
     }
 
     #[test]

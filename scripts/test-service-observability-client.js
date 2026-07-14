@@ -18,6 +18,7 @@ import {
   getServiceProfileForIdentity,
   getServiceProfileReadiness,
   getServiceProfileSeedingHandoff,
+  getServiceRemoteViewRoutePreflight,
   getServiceStatus,
   getServiceTrace,
   lookupServiceProfile,
@@ -104,6 +105,28 @@ async function main() {
       },
       service_state: {},
       profileAllocations: [],
+      browserSessionAuthority: {
+        schemaVersion: 1,
+        summary: {
+          modeledBrowserCount: 0,
+          viableBrowserCount: 0,
+          attentionBrowserCount: 0,
+          nonViableBrowserCount: 0,
+        },
+        resourcePressure: {
+          state: 'clear',
+          totalProcessCount: 0,
+          correlatedProcessCount: 0,
+          candidateCount: 0,
+          protectedCount: 0,
+          observedCount: 0,
+          observedUnownedAgentBrowserProcessCount: 0,
+          candidateRssBytes: 0,
+          totalRssBytes: 0,
+          reasons: [],
+        },
+        browserVerdicts: [],
+      },
       launchConfig: {
         defaultBrowserBuild: null,
         stealthCdpChromiumRequired: false,
@@ -122,6 +145,7 @@ async function main() {
   });
   assert.equal(status.calls[0].url, 'http://127.0.0.1:4849/api/service/status');
   assert.equal(status.calls[0].init.method, 'GET');
+  assert.equal(statusResult.browserSessionAuthority.schemaVersion, 1);
   assert.equal(statusResult.control_plane.service_monitor_interval_ms, 60000);
   assert.deepEqual(statusResult.profileAllocations, []);
   assert.equal(statusResult.launchConfig.stealthCdpChromiumReady, true);
@@ -228,6 +252,47 @@ async function main() {
   );
   assert.equal(accessPlanPreflight.calls[0].init.method, 'GET');
   assert.equal(accessPlanPreflightResult.preflight, true);
+
+  const routePreflight = createFetchRecorder({
+    success: true,
+    data: {
+      status: 'preflight_ready',
+      preflightStatus: 'ready',
+      observedAt: '2026-06-22T12:00:00Z',
+      routeId: 'route-1',
+      displayAllocationId: 'display-1',
+      browserId: 'session:abc',
+      sessionName: 'abc',
+      routeBinding: { routeId: 'route-1' },
+      acquisitionPlan: { mode: 'existing_route' },
+      fastPreflight: {
+        status: 'ready',
+        noLaunch: true,
+        components: [],
+      },
+    },
+  });
+  const routePreflightResult = await getServiceRemoteViewRoutePreflight({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: routePreflight.fetch,
+    routeId: 'route-1',
+    displayAllocationId: 'display-1',
+    browserId: 'session:abc',
+    sessionName: 'abc',
+    frameUrl: 'http://127.0.0.1/guacamole/#/client/1',
+    routeDescriptor: { localEmbedUrl: 'http://127.0.0.1/guacamole/#/client/1' },
+    serviceName: 'RemoteView',
+    agentName: 'codex',
+    taskName: 'preflight',
+    jobTimeoutMs: 2500,
+  });
+  assert.equal(
+    routePreflight.calls[0].url,
+    'http://127.0.0.1:4849/api/service/remote-view/route-preflight?displayAllocationId=display-1&routeId=route-1&browserId=session%3Aabc&sessionName=abc&frameUrl=http%3A%2F%2F127.0.0.1%2Fguacamole%2F%23%2Fclient%2F1&routeDescriptor=%7B%22localEmbedUrl%22%3A%22http%3A%2F%2F127.0.0.1%2Fguacamole%2F%23%2Fclient%2F1%22%7D&serviceName=RemoteView&agentName=codex&taskName=preflight&jobTimeoutMs=2500',
+  );
+  assert.equal(routePreflight.calls[0].init.method, 'GET');
+  assert.equal(routePreflightResult.fastPreflight.noLaunch, true);
+  assert.equal(routePreflightResult.preflightStatus, 'ready');
 
   const monitors = createFetchRecorder({
     success: true,
@@ -704,6 +769,8 @@ async function main() {
       profileAllocation: {
         profileId: 'work',
         profileName: 'Work',
+        profileOrigin: 'agent_browser_owned',
+        profileClass: 'durable_named',
         allocation: 'per_service',
         keyring: 'basic_password_store',
         targetServiceIds: ['google'],
@@ -767,6 +834,7 @@ async function main() {
   assert.equal(allocation.calls[0].url, 'http://127.0.0.1:4849/api/service/profiles/work/allocation');
   assert.equal(allocation.calls[0].init.method, 'GET');
   assert.equal(allocationResult.profileAllocation.profileId, 'work');
+  assert.equal(allocationResult.profileAllocation.profileClass, 'durable_named');
   assert.equal(allocationResult.profileAllocation.targetReadiness[0].state, 'needs_manual_seeding');
   assert.deepEqual(summarizeServiceProfileAllocationBrowserHealth(allocationResult), {
     profileId: 'work',
@@ -1144,7 +1212,7 @@ async function main() {
   const accessPlan = createFetchRecorder((url) => {
     assert.equal(
       url,
-      'http://127.0.0.1:4849/api/service/access-plan?serviceName=CanvaCLI&loginId=canva&sitePolicyId=canva&challengeId=challenge-1',
+      'http://127.0.0.1:4849/api/service/access-plan?serviceName=CanvaCLI&loginId=canva&browserBuild=stealthcdp_chromium&runtimeProfile=canva-default&sitePolicyId=canva&challengeId=challenge-1',
     );
     return {
       success: true,
@@ -1155,6 +1223,7 @@ async function main() {
           sitePolicyId: 'canva',
           challengeId: 'challenge-1',
           readinessProfileId: null,
+          runtimeProfile: 'canva-default',
         },
         selectedProfile: profileMatches[2],
         selectedProfileMatch: {
@@ -1201,6 +1270,7 @@ async function main() {
           interactionMode: 'human_like_input',
           challengePolicy: 'avoid_first',
           profileId: 'authenticated',
+          oneTimeProfileRecommendation: null,
           manualActionRequired: false,
           manualSeedingRequired: false,
           monitorAttentionRequired: true,
@@ -1262,6 +1332,8 @@ async function main() {
     fetch: accessPlan.fetch,
     serviceName: 'CanvaCLI',
     loginId: 'canva',
+    browserBuild: 'stealthcdp_chromium',
+    runtimeProfile: 'canva-default',
     sitePolicyId: 'canva',
     challengeId: 'challenge-1',
   });
@@ -1273,6 +1345,7 @@ async function main() {
     'canva-freshness',
   ]);
   assert.equal(accessPlanResult.decision.monitorAttentionRequired, true);
+  assert.equal(accessPlanResult.decision.oneTimeProfileRecommendation, null);
   assert.equal(accessPlanResult.decision.recommendedAction, 'use_selected_profile');
   const browserBuildSelectionSummary =
     summarizeServiceAccessPlanBrowserBuildSelection(accessPlanResult);

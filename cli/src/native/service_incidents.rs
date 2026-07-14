@@ -594,6 +594,8 @@ pub(crate) fn resolve_service_incident_in_repository(
             incident.resolved_at = Some(timestamp.to_string());
             incident.resolved_by = Some(actor.to_string());
             incident.resolution_note = note.clone();
+            incident.state = ServiceIncidentState::Recovered;
+            incident.current_health = None;
             let incident = incident.clone();
             push_service_event_bounded(
                 state,

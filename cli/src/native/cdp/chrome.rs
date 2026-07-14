@@ -667,7 +667,6 @@ fn build_chrome_args(
             "--no-default-browser-check".to_string(),
             "--disable-background-networking".to_string(),
             "--disable-backgrounding-occluded-windows".to_string(),
-            "--disable-blink-features=AutomationControlled".to_string(),
             "--disable-component-update".to_string(),
             "--disable-default-apps".to_string(),
             "--disable-hang-monitor".to_string(),
@@ -2848,6 +2847,10 @@ mod tests {
         };
         let result = build_chrome_args(&opts, true).unwrap();
         assert!(result.args.iter().any(|a| a == "--headless=new"));
+        assert!(!result
+            .args
+            .iter()
+            .any(|a| a.starts_with("--disable-blink-features")));
         assert!(result
             .args
             .iter()

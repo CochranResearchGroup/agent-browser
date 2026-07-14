@@ -25,6 +25,8 @@ export const SERVICE_REQUEST_ACTIONS = [
   "view_takeover",
   "remote_view_open",
   "service_remote_view_route_preflight",
+  "service_remote_view_browser_reattach",
+  "service_remote_view_route_switch",
   "service_remote_view_route_checkout",
   "service_remote_view_route_release",
   "service_route_pool_repair",
@@ -124,6 +126,7 @@ export const SERVICE_REQUEST_STRING_FIELDS = [
   "profile",
   "profileId",
   "runtimeProfile",
+  "profileClass",
   "cdpUrl",
   "browserId",
   "sessionName"

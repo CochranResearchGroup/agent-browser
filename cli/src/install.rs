@@ -2,14 +2,16 @@ use crate::color;
 use crate::connection::{cleanup_stale_files, get_socket_dir};
 use crate::flags::{launch_config_status, Flags};
 use crate::native::stream::runtime_manifest_json;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::{self, Read, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
-use std::process::{exit, Command, Stdio};
-use std::time::Duration;
+use std::process::{exit, Command, Output, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::thread;
+use std::time::{Duration, Instant};
 
 const LAST_KNOWN_GOOD_URL: &str =
     "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json";
@@ -27,6 +29,17 @@ const STEALTHCDP_CHROMIUM_UPSTREAM_REVISION: &str = "d421c3af8268e2e6227b7fe4461
 const STEALTHCDP_CHROMIUM_PATCHSET_SHA: &str = "fcf2d964f9070cc9acf7aabbfb2c576f36107bbe";
 const STEALTHCDP_CHROMIUM_PATCH_QUEUE_SHA256: &str =
     "6b6558b55a1d3b0dc081871e2d76cd6dc74665d28d0e5789846b456388afd3cf";
+const INSTALL_DOCTOR_COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
+const INSTALL_DOCTOR_SHORT_COMMAND_TIMEOUT: Duration = Duration::from_secs(3);
+const INSTALL_DOCTOR_SERVICE_STATUS_TIMEOUT: Duration = Duration::from_secs(15);
+const INSTALL_DOCTOR_COMMAND_POLL_INTERVAL: Duration = Duration::from_millis(25);
+static INSTALL_DOCTOR_COMMAND_OUTPUT_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+enum InstallDoctorCommandResult {
+    Output(Output),
+    Timeout { stdout: String, stderr: String },
+    SpawnError(String),
+}
 
 pub fn get_browsers_dir() -> PathBuf {
     dirs::home_dir()
@@ -960,6 +973,10 @@ pub fn run_install_doctor(flags: &Flags) {
         report.pointer("/data/remoteViewPrivileges/ready"),
     );
     print_doctor_field(
+        "remote-view route desktop",
+        report.pointer("/data/remoteViewPrivileges/helperDesktopSession/state"),
+    );
+    print_doctor_field(
         "dashboard runtime contract",
         report.pointer("/data/dashboardRuntime/serviceContractVersion"),
     );
@@ -1035,37 +1052,58 @@ fn print_doctor_field(label: &str, value: Option<&serde_json::Value>) {
 }
 
 fn install_doctor_report(flags: &Flags) -> serde_json::Value {
+    install_doctor_trace("current_executable");
     let current_executable = binary_fingerprint(std::env::current_exe().ok());
+    install_doctor_trace("path_command");
     let path_command = binary_fingerprint(find_path_command(command_name()));
+    install_doctor_trace("pnpm_package_binary");
     let pnpm_package_binary = binary_fingerprint(find_pnpm_package_binary());
+    install_doctor_trace("workspace_binary");
     let workspace_binary = binary_fingerprint(find_workspace_binary());
+    install_doctor_trace("launch_config");
     let launch_config = launch_config_status(flags);
+    install_doctor_trace("remote_view_privileges");
     let remote_view_privileges = remote_view_privilege_status();
+    install_doctor_trace("dashboard_runtime");
     let dashboard_runtime = runtime_manifest_json();
+    install_doctor_trace("live_dashboard_runtime");
     let live_dashboard_runtime = live_dashboard_runtime_probe(
         current_executable
             .get("sha256")
             .and_then(|value| value.as_str()),
     );
+    install_doctor_trace("service_status");
     let service = service_status_probe();
+    install_doctor_trace("service_resources");
     let service_resources = service_resources_probe();
+    install_doctor_trace("runtime_inventory");
     let runtime_inventory = active_runtime_inventory(
         current_executable
             .get("sha256")
             .and_then(|value| value.as_str()),
     );
+    install_doctor_trace("daemon_listener_inventory");
+    let daemon_listener_inventory = daemon_listener_inventory(
+        current_executable
+            .get("canonicalPath")
+            .and_then(|value| value.as_str()),
+    );
+    install_doctor_trace("runtime_convergence");
     let runtime_convergence =
         runtime_convergence_summary(&live_dashboard_runtime, &runtime_inventory);
+    install_doctor_trace("issues");
     let issues = install_doctor_issues(InstallDoctorIssueInputs {
         current_executable: &current_executable,
         path_command: &path_command,
         pnpm_package_binary: &pnpm_package_binary,
         workspace_binary: &workspace_binary,
         launch_config: &launch_config,
+        remote_view_privileges: &remote_view_privileges,
         service: &service,
         service_resources: &service_resources,
         live_dashboard_runtime: &live_dashboard_runtime,
         runtime_inventory: &runtime_inventory,
+        daemon_listener_inventory: &daemon_listener_inventory,
     });
 
     json!({
@@ -1083,10 +1121,17 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
             "dashboardRuntime": dashboard_runtime,
             "liveDashboardRuntime": live_dashboard_runtime,
             "runtimeInventory": runtime_inventory,
+            "daemonListenerInventory": daemon_listener_inventory,
             "runtimeConvergence": runtime_convergence,
             "issues": issues,
         }
     })
+}
+
+fn install_doctor_trace(phase: &str) {
+    if std::env::var("AGENT_BROWSER_INSTALL_DOCTOR_TRACE").is_ok() {
+        eprintln!("[install-doctor] {phase}");
+    }
 }
 
 struct InstallDoctorIssueInputs<'a> {
@@ -1095,10 +1140,12 @@ struct InstallDoctorIssueInputs<'a> {
     pnpm_package_binary: &'a serde_json::Value,
     workspace_binary: &'a serde_json::Value,
     launch_config: &'a serde_json::Value,
+    remote_view_privileges: &'a serde_json::Value,
     service: &'a serde_json::Value,
     service_resources: &'a serde_json::Value,
     live_dashboard_runtime: &'a serde_json::Value,
     runtime_inventory: &'a serde_json::Value,
+    daemon_listener_inventory: &'a serde_json::Value,
 }
 
 fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json::Value> {
@@ -1108,10 +1155,12 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
     let pnpm_package_binary = inputs.pnpm_package_binary;
     let workspace_binary = inputs.workspace_binary;
     let launch_config = inputs.launch_config;
+    let remote_view_privileges = inputs.remote_view_privileges;
     let service = inputs.service;
     let service_resources = inputs.service_resources;
     let live_dashboard_runtime = inputs.live_dashboard_runtime;
     let runtime_inventory = inputs.runtime_inventory;
+    let daemon_listener_inventory = inputs.daemon_listener_inventory;
 
     if path_command
         .get("path")
@@ -1178,6 +1227,52 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
         issues.push(json!({
             "code": "launch_config_not_ready",
             "message": "configured stealthcdp_chromium launch posture is not ready"
+        }));
+    }
+
+    if remote_view_privileges
+        .get("helperExists")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
+        && remote_view_privileges
+            .pointer("/helperDesktopSession/ready")
+            .and_then(|value| value.as_bool())
+            != Some(true)
+    {
+        issues.push(json!({
+            "code": "remote_view_route_desktop_helper_stale",
+            "message": "the installed remote-view helper still writes a terminal-first route desktop session",
+            "nextAction": "install_remote_view_privileges",
+            "remedy": {
+                "kind": "operator_command",
+                "command": "agent-browser install --with-remote-view-privileges",
+                "argv": ["agent-browser", "install", "--with-remote-view-privileges"],
+                "requiresInteractiveSudo": true,
+                "why": "Refresh the root-owned helper so new RDP route users start a terminal-free browser-control desktop."
+            }
+        }));
+    }
+    if remote_view_privileges
+        .get("helperExists")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
+        && !remote_view_helper_status_contract_ready(
+            remote_view_privileges
+                .get("helperStatus")
+                .unwrap_or(&Value::Null),
+        )
+    {
+        issues.push(json!({
+            "code": "remote_view_privileged_helper_status_stale",
+            "message": "the installed remote-view helper does not expose the current route-desktop and display-access capability contract",
+            "nextAction": "install_remote_view_privileges",
+            "remedy": {
+                "kind": "operator_command",
+                "command": "agent-browser install --with-remote-view-privileges",
+                "argv": ["agent-browser", "install", "--with-remote-view-privileges"],
+                "requiresInteractiveSudo": true,
+                "why": "Refresh the root-owned helper so doctors and launch preflight can verify route desktop and X11 display-access capabilities."
+            }
         }));
     }
 
@@ -1294,6 +1389,63 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
                 }
             }
         }
+    }
+
+    let listener_count = daemon_listener_inventory
+        .get("listenerCount")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let default_socket_listener_count = daemon_listener_inventory
+        .get("defaultSocketListenerCount")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(listener_count);
+    let default_socket_current_match_count = daemon_listener_inventory
+        .get("defaultSocketCurrentExecutableMatchCount")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let default_socket_deleted_executable_count = daemon_listener_inventory
+        .get("defaultSocketDeletedExecutableCount")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    if default_socket_listener_count > 1 {
+        issues.push(json!({
+            "code": "daemon_socket_multiple_listeners",
+            "message": "the agent-browser default daemon socket has multiple live listeners, so command routing is ambiguous",
+            "listenerCount": listener_count,
+            "defaultSocketListenerCount": default_socket_listener_count,
+            "nextAction": "repair_daemon_listener_authority",
+            "remedy": {
+                "kind": "operator_plan",
+                "why": "Stop stale default-socket daemon listeners and leave exactly one listener for the intended binary before live remote-view stress."
+            }
+        }));
+    }
+    if default_socket_listener_count > 0 && default_socket_current_match_count == 0 {
+        issues.push(json!({
+            "code": "daemon_socket_current_executable_mismatch",
+            "message": "no live agent-browser default daemon listener matches the current executable realpath",
+            "listenerCount": listener_count,
+            "defaultSocketListenerCount": default_socket_listener_count,
+            "defaultSocketCurrentExecutableMatchCount": default_socket_current_match_count,
+            "nextAction": "repair_daemon_listener_authority",
+            "remedy": {
+                "kind": "operator_plan",
+                "why": "Restart the default daemon listener from the intended current executable before live validation."
+            }
+        }));
+    }
+    if default_socket_deleted_executable_count > 0 {
+        issues.push(json!({
+            "code": "daemon_socket_deleted_executable",
+            "message": "one or more live agent-browser default daemon listeners are running a deleted executable inode",
+            "deletedExecutableCount": default_socket_deleted_executable_count,
+            "defaultSocketDeletedExecutableCount": default_socket_deleted_executable_count,
+            "nextAction": "repair_daemon_listener_authority",
+            "remedy": {
+                "kind": "operator_plan",
+                "why": "Stop stale default-socket daemon processes whose executable has been replaced on disk."
+            }
+        }));
     }
 
     issues
@@ -1431,6 +1583,216 @@ fn active_runtime_inventory(expected_sha256: Option<&str>) -> serde_json::Value 
     })
 }
 
+fn daemon_listener_inventory(current_executable_realpath: Option<&str>) -> serde_json::Value {
+    #[cfg(unix)]
+    {
+        let socket_dir = get_socket_dir();
+        let socket_dir_text = socket_dir.display().to_string();
+        let mut command = Command::new("ss");
+        command.args(["-xlpn"]);
+        let output =
+            run_install_doctor_command_with_timeout(command, INSTALL_DOCTOR_SHORT_COMMAND_TIMEOUT);
+        let stdout = match output {
+            InstallDoctorCommandResult::Output(output) => {
+                String::from_utf8_lossy(&output.stdout).to_string()
+            }
+            InstallDoctorCommandResult::Timeout { stdout, stderr } => {
+                return json!({
+                    "schemaVersion": "agent-browser.daemon-listener-inventory.v1",
+                    "available": false,
+                    "state": "probe_timeout",
+                    "socketDir": socket_dir_text,
+                    "stdout": redact_doctor_text(stdout),
+                    "stderr": redact_doctor_text(stderr),
+                    "listeners": [],
+                    "listenerCount": 0,
+                    "defaultSocketListenerCount": 0,
+                    "currentExecutableMatchCount": 0,
+                    "defaultSocketCurrentExecutableMatchCount": 0,
+                    "deletedExecutableCount": 0,
+                    "defaultSocketDeletedExecutableCount": 0,
+                });
+            }
+            InstallDoctorCommandResult::SpawnError(error) => {
+                return json!({
+                    "schemaVersion": "agent-browser.daemon-listener-inventory.v1",
+                    "available": false,
+                    "state": "probe_unavailable",
+                    "socketDir": socket_dir_text,
+                    "error": redact_doctor_text(error),
+                    "listeners": [],
+                    "listenerCount": 0,
+                    "defaultSocketListenerCount": 0,
+                    "currentExecutableMatchCount": 0,
+                    "defaultSocketCurrentExecutableMatchCount": 0,
+                    "deletedExecutableCount": 0,
+                    "defaultSocketDeletedExecutableCount": 0,
+                });
+            }
+        };
+        let mut listeners = Vec::new();
+        let mut seen = BTreeSet::new();
+        for line in stdout
+            .lines()
+            .filter(|line| line.contains(&socket_dir_text))
+        {
+            let socket_path = line
+                .split_whitespace()
+                .find(|part| part.starts_with(&socket_dir_text))
+                .unwrap_or("");
+            for pid in daemon_listener_pids_from_ss_line(line) {
+                if !seen.insert((pid, socket_path.to_string())) {
+                    continue;
+                }
+                let exe = proc_readlink(pid, "exe");
+                let cwd = proc_readlink(pid, "cwd");
+                let cmdline = fs::read(format!("/proc/{pid}/cmdline"))
+                    .ok()
+                    .map(|bytes| {
+                        String::from_utf8_lossy(&bytes)
+                            .replace('\0', " ")
+                            .trim()
+                            .to_string()
+                    })
+                    .filter(|value| !value.is_empty());
+                let exe_text = exe.clone().unwrap_or_default();
+                let deleted_executable = exe_text.ends_with(" (deleted)");
+                let matches_current_executable =
+                    current_executable_realpath.is_some_and(|expected| exe_text == expected);
+                listeners.push(json!({
+                    "pid": pid,
+                    "socketPath": socket_path,
+                    "exe": exe,
+                    "cwd": cwd,
+                    "cmdline": cmdline,
+                    "deletedExecutable": deleted_executable,
+                    "matchesCurrentExecutable": matches_current_executable,
+                }));
+            }
+        }
+        let listener_count = listeners.len();
+        let current_match_count = listeners
+            .iter()
+            .filter(|listener| {
+                listener
+                    .get("matchesCurrentExecutable")
+                    .and_then(|value| value.as_bool())
+                    == Some(true)
+            })
+            .count();
+        let deleted_executable_count = listeners
+            .iter()
+            .filter(|listener| {
+                listener
+                    .get("deletedExecutable")
+                    .and_then(|value| value.as_bool())
+                    == Some(true)
+            })
+            .count();
+        let default_socket_listener_count = listeners
+            .iter()
+            .filter(|listener| {
+                listener
+                    .get("socketPath")
+                    .and_then(|value| value.as_str())
+                    .is_some_and(|path| path.ends_with("/default.sock"))
+            })
+            .count();
+        let default_socket_current_match_count = listeners
+            .iter()
+            .filter(|listener| {
+                let is_default_socket = listener
+                    .get("socketPath")
+                    .and_then(|value| value.as_str())
+                    .is_some_and(|path| path.ends_with("/default.sock"));
+                let matches_current_executable = listener
+                    .get("matchesCurrentExecutable")
+                    .and_then(|value| value.as_bool())
+                    == Some(true);
+                is_default_socket && matches_current_executable
+            })
+            .count();
+        let default_socket_deleted_executable_count = listeners
+            .iter()
+            .filter(|listener| {
+                let is_default_socket = listener
+                    .get("socketPath")
+                    .and_then(|value| value.as_str())
+                    .is_some_and(|path| path.ends_with("/default.sock"));
+                let deleted_executable = listener
+                    .get("deletedExecutable")
+                    .and_then(|value| value.as_bool())
+                    == Some(true);
+                is_default_socket && deleted_executable
+            })
+            .count();
+        let state = if listener_count == 0 {
+            "none"
+        } else if default_socket_listener_count == 1
+            && default_socket_current_match_count == 1
+            && default_socket_deleted_executable_count == 0
+        {
+            "authoritative"
+        } else {
+            "ambiguous"
+        };
+        json!({
+            "schemaVersion": "agent-browser.daemon-listener-inventory.v1",
+            "available": true,
+            "state": state,
+            "socketDir": socket_dir_text,
+            "currentExecutableRealpath": current_executable_realpath,
+            "listenerCount": listener_count,
+            "defaultSocketListenerCount": default_socket_listener_count,
+            "currentExecutableMatchCount": current_match_count,
+            "defaultSocketCurrentExecutableMatchCount": default_socket_current_match_count,
+            "deletedExecutableCount": deleted_executable_count,
+            "defaultSocketDeletedExecutableCount": default_socket_deleted_executable_count,
+            "listeners": listeners,
+        })
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = current_executable_realpath;
+        json!({
+            "schemaVersion": "agent-browser.daemon-listener-inventory.v1",
+            "available": false,
+            "state": "unsupported_platform",
+            "listeners": [],
+            "listenerCount": 0,
+            "defaultSocketListenerCount": 0,
+            "currentExecutableMatchCount": 0,
+            "defaultSocketCurrentExecutableMatchCount": 0,
+            "deletedExecutableCount": 0,
+            "defaultSocketDeletedExecutableCount": 0,
+        })
+    }
+}
+
+#[cfg(unix)]
+fn daemon_listener_pids_from_ss_line(line: &str) -> Vec<u32> {
+    let mut pids = Vec::new();
+    for segment in line.split("pid=").skip(1) {
+        let pid_text = segment
+            .chars()
+            .take_while(|ch| ch.is_ascii_digit())
+            .collect::<String>();
+        if let Ok(pid) = pid_text.parse::<u32>() {
+            if !pids.contains(&pid) {
+                pids.push(pid);
+            }
+        }
+    }
+    pids
+}
+
+#[cfg(unix)]
+fn proc_readlink(pid: u32, name: &str) -> Option<String> {
+    fs::read_link(format!("/proc/{pid}/{name}"))
+        .ok()
+        .map(|path| path.display().to_string())
+}
+
 fn pid_is_running(pid: u32) -> bool {
     #[cfg(unix)]
     {
@@ -1465,7 +1827,7 @@ fn live_dashboard_runtime_probe(expected_executable_sha256: Option<&str>) -> ser
         }
     };
     let address = format!("127.0.0.1:{port}");
-    let timeout = Duration::from_millis(12_000);
+    let timeout = Duration::from_millis(3_000);
     let mut stream = match TcpStream::connect_timeout(
         &address
             .parse()
@@ -1706,15 +2068,17 @@ fn service_status_probe() -> serde_json::Value {
         });
     };
 
-    let output = Command::new(&current_exe)
+    let mut command = Command::new(&current_exe);
+    command
         .args(["--json", "--session", &probe_session, "service", "status"])
         .env("AGENT_BROWSER_HOME", &temp_home)
-        .env("AGENT_BROWSER_ARGS", "--no-sandbox")
-        .output();
+        .env("AGENT_BROWSER_ARGS", "--no-sandbox");
+    let output =
+        run_install_doctor_command_with_timeout(command, INSTALL_DOCTOR_SERVICE_STATUS_TIMEOUT);
     let state_path = temp_home.join("service").join("state.json");
 
     let result = match output {
-        Ok(output) => {
+        InstallDoctorCommandResult::Output(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
             let data = serde_json::from_str::<serde_json::Value>(stdout.trim()).ok();
@@ -1734,6 +2098,7 @@ fn service_status_probe() -> serde_json::Value {
                 "available": true,
                 "ready": command_success && response_success && no_launch,
                 "success": command_success,
+                "timedOut": false,
                 "exitCode": output.status.code(),
                 "command": format!(
                     "{} --json --session {} service status",
@@ -1746,10 +2111,11 @@ fn service_status_probe() -> serde_json::Value {
                 "stderr": redact_doctor_text(stderr.trim()),
             })
         }
-        Err(error) => json!({
-            "available": false,
+        InstallDoctorCommandResult::Timeout { stdout, stderr } => json!({
+            "available": true,
             "ready": false,
             "success": false,
+            "timedOut": true,
             "exitCode": null,
             "command": format!(
                 "{} --json --session {} service status",
@@ -1759,15 +2125,40 @@ fn service_status_probe() -> serde_json::Value {
             "noLaunch": true,
             "browserHealth": null,
             "statePathExists": state_path.exists(),
-            "stderr": redact_doctor_text(error.to_string()),
+            "stdout": redact_doctor_text(stdout.trim()),
+            "stderr": redact_doctor_text(if stderr.trim().is_empty() {
+                "install doctor service status probe timed out"
+            } else {
+                stderr.trim()
+            }),
+        }),
+        InstallDoctorCommandResult::SpawnError(error) => json!({
+            "available": false,
+            "ready": false,
+            "success": false,
+            "timedOut": false,
+            "exitCode": null,
+            "command": format!(
+                "{} --json --session {} service status",
+                current_exe.display(),
+                probe_session
+            ),
+            "noLaunch": true,
+            "browserHealth": null,
+            "statePathExists": state_path.exists(),
+            "stderr": redact_doctor_text(error),
         }),
     };
 
-    let _ = Command::new(&current_exe)
+    let mut close_command = Command::new(&current_exe);
+    close_command
         .args(["--json", "--session", &probe_session, "close"])
         .env("AGENT_BROWSER_HOME", &temp_home)
-        .env("AGENT_BROWSER_ARGS", "--no-sandbox")
-        .output();
+        .env("AGENT_BROWSER_ARGS", "--no-sandbox");
+    let _ = run_install_doctor_command_with_timeout(
+        close_command,
+        INSTALL_DOCTOR_SHORT_COMMAND_TIMEOUT,
+    );
     terminate_session_process_from_metadata(&probe_session);
     cleanup_stale_files(&probe_session);
     let _ = fs::remove_dir_all(&temp_home);
@@ -1805,13 +2196,14 @@ fn service_resources_probe() -> serde_json::Value {
         });
     };
 
-    let output = Command::new(&current_exe)
+    let mut command = Command::new(&current_exe);
+    command
         .args(["--json", "service", "gc", "--dry-run"])
-        .env("AGENT_BROWSER_ARGS", "--no-sandbox")
-        .output();
+        .env("AGENT_BROWSER_ARGS", "--no-sandbox");
+    let output = run_install_doctor_command_with_timeout(command, INSTALL_DOCTOR_COMMAND_TIMEOUT);
 
     match output {
-        Ok(output) => {
+        InstallDoctorCommandResult::Output(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
             let data = serde_json::from_str::<serde_json::Value>(stdout.trim()).ok();
@@ -1851,19 +2243,35 @@ fn service_resources_probe() -> serde_json::Value {
                         .and_then(|value| value.get("success"))
                         .and_then(|value| value.as_bool())
                         .unwrap_or(false),
+                "timedOut": false,
                 "candidateCount": candidates.len(),
                 "readinessImpactingCandidates": readiness_impacting,
                 "duplicateProfilePressureWarnings": duplicate_profile_pressure_warnings,
                 "stderr": redact_doctor_text(stderr.trim()),
             })
         }
-        Err(error) => json!({
-            "available": false,
+        InstallDoctorCommandResult::Timeout { stdout, stderr } => json!({
+            "available": true,
             "success": false,
+            "timedOut": true,
             "candidateCount": 0,
             "readinessImpactingCandidates": 0,
             "duplicateProfilePressureWarnings": 0,
-            "stderr": redact_doctor_text(error.to_string()),
+            "stdout": redact_doctor_text(stdout.trim()),
+            "stderr": redact_doctor_text(if stderr.trim().is_empty() {
+                "install doctor service resources probe timed out"
+            } else {
+                stderr.trim()
+            }),
+        }),
+        InstallDoctorCommandResult::SpawnError(error) => json!({
+            "available": false,
+            "success": false,
+            "timedOut": false,
+            "candidateCount": 0,
+            "readinessImpactingCandidates": 0,
+            "duplicateProfilePressureWarnings": 0,
+            "stderr": redact_doctor_text(error),
         }),
     }
 }
@@ -1894,12 +2302,22 @@ fn remote_view_privilege_status() -> serde_json::Value {
         .unwrap_or_else(|_| "/etc/sudoers.d/agent-browser".to_string());
     let current_user = std::env::var("USER").unwrap_or_else(|_| "unknown".to_string());
     let group_exists = command_success("getent", &["group", &group_name]);
-    let user_groups = Command::new("id").arg("-nG").output().ok().map(|output| {
-        String::from_utf8_lossy(&output.stdout)
-            .split_whitespace()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>()
-    });
+    let mut id_command = Command::new("id");
+    id_command.arg("-nG");
+    let user_groups = match run_install_doctor_command_with_timeout(
+        id_command,
+        INSTALL_DOCTOR_SHORT_COMMAND_TIMEOUT,
+    ) {
+        InstallDoctorCommandResult::Output(output) => Some(
+            String::from_utf8_lossy(&output.stdout)
+                .split_whitespace()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>(),
+        ),
+        InstallDoctorCommandResult::Timeout { .. } | InstallDoctorCommandResult::SpawnError(_) => {
+            None
+        }
+    };
     let user_in_group = user_groups
         .as_ref()
         .map(|groups| groups.iter().any(|group| group == &group_name))
@@ -1907,6 +2325,12 @@ fn remote_view_privilege_status() -> serde_json::Value {
     let helper_exists = Path::new(&helper_path).exists();
     let sudoers_exists = Path::new(&sudoers_path).exists();
     let helper_check = command_output_summary("sudo", &["-n", &helper_path, "check"]);
+    let helper_status = helper_status_output(command_output_summary(
+        "sudo",
+        &["-n", &helper_path, "status-json"],
+    ));
+    let helper_desktop_session = remote_view_helper_desktop_session_status(&helper_path);
+    let helper_status_ready = remote_view_helper_status_contract_ready(&helper_status);
 
     let mut issues = Vec::new();
     if !group_exists {
@@ -1954,6 +2378,14 @@ fn remote_view_privilege_status() -> serde_json::Value {
             false,
         ));
     }
+    if helper_exists && !helper_status_ready {
+        issues.push(remote_view_privilege_issue(
+            "remote_view_privileged_helper_status_stale",
+            "the installed remote-view helper does not expose the current route-desktop and display-access capability contract",
+            "run agent-browser install --with-remote-view-privileges from an interactive terminal",
+            true,
+        ));
+    }
 
     let ready = group_exists
         && user_in_group
@@ -1962,7 +2394,12 @@ fn remote_view_privilege_status() -> serde_json::Value {
         && helper_check
             .get("success")
             .and_then(|value| value.as_bool())
-            == Some(true);
+            == Some(true)
+        && helper_desktop_session
+            .get("ready")
+            .and_then(|value| value.as_bool())
+            == Some(true)
+        && helper_status_ready;
 
     json!({
         "ready": ready,
@@ -1973,11 +2410,147 @@ fn remote_view_privilege_status() -> serde_json::Value {
         "userInGroup": user_in_group,
         "helperPath": helper_path,
         "helperExists": helper_exists,
+        "helperDesktopSession": helper_desktop_session,
         "sudoersPath": sudoers_path,
         "sudoersExists": sudoers_exists,
         "helperCheck": helper_check,
+        "helperStatus": helper_status,
         "issues": issues,
     })
+}
+
+fn helper_status_output(mut report: Value) -> Value {
+    let stdout = report
+        .get("stdout")
+        .and_then(|value| value.as_str())
+        .unwrap_or("")
+        .trim();
+    if !stdout.is_empty() {
+        match serde_json::from_str::<Value>(stdout) {
+            Ok(parsed) => {
+                if let Some(object) = report.as_object_mut() {
+                    object.insert("parsed".to_string(), parsed);
+                }
+            }
+            Err(error) => {
+                if let Some(object) = report.as_object_mut() {
+                    object.insert("parseError".to_string(), json!(error.to_string()));
+                }
+            }
+        }
+    }
+    report
+}
+
+fn remote_view_helper_status_contract_ready(report: &Value) -> bool {
+    report.get("success").and_then(Value::as_bool) == Some(true)
+        && report
+            .pointer("/parsed/schemaVersion")
+            .and_then(Value::as_i64)
+            == Some(1)
+        && report
+            .pointer("/parsed/helperVersion")
+            .and_then(Value::as_str)
+            .is_some_and(|value| value.starts_with("2026-06-23.p44-route-desktop-v"))
+        && report
+            .pointer("/parsed/routeDesktopSession/ready")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/routeDesktopSession/terminalStartupDetected")
+            .and_then(Value::as_bool)
+            == Some(false)
+        && report
+            .pointer("/parsed/displayAccess/supportsFilesystemX11Socket")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/displayAccess/supportsAbstractX11Socket")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/displayAccess/boundedXhostTimeoutSeconds")
+            .and_then(Value::as_i64)
+            .is_some_and(|value| value > 0 && value <= 2)
+}
+
+fn remote_view_helper_desktop_session_status(helper_path: &str) -> Value {
+    let path = Path::new(helper_path);
+    if !path.exists() {
+        return json!({
+            "ready": false,
+            "available": false,
+            "state": "helper_missing",
+            "terminalStartupDetected": null,
+            "startsWindowManager": null,
+            "keepsSessionAlive": null,
+        });
+    }
+    let Ok(source) = fs::read_to_string(path) else {
+        return json!({
+            "ready": false,
+            "available": false,
+            "state": "helper_unreadable",
+            "terminalStartupDetected": null,
+            "startsWindowManager": null,
+            "keepsSessionAlive": null,
+        });
+    };
+    remote_view_helper_desktop_session_status_from_source(&source)
+}
+
+fn remote_view_helper_desktop_session_status_from_source(source: &str) -> Value {
+    let template = route_xsession_template(source);
+    let terminal_startup = template
+        .as_deref()
+        .is_some_and(route_xsession_starts_terminal);
+    let starts_window_manager = template
+        .as_deref()
+        .is_some_and(|value| value.contains("openbox-session"));
+    let keeps_session_alive = template
+        .as_deref()
+        .is_some_and(|value| value.contains("while true") && value.contains("sleep 3600"));
+    let ready =
+        template.is_some() && !terminal_startup && starts_window_manager && keeps_session_alive;
+    json!({
+        "ready": ready,
+        "available": template.is_some(),
+        "state": if ready {
+            "browser_control_ready_template"
+        } else if template.is_none() {
+            "xsession_template_missing"
+        } else if terminal_startup {
+            "terminal_first_template"
+        } else {
+            "incomplete_template"
+        },
+        "terminalStartupDetected": terminal_startup,
+        "startsWindowManager": starts_window_manager,
+        "keepsSessionAlive": keeps_session_alive,
+    })
+}
+
+fn route_xsession_template(source: &str) -> Option<String> {
+    let marker_pos = source.find(".xsession")?;
+    let after_marker = &source[marker_pos..];
+    let heredoc_pos = after_marker.find("<<'EOF'")?;
+    let content_start = marker_pos + heredoc_pos + "<<'EOF'".len();
+    let content = source[content_start..].strip_prefix('\n')?;
+    let content_end = content.find("\nEOF")?;
+    Some(content[..content_end].to_string())
+}
+
+fn route_xsession_starts_terminal(template: &str) -> bool {
+    let lowered = template.to_ascii_lowercase();
+    [
+        "xterm",
+        "gnome-terminal",
+        "xfce4-terminal",
+        "konsole",
+        "x-terminal-emulator",
+    ]
+    .iter()
+    .any(|needle| lowered.contains(needle))
 }
 
 fn remote_view_privilege_issue(
@@ -1995,31 +2568,116 @@ fn remote_view_privilege_issue(
 }
 
 fn command_success(command: &str, args: &[&str]) -> bool {
-    Command::new(command)
-        .args(args)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map(|status| status.success())
-        .unwrap_or(false)
+    let mut child = Command::new(command);
+    child.args(args);
+    match run_install_doctor_command_with_timeout(child, INSTALL_DOCTOR_SHORT_COMMAND_TIMEOUT) {
+        InstallDoctorCommandResult::Output(output) => output.status.success(),
+        InstallDoctorCommandResult::Timeout { .. } | InstallDoctorCommandResult::SpawnError(_) => {
+            false
+        }
+    }
 }
 
 fn command_output_summary(command: &str, args: &[&str]) -> serde_json::Value {
-    match Command::new(command).args(args).output() {
-        Ok(output) => json!({
+    let mut child = Command::new(command);
+    child.args(args);
+    match run_install_doctor_command_with_timeout(child, INSTALL_DOCTOR_SHORT_COMMAND_TIMEOUT) {
+        InstallDoctorCommandResult::Output(output) => json!({
             "available": true,
             "success": output.status.success(),
+            "timedOut": false,
             "exitCode": output.status.code(),
             "stdout": redact_doctor_text(String::from_utf8_lossy(&output.stdout).trim()),
             "stderr": redact_doctor_text(String::from_utf8_lossy(&output.stderr).trim()),
         }),
-        Err(error) => json!({
+        InstallDoctorCommandResult::Timeout { stdout, stderr } => json!({
+            "available": true,
+            "success": false,
+            "timedOut": true,
+            "exitCode": null,
+            "stdout": redact_doctor_text(stdout.trim()),
+            "stderr": redact_doctor_text(if stderr.trim().is_empty() {
+                "install doctor command timed out"
+            } else {
+                stderr.trim()
+            }),
+        }),
+        InstallDoctorCommandResult::SpawnError(error) => json!({
             "available": false,
             "success": false,
+            "timedOut": false,
             "exitCode": null,
             "stdout": "",
-            "stderr": redact_doctor_text(error.to_string()),
+            "stderr": redact_doctor_text(error),
         }),
+    }
+}
+
+fn run_install_doctor_command_with_timeout(
+    mut command: Command,
+    timeout: Duration,
+) -> InstallDoctorCommandResult {
+    let output_id = INSTALL_DOCTOR_COMMAND_OUTPUT_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let output_prefix = std::env::temp_dir().join(format!(
+        "agent-browser-install-doctor-command-{}-{output_id}",
+        std::process::id()
+    ));
+    let stdout_path = output_prefix.with_extension("stdout");
+    let stderr_path = output_prefix.with_extension("stderr");
+    let stdout_file = match fs::File::create(&stdout_path) {
+        Ok(file) => file,
+        Err(error) => return InstallDoctorCommandResult::SpawnError(error.to_string()),
+    };
+    let stderr_file = match fs::File::create(&stderr_path) {
+        Ok(file) => file,
+        Err(error) => return InstallDoctorCommandResult::SpawnError(error.to_string()),
+    };
+    command
+        .stdout(Stdio::from(stdout_file))
+        .stderr(Stdio::from(stderr_file));
+    let mut child = match command.spawn() {
+        Ok(child) => child,
+        Err(error) => return InstallDoctorCommandResult::SpawnError(error.to_string()),
+    };
+    let started = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => {
+                return match child.wait() {
+                    Ok(status) => {
+                        let stdout = fs::read(&stdout_path).unwrap_or_default();
+                        let stderr = fs::read(&stderr_path).unwrap_or_default();
+                        let _ = fs::remove_file(&stdout_path);
+                        let _ = fs::remove_file(&stderr_path);
+                        InstallDoctorCommandResult::Output(Output {
+                            status,
+                            stdout,
+                            stderr,
+                        })
+                    }
+                    Err(error) => InstallDoctorCommandResult::SpawnError(error.to_string()),
+                }
+            }
+            Ok(None) => {
+                if started.elapsed() >= timeout {
+                    let _ = child.kill();
+                    let wait_error = child.wait().err().map(|error| error.to_string());
+                    let stdout = fs::read_to_string(&stdout_path).unwrap_or_default();
+                    let stderr = wait_error
+                        .or_else(|| fs::read_to_string(&stderr_path).ok())
+                        .unwrap_or_default();
+                    let _ = fs::remove_file(&stdout_path);
+                    let _ = fs::remove_file(&stderr_path);
+                    return InstallDoctorCommandResult::Timeout { stdout, stderr };
+                }
+                thread::sleep(INSTALL_DOCTOR_COMMAND_POLL_INTERVAL);
+            }
+            Err(error) => {
+                let _ = fs::remove_file(&stdout_path);
+                let _ = fs::remove_file(&stderr_path);
+                return InstallDoctorCommandResult::SpawnError(error.to_string());
+            }
+        }
     }
 }
 
@@ -2053,7 +2711,8 @@ fn binary_fingerprint(path: Option<PathBuf>) -> serde_json::Value {
     };
     let canonical_path = path.canonicalize().unwrap_or(path.clone());
     let metadata = fs::metadata(&path);
-    let sha256 = file_sha256(&path).ok();
+    let sha256 =
+        doctor_file_sha256(&path, metadata.as_ref().ok().map(|metadata| metadata.len())).ok();
     json!({
         "path": path.display().to_string(),
         "canonicalPath": canonical_path.display().to_string(),
@@ -2061,6 +2720,35 @@ fn binary_fingerprint(path: Option<PathBuf>) -> serde_json::Value {
         "sha256": sha256,
         "sizeBytes": metadata.ok().map(|metadata| metadata.len()),
     })
+}
+
+fn doctor_file_sha256(path: &Path, size_bytes: Option<u64>) -> Result<String, String> {
+    #[cfg(unix)]
+    {
+        let mut command = Command::new("sha256sum");
+        command.arg(path);
+        if let InstallDoctorCommandResult::Output(output) =
+            run_install_doctor_command_with_timeout(command, INSTALL_DOCTOR_SHORT_COMMAND_TIMEOUT)
+        {
+            if output.status.success() {
+                if let Some(hash) = String::from_utf8_lossy(&output.stdout)
+                    .split_whitespace()
+                    .next()
+                    .filter(|value| value.len() == 64)
+                {
+                    return Ok(hash.to_string());
+                }
+            }
+        }
+    }
+
+    if size_bytes.is_some_and(|size| size > 64 * 1024 * 1024) {
+        return Err(format!(
+            "doctor fingerprint skipped bounded in-process hash for large file {}",
+            path.display()
+        ));
+    }
+    file_sha256(path)
 }
 
 fn file_sha256(path: &Path) -> Result<String, String> {
@@ -2132,10 +2820,17 @@ fn find_pnpm_package_binary() -> Option<PathBuf> {
                 .join(binary_name),
         );
     }
-    let output = Command::new("pnpm").args(["root", "-g"]).output().ok()?;
-    if !output.status.success() {
-        return None;
-    }
+    let mut command = Command::new("pnpm");
+    command.args(["root", "-g"]);
+    let output = match run_install_doctor_command_with_timeout(
+        command,
+        INSTALL_DOCTOR_SHORT_COMMAND_TIMEOUT,
+    ) {
+        InstallDoctorCommandResult::Output(output) if output.status.success() => output,
+        InstallDoctorCommandResult::Output(_)
+        | InstallDoctorCommandResult::Timeout { .. }
+        | InstallDoctorCommandResult::SpawnError(_) => return None,
+    };
     let root = String::from_utf8_lossy(&output.stdout).trim().to_string();
     if root.is_empty() {
         return None;
@@ -2569,11 +3264,49 @@ mod tests {
         })
     }
 
+    fn empty_daemon_listener_inventory() -> serde_json::Value {
+        json!({
+            "schemaVersion": "agent-browser.daemon-listener-inventory.v1",
+            "available": true,
+            "state": "none",
+            "listenerCount": 0,
+            "defaultSocketListenerCount": 0,
+            "currentExecutableMatchCount": 0,
+            "defaultSocketCurrentExecutableMatchCount": 0,
+            "deletedExecutableCount": 0,
+            "defaultSocketDeletedExecutableCount": 0,
+            "listeners": [],
+        })
+    }
+
     fn ready_live_dashboard_runtime() -> serde_json::Value {
         json!({
             "available": false,
             "ready": true,
             "state": "not_running"
+        })
+    }
+
+    fn ready_remote_view_privileges() -> serde_json::Value {
+        json!({
+            "helperExists": true,
+            "helperDesktopSession": {"ready": true},
+            "helperStatus": {
+                "success": true,
+                "parsed": {
+                    "schemaVersion": 1,
+                    "helperVersion": "2026-06-23.p44-route-desktop-v2",
+                    "routeDesktopSession": {
+                        "ready": true,
+                        "terminalStartupDetected": false
+                    },
+                    "displayAccess": {
+                        "supportsFilesystemX11Socket": true,
+                        "supportsAbstractX11Socket": true,
+                        "boundedXhostTimeoutSeconds": 2
+                    }
+                }
+            }
         })
     }
 
@@ -2637,16 +3370,19 @@ mod tests {
         let service_resources = json!({"readinessImpactingCandidates": 0});
         let live_dashboard_runtime = ready_live_dashboard_runtime();
         let runtime_inventory = empty_runtime_inventory();
+        let remote_view_privileges = ready_remote_view_privileges();
         let issues = install_doctor_issues(InstallDoctorIssueInputs {
             current_executable: &current_executable,
             path_command: &path_command,
             pnpm_package_binary: &pnpm_package_binary,
             workspace_binary: &workspace_binary,
             launch_config: &launch_config,
+            remote_view_privileges: &remote_view_privileges,
             service: &service,
             service_resources: &service_resources,
             live_dashboard_runtime: &live_dashboard_runtime,
             runtime_inventory: &runtime_inventory,
+            daemon_listener_inventory: &empty_daemon_listener_inventory(),
         });
 
         assert_eq!(
@@ -2673,16 +3409,19 @@ mod tests {
         let service_resources = json!({"readinessImpactingCandidates": 0});
         let live_dashboard_runtime = ready_live_dashboard_runtime();
         let runtime_inventory = empty_runtime_inventory();
+        let remote_view_privileges = ready_remote_view_privileges();
         let issues = install_doctor_issues(InstallDoctorIssueInputs {
             current_executable: &current_executable,
             path_command: &path_command,
             pnpm_package_binary: &pnpm_package_binary,
             workspace_binary: &workspace_binary,
             launch_config: &launch_config,
+            remote_view_privileges: &remote_view_privileges,
             service: &service,
             service_resources: &service_resources,
             live_dashboard_runtime: &live_dashboard_runtime,
             runtime_inventory: &runtime_inventory,
+            daemon_listener_inventory: &empty_daemon_listener_inventory(),
         });
 
         assert_eq!(issue_codes(issues), vec!["launch_config_not_ready"]);
@@ -2703,16 +3442,19 @@ mod tests {
         let service_resources = json!({"readinessImpactingCandidates": 0});
         let live_dashboard_runtime = ready_live_dashboard_runtime();
         let runtime_inventory = empty_runtime_inventory();
+        let remote_view_privileges = ready_remote_view_privileges();
         let issues = install_doctor_issues(InstallDoctorIssueInputs {
             current_executable: &current_executable,
             path_command: &path_command,
             pnpm_package_binary: &pnpm_package_binary,
             workspace_binary: &workspace_binary,
             launch_config: &launch_config,
+            remote_view_privileges: &remote_view_privileges,
             service: &service,
             service_resources: &service_resources,
             live_dashboard_runtime: &live_dashboard_runtime,
             runtime_inventory: &runtime_inventory,
+            daemon_listener_inventory: &empty_daemon_listener_inventory(),
         });
 
         assert_eq!(issue_codes(issues), vec!["service_status_not_ready"]);
@@ -2733,16 +3475,19 @@ mod tests {
         let service_resources = json!({"readinessImpactingCandidates": 1});
         let live_dashboard_runtime = ready_live_dashboard_runtime();
         let runtime_inventory = empty_runtime_inventory();
+        let remote_view_privileges = ready_remote_view_privileges();
         let issues = install_doctor_issues(InstallDoctorIssueInputs {
             current_executable: &current_executable,
             path_command: &path_command,
             pnpm_package_binary: &pnpm_package_binary,
             workspace_binary: &workspace_binary,
             launch_config: &launch_config,
+            remote_view_privileges: &remote_view_privileges,
             service: &service,
             service_resources: &service_resources,
             live_dashboard_runtime: &live_dashboard_runtime,
             runtime_inventory: &runtime_inventory,
+            daemon_listener_inventory: &empty_daemon_listener_inventory(),
         });
 
         assert_eq!(
@@ -2769,22 +3514,176 @@ mod tests {
         });
         let live_dashboard_runtime = ready_live_dashboard_runtime();
         let runtime_inventory = empty_runtime_inventory();
+        let remote_view_privileges = ready_remote_view_privileges();
         let issues = install_doctor_issues(InstallDoctorIssueInputs {
             current_executable: &current_executable,
             path_command: &path_command,
             pnpm_package_binary: &pnpm_package_binary,
             workspace_binary: &workspace_binary,
             launch_config: &launch_config,
+            remote_view_privileges: &remote_view_privileges,
             service: &service,
             service_resources: &service_resources,
             live_dashboard_runtime: &live_dashboard_runtime,
             runtime_inventory: &runtime_inventory,
+            daemon_listener_inventory: &empty_daemon_listener_inventory(),
         });
 
         assert_eq!(
             issue_codes(issues),
             vec!["service_duplicate_profile_pressure"]
         );
+    }
+
+    #[test]
+    fn install_doctor_flags_ambiguous_daemon_socket_listeners() {
+        let launch_config = json!({
+            "stealthCdpChromiumRequired": false,
+            "stealthCdpChromiumReady": true,
+        });
+
+        let current_executable = fingerprint(Some("/repo/agent-browser"), Some("aaa"));
+        let path_command = fingerprint(Some("/repo/agent-browser"), Some("aaa"));
+        let pnpm_package_binary = fingerprint(Some("/repo/agent-browser"), Some("aaa"));
+        let workspace_binary = fingerprint(Some("/repo/agent-browser"), Some("aaa"));
+        let service = json!({"ready": true});
+        let service_resources = json!({"readinessImpactingCandidates": 0});
+        let live_dashboard_runtime = ready_live_dashboard_runtime();
+        let runtime_inventory = empty_runtime_inventory();
+        let remote_view_privileges = ready_remote_view_privileges();
+        let daemon_listener_inventory = json!({
+            "schemaVersion": "agent-browser.daemon-listener-inventory.v1",
+            "available": true,
+            "state": "ambiguous",
+            "listenerCount": 2,
+            "defaultSocketListenerCount": 2,
+            "currentExecutableMatchCount": 1,
+            "defaultSocketCurrentExecutableMatchCount": 1,
+            "deletedExecutableCount": 1,
+            "defaultSocketDeletedExecutableCount": 1,
+            "listeners": [
+                {"pid": 1, "socketPath": "/run/user/1000/agent-browser/default.sock", "exe": "/repo/agent-browser", "matchesCurrentExecutable": true, "deletedExecutable": false},
+                {"pid": 2, "socketPath": "/run/user/1000/agent-browser/default.sock", "exe": "/repo/agent-browser (deleted)", "matchesCurrentExecutable": false, "deletedExecutable": true}
+            ]
+        });
+        let issues = install_doctor_issues(InstallDoctorIssueInputs {
+            current_executable: &current_executable,
+            path_command: &path_command,
+            pnpm_package_binary: &pnpm_package_binary,
+            workspace_binary: &workspace_binary,
+            launch_config: &launch_config,
+            remote_view_privileges: &remote_view_privileges,
+            service: &service,
+            service_resources: &service_resources,
+            live_dashboard_runtime: &live_dashboard_runtime,
+            runtime_inventory: &runtime_inventory,
+            daemon_listener_inventory: &daemon_listener_inventory,
+        });
+
+        assert_eq!(
+            issue_codes(issues),
+            vec![
+                "daemon_socket_multiple_listeners",
+                "daemon_socket_deleted_executable"
+            ]
+        );
+    }
+
+    #[test]
+    fn install_doctor_does_not_flag_named_socket_only_listeners_as_default_authority() {
+        let launch_config = json!({
+            "stealthCdpChromiumRequired": false,
+            "stealthCdpChromiumReady": true,
+        });
+
+        let current_executable = fingerprint(Some("/repo/agent-browser"), Some("aaa"));
+        let path_command = fingerprint(Some("/repo/agent-browser"), Some("aaa"));
+        let pnpm_package_binary = fingerprint(Some("/repo/agent-browser"), Some("aaa"));
+        let workspace_binary = fingerprint(Some("/repo/agent-browser"), Some("aaa"));
+        let service = json!({"ready": true});
+        let service_resources = json!({"readinessImpactingCandidates": 0});
+        let live_dashboard_runtime = ready_live_dashboard_runtime();
+        let runtime_inventory = empty_runtime_inventory();
+        let remote_view_privileges = ready_remote_view_privileges();
+        let daemon_listener_inventory = json!({
+            "schemaVersion": "agent-browser.daemon-listener-inventory.v1",
+            "available": true,
+            "state": "ambiguous",
+            "listenerCount": 2,
+            "defaultSocketListenerCount": 0,
+            "currentExecutableMatchCount": 1,
+            "defaultSocketCurrentExecutableMatchCount": 0,
+            "deletedExecutableCount": 1,
+            "defaultSocketDeletedExecutableCount": 0,
+            "listeners": [
+                {"pid": 1, "socketPath": "/run/user/1000/agent-browser/odollo-carrier-ups.sock", "exe": "/repo/agent-browser", "matchesCurrentExecutable": true, "deletedExecutable": false},
+                {"pid": 2, "socketPath": "/run/user/1000/agent-browser/plan-0206-header.sock", "exe": "/repo/agent-browser (deleted)", "matchesCurrentExecutable": false, "deletedExecutable": true}
+            ]
+        });
+        let issues = install_doctor_issues(InstallDoctorIssueInputs {
+            current_executable: &current_executable,
+            path_command: &path_command,
+            pnpm_package_binary: &pnpm_package_binary,
+            workspace_binary: &workspace_binary,
+            launch_config: &launch_config,
+            remote_view_privileges: &remote_view_privileges,
+            service: &service,
+            service_resources: &service_resources,
+            live_dashboard_runtime: &live_dashboard_runtime,
+            runtime_inventory: &runtime_inventory,
+            daemon_listener_inventory: &daemon_listener_inventory,
+        });
+
+        assert!(issue_codes(issues).is_empty());
+    }
+
+    #[test]
+    fn install_doctor_flags_daemon_socket_current_executable_mismatch() {
+        let launch_config = json!({
+            "stealthCdpChromiumRequired": false,
+            "stealthCdpChromiumReady": true,
+        });
+
+        let current_executable = fingerprint(Some("/repo/agent-browser"), Some("aaa"));
+        let path_command = fingerprint(Some("/repo/agent-browser"), Some("aaa"));
+        let pnpm_package_binary = fingerprint(Some("/repo/agent-browser"), Some("aaa"));
+        let workspace_binary = fingerprint(Some("/repo/agent-browser"), Some("aaa"));
+        let service = json!({"ready": true});
+        let service_resources = json!({"readinessImpactingCandidates": 0});
+        let live_dashboard_runtime = ready_live_dashboard_runtime();
+        let runtime_inventory = empty_runtime_inventory();
+        let remote_view_privileges = ready_remote_view_privileges();
+        let daemon_listener_inventory = json!({
+            "schemaVersion": "agent-browser.daemon-listener-inventory.v1",
+            "available": true,
+            "state": "ambiguous",
+            "listenerCount": 1,
+            "defaultSocketListenerCount": 1,
+            "currentExecutableMatchCount": 0,
+            "defaultSocketCurrentExecutableMatchCount": 0,
+            "deletedExecutableCount": 0,
+            "defaultSocketDeletedExecutableCount": 0,
+            "listeners": [
+                {"pid": 1, "socketPath": "/run/user/1000/agent-browser/default.sock", "exe": "/installed/agent-browser", "matchesCurrentExecutable": false, "deletedExecutable": false}
+            ]
+        });
+        let issue = install_doctor_issues(InstallDoctorIssueInputs {
+            current_executable: &current_executable,
+            path_command: &path_command,
+            pnpm_package_binary: &pnpm_package_binary,
+            workspace_binary: &workspace_binary,
+            launch_config: &launch_config,
+            remote_view_privileges: &remote_view_privileges,
+            service: &service,
+            service_resources: &service_resources,
+            live_dashboard_runtime: &live_dashboard_runtime,
+            runtime_inventory: &runtime_inventory,
+            daemon_listener_inventory: &daemon_listener_inventory,
+        })
+        .remove(0);
+
+        assert_eq!(issue["code"], "daemon_socket_current_executable_mismatch");
+        assert_eq!(issue["nextAction"], "repair_daemon_listener_authority");
     }
 
     #[test]
@@ -2811,16 +3710,19 @@ mod tests {
             }
         });
         let runtime_inventory = empty_runtime_inventory();
+        let remote_view_privileges = ready_remote_view_privileges();
         let issue = install_doctor_issues(InstallDoctorIssueInputs {
             current_executable: &current_executable,
             path_command: &path_command,
             pnpm_package_binary: &pnpm_package_binary,
             workspace_binary: &workspace_binary,
             launch_config: &launch_config,
+            remote_view_privileges: &remote_view_privileges,
             service: &service,
             service_resources: &service_resources,
             live_dashboard_runtime: &live_dashboard_runtime,
             runtime_inventory: &runtime_inventory,
+            daemon_listener_inventory: &empty_daemon_listener_inventory(),
         })
         .remove(0);
 
@@ -2907,16 +3809,19 @@ mod tests {
                 }
             ]
         });
+        let remote_view_privileges = ready_remote_view_privileges();
         let issues = install_doctor_issues(InstallDoctorIssueInputs {
             current_executable: &current_executable,
             path_command: &path_command,
             pnpm_package_binary: &pnpm_package_binary,
             workspace_binary: &workspace_binary,
             launch_config: &launch_config,
+            remote_view_privileges: &remote_view_privileges,
             service: &service,
             service_resources: &service_resources,
             live_dashboard_runtime: &live_dashboard_runtime,
             runtime_inventory: &runtime_inventory,
+            daemon_listener_inventory: &empty_daemon_listener_inventory(),
         });
 
         assert_eq!(issue_codes(issues), vec!["active_runtime_stale_executable"]);
@@ -2926,10 +3831,12 @@ mod tests {
             pnpm_package_binary: &pnpm_package_binary,
             workspace_binary: &workspace_binary,
             launch_config: &launch_config,
+            remote_view_privileges: &remote_view_privileges,
             service: &service,
             service_resources: &service_resources,
             live_dashboard_runtime: &live_dashboard_runtime,
             runtime_inventory: &runtime_inventory,
+            daemon_listener_inventory: &empty_daemon_listener_inventory(),
         })
         .remove(0);
         assert_eq!(issue["session"], "default");
@@ -2967,16 +3874,19 @@ mod tests {
                 }
             ]
         });
+        let remote_view_privileges = ready_remote_view_privileges();
         let issue = install_doctor_issues(InstallDoctorIssueInputs {
             current_executable: &current_executable,
             path_command: &path_command,
             pnpm_package_binary: &pnpm_package_binary,
             workspace_binary: &workspace_binary,
             launch_config: &launch_config,
+            remote_view_privileges: &remote_view_privileges,
             service: &service,
             service_resources: &service_resources,
             live_dashboard_runtime: &live_dashboard_runtime,
             runtime_inventory: &runtime_inventory,
+            daemon_listener_inventory: &empty_daemon_listener_inventory(),
         })
         .remove(0);
 
@@ -3069,6 +3979,176 @@ mod tests {
             privileges_pos < deps_pos,
             "remote-view privileges must establish the sudo boundary before dependency installation"
         );
+    }
+
+    #[test]
+    fn remote_view_helper_desktop_session_status_rejects_terminal_first_template() {
+        let source = r#"
+cat > "$home/.xsession" <<'EOF'
+#!/bin/sh
+xterm &
+openbox-session
+EOF
+"#;
+
+        let status = remote_view_helper_desktop_session_status_from_source(source);
+
+        assert_eq!(status["ready"], false);
+        assert_eq!(status["state"], "terminal_first_template");
+        assert_eq!(status["terminalStartupDetected"], true);
+    }
+
+    #[test]
+    fn remote_view_helper_desktop_session_status_accepts_idle_openbox_template() {
+        let source = r#"
+cat > "$home/.xsession" <<'EOF'
+#!/bin/sh
+xsetroot -solid '#20252b' 2>/dev/null || true
+if command -v openbox-session >/dev/null 2>&1; then
+  openbox-session &
+fi
+while true; do
+  sleep 3600
+done
+EOF
+"#;
+
+        let status = remote_view_helper_desktop_session_status_from_source(source);
+
+        assert_eq!(status["ready"], true);
+        assert_eq!(status["state"], "browser_control_ready_template");
+        assert_eq!(status["terminalStartupDetected"], false);
+        assert_eq!(status["startsWindowManager"], true);
+        assert_eq!(status["keepsSessionAlive"], true);
+    }
+
+    #[test]
+    fn remote_view_helper_status_contract_accepts_current_capabilities() {
+        let report = json!({
+            "success": true,
+            "parsed": {
+                "schemaVersion": 1,
+                "helperVersion": "2026-06-23.p44-route-desktop-v2",
+                "routeDesktopSession": {
+                    "ready": true,
+                    "terminalStartupDetected": false
+                },
+                "displayAccess": {
+                    "supportsFilesystemX11Socket": true,
+                    "supportsAbstractX11Socket": true,
+                    "boundedXhostTimeoutSeconds": 2
+                }
+            }
+        });
+
+        assert!(remote_view_helper_status_contract_ready(&report));
+    }
+
+    #[test]
+    fn remote_view_helper_status_contract_rejects_missing_abstract_socket_support() {
+        let report = json!({
+            "success": true,
+            "parsed": {
+                "schemaVersion": 1,
+                "helperVersion": "2026-06-23.p44-route-desktop-v2",
+                "routeDesktopSession": {
+                    "ready": true,
+                    "terminalStartupDetected": false
+                },
+                "displayAccess": {
+                    "supportsFilesystemX11Socket": true,
+                    "supportsAbstractX11Socket": false,
+                    "boundedXhostTimeoutSeconds": 2
+                }
+            }
+        });
+
+        assert!(!remote_view_helper_status_contract_ready(&report));
+    }
+
+    #[test]
+    fn install_doctor_issues_reports_stale_remote_view_helper_desktop_template() {
+        let ready_binary = json!({
+            "path": "/tmp/agent-browser",
+            "sha256": "same",
+        });
+        let launch_config = json!({
+            "stealthCdpChromiumRequired": false,
+            "stealthCdpChromiumReady": true,
+        });
+        let remote_view_privileges = json!({
+            "helperExists": true,
+            "helperDesktopSession": {"ready": false}
+        });
+        let service = json!({"ready": true});
+        let service_resources = json!({
+            "readinessImpactingCandidates": 0,
+            "duplicateProfilePressureWarnings": 0,
+        });
+        let live_dashboard_runtime = json!({"available": false});
+        let runtime_inventory = json!({"staleCount": 0});
+
+        let issues = install_doctor_issues(InstallDoctorIssueInputs {
+            current_executable: &ready_binary,
+            path_command: &ready_binary,
+            pnpm_package_binary: &ready_binary,
+            workspace_binary: &ready_binary,
+            launch_config: &launch_config,
+            remote_view_privileges: &remote_view_privileges,
+            service: &service,
+            service_resources: &service_resources,
+            live_dashboard_runtime: &live_dashboard_runtime,
+            runtime_inventory: &runtime_inventory,
+            daemon_listener_inventory: &empty_daemon_listener_inventory(),
+        });
+
+        assert!(issues.iter().any(|issue| {
+            issue.get("code").and_then(serde_json::Value::as_str)
+                == Some("remote_view_route_desktop_helper_stale")
+        }));
+    }
+
+    #[test]
+    fn install_doctor_issues_reports_stale_remote_view_helper_status_contract() {
+        let ready_binary = json!({
+            "path": "/tmp/agent-browser",
+            "sha256": "same",
+        });
+        let launch_config = json!({
+            "stealthCdpChromiumRequired": false,
+            "stealthCdpChromiumReady": true,
+        });
+        let remote_view_privileges = json!({
+            "helperExists": true,
+            "helperDesktopSession": {"ready": true},
+            "helperStatus": {"success": false}
+        });
+        let service = json!({"ready": true});
+        let service_resources = json!({
+            "readinessImpactingCandidates": 0,
+            "duplicateProfilePressureWarnings": 0,
+        });
+        let live_dashboard_runtime = json!({"available": false});
+        let runtime_inventory = json!({"staleCount": 0});
+
+        let issues = install_doctor_issues(InstallDoctorIssueInputs {
+            current_executable: &ready_binary,
+            path_command: &ready_binary,
+            pnpm_package_binary: &ready_binary,
+            workspace_binary: &ready_binary,
+            launch_config: &launch_config,
+            remote_view_privileges: &remote_view_privileges,
+            service: &service,
+            service_resources: &service_resources,
+            live_dashboard_runtime: &live_dashboard_runtime,
+            runtime_inventory: &runtime_inventory,
+            daemon_listener_inventory: &empty_daemon_listener_inventory(),
+        });
+
+        assert!(issues.iter().any(|issue| {
+            issue.get("code").and_then(serde_json::Value::as_str)
+                == Some("remote_view_privileged_helper_status_stale")
+        }));
     }
 
     #[test]

@@ -50,6 +50,92 @@
         "$ref": "service-profiles-response.v1.schema.json#/$defs/profileAllocation"
       }
     },
+    "retainedDisplayAllocations": {
+      "description": "Derived retained display-allocation classification summary. These records are historical service-state records and are not live control rows unless classified as live.",
+      "type": "object",
+      "properties": {
+        "count": { "type": "integer", "minimum": 0 },
+        "applySafeCount": { "type": "integer", "minimum": 0 },
+        "retainedCount": { "type": "integer", "minimum": 0 },
+        "classCounts": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "applySafeIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "retainedIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "candidateReasons": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "explanation": { "type": "string" },
+        "cleanupCommand": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "browserSessionAuthority": {
+      "description": "Read-only daemon authority snapshot that reconciles modeled browser rows with process/resource truth before clients present browsers as viable.",
+      "type": "object",
+      "properties": {
+        "schemaVersion": { "type": "integer", "minimum": 1 },
+        "summary": {
+          "type": "object",
+          "properties": {
+            "modeledBrowserCount": { "type": "integer", "minimum": 0 },
+            "viableBrowserCount": { "type": "integer", "minimum": 0 },
+            "attentionBrowserCount": { "type": "integer", "minimum": 0 },
+            "nonViableBrowserCount": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": true
+        },
+        "resourcePressure": {
+          "type": "object",
+          "properties": {
+            "state": { "type": "string" },
+            "totalProcessCount": { "type": "integer", "minimum": 0 },
+            "correlatedProcessCount": { "type": "integer", "minimum": 0 },
+            "candidateCount": { "type": "integer", "minimum": 0 },
+            "protectedCount": { "type": "integer", "minimum": 0 },
+            "observedCount": { "type": "integer", "minimum": 0 },
+            "observedUnownedAgentBrowserProcessCount": { "type": "integer", "minimum": 0 },
+            "candidateRssBytes": { "type": "integer", "minimum": 0 },
+            "totalRssBytes": { "type": "integer", "minimum": 0 },
+            "reasons": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "additionalProperties": true
+        },
+        "browserVerdicts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": { "type": "string" },
+              "browserId": { "type": "string" },
+              "state": { "type": "string" },
+              "viable": { "type": "boolean" },
+              "needsAttention": { "type": "boolean" },
+              "reasons": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    },
     "launchConfig": {
       "description": "No-launch diagnostic view of the configured browser build and executable path that service-owned requests would inherit.",
       "type": "object",

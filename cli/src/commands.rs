@@ -1,5 +1,6 @@
 use base64::{engine::general_purpose::STANDARD, Engine};
 use serde_json::{json, Value};
+use std::env;
 use std::io::{self, BufRead};
 
 use crate::color;
@@ -71,7 +72,7 @@ pub fn gen_id() -> String {
     )
 }
 
-const SERVICE_PROFILE_VERIFY_SEEDING_USAGE: &str = "service profiles <profile-id> verify-seeding <target-service-id> [--state <fresh|stale|seeded_unknown_freshness|blocked_by_attached_devtools>] [--evidence <text>] [--last-verified-at <rfc3339>] [--freshness-expires-at <rfc3339>] [--no-authenticated-service-update]";
+const SERVICE_PROFILE_VERIFY_SEEDING_USAGE: &str = "service profiles <profile-id> verify-seeding <target-service-id> [--state <fresh|stale|seeded_unknown_freshness|blocked_by_attached_devtools>] [--evidence <text>] [--account-id <id>] [--account-ids <id,id>] [--last-verified-at <rfc3339>] [--freshness-expires-at <rfc3339>] [--no-authenticated-service-update]";
 
 const SERVICE_BROWSER_CAPABILITY_PREFLIGHT_USAGE: &str = "service browser-capability preflight --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--runtime-profile <id>] [--profile <path>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--headed|--headless] [--cdp-free]";
 
@@ -79,9 +80,72 @@ const SERVICE_BROWSER_CAPABILITY_GUIDE_USAGE: &str = "service browser-capability
 
 const SERVICE_BROWSER_CAPABILITY_PREFER_USAGE: &str = "service browser-capability prefer --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> --preferred-executable-id <id> [--id <binding-id>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--service-name <name>] [--task-name <name>] [--preferred-host-id <id>] [--preferred-capability-id <id>] [--priority <n>] [--reason <text>]";
 
-const SERVICE_ACCESS_PLAN_USAGE: &str = "service access-plan [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--site-policy-id <id>] [--challenge-id <id>] [--readiness-profile-id <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--browser-host <local_headless|local_headed|docker_headed|remote_headed|cloud_provider|attached_existing>] [--view-stream-provider <cdp_screencast|chrome_tab_webrtc|virtual_display_webrtc|novnc|rdp_gateway|external_url>] [--control-input-provider <cdp_input|webrtc_input|vnc_input|manual_attached_desktop>] [--display-isolation <private_virtual_display|shared_display|ambient_display>]";
+const SERVICE_ACCESS_PLAN_USAGE: &str = "service access-plan [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--site-policy-id <id>] [--challenge-id <id>] [--readiness-profile-id <id>] [--runtime-profile <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--browser-host <local_headless|local_headed|docker_headed|remote_headed|cloud_provider|attached_existing>] [--view-stream-provider <cdp_screencast|chrome_tab_webrtc|virtual_display_webrtc|novnc|rdp_gateway|external_url>] [--control-input-provider <cdp_input|webrtc_input|vnc_input|manual_attached_desktop>] [--display-isolation <private_virtual_display|shared_display|ambient_display>]";
 
-const REMOTE_VIEW_OPEN_USAGE: &str = "remote-view open [url] [--url <url>] [--runtime-profile <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--provider <rdp_gateway>] [--profile <path>] [--route-pool-entry-id <id>] [--route-pool-entry-json <json>] [--route-id <id>] [--display <name>] [--display-allocation-id <id>] [--browser-id <id>] [--session-name <name>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--dry-run]";
+const REMOTE_VIEW_OPEN_USAGE: &str = "remote-view open [url] [--url <url>] [--runtime-profile <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--view-stream-provider <rdp_gateway>] [--provider <rdp_gateway>] [--profile <path>] [--route-pool-entry-id <id>] [--route-pool-entry-json <json>] [--route-id <id>] [--display <name>] [--display-allocation-id <id>] [--browser-id <id>] [--session-name <name>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--dry-run]";
+
+fn remote_view_route_pool_from_env_value(raw: Option<String>) -> Result<Option<Value>, ParseError> {
+    let Some(raw) = raw else {
+        return Ok(None);
+    };
+    if raw.trim().is_empty() {
+        return Ok(None);
+    }
+    let value = serde_json::from_str::<Value>(&raw).map_err(|err| ParseError::InvalidValue {
+        message: format!("Invalid AGENT_BROWSER_RDP_ROUTE_POOL_JSON value: {}", err),
+        usage: REMOTE_VIEW_OPEN_USAGE,
+    })?;
+    if !value.is_array() {
+        return Err(ParseError::InvalidValue {
+            message: "Invalid AGENT_BROWSER_RDP_ROUTE_POOL_JSON value: expected a JSON array"
+                .to_string(),
+            usage: REMOTE_VIEW_OPEN_USAGE,
+        });
+    }
+    Ok(Some(value))
+}
+
+fn remote_view_route_pool_from_env() -> Result<Option<Value>, ParseError> {
+    remote_view_route_pool_from_env_value(env::var("AGENT_BROWSER_RDP_ROUTE_POOL_JSON").ok())
+}
+
+fn apply_explicit_global_launch_routing_flags(cmd: &mut Value, flags: &Flags) {
+    if flags.cli_profile && cmd.get("profile").is_none() {
+        if let Some(profile) = flags.profile.as_deref() {
+            cmd["profile"] = json!(profile);
+        }
+    }
+    if flags.cli_runtime_profile && cmd.get("runtimeProfile").is_none() {
+        if let Some(runtime_profile) = flags.runtime_profile.as_deref() {
+            cmd["runtimeProfile"] = json!(runtime_profile);
+        }
+    }
+    if flags.cli_browser_build && cmd.get("browserBuild").is_none() {
+        if let Some(browser_build) = flags.browser_build.as_deref() {
+            cmd["browserBuild"] = json!(browser_build);
+        }
+    }
+    if flags.cli_browser_host && cmd.get("browserHost").is_none() {
+        if let Some(browser_host) = flags.browser_host.as_deref() {
+            cmd["browserHost"] = json!(browser_host);
+        }
+    }
+    if flags.cli_view_stream_provider && cmd.get("viewStreamProvider").is_none() {
+        if let Some(view_stream_provider) = flags.view_stream_provider.as_deref() {
+            cmd["viewStreamProvider"] = json!(view_stream_provider);
+        }
+    }
+    if flags.cli_control_input_provider && cmd.get("controlInputProvider").is_none() {
+        if let Some(control_input_provider) = flags.control_input_provider.as_deref() {
+            cmd["controlInputProvider"] = json!(control_input_provider);
+        }
+    }
+    if flags.cli_display_isolation && cmd.get("displayIsolation").is_none() {
+        if let Some(display_isolation) = flags.display_isolation.as_deref() {
+            cmd["displayIsolation"] = json!(display_isolation);
+        }
+    }
+}
 
 fn parse_service_access_plan(
     id: String,
@@ -204,6 +268,16 @@ fn parse_service_access_plan(
                     });
                 };
                 cmd["readinessProfileId"] = json!(value);
+                i += 1;
+            }
+            "--runtime-profile" => {
+                let Some(value) = rest.get(i + 1) else {
+                    return Err(ParseError::InvalidValue {
+                        message: "Missing value for --runtime-profile".to_string(),
+                        usage: SERVICE_ACCESS_PLAN_USAGE,
+                    });
+                };
+                cmd["runtimeProfile"] = json!(value);
                 i += 1;
             }
             "--browser-build" => {
@@ -333,6 +407,11 @@ fn parse_service_access_plan(
     if flags.cli_display_isolation && cmd.get("displayIsolation").is_none() {
         if let Some(display_isolation) = flags.display_isolation.as_deref() {
             cmd["displayIsolation"] = json!(display_isolation);
+        }
+    }
+    if flags.cli_runtime_profile && cmd.get("runtimeProfile").is_none() {
+        if let Some(runtime_profile) = flags.runtime_profile.as_deref() {
+            cmd["runtimeProfile"] = json!(runtime_profile);
         }
     }
     Ok(cmd)
@@ -862,14 +941,29 @@ fn parse_remote_view_open(id: String, rest: &[&str], flags: &Flags) -> Result<Va
     if let Some(browser_host) = flags.browser_host.as_ref() {
         cmd["browserHost"] = json!(browser_host);
     }
+    if let Some(browser_build) = flags.browser_build.as_ref() {
+        cmd["browserBuild"] = json!(browser_build);
+    }
     if let Some(provider) = flags.view_stream_provider.as_ref() {
         cmd["viewStreamProvider"] = json!(provider);
-        cmd["provider"] = json!(provider);
     }
     if flags.cli_provider {
         if let Some(provider) = flags.provider.as_ref() {
             match provider.as_str() {
                 "rdp_gateway" => {
+                    if cmd
+                        .get("viewStreamProvider")
+                        .and_then(Value::as_str)
+                        .is_some_and(|value| value != "rdp_gateway")
+                    {
+                        return Err(ParseError::InvalidValue {
+                            message: format!(
+                                "Invalid remote-view open provider combination: --provider rdp_gateway conflicts with --view-stream-provider {}",
+                                cmd["viewStreamProvider"].as_str().unwrap_or("")
+                            ),
+                            usage: REMOTE_VIEW_OPEN_USAGE,
+                        });
+                    }
                     cmd["viewStreamProvider"] = json!(provider);
                     cmd["provider"] = json!(provider);
                 }
@@ -920,6 +1014,20 @@ fn parse_remote_view_open(id: String, rest: &[&str], flags: &Flags) -> Result<Va
                 let value = required_next(rest, i, "--provider", REMOTE_VIEW_OPEN_USAGE)?;
                 match value.as_str() {
                     "rdp_gateway" => {
+                        if cmd
+                            .get("viewStreamProvider")
+                            .and_then(Value::as_str)
+                            .is_some_and(|existing| existing != value)
+                        {
+                            return Err(ParseError::InvalidValue {
+                                message: format!(
+                                    "Invalid remote-view open provider combination: --provider {} conflicts with --view-stream-provider {}",
+                                    value,
+                                    cmd["viewStreamProvider"].as_str().unwrap_or("")
+                                ),
+                                usage: REMOTE_VIEW_OPEN_USAGE,
+                            });
+                        }
                         cmd["viewStreamProvider"] = json!(value);
                         cmd["provider"] = json!(value);
                     }
@@ -1029,6 +1137,11 @@ fn parse_remote_view_open(id: String, rest: &[&str], flags: &Flags) -> Result<Va
     if cmd.get("url").and_then(Value::as_str).is_none() {
         if let Some(url) = positional_url {
             cmd["url"] = json!(url);
+        }
+    }
+    if cmd.get("routePoolEntry").is_none() && cmd.get("routePool").is_none() {
+        if let Some(route_pool) = remote_view_route_pool_from_env()? {
+            cmd["routePool"] = route_pool;
         }
     }
     Ok(cmd)
@@ -1173,6 +1286,44 @@ fn parse_service_profile_verify_seeding(
                 freshness["freshnessExpiresAt"] = json!(value);
                 i += 1;
             }
+            "--account-id" => {
+                let Some(value) = rest.get(i + 1) else {
+                    return Err(ParseError::InvalidValue {
+                        message: "Missing value for --account-id".to_string(),
+                        usage: SERVICE_PROFILE_VERIFY_SEEDING_USAGE,
+                    });
+                };
+                let mut accounts = freshness
+                    .get("accountIds")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default();
+                accounts.push(json!(value));
+                freshness["accountIds"] = Value::Array(accounts);
+                i += 1;
+            }
+            "--account-ids" => {
+                let Some(value) = rest.get(i + 1) else {
+                    return Err(ParseError::InvalidValue {
+                        message: "Missing value for --account-ids".to_string(),
+                        usage: SERVICE_PROFILE_VERIFY_SEEDING_USAGE,
+                    });
+                };
+                let mut accounts = freshness
+                    .get("accountIds")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default();
+                for account in value
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                {
+                    accounts.push(json!(account));
+                }
+                freshness["accountIds"] = Value::Array(accounts);
+                i += 1;
+            }
             "--no-authenticated-service-update" => {
                 freshness["updateAuthenticatedServiceIds"] = json!(false);
             }
@@ -1268,6 +1419,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                     })?;
                 nav_cmd["headers"] = headers;
             }
+            apply_explicit_global_launch_routing_flags(&mut nav_cmd, flags);
             // Include iOS device info if specified (needed for auto-launch with existing daemon)
             if flags.provider.as_deref() == Some("ios") {
                 if let Some(ref device) = flags.device {
@@ -2188,6 +2340,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 let mut released_sessions = false;
                 let mut abandoned_sessions = false;
                 let mut orphaned_profiles = false;
+                let mut display_allocations = false;
                 let mut abandoned_session_min_age_minutes = 1440u64;
                 let mut saw_apply = false;
                 let mut saw_dry_run = false;
@@ -2211,13 +2364,14 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                         "--released-sessions" => released_sessions = true,
                         "--abandoned-sessions" => abandoned_sessions = true,
                         "--orphaned-profiles" => orphaned_profiles = true,
+                        "--display-allocations" => display_allocations = true,
                         "--abandoned-session-min-age-minutes" => {
                             i += 1;
                             let Some(raw) = rest.get(i) else {
                                 return Err(ParseError::InvalidValue {
                                     message: "--abandoned-session-min-age-minutes requires a value"
                                         .to_string(),
-                                    usage: "service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers] [--released-sessions] [--abandoned-sessions] [--orphaned-profiles] [--abandoned-session-min-age-minutes <n>]",
+                                    usage: "service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers] [--released-sessions] [--abandoned-sessions] [--orphaned-profiles] [--display-allocations] [--abandoned-session-min-age-minutes <n>]",
                                 });
                             };
                             abandoned_session_min_age_minutes =
@@ -2226,13 +2380,13 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                                         "Invalid --abandoned-session-min-age-minutes value: {}",
                                         raw
                                     ),
-                                    usage: "service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers] [--released-sessions] [--abandoned-sessions] [--orphaned-profiles] [--abandoned-session-min-age-minutes <n>]",
+                                    usage: "service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers] [--released-sessions] [--abandoned-sessions] [--orphaned-profiles] [--display-allocations] [--abandoned-session-min-age-minutes <n>]",
                                 })?;
                         }
                         flag => {
                             return Err(ParseError::InvalidValue {
                                 message: format!("Unknown flag for service prune-retained: {}", flag),
-                                usage: "service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers] [--released-sessions] [--abandoned-sessions] [--orphaned-profiles] [--abandoned-session-min-age-minutes <n>]",
+                                usage: "service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers] [--released-sessions] [--abandoned-sessions] [--orphaned-profiles] [--display-allocations] [--abandoned-session-min-age-minutes <n>]",
                             });
                         }
                     }
@@ -2241,7 +2395,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 if saw_apply && saw_dry_run {
                     return Err(ParseError::InvalidValue {
                         message: "--apply and --dry-run cannot be used together".to_string(),
-                        usage: "service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers] [--released-sessions] [--abandoned-sessions] [--orphaned-profiles] [--abandoned-session-min-age-minutes <n>]",
+                        usage: "service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers] [--released-sessions] [--abandoned-sessions] [--orphaned-profiles] [--display-allocations] [--abandoned-session-min-age-minutes <n>]",
                     });
                 }
                 Ok(json!({
@@ -2255,6 +2409,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                     "releasedSessions": released_sessions,
                     "abandonedSessions": abandoned_sessions,
                     "orphanedProfiles": orphaned_profiles,
+                    "displayAllocations": display_allocations,
                     "abandonedSessionMinAgeMinutes": abandoned_session_min_age_minutes,
                     "serviceState": flags.service_state.clone(),
                 }))
@@ -3644,7 +3799,28 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
         "window" => {
             const VALID: &[&str] = &["new"];
             match rest.first().copied() {
-                Some("new") => Ok(json!({ "id": id, "action": "window_new" })),
+                Some("new") => {
+                    let mut cmd = json!({ "id": id, "action": "window_new" });
+                    for value in rest.iter().skip(1) {
+                        match *value {
+                            "--same-profile" => cmd["sameProfile"] = json!(true),
+                            flag if flag.starts_with("--") => {
+                                return Err(ParseError::InvalidValue {
+                                    message: format!("Unknown flag for window new: {}", flag),
+                                    usage: "window new [url] [--same-profile]",
+                                });
+                            }
+                            url if cmd.get("url").is_none() => cmd["url"] = json!(url),
+                            extra => {
+                                return Err(ParseError::InvalidValue {
+                                    message: format!("Unexpected argument for window new: {}", extra),
+                                    usage: "window new [url] [--same-profile]",
+                                });
+                            }
+                        }
+                    }
+                    Ok(cmd)
+                }
                 Some(sub) => Err(ParseError::UnknownSubcommand {
                     subcommand: sub.to_string(),
                     valid_options: VALID,
@@ -5011,6 +5187,7 @@ mod tests {
             service_recovery_max_backoff_ms_source:
                 crate::native::service_health::BrowserRecoveryPolicyValueSource::Default,
             browser_build_manifest_status: std::collections::BTreeMap::new(),
+            browser_build: None,
             runtime_profile: None,
             json: false,
             headed: false,
@@ -5046,6 +5223,7 @@ mod tests {
             cli_download_path: false,
             cli_headed: false,
             cli_leave_open: false,
+            cli_browser_build: false,
             cli_runtime_profile: false,
             cli_provider: false,
             cli_browser_host: false,
@@ -5348,6 +5526,34 @@ mod tests {
     }
 
     #[test]
+    fn test_navigate_preserves_explicit_global_launch_routing_flags() {
+        let mut flags = default_flags();
+        flags.runtime_profile = Some("last30days-facebook".to_string());
+        flags.cli_runtime_profile = true;
+        flags.browser_build = Some("stealthcdp_chromium".to_string());
+        flags.cli_browser_build = true;
+        flags.browser_host = Some("remote_headed".to_string());
+        flags.cli_browser_host = true;
+        flags.view_stream_provider = Some("rdp_gateway".to_string());
+        flags.cli_view_stream_provider = true;
+        flags.control_input_provider = Some("manual_attached_desktop".to_string());
+        flags.cli_control_input_provider = true;
+        flags.display_isolation = Some("private_virtual_display".to_string());
+        flags.cli_display_isolation = true;
+
+        let cmd = parse_command(&args("open https://x.com/home"), &flags).unwrap();
+
+        assert_eq!(cmd["action"], "navigate");
+        assert_eq!(cmd["url"], "https://x.com/home");
+        assert_eq!(cmd["runtimeProfile"], "last30days-facebook");
+        assert_eq!(cmd["browserBuild"], "stealthcdp_chromium");
+        assert_eq!(cmd["browserHost"], "remote_headed");
+        assert_eq!(cmd["viewStreamProvider"], "rdp_gateway");
+        assert_eq!(cmd["controlInputProvider"], "manual_attached_desktop");
+        assert_eq!(cmd["displayIsolation"], "private_virtual_display");
+    }
+
+    #[test]
     fn test_navigate_adds_manual_login_preferred_service_hint_for_login_host() {
         let mut flags = default_flags();
         flags.manual_login_preferred_services = vec!["google".to_string()];
@@ -5571,6 +5777,19 @@ mod tests {
     fn test_tab_close() {
         let cmd = parse_command(&args("tab close"), &default_flags()).unwrap();
         assert_eq!(cmd["action"], "tab_close");
+    }
+
+    #[test]
+    fn test_window_new_same_profile_with_url() {
+        let cmd = parse_command(
+            &args("window new https://example.com --same-profile"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "window_new");
+        assert_eq!(cmd["url"], "https://example.com");
+        assert_eq!(cmd["sameProfile"], true);
     }
 
     // === Network ===
@@ -6897,6 +7116,7 @@ mod tests {
         assert_eq!(cmd["releasedSessions"], false);
         assert_eq!(cmd["abandonedSessions"], false);
         assert_eq!(cmd["orphanedProfiles"], false);
+        assert_eq!(cmd["displayAllocations"], false);
         assert_eq!(cmd["abandonedSessionMinAgeMinutes"], 1440);
         assert!(cmd["serviceState"].is_object());
     }
@@ -6940,6 +7160,18 @@ mod tests {
 
         assert_eq!(cmd["action"], "service_prune_retained");
         assert_eq!(cmd["orphanedProfiles"], true);
+    }
+
+    #[test]
+    fn test_service_prune_retained_accepts_display_allocations() {
+        let cmd = parse_command(
+            &args("service prune-retained --display-allocations"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_prune_retained");
+        assert_eq!(cmd["displayAllocations"], true);
     }
 
     #[test]
@@ -7091,7 +7323,7 @@ mod tests {
     #[test]
     fn test_service_access_plan_accepts_identity_and_browser_build() {
         let cmd = parse_command(
-            &args("service access-plan --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace --login-id canva --account-id user@example.test --browser-build stealthcdp_chromium --browser-host remote_headed --view-stream-provider rdp_gateway --control-input-provider manual_attached_desktop --display-isolation private_virtual_display"),
+            &args("service access-plan --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace --login-id canva --account-id user@example.test --runtime-profile canva-default --browser-build stealthcdp_chromium --browser-host remote_headed --view-stream-provider rdp_gateway --control-input-provider manual_attached_desktop --display-isolation private_virtual_display"),
             &default_flags(),
         )
         .unwrap();
@@ -7102,6 +7334,7 @@ mod tests {
         assert_eq!(cmd["taskName"], "openCanvaWorkspace");
         assert_eq!(cmd["loginId"], "canva");
         assert_eq!(cmd["accountId"], "user@example.test");
+        assert_eq!(cmd["runtimeProfile"], "canva-default");
         assert_eq!(cmd["browserBuild"], "stealthcdp_chromium");
         assert_eq!(cmd["browserHost"], "remote_headed");
         assert_eq!(cmd["viewStreamProvider"], "rdp_gateway");
@@ -7112,7 +7345,7 @@ mod tests {
 
     #[test]
     fn test_service_access_plan_preserves_global_remote_view_flags_after_cleaning() {
-        let raw = args("service access-plan --service-name CanvaCLI --login-id canva --browser-host remote_headed --view-stream-provider rdp_gateway --control-input-provider manual_attached_desktop --display-isolation private_virtual_display");
+        let raw = args("--runtime-profile canva-default service access-plan --service-name CanvaCLI --login-id canva --browser-host remote_headed --view-stream-provider rdp_gateway --control-input-provider manual_attached_desktop --display-isolation private_virtual_display");
         let flags = crate::flags::parse_flags(&raw);
         let clean = crate::flags::clean_args(&raw);
         let cmd = parse_command(&clean, &flags).unwrap();
@@ -7124,6 +7357,7 @@ mod tests {
         assert_eq!(cmd["viewStreamProvider"], "rdp_gateway");
         assert_eq!(cmd["controlInputProvider"], "manual_attached_desktop");
         assert_eq!(cmd["displayIsolation"], "private_virtual_display");
+        assert_eq!(cmd["runtimeProfile"], "canva-default");
     }
 
     #[test]
@@ -7147,6 +7381,38 @@ mod tests {
         assert_eq!(cmd["agentName"], "codex");
         assert_eq!(cmd["taskName"], "authenticateLinkedIn");
         assert_eq!(cmd["dryRun"], true);
+    }
+
+    #[test]
+    fn test_remote_view_open_accepts_canonical_view_stream_provider() {
+        let raw = args("--runtime-profile stealthcdp-default --display-isolation shared_display remote-view open linkedin.com --browser-build stealthcdp_chromium --view-stream-provider rdp_gateway --route-pool-entry-id pool-a --service-name AuraCall --agent-name codex --task-name authenticateLinkedIn --dry-run");
+        let flags = crate::flags::parse_flags(&raw);
+        let clean = crate::flags::clean_args(&raw);
+        let cmd = parse_command(&clean, &flags).unwrap();
+
+        assert_eq!(cmd["action"], "remote_view_open");
+        assert_eq!(cmd["url"], "https://linkedin.com");
+        assert_eq!(cmd["viewStreamProvider"], "rdp_gateway");
+        assert!(cmd.get("provider").is_none());
+        assert_eq!(cmd["browserBuild"], "stealthcdp_chromium");
+        assert_eq!(cmd["routePoolEntryId"], "pool-a");
+        assert_eq!(cmd["dryRun"], true);
+    }
+
+    #[test]
+    fn test_remote_view_open_rejects_provider_view_stream_conflict() {
+        let raw = args(
+            "remote-view open linkedin.com --view-stream-provider external_url --provider rdp_gateway --dry-run",
+        );
+        let flags = crate::flags::parse_flags(&raw);
+        let clean = crate::flags::clean_args(&raw);
+        let err = parse_command(&clean, &flags).unwrap_err();
+
+        let ParseError::InvalidValue { message, .. } = err else {
+            panic!("expected invalid provider conflict");
+        };
+        assert!(message
+            .contains("--provider rdp_gateway conflicts with --view-stream-provider external_url"));
     }
 
     #[test]
@@ -7195,6 +7461,32 @@ mod tests {
         assert_eq!(cmd["routePoolEntryId"], "guacamole-rdp-a");
         assert_eq!(cmd["routePoolEntry"]["routeId"], "guacamole:1");
         assert_eq!(cmd["dryRun"], true);
+    }
+
+    #[test]
+    fn test_remote_view_route_pool_env_value_accepts_array() {
+        let route_pool = remote_view_route_pool_from_env_value(Some(
+            r#"[{"id":"guacamole-rdp-a","routeId":"guacamole:3","target":{"displayName":":11"}}]"#
+                .to_string(),
+        ))
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(route_pool[0]["id"], "guacamole-rdp-a");
+        assert_eq!(route_pool[0]["routeId"], "guacamole:3");
+    }
+
+    #[test]
+    fn test_remote_view_route_pool_env_value_rejects_non_array() {
+        let err =
+            remote_view_route_pool_from_env_value(Some(r#"{"id":"guacamole-rdp-a"}"#.to_string()))
+                .unwrap_err();
+
+        let ParseError::InvalidValue { message, .. } = err else {
+            panic!("expected invalid route-pool env value");
+        };
+        assert!(message.contains("AGENT_BROWSER_RDP_ROUTE_POOL_JSON"));
+        assert!(message.contains("JSON array"));
     }
 
     #[test]
@@ -7332,6 +7624,23 @@ mod tests {
             "2026-05-10T13:00:00Z"
         );
         assert_eq!(cmd["freshness"]["updateAuthenticatedServiceIds"], false);
+    }
+
+    #[test]
+    fn test_service_profile_verify_seeding_accepts_account_ids() {
+        let cmd = parse_command(
+            &args(
+                "service profiles google-work verify-seeding google --account-id eric@example.com --account-ids tenant-a,tenant-b",
+            ),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_profile_freshness_update");
+        assert_eq!(
+            cmd["freshness"]["accountIds"],
+            json!(["eric@example.com", "tenant-a", "tenant-b"])
+        );
     }
 
     #[test]

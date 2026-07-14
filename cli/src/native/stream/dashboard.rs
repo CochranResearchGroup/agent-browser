@@ -1,8 +1,12 @@
+use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
 use std::env;
+use std::fmt;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
+use tokio::time::{timeout, Duration};
+use tokio_tungstenite::tungstenite::Message;
 
 use crate::connection::get_socket_dir;
 
@@ -24,6 +28,69 @@ use super::http::{
 };
 
 const DASHBOARD_SERVICE_BACKEND_SESSION: &str = "dashboard-service-backend";
+const DASHBOARD_LOCAL_PROXY_TIMEOUT: Duration = Duration::from_secs(2);
+const DASHBOARD_STREAM_FRAME_PROXY_TIMEOUT: Duration = Duration::from_secs(7);
+const DASHBOARD_CDP_SCREENSHOT_TIMEOUT: Duration = Duration::from_secs(5);
+
+#[derive(Debug, Clone)]
+struct DashboardReadinessError {
+    code: &'static str,
+    message: String,
+    details: Option<Value>,
+}
+
+impl DashboardReadinessError {
+    fn new(code: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            code,
+            message: message.into(),
+            details: None,
+        }
+    }
+
+    fn with_details(mut self, details: Value) -> Self {
+        self.details = Some(details);
+        self
+    }
+
+    fn local_backend(
+        code: &'static str,
+        message: impl Into<String>,
+        port: u16,
+        path: &str,
+        stage: &str,
+    ) -> Self {
+        Self::new(code, message).with_details(json!({
+            "readinessState": readiness_state_for_gateway_code(code),
+            "transport": "local_proxy",
+            "port": port,
+            "path": path,
+            "stage": stage,
+        }))
+    }
+}
+
+impl fmt::Display for DashboardReadinessError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+fn readiness_state_for_gateway_code(code: &str) -> &'static str {
+    match code {
+        "backend_connect_timeout"
+        | "backend_write_timeout"
+        | "backend_read_timeout"
+        | "backend_unavailable" => "unreachable",
+        "backend_empty_response" | "backend_invalid_http" | "invalid_backend_payload" => {
+            "invalid_payload"
+        }
+        "stale_target" => "stale_target",
+        "screenshot_failed" => "invalid_payload",
+        _ => "error",
+    }
+}
+
 pub async fn run_dashboard_server(port: u16) {
     if let Err(err) = dashboard_auth::ensure_dashboard_auth_config() {
         eprintln!("Failed to initialize dashboard auth: {}", err);
@@ -131,16 +198,31 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
             String::new()
         };
         if let Some(port) = stream_api_port(path) {
-            match proxy_local_http_api_request(port, method, raw_path, &body_str).await {
+            let proxy_timeout = if method == "GET" && path.ends_with("/frame") {
+                DASHBOARD_STREAM_FRAME_PROXY_TIMEOUT
+            } else {
+                DASHBOARD_LOCAL_PROXY_TIMEOUT
+            };
+            match proxy_local_http_api_request_with_timeout(
+                port,
+                method,
+                raw_path,
+                &body_str,
+                proxy_timeout,
+            )
+            .await
+            {
                 Ok(response) => {
                     let _ = stream.write_all(&response).await;
                     return;
                 }
                 Err(err) => {
-                    write_json_error(
+                    write_json_error_with_code(
                         &mut stream,
                         "502 Bad Gateway",
                         &format!("Stream API proxy failed: {}", err),
+                        Some(err.code),
+                        err.details.clone(),
                     )
                     .await;
                     return;
@@ -219,6 +301,11 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
 
     if method == "GET" && path == "/api/session-tabs" {
         handle_session_tabs_api_request(&mut stream, query).await;
+        return;
+    }
+
+    if method == "GET" && path == "/api/session-screenshot" {
+        handle_session_screenshot_api_request(&mut stream, query).await;
         return;
     }
 
@@ -333,14 +420,31 @@ async fn handle_service_api_request(
                     .await
                 {
                     Ok(response) => {
+                        let response =
+                            match require_json_backend_response(response, port, "/api/command") {
+                                Ok(response) => response,
+                                Err(err) => {
+                                    write_json_error_with_code(
+                                        stream,
+                                        "502 Bad Gateway",
+                                        &format!("View focus proxy failed: {}", err),
+                                        Some(err.code),
+                                        err.details.clone(),
+                                    )
+                                    .await;
+                                    return;
+                                }
+                            };
                         let _ = stream.write_all(&response).await;
                         return;
                     }
                     Err(err) => {
-                        write_json_error(
+                        write_json_error_with_code(
                             stream,
                             "502 Bad Gateway",
                             &format!("View focus proxy failed: {}", err),
+                            Some(err.code),
+                            err.details.clone(),
                         )
                         .await;
                         return;
@@ -353,7 +457,28 @@ async fn handle_service_api_request(
     if let Some(port) = dashboard_service_backend_port() {
         match proxy_local_http_api_request(port, method, path, body).await {
             Ok(response) => {
+                let status = http_response_status(&response).unwrap_or(0);
+                if !(200..300).contains(&status) {
+                    if let Some(response) = service_api_cli_fallback(method, path).await {
+                        let _ = stream.write_all(response.as_bytes()).await;
+                        return;
+                    }
+                }
                 let response = repair_dashboard_service_status_response(path, response);
+                let response = match require_json_backend_response(response, port, path) {
+                    Ok(response) => response,
+                    Err(err) => {
+                        write_json_error_with_code(
+                            stream,
+                            "502 Bad Gateway",
+                            &format!("Service API proxy failed: {}", err),
+                            Some(err.code),
+                            err.details.clone(),
+                        )
+                        .await;
+                        return;
+                    }
+                };
                 let _ = stream.write_all(&response).await;
                 return;
             }
@@ -362,10 +487,12 @@ async fn handle_service_api_request(
                     let _ = stream.write_all(response.as_bytes()).await;
                     return;
                 }
-                write_json_error(
+                write_json_error_with_code(
                     stream,
                     "502 Bad Gateway",
                     &format!("Service API proxy failed: {}", err),
+                    Some(err.code),
+                    err.details.clone(),
                 )
                 .await;
                 return;
@@ -464,6 +591,17 @@ fn service_request_focus_command_body(path: &str, body: &str) -> Option<(String,
             .unwrap_or_else(|| format!("dashboard-view-focus-{}", uuid::Uuid::new_v4())),
         "action": "view_focus",
     });
+    for key in [
+        "serviceName",
+        "agentName",
+        "taskName",
+        "jobTimeoutMs",
+        "timeoutMs",
+    ] {
+        if let Some(value) = request.get(key) {
+            command[key] = value.clone();
+        }
+    }
     if let Some(params) = request.get("params").and_then(Value::as_object) {
         for (key, value) in params {
             if matches!(
@@ -629,24 +767,427 @@ async fn proxy_local_http_api_request(
     method: &str,
     path: &str,
     body: &str,
-) -> Result<Vec<u8>, String> {
-    let mut backend = tokio::net::TcpStream::connect(("127.0.0.1", port))
-        .await
-        .map_err(|err| err.to_string())?;
+) -> Result<Vec<u8>, DashboardReadinessError> {
+    proxy_local_http_api_request_with_timeout(
+        port,
+        method,
+        path,
+        body,
+        DASHBOARD_LOCAL_PROXY_TIMEOUT,
+    )
+    .await
+}
+
+async fn proxy_local_http_api_request_with_timeout(
+    port: u16,
+    method: &str,
+    path: &str,
+    body: &str,
+    request_timeout: Duration,
+) -> Result<Vec<u8>, DashboardReadinessError> {
+    let mut backend = timeout(
+        request_timeout,
+        tokio::net::TcpStream::connect(("127.0.0.1", port)),
+    )
+    .await
+    .map_err(|_| {
+        DashboardReadinessError::local_backend(
+            "backend_connect_timeout",
+            format!("timed out connecting to 127.0.0.1:{port}"),
+            port,
+            path,
+            "connect",
+        )
+    })?
+    .map_err(|err| {
+        DashboardReadinessError::local_backend(
+            "backend_unavailable",
+            format!("failed connecting to 127.0.0.1:{port}: {err}"),
+            port,
+            path,
+            "connect",
+        )
+    })?;
     let request = format!(
         "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
         body.len()
     );
-    backend
-        .write_all(request.as_bytes())
+    timeout(request_timeout, backend.write_all(request.as_bytes()))
         .await
-        .map_err(|err| err.to_string())?;
-    let mut response = Vec::new();
-    backend
-        .read_to_end(&mut response)
-        .await
-        .map_err(|err| err.to_string())?;
+        .map_err(|_| {
+            DashboardReadinessError::local_backend(
+                "backend_write_timeout",
+                format!("timed out writing to 127.0.0.1:{port}{path}"),
+                port,
+                path,
+                "write",
+            )
+        })?
+        .map_err(|err| {
+            DashboardReadinessError::local_backend(
+                "backend_unavailable",
+                format!("failed writing to 127.0.0.1:{port}{path}: {err}"),
+                port,
+                path,
+                "write",
+            )
+        })?;
+    read_local_http_response(&mut backend, port, path, request_timeout).await
+}
+
+fn http_response_status(response: &[u8]) -> Option<u16> {
+    let text = std::str::from_utf8(response).ok()?;
+    let status = text.lines().next()?.split_whitespace().nth(1)?;
+    status.parse::<u16>().ok()
+}
+
+fn http_response_content_length(response: &[u8]) -> Option<usize> {
+    let header_end = response
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")?;
+    let headers = std::str::from_utf8(&response[..header_end]).ok()?;
+    headers.lines().find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        if name.trim().eq_ignore_ascii_case("content-length") {
+            value.trim().parse::<usize>().ok()
+        } else {
+            None
+        }
+    })
+}
+
+fn http_response_body(response: &[u8]) -> Option<&[u8]> {
+    response
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .map(|index| &response[index + 4..])
+}
+
+fn require_json_backend_response(
+    response: Vec<u8>,
+    port: u16,
+    path: &str,
+) -> Result<Vec<u8>, DashboardReadinessError> {
+    let Some(body) = http_response_body(&response) else {
+        return Err(DashboardReadinessError::local_backend(
+            "invalid_backend_payload",
+            format!("backend response from 127.0.0.1:{port}{path} did not include a body"),
+            port,
+            path,
+            "response",
+        ));
+    };
+    if body.is_empty() {
+        return Err(DashboardReadinessError::local_backend(
+            "backend_empty_response",
+            format!("empty JSON response from 127.0.0.1:{port}{path}"),
+            port,
+            path,
+            "response",
+        ));
+    }
+    serde_json::from_slice::<Value>(body).map_err(|err| {
+        DashboardReadinessError::local_backend(
+            "invalid_backend_payload",
+            format!("invalid JSON response from 127.0.0.1:{port}{path}: {err}"),
+            port,
+            path,
+            "response",
+        )
+    })?;
     Ok(response)
+}
+
+async fn read_local_http_response(
+    backend: &mut tokio::net::TcpStream,
+    port: u16,
+    path: &str,
+    request_timeout: Duration,
+) -> Result<Vec<u8>, DashboardReadinessError> {
+    let mut response = Vec::new();
+    let mut buffer = [0_u8; 8192];
+    let max_response_bytes = 16 * 1024 * 1024;
+    loop {
+        let n = timeout(request_timeout, backend.read(&mut buffer))
+            .await
+            .map_err(|_| {
+                DashboardReadinessError::local_backend(
+                    "backend_read_timeout",
+                    format!("timed out reading from 127.0.0.1:{port}{path}"),
+                    port,
+                    path,
+                    "read",
+                )
+            })?
+            .map_err(|err| {
+                DashboardReadinessError::local_backend(
+                    "backend_unavailable",
+                    format!("failed reading from 127.0.0.1:{port}{path}: {err}"),
+                    port,
+                    path,
+                    "read",
+                )
+            })?;
+        if n == 0 {
+            break;
+        }
+        response.extend_from_slice(&buffer[..n]);
+        if response.len() > max_response_bytes {
+            return Err(DashboardReadinessError::local_backend(
+                "invalid_backend_payload",
+                format!("response from 127.0.0.1:{port}{path} exceeded proxy limit"),
+                port,
+                path,
+                "read",
+            ));
+        }
+        if let (Some(body), Some(content_length)) = (
+            http_response_body(&response),
+            http_response_content_length(&response),
+        ) {
+            if body.len() >= content_length {
+                break;
+            }
+        }
+    }
+    if response.is_empty() {
+        return Err(DashboardReadinessError::local_backend(
+            "backend_empty_response",
+            format!("empty response from 127.0.0.1:{port}{path}"),
+            port,
+            path,
+            "response",
+        ));
+    }
+    if http_response_status(&response).is_none() {
+        return Err(DashboardReadinessError::local_backend(
+            "backend_invalid_http",
+            format!("invalid HTTP response from 127.0.0.1:{port}{path}"),
+            port,
+            path,
+            "response",
+        ));
+    }
+    Ok(response)
+}
+
+fn json_http_response(status: &str, value: Value) -> Vec<u8> {
+    let body = value.to_string();
+    format!(
+        "HTTP/1.1 {status}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n{CORS_HEADERS}\r\n{body}",
+        body.len()
+    )
+    .into_bytes()
+}
+
+fn cdp_json_list_to_dashboard_tabs(body: &[u8]) -> Result<Vec<Value>, String> {
+    let pages: Vec<Value> = serde_json::from_slice(body).map_err(|err| err.to_string())?;
+    Ok(pages
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, page)| {
+            if page.get("type").and_then(Value::as_str) != Some("page") {
+                return None;
+            }
+            let url = page
+                .get("url")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let title = page
+                .get("title")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let target_id = page
+                .get("id")
+                .and_then(Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+                .map(|value| value.to_string());
+            let mut tab = json!({
+                "index": index,
+                "active": index == 0,
+                "title": title,
+                "url": url,
+                "type": "page",
+            });
+            if let Some(target_id) = target_id {
+                tab["targetId"] = json!(target_id);
+            }
+            Some(tab)
+        })
+        .collect())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ForeignCdpScreenshotTarget {
+    id: String,
+    title: String,
+    url: String,
+    web_socket_debugger_url: String,
+}
+
+fn cdp_json_list_screenshot_target(
+    body: &[u8],
+    requested_target_id: Option<&str>,
+) -> Result<ForeignCdpScreenshotTarget, String> {
+    let pages: Vec<Value> = serde_json::from_slice(body).map_err(|err| err.to_string())?;
+    let requested_target_id = requested_target_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let mut fallback: Option<ForeignCdpScreenshotTarget> = None;
+    let mut requested_found_without_ws = false;
+
+    for page in pages {
+        if page.get("type").and_then(Value::as_str) != Some("page") {
+            continue;
+        }
+        let id = page
+            .get("id")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        if id.is_empty() {
+            continue;
+        }
+        let target = page
+            .get("webSocketDebuggerUrl")
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .map(|web_socket_debugger_url| ForeignCdpScreenshotTarget {
+                id: id.clone(),
+                title: page
+                    .get("title")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string(),
+                url: page
+                    .get("url")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string(),
+                web_socket_debugger_url: web_socket_debugger_url.to_string(),
+            });
+        if requested_target_id == Some(id.as_str()) {
+            if let Some(target) = target {
+                return Ok(target);
+            }
+            requested_found_without_ws = true;
+        } else if fallback.is_none() {
+            fallback = target;
+        }
+    }
+
+    if requested_found_without_ws {
+        return Err("Requested CDP target does not expose a page WebSocket".to_string());
+    }
+    fallback.ok_or_else(|| "No screenshot-capable CDP page target was found".to_string())
+}
+
+async fn foreign_cdp_tabs_response(port: u16) -> Result<Vec<u8>, String> {
+    let response = proxy_local_http_api_request(port, "GET", "/json/list", "")
+        .await
+        .map_err(|err| err.to_string())?;
+    let status = http_response_status(&response).unwrap_or(0);
+    if status != 200 {
+        return Err(format!("CDP /json/list returned HTTP {status}"));
+    }
+    let body = http_response_body(&response)
+        .ok_or_else(|| "CDP /json/list response missing body".to_string())?;
+    let tabs = cdp_json_list_to_dashboard_tabs(body)?;
+    Ok(json_http_response("200 OK", json!(tabs)))
+}
+
+async fn capture_foreign_cdp_screenshot(
+    target: &ForeignCdpScreenshotTarget,
+    format: &str,
+) -> Result<String, String> {
+    let connect = timeout(
+        DASHBOARD_CDP_SCREENSHOT_TIMEOUT,
+        tokio_tungstenite::connect_async(&target.web_socket_debugger_url),
+    )
+    .await
+    .map_err(|_| "Timed out connecting to CDP page WebSocket".to_string())?;
+    let (mut ws, _) = connect.map_err(|err| format!("CDP page WebSocket connect failed: {err}"))?;
+    let mut params = json!({
+        "format": format,
+        "fromSurface": true,
+    });
+    if format == "jpeg" {
+        params["quality"] = json!(60);
+    }
+    let command = json!({
+        "id": 1,
+        "method": "Page.captureScreenshot",
+        "params": params,
+    });
+    ws.send(Message::Text(command.to_string()))
+        .await
+        .map_err(|err| format!("CDP screenshot command send failed: {err}"))?;
+
+    let response = timeout(DASHBOARD_CDP_SCREENSHOT_TIMEOUT, async {
+        while let Some(message) = ws.next().await {
+            let message =
+                message.map_err(|err| format!("CDP screenshot response failed: {err}"))?;
+            let Message::Text(text) = message else {
+                continue;
+            };
+            let value: Value = serde_json::from_str(&text)
+                .map_err(|err| format!("CDP screenshot response was not JSON: {err}"))?;
+            if value.get("id").and_then(Value::as_u64) != Some(1) {
+                continue;
+            }
+            if let Some(error) = value.get("error") {
+                return Err(format!("CDP screenshot command failed: {error}"));
+            }
+            return value
+                .get("result")
+                .and_then(|result| result.get("data"))
+                .and_then(Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+                .map(str::to_string)
+                .ok_or_else(|| "CDP screenshot response did not include image data".to_string());
+        }
+        Err("CDP page WebSocket closed before a screenshot response arrived".to_string())
+    })
+    .await
+    .map_err(|_| "Timed out waiting for CDP screenshot response".to_string())??;
+
+    let _ = ws.close(None).await;
+    Ok(response)
+}
+
+async fn foreign_cdp_screenshot_response(
+    port: u16,
+    requested_target_id: Option<&str>,
+    format: &str,
+) -> Result<Vec<u8>, String> {
+    let response = proxy_local_http_api_request(port, "GET", "/json/list", "")
+        .await
+        .map_err(|err| err.to_string())?;
+    let status = http_response_status(&response).unwrap_or(0);
+    if status != 200 {
+        return Err(format!("CDP /json/list returned HTTP {status}"));
+    }
+    let body = http_response_body(&response)
+        .ok_or_else(|| "CDP /json/list response missing body".to_string())?;
+    let target = cdp_json_list_screenshot_target(body, requested_target_id)?;
+    let data = capture_foreign_cdp_screenshot(&target, format).await?;
+    Ok(json_http_response(
+        "200 OK",
+        json!({
+            "success": true,
+            "provider": "cdp_snapshot",
+            "port": port,
+            "targetId": target.id,
+            "title": target.title,
+            "url": target.url,
+            "format": format,
+            "data": data,
+            "dataUrl": format!("data:image/{};base64,{}", format, data),
+        }),
+    ))
 }
 
 async fn handle_session_tabs_api_request(stream: &mut tokio::net::TcpStream, query: Option<&str>) {
@@ -656,18 +1197,90 @@ async fn handle_session_tabs_api_request(stream: &mut tokio::net::TcpStream, que
     };
 
     match proxy_local_http_api_request(port, "GET", "/api/tabs", "").await {
+        Ok(response) if http_response_status(&response) == Some(200) => {
+            let _ = stream.write_all(&response).await;
+        }
+        Ok(_) | Err(_) => match foreign_cdp_tabs_response(port).await {
+            Ok(response) => {
+                let _ = stream.write_all(&response).await;
+            }
+            Err(err) => {
+                write_json_error(
+                    stream,
+                    "502 Bad Gateway",
+                    &format!("Session tabs proxy failed: {}", err),
+                )
+                .await;
+            }
+        },
+    }
+}
+
+async fn handle_session_screenshot_api_request(
+    stream: &mut tokio::net::TcpStream,
+    query: Option<&str>,
+) {
+    let Some(port) = query_value(query, "port").and_then(|value| value.parse::<u16>().ok()) else {
+        write_json_error(stream, "400 Bad Request", "Missing or invalid session port").await;
+        return;
+    };
+    let requested_target_id = query_value(query, "targetId");
+    let format = match query_value(query, "format")
+        .as_deref()
+        .map(str::trim)
+        .map(str::to_ascii_lowercase)
+        .as_deref()
+    {
+        Some("png") => "png",
+        _ => "jpeg",
+    };
+
+    match foreign_cdp_screenshot_response(port, requested_target_id.as_deref(), format).await {
         Ok(response) => {
             let _ = stream.write_all(&response).await;
         }
         Err(err) => {
-            write_json_error(
+            let readiness_error = normalize_screenshot_error(err);
+            write_json_error_with_code(
                 stream,
                 "502 Bad Gateway",
-                &format!("Session tabs proxy failed: {}", err),
+                &format!("Session screenshot proxy failed: {}", readiness_error),
+                Some(readiness_error.code),
+                readiness_error.details.clone(),
             )
             .await;
         }
     }
+}
+
+fn normalize_screenshot_error(message: String) -> DashboardReadinessError {
+    let lower = message.to_ascii_lowercase();
+    let code = if lower.contains("requested cdp target")
+        || lower.contains("no screenshot-capable cdp page target")
+    {
+        "stale_target"
+    } else if lower.contains("not json")
+        || lower.contains("missing body")
+        || lower.contains("did not include image data")
+        || lower.contains("returned http")
+    {
+        "invalid_backend_payload"
+    } else if lower.contains("timed out connecting") {
+        "backend_connect_timeout"
+    } else if lower.contains("timed out") {
+        "backend_read_timeout"
+    } else if lower.contains("websocket connect failed")
+        || lower.contains("websocket closed")
+        || lower.contains("response failed")
+    {
+        "backend_unavailable"
+    } else {
+        "screenshot_failed"
+    };
+    DashboardReadinessError::new(code, message).with_details(json!({
+        "readinessState": readiness_state_for_gateway_code(code),
+        "transport": "cdp_screenshot",
+    }))
 }
 
 async fn handle_session_console_api_request(
@@ -712,10 +1325,12 @@ async fn handle_session_console_api_request(
             let _ = stream.write_all(&response).await;
         }
         Err(err) => {
-            write_json_error(
+            write_json_error_with_code(
                 stream,
                 "502 Bad Gateway",
                 &format!("Session console proxy failed: {}", err),
+                Some(err.code),
+                err.details.clone(),
             )
             .await;
         }
@@ -870,17 +1485,44 @@ async fn exec_agent_browser_args(args: Vec<String>) -> Result<String, String> {
 }
 
 async fn write_json_error(stream: &mut tokio::net::TcpStream, status: &str, error: &str) {
-    let body = json!({
+    write_json_error_with_code(stream, status, error, None, None).await;
+}
+
+async fn write_json_error_with_code(
+    stream: &mut tokio::net::TcpStream,
+    status: &str,
+    error: &str,
+    code: Option<&str>,
+    details: Option<Value>,
+) {
+    let response = json_error_http_response(status, error, code, details);
+    let _ = stream.write_all(&response).await;
+}
+
+fn json_error_http_response(
+    status: &str,
+    error: &str,
+    code: Option<&str>,
+    details: Option<Value>,
+) -> Vec<u8> {
+    let mut body = json!({
         "success": false,
         "error": error,
-    })
-    .to_string();
+    });
+    if let Some(code) = code {
+        body["code"] = json!(code);
+    }
+    if let Some(details) = details {
+        body["details"] = details;
+    }
+    let body = body.to_string();
     let response = format!(
         "HTTP/1.1 {status}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n{CORS_HEADERS}\r\n",
         body.len()
     );
-    let _ = stream.write_all(response.as_bytes()).await;
-    let _ = stream.write_all(body.as_bytes()).await;
+    let mut bytes = response.into_bytes();
+    bytes.extend_from_slice(body.as_bytes());
+    bytes
 }
 
 async fn write_json_value(stream: &mut tokio::net::TcpStream, status: &str, value: Value) {
@@ -1148,8 +1790,8 @@ mod tests {
     }
 
     #[test]
-    fn dashboard_service_request_focus_command_body_strips_service_identity() {
-        let body = r##"{"id":"focus-1","action":"view_focus","serviceName":"agent-browser-dashboard","agentName":"operator","taskName":"workspace-viewport-control","params":{"sessionName":"odollo-carrier-ups","targetId":"target-1","index":2,"maximize":true}}"##;
+    fn dashboard_service_request_focus_command_body_preserves_job_identity() {
+        let body = r##"{"id":"focus-1","action":"view_focus","serviceName":"agent-browser-dashboard","agentName":"operator","taskName":"workspace-viewport-control","jobTimeoutMs":5000,"params":{"sessionName":"odollo-carrier-ups","targetId":"target-1","index":2,"maximize":true}}"##;
         let (session_name, command_body) =
             service_request_focus_command_body("/api/service/request", body).unwrap();
         let command: Value = serde_json::from_str(&command_body).unwrap();
@@ -1160,7 +1802,10 @@ mod tests {
         assert_eq!(command["targetId"], "target-1");
         assert_eq!(command["index"], 2);
         assert_eq!(command["maximize"], true);
-        assert!(command.get("serviceName").is_none());
+        assert_eq!(command["serviceName"], "agent-browser-dashboard");
+        assert_eq!(command["agentName"], "operator");
+        assert_eq!(command["taskName"], "workspace-viewport-control");
+        assert_eq!(command["jobTimeoutMs"], 5000);
         assert!(command.get("sessionName").is_none());
     }
 
@@ -1323,5 +1968,299 @@ mod tests {
             query_value(Some("port=9223&ignored=true"), "port"),
             Some("9223".to_string())
         );
+    }
+
+    #[test]
+    fn cdp_json_list_pages_become_dashboard_tabs() {
+        let body = json!([
+            {
+                "id": "target-page-1",
+                "type": "page",
+                "title": "Foreign page",
+                "url": "https://example.test/foreign",
+                "webSocketDebuggerUrl": "ws://127.0.0.1:9222/devtools/page/target-page-1"
+            },
+            {
+                "id": "worker-1",
+                "type": "service_worker",
+                "title": "Worker",
+                "url": "https://example.test/worker.js"
+            },
+            {
+                "id": "target-page-2",
+                "type": "page",
+                "title": "Second page",
+                "url": "about:blank"
+            }
+        ])
+        .to_string();
+
+        let tabs = cdp_json_list_to_dashboard_tabs(body.as_bytes()).unwrap();
+
+        assert_eq!(tabs.len(), 2);
+        assert_eq!(tabs[0]["index"], 0);
+        assert_eq!(tabs[0]["active"], true);
+        assert_eq!(tabs[0]["targetId"], "target-page-1");
+        assert_eq!(tabs[0]["title"], "Foreign page");
+        assert_eq!(tabs[0]["url"], "https://example.test/foreign");
+        assert_eq!(tabs[1]["index"], 2);
+        assert_eq!(tabs[1]["active"], false);
+        assert_eq!(tabs[1]["targetId"], "target-page-2");
+    }
+
+    #[test]
+    fn cdp_json_list_screenshot_target_prefers_requested_page_with_websocket() {
+        let body = json!([
+            {
+                "id": "target-page-1",
+                "type": "page",
+                "title": "First page",
+                "url": "https://example.test/first",
+                "webSocketDebuggerUrl": "ws://127.0.0.1:9222/devtools/page/target-page-1"
+            },
+            {
+                "id": "target-page-2",
+                "type": "page",
+                "title": "Second page",
+                "url": "https://example.test/second",
+                "webSocketDebuggerUrl": "ws://127.0.0.1:9222/devtools/page/target-page-2"
+            }
+        ])
+        .to_string();
+
+        let target =
+            cdp_json_list_screenshot_target(body.as_bytes(), Some("target-page-2")).unwrap();
+
+        assert_eq!(target.id, "target-page-2");
+        assert_eq!(target.title, "Second page");
+        assert_eq!(target.url, "https://example.test/second");
+        assert_eq!(
+            target.web_socket_debugger_url,
+            "ws://127.0.0.1:9222/devtools/page/target-page-2"
+        );
+    }
+
+    #[test]
+    fn cdp_json_list_screenshot_target_falls_back_to_first_page_websocket() {
+        let body = json!([
+            {
+                "id": "worker-1",
+                "type": "service_worker",
+                "title": "Worker"
+            },
+            {
+                "id": "target-page-1",
+                "type": "page",
+                "title": "First page",
+                "url": "https://example.test/first",
+                "webSocketDebuggerUrl": "ws://127.0.0.1:9222/devtools/page/target-page-1"
+            }
+        ])
+        .to_string();
+
+        let target = cdp_json_list_screenshot_target(body.as_bytes(), None).unwrap();
+
+        assert_eq!(target.id, "target-page-1");
+    }
+
+    #[test]
+    fn json_http_response_sets_json_headers_and_body() {
+        let response = json_http_response("200 OK", json!([{"index": 0, "title": "ok"}]));
+        let text = String::from_utf8(response).unwrap();
+
+        assert!(text.starts_with("HTTP/1.1 200 OK\r\n"));
+        assert!(text.contains("Content-Type: application/json; charset=utf-8"));
+        assert_eq!(
+            serde_json::from_str::<Value>(
+                std::str::from_utf8(http_response_body(text.as_bytes()).unwrap()).unwrap()
+            )
+            .unwrap(),
+            json!([{"index": 0, "title": "ok"}])
+        );
+    }
+
+    #[test]
+    fn http_response_content_length_is_case_insensitive() {
+        let response = b"HTTP/1.1 200 OK\r\ncontent-length: 17\r\nConnection: keep-alive\r\n\r\n{\"ok\":true,\"n\":1}";
+
+        assert_eq!(http_response_status(response), Some(200));
+        assert_eq!(http_response_content_length(response), Some(17));
+        assert_eq!(
+            http_response_body(response).unwrap(),
+            b"{\"ok\":true,\"n\":1}"
+        );
+    }
+
+    #[tokio::test]
+    async fn dashboard_gateway_proxy_normalizes_empty_backend_response() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut buffer = [0_u8; 1024];
+            let _ = socket.read(&mut buffer).await;
+        });
+
+        let err = proxy_local_http_api_request_with_timeout(
+            port,
+            "GET",
+            "/api/empty",
+            "",
+            Duration::from_millis(100),
+        )
+        .await
+        .unwrap_err();
+
+        assert_eq!(err.code, "backend_empty_response");
+        assert_eq!(
+            err.message,
+            format!("empty response from 127.0.0.1:{port}/api/empty")
+        );
+        assert_eq!(
+            err.details.unwrap()["readinessState"],
+            json!("invalid_payload")
+        );
+    }
+
+    #[tokio::test]
+    async fn dashboard_gateway_proxy_normalizes_invalid_http_response() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut buffer = [0_u8; 1024];
+            let _ = socket.read(&mut buffer).await;
+            let _ = socket.write_all(b"not an http response").await;
+        });
+
+        let err = proxy_local_http_api_request_with_timeout(
+            port,
+            "GET",
+            "/api/invalid",
+            "",
+            Duration::from_millis(100),
+        )
+        .await
+        .unwrap_err();
+
+        assert_eq!(err.code, "backend_invalid_http");
+        assert_eq!(
+            err.message,
+            format!("invalid HTTP response from 127.0.0.1:{port}/api/invalid")
+        );
+    }
+
+    #[tokio::test]
+    async fn dashboard_gateway_proxy_normalizes_local_read_timeout() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut buffer = [0_u8; 1024];
+            let _ = socket.read(&mut buffer).await;
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        });
+
+        let err = proxy_local_http_api_request_with_timeout(
+            port,
+            "GET",
+            "/api/slow",
+            "",
+            Duration::from_millis(20),
+        )
+        .await
+        .unwrap_err();
+
+        assert_eq!(err.code, "backend_read_timeout");
+        assert_eq!(
+            err.message,
+            format!("timed out reading from 127.0.0.1:{port}/api/slow")
+        );
+        assert_eq!(err.details.unwrap()["readinessState"], json!("unreachable"));
+    }
+
+    #[test]
+    fn dashboard_gateway_timeout_codes_keep_compatibility_details() {
+        let connect = DashboardReadinessError::local_backend(
+            "backend_connect_timeout",
+            "connect timeout",
+            9222,
+            "/api/service/status",
+            "connect",
+        );
+        let write = DashboardReadinessError::local_backend(
+            "backend_write_timeout",
+            "write timeout",
+            9222,
+            "/api/service/status",
+            "write",
+        );
+
+        assert_eq!(connect.code, "backend_connect_timeout");
+        assert_eq!(
+            connect.details.unwrap()["readinessState"],
+            json!("unreachable")
+        );
+        assert_eq!(write.code, "backend_write_timeout");
+        assert_eq!(write.details.unwrap()["stage"], json!("write"));
+    }
+
+    #[test]
+    fn dashboard_gateway_rejects_invalid_json_backend_payload() {
+        let body = b"not-json";
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(),
+            std::str::from_utf8(body).unwrap()
+        )
+        .into_bytes();
+
+        let err = require_json_backend_response(response, 9222, "/api/service/status").unwrap_err();
+
+        assert_eq!(err.code, "invalid_backend_payload");
+        assert_eq!(
+            err.details.unwrap()["readinessState"],
+            json!("invalid_payload")
+        );
+    }
+
+    #[test]
+    fn dashboard_gateway_json_error_response_includes_code_and_details() {
+        let response = json_error_http_response(
+            "502 Bad Gateway",
+            "Service API proxy failed: invalid JSON response",
+            Some("invalid_backend_payload"),
+            Some(json!({
+                "transport": "local_proxy",
+                "stage": "response",
+            })),
+        );
+        let body = http_response_body(&response).unwrap();
+        let value: Value = serde_json::from_slice(body).unwrap();
+
+        assert_eq!(http_response_status(&response), Some(502));
+        assert_eq!(value["success"], false);
+        assert_eq!(value["code"], "invalid_backend_payload");
+        assert_eq!(value["details"]["stage"], "response");
+    }
+
+    #[test]
+    fn screenshot_errors_map_to_stable_readiness_codes() {
+        let invalid =
+            normalize_screenshot_error("CDP screenshot response did not include image data".into());
+        assert_eq!(invalid.code, "invalid_backend_payload");
+        assert_eq!(
+            invalid.details.unwrap()["readinessState"],
+            json!("invalid_payload")
+        );
+
+        let stale = normalize_screenshot_error(
+            "Requested CDP target does not expose a page WebSocket".into(),
+        );
+        assert_eq!(stale.code, "stale_target");
+
+        let unreachable =
+            normalize_screenshot_error("Timed out waiting for CDP screenshot response".into());
+        assert_eq!(unreachable.code, "backend_read_timeout");
     }
 }

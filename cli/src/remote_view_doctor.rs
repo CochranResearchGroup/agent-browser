@@ -2,13 +2,26 @@ use serde_json::{json, Value};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Output, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use crate::color;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct DoctorArgs {
     allow_shared_target: bool,
+}
+
+const DOCTOR_JSON_COMMAND_TIMEOUT: Duration = Duration::from_secs(20);
+const DOCTOR_TEXT_COMMAND_TIMEOUT: Duration = Duration::from_secs(3);
+const DOCTOR_DISPLAY_ACCESS_TIMEOUT: Duration = Duration::from_secs(3);
+const DOCTOR_COMMAND_POLL_INTERVAL: Duration = Duration::from_millis(25);
+
+enum DoctorCommandResult {
+    Output(Output),
+    Timeout { stdout: String, stderr: String },
+    SpawnError(String),
 }
 
 /// Run the read-only remote-view doctor. This command inventories existing
@@ -250,28 +263,45 @@ fn run_json_command<S: AsRef<str>>(command: String, args: &[S], cwd: Option<Path
     if let Some(cwd) = cwd {
         child.current_dir(cwd);
     }
-    let output = child.output();
-    match output {
-        Ok(output) => {
+    match run_command_with_timeout(child, DOCTOR_JSON_COMMAND_TIMEOUT) {
+        DoctorCommandResult::Output(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
             let parsed = serde_json::from_str::<Value>(stdout.trim()).ok();
             json!({
                 "available": true,
                 "success": output.status.success(),
+                "timedOut": false,
                 "exitCode": output.status.code(),
                 "command": format!("{} {}", command, args.join(" ")),
                 "data": parsed,
                 "stderr": redact_text(stderr.trim()),
             })
         }
-        Err(error) => json!({
+        DoctorCommandResult::Timeout { stdout, stderr } => {
+            let parsed = serde_json::from_str::<Value>(stdout.trim()).ok();
+            json!({
+                "available": true,
+                "success": false,
+                "timedOut": true,
+                "exitCode": null,
+                "command": format!("{} {}", command, args.join(" ")),
+                "data": parsed,
+                "stderr": redact_text(if stderr.trim().is_empty() {
+                    "doctor subcommand timed out"
+                } else {
+                    stderr.trim()
+                }),
+            })
+        }
+        DoctorCommandResult::SpawnError(error) => json!({
             "available": false,
             "success": false,
+            "timedOut": false,
             "exitCode": null,
             "command": format!("{} {}", command, args.join(" ")),
             "data": null,
-            "stderr": redact_text(error.to_string()),
+            "stderr": redact_text(error),
         }),
     }
 }
@@ -305,14 +335,18 @@ fn inspect_network() -> Value {
 }
 
 fn docker_container_running(name: &str) -> Option<bool> {
-    let output = Command::new("docker")
-        .args(["inspect", "-f", "{{.State.Running}}", name])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return Some(false);
+    let mut command = Command::new("docker");
+    command.args(["inspect", "-f", "{{.State.Running}}", name]);
+    match run_command_with_timeout(command, DOCTOR_TEXT_COMMAND_TIMEOUT) {
+        DoctorCommandResult::Output(output) => {
+            if !output.status.success() {
+                return Some(false);
+            }
+            Some(String::from_utf8_lossy(&output.stdout).trim() == "true")
+        }
+        DoctorCommandResult::Timeout { .. } => None,
+        DoctorCommandResult::SpawnError(_) => None,
     }
-    Some(String::from_utf8_lossy(&output.stdout).trim() == "true")
 }
 
 fn inspect_xrdp() -> Value {
@@ -424,6 +458,12 @@ fn inspect_privileges() -> Value {
     let helper_exists = Path::new(&helper_path).exists();
     let sudoers_exists = Path::new(&sudoers_path).exists();
     let helper_check = run_text_command("sudo", &["-n", &helper_path, "check"]);
+    let helper_status = helper_status_output(run_text_command(
+        "sudo",
+        &["-n", &helper_path, "status-json"],
+    ));
+    let helper_desktop_session = remote_view_helper_desktop_session_status(&helper_path);
+    let helper_status_ready = remote_view_helper_status_contract_ready(&helper_status);
 
     json!({
         "groupName": group_name,
@@ -435,8 +475,144 @@ fn inspect_privileges() -> Value {
         "sudoersPath": sudoers_path,
         "sudoersExists": sudoers_exists,
         "helperCheck": helper_check,
-        "ready": group_exists && user_in_group && helper_exists && sudoers_exists && helper_check["success"].as_bool() == Some(true),
+        "helperStatus": helper_status,
+        "helperDesktopSession": helper_desktop_session,
+        "ready": group_exists && user_in_group && helper_exists && sudoers_exists && helper_check["success"].as_bool() == Some(true) && helper_desktop_session["ready"].as_bool() == Some(true) && helper_status_ready,
     })
+}
+
+fn helper_status_output(mut report: Value) -> Value {
+    let stdout = report
+        .get("stdout")
+        .and_then(|value| value.as_str())
+        .unwrap_or("")
+        .trim();
+    if !stdout.is_empty() {
+        match serde_json::from_str::<Value>(stdout) {
+            Ok(parsed) => {
+                if let Some(object) = report.as_object_mut() {
+                    object.insert("parsed".to_string(), parsed);
+                }
+            }
+            Err(error) => {
+                if let Some(object) = report.as_object_mut() {
+                    object.insert("parseError".to_string(), json!(error.to_string()));
+                }
+            }
+        }
+    }
+    report
+}
+
+fn remote_view_helper_status_contract_ready(report: &Value) -> bool {
+    report.get("success").and_then(Value::as_bool) == Some(true)
+        && report
+            .pointer("/parsed/schemaVersion")
+            .and_then(Value::as_i64)
+            == Some(1)
+        && report
+            .pointer("/parsed/helperVersion")
+            .and_then(Value::as_str)
+            .is_some_and(|value| value.starts_with("2026-06-23.p44-route-desktop-v"))
+        && report
+            .pointer("/parsed/routeDesktopSession/ready")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/routeDesktopSession/terminalStartupDetected")
+            .and_then(Value::as_bool)
+            == Some(false)
+        && report
+            .pointer("/parsed/displayAccess/supportsFilesystemX11Socket")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/displayAccess/supportsAbstractX11Socket")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/displayAccess/boundedXhostTimeoutSeconds")
+            .and_then(Value::as_i64)
+            .is_some_and(|value| value > 0 && value <= 2)
+}
+
+fn remote_view_helper_desktop_session_status(helper_path: &str) -> Value {
+    let path = Path::new(helper_path);
+    if !path.exists() {
+        return json!({
+            "ready": false,
+            "available": false,
+            "state": "helper_missing",
+            "terminalStartupDetected": null,
+            "startsWindowManager": null,
+            "keepsSessionAlive": null,
+        });
+    }
+    let Ok(source) = fs::read_to_string(path) else {
+        return json!({
+            "ready": false,
+            "available": false,
+            "state": "helper_unreadable",
+            "terminalStartupDetected": null,
+            "startsWindowManager": null,
+            "keepsSessionAlive": null,
+        });
+    };
+    remote_view_helper_desktop_session_status_from_source(&source)
+}
+
+fn remote_view_helper_desktop_session_status_from_source(source: &str) -> Value {
+    let template = route_xsession_template(source);
+    let terminal_startup = template
+        .as_deref()
+        .is_some_and(route_xsession_starts_terminal);
+    let starts_window_manager = template
+        .as_deref()
+        .is_some_and(|value| value.contains("openbox-session"));
+    let keeps_session_alive = template
+        .as_deref()
+        .is_some_and(|value| value.contains("while true") && value.contains("sleep 3600"));
+    let ready =
+        template.is_some() && !terminal_startup && starts_window_manager && keeps_session_alive;
+    json!({
+        "ready": ready,
+        "available": template.is_some(),
+        "state": if ready {
+            "browser_control_ready_template"
+        } else if template.is_none() {
+            "xsession_template_missing"
+        } else if terminal_startup {
+            "terminal_first_template"
+        } else {
+            "incomplete_template"
+        },
+        "terminalStartupDetected": terminal_startup,
+        "startsWindowManager": starts_window_manager,
+        "keepsSessionAlive": keeps_session_alive,
+    })
+}
+
+fn route_xsession_template(source: &str) -> Option<String> {
+    let marker_pos = source.find(".xsession")?;
+    let after_marker = &source[marker_pos..];
+    let heredoc_pos = after_marker.find("<<'EOF'")?;
+    let content_start = marker_pos + heredoc_pos + "<<'EOF'".len();
+    let content = source[content_start..].strip_prefix('\n')?;
+    let content_end = content.find("\nEOF")?;
+    Some(content[..content_end].to_string())
+}
+
+fn route_xsession_starts_terminal(template: &str) -> bool {
+    let lowered = template.to_ascii_lowercase();
+    [
+        "xterm",
+        "gnome-terminal",
+        "xfce4-terminal",
+        "konsole",
+        "x-terminal-emulator",
+    ]
+    .iter()
+    .any(|needle| lowered.contains(needle))
 }
 
 fn inspect_route_display_access(route_displays: &Value) -> Value {
@@ -551,18 +727,21 @@ fn executable_candidate(explicit: Option<&str>, candidates: &[&str]) -> Option<S
 }
 
 fn command_path(command: &str) -> Option<String> {
-    let output = Command::new("sh")
-        .args(["-lc", &format!("command -v {}", shell_quote(command))])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if path.is_empty() {
-        None
-    } else {
-        Some(path)
+    let mut child = Command::new("sh");
+    child.args(["-lc", &format!("command -v {}", shell_quote(command))]);
+    match run_command_with_timeout(child, DOCTOR_TEXT_COMMAND_TIMEOUT) {
+        DoctorCommandResult::Output(output) => {
+            if !output.status.success() {
+                return None;
+            }
+            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if path.is_empty() {
+                None
+            } else {
+                Some(path)
+            }
+        }
+        DoctorCommandResult::Timeout { .. } | DoctorCommandResult::SpawnError(_) => None,
     }
 }
 
@@ -728,7 +907,8 @@ fn remote_control_status(
             })
         });
     let route_url_ready = frame_url.is_some() || external_url.is_some();
-    let display_ready = display_name.is_some();
+    let display_claimed = display_name.is_some();
+    let display_ready = display_claimed && route_pool_ready;
     let display_access_ready = display_access
         .get("success")
         .and_then(Value::as_bool)
@@ -779,6 +959,7 @@ fn remote_control_status(
         "routePoolReady": route_pool_ready,
         "routeUrlReady": route_url_ready,
         "routeDisplayReady": display_ready,
+        "routeDisplayClaimed": display_claimed,
         "routeDisplayAccessReady": display_access_ready,
         "routePoolEntryId": route_pool_entry_id,
         "routeId": route_id,
@@ -1394,6 +1575,39 @@ fn remote_view_issues(context: RemoteViewIssueContext<'_>) -> Vec<Value> {
             "install_privileged_helper",
         ));
     }
+    if privileges
+        .get("helperExists")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+        && privileges
+            .pointer("/helperDesktopSession/ready")
+            .and_then(Value::as_bool)
+            != Some(true)
+    {
+        issues.push(remote_view_issue(
+            "remote_view_route_desktop_helper_stale",
+            "the installed remote-view helper still writes a terminal-first route desktop session",
+            "run agent-browser install --with-remote-view-privileges from an interactive terminal",
+            true,
+            "install_privileged_helper",
+        ));
+    }
+    if privileges
+        .get("helperExists")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+        && !remote_view_helper_status_contract_ready(
+            privileges.get("helperStatus").unwrap_or(&Value::Null),
+        )
+    {
+        issues.push(remote_view_issue(
+            "remote_view_privileged_helper_status_stale",
+            "the installed remote-view helper does not expose the current route-desktop and display-access capability contract",
+            "run agent-browser install --with-remote-view-privileges from an interactive terminal",
+            true,
+            "install_privileged_helper",
+        ));
+    }
 
     issues
 }
@@ -1485,6 +1699,42 @@ fn state_sources() -> Vec<Value> {
     ]
 }
 
+fn run_command_with_timeout(mut command: Command, timeout: Duration) -> DoctorCommandResult {
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = match command.spawn() {
+        Ok(child) => child,
+        Err(error) => return DoctorCommandResult::SpawnError(error.to_string()),
+    };
+    let started = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => {
+                return match child.wait_with_output() {
+                    Ok(output) => DoctorCommandResult::Output(output),
+                    Err(error) => DoctorCommandResult::SpawnError(error.to_string()),
+                };
+            }
+            Ok(None) => {
+                if started.elapsed() >= timeout {
+                    let _ = child.kill();
+                    return match child.wait_with_output() {
+                        Ok(output) => DoctorCommandResult::Timeout {
+                            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+                            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+                        },
+                        Err(error) => DoctorCommandResult::Timeout {
+                            stdout: String::new(),
+                            stderr: error.to_string(),
+                        },
+                    };
+                }
+                thread::sleep(DOCTOR_COMMAND_POLL_INTERVAL);
+            }
+            Err(error) => return DoctorCommandResult::SpawnError(error.to_string()),
+        }
+    }
+}
+
 fn run_text_command(command: &str, args: &[&str]) -> Value {
     run_text_command_with_env(command, args, &[])
 }
@@ -1495,21 +1745,34 @@ fn run_text_command_with_env(command: &str, args: &[&str], envs: &[(&str, &str)]
     for (key, value) in envs {
         child.env(key, value);
     }
-    let output = child.output();
-    match output {
-        Ok(output) => json!({
+    match run_command_with_timeout(child, DOCTOR_TEXT_COMMAND_TIMEOUT) {
+        DoctorCommandResult::Output(output) => json!({
             "available": true,
             "success": output.status.success(),
+            "timedOut": false,
             "exitCode": output.status.code(),
             "stdout": redact_text(String::from_utf8_lossy(&output.stdout).trim()),
             "stderr": redact_text(String::from_utf8_lossy(&output.stderr).trim()),
         }),
-        Err(error) => json!({
+        DoctorCommandResult::Timeout { stdout, stderr } => json!({
+            "available": true,
+            "success": false,
+            "timedOut": true,
+            "exitCode": null,
+            "stdout": redact_text(stdout.trim()),
+            "stderr": redact_text(if stderr.trim().is_empty() {
+                "doctor text probe timed out"
+            } else {
+                stderr.trim()
+            }),
+        }),
+        DoctorCommandResult::SpawnError(error) => json!({
             "available": false,
             "success": false,
+            "timedOut": false,
             "exitCode": null,
             "stdout": "",
-            "stderr": redact_text(error.to_string()),
+            "stderr": redact_text(error),
         }),
     }
 }
@@ -1517,8 +1780,8 @@ fn run_text_command_with_env(command: &str, args: &[&str], envs: &[(&str, &str)]
 fn run_display_access_probe(display_name: &str) -> Value {
     let mut child = Command::new("xdpyinfo");
     child.env("DISPLAY", display_name);
-    match child.output() {
-        Ok(output) => {
+    match run_command_with_timeout(child, DOCTOR_DISPLAY_ACCESS_TIMEOUT) {
+        DoctorCommandResult::Output(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout);
             let evidence = stdout
                 .lines()
@@ -1534,17 +1797,31 @@ fn run_display_access_probe(display_name: &str) -> Value {
             json!({
                 "available": true,
                 "success": output.status.success(),
+                "timedOut": false,
                 "exitCode": output.status.code(),
                 "stdout": evidence,
                 "stderr": redact_text(String::from_utf8_lossy(&output.stderr).trim()),
             })
         }
-        Err(error) => json!({
+        DoctorCommandResult::Timeout { stdout, stderr } => json!({
+            "available": true,
+            "success": false,
+            "timedOut": true,
+            "exitCode": null,
+            "stdout": redact_text(stdout.trim()),
+            "stderr": redact_text(if stderr.trim().is_empty() {
+                "xdpyinfo timed out"
+            } else {
+                stderr.trim()
+            }),
+        }),
+        DoctorCommandResult::SpawnError(error) => json!({
             "available": false,
             "success": false,
+            "timedOut": false,
             "exitCode": null,
             "stdout": "",
-            "stderr": redact_text(error.to_string()),
+            "stderr": redact_text(error),
         }),
     }
 }
@@ -1656,6 +1933,11 @@ fn print_remote_view_doctor_report(report: &Value) {
         display_value(&data["rdpHost"]["privileges"]["groupName"]),
         display_value(&data["rdpHost"]["privileges"]["userInGroup"]),
         display_value(&data["rdpHost"]["privileges"]["helperPath"])
+    );
+    println!(
+        "route desktop helper: state={} ready={}",
+        display_value(&data["rdpHost"]["privileges"]["helperDesktopSession"]["state"]),
+        display_value(&data["rdpHost"]["privileges"]["helperDesktopSession"]["ready"])
     );
     println!("display access:");
     if let Some(entries) = data["rdpHost"]["displayAccess"]["entries"].as_array() {
@@ -2350,6 +2632,164 @@ MaxSessions=50
             route_pool_component_issue_code("rdp_backend_tcp:1", "failed"),
             "route_pool_rdp_backend_tcp_1_failed"
         );
+    }
+
+    #[test]
+    fn remote_view_helper_desktop_session_status_rejects_terminal_first_template() {
+        let source = r#"
+cat > "$home/.xsession" <<'EOF'
+#!/bin/sh
+xterm &
+openbox-session
+EOF
+"#;
+
+        let status = remote_view_helper_desktop_session_status_from_source(source);
+
+        assert_eq!(status["ready"], false);
+        assert_eq!(status["state"], "terminal_first_template");
+        assert_eq!(status["terminalStartupDetected"], true);
+    }
+
+    #[test]
+    fn remote_view_helper_desktop_session_status_accepts_idle_openbox_template() {
+        let source = r#"
+cat > "$home/.xsession" <<'EOF'
+#!/bin/sh
+xsetroot -solid '#20252b' 2>/dev/null || true
+if command -v openbox-session >/dev/null 2>&1; then
+  openbox-session &
+fi
+while true; do
+  sleep 3600
+done
+EOF
+"#;
+
+        let status = remote_view_helper_desktop_session_status_from_source(source);
+
+        assert_eq!(status["ready"], true);
+        assert_eq!(status["state"], "browser_control_ready_template");
+        assert_eq!(status["terminalStartupDetected"], false);
+        assert_eq!(status["startsWindowManager"], true);
+        assert_eq!(status["keepsSessionAlive"], true);
+    }
+
+    #[test]
+    fn remote_view_helper_status_contract_accepts_current_capabilities() {
+        let report = json!({
+            "success": true,
+            "parsed": {
+                "schemaVersion": 1,
+                "helperVersion": "2026-06-23.p44-route-desktop-v2",
+                "routeDesktopSession": {
+                    "ready": true,
+                    "terminalStartupDetected": false
+                },
+                "displayAccess": {
+                    "supportsFilesystemX11Socket": true,
+                    "supportsAbstractX11Socket": true,
+                    "boundedXhostTimeoutSeconds": 2
+                }
+            }
+        });
+
+        assert!(remote_view_helper_status_contract_ready(&report));
+    }
+
+    #[test]
+    fn remote_view_helper_status_contract_rejects_missing_abstract_socket_support() {
+        let report = json!({
+            "success": true,
+            "parsed": {
+                "schemaVersion": 1,
+                "helperVersion": "2026-06-23.p44-route-desktop-v2",
+                "routeDesktopSession": {
+                    "ready": true,
+                    "terminalStartupDetected": false
+                },
+                "displayAccess": {
+                    "supportsFilesystemX11Socket": true,
+                    "supportsAbstractX11Socket": false,
+                    "boundedXhostTimeoutSeconds": 2
+                }
+            }
+        });
+
+        assert!(!remote_view_helper_status_contract_ready(&report));
+    }
+
+    #[test]
+    fn remote_view_issues_reports_stale_remote_view_helper_desktop_template() {
+        let install = json!({"success": true});
+        let rdp_gateway = ready_rdp_gateway();
+        let route_pool = json!({"available": true, "data": {"success": true}});
+        let route_displays = json!({"data": {"success": true}});
+        let display_access = json!({"ready": true});
+        let viewer_prerequisites = json!({"ready": true});
+        let users = json!({"entries": []});
+        let privileges = json!({
+            "groupExists": true,
+            "userInGroup": true,
+            "helperExists": true,
+            "sudoersExists": true,
+            "helperCheck": {"success": true},
+            "helperDesktopSession": {"ready": false},
+        });
+
+        let issues = remote_view_issues(RemoteViewIssueContext {
+            install: &install,
+            rdp_gateway: &rdp_gateway,
+            route_pool: &route_pool,
+            route_displays: &route_displays,
+            display_access: &display_access,
+            viewer_prerequisites: &viewer_prerequisites,
+            users: &users,
+            privileges: &privileges,
+            next_action: "install_privileged_helper",
+        });
+
+        assert!(issues.iter().any(|issue| {
+            issue.get("code").and_then(Value::as_str)
+                == Some("remote_view_route_desktop_helper_stale")
+        }));
+    }
+
+    #[test]
+    fn remote_view_issues_reports_stale_remote_view_helper_status_contract() {
+        let install = json!({"success": true});
+        let rdp_gateway = ready_rdp_gateway();
+        let route_pool = json!({"available": true, "data": {"success": true}});
+        let route_displays = json!({"data": {"success": true}});
+        let display_access = json!({"ready": true});
+        let viewer_prerequisites = json!({"ready": true});
+        let users = json!({"entries": []});
+        let privileges = json!({
+            "groupExists": true,
+            "userInGroup": true,
+            "helperExists": true,
+            "sudoersExists": true,
+            "helperCheck": {"success": true},
+            "helperDesktopSession": {"ready": true},
+            "helperStatus": {"success": false},
+        });
+
+        let issues = remote_view_issues(RemoteViewIssueContext {
+            install: &install,
+            rdp_gateway: &rdp_gateway,
+            route_pool: &route_pool,
+            route_displays: &route_displays,
+            display_access: &display_access,
+            viewer_prerequisites: &viewer_prerequisites,
+            users: &users,
+            privileges: &privileges,
+            next_action: "install_privileged_helper",
+        });
+
+        assert!(issues.iter().any(|issue| {
+            issue.get("code").and_then(Value::as_str)
+                == Some("remote_view_privileged_helper_status_stale")
+        }));
     }
 
     #[test]

@@ -8,6 +8,8 @@ pub const SERVICE_BROWSER_CAPABILITY_REGISTRY_HTTP_ROUTE: &str =
     "/api/service/browser-capability-registry";
 pub const SERVICE_BROWSER_CAPABILITY_PREFLIGHT_HTTP_ROUTE: &str =
     "/api/service/browser-capability/preflight";
+pub const SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_HTTP_ROUTE: &str =
+    "/api/service/remote-view/route-preflight";
 pub const SERVICE_REQUEST_HTTP_ROUTE: &str = "/api/service/request";
 pub const SERVICE_PROFILE_ALLOCATION_HTTP_ROUTE: &str = "/api/service/profiles/<id>/allocation";
 pub const SERVICE_PROFILE_READINESS_HTTP_ROUTE: &str = "/api/service/profiles/<id>/readiness";
@@ -35,6 +37,8 @@ pub const SERVICE_ACCESS_PLAN_MCP_TOOL_NAME: &str = "service_access_plan";
 pub const SERVICE_REQUEST_MCP_TOOL_NAME: &str = "service_request";
 pub const SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME: &str =
     "service_browser_capability_preflight";
+pub const SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME: &str =
+    "service_remote_view_route_preflight";
 pub const SERVICE_REMEDIES_APPLY_MCP_TOOL_NAME: &str = "service_remedies_apply";
 pub const SERVICE_MONITORS_RUN_DUE_MCP_TOOL_NAME: &str = "service_monitors_run_due";
 pub const SERVICE_MONITOR_PAUSE_MCP_TOOL_NAME: &str = "service_monitor_pause";
@@ -87,6 +91,8 @@ pub const SERVICE_BROWSER_CAPABILITY_REGISTRY_UPSERT_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-browser-capability-registry-upsert-response.v1.schema.json";
 pub const SERVICE_BROWSER_CAPABILITY_PREFLIGHT_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-browser-capability-preflight-response.v1.schema.json";
+pub const SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_RESPONSE_SCHEMA_ID: &str =
+    "https://agent-browser.local/contracts/service-remote-view-route-preflight-response.v1.schema.json";
 pub const SERVICE_REQUEST_CONTRACT_VERSION: &str = "v1";
 
 /// Actions accepted by HTTP `/api/service/request`, MCP `service_request`, and
@@ -116,6 +122,8 @@ pub const SERVICE_REQUEST_ACTIONS: &[&str] = &[
     "view_takeover",
     "remote_view_open",
     "service_remote_view_route_preflight",
+    "service_remote_view_browser_reattach",
+    "service_remote_view_route_switch",
     "service_remote_view_route_checkout",
     "service_remote_view_route_release",
     "service_route_pool_repair",
@@ -263,6 +271,24 @@ pub fn service_contracts_metadata() -> Value {
                     "package": "@agent-browser/client/service-observability",
                     "helpers": ["getServiceBrowserCapabilityPreflight"],
                 },
+                "noLaunch": true,
+            },
+            "serviceRemoteViewRoutePreflightResponse": {
+                "version": SERVICE_REQUEST_CONTRACT_VERSION,
+                "schemaId": SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_RESPONSE_SCHEMA_ID,
+                "schemaPath": "docs/dev/contracts/service-remote-view-route-preflight-response.v1.schema.json",
+                "http": {
+                    "method": "GET",
+                    "route": SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_HTTP_ROUTE,
+                },
+                "mcp": {
+                    "tool": SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME,
+                },
+                "client": {
+                    "package": "@agent-browser/client/service-observability",
+                    "helpers": ["getServiceRemoteViewRoutePreflight"],
+                },
+                "responseFields": ["preflightStatus", "fastPreflight.status", "fastPreflight.components", "acquisitionPlan"],
                 "noLaunch": true,
             },
             "serviceProfileAllocationResponse": {
@@ -500,6 +526,7 @@ pub fn service_contracts_metadata() -> Value {
             "contractsRoute": SERVICE_CONTRACTS_HTTP_ROUTE,
             "serviceBrowserCapabilityRegistryRoute": SERVICE_BROWSER_CAPABILITY_REGISTRY_HTTP_ROUTE,
             "serviceBrowserCapabilityPreflightRoute": SERVICE_BROWSER_CAPABILITY_PREFLIGHT_HTTP_ROUTE,
+            "serviceRemoteViewRoutePreflightRoute": SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_HTTP_ROUTE,
             "serviceRequestRoute": SERVICE_REQUEST_HTTP_ROUTE,
             "serviceProfileAllocationRoute": SERVICE_PROFILE_ALLOCATION_HTTP_ROUTE,
             "serviceProfileReadinessRoute": SERVICE_PROFILE_READINESS_HTTP_ROUTE,
@@ -523,6 +550,7 @@ pub fn service_contracts_metadata() -> Value {
             "serviceRequestTool": SERVICE_REQUEST_MCP_TOOL_NAME,
             "serviceAccessPlanTool": SERVICE_ACCESS_PLAN_MCP_TOOL_NAME,
             "serviceBrowserCapabilityPreflightTool": SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME,
+            "serviceRemoteViewRoutePreflightTool": SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME,
             "serviceAccessPlanResource": SERVICE_ACCESS_PLAN_MCP_RESOURCE,
             "serviceDisplayAllocationsResource": SERVICE_DISPLAY_ALLOCATIONS_MCP_RESOURCE,
             "serviceRemoteViewRoutesResource": SERVICE_REMOTE_VIEW_ROUTES_MCP_RESOURCE,
@@ -604,6 +632,23 @@ mod tests {
             metadata["contracts"]["serviceBrowserCapabilityPreflightResponse"]["client"]["helpers"]
                 [0],
             "getServiceBrowserCapabilityPreflight"
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceRemoteViewRoutePreflightResponse"]["schemaId"],
+            SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_RESPONSE_SCHEMA_ID
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceRemoteViewRoutePreflightResponse"]["http"]["route"],
+            SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_HTTP_ROUTE
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceRemoteViewRoutePreflightResponse"]["mcp"]["tool"],
+            SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceRemoteViewRoutePreflightResponse"]["client"]["helpers"]
+                [0],
+            "getServiceRemoteViewRoutePreflight"
         );
         assert_eq!(
             metadata["contracts"]["serviceProfileAllocationResponse"]["schemaId"],

@@ -53,7 +53,10 @@ const displayIsolationSet = new Set([
  * @typedef {import('./service-request.generated.js').ServiceControllerLeaseTakeoverOptions} ServiceControllerLeaseTakeoverOptions
  * @typedef {import('./service-request.generated.js').ServiceRemoteViewRouteCheckoutHttpOptions} ServiceRemoteViewRouteCheckoutHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceRemoteViewRouteCheckoutOptions} ServiceRemoteViewRouteCheckoutOptions
+ * @typedef {import('./service-request.generated.js').ServiceRemoteViewBrowserReattachHttpOptions} ServiceRemoteViewBrowserReattachHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceRemoteViewBrowserReattachOptions} ServiceRemoteViewBrowserReattachOptions
  * @typedef {import('./service-request.generated.js').ServiceRemoteViewOpenProofSummary} ServiceRemoteViewOpenProofSummary
+ * @typedef {import('./service-request.generated.js').ServiceSharedProfileAcquisitionSummary} ServiceSharedProfileAcquisitionSummary
  * @typedef {import('./service-request.generated.js').ServiceRemoteViewRouteReleaseHttpOptions} ServiceRemoteViewRouteReleaseHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceRemoteViewRouteReleaseOptions} ServiceRemoteViewRouteReleaseOptions
  * @typedef {import('./service-request.generated.js').ServiceRoutePoolRepairHttpOptions} ServiceRoutePoolRepairHttpOptions
@@ -225,6 +228,10 @@ export function getServiceTabHandle(response) {
     const dataRecord = /** @type {Record<string, unknown>} */ (data);
     if (isServiceTabHandle(dataRecord.serviceTabHandle)) {
       return /** @type {ServiceTabHandle} */ (dataRecord.serviceTabHandle);
+    }
+    const tabRecord = recordFromUnknown(dataRecord.tab);
+    if (isServiceTabHandle(tabRecord?.serviceTabHandle)) {
+      return /** @type {ServiceTabHandle} */ (tabRecord.serviceTabHandle);
     }
   }
   return null;
@@ -767,9 +774,9 @@ export function createServiceTabHandleRefreshRequest(input) {
     assertPlainObject(params, 'service tab handle refresh request params');
   }
   const repairPolicy = request.repairPolicy ?? 'reject_only';
-  if (!['reject_only', 'reuse_compatible', 'open_if_missing'].includes(repairPolicy)) {
+  if (!['reject_only', 'reuse_compatible', 'open_if_missing', 'replace_duplicates'].includes(repairPolicy)) {
     throw new TypeError(
-      'service tab handle refresh request repairPolicy must be reject_only, reuse_compatible, or open_if_missing',
+      'service tab handle refresh request repairPolicy must be reject_only, reuse_compatible, open_if_missing, or replace_duplicates',
     );
   }
   const sessionName = request.sessionName ?? handle.sessionName ?? handle.ownerSessionId;
@@ -829,6 +836,7 @@ export function createServiceRemoteViewRoutePreflightRequest(input) {
     'browserId',
     'sessionName',
     'streamId',
+    'viewStreamProvider',
     'provider',
     'providerMode',
     'frameUrl',
@@ -860,6 +868,7 @@ export function createServiceRemoteViewOpenRequest(input) {
     'browserId',
     'sessionName',
     'streamId',
+    'viewStreamProvider',
     'provider',
     'providerMode',
     'frameUrl',
@@ -877,6 +886,60 @@ export function createServiceRemoteViewOpenRequest(input) {
     ...request,
     action: 'remote_view_open',
     params: openParams,
+  });
+}
+
+const REMOTE_VIEW_REATTACH_PARAM_FIELDS = [
+  'browserId',
+  'profileId',
+  'sessionName',
+  'displayAllocationId',
+  'routeId',
+  'remoteViewRouteId',
+  'routePoolEntryId',
+  'routePoolEntry',
+  'routePool',
+  'streamId',
+  'viewStreamProvider',
+  'provider',
+  'providerMode',
+  'frameUrl',
+  'externalUrl',
+  'connectionId',
+  'connectionName',
+  'routeDescriptor',
+  'openMode',
+  'viewerId',
+  'viewerName',
+  'viewerRole',
+  'controllerTakeover',
+];
+
+/**
+ * @param {ServiceRemoteViewBrowserReattachOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceRemoteViewBrowserReattachRequest(input) {
+  assertPlainObject(input, 'remote-view browser reattach request');
+  const { params, ...request } = input;
+  return createServiceRequest({
+    ...request,
+    action: 'service_remote_view_browser_reattach',
+    params: mergeParams(params, request, REMOTE_VIEW_REATTACH_PARAM_FIELDS),
+  });
+}
+
+/**
+ * @param {ServiceRemoteViewBrowserReattachOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceRemoteViewRouteSwitchRequest(input) {
+  assertPlainObject(input, 'remote-view route switch request');
+  const { params, ...request } = input;
+  return createServiceRequest({
+    ...request,
+    action: 'service_remote_view_route_switch',
+    params: mergeParams(params, request, REMOTE_VIEW_REATTACH_PARAM_FIELDS),
   });
 }
 
@@ -1336,6 +1399,30 @@ export async function requestServiceRemoteViewOpen({ baseUrl, fetch = globalThis
 }
 
 /**
+ * @param {ServiceRemoteViewBrowserReattachHttpOptions} options
+ */
+export async function requestServiceRemoteViewBrowserReattach({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceRemoteViewBrowserReattachRequest(request),
+  });
+}
+
+/**
+ * @param {ServiceRemoteViewBrowserReattachHttpOptions} options
+ */
+export async function requestServiceRemoteViewRouteSwitch({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceRemoteViewRouteSwitchRequest(request),
+  });
+}
+
+/**
  * @param {unknown} response
  * @returns {Record<string, unknown> | null}
  */
@@ -1381,6 +1468,13 @@ export function summarizeServiceRemoteViewOpenProof(response) {
   const tab = recordFromUnknown(data?.tab) ?? recordFromUnknown(data?.tabNew);
   const serviceTabHandle = recordFromUnknown(data?.serviceTabHandle) ?? recordFromUnknown(tab?.serviceTabHandle);
   const proof = recordFromUnknown(operatorVisible?.proof);
+  const target = recordFromUnknown(operatorVisible?.target);
+  const components = recordFromUnknown(operatorVisible?.components);
+  const routeComponent = recordFromUnknown(components?.route);
+  const tabComponent = recordFromUnknown(components?.tab);
+  const browserComponent = recordFromUnknown(components?.browser);
+  const guacamoleComponent = recordFromUnknown(components?.guacamole);
+  const browserBuildProof = recordFromUnknown(data?.browserBuildProof);
   const displayContent = recordFromUnknown(proof?.displayContent);
   const state = stringOrNull(operatorVisible?.state);
   const routeId = stringOrNull(operatorVisible?.routeId ?? data?.routeId ?? data?.remoteViewRouteId);
@@ -1392,6 +1486,8 @@ export function summarizeServiceRemoteViewOpenProof(response) {
     data?.tabId ??
       tab?.tabId ??
       tab?.id ??
+      target?.targetId ??
+      tabComponent?.targetId ??
       tab?.targetId ??
       serviceTabHandle?.tabId ??
       serviceTabHandle?.targetId,
@@ -1399,12 +1495,32 @@ export function summarizeServiceRemoteViewOpenProof(response) {
   const profileId = stringOrNull(
     data?.profileId ??
       data?.runtimeProfile ??
+      target?.profileId ??
+      browserComponent?.profileId ??
       tab?.profileId ??
       tab?.runtimeProfile ??
       serviceTabHandle?.profileId,
   );
   const visualProof = stringOrNull(displayContent?.state ?? proof?.state ?? state);
-  const failureReason = stringOrNull(operatorVisible?.reason ?? proof?.reason ?? data?.error);
+  const routeState = stringOrNull(routeComponent?.state);
+  const tabState = stringOrNull(tabComponent?.state ?? target?.state);
+  const guacamoleState = stringOrNull(guacamoleComponent?.state);
+  const browserBuildState = stringOrNull(browserBuildProof?.state);
+  const requestedBrowserBuild = stringOrNull(browserBuildProof?.requestedBrowserBuild);
+  const selectedBrowserBuild = stringOrNull(browserBuildProof?.selectedBrowserBuild);
+  const actualExecutablePath = stringOrNull(browserBuildProof?.actualExecutablePath);
+  const browserBuildMismatchReason = stringOrNull(browserBuildProof?.mismatchReason);
+  const failureReason = stringOrNull(
+    operatorVisible?.reason ??
+      proof?.reason ??
+      (routeState && routeState !== 'ready' && routeState !== 'not_checked' ? routeState : null) ??
+      (tabState && tabState !== 'ready' && tabState !== 'not_checked' ? tabState : null) ??
+      (guacamoleState && guacamoleState !== 'ready' && guacamoleState !== 'not_checked'
+        ? guacamoleState
+        : null) ??
+      (browserBuildState && browserBuildState === 'mismatch' ? browserBuildMismatchReason ?? browserBuildState : null) ??
+      data?.error,
+  );
   const ready = state === 'ready';
   const parts = [
     'remote_view_open',
@@ -1416,6 +1532,10 @@ export function summarizeServiceRemoteViewOpenProof(response) {
     `tab=${tabId ?? 'missing'}`,
     `profile=${profileId ?? 'missing'}`,
     `proof=${visualProof ?? 'missing'}`,
+    requestedBrowserBuild ? `requestedBuild=${requestedBrowserBuild}` : null,
+    selectedBrowserBuild ? `selectedBuild=${selectedBrowserBuild}` : null,
+    actualExecutablePath ? `executable=${actualExecutablePath}` : null,
+    browserBuildState ? `buildProof=${browserBuildState}` : null,
     failureReason ? `reason=${failureReason}` : null,
   ].filter(Boolean);
   return {
@@ -1429,7 +1549,130 @@ export function summarizeServiceRemoteViewOpenProof(response) {
     tabId,
     profileId,
     visualProof,
+    browserBuildState,
+    requestedBrowserBuild,
+    selectedBrowserBuild,
+    actualExecutablePath,
+    browserBuildMismatchReason,
     failureReason,
+    summary: parts.join(' '),
+  };
+}
+
+/**
+ * Summarize access-plan or tab-response shared-profile acquisition facts so
+ * clients do not need to parse nested profileReuse and tab data.
+ *
+ * @param {unknown} input
+ * @returns {ServiceSharedProfileAcquisitionSummary}
+ */
+export function summarizeServiceSharedProfileAcquisition(input) {
+  const record = recordFromUnknown(input);
+  const data = recordFromUnknown(record?.data);
+  const decision = recordFromUnknown(record?.decision) ?? recordFromUnknown(data?.decision);
+  const serviceRequest = recordFromUnknown(decision?.serviceRequest);
+  const plannedRequest = recordFromUnknown(serviceRequest?.request);
+  const profileReuse = recordFromUnknown(decision?.profileReuse);
+  const sharedAcquisition = recordFromUnknown(profileReuse?.sharedAcquisition) ?? recordFromUnknown(data?.sharedAcquisition);
+  const intent = recordFromUnknown(data?.intent);
+  const tab = recordFromUnknown(data?.tab);
+  const serviceTabHandle = getServiceTabHandle(input) ?? getServiceTabHandle({ data }) ?? getServiceTabHandle(record);
+  const runtimeProfile = stringOrNull(
+    data?.runtimeProfile ??
+      data?.profile ??
+      intent?.runtime_profile ??
+      intent?.runtimeProfile ??
+      intent?.profile ??
+      tab?.runtimeProfile ??
+      plannedRequest?.runtimeProfile ??
+      plannedRequest?.profile ??
+      serviceTabHandle?.profileId,
+  );
+  const profileId = stringOrNull(
+    data?.profileId ?? tab?.profileId ?? sharedAcquisition?.profileId ?? plannedRequest?.profileId ?? runtimeProfile ?? serviceTabHandle?.profileId,
+  );
+  const requestedProfile = stringOrNull(
+    sharedAcquisition?.requestedProfile ??
+      plannedRequest?.runtimeProfile ??
+      plannedRequest?.profileId ??
+      plannedRequest?.profile ??
+      intent?.runtime_profile ??
+      intent?.runtimeProfile ??
+      intent?.profile ??
+      runtimeProfile ??
+      profileId,
+  );
+  const plannedProfile = stringOrNull(
+    profileReuse?.selectedProfileId ??
+      profileReuse?.profileId ??
+      sharedAcquisition?.plannedProfile ??
+      sharedAcquisition?.profileId ??
+      plannedRequest?.profileId ??
+      plannedRequest?.runtimeProfile ??
+      data?.profileId ??
+      data?.runtimeProfile ??
+      tab?.profileId,
+  );
+  const browserId = stringOrNull(sharedAcquisition?.browserId ?? plannedRequest?.browserId ?? data?.browserId ?? serviceTabHandle?.browserId);
+  const sessionName = stringOrNull(
+    sharedAcquisition?.sessionName ??
+      plannedRequest?.sessionName ??
+      data?.sessionName ??
+      data?.sessionId ??
+      serviceTabHandle?.sessionName,
+  );
+  const tabId = stringOrNull(data?.tabId ?? data?.targetId ?? tab?.tabId ?? tab?.targetId ?? serviceTabHandle?.tabId);
+  const targetId = stringOrNull(data?.targetId ?? tab?.targetId ?? serviceTabHandle?.targetId);
+  const acquisitionMode = stringOrNull(sharedAcquisition?.mode ?? profileReuse?.defaultAcquisition);
+  const recommendedAction = stringOrNull(
+    profileReuse?.recommendedAction ?? sharedAcquisition?.recommendedAction ?? (sharedAcquisition ? 'reuse_existing_browser' : null),
+  );
+  const browserReused =
+    typeof sharedAcquisition?.browserReused === 'boolean'
+      ? sharedAcquisition.browserReused
+      : sharedAcquisition
+        ? true
+        : null;
+  const tabOpened = typeof sharedAcquisition?.tabOpened === 'boolean' ? sharedAcquisition.tabOpened : data ? true : null;
+  const duplicateProcessPolicy = stringOrNull(
+    sharedAcquisition?.duplicateProcessPolicy ?? profileReuse?.duplicateProcessPolicy ?? profileReuse?.profileProcessPolicy,
+  );
+  const requiresRouteHints = sharedAcquisition?.requiresRouteHints === true || Boolean(browserId || sessionName);
+  const routeHintFields = stringArray(sharedAcquisition?.routeHintFields);
+  const available = Boolean(sharedAcquisition || browserId || sessionName || serviceTabHandle);
+  const parts = [
+    'shared_profile_acquisition',
+    `available=${available ? 'true' : 'false'}`,
+    `mode=${acquisitionMode ?? 'missing'}`,
+    `requestedProfile=${requestedProfile ?? 'missing'}`,
+    `plannedProfile=${plannedProfile ?? 'missing'}`,
+    `browser=${browserId ?? 'missing'}`,
+    `session=${sessionName ?? 'missing'}`,
+    `tab=${tabId ?? 'missing'}`,
+    duplicateProcessPolicy ? `duplicateProcessPolicy=${duplicateProcessPolicy}` : null,
+    requiresRouteHints ? 'routeHints=true' : null,
+  ].filter(Boolean);
+
+  return {
+    available,
+    recommendedAction,
+    acquisitionMode,
+    requestedProfile,
+    plannedProfile,
+    runtimeProfile,
+    profileId,
+    browserId,
+    sessionName,
+    tabId,
+    targetId,
+    browserReused,
+    tabOpened,
+    profileProcessPolicy: stringOrNull(profileReuse?.profileProcessPolicy),
+    clientSharingPolicy: stringOrNull(profileReuse?.clientSharingPolicy ?? sharedAcquisition?.policy),
+    duplicateProcessPolicy,
+    requiresRouteHints,
+    routeHintFields,
+    serviceTabHandle,
     summary: parts.join(' '),
   };
 }

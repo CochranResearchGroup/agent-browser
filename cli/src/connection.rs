@@ -798,6 +798,9 @@ pub fn send_command(cmd: Value, session: &str) -> Result<Response, String> {
         match send_command_once(&cmd, session) {
             Ok(response) => return Ok(response),
             Err(e) => {
+                if is_command_response_read_timeout(&e) {
+                    return Err(e);
+                }
                 if is_transient_error(&e) {
                     last_error = e;
                     continue;
@@ -838,10 +841,18 @@ fn is_transient_error(error: &str) -> bool {
         || error.contains("os error 10054") // Connection reset by peer (Windows)
 }
 
+fn is_command_response_read_timeout(error: &str) -> bool {
+    error.starts_with("Failed to read:")
+        && (error.contains("os error 11")
+            || error.contains("os error 35")
+            || error.contains("WouldBlock")
+            || error.contains("Resource temporarily unavailable"))
+}
+
 fn send_command_once(cmd: &Value, session: &str) -> Result<Response, String> {
     let mut stream = connect(session)?;
 
-    stream.set_read_timeout(Some(Duration::from_secs(30))).ok();
+    stream.set_read_timeout(Some(Duration::from_secs(300))).ok();
     stream.set_write_timeout(Some(Duration::from_secs(5))).ok();
 
     let authenticated_cmd = attach_daemon_auth_token(cmd, session)?;
@@ -940,6 +951,16 @@ mod tests {
     fn test_is_transient_error_eagain_linux() {
         assert!(is_transient_error(
             "Failed to read: Resource temporarily unavailable (os error 11)"
+        ));
+    }
+
+    #[test]
+    fn test_command_response_read_timeout_is_not_replayed() {
+        assert!(is_command_response_read_timeout(
+            "Failed to read: Resource temporarily unavailable (os error 11)"
+        ));
+        assert!(!is_command_response_read_timeout(
+            "Failed to connect: Connection refused (os error 111)"
         ));
     }
 

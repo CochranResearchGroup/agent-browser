@@ -632,6 +632,21 @@ access-plan attention fields for software logs and operator output. It reports
 whether the request can be sent immediately or should be reused after manual
 seeding, challenge approval, or provider work completes.
 
+`service-remote-view-route-preflight-response.v1.schema.json` describes the
+no-launch route readiness response returned by HTTP
+`GET /api/service/remote-view/route-preflight`, MCP
+`service_remote_view_route_preflight`, and
+`getServiceRemoteViewRoutePreflight()`. The response includes
+`fastPreflight.status` as `ready`, `partial`, `stale`, or `blocked` with
+component evidence for route acquisition, Guacamole route URL shape, retained
+Guacamole and RDP readiness, display access, and route desktop state.
+Service browser records also expose optional `attachability` on browser and RDP
+view-stream rows. Service request actions `service_remote_view_browser_reattach`
+and `service_remote_view_route_switch` consume that browser-first state to
+reattach or rebind retained RDP browsers without launching a new browser.
+Route-switch responses may include `routeSwitchParking` when the broker parked
+another live browser's route surface because no route-pool entry was available.
+
 `service-browser-capability-registry-upsert-response.v1.schema.json` describes
 the response envelope returned by HTTP `POST
 /api/service/browser-capability-registry/<collection>/<id>` and MCP
@@ -710,7 +725,8 @@ overrides, and durable incident acknowledgement or resolution metadata.
 `service-reconcile-response.v1.schema.json` describes the response envelope
 returned by `agent-browser service reconcile` and HTTP
 `POST /api/service/reconcile`. It covers the reconciliation flag, browser
-counts, changed browser count, and returned service state snapshot.
+counts, changed browser count, remote-view repair counts, and returned service
+state snapshot.
 
 ## Service Trace Aggregate Records v1
 

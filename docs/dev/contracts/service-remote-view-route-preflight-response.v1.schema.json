@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-remote-view-route-preflight-response.v1.schema.json",
+  "title": "agent-browser service remote-view route preflight response",
+  "description": "Stable API shape for no-launch remote-view route readiness preflight responses returned by HTTP GET /api/service/remote-view/route-preflight, MCP service_remote_view_route_preflight, and service observability clients.",
+  "type": "object",
+  "required": [
+    "status",
+    "preflightStatus",
+    "observedAt",
+    "routeBinding",
+    "acquisitionPlan",
+    "fastPreflight"
+  ],
+  "properties": {
+    "status": {
+      "type": "string",
+      "const": "preflight_ready"
+    },
+    "preflightStatus": {
+      "type": "string",
+      "enum": [
+        "ready",
+        "partial",
+        "stale",
+        "blocked"
+      ]
+    },
+    "observedAt": {
+      "type": "string"
+    },
+    "routeId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "displayAllocationId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "routePoolEntryId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "browserId": {
+      "type": "string"
+    },
+    "sessionName": {
+      "type": "string"
+    },
+    "routeBinding": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "acquisitionPlan": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "fastPreflight": {
+      "type": "object",
+      "required": [
+        "status",
+        "noLaunch",
+        "components"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "ready",
+            "partial",
+            "stale",
+            "blocked"
+          ]
+        },
+        "noLaunch": {
+          "type": "boolean",
+          "const": true
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "blockers": {
+          "type": "array"
+        },
+        "stale": {
+          "type": "array"
+        },
+        "notChecked": {
+          "type": "array"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

@@ -69,6 +69,7 @@
         "profileId",
         "profileName",
         "profileOrigin",
+        "profileClass",
         "allocation",
         "keyring",
         "browserBuild",
@@ -103,6 +104,16 @@
           "description": "Ownership boundary for the profile user-data directory and cleanup policy.",
           "type": "string",
           "enum": ["agent_browser_owned", "external_byop", "external_observed"]
+        },
+        "profileClass": {
+          "description": "Product-level profile class used for reuse and cleanup decisions.",
+          "type": "string",
+          "enum": [
+            "default",
+            "managed_one_time",
+            "durable_named",
+            "operator_supplied"
+          ]
         },
         "allocation": {
           "type": "string"

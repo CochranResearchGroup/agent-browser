@@ -25,6 +25,8 @@ export type ServiceRequestAction =
   | "view_takeover"
   | "remote_view_open"
   | "service_remote_view_route_preflight"
+  | "service_remote_view_browser_reattach"
+  | "service_remote_view_route_switch"
   | "service_remote_view_route_checkout"
   | "service_remote_view_route_release"
   | "service_route_pool_repair"
@@ -120,6 +122,7 @@ export interface ServiceRequest {
   profile?: string;
   profileId?: string;
   runtimeProfile?: string;
+  profileClass?: string;
   cdpUrl?: string;
   browserId?: string;
   sessionName?: string;
@@ -342,7 +345,7 @@ export interface ServiceTabHandleRefreshData {
   action: "tab_handle_refresh";
   refreshed: boolean;
   decision: string;
-  repairPolicy: "reject_only" | "reuse_compatible" | "open_if_missing" | string;
+  repairPolicy: "reject_only" | "reuse_compatible" | "open_if_missing" | "replace_duplicates" | string;
   observedAt: string;
   browserId: string;
   targetId?: string | null;
@@ -588,6 +591,10 @@ export interface ServiceRemoteViewRouteMutationData {
   remoteViewRouteId?: string;
   displayAllocationId?: string;
   routePoolEntryId?: string | null;
+  previousRouteId?: string | null;
+  previousRoutePoolEntryId?: string | null;
+  newRouteId?: string | null;
+  newRoutePoolEntryId?: string | null;
   browserId?: string;
   sessionName?: string;
   frameUrl?: string | null;
@@ -595,6 +602,10 @@ export interface ServiceRemoteViewRouteMutationData {
   providerMode?: string;
   remoteViewRoute?: Record<string, unknown> | null;
   routePoolEntry?: Record<string, unknown> | null;
+  reattachRepair?: Record<string, unknown> | null;
+  routeSwitchRelease?: Record<string, unknown> | null;
+  routeSwitchParking?: Record<string, unknown> | null;
+  checkout?: Record<string, unknown> | null;
   releasedViewerLeaseIds?: string[];
   updatedAt?: string;
   [key: string]: unknown;
@@ -611,7 +622,35 @@ export interface ServiceRemoteViewOpenProofSummary {
   tabId: string | null;
   profileId: string | null;
   visualProof: string | null;
+  browserBuildState: string | null;
+  requestedBrowserBuild: string | null;
+  selectedBrowserBuild: string | null;
+  actualExecutablePath: string | null;
+  browserBuildMismatchReason: string | null;
   failureReason: string | null;
+  summary: string;
+}
+
+export interface ServiceSharedProfileAcquisitionSummary {
+  available: boolean;
+  recommendedAction: string | null;
+  acquisitionMode: string | null;
+  requestedProfile: string | null;
+  plannedProfile: string | null;
+  runtimeProfile: string | null;
+  profileId: string | null;
+  browserId: string | null;
+  sessionName: string | null;
+  tabId: string | null;
+  targetId: string | null;
+  browserReused: boolean | null;
+  tabOpened: boolean | null;
+  profileProcessPolicy: string | null;
+  clientSharingPolicy: string | null;
+  duplicateProcessPolicy: string | null;
+  requiresRouteHints: boolean;
+  routeHintFields: string[];
+  serviceTabHandle: ServiceTabHandle | null;
   summary: string;
 }
 
@@ -962,6 +1001,8 @@ export interface ServiceRetainedCleanupData {
   after?: Record<string, number>;
   candidates?: Record<string, string[]>;
   candidateCounts: Record<string, number>;
+  candidateReasons?: Record<string, unknown>;
+  candidateClassCounts?: Record<string, Record<string, number>>;
   skipped?: Record<string, string[]>;
   skippedCounts?: Record<string, number>;
   skippedSummary?: Record<string, unknown>;
@@ -1008,6 +1049,8 @@ export interface ServiceRequestActionDataMap {
   view_takeover: ServiceViewTakeoverData;
   remote_view_open: ServiceRemoteViewRouteMutationData;
   service_remote_view_route_preflight: ServiceRemoteViewRouteMutationData;
+  service_remote_view_browser_reattach: ServiceRemoteViewRouteMutationData;
+  service_remote_view_route_switch: ServiceRemoteViewRouteMutationData;
   service_remote_view_route_checkout: ServiceRemoteViewRouteMutationData;
   service_remote_view_route_release: ServiceRemoteViewRouteMutationData;
   service_route_pool_repair: ServiceRoutePoolRepairData;
@@ -1292,7 +1335,7 @@ export interface ServiceFileTransferRequestHttpOptions extends ServiceFileTransf
 
 export interface ServiceTabHandleRefreshOptions extends Omit<ServiceRequest, "action" | "params"> {
   serviceTabHandle: ServiceTabHandle;
-  repairPolicy?: "reject_only" | "reuse_compatible" | "open_if_missing";
+  repairPolicy?: "reject_only" | "reuse_compatible" | "open_if_missing" | "replace_duplicates";
   url?: string;
   desiredUrl?: string;
   params?: Record<string, unknown>;
@@ -1325,6 +1368,7 @@ export interface ServiceRemoteViewRouteCheckoutOptions extends Omit<ServiceReque
   browserId?: string;
   sessionName?: string;
   streamId?: string;
+  viewStreamProvider?: string;
   provider?: string;
   providerMode?: string;
   frameUrl?: string;
@@ -1338,6 +1382,33 @@ export interface ServiceRemoteViewRouteCheckoutOptions extends Omit<ServiceReque
   url?: string;
   dryRun?: boolean;
   allowInfrastructureOnlyReadiness?: boolean;
+  params?: Record<string, unknown>;
+}
+
+export interface ServiceRemoteViewBrowserReattachOptions extends Omit<ServiceRequest, "action" | "params"> {
+  browserId?: string;
+  profileId?: string;
+  sessionName?: string;
+  displayAllocationId?: string;
+  routeId?: string;
+  remoteViewRouteId?: string;
+  routePoolEntryId?: string;
+  routePoolEntry?: Record<string, unknown>;
+  routePool?: Record<string, unknown>[];
+  streamId?: string;
+  viewStreamProvider?: string;
+  provider?: string;
+  providerMode?: string;
+  frameUrl?: string;
+  externalUrl?: string;
+  connectionId?: string;
+  connectionName?: string;
+  routeDescriptor?: Record<string, unknown>;
+  openMode?: "embedded" | "external" | "fullscreen" | "tile" | string;
+  viewerId?: string;
+  viewerName?: string;
+  viewerRole?: "observer" | "controller" | "pending_controller" | "none" | string;
+  controllerTakeover?: boolean;
   params?: Record<string, unknown>;
 }
 
@@ -1380,6 +1451,12 @@ export interface ServiceControllerLeaseTakeoverOptions extends ServiceViewerLeas
 }
 
 export interface ServiceRemoteViewRouteCheckoutHttpOptions extends ServiceRemoteViewRouteCheckoutOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
+export interface ServiceRemoteViewBrowserReattachHttpOptions extends ServiceRemoteViewBrowserReattachOptions {
   baseUrl: string;
   fetch?: typeof globalThis.fetch;
   signal?: AbortSignal;
@@ -1484,6 +1561,12 @@ export declare function createServiceRemoteViewRoutePreflightRequest(
 export declare function createServiceRemoteViewOpenRequest(
   input: ServiceRemoteViewRouteCheckoutOptions,
 ): ServiceRequestForAction<"remote_view_open">;
+export declare function createServiceRemoteViewBrowserReattachRequest(
+  input: ServiceRemoteViewBrowserReattachOptions,
+): ServiceRequestForAction<"service_remote_view_browser_reattach">;
+export declare function createServiceRemoteViewRouteSwitchRequest(
+  input: ServiceRemoteViewBrowserReattachOptions,
+): ServiceRequestForAction<"service_remote_view_route_switch">;
 export declare function createServiceRemoteViewRouteCheckoutRequest(
   input: ServiceRemoteViewRouteCheckoutOptions,
 ): ServiceRequestForAction<"service_remote_view_route_checkout">;
@@ -1579,9 +1662,18 @@ export declare function requestServiceRemoteViewRoutePreflight(
 export declare function requestServiceRemoteViewOpen(
   options: ServiceRemoteViewRouteCheckoutHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceRemoteViewRouteMutationData>>;
+export declare function requestServiceRemoteViewBrowserReattach(
+  options: ServiceRemoteViewBrowserReattachHttpOptions,
+): Promise<ServiceRequestResponse<ServiceRemoteViewRouteMutationData>>;
+export declare function requestServiceRemoteViewRouteSwitch(
+  options: ServiceRemoteViewBrowserReattachHttpOptions,
+): Promise<ServiceRequestResponse<ServiceRemoteViewRouteMutationData>>;
 export declare function getServiceRemoteViewOpenOperatorVisible(response: unknown): Record<string, unknown> | null;
 export declare function isServiceRemoteViewOpenOperatorVisibleReady(response: unknown): boolean;
 export declare function summarizeServiceRemoteViewOpenProof(response: unknown): ServiceRemoteViewOpenProofSummary;
+export declare function summarizeServiceSharedProfileAcquisition(
+  input: unknown,
+): ServiceSharedProfileAcquisitionSummary;
 export declare function requireServiceRemoteViewOpenOperatorVisible(
   response: unknown,
   options?: { allowInfrastructureOnlyReadiness?: boolean },

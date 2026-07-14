@@ -10,6 +10,7 @@
     "changedBrowsers",
     "expiredSessionLeases",
     "expiredSessionLeaseCount",
+    "remoteViewRepair",
     "service_state"
   ],
   "properties": {
@@ -33,6 +34,54 @@
     "expiredSessionLeaseCount": {
       "type": "integer",
       "minimum": 0
+    },
+    "remoteViewRepair": {
+      "type": "object",
+      "required": [
+        "orphanedDisplayAllocations",
+        "orphanedRoutes",
+        "releasedViewerLeases",
+        "expiredViewerLeases",
+        "clearedControllerLeases",
+        "repaired",
+        "released",
+        "skippedUnsafe"
+      ],
+      "properties": {
+        "orphanedDisplayAllocations": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "orphanedRoutes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "releasedViewerLeases": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "expiredViewerLeases": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "clearedControllerLeases": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "repaired": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "released": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skippedUnsafe": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": true
     },
     "service_state": {
       "type": "object"
