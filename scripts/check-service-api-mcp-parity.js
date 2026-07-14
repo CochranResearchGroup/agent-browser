@@ -376,7 +376,7 @@ const serviceResourceSurface = [
     route: '/api/service/access-plan',
     docsNeedles: [
       '/api/service/access-plan',
-      'agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,browserBuild,browserHost,viewStreamProvider,controlInputProvider,displayIsolation}',
+      'agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,runtimeProfile,browserBuild,browserHost,viewStreamProvider,controlInputProvider,displayIsolation}',
     ],
     httpNeedles: [
       'path == "/api/service/access-plan"',
@@ -532,10 +532,10 @@ const serviceResourceSurface = [
     ],
   },
   {
-    resource: 'agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId,browserBuild}',
+    resource: 'agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId,runtimeProfile,browserBuild}',
     route: '/api/service/profiles/lookup',
     docsNeedles: [
-      'agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId,browserBuild}',
+      'agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId,runtimeProfile,browserBuild}',
       '/api/service/profiles/lookup',
       'getServiceProfileForIdentity',
     ],
@@ -553,7 +553,7 @@ const serviceResourceSurface = [
     contractNeedles: [
       'service-profile-lookup-response.v1.schema.json',
       'GET /api/service/profiles/lookup',
-      'agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId,browserBuild}',
+      'agent-browser://profiles/lookup{?serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,readinessProfileId,runtimeProfile,browserBuild}',
     ],
   },
 ];
