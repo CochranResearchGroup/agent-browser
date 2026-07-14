@@ -61,6 +61,16 @@ const commands = [
     command: process.execPath,
     args: ['--no-warnings', '--experimental-strip-types', 'scripts/test-dashboard-workspace-nodes.js'],
   },
+  {
+    label: 'RDP route xsession no-terminal fixture',
+    command: process.execPath,
+    args: ['scripts/test-rdp-route-xsession.js'],
+  },
+  {
+    label: 'RDP Guacamole Postgres hardening fixture',
+    command: process.execPath,
+    args: ['scripts/test-rdp-guac-postgres-hardening.js'],
+  },
 ];
 
 for (const item of commands) {

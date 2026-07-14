@@ -52,6 +52,29 @@ ensure_guacamole_postgres() {
   bash "$SCRIPT_DIR/ensure-rdp-guac-postgres.sh" --apply
 }
 
+read_secret() {
+  local key="$1"
+  if [[ ! -f "$SECRET_FILE" ]]; then
+    return 1
+  fi
+
+  python3 - "$SECRET_FILE" "$key" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+key = sys.argv[2]
+prefix = key + "="
+
+for line in path.read_text().splitlines():
+    if line.startswith(prefix):
+        print(line[len(prefix):])
+        sys.exit(0)
+
+sys.exit(1)
+PY
+}
+
 privileged_helper_available() {
   [[ -x "$PRIVILEGED_HELPER" ]] && sudo -n "$PRIVILEGED_HELPER" check >/dev/null 2>&1
 }
@@ -150,18 +173,32 @@ EOF
   exit 2
 fi
 
-USE_PRIVILEGED_HELPER=0
-if privileged_helper_available; then
-  USE_PRIVILEGED_HELPER=1
-elif ! sudo -v; then
-  echo "This setup needs sudo to create/update local XRDP users." >&2
-  echo "Install the one-time helper from an interactive terminal:" >&2
-  echo "  pnpm install:privileges -- --apply" >&2
-  echo "Or run this setup from an interactive terminal where sudo can prompt." >&2
-  exit 2
+EXISTING_PASS_A="$(read_secret XRDP_AGENT_BROWSER_ROUTE_A_PASSWORD || true)"
+EXISTING_PASS_B="$(read_secret XRDP_AGENT_BROWSER_ROUTE_B_PASSWORD || true)"
+REUSE_EXISTING_ROUTE_USERS=0
+if getent passwd "$USER_A" >/dev/null \
+  && getent passwd "$USER_B" >/dev/null \
+  && [[ -n "$EXISTING_PASS_A" ]] \
+  && [[ -n "$EXISTING_PASS_B" ]]; then
+  REUSE_EXISTING_ROUTE_USERS=1
 fi
 
-PASSWORDS="$(python3 - "$USER_A" "$USER_B" <<'PY'
+USE_PRIVILEGED_HELPER=0
+if [[ "$REUSE_EXISTING_ROUTE_USERS" != "1" ]]; then
+  if privileged_helper_available; then
+    USE_PRIVILEGED_HELPER=1
+  elif ! sudo -v; then
+    echo "This setup needs sudo to create/update local XRDP users." >&2
+    echo "Install the one-time helper from an interactive terminal:" >&2
+    echo "  pnpm install:privileges -- --apply" >&2
+    echo "Or run this setup from an interactive terminal where sudo can prompt." >&2
+    exit 2
+  fi
+fi
+
+PASSWORDS="{}"
+if [[ "$REUSE_EXISTING_ROUTE_USERS" != "1" ]]; then
+  PASSWORDS="$(python3 - "$USER_A" "$USER_B" <<'PY'
 import json
 import secrets
 import string
@@ -175,6 +212,7 @@ print(json.dumps({
 }))
 PY
 )"
+fi
 
 setup_user() {
   local user_name="$1"
@@ -196,21 +234,29 @@ setup_user() {
   sudo tee "/home/$user_name/.xsession" >/dev/null <<'EOF'
 #!/bin/sh
 xsetroot -solid '#20252b' 2>/dev/null || true
-xterm -geometry 100x28+40+40 -title 'agent-browser route-pool RDP session' &
-exec openbox-session
+if command -v openbox-session >/dev/null 2>&1; then
+  openbox-session &
+fi
+while true; do
+  sleep 3600
+done
 EOF
   sudo chmod 700 "/home/$user_name/.xsession"
   sudo chown "$user_name:$user_name" "/home/$user_name/.xsession"
 }
 
-PASS_A="$(python3 - "$PASSWORDS" "$USER_A" <<'PY'
+if [[ "$REUSE_EXISTING_ROUTE_USERS" == "1" ]]; then
+  PASS_A="$EXISTING_PASS_A"
+  PASS_B="$EXISTING_PASS_B"
+else
+  PASS_A="$(python3 - "$PASSWORDS" "$USER_A" <<'PY'
 import json
 import sys
 
 print(json.loads(sys.argv[1])[sys.argv[2]])
 PY
 )"
-PASS_B="$(python3 - "$PASSWORDS" "$USER_B" <<'PY'
+  PASS_B="$(python3 - "$PASSWORDS" "$USER_B" <<'PY'
 import json
 import sys
 
@@ -218,8 +264,9 @@ print(json.loads(sys.argv[1])[sys.argv[2]])
 PY
 )"
 
-setup_user "$USER_A" "$PASS_A"
-setup_user "$USER_B" "$PASS_B"
+  setup_user "$USER_A" "$PASS_A"
+  setup_user "$USER_B" "$PASS_B"
+fi
 
 mkdir -p "$(dirname "$SECRET_FILE")"
 python3 - "$SECRET_FILE" "$USER_A" "$PASS_A" "$USER_B" "$PASS_B" <<'PY'
@@ -334,16 +381,23 @@ PY
 
 (
   cd "$GUAC_DIR"
-  printf '%s\n' "$SQL" | docker compose exec -T postgres psql -U guacamole_user -d guacamole_db
+  printf '%s\n' "$SQL" | docker compose exec -T postgres psql -U guacamole_user -d guacamole_db -v ON_ERROR_STOP=1
+  docker compose exec -T postgres psql -U guacamole_user -d guacamole_db -v ON_ERROR_STOP=1 -c "CHECKPOINT;" >/dev/null
 )
 
-if [[ "$USE_PRIVILEGED_HELPER" == "1" ]]; then
-  sudo -n "$PRIVILEGED_HELPER" restart-xrdp
-else
-  sudo systemctl restart xrdp-sesman xrdp
+if [[ "$REUSE_EXISTING_ROUTE_USERS" != "1" ]]; then
+  if [[ "$USE_PRIVILEGED_HELPER" == "1" ]]; then
+    sudo -n "$PRIVILEGED_HELPER" restart-xrdp
+  else
+    sudo systemctl restart xrdp-sesman xrdp
+  fi
 fi
 
 echo "Configured two Guacamole RDP route-pool users and connections."
+if [[ "$REUSE_EXISTING_ROUTE_USERS" == "1" ]]; then
+  echo "Reused existing route-specific XRDP users and stored route secrets."
+fi
+echo "Guacamole Postgres route writes checkpoint completed."
 echo "Secrets were stored in $SECRET_FILE."
 echo "Next: pnpm test:rdp-guac-route-pool-readiness"
 echo "After opening both RDP sessions, run: pnpm inspect:rdp-route-displays"

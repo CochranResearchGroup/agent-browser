@@ -23,6 +23,7 @@ const context = createSmokeContext({
 });
 
 const { agentHome, session, tempHome } = context;
+context.env.AGENT_BROWSER_ARGS = '--no-sandbox';
 if (!process.env.AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD && existsSync('/usr/bin/google-chrome')) {
   context.env.AGENT_BROWSER_EXECUTABLE_PATH = '/usr/bin/google-chrome';
 }
@@ -112,7 +113,7 @@ async function fail(message) {
 try {
   seedServiceState();
 
-  const sourceOpen = await runCli(context, ['--json', '--session', externalSession, 'open', adoptUrl]);
+  const sourceOpen = await runCli(context, ['--json', '--session', externalSession, 'open', adoptUrl], 120000);
   const sourceOpenJson = parseJsonOutput(sourceOpen.stdout, 'source open');
   assert(sourceOpenJson.success === true, `source open failed: ${sourceOpen.stdout}${sourceOpen.stderr}`);
 
@@ -165,6 +166,18 @@ try {
   assert(adoptedBrowser, `adopted browser missing from readback: ${JSON.stringify(browsers.data)}`);
   assert(adoptedBrowser.profileId === profileId, `adopted browser profile mismatch: ${JSON.stringify(adoptedBrowser)}`);
   assert(adoptedBrowser.host === 'attached_existing', `adopted browser host mismatch: ${JSON.stringify(adoptedBrowser)}`);
+  const cdpStream = adoptedBrowser.viewStreams?.find((stream) => stream?.provider === 'cdp_screencast');
+  assert(cdpStream, `adopted browser missing CDP stream: ${JSON.stringify(adoptedBrowser)}`);
+  assert(cdpStream.url === `http://127.0.0.1:${port}/`, `adopted stream URL mismatch: ${JSON.stringify(cdpStream)}`);
+  assert(cdpStream.controlInput === 'cdp_input', `adopted stream control mismatch: ${JSON.stringify(cdpStream)}`);
+  assert(cdpStream.readOnly === false, `adopted stream should be controllable: ${JSON.stringify(cdpStream)}`);
+  assert(
+    cdpStream.readiness?.state === 'ready' && cdpStream.readiness?.reason === 'stream_server_ready',
+    `adopted stream readiness mismatch: ${JSON.stringify(cdpStream)}`,
+  );
+  const frame = await httpJson(port, 'GET', `/api/stream/${port}/frame`);
+  assert(frame.success === true, `adopted stream frame endpoint failed: ${JSON.stringify(frame)}`);
+  assert(typeof frame.frame === 'string' && frame.frame.length > 100, `adopted stream did not return a frame: ${JSON.stringify(frame)}`);
 
   await cleanup();
   console.log('External BYOP adopt live smoke passed');

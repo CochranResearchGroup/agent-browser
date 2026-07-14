@@ -120,10 +120,12 @@ PY
 
 (
   cd "$GUAC_DIR"
-  printf '%s\n' "$SQL" | docker compose exec -T postgres psql -U guacamole_user -d guacamole_db
+  printf '%s\n' "$SQL" | docker compose exec -T postgres psql -U guacamole_user -d guacamole_db -v ON_ERROR_STOP=1
+  docker compose exec -T postgres psql -U guacamole_user -d guacamole_db -v ON_ERROR_STOP=1 -c "CHECKPOINT;" >/dev/null
 )
 
 sudo systemctl restart xrdp-sesman xrdp
 
 echo "Configured Guacamole connection $CONNECTION_ID for XRDP autologin as $USER_NAME."
+echo "Guacamole Postgres route writes checkpoint completed."
 echo "The generated password was stored in $SECRET_FILE."

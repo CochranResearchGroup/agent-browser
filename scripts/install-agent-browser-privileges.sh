@@ -90,6 +90,51 @@ current_install_ready() {
   sudo -n "$HELPER_PATH" check >/dev/null 2>&1 || return 1
 }
 
+print_install_status() {
+  echo "Current readiness:"
+  if getent group "$GROUP_NAME" >/dev/null 2>&1; then
+    echo "  group: ready"
+  else
+    echo "  group: missing"
+  fi
+
+  if id -nG "$OPERATOR_USER" 2>/dev/null | tr ' ' '\n' | grep -Fx "$GROUP_NAME" >/dev/null; then
+    echo "  membership: ready"
+  else
+    echo "  membership: $OPERATOR_USER is not in $GROUP_NAME"
+  fi
+
+  if [[ -x "$HELPER_PATH" ]]; then
+    if cmp -s "$HELPER_SOURCE" "$HELPER_PATH"; then
+      echo "  helper: ready"
+    else
+      echo "  helper: installed helper differs from bundled helper and must be refreshed"
+    fi
+  elif [[ -e "$HELPER_PATH" ]]; then
+    echo "  helper: present but not executable"
+  else
+    echo "  helper: missing"
+  fi
+
+  if [[ -f "$SUDOERS_PATH" ]]; then
+    if [[ -r "$SUDOERS_PATH" ]] && expected_sudoers_content | diff -q - "$SUDOERS_PATH" >/dev/null 2>&1; then
+      echo "  sudoers: ready"
+    elif [[ -r "$SUDOERS_PATH" ]]; then
+      echo "  sudoers: policy differs from expected rule"
+    else
+      echo "  sudoers: present but not readable by current user"
+    fi
+  else
+    echo "  sudoers: missing"
+  fi
+
+  if [[ -x "$HELPER_PATH" ]] && sudo -n "$HELPER_PATH" check >/dev/null 2>&1; then
+    echo "  sudo helper check: ready"
+  else
+    echo "  sudo helper check: not ready"
+  fi
+}
+
 if [[ "$APPLY" != "1" ]]; then
   cat <<EOF
 agent-browser privileged helper install dry run
@@ -109,6 +154,7 @@ Would run with one privileged authorization:
 
 After applying, open a new shell or run: newgrp $GROUP_NAME
 EOF
+  print_install_status
   exit 0
 fi
 
@@ -123,6 +169,7 @@ if ! command -v visudo >/dev/null 2>&1; then
   exit 1
 fi
 
+print_install_status
 sudo -v
 
 SUDOERS_TMP="$(mktemp)"

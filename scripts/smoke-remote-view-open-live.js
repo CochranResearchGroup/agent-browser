@@ -6,7 +6,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { requestServiceRemoteViewOpen } from '../packages/client/src/service-request.js';
+import {
+  requestServiceRemoteViewOpen,
+  requestServiceRoutePoolRepair,
+} from '../packages/client/src/service-request.js';
 import { buildAudit } from './audit-route-handoff.js';
 import { assert, parseJsonOutput } from './smoke-utils.js';
 import { loadAgentBrowserEnvFromRealHome } from './smoke-remote-headed-utils.js';
@@ -18,8 +21,11 @@ const agentName = process.env.AGENT_BROWSER_REMOTE_VIEW_OPEN_AGENT_NAME || 'smok
 const daemonSession = process.env.AGENT_BROWSER_REMOTE_VIEW_OPEN_DAEMON_SESSION || `remote-view-open-live-${process.pid}`;
 const runtimeProfile = process.env.AGENT_BROWSER_REMOTE_VIEW_OPEN_RUNTIME_PROFILE || `${daemonSession}-profile`;
 const useFixture = process.argv.includes('--fixture') || process.env.AGENT_BROWSER_REMOTE_VIEW_OPEN_FIXTURE === '1';
+const forceProofFailure = process.argv.includes('--force-proof-failure') ||
+  process.env.AGENT_BROWSER_REMOTE_VIEW_OPEN_FORCE_PROOF_FAILURE === '1';
 const displayName = process.env.AGENT_BROWSER_REMOTE_VIEW_OPEN_DISPLAY || ':10';
 const displayIsolation = process.env.AGENT_BROWSER_REMOTE_VIEW_OPEN_DISPLAY_ISOLATION || 'shared_display';
+const remoteViewOpenTimeoutMs = Number(process.env.AGENT_BROWSER_REMOTE_VIEW_OPEN_TIMEOUT_MS || 300000);
 const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
 const artifactDir = join(tmpdir(), `agent-browser-remote-view-open-live-${timestamp}`);
 
@@ -97,6 +103,7 @@ const agentBrowser = agentBrowserCommand();
 function run(command, args, label, { allowFailure = false, timeoutMs = 120000 } = {}) {
   const result = spawnSync(command, args, {
     encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
     stdio: 'pipe',
     timeout: timeoutMs,
   });
@@ -128,6 +135,30 @@ function runAgentJson(args, label, timeoutMs = 120000) {
   return parseJsonOutput(result.stdout, label);
 }
 
+function runAgentJsonExpectFailure(args, label, timeoutMs = 120000) {
+  const previous = process.env.AGENT_BROWSER_REMOTE_VIEW_FORCE_PROOF_FAILURE;
+  process.env.AGENT_BROWSER_REMOTE_VIEW_FORCE_PROOF_FAILURE = '1';
+  try {
+    const result = run(agentBrowser, ['--session', daemonSession, '--json', ...args], label, {
+      allowFailure: true,
+      timeoutMs,
+    });
+    assert(
+      result.status !== 0,
+      `${label} unexpectedly succeeded: ${result.stdout}${result.stderr}`,
+    );
+    const parsed = parseJsonOutput(result.stdout, label);
+    assert(parsed.success === false, `${label} did not return success=false: ${JSON.stringify(parsed)}`);
+    return parsed;
+  } finally {
+    if (previous === undefined) {
+      delete process.env.AGENT_BROWSER_REMOTE_VIEW_FORCE_PROOF_FAILURE;
+    } else {
+      process.env.AGENT_BROWSER_REMOTE_VIEW_FORCE_PROOF_FAILURE = previous;
+    }
+  }
+}
+
 function routePoolReadiness() {
   if (envValue('AGENT_BROWSER_RDP_ROUTE_POOL_JSON')) {
     return {
@@ -148,19 +179,73 @@ function selectRouteEntry(report, serviceStatus = null) {
   const entries = report.routePoolJson;
   assert(Array.isArray(entries) && entries.length > 0, `route pool readiness did not return entries: ${JSON.stringify(report)}`);
   const liveRoutePool = serviceStatus?.data?.service_state?.routePool || serviceStatus?.data?.routePool || {};
+  const liveEntries = Object.values(liveRoutePool);
+  const entriesWithLiveState = entries.map((entry) => {
+    const live = liveRoutePool[entry?.id] || liveEntries.find((candidate) => candidate?.routeId === entry?.routeId);
+    if (!live) return entry;
+    const sameRoute = live.routeId && entry?.routeId && live.routeId === entry.routeId;
+    const sameConnection = live.connectionId && entry?.connectionId && String(live.connectionId) === String(entry.connectionId);
+    if (!sameRoute && !sameConnection) {
+      return {
+        ...entry,
+        stalePersistedRoutePoolEntry: {
+          id: live.id,
+          routeId: live.routeId,
+          connectionId: live.connectionId,
+          state: live.state,
+          currentRouteAllocationId: live.currentRouteAllocationId,
+        },
+      };
+    }
+    return {
+      ...entry,
+      ...live,
+      routeDescriptor: live.routeDescriptor || entry.routeDescriptor,
+      target: {
+        ...(entry.target || {}),
+        ...(live.target || {}),
+      },
+      readiness: live.readiness || entry.readiness,
+    };
+  });
   const selectedId = envValue('AGENT_BROWSER_REMOTE_VIEW_OPEN_ROUTE_POOL_ENTRY_ID');
   const isAvailable = (entry) => {
     const live = liveRoutePool[entry?.id];
+    if (entry?.stalePersistedRoutePoolEntry) return true;
+    if (live) {
+      const sameRoute = live.routeId && entry?.routeId && live.routeId === entry.routeId;
+      const sameConnection = live.connectionId && entry?.connectionId && String(live.connectionId) === String(entry.connectionId);
+      if (!sameRoute && !sameConnection) return true;
+    }
     return !live || !live.state || live.state === 'available';
   };
   const selected = selectedId
-    ? entries.find((entry) => entry?.id === selectedId || entry?.routeId === selectedId)
-    : entries.find(isAvailable) ?? entries[0];
+    ? entriesWithLiveState.find((entry) => entry?.id === selectedId || entry?.routeId === selectedId)
+    : entriesWithLiveState.find(isAvailable) ?? entriesWithLiveState[0];
   assert(selected, `selected route-pool entry ${selectedId} was not found in readiness output`);
-  assert(isAvailable(selected), `selected route-pool entry ${selected.id} is not available in service state: ${JSON.stringify(liveRoutePool[selected.id])}`);
+  assert(
+    isAvailable(selected),
+    `selected route-pool entry ${selected.id} is not available in service state: ${JSON.stringify(liveRoutePool[selected.id])}`,
+  );
   assert(selected.routeId || selected.connectionId, `selected route-pool entry is missing route identity: ${JSON.stringify(selected)}`);
   assert(selected.frameUrl || selected.externalUrl, `selected route-pool entry is missing route URL: ${JSON.stringify(selected)}`);
-  return { entries, selected, liveRoutePool };
+  return { entries: entriesWithLiveState, selected, liveRoutePool };
+}
+
+async function repairRoutePoolState(baseUrl, label) {
+  const repaired = await requestServiceRoutePoolRepair({
+    baseUrl,
+    serviceName,
+    agentName,
+    taskName: label,
+    apply: true,
+    staleCheckouts: true,
+    params: {
+      stalePendingAcquisitions: true,
+    },
+  });
+  assert(repaired.success === true, `${label} failed: ${JSON.stringify(repaired)}`);
+  return repaired;
 }
 
 function displayNameForRoute(routeEntry) {
@@ -205,6 +290,80 @@ function assertOpenResponse(response, label) {
     routeId: routeIdFromResponse(response, label),
     displayAllocationId: displayAllocationIdFromResponse(response, label),
   };
+}
+
+function targetIdFromOpenResponse(response, label) {
+  const targetId = response.data?.operatorVisible?.target?.targetId || response.data?.tab?.targetId;
+  assert(typeof targetId === 'string' && targetId.length > 0, `${label} did not return targetId: ${JSON.stringify(response)}`);
+  return targetId;
+}
+
+function normalizeUrlForCompare(value) {
+  return String(value || '').replace(/\/$/, '');
+}
+
+function assertRepeatOpenSingleActiveTarget(serviceStatus, records, targetUrl, responses) {
+  const state = serviceStatus.data?.service_state || serviceStatus.data || {};
+  const responseTargetIds = responses.map(({ response, label }) => targetIdFromOpenResponse(response, label));
+  const uniqueResponseTargets = new Set(responseTargetIds);
+  assert(
+    uniqueResponseTargets.size === 1,
+    `repeat remote-view open did not converge to one response target: ${JSON.stringify(responseTargetIds)}`,
+  );
+  const selectedTargetId = responseTargetIds[0];
+  const intendedUrl = normalizeUrlForCompare(targetUrl);
+  const retainedTabs = Object.values(state.tabs || {});
+  const activeTargetTabs = retainedTabs.filter((tab) => {
+    const lifecycle = tab?.lifecycle || 'unknown';
+    const tabTargetId = tab?.targetId || String(tab?.id || '').replace(/^target:/, '');
+    const tabUrl = normalizeUrlForCompare(tab?.url || tab?.serviceTabHandle?.url);
+    return tab?.browserId === records.browser.id &&
+      tabTargetId === selectedTargetId &&
+      tabUrl === intendedUrl &&
+      !['closed', 'released', 'stale'].includes(lifecycle);
+  });
+  assert(
+    activeTargetTabs.length === 1,
+    `service state did not retain exactly one active intended target: ${JSON.stringify({ selectedTargetId, intendedUrl, activeTargetTabs, retainedTabs })}`,
+  );
+  const duplicateIntentTabs = retainedTabs.filter((tab) => {
+    const lifecycle = tab?.lifecycle || 'unknown';
+    const tabUrl = normalizeUrlForCompare(tab?.url || tab?.serviceTabHandle?.url);
+    return tab?.browserId === records.browser.id &&
+      tabUrl === intendedUrl &&
+      !['closed', 'released', 'stale'].includes(lifecycle);
+  });
+  assert(
+    duplicateIntentTabs.length === 1,
+    `repeat remote-view open retained duplicate active intended tabs: ${JSON.stringify(duplicateIntentTabs)}`,
+  );
+  return {
+    selectedTargetId,
+    responseTargetIds,
+    activeTargetTab: activeTargetTabs[0],
+    duplicateIntentTabCount: duplicateIntentTabs.length,
+  };
+}
+
+function cleanupPayloadFromError(error) {
+  const match = String(error || '').match(/cleanup=(\{.*\})$/s);
+  assert(match, `forced failure error did not include cleanup JSON: ${error}`);
+  return JSON.parse(match[1]);
+}
+
+function assertForcedProofFailureResponse(response) {
+  assert(response.success === false, `forced proof response unexpectedly succeeded: ${JSON.stringify(response)}`);
+  assert(
+    String(response.error || '').includes('forced_visible_window_proof_failure'),
+    `forced proof response has wrong error: ${JSON.stringify(response)}`,
+  );
+  const cleanup = cleanupPayloadFromError(response.error);
+  const acceptedCleanupStates = new Set(['closed_new_browser', 'closed_opened_tab']);
+  assert(acceptedCleanupStates.has(cleanup.state), `forced proof cleanup did not close browser or tab: ${JSON.stringify(cleanup)}`);
+  assert(acceptedCleanupStates.has(cleanup.cleanup?.state), `forced proof cleanup payload mismatch: ${JSON.stringify(cleanup)}`);
+  assert(cleanup.leaseRollback?.state === 'rolled_back', `forced proof lease rollback missing: ${JSON.stringify(cleanup)}`);
+  assert(cleanup.leaseRollback?.phase === 'proof_failed', `forced proof rollback phase mismatch: ${JSON.stringify(cleanup)}`);
+  return cleanup;
 }
 
 function remoteViewOpenCliArgs(routeEntry, taskName, targetUrl) {
@@ -414,6 +573,32 @@ function assertRouteHandoffAudit(serviceStatus, expected, label) {
   return readyRow;
 }
 
+function assertForcedProofRollback(serviceStatus, selected, cleanup) {
+  assert(serviceStatus.success === true, `forced proof service status failed: ${JSON.stringify(serviceStatus)}`);
+  const state = serviceStatus.data?.service_state || serviceStatus.data || {};
+  const rollback = cleanup.leaseRollback;
+  const routePoolEntry = state.routePool?.[selected.id];
+  assert(routePoolEntry, `forced proof rollback did not retain route-pool entry ${selected.id}: ${JSON.stringify(state.routePool || {})}`);
+  assert(routePoolEntry.state === 'available', `forced proof rollback did not restore route-pool availability: ${JSON.stringify(routePoolEntry)}`);
+  assert(
+    routePoolEntry.currentRouteAllocationId == null,
+    `forced proof rollback left route allocation claimed: ${JSON.stringify(routePoolEntry)}`,
+  );
+  const display = state.displayAllocations?.[rollback.displayAllocationId];
+  assert(!display || display.state !== 'pending', `forced proof rollback left display pending: ${JSON.stringify(display)}`);
+  const route = state.remoteViewRoutes?.[rollback.routeId];
+  assert(!route || route.state !== 'pending', `forced proof rollback left route pending: ${JSON.stringify(route)}`);
+  const lease = state.remoteViewAcquisitionLeases?.[rollback.leaseId];
+  assert(lease, `forced proof rollback did not retain acquisition lease ${rollback.leaseId}: ${JSON.stringify(state.remoteViewAcquisitionLeases || {})}`);
+  assert(lease.state === 'failed', `forced proof lease state mismatch: ${JSON.stringify(lease)}`);
+  assert(lease.phase === 'rollback_complete', `forced proof lease phase mismatch: ${JSON.stringify(lease)}`);
+  assert(
+    String(lease.failureReason || '').includes('proof_failed'),
+    `forced proof lease failure reason mismatch: ${JSON.stringify(lease)}`,
+  );
+  return { routePoolEntry, display, route, lease };
+}
+
 function cleanupLiveSession() {
   if (process.env.AGENT_BROWSER_REMOTE_VIEW_OPEN_PRESERVE === '1') return;
   run(agentBrowser, ['--session', daemonSession, '--json', 'close'], 'cleanup live session', {
@@ -440,21 +625,65 @@ async function main() {
   const fixture = useFixture ? await createFixtureServer() : null;
   const targetUrl = fixture?.targetUrl || process.env.AGENT_BROWSER_REMOTE_VIEW_OPEN_URL || 'https://www.linkedin.com/';
   const readiness = routePoolReadiness();
+  const baseUrl = await ensureStreamBaseUrl();
+  const preRepairStatus = runAgentJson(['service', 'status'], 'pre-repair service status');
+  const preRepairRoutePool = preRepairStatus?.data?.service_state?.routePool || preRepairStatus?.data?.routePool || {};
+  const hasBlockedRoute = Object.values(preRepairRoutePool).some(
+    (entry) => entry?.state && entry.state !== 'available',
+  );
+  const preOpenRepair = hasBlockedRoute ? await repairRoutePoolState(baseUrl, 'pre-open route-pool repair') : null;
   const preOpenStatus = runAgentJson(['service', 'status'], 'pre-open service status');
   const { entries, selected, liveRoutePool } = selectRouteEntry(readiness, preOpenStatus);
   const routeDisplayName = displayNameForRoute(selected);
   const routeDisplayIsolation = displayIsolationForRoute(selected);
   writeArtifact('route-pool-readiness.json', readiness);
+  writeArtifact('pre-open-route-pool-repair.json', {
+    ran: Boolean(preOpenRepair),
+    response: preOpenRepair,
+  });
   writeArtifact('pre-open-route-pool-state.json', {
     selectedRoutePoolEntryId: selected.id,
     liveRoutePool,
   });
 
   try {
+    if (forceProofFailure) {
+      const failed = runAgentJsonExpectFailure(
+        remoteViewOpenCliArgs(selected, 'remoteViewOpenLiveForcedProofFailure', targetUrl),
+        'remote-view open forced proof failure',
+        remoteViewOpenTimeoutMs,
+      );
+      const cleanup = assertForcedProofFailureResponse(failed);
+      const postFailureStatus = runAgentJson(['service', 'status'], 'post-forced-proof-failure service status');
+      const rollbackState = assertForcedProofRollback(postFailureStatus, selected, cleanup);
+      writeArtifact('forced-proof-failure.json', failed);
+      writeArtifact('forced-proof-rollback-state.json', rollbackState);
+      const summary = {
+        success: true,
+        mode: 'forced_proof_failure',
+        artifactDir,
+        command: agentBrowser,
+        daemonSession,
+        runtimeProfile,
+        remoteViewOpenTimeoutMs,
+        displayName: routeDisplayName,
+        fixture: Boolean(fixture),
+        routePoolEntryId: selected.id,
+        routeId: cleanup.leaseRollback.routeId,
+        displayAllocationId: cleanup.leaseRollback.displayAllocationId,
+        acquisitionLeaseId: cleanup.leaseRollback.leaseId,
+        cleanupState: cleanup.state,
+        rollbackState: cleanup.leaseRollback.state,
+      };
+      writeArtifact('summary.json', summary);
+      console.log(JSON.stringify(summary, null, 2));
+      return;
+    }
+
     const first = runAgentJson(
       remoteViewOpenCliArgs(selected, 'remoteViewOpenLiveCliFirst', targetUrl),
       'remote-view open CLI first',
-      180000,
+      remoteViewOpenTimeoutMs,
     );
     const firstIds = assertOpenResponse(first, 'CLI first open');
     writeArtifact('cli-first.json', first);
@@ -462,7 +691,7 @@ async function main() {
     const repeat = runAgentJson(
       remoteViewOpenRepeatCliArgs(selected, firstIds, 'remoteViewOpenLiveCliRepeat', targetUrl),
       'remote-view open CLI repeat',
-      180000,
+      remoteViewOpenTimeoutMs,
     );
     const repeatIds = assertOpenResponse(repeat, 'CLI repeat open');
     writeArtifact('cli-repeat.json', repeat);
@@ -472,7 +701,6 @@ async function main() {
       `CLI repeat display allocation changed: ${JSON.stringify({ firstIds, repeatIds })}`,
     );
 
-    const baseUrl = await ensureStreamBaseUrl();
     const http = await requestServiceRemoteViewOpen({
       baseUrl,
       serviceName,
@@ -489,14 +717,14 @@ async function main() {
       routePoolEntry: selected,
       routePool: entries,
       routeDescriptor: selected.routeDescriptor,
-      provider: 'rdp_gateway',
+      viewStreamProvider: 'rdp_gateway',
       providerMode: selected.providerMode || selected.routeDescriptor?.providerMode || 'simultaneous_view',
       frameUrl: selected.frameUrl,
       externalUrl: selected.externalUrl,
       connectionId: selected.connectionId,
       connectionName: selected.connectionName,
       url: targetUrl,
-      jobTimeoutMs: 180000,
+      jobTimeoutMs: remoteViewOpenTimeoutMs,
     });
     const httpIds = {
       ...assertOpenResponse(http, 'HTTP helper open'),
@@ -522,6 +750,11 @@ async function main() {
 
     const serviceStatus = runAgentJson(['service', 'status'], 'service status');
     const records = assertServiceState(serviceStatus, httpIds, 'post-open');
+    const repeatOpenTargetProof = assertRepeatOpenSingleActiveTarget(serviceStatus, records, targetUrl, [
+      { response: first, label: 'CLI first open' },
+      { response: repeat, label: 'CLI repeat open' },
+      { response: http, label: 'HTTP helper open' },
+    ]);
     const auditRow = assertRouteHandoffAudit(serviceStatus, httpIds, 'post-open');
     writeArtifact('service-state-proof.json', {
       route: records.route,
@@ -529,6 +762,7 @@ async function main() {
       allocation: records.allocation,
       stream: records.stream,
       auditRow,
+      repeatOpenTargetProof,
     });
 
     assertXwininfo(routeDisplayName);
@@ -541,6 +775,7 @@ async function main() {
       command: agentBrowser,
       daemonSession,
       runtimeProfile,
+      remoteViewOpenTimeoutMs,
       displayName: routeDisplayName,
       fixture: Boolean(fixture),
       fixtureMarker: fixture?.marker || null,
@@ -554,6 +789,8 @@ async function main() {
       x11WindowPid: matchingWindow.pid,
       routeHandoffClassification: auditRow.classification,
       routeHandoffVisualState: auditRow.visualState,
+      selectedTargetId: repeatOpenTargetProof.selectedTargetId,
+      duplicateIntentTabCount: repeatOpenTargetProof.duplicateIntentTabCount,
       ocrProof,
     };
     writeArtifact('summary.json', summary);

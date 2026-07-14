@@ -7,6 +7,8 @@ const userB = process.env.AGENT_BROWSER_RDP_ROUTE_B_USERNAME || 'agent-browser-r
 const existingUser = process.env.AGENT_BROWSER_RDP_EXISTING_USERNAME ||
   process.env.XRDP_AGENT_BROWSER_USERNAME ||
   'agent-browser-rdp';
+const preferredRouteADisplay = process.env.AGENT_BROWSER_RDP_ROUTE_A_DISPLAY_NAME || null;
+const preferredRouteBDisplay = process.env.AGENT_BROWSER_RDP_ROUTE_B_DISPLAY_NAME || null;
 const shellOutput = process.argv.includes('--shell');
 const includeWindows = process.argv.includes('--windows') || process.argv.includes('--display-content');
 
@@ -46,7 +48,7 @@ function displayFromArgs(args) {
   return match?.[1] || null;
 }
 
-function inspectUser(rows, user) {
+function inspectUser(rows, user, preferredDisplayName = null) {
   const candidates = rows
     .filter((row) => row.user === user)
     .filter((row) => /^(Xorg|Xvnc|Xvfb)$/i.test(row.command) || /\b(Xorg|Xvnc|Xvfb)\b/i.test(row.args))
@@ -56,7 +58,18 @@ function inspectUser(rows, user) {
       displayName: displayFromArgs(row.args),
       args: row.args,
     }))
-    .filter((row) => row.displayName);
+    .filter((row) => row.displayName)
+    .sort((left, right) => {
+      if (preferredDisplayName) {
+        if (left.displayName === preferredDisplayName && right.displayName !== preferredDisplayName) {
+          return -1;
+        }
+        if (right.displayName === preferredDisplayName && left.displayName !== preferredDisplayName) {
+          return 1;
+        }
+      }
+      return Number(right.pid) - Number(left.pid);
+    });
   return {
     user,
     displayName: candidates[0]?.displayName || null,
@@ -110,8 +123,8 @@ function attachDisplayContent(route) {
 }
 
 const rows = processRows();
-const routeA = inspectUser(rows, userA);
-const routeB = inspectUser(rows, userB);
+const routeA = inspectUser(rows, userA, preferredRouteADisplay);
+const routeB = inspectUser(rows, userB, preferredRouteBDisplay);
 const existingUserRoutes = rows
   .filter((row) => row.user === existingUser)
   .filter((row) => /^(Xorg|Xvnc|Xvfb)$/i.test(row.command) || /\b(Xorg|Xvnc|Xvfb)\b/i.test(row.args))

@@ -371,8 +371,24 @@ try {
     `stale route-pool checkout was not reported: ${JSON.stringify(staleRepair)}`,
   );
   assert(
+    staleRepair.data?.candidateCounts?.staleRoutes === 1,
+    `stale route record was not reported: ${JSON.stringify(staleRepair)}`,
+  );
+  assert(
+    staleRepair.data?.candidateCounts?.staleDisplayAllocations === 1,
+    `stale display allocation was not reported: ${JSON.stringify(staleRepair)}`,
+  );
+  assert(
     staleRepair.data?.candidates?.staleCheckouts?.includes(poolEntryId),
     `stale repair candidates did not include ${poolEntryId}: ${JSON.stringify(staleRepair)}`,
+  );
+  assert(
+    staleRepair.data?.candidates?.staleRoutes?.includes(routeId),
+    `stale route candidates did not include ${routeId}: ${JSON.stringify(staleRepair)}`,
+  );
+  assert(
+    staleRepair.data?.candidates?.staleDisplayAllocations?.includes(browser.displayAllocationId),
+    `stale display candidates did not include ${browser.displayAllocationId}: ${JSON.stringify(staleRepair)}`,
   );
 
   const appliedRepair = await serviceRequest(
@@ -394,13 +410,28 @@ try {
     appliedRepair.data?.repairedCounts?.staleCheckouts === 1,
     `stale route-pool checkout was not repaired: ${JSON.stringify(appliedRepair)}`,
   );
+  assert(
+    appliedRepair.data?.repairedCounts?.staleRoutes === 1,
+    `stale route record was not released: ${JSON.stringify(appliedRepair)}`,
+  );
+  assert(
+    appliedRepair.data?.repairedCounts?.staleDisplayAllocations === 1,
+    `stale display allocation was not released: ${JSON.stringify(appliedRepair)}`,
+  );
 
   const afterRepair = await serviceStatus(streamPort, 'after-route-pool-repair');
   const repairedEntry = routePoolEntry(afterRepair, poolEntryId);
+  const repairedRoute = afterRepair.data?.service_state?.remoteViewRoutes?.[routeId];
+  const repairedDisplay = afterRepair.data?.service_state?.displayAllocations?.[browser.displayAllocationId];
   assert(repairedEntry.state === 'available', `repaired pool entry is not available: ${JSON.stringify(repairedEntry)}`);
   assert(
     repairedEntry.currentRouteAllocationId === null || repairedEntry.currentRouteAllocationId === undefined,
     `repaired pool entry still points at a route: ${JSON.stringify(repairedEntry)}`,
+  );
+  assert(repairedRoute?.state === 'released', `repaired route is not released: ${JSON.stringify(repairedRoute)}`);
+  assert(
+    repairedDisplay?.state === 'released',
+    `repaired display allocation is not released: ${JSON.stringify(repairedDisplay)}`,
   );
   writeArtifact('route-cleanup-summary.json', {
     artifactDir,
@@ -410,6 +441,8 @@ try {
     routeId,
     killedPid: pid,
     repairedEntry,
+    repairedRoute,
+    repairedDisplay,
   });
 
   await cleanup();

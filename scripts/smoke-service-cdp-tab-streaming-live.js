@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { createHash, randomBytes } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { request } from 'node:http';
 import { createConnection } from 'node:net';
 
@@ -19,6 +20,9 @@ const context = createSmokeContext({
   sessionPrefix: 'cdp-tab-stream',
 });
 context.env.AGENT_BROWSER_ARGS = '--no-sandbox';
+if (!process.env.AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD && existsSync('/usr/bin/google-chrome')) {
+  context.env.AGENT_BROWSER_EXECUTABLE_PATH = '/usr/bin/google-chrome';
+}
 
 const { session } = context;
 const serviceName = 'CdpTabStreamingSmoke';
@@ -319,6 +323,7 @@ try {
 
   await serviceRequest('navigate', {
     headless: true,
+    args: ['--no-sandbox'],
     url: pageA,
     waitUntil: 'load',
   }, 'openPageA');

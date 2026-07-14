@@ -41,6 +41,45 @@ function commandResult(command, args) {
   });
 }
 
+function routeDisplayProbe(displayName) {
+  if (!displayName) {
+    return {
+      ok: false,
+      evidence: 'route target has no displayName',
+    };
+  }
+  const match = /^:(\d+)$/.exec(displayName);
+  if (!match) {
+    return {
+      ok: false,
+      evidence: `route target displayName '${displayName}' is not an X11 display name`,
+    };
+  }
+  const socketPath = `/tmp/.X11-unix/X${match[1]}`;
+  if (existsSync(socketPath)) {
+    return {
+      ok: true,
+      evidence: `${displayName} has X11 socket ${socketPath}`,
+    };
+  }
+  const abstractSocketName = `@/tmp/.X11-unix/X${match[1]}`;
+  try {
+    const unixSockets = readFileSync('/proc/net/unix', 'utf8');
+    if (unixSockets.split(/\r?\n/).some((line) => line.includes(abstractSocketName))) {
+      return {
+        ok: true,
+        evidence: `${displayName} has abstract X11 socket ${abstractSocketName}`,
+      };
+    }
+  } catch {
+    // Fall through to the filesystem-socket failure below.
+  }
+  return {
+    ok: false,
+    evidence: `${displayName} has no X11 socket at ${socketPath} or ${abstractSocketName}`,
+  };
+}
+
 function shellQuote(value) {
   return `'${String(value).replace(/'/g, "'\\''")}'`;
 }
@@ -376,13 +415,23 @@ permission_counts as (
   select
     selected.connection_id::text as "connectionId",
     count(permission.*) filter (where permission.permission = 'READ')::int as "readGrantCount",
-    count(distinct entity.entity_id) filter (where permission.permission = 'READ')::int as "readUserCount"
+    count(distinct entity.entity_id) filter (where permission.permission = 'READ')::int as "readUserCount",
+    count(distinct required_user.entity_id)::int as "requiredUserCount",
+    coalesce(
+      json_agg(required_user.name order by required_user.name)
+        filter (where permission.entity_id is null),
+      '[]'::json
+    ) as "missingReadUsers"
   from selected
+  cross join guacamole_entity required_user
   left join guacamole_connection_permission permission
     on permission.connection_id = selected.connection_id
+   and permission.entity_id = required_user.entity_id
+   and permission.permission = 'READ'
   left join guacamole_entity entity
     on entity.entity_id = permission.entity_id
    and entity.type = 'USER'
+  where required_user.type = 'USER'
   group by selected.connection_id
 )
 select coalesce(json_agg(row_to_json(permission_counts) order by "connectionId"), '[]'::json)
@@ -412,13 +461,16 @@ from permission_counts;
   try {
     const connectionPermissions = JSON.parse(result.stdout.trim() || '[]');
     const missingReadConnectionIds = connectionPermissions
-      .filter((entry) => Number(entry.readGrantCount || 0) < 1 || Number(entry.readUserCount || 0) < 1)
+      .filter((entry) => Number(entry.readGrantCount || 0) < Number(entry.requiredUserCount || 0))
       .map((entry) => entry.connectionId);
+    const missingReadUsers = connectionPermissions.flatMap((entry) =>
+      (entry.missingReadUsers || []).map((user) => `${entry.connectionId}:${user}`),
+    );
     return {
       ok: missingReadConnectionIds.length === 0,
       error: missingReadConnectionIds.length === 0
         ? null
-        : `missing READ permission for Guacamole connection id(s): ${missingReadConnectionIds.join(', ')}`,
+        : `missing READ permission for Guacamole connection/user(s): ${missingReadUsers.join(', ')}`,
       connectionPermissions,
       missingReadConnectionIds,
     };
@@ -538,6 +590,22 @@ function routeTargetDisplayName(index) {
     null;
 }
 
+function routeTargetUser(connection, index) {
+  const label = index === 0 ? 'A' : 'B';
+  const configured = process.env[`AGENT_BROWSER_RDP_ROUTE_${label}_USERNAME`] ||
+    inferredRouteDisplays[`AGENT_BROWSER_RDP_ROUTE_${label}_USERNAME`];
+  if (configured) return configured;
+  if (/^Agent Browser RDP Existing User Route [AB]$/.test(connection.connectionName || '')) {
+    return process.env.AGENT_BROWSER_RDP_USERNAME || 'agent-browser-rdp';
+  }
+  if (/^Agent Browser RDP Route [AB]$/.test(connection.connectionName || '')) {
+    return label === 'A'
+      ? (process.env.AGENT_BROWSER_RDP_ROUTE_A_USERNAME || 'agent-browser-rdp-a')
+      : (process.env.AGENT_BROWSER_RDP_ROUTE_B_USERNAME || 'agent-browser-rdp-b');
+  }
+  return null;
+}
+
 function routePoolCandidates(connections) {
   const routeSpecific = connections.filter((connection) =>
     /^Agent Browser RDP Route [AB]$/.test(connection.connectionName || ''),
@@ -558,6 +626,7 @@ function routePoolCandidates(connections) {
 function routePoolEntry(connection, index, routeBases, routeReadiness) {
   const label = index === 0 ? 'a' : 'b';
   const displayName = routeTargetDisplayName(index);
+  const routeUser = routeTargetUser(connection, index);
   const clientId = guacamoleClientId(connection.connectionId);
   const localEmbedUrl = routeBases.localBase ? `${routeBases.localBase}#/client/${clientId}` : null;
   const publicOperatorUrl = routeBases.publicBase ? `${routeBases.publicBase}#/client/${clientId}` : null;
@@ -587,6 +656,7 @@ function routePoolEntry(connection, index, routeBases, routeReadiness) {
       colorDepth: connection.colorDepth || null,
       targetIdentityKey: targetIdentityKey(connection),
       ...(displayName ? { displayName } : {}),
+      ...(routeUser ? { routeUser } : {}),
     },
     readiness: routeReadiness,
   };
@@ -659,6 +729,10 @@ const rdpTcpProbes = guacdReady
         evidence: 'agent-browser-guacd is not running',
       },
     ]));
+const routeDisplayProbes = new Map(selectedConnections.map((connection, index) => [
+  connection.connectionId,
+  routeDisplayProbe(routeTargetDisplayName(index)),
+]));
 const redactedConnections = connections.map(redactConnection);
 const targetIdentities = connections.map(targetIdentity);
 const selectedTargetIdentities = selectedConnections.map(targetIdentity);
@@ -669,6 +743,8 @@ const hasTwoSelectedConnections = selectedConnections.length >= 2;
 const hasTwoDistinctTargets = distinctSelectedTargetIdentities.size >= 2;
 const selectedRdpTargetsReady = selectedConnections.length > 0 &&
   selectedConnections.every((connection) => rdpTcpProbes.get(connection.connectionId)?.ok === true);
+const selectedRouteDisplaysReady = selectedConnections.length > 0 &&
+  selectedConnections.every((connection) => routeDisplayProbes.get(connection.connectionId)?.ok === true);
 const ready = Boolean(
   dockerReady &&
     guacamoleReady &&
@@ -680,12 +756,17 @@ const ready = Boolean(
     permissions.ok &&
     hasTwoSelectedConnections &&
     selectedRdpTargetsReady &&
+    selectedRouteDisplaysReady &&
     (hasTwoDistinctTargets || allowSharedTarget),
 );
 const routePoolJson = ready || hasTwoSelectedConnections
   ? selectedConnections.map((connection, index) => {
       const rdpProbe = rdpTcpProbes.get(connection.connectionId);
-      const routeReady = guacamoleWebProbe.ok && guacamoleLoginProbe.ok && rdpProbe?.ok === true;
+      const displayProbe = routeDisplayProbes.get(connection.connectionId);
+      const routeReady = guacamoleWebProbe.ok &&
+        guacamoleLoginProbe.ok &&
+        rdpProbe?.ok === true &&
+        displayProbe?.ok === true;
       return routePoolEntry(connection, index, routeBases, {
         state: routeReady ? 'ready' : 'failed',
         components: [
@@ -728,6 +809,11 @@ const routePoolJson = ready || hasTwoSelectedConnections
             component: 'rdp_backend_tcp',
             status: rdpProbe?.ok ? 'ready' : 'failed',
             evidence: rdpProbe?.evidence || 'RDP TCP probe did not run',
+          },
+          {
+            component: 'route_display_socket',
+            status: displayProbe?.ok ? 'ready' : 'failed',
+            evidence: displayProbe?.evidence || 'route display probe did not run',
           },
         ],
       });
@@ -840,6 +926,20 @@ const components = [
         probe?.ok
           ? 'guacd can reach this RDP backend over TCP.'
           : 'Repair the RDP backend host, port, firewall, or Docker host routing before using this route.',
+      ),
+    };
+  }),
+  ...selectedConnections.map((connection) => {
+    const probe = routeDisplayProbes.get(connection.connectionId);
+    return {
+      component: `route_display_socket:${connection.connectionId}`,
+      ...readiness(
+        probe?.ok ? 'ready' : 'failed',
+        probe?.evidence || 'route display probe did not run',
+        probe?.ok ? 'none' : 'repair_rdp_route_display_session',
+        probe?.ok
+          ? 'The selected route display has a local X11 socket.'
+          : 'Start or repair the RDP route desktop session before exporting this route-pool entry.',
       ),
     };
   }),

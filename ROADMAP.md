@@ -573,6 +573,45 @@ Keep P16 closed. Downstream clients should adopt the generic `remote_view_open`
 path and run the required remote-view doctor, fixture, and many-to-many gates
 in their own environment before changing browser-owner defaults.
 
+## P69 | Shared Profile Routing And Handoff Deepening
+
+State: OPEN
+Current state: P69 is the active follow-up for the architecture review,
+`last30days` profile-routing failure, and shared-profile operator confusion.
+It makes explicit runtime profile identity authoritative for plain `open`, then
+routes concurrent operators through retained-browser tab acquisition instead of
+refusing merely because the profile directory is already owned by a browser
+process.
+
+### Current State
+
+- Plan
+  `docs/dev/plans/0069-2026-07-06-shared-profile-routing-and-handoff-deepening-plan.md`
+  is open.
+- The source routing note is
+  `docs/dev/notes/2026-07-06-last30days-profile-routing-failure.md`.
+- The plan applies the architecture-review recommendation to deepen the
+  route-bound handoff module first, then tighten workspace inventory
+  actionability and contract catalog/client ergonomics.
+- The target behavior keeps the exclusive-profile-process invariant while
+  allowing multiple operators or clients to open separate tabs through one
+  retained browser/profile owner.
+
+### Evidence
+
+- `/tmp/architecture-review-agent-browser-2026-07-06T15-20-00.html`
+- `docs/dev/plans/0037-2026-06-19-runtime-profile-sharing-plan.md`
+- `docs/dev/plans/0067-2026-07-05-rdp-reattachment-stress-hardening-plan.md`
+- `docs/dev/plans/0068-2026-07-06-operator-handoff-and-one-time-profile-hardening-plan.md`
+- `docs/dev/notes/2026-07-06-last30days-profile-routing-failure.md`
+
+### Next Recommendation
+
+Start P69 Slice A with parser and no-launch launch-planning coverage for plain
+`open --runtime-profile <non-default> --browser-host remote_headed
+--browser-build stealthcdp_chromium`, then implement Slice B so an in-use
+compatible retained profile opens a shared tab instead of launching or refusing.
+
 ## P42 | Runtime Convergence
 
 State: CLOSED
@@ -706,3 +745,139 @@ Open the next lane on the temporary-daemon startup race that still blocks
 Keep it separate from P43: the route-bound Guacamole/RDP handoff contract now
 has row-bound proof, downstream enforcement, no-launch fixtures, and OCR live
 coverage.
+
+## P44 | RDP Browser Deterministic Refactor
+
+State: OPEN
+Current state: P44 is the follow-on deterministic route-bound acquisition
+lane. It turns the audited Facebook/RDP friction into one normalized
+operator-visible browser transaction instead of separate parser, route,
+display, browser, tab, proof, and dashboard recovery surfaces.
+
+### Current State
+
+- Plan
+  `docs/dev/plans/0044-2026-06-22-rdp-browser-deterministic-refactor-plan.md`
+  is in progress.
+- Slice A is complete. `remote_view_open` now normalizes a typed
+  `RemoteViewOpenIntent` before acquisition, uses `viewStreamProvider` as the
+  canonical RDP gateway field, preserves `provider=rdp_gateway` as a
+  compatibility alias, and rejects provider/view-stream conflicts before
+  route binding or launch.
+- Help, README, docs site, and repo skill guidance now prefer
+  `--view-stream-provider rdp_gateway` for `remote-view open` while documenting
+  the legacy alias boundary.
+- The generated service-client helper surface now preserves
+  `viewStreamProvider` for `remote_view_open` helper requests.
+- Slice B is complete. `remote_view_open`, route preflight, and route checkout
+  now share a no-mutation `RemoteViewAcquisitionPlan` that explains selected
+  route/display decisions, same-owner reuse, stale-browser fallback avoidance,
+  blockers, and suggested repair commands before acquisition mutates state.
+- Slice C is complete. `remote_view_open` now creates a persisted pending
+  acquisition lease, marks selected route-pool/display/route state pending, and
+  restores those records with typed cleanup evidence when display access,
+  launch, tab, focus, proof, or checkout fails. The forced-proof live smoke
+  passed with cleanup state `closed_new_browser` and rollback state
+  `rolled_back`, and the normal fixture smoke passed afterward with repeat
+  open, HTTP helper, CDP readback, X11 PID proof, route-handoff classification
+  `route_bound_ready`, visual state `browser_window_visible`, and OCR proof.
+- Slice C service-contract metadata coverage is in place for
+  `remoteViewAcquisitionLeases`, route checkout metadata, and route release
+  metadata. Live validation also hardened stale released display allocation
+  reclaim and same-owner pending reservation reuse during checkout.
+- Slice D is in progress. New route-pool XRDP users no longer start a
+  foreground terminal from `.xsession`; the privileged helper and route-pool
+  setup fallback now write an idle Openbox session that keeps XRDP alive for the
+  browser launch. Display proof now classifies a browser-obscuring terminal as
+  `terminal_topmost` and fails with `terminal_topmost_route`.
+- `agent-browser install doctor` and `agent-browser doctor remote-view` now
+  parse the installed privileged helper's route `.xsession` template into
+  `helperDesktopSession` and emit
+  `remote_view_route_desktop_helper_stale` when the installed helper still
+  writes a terminal-first route desktop. Current debug-binary readback on this
+  host reports `state=terminal_first_template`.
+- Slice E has started. Successful `remote_view_open` responses now preserve the
+  existing visible-window proof and add structured `operatorVisible` target
+  evidence plus route, display, browser, tab, stream, and Guacamole component
+  states. The service-client proof summary helper prefers those structured
+  fields when present.
+- Slice E now distinguishes `wrong_tab` from display visibility: a browser
+  window can be visible on the route while the selected target URL fails the
+  requested URL proof.
+- Slice E now distinguishes `guacamole_route_unavailable` from both wrong-tab
+  and display visibility failures when the display and tab are ready but the
+  operator route is not.
+- Slice E now distinguishes `cdp_target_unavailable` when the selected tab
+  result lacks a CDP target ID even though display and route proof can be ready.
+- Slice E now distinguishes `stale_route_record` when retained route-pool
+  metadata points at stale or mismatched route allocation state.
+- Slice E dashboard fixture coverage is in place. Workspace rows preserve the
+  expanded proof states from structured stream readiness and keep View and
+  Control disabled with state-specific reasons.
+- Slice F has started. Generic `tab_handle_refresh` now accepts
+  `replace_duplicates` through the daemon, HTTP, MCP, service schema, generated
+  client template, README, docs site, and repo plus installed skill guidance.
+  The policy reuses or opens one compatible target and returns
+  `duplicateTargetCleanup` evidence for best-effort closure of other compatible
+  live targets.
+- Slice F dashboard stale-target URL recovery is in place. Workspace viewport
+  control mode now treats missing, closed, blank, or target-shaped stale
+  `tab=target:*` selections as recoverable stale target identity, replaces the
+  URL with the current live service tab, and queues `view_focus` only after that
+  recovery.
+- Slice F route-bound tab acquisition now reuses a live same-origin target before
+  opening a new tab and records `tabAcquisitionDecision` plus
+  `duplicateTargetCleanup` evidence. The live smoke now asserts that CLI first,
+  CLI repeat, and HTTP helper opens converge to one active intended target.
+- Slice G has started. The existing `service_remote_view_route_preflight`
+  no-launch action now returns `fastPreflight` component evidence for route
+  launch eligibility, including acquisition-plan blockers, Guacamole route URL
+  shape, retained Guacamole and RDP readiness, display access, and route desktop
+  state. HTTP `GET /api/service/remote-view/route-preflight`, MCP
+  `service_remote_view_route_preflight`, and
+  `getServiceRemoteViewRoutePreflight()` now expose the same no-launch gate
+  without requiring clients to hand-build a generic service request.
+  Display-access probing is bounded so unreachable displays cannot hang fast
+  preflight. `pnpm test:remote-view-route-preflight-timing` exercises the
+  isolated HTTP/client path and asserts the fast preflight remains within a
+  bounded threshold without launching a browser.
+- Slice H has started. RDP gateway workspace rows with non-ready
+  operator-visible proof now move to `needs-attention` with disabled View and
+  Control reasons instead of remaining in the active control group. The
+  dashboard workspace fixture covers terminal-only, unbound, missing-proof,
+  wrong-tab, unavailable-route, missing-CDP-target, and stale-route rows while
+  preserving ready service-owned browsers as active controllable rows and
+  external CDP browsers as detected non-owned rows.
+- Slice H now has explicit `WorkspaceInventoryClass` metadata on the shared
+  workspace node model and selected-workspace context. Inspector, chat,
+  console, and automation consumers can distinguish service-owned controllable,
+  service-owned view-only, service-owned diagnostic, detected non-owned, viewer
+  client, retained history, service-owned session, and profile action rows
+  without inferring ownership from URL shape.
+- Slice H dashboard inventory refactor is complete. The Workspace inspector
+  now renders the selected row's canonical inventory Class, the focused
+  navigator and inspector-action smokes passed, and the dashboard was published
+  locally with runtime smoke coverage against
+  `http://127.0.0.1:4848/`. The installed executable SHA is
+  `6c7c9b879c1b564130fb74e4d2abec7502252033be14e66586c20477e7762649`;
+  the dashboard bundle SHA is
+  `10177dc55ce0a76f29fbcce7ede2acf8e7b5cbb896d83987ddff2e2aaa193967`.
+  After closing stale daemon session `default`, install doctor reports runtime
+  convergence `converged` with stale daemon count `0`.
+
+### Evidence
+
+- `docs/dev/notes/2026-06-22-rdp-browser-determinism-audit.md`
+- `docs/dev/plans/0044-2026-06-22-rdp-browser-deterministic-refactor-plan.md`
+
+### Next Recommendation
+
+Continue P44 by refreshing the installed privileged helper from an interactive
+sudo shell to close the Slice D live boundary, then run the guarded Slice F
+route-bound repeat-open live smoke on the refreshed route. After that, continue
+with Slice I foreign CDP integration boundaries and Slice J incident/state
+durability.
+Current doctor readback shows the repo helper is fixed and the installed helper
+is detected as `remote_view_route_desktop_helper_stale`; refreshing it requires
+an interactive sudo boundary because `sudo -n` is unavailable in this session.
+Doctor also reports readiness-impacting stale resource candidates.

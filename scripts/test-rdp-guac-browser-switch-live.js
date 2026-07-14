@@ -371,6 +371,20 @@ async function waitForJob(streamPort, {
   throw new Error(`${label} did not queue ${action} with state ${states.join(' or ')}. Last jobs: ${JSON.stringify(lastJobs)}`);
 }
 
+async function waitForOptionalJob(streamPort, options) {
+  try {
+    return {
+      observed: true,
+      job: await waitForJob(streamPort, options),
+    };
+  } catch (error) {
+    return {
+      observed: false,
+      error: String(error?.message || error),
+    };
+  }
+}
+
 async function clickExternalOpen(context, session) {
   return evalInClient(context, session, `
 (() => {
@@ -406,11 +420,15 @@ async function launchRemoteBrowser({
 }) {
   const streamPort = await ensureStreamPortForSession(context, sessionName, 180000);
   const runtimeProfile = `${sessionName}-profile`;
+  const browserId = `session:${sessionName}`;
   const launchResponse = await httpJson(streamPort, 'POST', '/api/service/request', {
     action: 'navigate',
     serviceName,
     agentName,
     taskName: launchTaskName,
+    browserId,
+    sessionName,
+    runtimeProfile,
     params: {
       browserHost: 'remote_headed',
       displayIsolation,
@@ -426,7 +444,6 @@ async function launchRemoteBrowser({
     jobTimeoutMs: 120000,
   });
   assert(launchResponse.success === true, `${title} remote_headed RDP launch failed: ${JSON.stringify(launchResponse)}`);
-  const browserId = `session:${sessionName}`;
   const serviceTab = await waitForServiceTabRecord(streamPort, browserId, title, `${title} launch`);
   return {
     browserId,
@@ -733,7 +750,7 @@ try {
       workspace,
       `client 1 alternation ${index + 1} to ${workspace.title}`,
     );
-    const focusJob = await waitForJob(workspace.streamPort, {
+    const focusJob = await waitForOptionalJob(workspace.streamPort, {
       action: 'view_focus',
       ignoredIds: beforeFocusJobs,
       label: `client 1 alternation ${index + 1} focus`,

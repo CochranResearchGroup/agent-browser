@@ -54,6 +54,9 @@ This installs the <code>agent-browser</code> group, the root-owned helper at
 <code>/usr/local/libexec/agent-browser/agent-browser-privileged-helper</code>,
 and the sudoers rule that lets members of that group configure RDP route users,
 restart XRDP, and grant route-display access without repeated sudo prompts.
+New route-pool users get an idle Openbox session that keeps XRDP alive without
+starting a foreground terminal, so <code>remote-view open</code> can make the
+browser the operator-visible window.
 After applying, open a new shell or run <code>newgrp agent-browser</code>, then
 verify with <code>agent-browser doctor remote-view</code>.
 When <code>--with-deps</code> is combined with
@@ -62,7 +65,11 @@ runs first so its explicit <code>sudo -v</code> boundary authorizes the later
 dependency installation.
 Re-running the command on an already-provisioned machine exits before any
 privileged changes when the helper, sudoers policy, group, and membership are
-already ready.
+already ready. <code>agent-browser install doctor --json</code> reports the
+installed helper's route desktop template as
+<code>remoteViewPrivileges.helperDesktopSession</code> and raises
+<code>remote_view_route_desktop_helper_stale</code> when that helper still
+starts a terminal-first route desktop.
 
 ## Stealth CDP Chromium
 
@@ -82,9 +89,10 @@ only prefers <code>stealthcdp_chromium</code> automatically after the manifest
 has live smoke evidence showing <code>navigator.webdriver</code> is false.
 Run <code>agent-browser install doctor</code> to inspect the no-launch
 readiness view. On Linux, its JSON also reports
-<code>remoteViewPrivileges</code> with helper, sudoers, group, membership, and
-<code>requiresInteractiveSudo</code> fields for the Guacamole/RDP path, plus
-<code>service</code> readiness from a no-launch service-status probe.
+<code>remoteViewPrivileges</code> with helper, sudoers, group, membership,
+route desktop template readiness, and <code>requiresInteractiveSudo</code>
+fields for the Guacamole/RDP path, plus <code>service</code> readiness from a
+no-launch service-status probe.
 
 When WSL launches the installed Windows <code>chrome.exe</code>, agent-browser
 translates mounted Windows paths such as <code>/mnt/c/...</code> to

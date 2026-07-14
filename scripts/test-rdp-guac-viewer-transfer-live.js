@@ -187,6 +187,19 @@ async function loginDashboardClient(context, session, credentials) {
   assert(result?.ok === true, `${session} dashboard login failed: ${JSON.stringify(result)}`);
 }
 
+async function waitForDashboardLocation(context, session, label, timeoutMs = 60000) {
+  const started = Date.now();
+  let lastLocation = null;
+  while (Date.now() - started < timeoutMs) {
+    lastLocation = await evalInClient(context, session, 'location.href', 30000);
+    if (typeof lastLocation === 'string' && /^https?:\/\//.test(lastLocation)) {
+      return lastLocation;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw new Error(`${label} did not reach a dashboard URL before login: ${lastLocation}`);
+}
+
 async function waitForClientState(context, session, predicate, label, timeoutMs = 60000) {
   const started = Date.now();
   let lastState = null;
@@ -229,6 +242,12 @@ async function openDashboardClient(context, {
   const opened = parseJsonOutput(openedResult.stdout, `${session} dashboard open`);
   assert(opened.success === true, `${session} dashboard open failed: ${openedResult.stdout}${openedResult.stderr}`);
   await runCli(context, ['--json', '--session', session, 'set', 'viewport', String(viewport.width), String(viewport.height)]);
+  await evalInClient(context, session, `
+(() => {
+  location.href = ${JSON.stringify(url)};
+  return { navigating: true, url: location.href };
+})()
+`, 30000);
 }
 
 async function screenshotClient(context, session, label) {
@@ -492,6 +511,7 @@ try {
     viewport: { width: 1440, height: 900 },
   });
   const dashboardCredentials = await waitForDashboardCredentials(context);
+  await waitForDashboardLocation(context, clientASession, 'client 1');
   await loginDashboardClient(context, clientASession, dashboardCredentials);
   const client1Connected = await waitForClientState(
     context,
@@ -509,6 +529,7 @@ try {
     url: workspaceUrl,
     viewport: { width: 1366, height: 860 },
   });
+  await waitForDashboardLocation(context, clientBSession, 'client 2');
   await loginDashboardClient(context, clientBSession, dashboardCredentials);
   const client2Connected = await waitForClientState(
     context,

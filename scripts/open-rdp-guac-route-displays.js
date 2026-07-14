@@ -7,6 +7,7 @@ import { join } from 'node:path';
 const reportOnly = process.argv.includes('--report-only');
 const dryRun = process.argv.includes('--dry-run');
 const waitMs = numberArg('--wait-ms') ?? 8000;
+const agentBrowserTimeoutMs = numberArg('--agent-browser-timeout-ms') ?? 15000;
 
 loadAgentBrowserEnv();
 
@@ -69,7 +70,10 @@ function runAgentBrowser(args, label) {
   if (!command) {
     throw new Error('agent_browser_command_missing: install agent-browser or set AGENT_BROWSER_ROUTE_DISPLAY_AGENT_BROWSER_CMD');
   }
-  const result = commandResult(command, args);
+  const result = commandResult(command, args, { timeout: agentBrowserTimeoutMs });
+  if (result.error) {
+    throw new Error(`${label} failed: ${command} ${args.join(' ')}\n${result.error.message}`.trim());
+  }
   if (result.status !== 0) {
     throw new Error(`${label} failed: ${command} ${args.join(' ')}\n${result.stdout}${result.stderr}`.trim());
   }

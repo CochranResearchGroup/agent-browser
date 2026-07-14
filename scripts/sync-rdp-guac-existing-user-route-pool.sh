@@ -195,8 +195,10 @@ PY
 
 (
   cd "$GUAC_DIR"
-  printf '%s\n' "$SQL" | docker compose exec -T postgres psql -U guacamole_user -d guacamole_db
+  printf '%s\n' "$SQL" | docker compose exec -T postgres psql -U guacamole_user -d guacamole_db -v ON_ERROR_STOP=1
+  docker compose exec -T postgres psql -U guacamole_user -d guacamole_db -v ON_ERROR_STOP=1 -c "CHECKPOINT;" >/dev/null
 )
 
 echo "Configured two Guacamole RDP connections for existing user $USERNAME."
+echo "Guacamole Postgres route writes checkpoint completed."
 echo "Next: open both routes in Guacamole, then run pnpm inspect:rdp-route-displays."
