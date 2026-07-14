@@ -97,8 +97,8 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /function runtimeProfileConfigPayload\([\s\S]*profileOrigin: profile\.profileOrigin \?\? "agent_browser_owned"[\s\S]*targetReadiness: profile\.targetReadiness \?\? \[\],[\s\S]*registration: profile\.registration \?\? null,[\s\S]*browserCompatibilityEvidence: profile\.browserCompatibilityEvidence \?\? \[\],[\s\S]*persistent: form\.persistent/,
-  'Profile config saves must preserve origin, external metadata, and readiness rows while editing config fields',
+  /function runtimeProfileConfigPayload\([\s\S]*profileOrigin: profile\.profileOrigin \?\? "agent_browser_owned"[\s\S]*profileClass: profile\.profileClass \?\? "durable_named"[\s\S]*targetReadiness: profile\.targetReadiness \?\? \[\],[\s\S]*registration: profile\.registration \?\? null,[\s\S]*browserCompatibilityEvidence: profile\.browserCompatibilityEvidence \?\? \[\],[\s\S]*persistent: form\.persistent/,
+  'Profile config saves must preserve origin, class, external metadata, and readiness rows while editing config fields',
 );
 
 assert.match(

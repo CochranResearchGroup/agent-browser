@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from "react";
 import { createPortal } from "react-dom";
 import { useAtomValue, useSetAtom } from "jotai/react";
 import { AlertTriangle, ExternalLink, LogIn, Maximize2, Minimize2, MousePointer2, PlugZap, RefreshCw, Settings2, SquareArrowOutUpRight, Unplug } from "lucide-react";
@@ -22,6 +22,7 @@ import {
   DASHBOARD_WORKSPACE_SELECTION_EVENT,
   dashboardWorkspaceSelectionHasValue,
   readDashboardWorkspaceUrlSelection,
+  writeDashboardWorkspaceUrlSelection,
   type DashboardWorkspaceUrlSelection,
 } from "@/lib/workspace-url-selection";
 import type { SelectedWorkspaceContext } from "@/lib/selected-workspace-context";
@@ -29,13 +30,20 @@ import { activePortAtom, activeSessionNameAtom, sessionsAtom } from "@/store/ses
 import { appendConsoleLogsAtom } from "@/store/stream";
 import type { SessionInfo } from "@/types";
 import { cn } from "@/lib/utils";
-import { SERVICE_API_BASE } from "@/lib/dashboard-api";
+import { SERVICE_API_BASE, sessionScreenshotApiUrl } from "@/lib/dashboard-api";
 import {
   deriveWorkspaceViewportReadiness,
   deriveWorkspaceViewportUxState,
   workspaceViewportReadinessStatusLabel,
   workspaceViewportUxStateLabel,
 } from "@/lib/workspace-viewport-state";
+import {
+  INITIAL_WORKSPACE_VIEWPORT_CONTROLLER_STATE,
+  workspaceViewportControllerReducer,
+  workspaceViewportTargetToken,
+  type WorkspaceViewportPreflightState,
+  type WorkspaceViewportTarget,
+} from "@/lib/workspace-viewport-controller";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { StreamMessage } from "@/types";
@@ -51,6 +59,7 @@ type WorkspaceViewportBrowser = {
   browserBuild?: string | null;
   displayAllocationId?: string | null;
   viewStreams?: ServiceViewStream[];
+  attachability?: unknown;
   activeSessionIds?: string[];
 };
 
@@ -76,7 +85,19 @@ type ApiResponse<T> = {
   error?: string | null;
 };
 
+function viewportRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function viewportString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
 type ServiceRequestAction =
+  | "service_remote_view_browser_reattach"
+  | "service_remote_view_route_switch"
   | "service_remote_view_route_checkout"
   | "service_viewer_lease_request"
   | "service_viewer_lease_release"
@@ -94,11 +115,6 @@ type WorkspaceViewportTile = {
   externalUrl: string | null;
   routeKey: string;
   sharedRoute: boolean;
-};
-
-type StreamPreflightState = {
-  status: "idle" | "checking" | "ready" | "login-required" | "error";
-  message: string;
 };
 
 type WorkspaceFrameFailure = "login-required" | "fatal-error" | "browser-error" | "remote-disconnected" | "taken-over";
@@ -218,8 +234,12 @@ function cdpButton(btn: number): string {
   }
 }
 
-function isCdpScreencastStream(stream?: ServiceViewStream | null): boolean {
+function isCdpScreencastStream(stream?: { provider?: string | null } | null): boolean {
   return stream?.provider?.trim().toLowerCase() === "cdp_screencast";
+}
+
+function isCdpSnapshotStream(stream?: { provider?: string | null } | null): boolean {
+  return stream?.provider?.trim().toLowerCase() === "cdp_snapshot";
 }
 
 function workspaceCdpWebSocketUrl(streamUrl: string | null): string | null {
@@ -535,7 +555,8 @@ function daemonSessionFromSelection(
 
 function daemonBrowserFromSession(session: SessionInfo | null): WorkspaceViewportBrowser | null {
   if (!session || session.pending || session.closing || session.port <= 0) return null;
-  const streamUrl = `http://127.0.0.1:${session.port}/`;
+  const detectedExternal = session.detected === true || session.ownership === "foreign_cdp";
+  const streamUrl = detectedExternal ? sessionScreenshotApiUrl(session.port) : `http://127.0.0.1:${session.port}/`;
   return {
     id: `daemon:${session.session}`,
     displayName: session.session,
@@ -544,21 +565,58 @@ function daemonBrowserFromSession(session: SessionInfo | null): WorkspaceViewpor
     browserBuild: session.provider ?? session.engine ?? null,
     viewStreams: [
       {
-        id: `daemon-stream:${session.session}`,
-        provider: "cdp_screencast",
-        controlInput: "cdp_input",
+        id: detectedExternal ? `foreign-cdp-snapshot:${session.session}` : `daemon-stream:${session.session}`,
+        provider: detectedExternal ? "cdp_snapshot" : "cdp_screencast",
+        controlInput: detectedExternal ? null : "cdp_input",
         url: streamUrl,
         frameUrl: streamUrl,
         externalUrl: streamUrl,
-        routeId: `daemon:${session.session}`,
+        routeId: detectedExternal ? `foreign-cdp:${session.session}` : `daemon:${session.session}`,
         connectionName: session.session,
-        routeSource: "daemon-session",
-        providerMode: "single_controller",
-        readOnly: false,
-        readiness: { state: "ready", reason: `daemon stream ${session.port}` },
+        routeSource: detectedExternal ? "foreign-cdp" : "daemon-session",
+        providerMode: detectedExternal ? "read_only_snapshot_poll" : "single_controller",
+        readOnly: detectedExternal,
+        readiness: { state: "ready", reason: detectedExternal ? `foreign CDP snapshot ${session.port}` : `daemon stream ${session.port}` },
       },
     ],
     activeSessionIds: [session.session],
+  };
+}
+
+function workspaceViewportBrowserFromSelectedContext(
+  context?: SelectedWorkspaceContext | null,
+): WorkspaceViewportBrowser | null {
+  const stream = context?.stream;
+  const node = context?.node;
+  if (!context || !node || !stream?.url) return null;
+  const selectedStream: ServiceViewStream = {
+    id: `selected:${node.id}:${stream.provider ?? "stream"}`,
+    provider: stream.provider ?? undefined,
+    controlInput: stream.controlInput ?? null,
+    url: stream.url,
+    frameUrl: stream.url,
+    externalUrl: stream.url,
+    routeId: stream.routeId ?? null,
+    displayAllocationId: stream.displayAllocationId ?? null,
+    connectionId: stream.connectionId ?? null,
+    connectionName: stream.connectionName ?? null,
+    routeSource: stream.routeSource ?? null,
+    providerMode: stream.providerMode ?? null,
+    viewerLeaseIds: stream.viewerLeaseIds,
+    controllerLeaseId: stream.controllerLeaseId ?? null,
+    readOnly: stream.readOnly,
+    readiness: { state: stream.operatorVisibleState, reason: stream.operatorVisibleReason ?? stream.routeSummary },
+  };
+  return {
+    id: node.browserId ? `browser:${node.browserId}` : node.daemonSession ? `daemon:${node.daemonSession}` : node.id,
+    displayName: node.label,
+    profileId: node.profileId ?? null,
+    host: node.host ?? node.source,
+    health: node.health ?? (node.live ? "ready" : "retained"),
+    browserBuild: node.browserBuild ?? context.daemonSession?.provider ?? context.daemonSession?.engine ?? null,
+    displayAllocationId: stream.displayAllocationId ?? null,
+    viewStreams: [selectedStream],
+    activeSessionIds: [node.daemonSession, node.serviceSessionId].filter((value): value is string => Boolean(value)),
   };
 }
 
@@ -673,22 +731,34 @@ function selectedTabForBrowser(
   tabs: WorkspaceViewportTab[],
   browserId: string,
   selection: DashboardWorkspaceUrlSelection,
-): { tab: WorkspaceViewportTab | null; tabIndex: number | null; recoveredFromStaleSelection: boolean } {
+): {
+  tab: WorkspaceViewportTab | null;
+  tabIndex: number | null;
+  recoveredFromStaleSelection: boolean;
+  staleSelectionId: string | null;
+} {
   const rows = browserTabs(tabs, browserId);
-  if (rows.length === 0) return { tab: null, tabIndex: null, recoveredFromStaleSelection: false };
-  const selected = selection.tabId ? rows.find((tab) => tab.id === selection.tabId) : undefined;
+  if (rows.length === 0) {
+    return { tab: null, tabIndex: null, recoveredFromStaleSelection: false, staleSelectionId: null };
+  }
+  const selected = selection.tabId
+    ? rows.find((tab) => tab.id === selection.tabId || tab.targetId === selection.tabId || (tab.targetId ? `target:${tab.targetId}` === selection.tabId : false))
+    : undefined;
   const focusableRows = rows.filter(isLiveWorkspaceViewportTab);
-  const selectedFocusable = selected && isLiveWorkspaceViewportTab(selected) && !isBlankWorkspaceViewportTab(selected) ? selected : undefined;
+  const selectedIsLive = selected ? isLiveWorkspaceViewportTab(selected) : false;
+  const selectedIsBlank = selected ? isBlankWorkspaceViewportTab(selected) : false;
+  const selectedFocusable = selected && selectedIsLive ? selected : undefined;
   const tab = selectedFocusable
     ?? [...focusableRows].sort((left, right) => workspaceViewportTabScore(right) - workspaceViewportTabScore(left))[0]
     ?? rows[0];
   const indexRows = focusableRows.length > 0 ? focusableRows : rows;
   const tabIndex = indexRows.findIndex((item) => item.id === tab.id);
-  const selectedWasStale = Boolean(selected && (!isLiveWorkspaceViewportTab(selected) || isBlankWorkspaceViewportTab(selected)));
+  const selectedWasStale = Boolean(selection.tabId && (!selected || !selectedIsLive || selectedIsBlank));
   return {
     tab,
     tabIndex: tabIndex >= 0 ? tabIndex : null,
-    recoveredFromStaleSelection: Boolean(selectedWasStale && tab.id !== selected?.id),
+    recoveredFromStaleSelection: Boolean(selectedWasStale && (selectedIsBlank || tab.id !== selected?.id)),
+    staleSelectionId: selectedWasStale ? selection.tabId : null,
   };
 }
 
@@ -754,6 +824,18 @@ function buildWorkspaceFrameUrl(streamUrl: string | null, refreshNonce: number):
       resolved.searchParams.set("agentBrowserViewport", "workspace");
       resolved.searchParams.set("agentBrowserRefresh", String(refreshNonce));
     }
+    return resolved.toString();
+  } catch {
+    return streamUrl;
+  }
+}
+
+function buildCdpSnapshotUrl(streamUrl: string | null, targetId?: string | null): string | null {
+  if (!streamUrl || typeof window === "undefined") return streamUrl;
+  try {
+    const resolved = new URL(streamUrl, window.location.href);
+    const target = targetId?.trim();
+    if (target) resolved.searchParams.set("targetId", target);
     return resolved.toString();
   } catch {
     return streamUrl;
@@ -1151,6 +1233,105 @@ function WorkspaceCdpStreamCanvas({
   );
 }
 
+function WorkspaceCdpSnapshotViewer({
+  snapshotUrl,
+  refreshNonce,
+}: {
+  snapshotUrl: string;
+  refreshNonce: number;
+}) {
+  const [state, setState] = useState<{
+    dataUrl: string | null;
+    connected: boolean;
+    message: string;
+    targetLabel: string;
+  }>({
+    dataUrl: null,
+    connected: false,
+    message: "Fetching read-only CDP screenshot.",
+    targetLabel: "",
+  });
+
+  useEffect(() => {
+    let disposed = false;
+    let controller: AbortController | null = null;
+
+    const fetchSnapshot = async () => {
+      controller?.abort();
+      controller = new AbortController();
+      try {
+        const response = await fetch(snapshotUrl, {
+          cache: "no-store",
+          credentials: "include",
+          signal: controller.signal,
+        });
+        const json = await response.json() as {
+          success?: boolean;
+          dataUrl?: string | null;
+          data?: string | null;
+          format?: string | null;
+          title?: string | null;
+          url?: string | null;
+          targetId?: string | null;
+          error?: string | null;
+        };
+        if (disposed) return;
+        if (!response.ok || json.success === false) {
+          throw new Error(json.error || `Snapshot request returned HTTP ${response.status}.`);
+        }
+        const format = json.format || "jpeg";
+        const dataUrl = json.dataUrl || (json.data ? `data:image/${format};base64,${json.data}` : null);
+        if (!dataUrl) throw new Error("Snapshot response did not include image data.");
+        setState({
+          dataUrl,
+          connected: true,
+          message: "",
+          targetLabel: [json.title, json.url, json.targetId].filter(Boolean).join(" / "),
+        });
+      } catch (err) {
+        if (disposed || (err instanceof DOMException && err.name === "AbortError")) return;
+        setState((current) => ({
+          ...current,
+          connected: false,
+          message: err instanceof Error ? err.message : "Read-only CDP screenshot polling failed.",
+        }));
+      }
+    };
+
+    void fetchSnapshot();
+    const timer = window.setInterval(fetchSnapshot, 2000);
+    return () => {
+      disposed = true;
+      controller?.abort();
+      window.clearInterval(timer);
+    };
+  }, [snapshotUrl, refreshNonce]);
+
+  return (
+    <div className="workspace-cdp-stream" data-provider="cdp_snapshot" data-snapshot-url={snapshotUrl}>
+      {state.dataUrl && (
+        <img
+          className="workspace-cdp-snapshot-image"
+          src={state.dataUrl}
+          alt="Read-only browser snapshot"
+          draggable={false}
+        />
+      )}
+      {(!state.dataUrl || state.message) && (
+        <div className="workspace-cdp-stream-status">
+          <RefreshCw className={cn("size-4", !state.message && "animate-spin")} />
+          <span>{state.message || "Waiting for read-only CDP screenshot."}</span>
+        </div>
+      )}
+      <div className="workspace-cdp-stream-footer">
+        <span className={cn("workspace-cdp-stream-dot", state.connected && "workspace-cdp-stream-dot-ready")} />
+        <span>{state.connected ? "Read-only snapshot live" : "Read-only snapshot waiting"}</span>
+        <span className="workspace-cdp-stream-port">{state.targetLabel || snapshotUrl}</span>
+      </div>
+    </div>
+  );
+}
+
 export function WorkspaceRemoteViewport({
   fallback,
   selectedWorkspaceContext,
@@ -1174,10 +1355,10 @@ export function WorkspaceRemoteViewport({
   const [streamRefreshNonce, setStreamRefreshNonce] = useState(() => Date.now());
   const [tileRefreshNonces, setTileRefreshNonces] = useState<Record<string, number>>({});
   const [frameIssue, setFrameIssue] = useState<WorkspaceFrameIssue>(null);
-  const [streamPreflight, setStreamPreflight] = useState<StreamPreflightState>({
-    status: "idle",
-    message: "",
-  });
+  const [viewportController, dispatchViewportController] = useReducer(
+    workspaceViewportControllerReducer,
+    INITIAL_WORKSPACE_VIEWPORT_CONTROLLER_STATE,
+  );
   const viewportRef = useRef<HTMLElement | null>(null);
   const viewportFrameRef = useRef<HTMLIFrameElement | null>(null);
   const focusedKeyRef = useRef("");
@@ -1239,22 +1420,44 @@ export function WorkspaceRemoteViewport({
 
   const browserId = viewportSelection ? browserIdFromSelection(viewportSelection.selection) : null;
   const serviceBrowser = browserId ? serviceStatus?.service_state?.browsers?.[browserId] ?? null : null;
+  const selectedContextBrowser = isCdpSnapshotStream(selectedWorkspaceContext?.stream)
+    ? workspaceViewportBrowserFromSelectedContext(selectedWorkspaceContext)
+    : null;
   const daemonBrowser = daemonBrowserFromSession(daemonSessionFromSelection(sessions, viewportSelection?.selection));
-  const browser = chooseWorkspaceViewportBrowser(serviceBrowser, daemonBrowser);
+  const browser = selectedContextBrowser ?? chooseWorkspaceViewportBrowser(serviceBrowser, daemonBrowser);
   const tabs = useMemo(() => Object.values(serviceStatus?.service_state?.tabs ?? {}), [serviceStatus]);
   const tabSelection = browser?.id && viewportSelection
     ? selectedTabForBrowser(tabs, browser.id, viewportSelection.selection)
-    : { tab: null, tabIndex: null, recoveredFromStaleSelection: false };
+    : { tab: null, tabIndex: null, recoveredFromStaleSelection: false, staleSelectionId: null };
   const stream = primaryViewStream(browser);
   const tileStreams = viewportSelection?.mode === "tile" ? workspaceViewportTiles(serviceStatus) : [];
   const streamUrl = resolveWorkspaceStreamUrl(stream);
-  const externalStreamUrl = resolveWorkspaceStreamUrl(stream, "external");
+  const snapshotStream = isCdpSnapshotStream(stream);
+  const externalStreamUrl = snapshotStream ? null : resolveWorkspaceStreamUrl(stream, "external");
   const frameUrl = buildWorkspaceFrameUrl(streamUrl, streamRefreshNonce);
-  const canEmbed = stream ? canEmbedViewStream(stream) : false;
+  const snapshotUrl = snapshotStream ? buildCdpSnapshotUrl(streamUrl, tabSelection.tab?.targetId) : null;
+  const canEmbed = stream ? canOpenViewStream(stream) : false;
   const canControl = stream ? canOpenControlViewStream(stream) : false;
   const canRenderSelectedBrowser = browserCanRenderWorkspaceViewport(browser);
+  const viewportTarget = useMemo<WorkspaceViewportTarget | null>(() => {
+    if (!browser && !streamUrl) return null;
+    return {
+      browserId: browser?.id ?? null,
+      streamId: stream?.id ?? null,
+      streamUrl: streamUrl ?? snapshotUrl ?? null,
+      routeId: snapshotStream ? null : stream?.routeId ?? null,
+      mode: viewportSelection?.mode === "tile" ? "tile" : viewportSelection?.mode === "control" ? "control" : "view",
+      browserAvailable: canRenderSelectedBrowser,
+    };
+  }, [browser, canRenderSelectedBrowser, snapshotStream, snapshotUrl, stream, streamUrl, viewportSelection?.mode]);
+  const viewportTargetToken = workspaceViewportTargetToken(viewportTarget);
+  const streamPreflight: WorkspaceViewportPreflightState =
+    viewportController.targetToken === viewportTargetToken
+      ? viewportController.preflight
+      : { status: "idle", message: "" };
   const canRenderCdpStream = canRenderSelectedBrowser && isCdpScreencastStream(stream) && Boolean(streamUrl) && streamPreflight.status === "ready";
-  const canRenderFrame = canRenderSelectedBrowser && !isCdpScreencastStream(stream) && canEmbed && streamPreflight.status === "ready";
+  const canRenderSnapshotStream = canRenderSelectedBrowser && snapshotStream && Boolean(snapshotUrl) && streamPreflight.status === "ready";
+  const canRenderFrame = canRenderSelectedBrowser && !isCdpScreencastStream(stream) && !snapshotStream && canEmbed && streamPreflight.status === "ready";
   const singleWorkspaceMode = viewportSelection?.mode === "control" ? "control" : "view";
   const viewportUxState = deriveWorkspaceViewportUxState({
     hasBrowser: Boolean(browser),
@@ -1290,25 +1493,47 @@ export function WorkspaceRemoteViewport({
   });
 
   useEffect(() => {
+    if (!viewportSelection || !tabSelection.recoveredFromStaleSelection || !tabSelection.tab?.id) return;
+    if (viewportSelection.selection.tabId === tabSelection.tab.id) return;
+    const nextSelection = {
+      ...viewportSelection.selection,
+      tabId: tabSelection.tab.id,
+    };
+    const writtenSelection = writeDashboardWorkspaceUrlSelection(nextSelection, "replace");
+    setViewportSelection({ mode: viewportSelection.mode, selection: writtenSelection });
+    setFocusMessage(tabSelection.staleSelectionId
+      ? `Recovered stale selected tab identity ${tabSelection.staleSelectionId}; using current live target ${tabSelection.tab.id}.`
+      : `Recovered stale selected tab identity; using current live target ${tabSelection.tab.id}.`);
+  }, [tabSelection.recoveredFromStaleSelection, tabSelection.staleSelectionId, tabSelection.tab?.id, viewportSelection]);
+
+  useEffect(() => {
     streamFrameRetryRef.current = 0;
     setFrameIssue(null);
   }, [streamUrl]);
 
   useEffect(() => {
-    if (!frameUrl || !canEmbed) {
-      setStreamPreflight({ status: "idle", message: "" });
+    dispatchViewportController({ type: "target_changed", target: viewportTarget });
+  }, [viewportTarget, viewportTargetToken]);
+
+  useEffect(() => {
+    if (!frameUrl || !canEmbed || !viewportTargetToken) {
       return;
     }
 
     let disposed = false;
     const preflightStreamUrl = frameUrl;
-    setStreamPreflight({ status: "checking", message: "Checking stream access." });
+    const preflightTargetToken = viewportTargetToken;
+    dispatchViewportController({
+      type: "preflight_started",
+      targetToken: preflightTargetToken,
+      message: "Checking stream access.",
+    });
 
     async function checkStreamAccess() {
       try {
         const resolved = new URL(preflightStreamUrl, window.location.href);
         if (resolved.origin !== window.location.origin) {
-          setStreamPreflight({ status: "ready", message: "" });
+          dispatchViewportController({ type: "preflight_succeeded", targetToken: preflightTargetToken });
           return;
         }
         const response = await fetch(resolved.toString(), {
@@ -1318,30 +1543,38 @@ export function WorkspaceRemoteViewport({
         });
         if (disposed) return;
         if (responseLooksLikeDashboardLogin(response, resolved)) {
-          setStreamPreflight({
+          dispatchViewportController({
+            type: "preflight_failed",
+            targetToken: preflightTargetToken,
             status: "login-required",
             message: "The remote stream needs a fresh dashboard sign-in before it can be embedded.",
           });
           return;
         }
         if (response.status === 401 || response.status === 403) {
-          setStreamPreflight({
+          dispatchViewportController({
+            type: "preflight_failed",
+            targetToken: preflightTargetToken,
             status: "login-required",
             message: "The remote stream rejected the current dashboard session.",
           });
           return;
         }
         if (!response.ok) {
-          setStreamPreflight({
+          dispatchViewportController({
+            type: "preflight_failed",
+            targetToken: preflightTargetToken,
             status: "error",
             message: `The remote stream returned HTTP ${response.status}.`,
           });
           return;
         }
-        setStreamPreflight({ status: "ready", message: "" });
+        dispatchViewportController({ type: "preflight_succeeded", targetToken: preflightTargetToken });
       } catch (err) {
         if (disposed) return;
-        setStreamPreflight({
+        dispatchViewportController({
+          type: "preflight_failed",
+          targetToken: preflightTargetToken,
           status: "error",
           message: err instanceof Error ? err.message : "The remote stream could not be reached.",
         });
@@ -1352,12 +1585,14 @@ export function WorkspaceRemoteViewport({
     return () => {
       disposed = true;
     };
-  }, [canEmbed, frameUrl]);
+  }, [canEmbed, frameUrl, viewportTargetToken]);
 
   const handleFrameLoadIssue = useCallback((failure: WorkspaceFrameFailure) => {
     if (failure === "login-required") {
       setFrameIssue(null);
-      setStreamPreflight({
+      if (viewportTargetToken) dispatchViewportController({
+        type: "preflight_failed",
+        targetToken: viewportTargetToken,
         status: "login-required",
         message: "The remote stream needs a fresh dashboard sign-in before it can be embedded.",
       });
@@ -1383,13 +1618,15 @@ export function WorkspaceRemoteViewport({
     }
 
     setFrameIssue(null);
-    setStreamPreflight({
+    if (viewportTargetToken) dispatchViewportController({
+      type: "preflight_failed",
+      targetToken: viewportTargetToken,
       status: "error",
       message: failure === "fatal-error"
         ? "Guacamole reported that the remote desktop connection closed."
         : "The embedded remote stream failed to load. Refresh the workspace viewport or open the stream externally.",
     });
-  }, []);
+  }, [viewportTargetToken]);
 
   const onFrameLoad = useCallback(() => {
     const failure = detectWorkspaceFrameFailure(viewportFrameRef.current);
@@ -1419,7 +1656,7 @@ export function WorkspaceRemoteViewport({
   }, [canRenderFrame, frameUrl, handleFrameLoadIssue]);
 
   useEffect(() => {
-    if (!viewportSelection || viewportSelection.mode !== "control") return;
+    if (!viewportSelection || viewportSelection.mode !== "control" || snapshotStream) return;
     if (!browser || !stream || !canControl) return;
     const tabIndex = tabSelection.tabIndex;
     const targetId = tabSelection.tab?.targetId?.trim();
@@ -1470,7 +1707,7 @@ export function WorkspaceRemoteViewport({
     }
 
     void queueFocus();
-  }, [activePort, activeSessionName, browser, canControl, stream, streamUrl, tabSelection.recoveredFromStaleSelection, tabSelection.tab?.id, tabSelection.tabIndex, viewportSelection]);
+  }, [activePort, activeSessionName, browser, canControl, snapshotStream, stream, streamUrl, tabSelection.recoveredFromStaleSelection, tabSelection.tab?.id, tabSelection.tabIndex, viewportSelection]);
 
   useEffect(() => {
     if (!frameUrl || !canRenderFrame || !canControl) return;
@@ -1580,7 +1817,7 @@ export function WorkspaceRemoteViewport({
     return json;
   }, [activePort, activeSessionName]);
 
-  const workspaceRouteId = stream?.routeId?.trim() || null;
+  const workspaceRouteId = snapshotStream ? null : stream?.routeId?.trim() || null;
   const workspaceViewerLeaseIds = useMemo(() => Array.from(new Set([
     ...(stream?.viewerLeaseIds ?? []),
     ...(stream?.controllerLeaseId ? [stream.controllerLeaseId] : []),
@@ -1591,19 +1828,23 @@ export function WorkspaceRemoteViewport({
   const refreshWorkspaceRoute = useCallback(async () => {
     if (!browser || !stream) return;
     const displayAllocationId = stream.displayAllocationId || browser.displayAllocationId;
-    if (!displayAllocationId) {
-      setFocusMessage("Route refresh requires a service-owned display allocation.");
-      return;
-    }
+    const attachability = viewportRecord(stream.attachability) ?? viewportRecord(browser.attachability);
+    const recommendedAction = viewportString(attachability?.recommendedAction);
+    const recoveryAction: ServiceRequestAction = recommendedAction === "service_remote_view_route_switch"
+      ? "service_remote_view_route_switch"
+      : "service_remote_view_browser_reattach";
+    const switchingRoute = recoveryAction === "service_remote_view_route_switch";
     setRecoveryPending("route-refresh");
-    setFocusMessage("Refreshing the service-owned remote route lease.");
+    setFocusMessage(switchingRoute
+      ? "Switching the retained remote browser to an available route."
+      : "Reattaching the retained remote browser route.");
     try {
-      await postWorkspaceRecoveryRequest("service_remote_view_route_checkout", "workspace-viewport-route-refresh", {
-        displayAllocationId,
+      await postWorkspaceRecoveryRequest(recoveryAction, switchingRoute ? "workspace-viewport-route-switch" : "workspace-viewport-browser-reattach", {
         browserId: browser.id,
         ...(workspaceSessionName ? { sessionName: workspaceSessionName } : {}),
         ...(stream.id ? { streamId: stream.id } : {}),
-        ...(workspaceRouteId ? { routeId: workspaceRouteId } : {}),
+        ...(displayAllocationId ? { displayAllocationId } : {}),
+        ...(!switchingRoute && workspaceRouteId ? { routeId: workspaceRouteId } : {}),
         ...(stream.provider ? { provider: stream.provider } : {}),
         ...(stream.providerMode ? { providerMode: stream.providerMode } : {}),
         ...(stream.frameUrl ? { frameUrl: stream.frameUrl } : {}),
@@ -1614,10 +1855,14 @@ export function WorkspaceRemoteViewport({
       streamFrameRetryRef.current = 0;
       setFrameIssue(null);
       setStreamRefreshNonce(Date.now());
-      setFocusMessage("Refreshed the service-owned remote route lease.");
+      setFocusMessage(switchingRoute
+        ? "Switched the retained remote browser route."
+        : "Reattached the retained remote browser route.");
       void fetchServiceStatus();
     } catch (err) {
-      setFocusMessage(err instanceof Error ? `Route refresh failed: ${err.message}` : "Route refresh failed.");
+      setFocusMessage(err instanceof Error
+        ? `Browser route recovery failed: ${err.message}`
+        : "Browser route recovery failed.");
     } finally {
       setRecoveryPending(null);
     }
@@ -1952,14 +2197,14 @@ export function WorkspaceRemoteViewport({
           >
             <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
           </Button>
-          {stream && (
+          {stream && !snapshotStream && (
             <Button
               type="button"
               size="icon"
               variant="outline"
-              aria-label="Refresh remote route lease"
-              title="Refresh remote route lease"
-              disabled={Boolean(recoveryPending) || !(stream.displayAllocationId || browser?.displayAllocationId)}
+              aria-label="Reattach remote browser route"
+              title="Reattach remote browser route"
+              disabled={Boolean(recoveryPending)}
               onClick={() => {
                 void refreshWorkspaceRoute();
               }}
@@ -2139,6 +2384,12 @@ export function WorkspaceRemoteViewport({
             key={`${streamUrl}:${streamRefreshNonce}`}
             streamUrl={streamUrl}
             canControl={canControl}
+            refreshNonce={streamRefreshNonce}
+          />
+        ) : stream && canRenderSnapshotStream && snapshotUrl ? (
+          <WorkspaceCdpSnapshotViewer
+            key={`${snapshotUrl}:${streamRefreshNonce}`}
+            snapshotUrl={snapshotUrl}
             refreshNonce={streamRefreshNonce}
           />
         ) : stream && canRenderFrame ? (

@@ -14,6 +14,12 @@ export function sessionTabsApiUrl(port: number): string {
   return `/api/session-tabs?port=${encodeURIComponent(String(port))}`;
 }
 
+export function sessionScreenshotApiUrl(port: number, targetId?: string | null): string {
+  const params = new URLSearchParams({ port: String(port) });
+  if (targetId) params.set("targetId", targetId);
+  return `/api/session-screenshot?${params.toString()}`;
+}
+
 export function sessionConsoleApiUrl(port: number, session?: string | null): string {
   const params = new URLSearchParams({ port: String(port) });
   if (session) params.set("session", session);

@@ -18,6 +18,7 @@ import type {
 } from "@/types";
 import type {
   WorkspaceServiceBrowser,
+  WorkspaceBrowserSessionAuthority,
   WorkspaceServiceIncident,
   WorkspaceServiceJob,
   WorkspaceServiceProfileAllocation,
@@ -35,6 +36,7 @@ type ServiceStatusData = {
     incidents?: WorkspaceServiceIncident[];
   };
   profileAllocations?: WorkspaceServiceProfileAllocation[];
+  browserSessionAuthority?: WorkspaceBrowserSessionAuthority | null;
 };
 
 type ServiceResourcesData = {
@@ -141,6 +143,7 @@ export function useSelectedWorkspaceContext(enabled = true): UseSelectedWorkspac
     jobs: Object.values(serviceStatus?.service_state?.jobs ?? {}),
     incidents: serviceStatus?.service_state?.incidents ?? [],
     resources: serviceResources?.resources ?? [],
+    browserSessionAuthority: serviceStatus?.browserSessionAuthority ?? null,
     refreshedAt,
   }), [
     daemonEngineByPort,

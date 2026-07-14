@@ -107,6 +107,7 @@ function context(selection) {
 const byBrowser = context({ browserId: 'browser-live' });
 assert.equal(byBrowser.node.id, 'browser:browser-live');
 assert.equal(byBrowser.source, 'service-browser');
+assert.equal(byBrowser.inventoryClass, 'service-owned-controllable-browser');
 assert.equal(byBrowser.runtime.pid, 95444);
 assert.equal(byBrowser.runtime.streamPort, 38395);
 assert.equal(byBrowser.primaryTab.targetId, 'target-live');
@@ -124,6 +125,13 @@ assert.deepEqual(
   ],
 );
 assert.equal(selectedWorkspaceDiagnosticBundle(byBrowser).resources.length, 2);
+assert.equal(selectedWorkspaceDiagnosticBundle(byBrowser).workspace.inventoryClass, 'service-owned-controllable-browser');
+assert.deepEqual(
+  byBrowser.evidence.rows
+    .filter((row) => row.label === 'Inventory class')
+    .map((row) => row.value),
+  ['service-owned-controllable-browser'],
+);
 assert.ok(selectedWorkspaceChatSummary(byBrowser).includes('browser browser-live'));
 assert.equal(selectedWorkspaceDiagnosticBundle(byBrowser).ids.browserId, 'browser-live');
 

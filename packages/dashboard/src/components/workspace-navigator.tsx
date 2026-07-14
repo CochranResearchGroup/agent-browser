@@ -25,9 +25,10 @@ import {
   X,
 } from "lucide-react";
 import {
-  deriveWorkspaceNodes,
+  deriveLiveWorkspaceNodes,
   type WorkspaceNode,
   type WorkspaceNodeActionId,
+  type WorkspaceProfileActionabilityAction,
   type WorkspaceNodeGroup,
   type WorkspaceNodeInput,
   type WorkspaceServiceBrowser,
@@ -105,7 +106,7 @@ import {
 } from "@/components/ui/tooltip";
 
 type WorkspaceScope = "all" | "active" | "needs-attention" | "detected";
-type LiveWorkspaceScope = "all" | "active" | "detected";
+type LiveWorkspaceScope = "all" | "active" | "needs-attention" | "detected";
 type LauncherRowFilter = "all" | "eligible" | "needs-action" | "blocked";
 
 type ServiceStatusData = {
@@ -119,6 +120,7 @@ type ServiceStatusData = {
     browserCapabilityRegistry?: LauncherBrowserCapabilityRegistry;
   };
   profileAllocations?: WorkspaceServiceProfileAllocation[];
+  browserSessionAuthority?: WorkspaceNodeInput["browserSessionAuthority"];
 };
 
 type ServiceContractsData = {
@@ -151,7 +153,7 @@ const SCOPE_LABELS: Record<WorkspaceScope, string> = {
   detected: "Detected",
   "needs-attention": "Attention",
 };
-const LIVE_WORKSPACE_SCOPES: LiveWorkspaceScope[] = ["all", "active", "detected"];
+const LIVE_WORKSPACE_SCOPES: LiveWorkspaceScope[] = ["all", "active", "needs-attention", "detected"];
 
 const LAUNCHER_DISPLAY_OPTIONS: Array<{ value: LauncherDisplayIsolation; label: string }> = [
   { value: "service_default", label: "Service plan" },
@@ -377,6 +379,45 @@ function workspaceUrlSelectionForNode(node: WorkspaceNode): DashboardWorkspaceUr
   };
 }
 
+function serviceOwnedAddTabRequest(node: WorkspaceNode): Record<string, unknown> | null {
+  const actionability = node.profileActionability;
+  if (
+    !actionability ||
+    actionability.recommendedAction !== "openSharedProfileTab" ||
+    !actionability.enabled ||
+    !node.browserId
+  ) {
+    return null;
+  }
+  const sessionName = actionability.ownerSessionIds[0] ?? node.serviceSessionId ?? node.relatedIds.serviceSessionIds[0];
+  if (!sessionName) return null;
+  return {
+    action: "tab_new",
+    serviceName: node.ownership.serviceName ?? "agent-browser-dashboard",
+    agentName: node.ownership.agentName ?? "dashboard-operator",
+    taskName: node.ownership.taskName ?? "workspace-add-tab",
+    browserId: node.browserId,
+    sessionName,
+    runtimeProfile: actionability.profileId ?? node.profileId ?? undefined,
+    profileId: actionability.profileId ?? node.profileId ?? undefined,
+    browserBuild: actionability.browserBuild ?? undefined,
+    params: {
+      url: "about:blank",
+      browserId: node.browserId,
+      sessionName,
+      profileActionability: {
+        recommendedAction: actionability.recommendedAction,
+        ownerBrowserId: actionability.ownerBrowserId,
+        ownerSessionIds: actionability.ownerSessionIds,
+        activeTabIds: actionability.activeTabIds,
+        routeId: actionability.routeId,
+        displayAllocationId: actionability.displayAllocationId,
+      },
+    },
+    jobTimeoutMs: 10000,
+  };
+}
+
 function workspaceUrlSelectionScore(node: WorkspaceNode, selection: DashboardWorkspaceUrlSelection): number {
   let score = 0;
   if (selection.workspaceId) {
@@ -463,6 +504,9 @@ function nodeSearchText(node: WorkspaceNode): string {
     node.ownership.taskName,
     node.takeover?.ownerLabel,
     node.takeover?.queueImpact,
+    node.profileActionability?.recommendedAction,
+    node.profileActionability?.reason,
+    node.profileActionability?.ownerBrowserId,
     ...(node.diagnostics ?? []).map((diagnostic) => diagnostic.message),
     node.primaryTab?.title,
     node.primaryTab?.url,
@@ -478,9 +522,31 @@ function nodeStatusLabel(node: WorkspaceNode): string {
   return node.state;
 }
 
+function inventoryClassLabel(node: WorkspaceNode): string {
+  return node.inventoryClass.replaceAll("-", " ");
+}
+
+function profileActionLabel(action: WorkspaceProfileActionabilityAction): string {
+  const labels: Record<WorkspaceProfileActionabilityAction, string> = {
+    openSharedProfileTab: "Open tab in owner",
+    reuseCompatibleTab: "Reuse tab",
+    waitForProfileHolder: "Wait for holder",
+    takeOverViewer: "Take over viewer",
+    routeSwitch: "Switch route",
+    launchNewBrowser: "Launch browser",
+    rejectDuplicateProcess: "Do not duplicate",
+  };
+  return labels[action];
+}
+
 function primaryAction(node: WorkspaceNode) {
   const operatorControlIds: WorkspaceNodeActionId[] = ["control", "view"];
   for (const id of operatorControlIds) {
+    const action = node.actions.find((candidate) => candidate.id === id && candidate.enabled);
+    if (action) return action;
+  }
+  const readOnlyDetectedIds: WorkspaceNodeActionId[] = ["inspect", "stream", "screenshot"];
+  for (const id of readOnlyDetectedIds) {
     const action = node.actions.find((candidate) => candidate.id === id && candidate.enabled);
     if (action) return action;
   }
@@ -531,9 +597,12 @@ function processIndicatorItems(node: WorkspaceNode): Array<{ label: string; valu
 
 function actionIcon(actionId: WorkspaceNodeActionId) {
   if (actionId === "control") return <MousePointer2 className="size-3.5" />;
-  if (actionId === "view") return <Eye className="size-3.5" />;
+  if (actionId === "view" || actionId === "stream") return <Eye className="size-3.5" />;
+  if (actionId === "inspect") return <Search className="size-3.5" />;
+  if (actionId === "screenshot") return <MonitorDot className="size-3.5" />;
   if (actionId === "launch" || actionId === "seed") return <Plus className="size-3.5" />;
   if (actionId === "resume" || actionId === "repair") return <RotateCcw className="size-3.5" />;
+  if (actionId === "borrow-control") return <RotateCcw className="size-3.5" />;
   if (actionId === "external-open") return <ExternalLink className="size-3.5" />;
   return <CircleDot className="size-3.5" />;
 }
@@ -1125,12 +1194,17 @@ function WorkspaceNodeRow({
 function WorkspaceNodeDetail({
   node,
   onAction,
+  loadingActionId,
 }: {
   node: WorkspaceNode;
   onAction: (node: WorkspaceNode, action: WorkspaceNodeActionId) => void;
+  loadingActionId?: string | null;
 }) {
   const processItems = processIndicatorItems(node);
   const detailActionIds = new Set<WorkspaceNodeActionId>([
+    "inspect",
+    "stream",
+    "screenshot",
     "control",
     "view",
     "focus",
@@ -1138,6 +1212,7 @@ function WorkspaceNodeDetail({
     "seed",
     "resume",
     "repair",
+    "borrow-control",
     "add-tab",
     "external-open",
   ]);
@@ -1158,12 +1233,22 @@ function WorkspaceNodeDetail({
       <div className="workspace-nav-detail-grid">
         <span>State</span>
         <strong>{nodeStatusLabel(node)}</strong>
+        <span>Class</span>
+        <strong>{inventoryClassLabel(node)}</strong>
         <span>Health</span>
         <strong>{node.health ?? (node.live ? "live" : "retained")}</strong>
         <span>Browser</span>
         <strong>{node.browserId ?? node.daemonSession ?? "none"}</strong>
         <span>Profile</span>
         <strong>{node.profileId ?? "none"}</strong>
+        {node.profileActionability && (
+          <>
+            <span>Profile action</span>
+            <strong title={node.profileActionability.reason}>
+              {profileActionLabel(node.profileActionability.recommendedAction)}
+            </strong>
+          </>
+        )}
       </div>
       {processItems.length > 0 && (
         <div className="workspace-nav-detail-indicators">
@@ -1184,6 +1269,7 @@ function WorkspaceNodeDetail({
             size="sm"
             variant={action.id === "control" ? "default" : "outline"}
             className="workspace-nav-detail-action"
+            disabled={loadingActionId === `${node.id}:${action.id}`}
             onClick={() => onAction(node, action.id)}
           >
             {actionIcon(action.id)}
@@ -1235,6 +1321,7 @@ export function WorkspaceNavigator() {
     request: LauncherServiceRequest;
   } | null>(null);
   const [serviceError, setServiceError] = useState("");
+  const [workspaceActionLoadingId, setWorkspaceActionLoadingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const [scope, setScope] = useState<LiveWorkspaceScope>("all");
@@ -1327,14 +1414,11 @@ export function WorkspaceNavigator() {
       profileAllocations: serviceStatus?.profileAllocations ?? [],
       jobs: Object.values(serviceState?.jobs ?? {}),
       incidents: serviceState?.incidents ?? [],
+      browserSessionAuthority: serviceStatus?.browserSessionAuthority ?? null,
     };
   }, [getEngineForSession, getTabsForSession, serviceStatus, sessions]);
 
-  const nodes = useMemo(() => deriveWorkspaceNodes(workspaceInput), [workspaceInput]);
-  const liveRailNodes = useMemo(
-    () => nodes.filter((node) => node.group === "active" || node.group === "detected"),
-    [nodes],
-  );
+  const liveRailNodes = useMemo(() => deriveLiveWorkspaceNodes(workspaceInput), [workspaceInput]);
   const filteredNodes = useMemo(() => {
     const text = deferredQuery.trim().toLowerCase();
     return liveRailNodes.filter((node) => {
@@ -1587,11 +1671,58 @@ export function WorkspaceNavigator() {
     lastScrolledSelectionRef.current = selectedNodeId;
   }, [selectedNodeId]);
 
-  const performNodeAction = useCallback((node: WorkspaceNode, actionId: WorkspaceNodeActionId) => {
+  const performNodeAction = useCallback(async (node: WorkspaceNode, actionId: WorkspaceNodeActionId) => {
     const action = node.actions.find((candidate) => candidate.id === actionId);
     if (!action?.enabled) return;
     if (action.id === "add-tab" && node.port) {
       dispatchAddTab(node.port);
+      return;
+    }
+    if (action.id === "add-tab" && node.profileActionability?.recommendedAction === "openSharedProfileTab") {
+      const request = serviceOwnedAddTabRequest(node);
+      if (!request) {
+        setServiceError(node.profileActionability.reason || "No service-owned profile owner is available for tab creation.");
+        return;
+      }
+      setWorkspaceActionLoadingId(`${node.id}:add-tab`);
+      setServiceError("");
+      try {
+        const resp = await fetchWithTimeout(`${serviceBase(activePort)}/request`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(request),
+        });
+        const json = (await resp.json()) as ApiResponse<unknown>;
+        if (!json.success) throw new Error(json.error || "Service add-tab request failed");
+        const identity = extractServiceRequestWorkspaceIdentity(json.data);
+        const freshStatus = await fetchServiceStatus();
+        const browser = identity.browserId
+          ? freshStatus?.service_state?.browsers?.[identity.browserId] ?? null
+          : node.browserId
+            ? freshStatus?.service_state?.browsers?.[node.browserId] ?? null
+            : null;
+        if (browser) {
+          const selection = selectionForLaunchedBrowser(browser, freshStatus, {
+            ...identity,
+            browserId: identity.browserId ?? browser.id,
+            sessionId: identity.sessionId ?? node.serviceSessionId ?? node.relatedIds.serviceSessionIds[0] ?? null,
+            profileId: identity.profileId ?? node.profileId ?? null,
+          });
+          const stream = launchViewStream(browser);
+          if (stream?.url) {
+            setUrlSelection(pushWorkspaceViewportSelectionUrl(selection, stream.readOnly ? "view" : "control") ?? selection);
+          } else {
+            setUrlSelection(updateDashboardWorkspaceUrlSelection(selection, "replace"));
+          }
+          setSelectedNodeId(`browser:${browser.id}`);
+        } else {
+          selectNode(node);
+        }
+      } catch (err) {
+        setServiceError(err instanceof Error ? err.message : "Service add-tab request failed");
+      } finally {
+        setWorkspaceActionLoadingId(null);
+      }
       return;
     }
     if (action.id === "control" && node.viewStream?.controllable) {
@@ -1608,8 +1739,12 @@ export function WorkspaceNavigator() {
       window.open(node.viewStream.url, "_blank", "noopener,noreferrer");
       return;
     }
+    if (action.id === "inspect" || action.id === "stream" || action.id === "screenshot") {
+      selectNode(node);
+      return;
+    }
     selectNode(node);
-  }, [dispatchAddTab, selectNode]);
+  }, [activePort, dispatchAddTab, fetchServiceStatus, selectNode]);
 
   const performPrimaryAction = useCallback((node: WorkspaceNode) => {
     const action = primaryAction(node);
@@ -1741,11 +1876,12 @@ export function WorkspaceNavigator() {
         <WorkspaceNodeDetail
           node={selectedNode}
           onAction={performNodeAction}
+          loadingActionId={workspaceActionLoadingId}
         />
       )}
       <div className="workspace-nav-scroll min-h-0 flex-1" role="region" aria-label="Workspace list">
         <div className="workspace-nav-body">
-          {serviceError && !loadedOnceRef.current && (
+          {serviceError && (
             <div className="workspace-nav-empty workspace-nav-error">
               {serviceError}
             </div>
@@ -1769,6 +1905,16 @@ export function WorkspaceNavigator() {
               <WorkspaceGroup
                 title="Detected non-owned browsers"
                 nodes={grouped.detected}
+                selectedNodeId={selectedNodeId}
+                onSelect={selectNode}
+                onPrimaryAction={performPrimaryAction}
+                onClose={(node) => setPendingDangerAction({ type: "close", node })}
+                onKill={(node) => setPendingDangerAction({ type: "kill", node })}
+                rowWindow={WORKSPACE_ACTIVE_ROW_WINDOW}
+              />
+              <WorkspaceGroup
+                title="Needs attention"
+                nodes={grouped["needs-attention"]}
                 selectedNodeId={selectedNodeId}
                 onSelect={selectNode}
                 onPrimaryAction={performPrimaryAction}

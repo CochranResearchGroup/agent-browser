@@ -39,6 +39,7 @@ export type WorkspaceViewportReadinessAction =
   | "sign_in_again"
   | "open_externally"
   | "relaunch_browser"
+  | "refresh_remote_view_helper"
   | "inspect_readiness"
   | "open_view_only";
 
@@ -318,13 +319,18 @@ function firstBlockingReadinessComponent(
     const isFailed = FAILED_READINESS_STATES.has(status);
     if (!isFailed && !ACTION_READINESS_STATES.has(status)) continue;
     const label = componentLabel(component.component);
+    const nextAction = readinessNextAction(component);
     return {
       component: component.component,
       status: isFailed ? "blocked" : "action_required",
       evidence: component.evidence || component.message || `${label} readiness is ${component.status ?? "not ready"}.`,
-      nextAction: readinessNextAction(component),
+      nextAction,
       title: `${label} readiness ${isFailed ? "failed" : "needs attention"}`,
-      recoveryCopy: component.recovery || component.message || component.nextAction || `Inspect ${label} readiness before opening the workspace stream.`,
+      recoveryCopy: component.recovery
+        || component.message
+        || helperRefreshCopy(component, nextAction)
+        || component.nextAction
+        || `Inspect ${label} readiness before opening the workspace stream.`,
     };
   }
   return null;
@@ -340,11 +346,25 @@ function isRetainedJobComponent(component: string): boolean {
 
 function readinessNextAction(component: WorkspaceViewportReadinessComponent): WorkspaceViewportReadinessAction {
   const action = normalized(component.nextAction);
+  const name = normalized(component.component).replaceAll("-", "_");
+  if (name.includes("privileged_helper") || action.includes("privileged_helper") || action.includes("install_privileged_helper")) {
+    return "refresh_remote_view_helper";
+  }
   if (action.includes("sign") || action.includes("auth")) return "sign_in_again";
   if (action.includes("takeover") || action.includes("take_over")) return "take_over";
   if (action.includes("external") || action.includes("popout")) return "open_externally";
   if (action.includes("relaunch") || action.includes("browser")) return "relaunch_browser";
   return "inspect_readiness";
+}
+
+function helperRefreshCopy(
+  component: WorkspaceViewportReadinessComponent,
+  nextAction: WorkspaceViewportReadinessAction,
+): string | null {
+  if (nextAction !== "refresh_remote_view_helper") return null;
+  return component.nextAction
+    ? "Refresh the installed remote-view privileged helper from an interactive terminal, then rerun route preflight before opening the workspace stream."
+    : null;
 }
 
 function providerComponent(message?: string | null): string {

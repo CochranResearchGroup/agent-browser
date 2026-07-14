@@ -79,6 +79,7 @@ export interface TabInfo {
   url: string;
   type: string;
   active: boolean;
+  targetId?: string | null;
 }
 
 export interface TabsMessage {
@@ -113,9 +114,26 @@ export interface SessionInfo {
   port: number;
   engine?: string;
   provider?: string;
+  ownership?: string;
+  addressability?: string;
+  capabilities?: {
+    inspect?: boolean;
+    screenshot?: boolean;
+    stream?: boolean;
+    mutateRequiresBorrow?: boolean;
+    lifecycle?: boolean;
+    [key: string]: unknown;
+  };
+  borrow?: {
+    state?: string | null;
+    expiresAt?: string | null;
+    owner?: string | null;
+    [key: string]: unknown;
+  };
   extensions?: ExtensionInfo[];
   detected?: boolean;
   cdpPort?: number;
+  cdpUrl?: string;
   profilePath?: string;
   pid?: number;
   pending?: boolean;

@@ -159,10 +159,22 @@ assert.equal(active.controllable, true);
 assert.equal(active.primaryTab?.targetId, 'target-live');
 assert.ok(active.actions.some((action) => action.id === 'control' && action.enabled));
 
-const retained = buildSelectedWorkspaceContext({
+const postTermination = buildSelectedWorkspaceContext({
   selection: { ...emptySelection, browserId: 'browser-retained' },
   serviceBrowsers: [
     { id: 'browser-retained', health: 'closed', lastError: 'process exited' },
+  ],
+});
+
+assert.equal(postTermination.state, 'missing');
+assert.equal(postTermination.live, false);
+assert.equal(postTermination.retained, false);
+assert.match(postTermination.missingReason ?? '', /no longer reported by the service/);
+
+const retained = buildSelectedWorkspaceContext({
+  selection: { ...emptySelection, browserId: 'browser-retained-waiting' },
+  serviceBrowsers: [
+    { id: 'browser-retained-waiting', health: 'waiting', lastError: 'profile lease unavailable' },
   ],
 });
 

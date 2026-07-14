@@ -59,8 +59,8 @@ assert.match(
 
 assert.match(
   navigator,
-  /deriveWorkspaceNodes\(\{?workspaceInput\}?\)/,
-  'Workspace navigator must derive rows from the shared WorkspaceNode model',
+  /deriveLiveWorkspaceNodes\(workspaceInput\)/,
+  'Workspace navigator must derive live rail rows from the shared WorkspaceNode live projection',
 );
 
 assert.match(
@@ -88,9 +88,33 @@ assert.match(
 );
 
 assert.match(
+  dashboardApi,
+  /sessionScreenshotApiUrl\(port: number, targetId\?: string \| null\)[\s\S]*\/api\/session-screenshot\?/,
+  'Dashboard browser clients must use same-origin screenshot URLs for read-only foreign CDP snapshot viewing',
+);
+
+assert.match(
   remoteViewport,
   /function buildWorkspaceFrameUrl[\s\S]*if \(isGuacamoleClientFrameUrl\(resolved\)\) return resolved\.toString\(\);[\s\S]*resolved\.searchParams\.set\("agentBrowserViewport"/,
   'Workspace viewport must preserve Guacamole hash-client iframe URLs instead of adding dashboard query params before the hash route',
+);
+
+assert.match(
+  remoteViewport,
+  /function isCdpSnapshotStream[\s\S]*WorkspaceCdpSnapshotViewer[\s\S]*window\.setInterval\(fetchSnapshot, 2000\)/,
+  'Workspace viewport must render foreign CDP snapshot streams through periodic read-only screenshot polling',
+);
+
+assert.match(
+  remoteViewport,
+  /function workspaceViewportBrowserFromSelectedContext[\s\S]*selectedWorkspaceContext\?\.stream[\s\S]*const browser = selectedContextBrowser \?\? chooseWorkspaceViewportBrowser/,
+  'Workspace viewport must honor the selected workspace cdp_snapshot stream instead of rebuilding a cdp_screencast from the session port',
+);
+
+assert.match(
+  remoteViewport,
+  /snapshotStream \? null : resolveWorkspaceStreamUrl\(stream, "external"\)/,
+  'Foreign CDP snapshot streams must not expose remote-route external takeover controls',
 );
 
 assert.match(
@@ -156,6 +180,12 @@ assert.match(
 
 assert.match(
   navigator,
+  /function inventoryClassLabel\(node: WorkspaceNode\)[\s\S]*node\.inventoryClass\.replaceAll\("-", " "\)[\s\S]*<span>Class<\/span>[\s\S]*<strong>\{inventoryClassLabel\(node\)\}<\/strong>/,
+  'Workspace detail inspector must show the canonical workspace inventory class',
+);
+
+assert.match(
+  navigator,
   /selectNode\(bestNode, \{[\s\S]*focusDaemon: false,[\s\S]*persistUrl: false,[\s\S]*\}\);[\s\S]*updateDashboardWorkspaceUrlSelection\(\{ workspaceId: bestNode\.id \}, "replace"\)/,
   'Workspace navigator must fill only the derived workspace id when restoring URL selection so related-record jumps do not regain stale browser or session params',
 );
@@ -216,26 +246,38 @@ assert.match(
 
 assert.match(
   navigator,
-  /type LiveWorkspaceScope = "all" \| "active" \| "detected"[\s\S]*LIVE_WORKSPACE_SCOPES: LiveWorkspaceScope\[\] = \["all", "active", "detected"\]/,
-  'Workspace navigator live rail scope tabs must include only all, owned, and detected control targets',
+  /type LiveWorkspaceScope = "all" \| "active" \| "needs-attention" \| "detected"[\s\S]*LIVE_WORKSPACE_SCOPES: LiveWorkspaceScope\[\] = \["all", "active", "needs-attention", "detected"\]/,
+  'Workspace navigator live rail scope tabs must include all, owned, attention, and detected live targets',
 );
 
 assert.match(
   navigator,
-  /const liveRailNodes = useMemo\([\s\S]*node\.group === "active" \|\| node\.group === "detected"[\s\S]*<WorkspaceGroup[\s\S]*title="Agent-browser owned"[\s\S]*nodes=\{grouped\.active\}[\s\S]*<WorkspaceGroup[\s\S]*title="Detected non-owned browsers"[\s\S]*nodes=\{grouped\.detected\}/,
-  'Workspace navigator must separate owned work from detected non-owned browsers and exclude attention rows from the live rail',
+  /deriveLiveWorkspaceNodes[\s\S]*const liveRailNodes = useMemo\(\(\) => deriveLiveWorkspaceNodes\(workspaceInput\), \[workspaceInput\]\)[\s\S]*<WorkspaceGroup[\s\S]*title="Agent-browser owned"[\s\S]*nodes=\{grouped\.active\}[\s\S]*<WorkspaceGroup[\s\S]*title="Detected non-owned browsers"[\s\S]*nodes=\{grouped\.detected\}[\s\S]*<WorkspaceGroup[\s\S]*title="Needs attention"[\s\S]*nodes=\{grouped\["needs-attention"\]\}/,
+  'Workspace navigator must keep live attention rows visible at the bottom while separating owned work from detected non-owned browsers',
+);
+
+assert.match(
+  cliOutput,
+  /left workspace navigator renders live Agent-browser owned browsers, live\s+needs-attention browser diagnostics, and detected non-owned addressable\s+browsers[\s\S]*stale, retained, and resolved incident records stay in Service,/,
+  'CLI dashboard help must describe the live rail as owned plus live attention plus detected non-owned rows',
+);
+
+assert.doesNotMatch(
+  cliOutput,
+  /left workspace navigator groups Active, Attention, and Retained browser work/,
+  'CLI dashboard help must not describe retained history as part of the live workspace navigator',
 );
 
 assert.doesNotMatch(
   navigator,
-  /title="Needs attention"|dismissAttentionNode|restoreDismissedAttention|DISMISSED_ATTENTION_STORAGE_KEY/,
-  'Workspace navigator must not keep a dismissible attention category in the live left rail',
+  /dismissAttentionNode|restoreDismissedAttention|DISMISSED_ATTENTION_STORAGE_KEY/,
+  'Workspace navigator must not hide live attention rows behind dismissible local state',
 );
 
 assert.match(
   navigator,
   /LIVE_WORKSPACE_SCOPES\.map\(\(value\)[\s\S]*title="Detected non-owned browsers"[\s\S]*rowWindow=\{WORKSPACE_ACTIVE_ROW_WINDOW\}/,
-  'Workspace navigator must remove retained history and attention rows from the live rail and window detected non-owned browsers',
+  'Workspace navigator must remove retained history from the live rail and window detected non-owned browsers',
 );
 
 assert.match(
@@ -330,6 +372,30 @@ assert.match(
 
 assert.match(
   navigator,
+  /node\.profileActionability\?\.recommendedAction[\s\S]*node\.profileActionability\?\.reason[\s\S]*node\.profileActionability\?\.ownerBrowserId/,
+  'Workspace navigator search must include shared-profile actionability and owner text',
+);
+
+assert.match(
+  navigator,
+  /function profileActionLabel\(action: WorkspaceProfileActionabilityAction\)[\s\S]*openSharedProfileTab[\s\S]*Open tab in owner[\s\S]*Profile action/,
+  'Workspace navigator detail must expose the projected shared-profile action instead of only raw profile lock state',
+);
+
+assert.match(
+  navigator,
+  /function serviceOwnedAddTabRequest\(node: WorkspaceNode\)[\s\S]*recommendedAction !== "openSharedProfileTab"[\s\S]*action: "tab_new"[\s\S]*browserId: node\.browserId[\s\S]*sessionName[\s\S]*runtimeProfile[\s\S]*profileActionability/,
+  'Workspace navigator service-owned add-tab must build a routed tab_new service request from profile actionability',
+);
+
+assert.match(
+  navigator,
+  /action\.id === "add-tab" && node\.profileActionability\?\.recommendedAction === "openSharedProfileTab"[\s\S]*fetchWithTimeout\(`\$\{serviceBase\(activePort\)\}\/request`[\s\S]*JSON\.stringify\(request\)[\s\S]*extractServiceRequestWorkspaceIdentity\(json\.data\)[\s\S]*fetchServiceStatus\(\)[\s\S]*selectionForLaunchedBrowser/,
+  'Workspace navigator service-owned add-tab action must post to service_request, refresh status, and select the returned browser/tab identity',
+);
+
+assert.match(
+  navigator,
   /function nodeStatusLabel\(node: WorkspaceNode\): string \{[\s\S]*if \(node\.takeover\?\.active\) return "takeover";[\s\S]*if \(node\.state === "blocked"\) return "needs review";/,
   'Workspace navigator rows must label service-owned human takeover state directly and avoid raw blocked wording',
 );
@@ -366,8 +432,8 @@ assert.match(
 
 assert.match(
   serviceWorkspaces,
-  /const hasBrowserEvidence = tabs\.length > 0[\s\S]*const live = portRegistered && hasBrowserEvidence[\s\S]*function daemonViewStream\(session: SessionInfo, live: boolean\)[\s\S]*provider: "cdp_screencast"[\s\S]*url: streamUrl[\s\S]*controlInput: "cdp_input"/,
-  'Daemon workspace rows must require CDP tab evidence before advertising a CDP screencast stream',
+  /const hasBrowserEvidence = tabs\.length > 0[\s\S]*const hasDetectedReachableEvidence = detectedExternal && portRegistered[\s\S]*const live = portRegistered && \(hasBrowserEvidence \|\| hasDetectedReachableEvidence\)[\s\S]*const viewStream = detectedExternal \? foreignCdpSnapshotViewStream\(session, live\) : daemonViewStream\(session, live\)[\s\S]*function daemonViewStream\(session: SessionInfo, live: boolean\)[\s\S]*provider: "cdp_screencast"[\s\S]*function foreignCdpSnapshotViewStream\(session: SessionInfo, live: boolean\)[\s\S]*provider: "cdp_snapshot"/,
+  'Daemon workspace rows must require tab evidence for screencast streams while detected external CDP rows may stay visible from reachability evidence through read-only snapshots',
 );
 
 assert.match(

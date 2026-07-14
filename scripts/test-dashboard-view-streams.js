@@ -312,6 +312,37 @@ assert.deepEqual(
     recoveryCopy: 'Open the browser on the selected route display before treating this route as ready.',
   },
 );
+assert.deepEqual(
+  deriveWorkspaceViewportReadiness({
+    hasBrowser: true,
+    browserHealth: 'ready',
+    hasStream: true,
+    canEmbed: true,
+    canControl: true,
+    mode: 'control',
+    preflightStatus: 'blocked',
+    streamProvider: 'rdp_gateway',
+    streamUrl: 'http://127.0.0.1:8080/guacamole',
+    streamReadiness: {
+      components: [
+        {
+          component: 'privileged_helper_status',
+          status: 'blocked',
+          evidence: 'installed remote-view helper does not report the current route desktop and display-access capability contract',
+          nextAction: 'install_privileged_helper',
+        },
+      ],
+    },
+  }),
+  {
+    component: 'privileged_helper_status',
+    status: 'blocked',
+    evidence: 'installed remote-view helper does not report the current route desktop and display-access capability contract',
+    nextAction: 'refresh_remote_view_helper',
+    title: 'privileged helper status readiness failed',
+    recoveryCopy: 'Refresh the installed remote-view privileged helper from an interactive terminal, then rerun route preflight before opening the workspace stream.',
+  },
+);
 assert.equal(
   deriveWorkspaceViewportReadiness({
     hasBrowser: true,
@@ -420,6 +451,54 @@ assert.equal(canOpenControlViewStream(cdpScreencastStream), true);
 assert.equal(viewStreamOpenTitle(cdpScreencastStream), 'Open cdp screencast in the dashboard.');
 assert.equal(viewStreamControlTitle(cdpScreencastStream), 'Focus the browser and open cdp input control.');
 assert.equal(
+  canOpenViewStream({
+    provider: 'cdp_screencast',
+    url: 'http://127.0.0.1:44841/',
+  }),
+  true,
+);
+assert.equal(
+  canOpenViewStream({
+    provider: 'cdp_screencast',
+    url: 'http://127.0.0.1:44841/',
+    readiness: { state: 'unknown' },
+  }),
+  true,
+);
+assert.equal(
+  canOpenViewStream({
+    provider: 'cdp_screencast',
+    url: 'http://127.0.0.1:44841/',
+    readiness: { state: 'probing' },
+  }),
+  true,
+);
+for (const state of ['unreachable', 'auth_expired', 'stale_target', 'invalid_payload', 'unsupported_provider']) {
+  const blockedStream = {
+    provider: 'cdp_screencast',
+    controlInput: 'cdp_input',
+    url: 'http://127.0.0.1:44841/',
+    readiness: { state, reason: `${state}_reason` },
+  };
+  assert.equal(canEmbedViewStream(blockedStream), true);
+  assert.equal(canOpenViewStream(blockedStream), false);
+  assert.equal(canOpenControlViewStream(blockedStream), false);
+  assert.equal(viewStreamOpenTitle(blockedStream), `cdp screencast is unavailable: ${state.replaceAll('_', ' ')} reason.`);
+}
+assert.equal(
+  canOpenViewStream({
+    provider: 'rdp_gateway',
+    url: 'http://127.0.0.1:8080/rdp/session',
+    remoteReadiness: {
+      components: [
+        { component: 'proxy', state: 'ready' },
+        { component: 'frame', state: 'invalid_payload', reason: 'empty backend response' },
+      ],
+    },
+  }),
+  false,
+);
+assert.equal(
   viewStreamOpenTitle({
     provider: 'cdp_screencast',
     url: null,
@@ -516,6 +595,21 @@ assert.match(
 );
 assert.match(
   workspaceViewport,
+  /selectedIsLive[\s\S]*selectedIsBlank[\s\S]*selectedFocusable = selected && selectedIsLive \? selected : undefined[\s\S]*recoveredFromStaleSelection: Boolean\(selectedWasStale && \(selectedIsBlank \|\| tab\.id !== selected\?\.id\)\)/,
+  'Workspace remote viewport must honor an explicitly selected live blank tab while still marking it as recovered stale selection evidence',
+);
+assert.match(
+  workspaceViewport,
+  /tabSelection\.recoveredFromStaleSelection[\s\S]*if \(viewportSelection\.selection\.tabId === tabSelection\.tab\.id\) return[\s\S]*tabId: tabSelection\.tab\.id[\s\S]*writeDashboardWorkspaceUrlSelection\(nextSelection, "replace"\)[\s\S]*mode: viewportSelection\.mode[\s\S]*Recovered stale selected tab identity/,
+  'Workspace remote viewport must replace missing or dead stale tab URL selections with the current live tab before rendering control mode',
+);
+assert.match(
+  workspaceViewport,
+  /rows\.find\(\(tab\) => tab\.id === selection\.tabId \|\| tab\.targetId === selection\.tabId \|\| \(tab\.targetId \? `target:\$\{tab\.targetId\}` === selection\.tabId : false\)\)[\s\S]*selectedWasStale = Boolean\(selection\.tabId && \(!selected \|\| !selectedIsLive \|\| selectedIsBlank\)\)/,
+  'Workspace remote viewport must treat missing, dead, or blank target-shaped tab URL selections as stale recovery evidence',
+);
+assert.match(
+  workspaceViewport,
   /deriveWorkspaceViewportReadiness[\s\S]*streamReadiness: stream\?\.remoteReadiness \?\? stream\?\.readiness[\s\S]*data-readiness-status=\{viewportReadiness\.status\}[\s\S]*viewStreamRouteSummary\(stream\)[\s\S]*viewportReadiness\.recoveryCopy/,
   'Workspace remote viewport must derive compact readiness and render actionable recovery copy for auth, provider, browser, viewer, and retained-job states',
 );
@@ -532,7 +626,7 @@ assert.match(
 
 assert.match(
   workspaceViewport,
-  /function resolveWorkspaceStreamUrl[\s\S]*viewStreamExternalUrl\(stream\)[\s\S]*viewStreamDashboardFrameUrl\(stream, dashboardHref\)[\s\S]*new URL\(streamUrl, window\.location\.href\)\.toString\(\)[\s\S]*resolved\.origin === window\.location\.origin[\s\S]*setStreamPreflight\(\{ status: "ready", message: "" \}\)/,
+  /function resolveWorkspaceStreamUrl[\s\S]*viewStreamExternalUrl\(stream\)[\s\S]*viewStreamDashboardFrameUrl\(stream, dashboardHref\)[\s\S]*new URL\(streamUrl, window\.location\.href\)\.toString\(\)[\s\S]*resolved\.origin === window\.location\.origin[\s\S]*dispatchViewportController\(\{ type: "preflight_succeeded", targetToken: preflightTargetToken \}\)/,
   'Workspace remote viewport must resolve service-owned frame and external stream URLs with hosted-dashboard loopback protection and allow cross-origin iframe rendering instead of treating CORS preflight failure as stream unavailability',
 );
 assert.match(
@@ -543,8 +637,8 @@ assert.match(
 
 assert.match(
   workspaceViewport,
-  /WORKSPACE_VIEWPORT_TERMINAL_BROWSER_HEALTH[\s\S]*process_exited[\s\S]*function browserCanRenderWorkspaceViewport[\s\S]*!WORKSPACE_VIEWPORT_TERMINAL_BROWSER_HEALTH\.has\(health\)[\s\S]*const canRenderSelectedBrowser = browserCanRenderWorkspaceViewport\(browser\)[\s\S]*const canRenderCdpStream = canRenderSelectedBrowser[\s\S]*const canRenderFrame = canRenderSelectedBrowser/,
-  'Workspace remote viewport must not embed retained Guacamole routes for browsers whose process or CDP endpoint is terminal',
+  /WORKSPACE_VIEWPORT_TERMINAL_BROWSER_HEALTH[\s\S]*process_exited[\s\S]*function browserCanRenderWorkspaceViewport[\s\S]*!WORKSPACE_VIEWPORT_TERMINAL_BROWSER_HEALTH\.has\(health\)[\s\S]*const canEmbed = stream \? canOpenViewStream\(stream\)[\s\S]*const canRenderSelectedBrowser = browserCanRenderWorkspaceViewport\(browser\)[\s\S]*const canRenderCdpStream = canRenderSelectedBrowser[\s\S]*const canRenderFrame = canRenderSelectedBrowser/,
+  'Workspace remote viewport must not embed retained, terminal, or readiness-blocked streams',
 );
 
 assert.match(
@@ -578,6 +672,12 @@ assert.match(
 );
 
 assert.match(
+  workspaceViewport,
+  /const viewportTargetToken = workspaceViewportTargetToken\(viewportTarget\);[\s\S]*const streamPreflight: WorkspaceViewportPreflightState =[\s\S]*viewportController\.targetToken === viewportTargetToken[\s\S]*\? viewportController\.preflight[\s\S]*: \{ status: "idle", message: "" \};[\s\S]*const canRenderCdpStream = canRenderSelectedBrowser[\s\S]*streamPreflight\.status === "ready"[\s\S]*const canRenderFrame = canRenderSelectedBrowser[\s\S]*streamPreflight\.status === "ready"/,
+  'Workspace remote viewport must not reuse a previous target ready preflight state while the selected target token is changing',
+);
+
+assert.match(
   css,
   /\.workspace-cdp-stream[\s\S]*\.workspace-cdp-stream-canvas[\s\S]*\.workspace-cdp-stream-footer/,
   'Workspace remote viewport must style the native CDP canvas so stream readiness is visible without embedding the dashboard login shell',
@@ -603,13 +703,13 @@ assert.match(
 
 assert.match(
   workspaceViewport,
-  /postWorkspaceRecoveryRequest[\s\S]*action: ServiceRequestAction[\s\S]*service_remote_view_route_checkout[\s\S]*workspace-viewport-route-refresh[\s\S]*service_viewer_lease_request[\s\S]*workspace-viewport-viewer-reconnect[\s\S]*service_controller_lease_takeover[\s\S]*workspace-viewport-controller-takeover[\s\S]*service_viewer_lease_release[\s\S]*workspace-viewport-viewer-release/,
-  'Workspace remote viewport must expose explicit route refresh, viewer reconnect, controller takeover, and viewer release recovery actions',
+  /postWorkspaceRecoveryRequest[\s\S]*action: ServiceRequestAction[\s\S]*service_remote_view_browser_reattach[\s\S]*service_remote_view_route_switch[\s\S]*workspace-viewport-route-switch[\s\S]*workspace-viewport-browser-reattach[\s\S]*service_viewer_lease_request[\s\S]*workspace-viewport-viewer-reconnect[\s\S]*service_controller_lease_takeover[\s\S]*workspace-viewport-controller-takeover[\s\S]*service_viewer_lease_release[\s\S]*workspace-viewport-viewer-release/,
+  'Workspace remote viewport must expose explicit browser reattach, route switch, viewer reconnect, controller takeover, and viewer release recovery actions',
 );
 
 assert.match(
   workspaceViewport,
-  /aria-label="Refresh remote route lease"[\s\S]*aria-label="Reconnect viewer lease"[\s\S]*aria-label="Take controller lease"[\s\S]*aria-label="Release viewer leases"/,
+  /aria-label="Reattach remote browser route"[\s\S]*aria-label="Reconnect viewer lease"[\s\S]*aria-label="Take controller lease"[\s\S]*aria-label="Release viewer leases"/,
   'Workspace remote viewport recovery actions must be visible as stable icon-button controls',
 );
 

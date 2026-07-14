@@ -211,6 +211,8 @@ export type ServiceSession = {
 export type ServiceProfileAllocation = {
   profileId: string;
   profileName?: string;
+  profileOrigin?: string;
+  profileClass?: string;
   allocation?: string;
   keyring?: string;
   browserBuild?: string | null;
@@ -239,6 +241,7 @@ type ServiceProfileRecord = {
   id?: string;
   name?: string;
   profileOrigin?: string;
+  profileClass?: string;
   userDataDir?: string | null;
   sitePolicyIds?: string[];
   targetServiceIds?: string[];
@@ -723,6 +726,8 @@ function profileAllocationSearchText(allocation: ServiceProfileAllocation): stri
   return [
     allocation.profileId,
     allocation.profileName,
+    allocation.profileOrigin,
+    allocation.profileClass,
     allocation.allocation,
     allocation.keyring,
     allocation.browserBuild,
@@ -1085,6 +1090,7 @@ function runtimeProfileConfigPayload(
     id: profileId,
     name: form.name.trim() || profileId,
     profileOrigin: profile.profileOrigin ?? "agent_browser_owned",
+    profileClass: profile.profileClass ?? "durable_named",
     userDataDir: nullableFormValue(form.userDataDir),
     sitePolicyIds: parseCommaList(form.sitePolicyIds),
     targetServiceIds: parseCommaList(form.targetServiceIds),
@@ -5233,6 +5239,7 @@ function ProfileAllocationDetailContent({
           rows={[
             { label: "Primary target", value: profileAllocationPrimaryTarget(allocation) },
             { label: "Primary login", value: profileAllocationPrimaryLogin(allocation) },
+            { label: "Profile class", value: allocation.profileClass ?? "durable_named" },
             { label: "Browser build", value: allocation.browserBuild ?? "service default" },
             { label: "Allocation", value: allocation.allocation },
             { label: "Keyring", value: allocation.keyring },

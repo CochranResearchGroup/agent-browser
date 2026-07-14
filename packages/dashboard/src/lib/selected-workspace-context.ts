@@ -4,6 +4,7 @@ import {
   deriveWorkspaceNodes,
   type WorkspaceNode,
   type WorkspaceNodeAction,
+  type WorkspaceInventoryClass,
   type WorkspaceNodeInput,
   type WorkspaceNodeOwnership,
   type WorkspaceNodePrimaryTab,
@@ -50,6 +51,7 @@ export type SelectedWorkspaceContext = {
   source: SelectedWorkspaceSource;
   label: string;
   state: SelectedWorkspaceState;
+  inventoryClass: WorkspaceInventoryClass | "none";
   role: WorkspaceNodeRole | "none";
   roleReason: string | null;
   missingReason: string | null;
@@ -94,7 +96,7 @@ const EMPTY_RUNTIME: SelectedWorkspaceRuntime = {
 
 export function buildSelectedWorkspaceContext(input: SelectedWorkspaceContextInput): SelectedWorkspaceContext {
   const selection = input.selection;
-  const nodes = input.nodes ?? deriveWorkspaceNodes({ ...input, includeRetained: true });
+  const nodes = input.nodes ?? deriveWorkspaceNodes({ ...input, includeRetained: true, includeHidden: true });
   const node = selectWorkspaceNode(selection, nodes);
   const serviceBrowsers = input.serviceBrowsers ?? [];
   const serviceSessions = input.serviceSessions ?? [];
@@ -161,6 +163,7 @@ export function buildSelectedWorkspaceContext(input: SelectedWorkspaceContextInp
     source,
     label: node?.label ?? (missingReason ? "Workspace not found" : "No workspace selected"),
     state: node?.state ?? (missingReason ? "missing" : "none"),
+    inventoryClass: node?.inventoryClass ?? "none",
     role: node?.role ?? "none",
     roleReason: node?.roleReason ?? null,
     missingReason,
@@ -255,6 +258,7 @@ export function selectedWorkspaceDiagnosticBundle(context: SelectedWorkspaceCont
       source: context.source,
       label: context.label,
       state: context.state,
+      inventoryClass: context.inventoryClass,
       role: context.role,
       roleReason: context.roleReason,
       health: context.node?.health ?? null,
@@ -366,6 +370,7 @@ function selectedWorkspaceEvidence(input: {
     row("Selection", selectionLabel(input.selection)),
     row("Workspace", input.node?.id),
     row("Source", input.node?.source),
+    row("Inventory class", input.node?.inventoryClass),
     row("Role", input.node?.role),
     row("Role reason", input.node?.roleReason),
     row("State", input.node?.state),

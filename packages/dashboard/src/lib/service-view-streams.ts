@@ -28,15 +28,25 @@ export type ServiceViewStream = {
   readOnly?: boolean;
   readiness?: unknown;
   remoteReadiness?: unknown;
+  attachability?: unknown;
 };
 
 const EMBEDDABLE_VIEW_STREAM_PROVIDERS = new Set([
   "cdp_screencast",
+  "cdp_snapshot",
   "external_url",
   "novnc",
   "rdp_gateway",
   "virtual_display_webrtc",
   "chrome_tab_webrtc",
+]);
+
+const BLOCKING_VIEW_STREAM_READINESS_STATES = new Set([
+  "unreachable",
+  "auth_expired",
+  "stale_target",
+  "invalid_payload",
+  "unsupported_provider",
 ]);
 
 export function viewStreamLabel(stream: ServiceViewStream): string {
@@ -89,15 +99,21 @@ export function canControlViewStream(stream: ServiceViewStream): boolean {
 }
 
 export function canOpenViewStream(stream?: ServiceViewStream | null): boolean {
-  return Boolean(stream && canEmbedViewStream(stream));
+  return Boolean(stream && canEmbedViewStream(stream) && !hasBlockingViewStreamReadiness(stream));
 }
 
 export function canOpenControlViewStream(stream?: ServiceViewStream | null): boolean {
-  return Boolean(stream && canEmbedViewStream(stream) && canControlViewStream(stream));
+  return Boolean(stream && canEmbedViewStream(stream) && canControlViewStream(stream) && !hasBlockingViewStreamReadiness(stream));
 }
 
 export function viewStreamOpenTitle(stream?: ServiceViewStream | null): string {
   if (!stream) return "No service-owned view stream is registered for this browser.";
+  if (hasBlockingViewStreamReadiness(stream)) {
+    const reason = readinessReason(stream.remoteReadiness ?? stream.readiness);
+    return reason
+      ? `${viewStreamLabel(stream)} is unavailable: ${reason}.`
+      : `${viewStreamLabel(stream)} is unavailable: ${viewStreamReadinessLabel(stream)}.`;
+  }
   if (!canEmbedViewStream(stream)) {
     const reason = readinessReason(stream.remoteReadiness ?? stream.readiness);
     if (!stream.url) {
@@ -112,6 +128,7 @@ export function viewStreamOpenTitle(stream?: ServiceViewStream | null): string {
 
 export function viewStreamControlTitle(stream?: ServiceViewStream | null): string {
   if (!stream) return "No service-owned view stream is registered for this browser.";
+  if (hasBlockingViewStreamReadiness(stream)) return viewStreamOpenTitle(stream);
   if (!canEmbedViewStream(stream)) return viewStreamOpenTitle(stream);
   if (!canControlViewStream(stream)) return "The service marked this stream as view-only or did not report a control input provider.";
   return `Focus the browser and open ${controlInputLabel(stream)} control.`;
@@ -174,6 +191,11 @@ function readinessState(readiness: unknown): string | null {
     return failed ? readinessState(failed) : null;
   }
   return null;
+}
+
+function hasBlockingViewStreamReadiness(stream: ServiceViewStream): boolean {
+  const state = readinessState(stream.remoteReadiness ?? stream.readiness);
+  return Boolean(state && BLOCKING_VIEW_STREAM_READINESS_STATES.has(state));
 }
 
 function readinessReason(readiness: unknown): string | null {
