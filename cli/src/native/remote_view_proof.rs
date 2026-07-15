@@ -23,15 +23,19 @@ pub fn remote_view_operator_visible_state(
     display_state: &str,
     target_state: &str,
     guacamole_state: &str,
+    operator_access_state: &str,
 ) -> String {
     if route_state == "ready"
         && display_state == "ready"
         && target_state == "ready"
         && guacamole_state == "ready"
+        && operator_access_state == "ready"
     {
         "ready".to_string()
     } else if route_state != "ready" {
         route_state.to_string()
+    } else if display_state == "ready" && target_state == "ready" && guacamole_state == "ready" {
+        operator_access_state.to_string()
     } else if display_state == "ready" && target_state == "ready" {
         guacamole_state.to_string()
     } else if display_state == "ready" {
@@ -46,9 +50,15 @@ pub fn remote_view_operator_visible_ready(
     display_state: &str,
     target_state: &str,
     guacamole_state: &str,
+    operator_access_state: &str,
 ) -> bool {
-    remote_view_operator_visible_state(route_state, display_state, target_state, guacamole_state)
-        == "ready"
+    remote_view_operator_visible_state(
+        route_state,
+        display_state,
+        target_state,
+        guacamole_state,
+        operator_access_state,
+    ) == "ready"
 }
 
 #[cfg(test)]
@@ -61,10 +71,10 @@ mod tests {
     #[test]
     fn operator_visible_proof_reports_ready_only_when_all_components_are_ready() {
         assert!(remote_view_operator_visible_ready(
-            "ready", "ready", "ready", "ready"
+            "ready", "ready", "ready", "ready", "ready"
         ));
         assert_eq!(
-            remote_view_operator_visible_state("ready", "ready", "ready", "ready"),
+            remote_view_operator_visible_state("ready", "ready", "ready", "ready", "ready"),
             "ready"
         );
     }
@@ -72,15 +82,21 @@ mod tests {
     #[test]
     fn operator_visible_proof_preserves_blocker_priority() {
         assert_eq!(
-            remote_view_operator_visible_state("stale_route_record", "ready", "ready", "ready"),
+            remote_view_operator_visible_state(
+                "stale_route_record",
+                "ready",
+                "ready",
+                "ready",
+                "ready"
+            ),
             "stale_route_record"
         );
         assert_eq!(
-            remote_view_operator_visible_state("ready", "terminal_only", "ready", "ready"),
+            remote_view_operator_visible_state("ready", "terminal_only", "ready", "ready", "ready"),
             "terminal_only"
         );
         assert_eq!(
-            remote_view_operator_visible_state("ready", "ready", "wrong_tab", "ready"),
+            remote_view_operator_visible_state("ready", "ready", "wrong_tab", "ready", "ready"),
             "wrong_tab"
         );
         assert_eq!(
@@ -88,9 +104,20 @@ mod tests {
                 "ready",
                 "ready",
                 "ready",
-                "guacamole_route_unavailable"
+                "guacamole_route_unavailable",
+                "ready",
             ),
             "guacamole_route_unavailable"
+        );
+        assert_eq!(
+            remote_view_operator_visible_state(
+                "ready",
+                "ready",
+                "ready",
+                "ready",
+                "public_operator_unavailable",
+            ),
+            "public_operator_unavailable"
         );
     }
 

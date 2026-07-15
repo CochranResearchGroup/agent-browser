@@ -1,3 +1,4 @@
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use serde_json::{json, Map, Value};
 
 use super::remote_view::{
@@ -295,8 +296,18 @@ pub fn route_bound_handoff_operator_visible(
         .and_then(Value::as_str);
     let guacamole_has_route =
         route_binding.frame_url.is_some() || route_binding.external_url.is_some();
-    let operator_state =
-        remote_view_operator_visible_state(route_state, proof_state, target_state, guacamole_state);
+    let operator_access = route_bound_handoff_operator_access(route_binding);
+    let operator_access_state = operator_access
+        .get("state")
+        .and_then(Value::as_str)
+        .unwrap_or("not_checked");
+    let operator_state = remote_view_operator_visible_state(
+        route_state,
+        proof_state,
+        target_state,
+        guacamole_state,
+        operator_access_state,
+    );
 
     json!({
         "state": operator_state,
@@ -386,12 +397,73 @@ pub fn route_bound_handoff_operator_visible(
                 "connectionId": route_binding.connection_id,
                 "connectionName": route_binding.connection_name,
                 "readiness": route_binding.readiness.clone(),
-            }
+            },
+            "operatorAccess": operator_access
         },
     })
 }
 
+fn route_bound_handoff_operator_access(route_binding: &RemoteViewRouteBinding) -> Value {
+    let public_url = route_descriptor_url(route_binding, "publicOperatorUrl");
+    let dashboard_url = route_descriptor_url(route_binding, "dashboardEmbedUrl");
+    let requires_check = public_url.is_some() || dashboard_url.is_some();
+    let readiness = route_binding
+        .readiness
+        .as_ref()
+        .and_then(|readiness| readiness.get("operatorAccess"));
+    let readiness_state = readiness
+        .and_then(readiness_state)
+        .filter(|state| !state.trim().is_empty());
+    let reason = readiness
+        .and_then(|readiness| readiness.get("reason").or_else(|| readiness.get("message")))
+        .and_then(Value::as_str);
+    let http_status = readiness
+        .and_then(|readiness| {
+            readiness
+                .get("httpStatus")
+                .or_else(|| readiness.get("statusCode"))
+        })
+        .and_then(Value::as_u64);
+    let state = match readiness_state.as_deref() {
+        Some("ready") => "ready",
+        Some("not_required") => "ready",
+        Some("public_operator_unavailable")
+        | Some("auth_expired")
+        | Some("dashboard_unavailable")
+        | Some("proxy_failed")
+        | Some("timed_out")
+        | Some("invalid_payload") => "public_operator_unavailable",
+        Some("not_checked") => "public_operator_not_checked",
+        Some(_) => "public_operator_unavailable",
+        None if requires_check => "public_operator_not_checked",
+        None => "ready",
+    };
+    json!({
+        "state": state,
+        "required": requires_check,
+        "publicOperatorUrl": public_url,
+        "dashboardEmbedUrl": dashboard_url,
+        "readinessState": readiness_state,
+        "reason": reason,
+        "httpStatus": http_status,
+    })
+}
+
+fn route_descriptor_url(route_binding: &RemoteViewRouteBinding, key: &str) -> Option<String> {
+    route_binding
+        .route_descriptor
+        .as_ref()
+        .and_then(|descriptor| descriptor.get(key))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+}
+
 fn route_bound_handoff_route_state(route_binding: &RemoteViewRouteBinding) -> &'static str {
+    if route_bound_handoff_has_invalid_client_token(route_binding) {
+        return "invalid_operator_route";
+    }
     let readiness_state = route_binding.readiness.as_ref().and_then(readiness_state);
     if readiness_state.as_deref().is_some_and(|state| {
         matches!(
@@ -415,6 +487,41 @@ fn route_bound_handoff_route_state(route_binding: &RemoteViewRouteBinding) -> &'
         }
     }
     "ready"
+}
+
+fn route_bound_handoff_has_invalid_client_token(route_binding: &RemoteViewRouteBinding) -> bool {
+    [
+        route_binding.frame_url.as_deref(),
+        route_binding.external_url.as_deref(),
+        route_descriptor_url(route_binding, "localEmbedUrl").as_deref(),
+        route_descriptor_url(route_binding, "dashboardEmbedUrl").as_deref(),
+        route_descriptor_url(route_binding, "publicOperatorUrl").as_deref(),
+        route_descriptor_url(route_binding, "externalUrl").as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    .any(|url| guacamole_client_token_state(url) == Some(false))
+}
+
+fn guacamole_client_token_state(url: &str) -> Option<bool> {
+    let token = url
+        .split("#/client/")
+        .nth(1)?
+        .split(['?', '&', '#'])
+        .next()
+        .unwrap_or("")
+        .trim();
+    if token.is_empty() {
+        return Some(false);
+    }
+    if !looks_like_encoded_guacamole_client_token(token) {
+        return Some(true);
+    }
+    Some(BASE64_STANDARD.decode(token).is_ok())
+}
+
+fn looks_like_encoded_guacamole_client_token(token: &str) -> bool {
+    token.len() >= 12 || token.contains('=') || token.contains("%3D")
 }
 
 fn route_bound_handoff_guacamole_state(route_binding: &RemoteViewRouteBinding) -> &'static str {

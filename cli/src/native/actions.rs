@@ -47,7 +47,7 @@ use super::recording::{self, RecordingState};
 use super::remote_view::{
     display_allocation_id_for_route_pool_entry, normalize_remote_view_open_intent,
     plan_remote_view_acquisition, readiness_state, route_binding_readiness, route_display_content,
-    visible_browser_window_proof, RemoteViewAcquisitionPlan,
+    visible_browser_window_proof, RemoteViewAcquisitionPlan, RemoteViewRouteBinding,
 };
 use super::remote_view_attachability::refresh_remote_view_attachability;
 use super::remote_view_handoff::{
@@ -12586,7 +12586,7 @@ async fn handle_remote_view_open(cmd: &Value, state: &mut DaemonState) -> Result
         &session_id,
     )?;
     let RouteBoundHandoffPlan {
-        route_binding,
+        mut route_binding,
         launch_command,
         tab_command,
         checkout_command,
@@ -12748,6 +12748,8 @@ async fn handle_remote_view_open(cmd: &Value, state: &mut DaemonState) -> Result
             return Err(format!("{}; cleanup={}", error, failure.summary));
         }
     };
+    let operator_access = remote_view_open_operator_access_readiness(&route_binding).await;
+    route_binding = route_binding_with_operator_access(route_binding, operator_access);
     let operator_visible = route_bound_handoff_operator_visible(
         &route_binding,
         &browser_id,
@@ -12817,8 +12819,16 @@ async fn handle_remote_view_open(cmd: &Value, state: &mut DaemonState) -> Result
             expected_url: tab_command.get("url").and_then(Value::as_str),
         },
         |final_route_binding| {
+            let final_route_binding = route_binding_with_operator_access(
+                final_route_binding.clone(),
+                route_binding
+                    .readiness
+                    .as_ref()
+                    .and_then(|readiness| readiness.get("operatorAccess"))
+                    .cloned(),
+            );
             route_bound_handoff_operator_visible(
-                final_route_binding,
+                &final_route_binding,
                 &browser_id,
                 &session_id,
                 Some(&visible_window_proof),
@@ -13308,6 +13318,121 @@ fn remote_view_open_dry_run(cmd: &Value) -> bool {
                 .and_then(Value::as_bool)
         })
         .unwrap_or(false)
+}
+
+async fn remote_view_open_operator_access_readiness(
+    route_binding: &RemoteViewRouteBinding,
+) -> Option<Value> {
+    let probe_url = remote_view_operator_access_probe_url(route_binding)?;
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(4))
+        .redirect(reqwest::redirect::Policy::limited(3))
+        .build()
+        .ok()?;
+    let started_at = Instant::now();
+    let response = client.get(&probe_url).send().await;
+    let elapsed_ms = started_at.elapsed().as_millis() as u64;
+    Some(match response {
+        Ok(response) => {
+            let status = response.status().as_u16();
+            let state = if response.status().is_success() || response.status().is_redirection() {
+                "ready"
+            } else if matches!(status, 401 | 403) {
+                "auth_expired"
+            } else if matches!(status, 500 | 502 | 503 | 504) {
+                "proxy_failed"
+            } else {
+                "public_operator_unavailable"
+            };
+            json!({
+                "state": state,
+                "url": probe_url,
+                "httpStatus": status,
+                "elapsedMs": elapsed_ms,
+                "reason": if state == "ready" {
+                    "public operator URL responded"
+                } else {
+                    "public operator URL did not return a usable response"
+                },
+            })
+        }
+        Err(error) => {
+            let state = if error.is_timeout() {
+                "timed_out"
+            } else if error.is_connect() {
+                "proxy_failed"
+            } else {
+                "public_operator_unavailable"
+            };
+            json!({
+                "state": state,
+                "url": probe_url,
+                "httpStatus": null,
+                "elapsedMs": elapsed_ms,
+                "reason": error.to_string(),
+            })
+        }
+    })
+}
+
+fn route_binding_with_operator_access(
+    mut route_binding: RemoteViewRouteBinding,
+    operator_access: Option<Value>,
+) -> RemoteViewRouteBinding {
+    let Some(operator_access) = operator_access else {
+        return route_binding;
+    };
+    let mut readiness = route_binding
+        .readiness
+        .take()
+        .unwrap_or_else(|| route_binding_readiness(&route_binding));
+    if !readiness.is_object() {
+        readiness = json!({
+            "state": readiness_state(&readiness).unwrap_or_else(|| "ready".to_string()),
+            "previous": readiness,
+        });
+    }
+    if let Some(record) = readiness.as_object_mut() {
+        record.insert("operatorAccess".to_string(), operator_access);
+    }
+    route_binding.readiness = Some(readiness);
+    route_binding
+}
+
+fn remote_view_operator_access_probe_url(route_binding: &RemoteViewRouteBinding) -> Option<String> {
+    for key in [
+        "dashboardEmbedUrl",
+        "publicOperatorUrl",
+        "externalUrl",
+        "healthUrl",
+    ] {
+        if let Some(url) = route_descriptor_string(route_binding, key)
+            .and_then(|value| remote_view_http_probe_url(&value))
+        {
+            return Some(url);
+        }
+    }
+    None
+}
+
+fn route_descriptor_string(route_binding: &RemoteViewRouteBinding, key: &str) -> Option<String> {
+    route_binding
+        .route_descriptor
+        .as_ref()
+        .and_then(|descriptor| descriptor.get(key))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+}
+
+fn remote_view_http_probe_url(value: &str) -> Option<String> {
+    let mut url = reqwest::Url::parse(value).ok()?;
+    if !matches!(url.scheme(), "http" | "https") {
+        return None;
+    }
+    url.set_fragment(None);
+    Some(url.to_string())
 }
 
 fn remote_view_open_visible_window_proof(
@@ -22522,6 +22647,223 @@ mod tests {
         assert_eq!(
             operator_visible["components"]["guacamole"]["hasRouteUrl"],
             true
+        );
+        assert_eq!(
+            operator_visible["components"]["operatorAccess"]["state"],
+            "ready"
+        );
+        assert_eq!(
+            operator_visible["components"]["operatorAccess"]["required"],
+            false
+        );
+    }
+
+    #[test]
+    fn test_route_bound_handoff_operator_visible_requires_public_operator_access_check() {
+        let binding = crate::native::remote_view::RemoteViewRouteBinding {
+            route_id: "route-a".to_string(),
+            route_pool_entry_id: Some("pool-a".to_string()),
+            display_allocation_id: "display-a".to_string(),
+            route_pool_entry_state: Some("available".to_string()),
+            current_route_allocation_id: None,
+            display_name: Some(":11".to_string()),
+            launch_display_name: Some(":11".to_string()),
+            display_isolation: "shared_display".to_string(),
+            route_user: Some("agent-browser-rdp-a".to_string()),
+            display_access: None,
+            provider: ViewStreamProvider::RdpGateway,
+            provider_mode: "single_controller".to_string(),
+            connection_id: Some("conn-a".to_string()),
+            connection_name: Some("Route A".to_string()),
+            frame_url: Some("http://127.0.0.1:8092/guacamole/#/client/route-a".to_string()),
+            external_url: Some(
+                "https://agent-browser.example/guacamole/#/client/route-a".to_string(),
+            ),
+            route_descriptor: Some(json!({
+                "localEmbedUrl": "http://127.0.0.1:8092/guacamole/#/client/route-a",
+                "dashboardEmbedUrl": "https://dashboard.example/guacamole/#/client/route-a",
+                "publicOperatorUrl": "https://agent-browser.example/guacamole/#/client/route-a"
+            })),
+            readiness: None,
+        };
+        let proof = json!({
+            "state": "ready",
+            "displayName": ":11",
+            "displayContent": {
+                "state": "browser_window_visible"
+            }
+        });
+        let tab = json!({
+            "targetId": "target-1",
+            "url": "https://www.facebook.com/",
+            "title": "Facebook",
+            "profileId": "last30days-facebook"
+        });
+
+        let operator_visible = route_bound_handoff_operator_visible(
+            &binding,
+            "session:rdp-a",
+            "rdp-a",
+            Some(&proof),
+            Some(&tab),
+            Some("https://www.facebook.com/"),
+        );
+
+        assert_eq!(operator_visible["state"], "public_operator_not_checked");
+        assert_eq!(operator_visible["proof"]["state"], "ready");
+        assert_eq!(operator_visible["target"]["state"], "ready");
+        assert_eq!(
+            operator_visible["components"]["guacamole"]["state"],
+            "ready"
+        );
+        assert_eq!(
+            operator_visible["components"]["operatorAccess"]["state"],
+            "public_operator_not_checked"
+        );
+        assert_eq!(
+            operator_visible["components"]["operatorAccess"]["required"],
+            true
+        );
+        assert_eq!(
+            operator_visible["components"]["operatorAccess"]["publicOperatorUrl"],
+            "https://agent-browser.example/guacamole/#/client/route-a"
+        );
+    }
+
+    #[test]
+    fn test_route_bound_handoff_operator_visible_blocks_failed_public_operator_access() {
+        let binding = crate::native::remote_view::RemoteViewRouteBinding {
+            route_id: "route-a".to_string(),
+            route_pool_entry_id: Some("pool-a".to_string()),
+            display_allocation_id: "display-a".to_string(),
+            route_pool_entry_state: Some("available".to_string()),
+            current_route_allocation_id: None,
+            display_name: Some(":11".to_string()),
+            launch_display_name: Some(":11".to_string()),
+            display_isolation: "shared_display".to_string(),
+            route_user: Some("agent-browser-rdp-a".to_string()),
+            display_access: None,
+            provider: ViewStreamProvider::RdpGateway,
+            provider_mode: "single_controller".to_string(),
+            connection_id: Some("conn-a".to_string()),
+            connection_name: Some("Route A".to_string()),
+            frame_url: Some("http://127.0.0.1:8092/guacamole/#/client/route-a".to_string()),
+            external_url: Some(
+                "https://agent-browser.example/guacamole/#/client/route-a".to_string(),
+            ),
+            route_descriptor: Some(json!({
+                "localEmbedUrl": "http://127.0.0.1:8092/guacamole/#/client/route-a",
+                "dashboardEmbedUrl": "https://dashboard.example/guacamole/#/client/route-a",
+                "publicOperatorUrl": "https://agent-browser.example/guacamole/#/client/route-a"
+            })),
+            readiness: Some(json!({
+                "state": "ready",
+                "operatorAccess": {
+                    "state": "proxy_failed",
+                    "httpStatus": 502,
+                    "reason": "public ingress returned 502"
+                }
+            })),
+        };
+        let proof = json!({
+            "state": "ready",
+            "displayName": ":11",
+            "displayContent": {
+                "state": "browser_window_visible"
+            }
+        });
+        let tab = json!({
+            "targetId": "target-1",
+            "url": "https://www.facebook.com/",
+            "title": "Facebook",
+            "profileId": "last30days-facebook"
+        });
+
+        let operator_visible = route_bound_handoff_operator_visible(
+            &binding,
+            "session:rdp-a",
+            "rdp-a",
+            Some(&proof),
+            Some(&tab),
+            Some("https://www.facebook.com/"),
+        );
+
+        assert_eq!(operator_visible["state"], "public_operator_unavailable");
+        assert_eq!(
+            operator_visible["components"]["operatorAccess"]["state"],
+            "public_operator_unavailable"
+        );
+        assert_eq!(
+            operator_visible["components"]["operatorAccess"]["readinessState"],
+            "proxy_failed"
+        );
+        assert_eq!(
+            operator_visible["components"]["operatorAccess"]["httpStatus"],
+            502
+        );
+    }
+
+    #[test]
+    fn test_route_bound_handoff_operator_visible_blocks_malformed_guacamole_client_token() {
+        let binding = crate::native::remote_view::RemoteViewRouteBinding {
+            route_id: "route-a".to_string(),
+            route_pool_entry_id: Some("pool-a".to_string()),
+            display_allocation_id: "display-a".to_string(),
+            route_pool_entry_state: Some("available".to_string()),
+            current_route_allocation_id: None,
+            display_name: Some(":11".to_string()),
+            launch_display_name: Some(":11".to_string()),
+            display_isolation: "shared_display".to_string(),
+            route_user: Some("agent-browser-rdp-a".to_string()),
+            display_access: None,
+            provider: ViewStreamProvider::RdpGateway,
+            provider_mode: "single_controller".to_string(),
+            connection_id: Some("conn-a".to_string()),
+            connection_name: Some("Route A".to_string()),
+            frame_url: Some(
+                "http://127.0.0.1:8092/guacamole/#/client/NABjAHBvc3RncmVzcW".to_string(),
+            ),
+            external_url: None,
+            route_descriptor: None,
+            readiness: Some(json!({
+                "state": "ready",
+                "operatorAccess": {
+                    "state": "ready",
+                    "httpStatus": 200
+                }
+            })),
+        };
+        let proof = json!({
+            "state": "ready",
+            "displayName": ":11",
+            "displayContent": {
+                "state": "browser_window_visible"
+            }
+        });
+        let tab = json!({
+            "targetId": "target-1",
+            "url": "https://www.facebook.com/",
+            "title": "Facebook",
+            "profileId": "last30days-facebook"
+        });
+
+        let operator_visible = route_bound_handoff_operator_visible(
+            &binding,
+            "session:rdp-a",
+            "rdp-a",
+            Some(&proof),
+            Some(&tab),
+            Some("https://www.facebook.com/"),
+        );
+
+        assert_eq!(operator_visible["state"], "invalid_operator_route");
+        assert_eq!(
+            operator_visible["components"]["route"]["state"],
+            "invalid_operator_route"
+        );
+        assert_eq!(
+            operator_visible["components"]["operatorAccess"]["state"],
+            "ready"
         );
     }
 
