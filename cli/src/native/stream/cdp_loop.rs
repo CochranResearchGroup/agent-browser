@@ -1,5 +1,6 @@
 use serde_json::{json, Value};
 use std::sync::Arc;
+use std::time::Duration;
 
 use tokio::sync::{broadcast, watch, Mutex, RwLock};
 
@@ -8,6 +9,8 @@ use crate::native::cdp::types::{CaptureScreenshotParams, CaptureScreenshotResult
 use crate::native::network;
 
 use super::timestamp_ms;
+
+const INITIAL_SCREENSHOT_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Background task that subscribes to CDP events and broadcasts screencast frames in real-time.
 /// Also handles auto-start/stop of screencast based on WebSocket client count.
@@ -69,13 +72,16 @@ pub(super) async fn cdp_event_loop(
                     .await;
 
                 if supports_screencast {
-                    broadcast_initial_screenshot(
-                        &frame_tx,
-                        &client_arc,
-                        session_id.as_deref(),
-                        vw,
-                        vh,
-                        &last_frame,
+                    let _ = tokio::time::timeout(
+                        INITIAL_SCREENSHOT_TIMEOUT,
+                        broadcast_initial_screenshot(
+                            &frame_tx,
+                            &client_arc,
+                            session_id.as_deref(),
+                            vw,
+                            vh,
+                            &last_frame,
+                        ),
                     )
                     .await;
                     let _ = client_arc

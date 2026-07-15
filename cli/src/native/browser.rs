@@ -561,6 +561,7 @@ impl BrowserManager {
                 target_type: "page".to_string(),
             });
             self.active_page_index = 0;
+            self.activate_page(self.active_page_index).await?;
             self.enable_domains(&attach_result.session_id).await?;
         } else {
             for target in &page_targets {
@@ -591,6 +592,7 @@ impl BrowserManager {
                 .position(|page| page.url != "about:blank" && !page.url.is_empty())
                 .unwrap_or(0);
             let session_id = self.pages[self.active_page_index].session_id.clone();
+            self.activate_page(self.active_page_index).await?;
             self.enable_domains(&session_id).await?;
         }
 
@@ -599,6 +601,28 @@ impl BrowserManager {
 
     pub async fn enable_domains_pub(&self, session_id: &str) -> Result<(), String> {
         self.enable_domains(session_id).await
+    }
+
+    async fn activate_target(&self, target_id: &str) -> Result<(), String> {
+        self.client
+            .send_command_typed::<_, Value>(
+                "Target.activateTarget",
+                &ActivateTargetParams {
+                    target_id: target_id.to_string(),
+                },
+                None,
+            )
+            .await?;
+        Ok(())
+    }
+
+    async fn activate_page(&self, index: usize) -> Result<(), String> {
+        let target_id = self
+            .pages
+            .get(index)
+            .map(|page| page.target_id.clone())
+            .ok_or_else(|| format!("Tab index {index} out of range"))?;
+        self.activate_target(&target_id).await
     }
 
     async fn enable_domains(&self, session_id: &str) -> Result<(), String> {
@@ -734,6 +758,7 @@ impl BrowserManager {
             )
             .await?;
         self.update_page_session(&target_id, &attach_result.session_id);
+        self.activate_target(&target_id).await?;
         self.enable_domains(&attach_result.session_id).await?;
         Ok(attach_result.session_id)
     }
@@ -755,6 +780,7 @@ impl BrowserManager {
             if let Some(index) = self.pages.iter().position(|p| p.target_id == target_id) {
                 self.active_page_index = index;
                 let session_id = self.pages[index].session_id.clone();
+                self.activate_page(index).await?;
                 self.enable_domains(&session_id).await?;
             }
         }
@@ -1171,6 +1197,7 @@ impl BrowserManager {
             target_type: "page".to_string(),
         });
         self.active_page_index = index;
+        self.activate_page(index).await?;
 
         Ok(json!({
             "index": index,
@@ -1190,6 +1217,7 @@ impl BrowserManager {
         }
 
         self.active_page_index = index;
+        self.activate_page(index).await?;
         let session_id = self.pages[index].session_id.clone();
         self.enable_domains(&session_id).await?;
 

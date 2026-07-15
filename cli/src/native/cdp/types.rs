@@ -133,6 +133,12 @@ pub struct AttachToTargetResult {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ActivateTargetParams {
+    pub target_id: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SetDiscoverTargetsParams {
     pub discover: bool,
 }
