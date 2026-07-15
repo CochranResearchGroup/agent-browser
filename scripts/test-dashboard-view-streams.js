@@ -499,6 +499,23 @@ assert.equal(
   false,
 );
 assert.equal(
+  canOpenViewStream({
+    provider: 'rdp_gateway',
+    url: 'http://127.0.0.1:8080/rdp/terminal-only',
+    remoteReadiness: { state: 'route_bound_terminal_only', reason: 'Remote route display is terminal-only.' },
+  }),
+  false,
+);
+assert.equal(
+  canOpenViewStream({
+    provider: 'rdp_gateway',
+    url: 'http://127.0.0.1:8080/rdp/display-content-terminal',
+    remoteReadiness: { state: 'ready' },
+    displayContent: { state: 'terminal_only' },
+  }),
+  false,
+);
+assert.equal(
   viewStreamOpenTitle({
     provider: 'cdp_screencast',
     url: null,

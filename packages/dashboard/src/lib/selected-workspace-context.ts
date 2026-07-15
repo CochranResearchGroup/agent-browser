@@ -169,7 +169,7 @@ export function buildSelectedWorkspaceContext(input: SelectedWorkspaceContextInp
     missingReason,
     live: node?.live ?? false,
     retained: node?.retained ?? false,
-    viewable: Boolean(node?.viewStream?.embeddable || node?.viewStream?.url),
+    viewable: Boolean(node?.viewStream?.embeddable),
     controllable: Boolean(node?.viewStream?.controllable),
     browser,
     daemonSession,

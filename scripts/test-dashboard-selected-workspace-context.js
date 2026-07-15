@@ -135,6 +135,51 @@ assert.deepEqual(
 assert.ok(selectedWorkspaceChatSummary(byBrowser).includes('browser browser-live'));
 assert.equal(selectedWorkspaceDiagnosticBundle(byBrowser).ids.browserId, 'browser-live');
 
+const terminalOnlySelection = buildSelectedWorkspaceContext({
+  ...fixture,
+  serviceBrowsers: [
+    {
+      id: 'browser-terminal-only',
+      profileId: 'default',
+      host: 'remote_headed',
+      health: 'ready',
+      pid: 95446,
+      viewStreams: [
+        {
+          provider: 'rdp_gateway',
+          url: 'https://agent-browser.example.test/guacamole/#/client/terminal-only',
+          routeId: 'terminal-only-route',
+          displayAllocationId: 'display-terminal-only',
+          remoteReadiness: { state: 'ready' },
+          displayContent: {
+            state: 'terminal_only',
+            windows: [{ title: 'agent-browser-rdp@host: ~', className: 'XTerm' }],
+          },
+          controlInput: 'manual_attached_desktop',
+          readOnly: false,
+        },
+      ],
+      activeSessionIds: ['session-terminal-only'],
+    },
+  ],
+  serviceSessions: [
+    { id: 'session-terminal-only', browserIds: ['browser-terminal-only'], tabIds: ['tab-terminal-only'], profileId: 'default', serviceName: 'svc' },
+  ],
+  serviceTabs: [
+    { id: 'tab-terminal-only', browserId: 'browser-terminal-only', sessionId: 'session-terminal-only', targetId: 'target-terminal-only', lifecycle: 'active', title: 'Route-bound target tab', url: 'https://example.test/route-bound-target' },
+  ],
+  selection: { ...emptySelection, browserId: 'browser-terminal-only' },
+  refreshedAt: 1710000000000,
+});
+assert.equal(terminalOnlySelection.node.id, 'browser:browser-terminal-only');
+assert.equal(terminalOnlySelection.primaryTab.title, 'Route-bound target tab');
+assert.equal(terminalOnlySelection.state, 'needs-attention');
+assert.equal(terminalOnlySelection.viewable, false);
+assert.equal(terminalOnlySelection.controllable, false);
+assert.equal(terminalOnlySelection.stream.url, null);
+assert.equal(terminalOnlySelection.stream.embeddable, false);
+assert.match(terminalOnlySelection.stream.operatorVisibleReason, /terminal/i);
+
 const byWorkspaceBrowser = context({ workspaceId: 'browser:browser-live' });
 assert.equal(byWorkspaceBrowser.node.id, 'browser:browser-live');
 

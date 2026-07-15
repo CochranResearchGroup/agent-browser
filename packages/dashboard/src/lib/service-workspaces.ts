@@ -2226,6 +2226,7 @@ function primaryViewStream(streams?: WorkspaceServiceViewStream[]): WorkspaceNod
     readiness: stream.readiness,
     remoteReadiness: stream.remoteReadiness,
     attachability: stream.attachability,
+    displayContent: stream.displayContent,
   };
   const canOpenView = canOpenViewStream(readinessCheckedStream);
   const effectiveOperatorVisible = operatorVisible.state === "ready" && !canOpenView
@@ -2458,10 +2459,6 @@ function viewStreamRouteSummary(
 function routeProofState(stream: WorkspaceServiceViewStream): { state: string; reason: string | null } {
   const provider = normalize(stream.provider);
   if (provider !== "rdp_gateway") return { state: "ready", reason: null };
-  const attachability = recordFromUnknown(stream.attachability);
-  if (stringOrNull(attachability?.proofState) === "ready" && normalize(stringOrNull(attachability?.state)) === "attached_ready") {
-    return { state: "ready", reason: null };
-  }
   const structuredProof = structuredRouteProofState(stream);
   if (structuredProof) return structuredProof;
   const displayStateValue = routeDisplayStateValue(stream);
@@ -2492,6 +2489,10 @@ function routeProofState(stream: WorkspaceServiceViewStream): { state: string; r
       reason: "Remote route readiness reports a terminal-only display.",
     };
   }
+  const attachability = recordFromUnknown(stream.attachability);
+  if (stringOrNull(attachability?.proofState) === "ready" && normalize(stringOrNull(attachability?.state)) === "attached_ready") {
+    return { state: "ready", reason: null };
+  }
   return {
     state: "route_bound_proof_missing",
     reason: "operator-visible proof missing",
@@ -2519,7 +2520,7 @@ function structuredRouteProofState(stream: WorkspaceServiceViewStream): { state:
       return routeProofResult(operatorState, stringOrNull(operatorVisible?.reason));
     }
     const components = recordFromUnknown(operatorVisible?.components);
-    for (const key of ["route", "tab", "guacamole"]) {
+    for (const key of ["route", "tab", "guacamole", "operatorAccess"]) {
       const component = recordFromUnknown(components?.[key]);
       const componentState = normalizedRecordState(component);
       if (isOperatorVisibleProofState(componentState)) {
@@ -2545,6 +2546,12 @@ function isOperatorVisibleProofState(state: string | null): state is string {
         "guacamole_route_unavailable",
         "cdp_target_unavailable",
         "stale_route_record",
+        "public_operator_not_checked",
+        "public_operator_unavailable",
+        "invalid_operator_route",
+        "dashboard_unavailable",
+        "proxy_failed",
+        "timed_out",
       ].includes(state),
   );
 }
@@ -2562,6 +2569,15 @@ function routeProofReason(state: string): string {
       return "Remote route display is browser-visible, but the selected tab URL does not match the requested target.";
     case "guacamole_route_unavailable":
       return "Remote route display and tab are ready, but the Guacamole operator route is unavailable.";
+    case "public_operator_not_checked":
+      return "Remote route display and local Guacamole are ready, but the public operator URL has not been checked.";
+    case "public_operator_unavailable":
+    case "dashboard_unavailable":
+    case "proxy_failed":
+    case "timed_out":
+      return "Remote route display and local Guacamole are ready, but the public operator URL is unavailable.";
+    case "invalid_operator_route":
+      return "Remote route display and local Guacamole are ready, but the operator route URL is malformed.";
     case "cdp_target_unavailable":
       return "Remote route selected tab has no CDP target id.";
     case "stale_route_record":

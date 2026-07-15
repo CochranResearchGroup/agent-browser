@@ -29,6 +29,7 @@ export type ServiceViewStream = {
   readiness?: unknown;
   remoteReadiness?: unknown;
   attachability?: unknown;
+  displayContent?: unknown;
 };
 
 const EMBEDDABLE_VIEW_STREAM_PROVIDERS = new Set([
@@ -47,6 +48,23 @@ const BLOCKING_VIEW_STREAM_READINESS_STATES = new Set([
   "stale_target",
   "invalid_payload",
   "unsupported_provider",
+  "disabled",
+  "unavailable",
+  "terminal_only",
+  "terminal_only_route",
+  "idle_display",
+  "display_idle",
+  "no_browser_window",
+  "route_bound_terminal_only",
+  "route_bound_display_idle",
+  "route_bound_browser_not_visible",
+  "route_bound_proof_missing",
+  "public_operator_not_checked",
+  "public_operator_unavailable",
+  "invalid_operator_route",
+  "dashboard_unavailable",
+  "proxy_failed",
+  "timed_out",
 ]);
 
 export function viewStreamLabel(stream: ServiceViewStream): string {
@@ -194,8 +212,10 @@ function readinessState(readiness: unknown): string | null {
 }
 
 function hasBlockingViewStreamReadiness(stream: ServiceViewStream): boolean {
-  const state = readinessState(stream.remoteReadiness ?? stream.readiness);
-  return Boolean(state && BLOCKING_VIEW_STREAM_READINESS_STATES.has(state));
+  const state = normalizeReadinessState(readinessState(stream.remoteReadiness ?? stream.readiness));
+  if (state && BLOCKING_VIEW_STREAM_READINESS_STATES.has(state)) return true;
+  const displayState = normalizeReadinessState(displayContentState(stream));
+  return Boolean(displayState && BLOCKING_VIEW_STREAM_READINESS_STATES.has(displayState));
 }
 
 function readinessReason(readiness: unknown): string | null {
@@ -203,6 +223,28 @@ function readinessReason(readiness: unknown): string | null {
   const record = readiness as Record<string, unknown>;
   const reason = record.reason ?? record.message ?? record.lastProviderEvent;
   return typeof reason === "string" && reason.trim() ? reason.trim().replaceAll("_", " ") : null;
+}
+
+function displayContentState(stream: ServiceViewStream): string | null {
+  for (const source of [
+    stream.displayContent,
+    recordValue(stream.remoteReadiness, "displayContent"),
+    recordValue(stream.readiness, "displayContent"),
+  ]) {
+    const state = recordValue(source, "state");
+    if (typeof state === "string" && state.trim()) return state.trim();
+  }
+  return null;
+}
+
+function recordValue(value: unknown, key: string): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return (value as Record<string, unknown>)[key];
+}
+
+function normalizeReadinessState(value: string | null): string | null {
+  const normalized = value?.trim().toLowerCase().replaceAll("-", "_");
+  return normalized || null;
 }
 
 function isLoopbackUrl(value: string | null | undefined, base?: string | null): boolean {

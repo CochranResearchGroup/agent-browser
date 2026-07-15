@@ -588,7 +588,7 @@ function workspaceViewportBrowserFromSelectedContext(
 ): WorkspaceViewportBrowser | null {
   const stream = context?.stream;
   const node = context?.node;
-  if (!context || !node || !stream?.url) return null;
+  if (!context || !node || !stream?.url || !stream.embeddable) return null;
   const selectedStream: ServiceViewStream = {
     id: `selected:${node.id}:${stream.provider ?? "stream"}`,
     provider: stream.provider ?? undefined,
