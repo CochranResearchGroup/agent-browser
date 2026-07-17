@@ -79,6 +79,7 @@ export function WorkspaceSelectionPanel({
   onRefresh,
 }: WorkspaceSelectionPanelProps) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const [actionError, setActionError] = useState<string | null>(null);
   const diagnosticText = useMemo(
     () => JSON.stringify(selectedWorkspaceDiagnosticBundle(context), null, 2),
     [context],
@@ -90,19 +91,23 @@ export function WorkspaceSelectionPanel({
   const refreshAge = formatAge(Date.now() - context.refreshedAt);
 
   const copyDiagnostics = async () => {
-    try {
-      await navigator.clipboard.writeText(diagnosticText);
+    if (await copyTextToClipboard(diagnosticText)) {
+      setActionError(null);
       setCopyState("copied");
       window.setTimeout(() => setCopyState("idle"), 1400);
-    } catch {
-      setCopyState("failed");
-      window.setTimeout(() => setCopyState("idle"), 1800);
+      return;
     }
+    setCopyState("failed");
+    setActionError("Clipboard write failed. Use the evidence panel to select and copy diagnostics manually.");
+    window.setTimeout(() => setCopyState("idle"), 1800);
   };
 
   const runAction = async (actionId: string) => {
+    setActionError(null);
     if (actionId === "copy-link") {
-      await navigator.clipboard.writeText(window.location.href);
+      if (!(await copyTextToClipboard(window.location.href))) {
+        setActionError("Clipboard write failed. Use the address bar to copy this workspace link.");
+      }
       return;
     }
     if (actionId === "external-open" && context.stream?.url) {
@@ -159,10 +164,10 @@ export function WorkspaceSelectionPanel({
         </Button>
       </header>
 
-      {(error || context.missingReason || priorityNotice) && (
+      {(error || context.missingReason || priorityNotice || actionError) && (
         <div className="workspace-selection-alert" role="status">
           <AlertTriangle className="size-3.5" />
-          <span>{error ? `Service context refresh failed: ${error}` : context.missingReason ?? priorityNotice}</span>
+          <span>{error ? `Service context refresh failed: ${error}` : context.missingReason ?? priorityNotice ?? actionError}</span>
         </div>
       )}
 
@@ -214,6 +219,37 @@ export function WorkspaceSelectionPanel({
       </details>
     </section>
   );
+}
+
+async function copyTextToClipboard(text: string): Promise<boolean> {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // Fall through to the selection-based copy path.
+    }
+  }
+  return fallbackCopyTextToClipboard(text);
+}
+
+function fallbackCopyTextToClipboard(text: string): boolean {
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "0";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  try {
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    textarea.remove();
+  }
 }
 
 function FactGrid({ rows }: { rows: Array<[string, unknown]> }) {

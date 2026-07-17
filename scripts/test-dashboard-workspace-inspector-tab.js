@@ -40,6 +40,18 @@ assert.match(
 
 assert.match(
   component,
+  /copyTextToClipboard[\s\S]*navigator\.clipboard\?\.writeText[\s\S]*fallbackCopyTextToClipboard[\s\S]*document\.execCommand\("copy"\)/,
+  'Workspace inspector copy actions must fall back when the Clipboard API is unavailable or denied.',
+);
+
+assert.match(
+  component,
+  /actionId === "copy-link"[\s\S]*copyTextToClipboard\(window\.location\.href\)[\s\S]*Clipboard write failed\. Use the address bar to copy this workspace link\./,
+  'Workspace inspector copy-link action must surface clipboard failures instead of dropping rejected writes.',
+);
+
+assert.match(
+  component,
   /<details className="workspace-selection-evidence">[\s\S]*<summary>Evidence<\/summary>/,
   'Workspace inspector raw evidence must remain collapsed by default.',
 );
