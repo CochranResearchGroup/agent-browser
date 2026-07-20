@@ -8,28 +8,28 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 
 ## P76 | Clipboard Target Recovery And Interaction Performance
 
-State: OPEN
-Current state: P76 is the active remediation lane for the retained LinkedIn
-clipboard-read incident. It covers cancellation-safe clipboard deadlines,
-proved target recovery, bounded clipboard-write capture, page-command timing,
-dependent command execution, accessible role locators, and closed-tab status
-projection without weakening retained service-state authority.
+State: CLOSED
+Current state: P76 completed the remediation lane for the retained LinkedIn
+clipboard-read incident. Clipboard deadlines and recovery are bounded,
+clipboard-write capture is opt-in and restored, dependent batches expose
+timings while preserving target identity, role locators use browser-computed
+accessible names, and ordinary closed-tab status is a bounded projection of
+the complete retained authority.
 
 ### Current State
 
 - Plan
   `docs/dev/plans/0076-2026-07-19-clipboard-target-recovery-and-interaction-performance-remediation-plan.md`
-  is in progress.
+  is complete.
 - The source incident note is
   `docs/dev/notes/2026-07-19-clipboard-read-target-recovery-performance.md`.
-- Review mediation requires the clipboard deadline to live inside the CDP
-  command lifecycle, empty text to remain successful output, target recovery
-  to be proved rather than inferred, and the locator regression to reproduce
-  the actual accessible-name mismatch.
-- Slice A evidence correction is complete. Slice B source work now provides
-  cancellation-safe CDP deadlines, bounded renderer timeout and recovery,
-  successful empty text, stable failure diagnostics, and replacement-tab
-  guidance. Installed retained-browser proof remains open for final closeout.
+- Installed validation proved the unresolved-promise deadline and same-target
+  recovery, bounded write capture and restoration, dependent-batch target
+  stability and timings, accessible-name lookup, and bounded versus full
+  closed-tab status modes.
+- `agent-browser install doctor` passed after local runtime publication with a
+  ready dashboard, converged runtime state, zero stale runtimes, and no install
+  issues.
 
 ### Evidence
 
@@ -38,11 +38,15 @@ projection without weakening retained service-state authority.
 - `cli/src/native/cdp/client.rs`
 - `cli/src/native/browser.rs`
 - `cli/src/native/actions.rs`
+- `cli/src/native/clipboard.rs`
+- `cli/src/native/dependent_batch.rs`
+- `cli/src/native/service_status_projection.rs`
 
 ### Next Recommendation
 
-Start Slice C bounded clipboard-write capture while retaining Slice B's
-installed retained-browser smoke as a final closeout gate.
+Keep future clipboard and interaction changes within the Plan 0076 typed
+deadline, restoration, target-identity, timing, accessibility, and projection
+contracts.
 
 ## P01 | Remote View Backend Reliability
 

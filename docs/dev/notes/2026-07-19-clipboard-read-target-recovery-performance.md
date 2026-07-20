@@ -259,6 +259,30 @@ For timing claims, preserve the command start and finish monotonic durations or
 the structured timing output. For target recovery, preserve the redacted target
 identity transition and the result of one normal post-timeout evaluation.
 
+## Plan 0076 Closeout Validation
+
+Plan 0076 completed the mediated product work and installed-runtime proof.
+Final privacy-safe validation used a temporary profile against a public test
+page and retained no authenticated site data.
+
+- An intentionally unresolved clipboard-read promise returned the typed
+  `unresolved_promise` diagnostic after the operation-specific deadline.
+- Recovery reported `same_target_ready`, and a following title read succeeded
+  on the same target.
+- Opt-in click capture returned one bounded synthetic write, confirmed the
+  original method was restored, and did not read the system clipboard.
+- A dependent batch preserved one target identity and returned per-step daemon
+  timing components.
+- The Chrome accessibility regression resolved exact and partial
+  `aria-labelledby` names and the supported shadow-root case.
+- Ordinary installed CLI status returned bounded closed-tab projection
+  metadata, while `service status --full-tab-history` returned full mode.
+- `agent-browser install doctor` passed with a ready dashboard, converged
+  runtime state, zero stale runtimes, and no install issues.
+
+The authoritative implementation and complete command evidence are recorded in
+`docs/dev/plans/0076-2026-07-19-clipboard-target-recovery-and-interaction-performance-remediation-plan.md`.
+
 ## Relationship To Existing Notes
 
 `docs/dev/notes/2026-07-06-last30days-profile-routing-failure.md` covers

@@ -1,7 +1,7 @@
 # Plan 0076: Clipboard Target Recovery And Interaction Performance Remediation
 
 Date: 2026-07-19
-Status: In Progress
+Status: Complete
 Lane: P76
 
 ## Goal
@@ -136,7 +136,7 @@ Completion evidence:
 
 ## Slice B | Cancellation-Safe Clipboard Timeout And Target Recovery
 
-Status: Source Complete, Installed Live Proof Pending
+Status: Complete
 
 Deliver vertical red-to-green behaviors in this order:
 
@@ -199,7 +199,7 @@ recommendations without approving or executing those dependency scripts.
 
 ## Slice C | Bounded Clipboard-Write Capture
 
-Status: Source Complete, Installed Live Proof Pending
+Status: Complete
 
 - Add an opt-in click action mode that captures `Clipboard.writeText` values
   without reading the system clipboard.
@@ -250,7 +250,7 @@ git diff --check
 
 ## Slice D | Page-Command Timing And Dependent Batch Execution
 
-Status: Source Complete, Installed Live Proof Pending
+Status: Complete
 
 - Add bounded timing fields for queue wait, browser and target resolution, CDP
   session acquisition or reuse, action execution, and response serialization.
@@ -398,6 +398,56 @@ pnpm --config.verify-deps-before-run=false test:service-api-mcp-parity
 pnpm --config.verify-deps-before-run=false --dir docs build
 git diff --check
 ```
+
+## Closeout Evidence
+
+The final installed runtime used a temporary profile and redacted public test
+page. No authenticated site data, copied private URL, cookie, screenshot, or
+retained profile content entered the validation artifact.
+
+- An intentionally unresolved `Clipboard.prototype.readText` promise returned
+  `unresolved_promise` after the clipboard-specific deadline with recovery
+  `same_target_ready`. A following `get title` succeeded on the same target.
+- `click --capture-clipboard-write --json` captured the synthetic text
+  `captured-live`, reported `invoked: true`, and reported `restored: true`.
+- `batch --dependent --json` ran two target-stable reads under one target
+  binding and returned per-step daemon timing components.
+- The accessibility E2E fixture passed against real Chrome for exact and
+  partial `aria-labelledby` names plus the supported shadow-root path.
+- Installed CLI status reported `closedTabProjection.mode` as `bounded` for
+  ordinary status and `full` for `--full-tab-history`. The installed smoke
+  exposed and closed a missing projection on the CLI-local no-launch path
+  before final publication.
+- `agent-browser install doctor` passed after local runtime publication,
+  dashboard restart, and stale daemon-session retirement. The final readback
+  reported a ready dashboard, converged runtime state, zero stale runtimes,
+  and no install issues.
+- Graphiti provider readiness passed, and one compact source-backed closeout
+  episode was queued in `agent_browser_main` from this plan and the redacted
+  incident note.
+
+Final source and contract validation included:
+
+```bash
+scripts/ci/rust-tests.sh
+cargo fmt --manifest-path cli/Cargo.toml -- --check
+cargo clippy --manifest-path cli/Cargo.toml -- -D warnings
+pnpm --config.verify-deps-before-run=false test:service-client
+pnpm --config.verify-deps-before-run=false test:service-api-mcp-parity
+pnpm --config.verify-deps-before-run=false --dir docs build
+node scripts/dev/select-validation.js --base 0065a938
+git diff --check
+```
+
+The first unconstrained parallel `cargo test` run exposed two stale assertions
+that still expected intentionally pruned `NotStarted` browser and empty session
+records. Those assertions now match the operational-record pruning contract.
+The same run also exposed Xvfb display contention; the repository CI harness
+ran that environment-mutating module serially and passed.
+
+All Slice A through Slice F exit criteria are satisfied. The temporary browser
+profile was removed after validation, and the previous installed executable
+was retained as a named local backup.
 
 ## Documentation And Contract Surfaces
 

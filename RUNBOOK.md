@@ -4,6 +4,53 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 110 | 2026-07-19
+
+Scope: complete P76 source, contract, installed-runtime, and closeout gates.
+
+Actions:
+
+- Completed bounded clipboard-write capture, daemon-owned dependent batches,
+  per-command timing fields, browser accessibility-tree role lookup, and
+  bounded closed-tab status projection with full diagnostic retrieval.
+- Updated every required CLI help, README, skill, docs-site, schema, contract,
+  HTTP, MCP, generated-client, and inline documentation surface.
+- Added and passed a real Chrome accessibility fixture for dynamically mounted
+  `aria-labelledby` content and supported shadow-root lookup.
+- Corrected two stale close-action tests to match intentional removal of
+  `NotStarted` browser placeholders and empty released sessions.
+- Used the installed smoke to find and repair missing
+  `closedTabProjection` metadata on the CLI-local no-launch status path.
+- Published the local dashboard runtime, retired stale daemon sessions, and
+  verified a converged installed runtime with `agent-browser install doctor`.
+- Queued one compact Graphiti closeout episode in `agent_browser_main` from the
+  completed plan and redacted incident note after provider readiness passed.
+
+Validation:
+
+- `scripts/ci/rust-tests.sh`
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- focused clipboard, CDP lifecycle, dependent batch, service projection, and
+  real Chrome accessibility tests
+- `pnpm --config.verify-deps-before-run=false test:service-client`
+- `pnpm --config.verify-deps-before-run=false test:service-api-mcp-parity`
+- repeated successful docs and dashboard production builds
+- installed live capture, timeout recovery, dependent batch, status projection,
+  and doctor readbacks with a temporary profile
+
+Result:
+
+- P76 is closed. All six slices are implemented and documented.
+- The unresolved clipboard promise returned within the bounded deadline, a
+  following evaluation succeeded on the same target, and opt-in write capture
+  restored the patched method.
+- Installed ordinary and full status modes returned their respective
+  projection metadata. Final install doctor reported no issues and zero stale
+  runtimes.
+- The privacy-safe closeout evidence is recorded in Plan 0076 and the incident
+  note. The temporary validation profile was removed.
+
 ## Turn 109 | 2026-07-19
 
 Scope: open and execute P76 clipboard target recovery and interaction
