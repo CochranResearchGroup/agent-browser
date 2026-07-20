@@ -383,6 +383,7 @@ For the full service model, including queueing, HTTP and MCP access, browser hea
 ```bash
 agent-browser service status          # Inspect worker state, browser health, queue depth, profile lease waits, site policies, and providers
 agent-browser service status --watch --interval 1000
+agent-browser service status --full-tab-history
 agent-browser service watch --interval 1000 --count 5
 agent-browser service reconcile       # Probe persisted browser records and update service state
 agent-browser service prune-retained  # Dry-run retained closed-tab and inert-browser cleanup
@@ -448,6 +449,14 @@ The persisted service state includes a `reconciliation` snapshot with `lastRecon
 The persisted service state also includes bounded audit records for recent control-plane jobs in `jobs`, a derived `incidents` collection grouped by browser or service scope, plus an `events` log with reconciliation summaries, browser health transitions, browser recovery starts, profile lease wait transitions, ownership-repair details, and tab lifecycle changes such as discovered tabs, URL or title changes, and closed tabs. Job records track request action, priority, timestamps, final success or failure, requested remote-headed `displayIsolation`, and error text without storing large command payloads.
 
 `service status --watch` and `service watch` poll the same status path until interrupted. Use `--interval <ms>` to set the polling interval and `--count <n>` for bounded scripts. In JSON mode, each poll is emitted as one JSON response line.
+
+Ordinary status retains all live and referenced tabs and projects at most 50
+unreferenced closed-tab rows. <code>closedTabProjection</code> reports the mode,
+cap, total, retained, omitted, and deterministic ordering. Use
+<code>service status --full-tab-history</code> or HTTP
+<code>GET /api/service/status?full-tab-history=true</code> for the complete
+response-only diagnostic projection. Status reads do not compact persisted
+service state or change routing and stale-handle authority.
 
 `service status` includes <code>retainedDisplayAllocations</code>, a compact classification summary that separates retained historical display-allocation rows from live browser, session, tab, and route-pool readiness. Use its <code>cleanupCommand</code> value for the dry-run before applying display allocation compaction.
 

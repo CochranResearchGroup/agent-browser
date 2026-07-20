@@ -194,6 +194,7 @@ impl ControlPlaneHandle {
         id: &str,
         service_state: Value,
         launch_config: Value,
+        full_tab_history: bool,
     ) -> Value {
         let mut service_state = serde_json::from_value::<ServiceState>(service_state)
             .unwrap_or_else(|_| ServiceState::default());
@@ -206,6 +207,11 @@ impl ControlPlaneHandle {
         let profile_allocations = service_profile_allocations(&service_state);
         let retained_display_allocations = retained_display_allocation_summary(&service_state);
         let browser_session_authority = browser_session_authority_snapshot(&service_state);
+        let (service_state, closed_tab_projection) =
+            super::service_status_projection::project_service_status(
+                &service_state,
+                full_tab_history,
+            );
 
         json!({
             "id": id,
@@ -215,6 +221,7 @@ impl ControlPlaneHandle {
                 "profileAllocations": profile_allocations,
                 "retainedDisplayAllocations": retained_display_allocations,
                 "browserSessionAuthority": browser_session_authority,
+                "closedTabProjection": closed_tab_projection,
                 "launchConfig": launch_config,
                 "service_state": service_state,
             },
@@ -2064,6 +2071,7 @@ mod tests {
                     },
                     "warnings": []
                 }),
+                false,
             )
             .await;
 
@@ -2077,6 +2085,12 @@ mod tests {
                 .and_then(|v| v.as_str())
                 .is_some(),
             true
+        );
+        assert_eq!(
+            response
+                .pointer("/data/closedTabProjection/mode")
+                .and_then(|value| value.as_str()),
+            Some("bounded")
         );
         assert_eq!(
             response

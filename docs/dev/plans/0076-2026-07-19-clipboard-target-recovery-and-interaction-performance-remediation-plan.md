@@ -347,6 +347,8 @@ git diff --check
 
 ## Slice F | Bounded Closed-Tab Status Projection
 
+Status: Complete
+
 - Add a deterministic ordinary-status cap for closed tab lifecycle rows.
 - Keep all live, opening, loading, closing, crashed, and routing-referenced tab
   records visible regardless of the closed-history cap.
@@ -363,6 +365,39 @@ Exit criteria:
 - Diagnostic retrieval preserves the required lifecycle history.
 - A stale handle cannot become live because its ordinary status row was
   omitted.
+
+Completion evidence:
+
+- Ordinary status clones the reconciled authority and removes only
+  unreferenced `closed` rows beyond a deterministic cap of 50.
+- Every non-closed lifecycle remains visible. Closed rows also remain visible
+  when referenced by a session, owner, service tab handle, challenge, snapshot,
+  or screenshot.
+- `closedTabProjection` reports mode, cap, total closed count, retained closed
+  count, omitted count, ordering, and diagnostic availability.
+- `service status --full-tab-history` and HTTP
+  `GET /api/service/status?full-tab-history=true` expose the complete cloned
+  authority with no omissions.
+- Reconciliation and persistence finish against the complete state before the
+  response projection is built. Unit tests prove the source state remains
+  unchanged and a stale handle retains its stale reason.
+- The status response schema and contract documentation include the projection
+  metadata, and generated client contract checks remain green.
+
+Focused validation:
+
+```bash
+cargo test --manifest-path cli/Cargo.toml service_status_projection -- --nocapture
+cargo test --manifest-path cli/Cargo.toml service_status_full_tab_history -- --nocapture
+cargo test --manifest-path cli/Cargo.toml service_status_command_maps_full_tab_history_query -- --nocapture
+cargo test --manifest-path cli/Cargo.toml service_status_response_combines_worker_and_service_state -- --nocapture
+cargo fmt --manifest-path cli/Cargo.toml -- --check
+cargo clippy --manifest-path cli/Cargo.toml -- -D warnings
+pnpm --config.verify-deps-before-run=false test:service-client-contract
+pnpm --config.verify-deps-before-run=false test:service-api-mcp-parity
+pnpm --config.verify-deps-before-run=false --dir docs build
+git diff --check
+```
 
 ## Documentation And Contract Surfaces
 

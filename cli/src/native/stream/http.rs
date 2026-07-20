@@ -632,7 +632,7 @@ pub(super) async fn handle_http_request(
     }
 
     if method == "GET" && path == "/api/service/status" {
-        let result = relay_service_command(session_name, service_status_command()).await;
+        let result = relay_service_command(session_name, service_status_command(query)).await;
         write_json_result(&mut stream, result, "502 Bad Gateway").await;
         return;
     }
@@ -1178,14 +1178,19 @@ async fn stream_api_send_input(port: u16, body: &str) -> Value {
     json!({"success": true})
 }
 
-fn service_status_command() -> Value {
+fn service_status_command(query: Option<&str>) -> Value {
     let _ = refresh_persisted_profile_seeding_handoffs();
     let args = vec!["service".to_string(), "status".to_string()];
     let flags = parse_flags(&args);
+    let full_tab_history = query_params(query).into_iter().any(|(key, value)| {
+        matches!(key.as_str(), "full-tab-history" | "fullTabHistory")
+            && matches!(value.as_str(), "1" | "true" | "yes")
+    });
     json!({
         "action": "service_status",
         "serviceState": flags.service_state.clone(),
         "launchConfig": launch_config_status(&flags),
+        "fullTabHistory": full_tab_history,
     })
 }
 
@@ -3957,6 +3962,15 @@ mod tests {
             split_path_query("/api/service/status"),
             ("/api/service/status", None)
         );
+    }
+
+    #[test]
+    fn service_status_command_maps_full_tab_history_query() {
+        let ordinary = service_status_command(None);
+        let full = service_status_command(Some("full-tab-history=true"));
+
+        assert_eq!(ordinary["fullTabHistory"], false);
+        assert_eq!(full["fullTabHistory"], true);
     }
 
     #[test]

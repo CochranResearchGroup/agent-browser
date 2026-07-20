@@ -463,6 +463,9 @@ counters for filtered event list consumers.
 ## Service Collection Records v1
 
 `service-status-response.v1.schema.json` describes the full service status
+response, including response-only `closedTabProjection` metadata. Ordinary
+status caps unreferenced closed history while `--full-tab-history` and HTTP
+`full-tab-history=true` expose the complete persisted lifecycle authority.
 response returned by `agent-browser service status` and HTTP
 `GET /api/service/status`. It includes the derived `profileAllocations` view so
 software clients can consume profile holder, waiting job, conflict, lease

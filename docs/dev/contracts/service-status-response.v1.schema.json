@@ -6,7 +6,8 @@
   "type": "object",
   "required": [
     "service_state",
-    "profileAllocations"
+    "profileAllocations",
+    "closedTabProjection"
   ],
   "properties": {
     "control_plane": {
@@ -49,6 +50,29 @@
       "items": {
         "$ref": "service-profiles-response.v1.schema.json#/$defs/profileAllocation"
       }
+    },
+    "closedTabProjection": {
+      "description": "Response-only closed-tab history projection metadata. Persisted service state remains authoritative and is not compacted by status reads.",
+      "type": "object",
+      "required": [
+        "mode",
+        "cap",
+        "totalClosedCount",
+        "retainedClosedCount",
+        "omittedClosedCount",
+        "ordering",
+        "diagnosticAvailable"
+      ],
+      "properties": {
+        "mode": { "enum": ["bounded", "full"] },
+        "cap": { "type": ["integer", "null"], "minimum": 0 },
+        "totalClosedCount": { "type": "integer", "minimum": 0 },
+        "retainedClosedCount": { "type": "integer", "minimum": 0 },
+        "omittedClosedCount": { "type": "integer", "minimum": 0 },
+        "ordering": { "const": "tab_id_descending" },
+        "diagnosticAvailable": { "const": true }
+      },
+      "additionalProperties": false
     },
     "retainedDisplayAllocations": {
       "description": "Derived retained display-allocation classification summary. These records are historical service-state records and are not live control rows unless classified as live.",

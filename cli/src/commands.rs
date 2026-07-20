@@ -2189,19 +2189,22 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                         "--watch" => {
                             cmd["watch"] = json!(true);
                         }
+                        "--full-tab-history" => {
+                            cmd["fullTabHistory"] = json!(true);
+                        }
                         "--interval" => {
                             let Some(raw) = rest.get(i + 1) else {
                                 return Err(ParseError::InvalidValue {
                                     message: "Missing value for --interval".to_string(),
                                     usage:
-                                        "service status [--watch] [--interval <ms>] [--count <n>]",
+                                        "service status [--watch] [--interval <ms>] [--count <n>] [--full-tab-history]",
                                 });
                             };
                             let interval =
                                 raw.parse::<u64>().map_err(|_| ParseError::InvalidValue {
                                     message: format!("Invalid --interval value: {}", raw),
                                     usage:
-                                        "service status [--watch] [--interval <ms>] [--count <n>]",
+                                        "service status [--watch] [--interval <ms>] [--count <n>] [--full-tab-history]",
                                 })?;
                             cmd["watchIntervalMs"] = json!(interval);
                             i += 1;
@@ -2226,7 +2229,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                         flag => {
                             return Err(ParseError::InvalidValue {
                                 message: format!("Unknown flag for service status: {}", flag),
-                                usage: "service status [--watch] [--interval <ms>] [--count <n>]",
+                                usage: "service status [--watch] [--interval <ms>] [--count <n>] [--full-tab-history]",
                             });
                         }
                     }
@@ -6886,6 +6889,15 @@ mod tests {
         assert_eq!(cmd["watch"], true);
         assert_eq!(cmd["watchIntervalMs"], 250);
         assert_eq!(cmd["watchCount"], 2);
+    }
+
+    #[test]
+    fn test_service_status_full_tab_history() {
+        let cmd =
+            parse_command(&args("service status --full-tab-history"), &default_flags()).unwrap();
+
+        assert_eq!(cmd["action"], "service_status");
+        assert_eq!(cmd["fullTabHistory"], true);
     }
 
     #[test]

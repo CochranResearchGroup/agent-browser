@@ -604,6 +604,7 @@ agent-browser stream enable --port 9223  # Bind a specific localhost port
 agent-browser stream status           # Inspect enabled state, port, connection, and screencasting
 agent-browser stream disable          # Stop runtime streaming and remove the .stream metadata file
 agent-browser service status          # Inspect service control-plane and configured service entities
+agent-browser service status --full-tab-history  # Include complete retained closed-tab history
 agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health records
 agent-browser service prune-retained  # Preview retained closed-tab and inert-browser cleanup
@@ -747,6 +748,12 @@ Run `pnpm test:service-client-post-seeding-probe-live` when live validation is
 needed for that recipe; it uses an isolated daemon and temporary profile.
 
 Use `agent-browser service status --watch` or `agent-browser service watch` for a polling operator view of worker health, browser health, queue depth, profile lease wait pressure, and reconciliation status. Add `--interval <ms>` to set the poll interval and `--count <n>` for bounded scripts. In JSON mode, each poll is emitted as one JSON response line.
+
+Ordinary service status retains every live or referenced tab and at most 50
+unreferenced closed-tab rows. Inspect `closedTabProjection` for the cap and
+omitted count. Use `service status --full-tab-history` or HTTP
+`GET /api/service/status?full-tab-history=true` for the complete response-only
+diagnostic view. Status reads never compact persisted service state.
 
 Launch-shaping options such as `--args` or `AGENT_BROWSER_ARGS` apply only to commands that can launch a browser. Service inspection commands such as `service status`, `service sessions`, and `mcp read` must remain read-only and must not start Chrome just because launch defaults are configured.
 

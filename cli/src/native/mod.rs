@@ -73,6 +73,8 @@ pub mod service_monitors;
 #[allow(dead_code)]
 pub mod service_resources;
 #[allow(dead_code)]
+pub mod service_status_projection;
+#[allow(dead_code)]
 pub mod service_store;
 #[allow(dead_code)]
 pub mod service_trace;

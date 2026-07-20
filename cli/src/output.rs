@@ -1403,6 +1403,31 @@ fn format_service_profile_seeding_handoff_text(data: &serde_json::Value) -> Opti
         format!("Profile seeding handoff: profile={profile} target={target} seeding={seeding} cdp_allowed={cdp} keyring={keyring}"),
         format!("Command: {command}"),
     ];
+
+    if let Some(projection) = data.get("closedTabProjection") {
+        lines.push(format!(
+            "Closed tab projection: mode={} retained={} omitted={} total={} cap={} ordering={}",
+            value_str(projection, "mode", "unknown"),
+            projection
+                .get("retainedClosedCount")
+                .and_then(|value| value.as_u64())
+                .unwrap_or(0),
+            projection
+                .get("omittedClosedCount")
+                .and_then(|value| value.as_u64())
+                .unwrap_or(0),
+            projection
+                .get("totalClosedCount")
+                .and_then(|value| value.as_u64())
+                .unwrap_or(0),
+            projection
+                .get("cap")
+                .and_then(|value| value.as_u64())
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "none".to_string()),
+            value_str(projection, "ordering", "unknown"),
+        ));
+    }
     if let Some(intervention) = data
         .get("operatorIntervention")
         .and_then(|value| value.as_object())
@@ -5338,7 +5363,7 @@ Examples:
 agent-browser service - Inspect service-mode state
 
 Usage:
-  agent-browser service status
+  agent-browser service status [--full-tab-history]
   agent-browser service status --watch [--interval <ms>] [--count <n>]
   agent-browser service watch [--interval <ms>] [--count <n>]
   agent-browser service reconcile
@@ -5494,6 +5519,7 @@ Notes:
   - Runtime profile and custom profile launches populate linked service profile and session records, including profileSelectionReason, profileLeaseDisposition, profileLeaseConflictSessionIds, and browserCapabilityLaunch diagnostics when known.
   - Service-scoped launches reject active exclusive profile conflicts by default before browser start; set profileLeasePolicy=wait and profileLeaseWaitTimeoutMs to keep the job queued while polling for release, leaving the worker available for other commands. Same-session retained browser reuse remains allowed.
   - service status includes launchConfig, a no-launch diagnostic for service.defaultBrowserBuild and the resolved executablePath from config, AGENT_BROWSER_EXECUTABLE_PATH, or service.browserBuildManifests.<build>.manifestPath. launchConfig.profileSmoke tells API, MCP, and CLI clients whether the WSL Windows chromium-stealthcdp profile-write smoke is applicable. If stealthcdp_chromium is selected but no executable path or ready manifest exists, status reports a warning. Ordinary launch and queued tab paths consume service.defaultBrowserBuild through the service access-plan resolver unless the caller explicitly supplies a profile, browser host, headless mode, executable, or browser build. When no explicit default is configured and a ready stealthcdp_chromium manifest is available, fresh installs prefer that build automatically.
+  - Ordinary service status retains every live or referenced tab and at most 50 unreferenced closed-tab rows. closedTabProjection reports retained, omitted, cap, and ordering metadata. Use --full-tab-history for the complete response-only diagnostic projection; persisted service state is never compacted by a status read.
   - Service profiles can set browserBuild to stock_chrome, stealthcdp_chromium, or cdp_free_headed. Exact authenticated target, account, and target-site matches win first; browserBuild then breaks ties and can select a generic default profile for new identities.
   - service.browserCapabilityRegistry carries draft browser host, executable, capability, profile compatibility, preference binding, and validation evidence arrays into service_state.browserCapabilityRegistry for no-launch status consumers. Access-plan recommendations can use preference bindings for browserBuild selection, and populated target, account, service, and task filters are conjunctive. Guarded launches record browserCapabilityLaunch diagnostics explaining whether a local executable binding was applied or skipped. A matching failed, stale, incompatible, or operator-override row blocks launch routing even if another matching row passed.
   - service browser-capability preflight is the operator no-launch gate check for that same guarded launch path. It accepts the requested build, site/login/account hints, caller labels, profile hint, headed or headless posture, and CDP-free posture, evaluates effective configured service state, and returns browserCapabilityLaunch plus selected evidence IDs when the route passes. Manifest-derived default executables do not count as explicit operator overrides.
@@ -5506,6 +5532,7 @@ Global Options:
 
 Examples:
   agent-browser service status
+  agent-browser service status --full-tab-history
   agent-browser service status --watch --interval 1000
   agent-browser service watch --interval 1000 --count 5
   agent-browser service reconcile

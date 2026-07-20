@@ -539,8 +539,12 @@ async fn handle_connection<S>(
                         .get("launchConfig")
                         .cloned()
                         .unwrap_or_else(|| serde_json::json!({}));
+                    let full_tab_history = cmd
+                        .get("fullTabHistory")
+                        .and_then(|value| value.as_bool())
+                        .unwrap_or(false);
                     control_plane
-                        .service_status_response(id, service_state, launch_config)
+                        .service_status_response(id, service_state, launch_config, full_tab_history)
                         .await
                 } else {
                     control_plane.submit(cmd).await
