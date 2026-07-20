@@ -35851,7 +35851,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_close_persists_not_started_browser_health() {
+    async fn test_close_does_not_persist_not_started_browser_placeholder() {
         let home = unique_socket_dir("service-browser-close-home");
         fs::create_dir_all(&home).unwrap();
         let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_SESSION"]);
@@ -35865,10 +35865,7 @@ mod tests {
         assert_eq!(result["success"], true);
         let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
         let persisted = store.load().unwrap();
-        assert_eq!(
-            persisted.browsers["session:close-session"].health,
-            ServiceBrowserHealth::NotStarted
-        );
+        assert!(!persisted.browsers.contains_key("session:close-session"));
 
         let _ = fs::remove_dir_all(&home);
     }
@@ -35958,16 +35955,8 @@ mod tests {
                 .and_then(|succeeded| succeeded.as_bool()),
             Some(true)
         );
-        assert!(persisted.browsers[browser_id]
-            .last_health_observation
-            .is_none());
-        assert_eq!(
-            persisted.sessions["close-reason-session"].lease,
-            LeaseState::Released
-        );
-        assert!(persisted.sessions["close-reason-session"]
-            .profile_lease_conflict_session_ids
-            .is_empty());
+        assert!(!persisted.browsers.contains_key(browser_id));
+        assert!(!persisted.sessions.contains_key("close-reason-session"));
 
         let _ = fs::remove_dir_all(&home);
     }
