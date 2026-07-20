@@ -9,15 +9,16 @@ problems:
 
 - `clipboard read` can wait for the full CDP timeout when
   `navigator.clipboard.readText()` never resolves;
-- the unresolved evaluation can leave the selected target unable to complete
-  later `Runtime.evaluate` calls;
+- later `Runtime.evaluate` calls against the selected target also failed to
+  complete after the unresolved evaluation;
 - multi-command page interactions incur enough repeated setup latency that a
   small menu workflow becomes slow and difficult to recover.
 
 The target site successfully produced a canonical post URL when its
-`Clipboard.prototype.writeText` call was intercepted. This proves that the
-copy action itself worked and that the failure was in clipboard retrieval, not
-in the site's menu action.
+`Clipboard.prototype.writeText` call was intercepted. In that historical run,
+this distinguished the site's successful write call from the later clipboard
+read failure. It does not by itself prove the cause of the target's subsequent
+evaluation failures.
 
 This note does not contain the copied URL, browser cookies, authentication
 state, private page text, or other browser-profile data.
@@ -62,7 +63,14 @@ navigator.clipboard.readText()
 There is no clipboard-specific promise timeout, permission preflight, or
 target-health recovery around that evaluation.
 
-## Confirmed Findings
+## Historical Runtime Observations
+
+The observations below came from one retained authenticated runtime. They are
+useful incident evidence, but the original run did not produce a durable,
+privacy-safe command artifact. Treat timings and causal explanations as
+historical narrative until a deterministic fixture or a new redacted live
+artifact reproduces them. Plan 0076 defines the required evidence shape and
+regression coverage.
 
 ### 1. Copy succeeded but read did not
 
@@ -92,11 +100,13 @@ An X11 clipboard read on the retained browser display did not return data and
 timed out. The visible display included a Chromium clipboard window, but the
 X11 selection path was not a usable fallback for this browser copy action.
 
-### 4. The selected target became evaluation-unhealthy
+### 4. The selected target was evaluation-unhealthy after the timeout
 
 After the unresolved clipboard read, later `Runtime.evaluate` calls against
 the same target did not return useful responses. Navigating the existing tab
-to the same URL did not restore evaluation health.
+to the same URL did not restore evaluation health. The run established this
+ordering, but did not isolate whether the unresolved promise, renderer state,
+CDP session state, or another target condition caused the later failures.
 
 Closing only the affected LinkedIn tab and opening a replacement tab in the
 same retained browser restored normal evaluation. Authentication remained in
@@ -107,7 +117,10 @@ selected LinkedIn tab.
 
 DOM inspection showed three visible elements with `role="menuitem"`, including
 `Copy link to post`. A role-and-name lookup reported that the element was not
-found, while a direct selector/DOM path could invoke the same menu action.
+found, while a direct selector/DOM path could invoke the same menu action. The
+original run did not preserve the privacy-safe DOM and accessibility-tree shape
+needed to distinguish `aria-labelledby`, hidden descendant text, iframe,
+shadow-root, or other accessible-name differences.
 
 This is separate from clipboard retrieval and should have its own locator
 regression test.
@@ -129,11 +142,16 @@ ordinary status payload increases output size and target-selection noise.
 ### P0: Bound clipboard promises and recover target health
 
 - Give clipboard reads an operation-specific timeout shorter than the generic
-  CDP command timeout.
+  CDP command timeout. Implement the deadline inside the CDP command lifecycle
+  so timeout and cancellation always remove the pending response entry; do not
+  wrap `BrowserManager::evaluate` in an outer timeout that can bypass cleanup.
 - Return a typed clipboard error that distinguishes permission denial,
-  unresolved promise, empty clipboard, unavailable backend, and CDP failure.
-- On timeout, invalidate the affected execution context or CDP page session so
-  later evaluations do not remain blocked behind the failed read.
+  unresolved promise, unavailable backend, recovery failure, and CDP failure.
+  A read that resolves to an empty string is successful clipboard output.
+- On timeout, use a recovery primitive that a regression test proves restores
+  a normal evaluation on the same retained browser. Do not assume that
+  detaching and reattaching a CDP page session cancels renderer work or repairs
+  the execution context.
 - If context repair cannot be proven, return an explicit recommendation to
   replace the affected tab instead of silently continuing on it.
 
@@ -167,9 +185,11 @@ requiring raw debug logs.
 
 For a batch that opens a menu, waits, selects an item, and captures a result:
 
-- resolve the browser and target once;
+- resolve the browser and target once while steps preserve target identity;
 - retain one queue lease and CDP page session for the dependent commands;
 - refresh element references only when the DOM changes;
+- revalidate after navigation, tab creation, close, switch, or another
+  target-changing step;
 - stop on the first target-health failure when batch bail behavior is enabled.
 
 This should remove repeated target-resolution work without weakening service
@@ -177,8 +197,12 @@ serialization or site-specific pacing.
 
 ### P2: Repair role-based menu lookup
 
-- Add coverage for visible `div[role="menuitem"]` elements with exact names.
-- Verify locators against dynamically mounted menus and portal roots.
+- Reconstruct an accessible-name fixture that differs from raw `aria-label`
+  and `textContent`, using the observed failure shape when a privacy-safe
+  reproduction becomes available.
+- Cover `aria-labelledby`, hidden descendant text, dynamically mounted menus,
+  iframe context, and supported shadow-root behavior. Keep an ordinary portal
+  menu as baseline coverage, not as the incident regression by itself.
 - Ensure failed and successful `find` actions always emit one structured JSON
   response.
 
@@ -193,17 +217,47 @@ serialization or site-specific pacing.
 ## Suggested Regression Tests
 
 1. A clipboard-read promise that never resolves returns a typed error within
-   the clipboard-specific timeout.
-2. A normal evaluation succeeds immediately after that clipboard timeout on
-   the same retained browser.
-3. A copy-action capture returns a synthetic canonical URL and restores the
+   the clipboard-specific timeout and leaves no pending CDP response entry.
+2. A following CDP command succeeds without waiting for the generic timeout.
+3. A normal evaluation succeeds immediately after that clipboard timeout on
+   the same retained browser, or the action returns a typed replacement-tab
+   requirement when same-target repair is not supported.
+4. A clipboard read that resolves to `""` succeeds with empty text.
+5. A copy-action capture returns a synthetic canonical URL and restores the
    original Clipboard API method.
-4. A visible portal-mounted `div[role="menuitem"]` is found by exact role and
-   accessible name.
-5. A dependent batch resolves one target and one CDP page session while
+6. A role locator resolves an element whose accessible name differs from its
+   raw `aria-label` and `textContent`; an ordinary portal menu remains a
+   separate baseline case.
+7. A dependent batch resolves one target and one CDP page session while
    preserving command order and bail behavior.
-6. Ordinary service status caps closed tab-handle history while a diagnostic
+8. A target-changing batch step forces target revalidation before the next
+   dependent step.
+9. Ordinary service status caps closed tab-handle history while a diagnostic
    or verbose surface can still retrieve the retained lifecycle evidence.
+
+## Privacy-Safe Validation Artifact Template
+
+Future deterministic or live validation should record the following without
+private site or profile data:
+
+```text
+artifactId: <timestamp-or-stable-fixture-id>
+browserMode: <headless-or-remote-headed>
+profileClass: <temporary-fixture-or-retained-redacted>
+commandShape: clipboard read
+clipboardDeadlineMs: <bounded-value>
+observedDurationMs: <measured-value>
+clipboardOutcome: <success-empty|success-text-redacted|permission-denied|unresolved-promise|backend-unavailable|cdp-failure>
+pendingCommandCleanup: <proved|not-proved>
+targetHealthProbe: <normal-evaluation-success|normal-evaluation-failure>
+recoveryAction: <none|execution-context-repair|replace-tab-required|replacement-tab-opened>
+finalTopology: <same-browser-and-tab|same-browser-replacement-tab|browser-replaced>
+privateDataRetained: false
+```
+
+For timing claims, preserve the command start and finish monotonic durations or
+the structured timing output. For target recovery, preserve the redacted target
+identity transition and the result of one normal post-timeout evaluation.
 
 ## Relationship To Existing Notes
 
@@ -215,7 +269,7 @@ and per-command performance.
 
 ## Recommended Next Step
 
-Open a bounded implementation plan for the P0 clipboard timeout and target
-recovery behavior first. Keep clipboard-write capture, command timing,
-batch-session reuse, locator repair, and stale-handle compaction as separately
-reviewable follow-up slices so each can carry focused tests and rollback.
+Execute
+`docs/dev/plans/0076-2026-07-19-clipboard-target-recovery-and-interaction-performance-remediation-plan.md`.
+Start with the cancellation-safe CDP deadline tracer bullet, then complete the
+remaining separately reviewable slices with focused tests and rollback.

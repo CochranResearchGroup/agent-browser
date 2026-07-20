@@ -4,6 +4,55 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 109 | 2026-07-19
+
+Scope: open and execute P76 clipboard target recovery and interaction
+performance remediation.
+
+Actions:
+
+- Reviewed the retained clipboard incident against the current clipboard,
+  CDP timeout, evaluation, locator, batch, and service-status implementations.
+- Opened Plan 0076 with six bounded slices covering evidence correction,
+  cancellation-safe clipboard timeout and recovery, clipboard-write capture,
+  timing and dependent batching, accessible locator repair, and closed-tab
+  status projection.
+- Made the CDP command lifecycle the deep module for deadline enforcement,
+  pending-command cleanup, late responses, and timeout classification.
+- Recorded review mediation so empty clipboard text remains successful, target
+  recovery must be proved, locator coverage reproduces accessible-name
+  behavior, and service-status compaction remains a projection rather than a
+  mutation of persisted lifecycle authority.
+- Completed Slice A by correcting causal language in the incident note,
+  labeling historical observations, replacing the insufficient portal-only
+  locator regression, and adding a privacy-safe validation artifact template.
+- Completed Slice B source work with a cancellation-safe per-command CDP
+  deadline, Chrome renderer timeout, execution termination fallback, normal
+  evaluation health probe, successful empty-text output, stable failure codes,
+  and explicit replacement-tab guidance.
+- Updated CLI help, README, docs command and streaming pages, MCP tool
+  description, and repo plus installed skill guidance for the bounded read
+  contract.
+
+Validation:
+
+- `git diff --check`
+- `cargo test --manifest-path cli/Cargo.toml clipboard -- --nocapture`
+- `cargo test --manifest-path cli/Cargo.toml native::cdp::client::tests -- --nocapture`
+- `cargo fmt --manifest-path cli/Cargo.toml -- --check`
+- `cargo clippy --manifest-path cli/Cargo.toml -- -D warnings`
+- `pnpm --config.verify-deps-before-run=false test:service-api-mcp-parity`
+- `pnpm --config.verify-deps-before-run=false --dir docs build`
+- `pnpm validation:select -- --base HEAD` was blocked before selection by
+  pnpm 11 ignored-build enforcement. The underlying selector script completed
+  directly without approving dependency build scripts.
+
+Result:
+
+- P76 is open and in progress. Slices A and B source work are complete. Slice C
+  clipboard-write capture is the current execution boundary; Slice B installed
+  retained-browser proof remains a final closeout gate.
+
 ## Turn 108 | 2026-07-06
 
 Scope: close P69 Slice F live proof and fix live-discovered shared-profile and

@@ -4282,7 +4282,7 @@ fn browser_clipboard_tool_schema() -> Value {
     json!({
         "name": "browser_clipboard",
         "title": "Use browser clipboard",
-        "description": "Queue browser clipboard read, write, copy, or paste for the active session. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
+        "description": "Queue browser clipboard read, write, copy, or paste for the active session. Reads use a bounded renderer deadline, preserve empty text as success, and append structured diagnostic JSON when target recovery or replacement is required. Include serviceName, agentName, and taskName when available so the retained service job is traceable.",
         "inputSchema": {
             "type": "object",
             "additionalProperties": false,

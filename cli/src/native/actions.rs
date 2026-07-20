@@ -16484,8 +16484,24 @@ async fn handle_clipboard(cmd: &Value, state: &DaemonState) -> Result<Value, Str
             Ok(json!({ "pasted": true }))
         }
         _ => {
-            let result = mgr.evaluate("navigator.clipboard.readText()", None).await?;
-            Ok(json!({ "text": result }))
+            match super::clipboard::read_text(
+                &mgr.client,
+                &session_id,
+                super::clipboard::DEFAULT_READ_TIMEOUT,
+            )
+            .await
+            {
+                Ok(outcome) => Ok(json!({
+                    "text": outcome.text,
+                    "empty": outcome.empty,
+                    "clipboardOutcome": if outcome.empty { "success_empty" } else { "success_text" },
+                })),
+                Err(error) => Err(format!(
+                    "Clipboard read failed: {}; diagnostic={}",
+                    error.message(),
+                    error.diagnostic()
+                )),
+            }
         }
     }
 }

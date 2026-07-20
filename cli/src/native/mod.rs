@@ -11,6 +11,8 @@ pub mod cancellation;
 #[allow(dead_code)]
 pub mod cdp;
 #[allow(dead_code)]
+pub mod clipboard;
+#[allow(dead_code)]
 pub mod control_plane;
 #[allow(dead_code)]
 pub mod cookies;

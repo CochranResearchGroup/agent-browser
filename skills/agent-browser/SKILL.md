@@ -654,6 +654,11 @@ agent-browser clipboard write "Hello, World!"     # Write text to clipboard
 agent-browser clipboard copy                      # Copy current selection
 agent-browser clipboard paste                     # Paste from clipboard
 
+# Clipboard reads have a three-second renderer deadline and bounded recovery.
+# Empty text is success. In JSON, inspect empty and clipboardOutcome.
+# On failure, parse the diagnostic JSON suffix. If recovery is
+# replace_tab_required, replace only the affected tab before retrying.
+
 # Dialogs (alert, confirm, prompt, beforeunload)
 # By default, alert and beforeunload dialogs are auto-accepted so they never block the agent.
 # confirm and prompt dialogs still require explicit handling.

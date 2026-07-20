@@ -4858,7 +4858,11 @@ agent-browser clipboard - Read and write clipboard
 
 Usage: agent-browser clipboard <operation> [text]
 
-Read from or write to the browser clipboard.
+Read from or write to the browser clipboard. Reads use a three-second renderer
+deadline plus a short CDP response grace period. Empty text is a successful
+read. JSON success includes text, empty, and clipboardOutcome. Read failures
+append diagnostic JSON with code, recovery, and recommendedAction. When
+recovery is replace_tab_required, replace only the affected tab before retrying.
 
 Operations:
   read                 Read text from clipboard

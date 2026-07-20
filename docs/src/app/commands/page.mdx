@@ -243,6 +243,13 @@ agent-browser clipboard copy                      # Copy current selection (Ctrl
 agent-browser clipboard paste                     # Paste from clipboard (Ctrl+V)
 ```
 
+Clipboard reads use a three-second renderer deadline plus a short CDP response
+grace period. Empty clipboard text is successful. JSON output reports
+<code>text</code>, <code>empty</code>, and <code>clipboardOutcome</code>.
+Failures append diagnostic JSON with a stable <code>code</code>, target
+<code>recovery</code>, and <code>recommendedAction</code>. Replace only the
+affected tab when recovery is <code>replace_tab_required</code>.
+
 ## Settings
 
 ```bash

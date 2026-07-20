@@ -6,6 +6,44 @@ This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
 
+## P76 | Clipboard Target Recovery And Interaction Performance
+
+State: OPEN
+Current state: P76 is the active remediation lane for the retained LinkedIn
+clipboard-read incident. It covers cancellation-safe clipboard deadlines,
+proved target recovery, bounded clipboard-write capture, page-command timing,
+dependent command execution, accessible role locators, and closed-tab status
+projection without weakening retained service-state authority.
+
+### Current State
+
+- Plan
+  `docs/dev/plans/0076-2026-07-19-clipboard-target-recovery-and-interaction-performance-remediation-plan.md`
+  is in progress.
+- The source incident note is
+  `docs/dev/notes/2026-07-19-clipboard-read-target-recovery-performance.md`.
+- Review mediation requires the clipboard deadline to live inside the CDP
+  command lifecycle, empty text to remain successful output, target recovery
+  to be proved rather than inferred, and the locator regression to reproduce
+  the actual accessible-name mismatch.
+- Slice A evidence correction is complete. Slice B source work now provides
+  cancellation-safe CDP deadlines, bounded renderer timeout and recovery,
+  successful empty text, stable failure diagnostics, and replacement-tab
+  guidance. Installed retained-browser proof remains open for final closeout.
+
+### Evidence
+
+- `docs/dev/notes/2026-07-19-clipboard-read-target-recovery-performance.md`
+- `docs/dev/plans/0076-2026-07-19-clipboard-target-recovery-and-interaction-performance-remediation-plan.md`
+- `cli/src/native/cdp/client.rs`
+- `cli/src/native/browser.rs`
+- `cli/src/native/actions.rs`
+
+### Next Recommendation
+
+Start Slice C bounded clipboard-write capture while retaining Slice B's
+installed retained-browser smoke as a final closeout gate.
+
 ## P01 | Remote View Backend Reliability
 
 State: CLOSED

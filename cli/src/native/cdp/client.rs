@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::io::Write;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 
 use futures_util::{SinkExt, StreamExt};
 use serde_json::Value;
@@ -12,7 +12,95 @@ use tokio_tungstenite::tungstenite::Message;
 
 use super::types::{CdpCommand, CdpEvent, CdpMessage};
 
-type PendingMap = Arc<Mutex<HashMap<u64, oneshot::Sender<CdpMessage>>>>;
+type PendingMap = Arc<StdMutex<HashMap<u64, oneshot::Sender<CdpMessage>>>>;
+
+fn lock_pending(
+    pending: &PendingMap,
+) -> std::sync::MutexGuard<'_, HashMap<u64, oneshot::Sender<CdpMessage>>> {
+    pending
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+struct PendingCommandRegistration {
+    id: u64,
+    pending: PendingMap,
+    active: bool,
+}
+
+impl PendingCommandRegistration {
+    fn insert(id: u64, sender: oneshot::Sender<CdpMessage>, pending: PendingMap) -> Self {
+        lock_pending(&pending).insert(id, sender);
+        Self {
+            id,
+            pending,
+            active: true,
+        }
+    }
+
+    fn disarm(&mut self) {
+        self.active = false;
+    }
+}
+
+impl Drop for PendingCommandRegistration {
+    fn drop(&mut self) {
+        if self.active {
+            lock_pending(&self.pending).remove(&self.id);
+        }
+    }
+}
+
+const DEFAULT_COMMAND_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Stable command-lifecycle failures for callers that need more than the
+/// compatibility string returned by `send_command`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CdpCommandError {
+    Serialization {
+        method: String,
+        message: String,
+    },
+    Transport {
+        method: String,
+        message: String,
+    },
+    ResponseChannelClosed {
+        method: String,
+    },
+    Timeout {
+        method: String,
+        timeout: std::time::Duration,
+    },
+    Protocol {
+        method: String,
+        message: String,
+    },
+}
+
+impl std::fmt::Display for CdpCommandError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Serialization { message, .. } => {
+                write!(formatter, "Failed to serialize CDP command: {message}")
+            }
+            Self::Transport { message, .. } => {
+                write!(formatter, "Failed to send CDP command: {message}")
+            }
+            Self::ResponseChannelClosed { .. } => {
+                write!(formatter, "CDP response channel closed")
+            }
+            Self::Timeout { method, .. } => {
+                write!(formatter, "CDP command timed out: {method}")
+            }
+            Self::Protocol { method, message } => {
+                write!(formatter, "CDP error ({method}): {message}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for CdpCommandError {}
 
 /// Interval between WebSocket ping frames sent to keep the connection alive
 /// through intermediate proxies (reverse proxies, load balancers, service meshes).
@@ -86,7 +174,7 @@ impl CdpClient {
         let (ws_tx, mut ws_rx) = ws_stream.split();
         let ws_tx = Arc::new(Mutex::new(ws_tx));
 
-        let pending: PendingMap = Arc::new(Mutex::new(HashMap::new()));
+        let pending: PendingMap = Arc::new(StdMutex::new(HashMap::new()));
         let (event_tx, _) = broadcast::channel(4096);
         let (raw_tx, _) = broadcast::channel(4096);
 
@@ -149,7 +237,7 @@ impl CdpClient {
 
                 if let Some(id) = parsed.id {
                     // Response to a command
-                    let mut pending = pending_clone.lock().await;
+                    let mut pending = lock_pending(&pending_clone);
                     if let Some(tx) = pending.remove(&id) {
                         let _ = tx.send(parsed);
                     }
@@ -167,7 +255,7 @@ impl CdpClient {
             // Reader loop exited (connection closed or error). Drop all pending
             // command senders so callers get an immediate channel-closed error
             // instead of waiting for the 30-second timeout.
-            pending_clone.lock().await.clear();
+            lock_pending(&pending_clone).clear();
 
             // Stop the keepalive task — the connection is gone.
             let _ = cancel_tx.send(true);
@@ -209,44 +297,74 @@ impl CdpClient {
         params: Option<Value>,
         session_id: Option<&str>,
     ) -> Result<Value, String> {
+        self.send_command_with_timeout(method, params, session_id, DEFAULT_COMMAND_TIMEOUT)
+            .await
+            .map_err(|error| error.to_string())
+    }
+
+    /// Sends one CDP command with a caller-selected transport deadline.
+    ///
+    /// The pending response registration is removed on response, timeout,
+    /// transport failure, channel closure, or external future cancellation.
+    pub async fn send_command_with_timeout(
+        &self,
+        method: &str,
+        params: Option<Value>,
+        session_id: Option<&str>,
+        timeout: std::time::Duration,
+    ) -> Result<Value, CdpCommandError> {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
+        let method_name = method.to_string();
 
         let cmd = CdpCommand {
             id,
-            method: method.to_string(),
+            method: method_name.clone(),
             params,
             session_id: session_id.filter(|s| !s.is_empty()).map(|s| s.to_string()),
         };
 
-        let json = serde_json::to_string(&cmd)
-            .map_err(|e| format!("Failed to serialize CDP command: {}", e))?;
+        let json = serde_json::to_string(&cmd).map_err(|error| CdpCommandError::Serialization {
+            method: method_name.clone(),
+            message: error.to_string(),
+        })?;
 
         let (tx, rx) = oneshot::channel();
 
-        {
-            let mut pending = self.pending.lock().await;
-            pending.insert(id, tx);
-        }
+        let mut registration = PendingCommandRegistration::insert(id, tx, self.pending.clone());
 
         {
             let mut ws_tx = self.ws_tx.lock().await;
-            ws_tx
-                .send(Message::Text(json))
-                .await
-                .map_err(|e| format!("Failed to send CDP command: {}", e))?;
+            if let Err(error) = ws_tx.send(Message::Text(json)).await {
+                return Err(CdpCommandError::Transport {
+                    method: method_name,
+                    message: error.to_string(),
+                });
+            }
         }
 
-        let response = match tokio::time::timeout(std::time::Duration::from_secs(30), rx).await {
-            Ok(Ok(resp)) => resp,
-            Ok(Err(_)) => return Err("CDP response channel closed".to_string()),
+        let response = match tokio::time::timeout(timeout, rx).await {
+            Ok(Ok(resp)) => {
+                registration.disarm();
+                resp
+            }
+            Ok(Err(_)) => {
+                return Err(CdpCommandError::ResponseChannelClosed {
+                    method: method_name,
+                })
+            }
             Err(_) => {
-                self.pending.lock().await.remove(&id);
-                return Err(format!("CDP command timed out: {}", method));
+                return Err(CdpCommandError::Timeout {
+                    method: method_name,
+                    timeout,
+                });
             }
         };
 
         if let Some(error) = response.error {
-            return Err(format!("CDP error ({}): {}", method, error));
+            return Err(CdpCommandError::Protocol {
+                method: method_name,
+                message: error.to_string(),
+            });
         }
 
         Ok(response.result.unwrap_or(Value::Null))
@@ -254,6 +372,11 @@ impl CdpClient {
 
     pub fn subscribe(&self) -> broadcast::Receiver<CdpEvent> {
         self.event_tx.subscribe()
+    }
+
+    #[cfg(test)]
+    async fn pending_command_count(&self) -> usize {
+        lock_pending(&self.pending).len()
     }
 
     /// Subscribe to all raw incoming CDP messages (responses + events).
@@ -358,4 +481,121 @@ fn enable_tcp_keepalive(stream: &tokio_tungstenite::MaybeTlsStream<tokio::net::T
     let keepalive = keepalive.with_interval(std::time::Duration::from_secs(10));
 
     let _ = sock.set_tcp_keepalive(&keepalive);
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    use futures_util::{SinkExt, StreamExt};
+    use serde_json::json;
+    use tokio::net::TcpListener;
+    use tokio_tungstenite::tungstenite::Message;
+
+    use super::{CdpClient, CdpCommandError};
+
+    #[tokio::test]
+    async fn short_deadline_times_out_without_blocking_the_next_command() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut websocket = tokio_tungstenite::accept_async(stream).await.unwrap();
+
+            let first = websocket.next().await.unwrap().unwrap();
+            let first: serde_json::Value = serde_json::from_str(first.to_text().unwrap()).unwrap();
+            assert_eq!(first["method"], "Runtime.evaluate");
+
+            let second = websocket.next().await.unwrap().unwrap();
+            let second: serde_json::Value =
+                serde_json::from_str(second.to_text().unwrap()).unwrap();
+            websocket
+                .send(Message::Text(
+                    json!({
+                        "id": second["id"],
+                        "result": { "ready": true }
+                    })
+                    .to_string(),
+                ))
+                .await
+                .unwrap();
+        });
+
+        let client = CdpClient::connect(&format!("ws://{address}"))
+            .await
+            .unwrap();
+        let error = client
+            .send_command_with_timeout(
+                "Runtime.evaluate",
+                Some(json!({ "expression": "new Promise(() => {})" })),
+                Some("session-1"),
+                Duration::from_millis(25),
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            CdpCommandError::Timeout {
+                ref method,
+                timeout
+            } if method == "Runtime.evaluate" && timeout == Duration::from_millis(25)
+        ));
+
+        let result = client
+            .send_command_with_timeout(
+                "Runtime.evaluate",
+                Some(json!({ "expression": "true" })),
+                Some("session-1"),
+                Duration::from_secs(1),
+            )
+            .await
+            .unwrap();
+        assert_eq!(result, json!({ "ready": true }));
+
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn externally_cancelled_command_removes_its_pending_registration() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (received_tx, received_rx) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut websocket = tokio_tungstenite::accept_async(stream).await.unwrap();
+            let command = websocket.next().await.unwrap().unwrap();
+            let command: serde_json::Value =
+                serde_json::from_str(command.to_text().unwrap()).unwrap();
+            received_tx.send(command["id"].as_u64().unwrap()).unwrap();
+            futures_util::future::pending::<()>().await;
+        });
+
+        let client = Arc::new(
+            CdpClient::connect(&format!("ws://{address}"))
+                .await
+                .unwrap(),
+        );
+        let command_client = client.clone();
+        let command = tokio::spawn(async move {
+            command_client
+                .send_command_with_timeout(
+                    "Runtime.evaluate",
+                    Some(json!({ "expression": "new Promise(() => {})" })),
+                    Some("session-1"),
+                    Duration::from_secs(60),
+                )
+                .await
+        });
+
+        received_rx.await.unwrap();
+        assert_eq!(client.pending_command_count().await, 1);
+        command.abort();
+        let _ = command.await;
+
+        tokio::task::yield_now().await;
+        assert_eq!(client.pending_command_count().await, 0);
+
+        server.abort();
+    }
 }
