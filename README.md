@@ -138,7 +138,7 @@ agent-browser find role button click --name "Submit"
 
 ```bash
 agent-browser open <url>              # Navigate to URL (aliases: goto, navigate)
-agent-browser click <sel>             # Click element (--new-tab to open in new tab)
+agent-browser click <sel>             # Click element (--new-tab or --capture-clipboard-write)
 agent-browser dblclick <sel>          # Double-click element
 agent-browser focus <sel>             # Focus element
 agent-browser type <sel> <text>       # Type into element
@@ -329,6 +329,13 @@ grace period. An empty clipboard succeeds with `text: ""`, `empty: true`, and
 `diagnostic` JSON suffix with a stable `code`, target `recovery` result, and
 `recommendedAction`. If recovery is `replace_tab_required`, replace only the
 affected tab before retrying the read.
+
+Use `agent-browser click <selector> --capture-clipboard-write --json` only when
+the click is expected to call `Clipboard.writeText`. The opt-in response reports
+whether that method was invoked and returns its last text argument, capped at
+4096 characters with truncation metadata. The original method descriptor is
+restored before the command completes, including when the click fails. This
+does not capture `Clipboard.write`, legacy `execCommand`, or native browser UI.
 
 ### Mouse Control
 

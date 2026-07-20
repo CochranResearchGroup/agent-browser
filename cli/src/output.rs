@@ -3631,7 +3631,7 @@ Examples:
             r##"
 agent-browser click - Click an element
 
-Usage: agent-browser click <selector> [--new-tab]
+Usage: agent-browser click <selector> [--new-tab] [--capture-clipboard-write]
 
 Clicks on the specified element. The selector can be a CSS selector,
 XPath, or an element reference from snapshot (e.g., @e1).
@@ -3639,6 +3639,9 @@ XPath, or an element reference from snapshot (e.g., @e1).
 Options:
   --new-tab            Open link in a new tab instead of navigating current tab
                        (only works on elements with href attribute)
+  --capture-clipboard-write
+                       Explicitly capture the last Clipboard.writeText payload
+                       during the click (4096-character response cap)
 
 Global Options:
   --json               Output as JSON
@@ -3650,6 +3653,7 @@ Examples:
   agent-browser click "button.primary"
   agent-browser click "//button[@type='submit']"
   agent-browser click @e3 --new-tab
+  agent-browser click @e4 --capture-clipboard-write --json
 "##
         }
         "dblclick" => {

@@ -9284,6 +9284,58 @@ async fn handle_screenshot(cmd: &Value, state: &mut DaemonState) -> Result<Value
 }
 
 async fn handle_click(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+    let capture_clipboard_write = cmd
+        .get("captureClipboardWrite")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+    if !capture_clipboard_write {
+        return handle_click_action(cmd, state).await;
+    }
+
+    let (client, session_id) = {
+        let mgr = state
+            .browser
+            .as_ref()
+            .ok_or("--capture-clipboard-write requires the native Chrome browser backend")?;
+        (mgr.client.clone(), mgr.active_session_id()?.to_string())
+    };
+    let action = handle_click_action(cmd, state);
+    let action_timeout = cmd
+        .get("jobTimeoutMs")
+        .and_then(|value| value.as_u64())
+        .map(|timeout_ms| {
+            tokio::time::Duration::from_millis(timeout_ms.saturating_sub(1000).max(1))
+        })
+        .unwrap_or(super::clipboard::DEFAULT_WRITE_CAPTURE_ACTION_TIMEOUT);
+    let (action_result, capture) = super::clipboard::capture_write_during(
+        &client,
+        &session_id,
+        super::clipboard::DEFAULT_WRITE_CAPTURE_LIMIT,
+        action_timeout,
+        action,
+    )
+    .await?;
+    match action_result {
+        Ok(mut response) => {
+            response["clipboardCapture"] = json!({
+                "supported": capture.supported,
+                "invoked": capture.invoked,
+                "text": capture.text,
+                "truncated": capture.truncated,
+                "originalLength": capture.original_length,
+                "restored": capture.restored,
+                "reason": capture.reason,
+            });
+            Ok(response)
+        }
+        Err(error) => Err(format!(
+            "{error}; clipboardCaptureRestored={}",
+            capture.restored
+        )),
+    }
+}
+
+async fn handle_click_action(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
     let selector = cmd
         .get("selector")
         .and_then(|v| v.as_str())

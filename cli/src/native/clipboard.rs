@@ -1,5 +1,7 @@
 use std::time::Duration;
+use std::{future::Future, result::Result as StdResult};
 
+use serde::Deserialize;
 use serde_json::json;
 
 use super::cdp::client::{CdpClient, CdpCommandError};
@@ -7,6 +9,198 @@ use super::cdp::types::EvaluateResult;
 
 const CDP_RESPONSE_GRACE: Duration = Duration::from_millis(250);
 pub const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(3);
+pub const DEFAULT_WRITE_CAPTURE_LIMIT: usize = 4096;
+pub const DEFAULT_WRITE_CAPTURE_ACTION_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Result of an explicitly requested, bounded `Clipboard.writeText` capture.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClipboardWriteCaptureOutcome {
+    pub supported: bool,
+    pub invoked: bool,
+    pub text: Option<String>,
+    pub truncated: bool,
+    pub original_length: usize,
+    pub restored: bool,
+    pub reason: Option<String>,
+}
+
+/// Installed page-scoped capture that must be finalized to restore the
+/// original `Clipboard.prototype.writeText` descriptor.
+pub struct ClipboardWriteCapture<'a> {
+    client: &'a CdpClient,
+    session_id: &'a str,
+    token: String,
+    supported: bool,
+}
+
+impl<'a> ClipboardWriteCapture<'a> {
+    pub async fn begin(client: &'a CdpClient, session_id: &'a str) -> Result<Self, String> {
+        let token = format!("__agentBrowserClipboardCapture_{}", uuid::Uuid::new_v4());
+        let token_json = serde_json::to_string(&token).map_err(|error| error.to_string())?;
+        let expression = format!(
+            r#"(() => {{
+                const token = {token_json};
+                const clipboard = globalThis.navigator?.clipboard;
+                const prototype = globalThis.Clipboard?.prototype ?? (clipboard ? Object.getPrototypeOf(clipboard) : null);
+                if (!clipboard || !prototype) {{
+                    globalThis[token] = {{ supported: false, reason: "clipboard_backend_unavailable" }};
+                    return {{ supported: false }};
+                }}
+                // Capture only calls to Clipboard.prototype.writeText.
+                const descriptor = Object.getOwnPropertyDescriptor(prototype, "writeText");
+                if (!descriptor || typeof descriptor.value !== "function" || descriptor.configurable === false) {{
+                    globalThis[token] = {{ supported: false, reason: "write_text_not_patchable" }};
+                    return {{ supported: false }};
+                }}
+                const state = {{ supported: true, prototype, descriptor, calls: [] }};
+                globalThis[token] = state;
+                Object.defineProperty(prototype, "writeText", {{
+                    ...descriptor,
+                    value: function(text) {{
+                        state.calls.push(String(text));
+                        return Reflect.apply(descriptor.value, this, arguments);
+                    }}
+                }});
+                return {{ supported: true }};
+            }})()"#
+        );
+        let response = evaluate_capture_script(client, session_id, expression).await?;
+        let supported = response
+            .get("supported")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false);
+        Ok(Self {
+            client,
+            session_id,
+            token,
+            supported,
+        })
+    }
+
+    pub async fn finish(self, max_chars: usize) -> Result<ClipboardWriteCaptureOutcome, String> {
+        let token_json = serde_json::to_string(&self.token).map_err(|error| error.to_string())?;
+        let expression = format!(
+            r#"(() => {{
+                const token = {token_json};
+                const state = globalThis[token];
+                if (!state) {{
+                    return {{ supported: false, invoked: false, text: null, truncated: false, originalLength: 0, restored: false, reason: "capture_state_missing" }};
+                }}
+                let restored = !state.supported;
+                if (state.supported) {{
+                    try {{
+                        Object.defineProperty(state.prototype, "writeText", state.descriptor);
+                        restored = true;
+                    }} catch (_) {{
+                        restored = false;
+                    }}
+                }}
+                delete globalThis[token];
+                const invoked = Boolean(state.supported && state.calls.length);
+                const text = invoked ? state.calls[state.calls.length - 1] : null;
+                const characters = text === null ? [] : Array.from(text);
+                const bounded = text === null ? null : characters.slice(0, {max_chars}).join("");
+                return {{
+                    supported: Boolean(state.supported),
+                    invoked,
+                    text: bounded,
+                    truncated: characters.length > {max_chars},
+                    originalLength: characters.length,
+                    restored,
+                    reason: state.reason ?? null
+                }};
+            }})()"#
+        );
+        let value = evaluate_capture_script(self.client, self.session_id, expression).await?;
+        let outcome: ClipboardWriteCaptureWire = serde_json::from_value(value)
+            .map_err(|error| format!("Invalid clipboard capture response: {error}"))?;
+        if self.supported && !outcome.restored {
+            return Err(
+                "Clipboard write capture could not restore Clipboard.prototype.writeText"
+                    .to_string(),
+            );
+        }
+        Ok(outcome.into())
+    }
+}
+
+/// Runs one action between capture installation and restoration. The action
+/// result is preserved so cleanup still runs when the action itself fails.
+pub async fn capture_write_during<F, T>(
+    client: &CdpClient,
+    session_id: &str,
+    max_chars: usize,
+    action_timeout: Duration,
+    action: F,
+) -> Result<(StdResult<T, String>, ClipboardWriteCaptureOutcome), String>
+where
+    F: Future<Output = StdResult<T, String>>,
+{
+    let capture = ClipboardWriteCapture::begin(client, session_id).await?;
+    let action_result = match tokio::time::timeout(action_timeout, action).await {
+        Ok(result) => result,
+        Err(_) => Err(format!(
+            "Click did not complete within the {} ms clipboard capture deadline",
+            action_timeout.as_millis()
+        )),
+    };
+    let outcome = capture.finish(max_chars).await?;
+    Ok((action_result, outcome))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ClipboardWriteCaptureWire {
+    supported: bool,
+    invoked: bool,
+    text: Option<String>,
+    truncated: bool,
+    original_length: usize,
+    restored: bool,
+    reason: Option<String>,
+}
+
+impl From<ClipboardWriteCaptureWire> for ClipboardWriteCaptureOutcome {
+    fn from(value: ClipboardWriteCaptureWire) -> Self {
+        Self {
+            supported: value.supported,
+            invoked: value.invoked,
+            text: value.text,
+            truncated: value.truncated,
+            original_length: value.original_length,
+            restored: value.restored,
+            reason: value.reason,
+        }
+    }
+}
+
+async fn evaluate_capture_script(
+    client: &CdpClient,
+    session_id: &str,
+    expression: String,
+) -> Result<serde_json::Value, String> {
+    let response: EvaluateResult = client
+        .send_command_typed(
+            "Runtime.evaluate",
+            &super::cdp::types::EvaluateParams {
+                expression,
+                return_by_value: Some(true),
+                await_promise: Some(false),
+            },
+            Some(session_id),
+        )
+        .await?;
+    if let Some(details) = response.exception_details {
+        return Err(format!(
+            "Clipboard capture evaluation failed: {}",
+            details.text
+        ));
+    }
+    response
+        .result
+        .value
+        .ok_or_else(|| "Clipboard capture evaluation returned no value".to_string())
+}
 
 /// Successful browser clipboard text read. Empty text remains successful.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -288,7 +482,10 @@ mod tests {
     use tokio::net::TcpListener;
     use tokio_tungstenite::tungstenite::Message;
 
-    use super::{read_text, ClipboardFailureCode, ClipboardRecovery};
+    use super::{
+        capture_write_during, read_text, ClipboardFailureCode, ClipboardRecovery,
+        ClipboardWriteCapture, DEFAULT_WRITE_CAPTURE_LIMIT,
+    };
     use crate::native::cdp::client::CdpClient;
 
     #[tokio::test]
@@ -334,6 +531,207 @@ mod tests {
             .unwrap();
         assert_eq!(outcome.text, "");
         assert!(outcome.empty);
+
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn write_capture_is_bounded_and_restores_the_original_descriptor() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut websocket = tokio_tungstenite::accept_async(stream).await.unwrap();
+
+            let begin = websocket.next().await.unwrap().unwrap();
+            let begin: serde_json::Value = serde_json::from_str(begin.to_text().unwrap()).unwrap();
+            assert_eq!(begin["method"], "Runtime.evaluate");
+            assert!(begin["params"]["expression"]
+                .as_str()
+                .unwrap()
+                .contains("Clipboard.prototype.writeText"));
+            websocket
+                .send(Message::Text(
+                    json!({
+                        "id": begin["id"],
+                        "result": { "result": { "type": "object", "value": {
+                            "supported": true
+                        }}}
+                    })
+                    .to_string(),
+                ))
+                .await
+                .unwrap();
+
+            let finish = websocket.next().await.unwrap().unwrap();
+            let finish: serde_json::Value =
+                serde_json::from_str(finish.to_text().unwrap()).unwrap();
+            assert_eq!(finish["method"], "Runtime.evaluate");
+            assert!(finish["params"]["expression"]
+                .as_str()
+                .unwrap()
+                .contains("Object.defineProperty"));
+            websocket
+                .send(Message::Text(
+                    json!({
+                        "id": finish["id"],
+                        "result": { "result": { "type": "object", "value": {
+                            "supported": true,
+                            "invoked": true,
+                            "text": "bounded",
+                            "truncated": true,
+                            "originalLength": 5000,
+                            "restored": true,
+                            "reason": null
+                        }}}
+                    })
+                    .to_string(),
+                ))
+                .await
+                .unwrap();
+        });
+
+        let client = CdpClient::connect(&format!("ws://{address}"))
+            .await
+            .unwrap();
+        let capture = ClipboardWriteCapture::begin(&client, "session-1")
+            .await
+            .unwrap();
+        let outcome = capture.finish(DEFAULT_WRITE_CAPTURE_LIMIT).await.unwrap();
+        assert!(outcome.supported);
+        assert!(outcome.invoked);
+        assert_eq!(outcome.text.as_deref(), Some("bounded"));
+        assert!(outcome.truncated);
+        assert_eq!(outcome.original_length, 5000);
+        assert!(outcome.restored);
+
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn write_capture_restores_after_the_wrapped_action_fails() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut websocket = tokio_tungstenite::accept_async(stream).await.unwrap();
+
+            let begin = websocket.next().await.unwrap().unwrap();
+            let begin: serde_json::Value = serde_json::from_str(begin.to_text().unwrap()).unwrap();
+            websocket
+                .send(Message::Text(
+                    json!({
+                        "id": begin["id"],
+                        "result": { "result": { "type": "object", "value": {
+                            "supported": true
+                        }}}
+                    })
+                    .to_string(),
+                ))
+                .await
+                .unwrap();
+
+            let finish = websocket.next().await.unwrap().unwrap();
+            let finish: serde_json::Value =
+                serde_json::from_str(finish.to_text().unwrap()).unwrap();
+            websocket
+                .send(Message::Text(
+                    json!({
+                        "id": finish["id"],
+                        "result": { "result": { "type": "object", "value": {
+                            "supported": true,
+                            "invoked": false,
+                            "text": null,
+                            "truncated": false,
+                            "originalLength": 0,
+                            "restored": true,
+                            "reason": null
+                        }}}
+                    })
+                    .to_string(),
+                ))
+                .await
+                .unwrap();
+        });
+
+        let client = CdpClient::connect(&format!("ws://{address}"))
+            .await
+            .unwrap();
+        let (action_result, outcome) = capture_write_during(
+            &client,
+            "session-1",
+            DEFAULT_WRITE_CAPTURE_LIMIT,
+            Duration::from_secs(1),
+            async { Err::<(), String>("click failed".to_string()) },
+        )
+        .await
+        .unwrap();
+        assert_eq!(action_result.unwrap_err(), "click failed");
+        assert!(outcome.restored);
+
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn write_capture_restores_after_the_wrapped_action_times_out() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut websocket = tokio_tungstenite::accept_async(stream).await.unwrap();
+
+            let begin = websocket.next().await.unwrap().unwrap();
+            let begin: serde_json::Value = serde_json::from_str(begin.to_text().unwrap()).unwrap();
+            websocket
+                .send(Message::Text(
+                    json!({
+                        "id": begin["id"],
+                        "result": { "result": { "type": "object", "value": {
+                            "supported": true
+                        }}}
+                    })
+                    .to_string(),
+                ))
+                .await
+                .unwrap();
+
+            let finish = websocket.next().await.unwrap().unwrap();
+            let finish: serde_json::Value =
+                serde_json::from_str(finish.to_text().unwrap()).unwrap();
+            websocket
+                .send(Message::Text(
+                    json!({
+                        "id": finish["id"],
+                        "result": { "result": { "type": "object", "value": {
+                            "supported": true,
+                            "invoked": false,
+                            "text": null,
+                            "truncated": false,
+                            "originalLength": 0,
+                            "restored": true,
+                            "reason": null
+                        }}}
+                    })
+                    .to_string(),
+                ))
+                .await
+                .unwrap();
+        });
+
+        let client = CdpClient::connect(&format!("ws://{address}"))
+            .await
+            .unwrap();
+        let (action_result, outcome) = capture_write_during(
+            &client,
+            "session-1",
+            DEFAULT_WRITE_CAPTURE_LIMIT,
+            Duration::from_millis(10),
+            std::future::pending::<Result<(), String>>(),
+        )
+        .await
+        .unwrap();
+        assert!(action_result.unwrap_err().contains("capture deadline"));
+        assert!(outcome.restored);
 
         server.await.unwrap();
     }

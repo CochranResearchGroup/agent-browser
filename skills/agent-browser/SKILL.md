@@ -535,6 +535,7 @@ agent-browser snapshot -s "#selector" # Scope to CSS selector
 # Interaction (use @refs from snapshot)
 agent-browser click @e1               # Click element
 agent-browser click @e1 --new-tab     # Click and open in new tab
+agent-browser click @e1 --capture-clipboard-write --json  # Explicitly capture Clipboard.writeText
 agent-browser fill @e2 "text"         # Clear and type text
 agent-browser type @e2 "text"         # Type without clearing
 agent-browser select @e1 "option"     # Select dropdown option
@@ -658,6 +659,10 @@ agent-browser clipboard paste                     # Paste from clipboard
 # Empty text is success. In JSON, inspect empty and clipboardOutcome.
 # On failure, parse the diagnostic JSON suffix. If recovery is
 # replace_tab_required, replace only the affected tab before retrying.
+
+# Opt-in capture returns the last Clipboard.writeText argument with a
+# 4096-character cap and restores the original descriptor before completion.
+agent-browser click @e1 --capture-clipboard-write --json
 
 # Dialogs (alert, confirm, prompt, beforeunload)
 # By default, alert and beforeunload dialogs are auto-accepted so they never block the agent.

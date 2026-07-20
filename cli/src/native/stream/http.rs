@@ -5655,7 +5655,7 @@ mod tests {
             "POST",
             "/api/browser/click",
             None,
-            r##"{"selector":"#ready","serviceName":"JournalDownloader"}"##,
+            r##"{"selector":"#ready","captureClipboardWrite":true,"serviceName":"JournalDownloader"}"##,
         )
         .unwrap()
         .unwrap();
@@ -5922,6 +5922,7 @@ mod tests {
         assert_eq!(request_detail["requestId"], "request-1");
         assert_eq!(click["action"], "click");
         assert_eq!(click["selector"], "#ready");
+        assert_eq!(click["captureClipboardWrite"], true);
         assert_eq!(click["serviceName"], "JournalDownloader");
         assert_eq!(fill["action"], "fill");
         assert_eq!(fill["value"], "Ada");

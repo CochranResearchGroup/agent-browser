@@ -1435,18 +1435,24 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
         // === Core Actions ===
         "click" => {
             let new_tab = rest.contains(&"--new-tab");
+            let capture_clipboard_write = rest.contains(&"--capture-clipboard-write");
             let sel = rest
                 .iter()
-                .find(|arg| **arg != "--new-tab")
+                .find(|arg| {
+                    **arg != "--new-tab" && **arg != "--capture-clipboard-write"
+                })
                 .ok_or_else(|| ParseError::MissingArguments {
                     context: "click".to_string(),
-                    usage: "click <selector> [--new-tab]",
+                    usage: "click <selector> [--new-tab] [--capture-clipboard-write]",
                 })?;
+            let mut command = json!({ "id": id, "action": "click", "selector": sel });
             if new_tab {
-                Ok(json!({ "id": id, "action": "click", "selector": sel, "newTab": true }))
-            } else {
-                Ok(json!({ "id": id, "action": "click", "selector": sel }))
+                command["newTab"] = json!(true);
             }
+            if capture_clipboard_write {
+                command["captureClipboardWrite"] = json!(true);
+            }
+            Ok(command)
         }
         "dblclick" => {
             let sel = rest.first().ok_or_else(|| ParseError::MissingArguments {
@@ -5693,6 +5699,18 @@ mod tests {
         let cmd = parse_command(&args("click #button"), &default_flags()).unwrap();
         assert_eq!(cmd["action"], "click");
         assert_eq!(cmd["selector"], "#button");
+    }
+
+    #[test]
+    fn test_click_capture_clipboard_write() {
+        let cmd = parse_command(
+            &args("click #copy --capture-clipboard-write"),
+            &default_flags(),
+        )
+        .unwrap();
+        assert_eq!(cmd["action"], "click");
+        assert_eq!(cmd["selector"], "#copy");
+        assert_eq!(cmd["captureClipboardWrite"], true);
     }
 
     #[test]

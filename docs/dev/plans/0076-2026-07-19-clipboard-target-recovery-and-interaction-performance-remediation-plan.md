@@ -199,6 +199,8 @@ recommendations without approving or executing those dependency scripts.
 
 ## Slice C | Bounded Clipboard-Write Capture
 
+Status: Source Complete, Installed Live Proof Pending
+
 - Add an opt-in click action mode that captures `Clipboard.writeText` values
   without reading the system clipboard.
 - Bound captured text length and report truncation.
@@ -216,6 +218,35 @@ Exit criteria:
 - Action failure and timeout restore the original method.
 - Unsupported copy mechanisms return an explicit no-capture result rather than
   a false success claim.
+
+Source completion evidence:
+
+- `click --capture-clipboard-write` and MCP/HTTP
+  `captureClipboardWrite: true` explicitly install a page-scoped wrapper for
+  `Clipboard.prototype.writeText` around one click.
+- The response reports `supported`, `invoked`, bounded `text`, `truncated`,
+  `originalLength`, `restored`, and an unsupported `reason` where applicable.
+- Captured text is capped at 4096 characters and is returned only in the
+  explicit command response. It is not added to service trace or debug fields.
+- The clipboard module owns setup, deadline enforcement, and restoration. Unit
+  tests prove restoration after success, action failure, and action timeout.
+- The click action uses a five-second capture-specific deadline, shortened to
+  leave a one-second cleanup reserve when a smaller worker deadline is present.
+- Documentation states that `Clipboard.write`, legacy `execCommand`, and native
+  browser UI are outside this capture contract.
+
+Focused validation:
+
+```bash
+cargo test --manifest-path cli/Cargo.toml write_capture_ -- --nocapture
+cargo test --manifest-path cli/Cargo.toml browser_api_command_maps_named_post_routes -- --nocapture
+cargo test --manifest-path cli/Cargo.toml browser_click_command_forwards_options_and_trace_fields -- --nocapture
+cargo fmt --manifest-path cli/Cargo.toml -- --check
+cargo clippy --manifest-path cli/Cargo.toml -- -D warnings
+pnpm --config.verify-deps-before-run=false test:service-api-mcp-parity
+pnpm --config.verify-deps-before-run=false --dir docs build
+git diff --check
+```
 
 ## Slice D | Page-Command Timing And Dependent Batch Execution
 

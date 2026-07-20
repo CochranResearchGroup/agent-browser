@@ -2232,6 +2232,10 @@ fn service_mcp_tools() -> Vec<Value> {
                         "type": "boolean",
                         "description": "Open a link target in a new tab instead of clicking in-place."
                     },
+                    "captureClipboardWrite": {
+                        "type": "boolean",
+                        "description": "Explicitly capture the last Clipboard.writeText payload during this click. Returned text is capped at 4096 characters; the page method is restored before the command completes."
+                    },
                     "jobTimeoutMs": {
                         "type": "integer",
                         "minimum": 1,
@@ -6906,6 +6910,7 @@ fn call_browser_screenshot(arguments: &Value, session: &str) -> Result<Value, Js
 fn call_browser_click(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
     let selector = required_string_argument(arguments, "selector")?;
     let new_tab = optional_bool_argument(arguments, "newTab")?;
+    let capture_clipboard_write = optional_bool_argument(arguments, "captureClipboardWrite")?;
     let job_timeout_ms = optional_positive_u64_argument(arguments, "jobTimeoutMs")?;
     let service_name = optional_string_argument(arguments, "serviceName")?;
     let agent_name = optional_string_argument(arguments, "agentName")?;
@@ -6914,6 +6919,7 @@ fn call_browser_click(arguments: &Value, session: &str) -> Result<Value, JsonRpc
     let command = browser_click_command(
         selector,
         new_tab,
+        capture_clipboard_write,
         job_timeout_ms,
         service_name,
         agent_name,
@@ -8889,6 +8895,7 @@ fn browser_clipboard_command(
 fn browser_click_command(
     selector: &str,
     new_tab: Option<bool>,
+    capture_clipboard_write: Option<bool>,
     job_timeout_ms: Option<u64>,
     service_name: Option<&str>,
     agent_name: Option<&str>,
@@ -8901,6 +8908,9 @@ fn browser_click_command(
     });
     if let Some(new_tab) = new_tab {
         command["newTab"] = json!(new_tab);
+    }
+    if let Some(capture_clipboard_write) = capture_clipboard_write {
+        command["captureClipboardWrite"] = json!(capture_clipboard_write);
     }
     if let Some(job_timeout_ms) = job_timeout_ms {
         command["jobTimeoutMs"] = json!(job_timeout_ms);
@@ -11100,6 +11110,9 @@ mod tests {
             "selector"
         );
         assert!(response["result"]["tools"][6]["inputSchema"]["properties"]["newTab"].is_object());
+        assert!(response["result"]["tools"][6]["inputSchema"]["properties"]
+            ["captureClipboardWrite"]
+            .is_object());
         assert!(
             response["result"]["tools"][6]["inputSchema"]["properties"]["serviceName"].is_object()
         );
@@ -14481,6 +14494,7 @@ mod tests {
         let command = browser_click_command(
             "#ready",
             Some(true),
+            Some(true),
             Some(1000),
             Some("JournalDownloader"),
             Some("agent-a"),
@@ -14490,6 +14504,7 @@ mod tests {
         assert_eq!(command["action"], "click");
         assert_eq!(command["selector"], "#ready");
         assert_eq!(command["newTab"], true);
+        assert_eq!(command["captureClipboardWrite"], true);
         assert_eq!(command["jobTimeoutMs"], 1000);
         assert_eq!(command["serviceName"], "JournalDownloader");
         assert_eq!(command["agentName"], "agent-a");
