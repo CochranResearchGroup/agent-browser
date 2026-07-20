@@ -300,6 +300,8 @@ git diff --check
 
 ## Slice E | Accessible Role Locator Repair
 
+Status: Complete
+
 - Replace the `aria-label` or `textContent` approximation with accessible-name
   matching consistent with the snapshot/ref-map semantics already used by the
   native browser implementation.
@@ -316,6 +318,32 @@ Exit criteria:
   the incident regression by itself.
 - Exact accessible-name matching does not fall back to raw `textContent` when
   those values differ.
+
+Completion evidence:
+
+- `getbyrole` now queries Chrome's full accessibility tree and matches the
+  browser-computed role and accessible name used by snapshot ref recovery.
+- Exact and partial matching share one AX-name predicate. Exact matching does
+  not inspect `aria-label` or raw `textContent` separately.
+- Main-frame and tracked iframe sessions are searched deterministically.
+  Backend-node resolution retains supported shadow-tree behavior.
+- The located backend node is installed as a temporary frame-aware ref and is
+  removed after either subaction success or failure. No DOM marker attribute is
+  created.
+- The live ignored E2E fixture uses a dynamically mounted button with no own
+  text and a name supplied only by a hidden `aria-labelledby` target. It proves
+  exact and partial clicks plus a browser-accessibility shadow-root click.
+
+Focused validation:
+
+```bash
+cargo test --manifest-path cli/Cargo.toml accessible_role_name_matching -- --nocapture
+cargo test --manifest-path cli/Cargo.toml e2e_getbyrole_uses_browser_accessible_name_from_aria_labelledby -- --ignored --test-threads=1 --nocapture
+cargo fmt --manifest-path cli/Cargo.toml -- --check
+cargo clippy --manifest-path cli/Cargo.toml -- -D warnings
+pnpm --config.verify-deps-before-run=false --dir docs build
+git diff --check
+```
 
 ## Slice F | Bounded Closed-Tab Status Projection
 

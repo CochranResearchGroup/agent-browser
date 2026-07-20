@@ -2881,6 +2881,113 @@ async fn e2e_inspect() {
 
 #[tokio::test]
 #[ignore]
+async fn e2e_getbyrole_uses_browser_accessible_name_from_aria_labelledby() {
+    let mut state = DaemonState::new();
+    let resp = execute_command(
+        &json!({ "id": "1", "action": "launch", "headless": true }),
+        &mut state,
+    )
+    .await;
+    assert_success(&resp);
+
+    let html = r#"data:text/html,<body>
+        <span id="accessible-name" style="display:none">Open profile menu</span>
+        <div id="portal"></div>
+        <script>
+          setTimeout(() => {
+            const button = document.createElement('button');
+            button.id = 'profile';
+            button.setAttribute('aria-labelledby', 'accessible-name');
+            button.onclick = () => { document.title = 'accessible-clicked'; };
+            document.getElementById('portal').appendChild(button);
+          }, 25);
+        </script>
+    </body>"#;
+    let resp = execute_command(
+        &json!({ "id": "2", "action": "navigate", "url": html }),
+        &mut state,
+    )
+    .await;
+    assert_success(&resp);
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+    let resp = execute_command(
+        &json!({
+            "id": "3",
+            "action": "getbyrole",
+            "role": "button",
+            "name": "Open profile menu",
+            "exact": true,
+            "subaction": "click"
+        }),
+        &mut state,
+    )
+    .await;
+    assert_success(&resp);
+
+    let resp = execute_command(&json!({ "id": "4", "action": "title" }), &mut state).await;
+    assert_success(&resp);
+    assert_eq!(get_data(&resp)["title"], "accessible-clicked");
+    assert!(state.ref_map.entries_sorted().is_empty());
+
+    let resp = execute_command(
+        &json!({ "id": "5", "action": "evaluate", "script": "document.title = 'reset'" }),
+        &mut state,
+    )
+    .await;
+    assert_success(&resp);
+    let resp = execute_command(
+        &json!({
+            "id": "6",
+            "action": "getbyrole",
+            "role": "button",
+            "name": "profile",
+            "exact": false,
+            "subaction": "click"
+        }),
+        &mut state,
+    )
+    .await;
+    assert_success(&resp);
+    let resp = execute_command(&json!({ "id": "7", "action": "title" }), &mut state).await;
+    assert_success(&resp);
+    assert_eq!(get_data(&resp)["title"], "accessible-clicked");
+    assert!(state.ref_map.entries_sorted().is_empty());
+
+    let resp = execute_command(
+        &json!({
+            "id": "8",
+            "action": "evaluate",
+            "script": "(() => { const host = document.createElement('div'); document.body.appendChild(host); const root = host.attachShadow({mode:'open'}); const button = document.createElement('button'); button.setAttribute('aria-label', 'Shadow action'); button.onclick = () => { document.title = 'shadow-clicked'; }; root.appendChild(button); })()"
+        }),
+        &mut state,
+    )
+    .await;
+    assert_success(&resp);
+    let resp = execute_command(
+        &json!({
+            "id": "9",
+            "action": "getbyrole",
+            "role": "button",
+            "name": "Shadow action",
+            "exact": true,
+            "subaction": "click"
+        }),
+        &mut state,
+    )
+    .await;
+    assert_success(&resp);
+    let resp = execute_command(&json!({ "id": "10", "action": "title" }), &mut state).await;
+    assert_success(&resp);
+    assert_eq!(get_data(&resp)["title"], "shadow-clicked");
+    assert!(state.ref_map.entries_sorted().is_empty());
+
+    let resp = execute_command(&json!({ "id": "99", "action": "close" }), &mut state).await;
+    assert_success(&resp);
+}
+
+#[tokio::test]
+#[ignore]
 async fn e2e_click_stale_ref_falls_back_to_role_name() {
     let mut state = DaemonState::new();
 

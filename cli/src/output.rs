@@ -4313,6 +4313,10 @@ Options:
   --name <name>        Filter role by accessible name
   --exact              Require exact text match
 
+Role locators use Chrome's accessibility tree rather than DOM text shortcuts.
+Browser-computed names such as aria-labelledby and hidden referenced text are
+therefore matched consistently with snapshots.
+
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session

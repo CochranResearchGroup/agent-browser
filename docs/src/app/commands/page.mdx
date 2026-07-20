@@ -191,6 +191,13 @@ Options:
 - `--name <name>`: filter role by accessible name
 - `--exact`: require exact text match
 
+Role locators use Chrome's accessibility tree and the same browser-computed
+role and accessible name authority as snapshots. Names from
+<code>aria-labelledby</code>, hidden referenced text, implicit roles,
+dynamically mounted elements, and supported iframe or shadow-tree targets are
+matched without falling back to raw <code>textContent</code>. Temporary locator
+refs are removed after successful and failed actions.
+
 Examples:
 
 ```bash

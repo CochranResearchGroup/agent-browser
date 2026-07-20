@@ -20311,8 +20311,10 @@ fn build_role_selector(role: &str, name: Option<&str>, exact: bool) -> String {
 }
 
 async fn handle_getbyrole(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
-    let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
-    let session_id = mgr.active_session_id()?.to_string();
+    let (client, session_id) = {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        (mgr.client.clone(), mgr.active_session_id()?.to_string())
+    };
     let role = cmd
         .get("role")
         .and_then(|v| v.as_str())
@@ -20320,76 +20322,55 @@ async fn handle_getbyrole(cmd: &Value, state: &mut DaemonState) -> Result<Value,
     let name = cmd.get("name").and_then(|v| v.as_str());
     let exact = cmd.get("exact").and_then(|v| v.as_bool()).unwrap_or(false);
 
-    let name_match = name
-        .map(|n| {
-            if exact {
-                format!(
-                    "el.getAttribute('aria-label') === {} || el.textContent.trim() === {}",
-                    serde_json::to_string(n).unwrap_or_default(),
-                    serde_json::to_string(n).unwrap_or_default()
-                )
-            } else {
-                format!(
-                    "(el.getAttribute('aria-label') || '').includes({n}) || el.textContent.includes({n})",
-                    n = serde_json::to_string(n).unwrap_or_default()
-                )
-            }
-        })
-        .unwrap_or_else(|| "true".to_string());
-
-    let js = format!(
-        r#"(() => {{
-            const els = document.querySelectorAll('[role="{role}"], {role}');
-            for (const el of els) {{
-                if ({name_match}) {{
-                    el.setAttribute('data-agent-browser-located', 'true');
-                    return true;
-                }}
-            }}
-            return false;
-        }})()"#,
-        role = role,
-        name_match = name_match,
-    );
-
-    let result: super::cdp::types::EvaluateResult = mgr
-        .client
-        .send_command_typed(
-            "Runtime.evaluate",
-            &super::cdp::types::EvaluateParams {
-                expression: js,
-                return_by_value: Some(true),
-                await_promise: Some(false),
-            },
-            Some(&session_id),
-        )
-        .await?;
-
-    if !result
-        .result
-        .value
-        .as_ref()
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false)
+    let mut frame_ids = state.iframe_sessions.keys().cloned().collect::<Vec<_>>();
+    frame_ids.sort();
+    let mut located = None;
+    for frame_id in
+        std::iter::once(None).chain(frame_ids.iter().map(|frame_id| Some(frame_id.as_str())))
     {
-        let desc = build_role_selector(role, name, exact);
-        return Err(format!("No element found: {}", desc));
-    }
-
-    let selector = "[data-agent-browser-located='true']";
-    let result = execute_subaction(cmd, state, selector).await;
-
-    // Clean up the marker attribute
-    if let Some(ref browser) = state.browser {
-        if browser.active_session_id().is_ok() {
-            let _ = browser
-                .evaluate(
-                    "document.querySelector('[data-agent-browser-located]')?.removeAttribute('data-agent-browser-located')",
-                    None,
-                )
-                .await;
+        let (_, effective_session_id) =
+            super::element::resolve_ax_session(frame_id, &session_id, &state.iframe_sessions);
+        let _ = client
+            .send_command_no_params("Accessibility.enable", Some(effective_session_id))
+            .await;
+        if let Ok(backend_node_id) = super::element::find_backend_node_by_role_name(
+            &client,
+            &session_id,
+            super::element::RoleNameQuery {
+                role,
+                name,
+                exact,
+                nth: None,
+            },
+            frame_id,
+            &state.iframe_sessions,
+        )
+        .await
+        {
+            located = Some((backend_node_id, frame_id.map(str::to_string)));
+            break;
         }
     }
+
+    let Some((backend_node_id, frame_id)) = located else {
+        let desc = build_role_selector(role, name, exact);
+        return Err(format!("No element found: {}", desc));
+    };
+
+    // A temporary ref routes actions through the same backend-node and frame
+    // resolution path as snapshots. It avoids DOM marker attributes entirely.
+    let ref_id = format!("e{}", state.ref_map.next_ref_num());
+    state.ref_map.add_with_frame(
+        ref_id.clone(),
+        Some(backend_node_id),
+        role,
+        name.unwrap_or(""),
+        None,
+        frame_id.as_deref(),
+    );
+    let selector = format!("@{ref_id}");
+    let result = execute_subaction(cmd, state, &selector).await;
+    state.ref_map.remove(&ref_id);
 
     result
 }

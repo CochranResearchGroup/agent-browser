@@ -265,6 +265,13 @@ agent-browser find nth <n> <sel> <action> [value]     # Nth match
 
 **Options:** `--name <name>` (filter role by accessible name), `--exact` (require exact text match)
 
+Role locators use Chrome's accessibility tree, matching the browser-computed
+role and accessible name used by snapshots. This covers names from
+`aria-labelledby`, hidden referenced text, implicit roles, dynamically mounted
+elements, and supported iframe or shadow-tree targets. Exact matching never
+falls back to raw `textContent`, and temporary locator refs are removed after
+both successful and failed actions.
+
 **Examples:**
 
 ```bash

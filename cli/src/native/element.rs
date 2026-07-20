@@ -362,6 +362,38 @@ async fn find_node_id_by_role_name(
     frame_id: Option<&str>,
     iframe_sessions: &HashMap<String, String>,
 ) -> Result<i64, String> {
+    find_backend_node_by_role_name(
+        client,
+        session_id,
+        RoleNameQuery {
+            role,
+            name: Some(name),
+            exact: true,
+            nth,
+        },
+        frame_id,
+        iframe_sessions,
+    )
+    .await
+}
+
+/// Resolves role and accessible name from Chrome's accessibility tree. This
+/// preserves browser-computed `aria-labelledby`, hidden referenced text,
+/// implicit roles, and shadow-tree semantics.
+pub(super) struct RoleNameQuery<'a> {
+    pub role: &'a str,
+    pub name: Option<&'a str>,
+    pub exact: bool,
+    pub nth: Option<usize>,
+}
+
+pub(super) async fn find_backend_node_by_role_name(
+    client: &CdpClient,
+    session_id: &str,
+    query: RoleNameQuery<'_>,
+    frame_id: Option<&str>,
+    iframe_sessions: &HashMap<String, String>,
+) -> Result<i64, String> {
     let (ax_params, effective_session_id) =
         resolve_ax_session(frame_id, session_id, iframe_sessions);
     let ax_tree: GetFullAXTreeResult = client
@@ -372,7 +404,7 @@ async fn find_node_id_by_role_name(
         )
         .await?;
 
-    let nth_index = nth.unwrap_or(0);
+    let nth_index = query.nth.unwrap_or(0);
     let mut match_count: usize = 0;
 
     for node in &ax_tree.nodes {
@@ -381,12 +413,13 @@ async fn find_node_id_by_role_name(
         }
         let node_role = extract_ax_string(&node.role);
         let node_name = extract_ax_string(&node.name);
-        if node_role == role && node_name == name {
+        if role_name_matches(&node_role, &node_name, query.role, query.name, query.exact) {
             if match_count == nth_index {
                 return node.backend_d_o_m_node_id.ok_or_else(|| {
                     format!(
                         "AX node has no backendDOMNodeId for role={} name={}",
-                        role, name
+                        query.role,
+                        query.name.unwrap_or("<any>")
                     )
                 });
             }
@@ -396,8 +429,26 @@ async fn find_node_id_by_role_name(
 
     Err(format!(
         "Could not locate element with role={} name={}",
-        role, name
+        query.role,
+        query.name.unwrap_or("<any>")
     ))
+}
+
+fn role_name_matches(
+    node_role: &str,
+    node_name: &str,
+    requested_role: &str,
+    requested_name: Option<&str>,
+    exact: bool,
+) -> bool {
+    node_role.eq_ignore_ascii_case(requested_role)
+        && requested_name.is_none_or(|requested_name| {
+            if exact {
+                node_name == requested_name
+            } else {
+                node_name.contains(requested_name)
+            }
+        })
 }
 
 pub(super) fn extract_ax_string(value: &Option<AXValue>) -> String {
@@ -1037,6 +1088,40 @@ pub async fn get_element_styles(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn accessible_role_name_matching_uses_the_ax_name() {
+        let ax_name = "Open profile menu";
+        assert!(role_name_matches(
+            "button",
+            ax_name,
+            "button",
+            Some("Open profile menu"),
+            true
+        ));
+        assert!(role_name_matches(
+            "button",
+            ax_name,
+            "button",
+            Some("profile"),
+            false
+        ));
+        assert!(!role_name_matches(
+            "button",
+            ax_name,
+            "button",
+            Some("Open"),
+            true
+        ));
+        assert!(!role_name_matches(
+            "button",
+            ax_name,
+            "link",
+            Some("profile"),
+            false
+        ));
+        assert!(role_name_matches("button", ax_name, "button", None, true));
+    }
 
     #[test]
     fn test_parse_ref_at_prefix() {

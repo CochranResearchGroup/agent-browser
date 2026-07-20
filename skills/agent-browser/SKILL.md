@@ -1481,6 +1481,12 @@ agent-browser find placeholder "Search" type "query"
 agent-browser find testid "submit-btn" click
 ```
 
+Role locators use Chrome's accessibility tree and snapshot-compatible
+accessible names. Prefer them when names come from `aria-labelledby`, hidden
+referenced text, implicit roles, dynamically mounted menus, or supported iframe
+and shadow-tree targets. `--exact` compares only the browser-computed accessible
+name; it does not fall back to raw `textContent`.
+
 ## JavaScript Evaluation (eval)
 
 Use `eval` to run JavaScript in the browser context. **Shell quoting can corrupt complex expressions**. Use `--stdin` or `-b` to avoid issues.
