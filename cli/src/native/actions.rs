@@ -16995,6 +16995,12 @@ async fn handle_service_status(cmd: &Value) -> Result<Value, String> {
         .get("launchConfig")
         .cloned()
         .unwrap_or_else(|| json!({}));
+    let full_tab_history = cmd
+        .get("fullTabHistory")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let (service_state, closed_tab_projection) =
+        super::service_status_projection::project_service_status(&service_state, full_tab_history);
     let mut service_state_json =
         serde_json::to_value(&service_state).map_err(|err| err.to_string())?;
     inject_browser_process_stats(&mut service_state_json);
@@ -17004,6 +17010,7 @@ async fn handle_service_status(cmd: &Value) -> Result<Value, String> {
         "profileAllocations": profile_allocations,
         "retainedDisplayAllocations": retained_display_allocations,
         "browserSessionAuthority": browser_session_authority,
+        "closedTabProjection": closed_tab_projection,
         "launchConfig": launch_config,
     }))
 }
@@ -27784,6 +27791,15 @@ mod tests {
 
         assert_eq!(result["success"], true);
         assert_service_status_response_contract(&result["data"]);
+        assert_eq!(result["data"]["closedTabProjection"]["mode"], "bounded");
+        assert_eq!(
+            result["data"]["closedTabProjection"]["diagnosticAvailable"],
+            true
+        );
+        let mut full_cmd = cmd.clone();
+        full_cmd["fullTabHistory"] = json!(true);
+        let full_result = execute_command(&full_cmd, &mut state).await;
+        assert_eq!(full_result["data"]["closedTabProjection"]["mode"], "full");
         assert_eq!(
             result["data"]["launchConfig"]["warnings"][0]["code"],
             "stealthcdp_executable_missing"
