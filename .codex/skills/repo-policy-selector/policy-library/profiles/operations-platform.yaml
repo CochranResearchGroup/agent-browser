@@ -1,0 +1,35 @@
+id: operations-platform
+summary: Policy bundle for repos that mix reusable product code with live tenant or operator operations and need strong runtime isolation plus fieldwork productization discipline.
+repo_purpose: operations-platform
+modules:
+  - policy-management
+  - policy-upgrade-management
+  - policy-adoption-feedback-loop
+  - notes-and-memories
+  - graph-backed-memory-usage
+  - codegraph-usage
+  - planning-discipline
+  - goal-execution-governance
+  - parallel-plan-design
+  - roadmap-runbook-governance
+  - runtime-vs-product-boundary
+  - runtime-state-governance
+  - tenant-isolation-and-operator-state
+  - fieldwork-productization
+  - monolith-extraction-discipline
+  - architecture-guardrails
+  - documentation-change-control
+  - git-worktree-hygiene
+  - commit-history-discipline
+  - branch-and-integration-strategy
+  - commit-and-push-cadence
+  - multi-agent-reconciliation
+  - subagent-workflow-optimization
+  - versioning-and-release
+  - turn-closeout
+  - validation-and-handoff
+  - policy-harvest-loop
+overrides:
+  expects_runbook: true
+  expects_roadmap: true
+  execution_bias: balanced

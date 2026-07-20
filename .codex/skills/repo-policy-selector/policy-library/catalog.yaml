@@ -1,0 +1,165 @@
+modules:
+  - id: policy-management
+    path: modules/policy-management.md
+    tags: [policy, governance, installation, wiring]
+  - id: policy-upgrade-management
+    path: modules/policy-upgrade-management.md
+    tags: [policy, upgrades, releases, governance]
+  - id: policy-adoption-feedback-loop
+    path: modules/policy-adoption-feedback-loop.md
+    tags: [policy, feedback, upgrades, notes]
+  - id: notes-and-memories
+    path: modules/notes-and-memories.md
+    tags: [notes, memories, continuity, governance]
+  - id: graph-backed-memory-usage
+    path: modules/graph-backed-memory-usage.md
+    tags: [memory, graph, retrieval, continuity]
+  - id: codegraph-usage
+    path: modules/codegraph-usage.md
+    tags: [code, graph, analysis, refactor]
+  - id: memory-service-runtime-governance
+    path: modules/memory-service-runtime-governance.md
+    tags: [memory, runtime, mcp, operations]
+  - id: seminal-workspace-evolution
+    path: modules/seminal-workspace-evolution.md
+    tags: [policy, archetypes, feedback, evolution]
+  - id: planning-discipline
+    path: modules/planning-discipline.md
+    tags: [planning, slices, parallelism]
+  - id: goal-execution-governance
+    path: modules/goal-execution-governance.md
+    tags: [goals, agents, orchestration, antidrift, checkpoints]
+  - id: roadmap-runbook-governance
+    path: modules/roadmap-runbook-governance.md
+    tags: [governance, roadmap, runbook, antidrift]
+  - id: parallel-plan-design
+    path: modules/parallel-plan-design.md
+    tags: [planning, parallelism, agents, coordination]
+  - id: git-worktree-hygiene
+    path: modules/git-worktree-hygiene.md
+    tags: [git, branches, worktrees, merge]
+  - id: commit-history-discipline
+    path: modules/commit-history-discipline.md
+    tags: [git, commits, history, review]
+  - id: branch-and-integration-strategy
+    path: modules/branch-and-integration-strategy.md
+    tags: [git, branches, integration, rebase]
+  - id: commit-and-push-cadence
+    path: modules/commit-and-push-cadence.md
+    tags: [git, commits, push, cadence]
+  - id: upstream-fork-maintenance
+    path: modules/upstream-fork-maintenance.md
+    tags: [git, fork, upstream, rebase]
+  - id: multi-agent-reconciliation
+    path: modules/multi-agent-reconciliation.md
+    tags: [agents, git, reconciliation, blame]
+  - id: turn-closeout
+    path: modules/turn-closeout.md
+    tags: [closeout, recommendations, handoff]
+  - id: policy-harvest-loop
+    path: modules/policy-harvest-loop.md
+    tags: [meta, harvesting, normalization]
+  - id: architecture-guardrails
+    path: modules/architecture-guardrails.md
+    tags: [architecture, boundaries, semantics, change-control]
+  - id: documentation-change-control
+    path: modules/documentation-change-control.md
+    tags: [docs, roadmap, runbook, semantics]
+  - id: validation-and-handoff
+    path: modules/validation-and-handoff.md
+    tags: [validation, tests, handoff, verification]
+  - id: preview-artifact-review
+    path: modules/preview-artifact-review.md
+    tags: [artifacts, previews, review, approval]
+  - id: subagent-workflow-optimization
+    path: modules/subagent-workflow-optimization.md
+    tags: [agents, delegation, subagents, optimization]
+  - id: subagent-runtime-governance
+    path: modules/subagent-runtime-governance.md
+    tags: [agents, subagents, runtime, governance]
+  - id: versioning-and-release
+    path: modules/versioning-and-release.md
+    tags: [versioning, release, compatibility, changelog]
+  - id: course-workspace-governance
+    path: modules/course-workspace-governance.md
+    tags: [course, education, workspace, governance]
+  - id: lms-cli-governance
+    path: modules/lms-cli-governance.md
+    tags: [course, lms, canvas, cli]
+  - id: cloud-drive-course-governance
+    path: modules/cloud-drive-course-governance.md
+    tags: [course, drive, cloud, documents]
+  - id: student-data-and-assessment-safety
+    path: modules/student-data-and-assessment-safety.md
+    tags: [course, student-data, assessment, privacy]
+  - id: website-surface-targeting
+    path: modules/website-surface-targeting.md
+    tags: [website, environments, deployment, targeting]
+  - id: db-backed-state-governance
+    path: modules/db-backed-state-governance.md
+    tags: [website, database, cms, migrations]
+  - id: live-drift-reconciliation
+    path: modules/live-drift-reconciliation.md
+    tags: [website, drift, reconciliation, release]
+  - id: backup-and-recovery-operations
+    path: modules/backup-and-recovery-operations.md
+    tags: [website, backup, recovery, operations]
+  - id: visual-release-qa
+    path: modules/visual-release-qa.md
+    tags: [website, design, qa, release]
+  - id: web-interface-quality
+    path: modules/web-interface-quality.md
+    tags: [website, accessibility, interaction, performance]
+  - id: runtime-vs-product-boundary
+    path: modules/runtime-vs-product-boundary.md
+    tags: [runtime, product, boundary, state]
+  - id: runtime-state-governance
+    path: modules/runtime-state-governance.md
+    tags: [runtime, state, versioning, redaction]
+  - id: tenant-isolation-and-operator-state
+    path: modules/tenant-isolation-and-operator-state.md
+    tags: [tenant, runtime, isolation, operations]
+  - id: fieldwork-productization
+    path: modules/fieldwork-productization.md
+    tags: [fieldwork, productization, operations, migration]
+  - id: monolith-extraction-discipline
+    path: modules/monolith-extraction-discipline.md
+    tags: [architecture, modularity, refactor, debt]
+  - id: writing-environment-aware-workflow
+    path: modules/writing-environment-aware-workflow.md
+    tags: [writing, environment, continuity, handoff]
+  - id: writing-authoritative-deliverables
+    path: modules/writing-authoritative-deliverables.md
+    tags: [writing, deliverables, canonical, review]
+  - id: writing-document-edit-safety
+    path: modules/writing-document-edit-safety.md
+    tags: [writing, docx, citations, safety]
+  - id: writing-review-evidence-discipline
+    path: modules/writing-review-evidence-discipline.md
+    tags: [writing, review, evidence, analysis]
+
+profiles:
+  - id: repo-product-engineering
+    path: profiles/repo-product-engineering.yaml
+    tags: [product, engineering, roadmap, runbook, slices]
+  - id: standalone-library
+    path: profiles/standalone-library.yaml
+    tags: [library, cli, lightweight, git]
+  - id: seminal-workspace
+    path: profiles/seminal-workspace.yaml
+    tags: [seminal, formative, discovery, governance]
+  - id: writing-project
+    path: profiles/writing-project.yaml
+    tags: [writing, deliverable, proposal, manuscript]
+  - id: skill-repo-maintainer
+    path: profiles/skill-repo-maintainer.yaml
+    tags: [skills, policy, curation]
+  - id: website-maintenance
+    path: profiles/website-maintenance.yaml
+    tags: [website, operations, deploy, qa]
+  - id: operations-platform
+    path: profiles/operations-platform.yaml
+    tags: [operations, tenants, runtime, productization]
+  - id: course-workspace
+    path: profiles/course-workspace.yaml
+    tags: [course, education, lms, student-data]

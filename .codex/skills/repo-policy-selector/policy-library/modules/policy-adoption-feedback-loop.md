@@ -1,4 +1,13 @@
-# Policy | Policy Adoption Feedback Loop
+---
+id: policy-adoption-feedback-loop
+title: Policy Adoption Feedback Loop
+summary: Record what worked, what did not, and what should change upstream after policy adoption or upgrade so reusable lessons do not disappear into chat history.
+tags:
+  - policy
+  - feedback
+  - upgrades
+  - notes
+---
 
 ## Policy
 

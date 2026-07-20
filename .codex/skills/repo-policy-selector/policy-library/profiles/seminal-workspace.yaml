@@ -1,0 +1,19 @@
+id: seminal-workspace
+summary: Minimal policy bundle for formative workspaces that do not yet fit an existing repo family and are expected to generate evidence for a future shared archetype.
+repo_purpose: seminal-workspace
+modules:
+  - policy-management
+  - policy-upgrade-management
+  - policy-adoption-feedback-loop
+  - notes-and-memories
+  - graph-backed-memory-usage
+  - seminal-workspace-evolution
+  - documentation-change-control
+  - commit-history-discipline
+  - commit-and-push-cadence
+  - turn-closeout
+overrides:
+  expects_runbook: false
+  expects_roadmap: false
+  parallel_execution_bias: false
+  execution_bias: balanced

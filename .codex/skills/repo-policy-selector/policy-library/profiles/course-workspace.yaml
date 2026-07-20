@@ -1,0 +1,19 @@
+id: course-workspace
+summary: Policy bundle for live LMS-backed course workspaces with course-local configuration, cloud-drive material, student data, and instructor operations.
+repo_purpose: course-workspace
+modules:
+  - policy-management
+  - policy-upgrade-management
+  - policy-adoption-feedback-loop
+  - notes-and-memories
+  - graph-backed-memory-usage
+  - course-workspace-governance
+  - lms-cli-governance
+  - cloud-drive-course-governance
+  - student-data-and-assessment-safety
+  - validation-and-handoff
+  - turn-closeout
+overrides:
+  expects_runbook: false
+  expects_roadmap: false
+  execution_bias: balanced

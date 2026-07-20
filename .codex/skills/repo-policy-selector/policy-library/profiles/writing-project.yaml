@@ -1,0 +1,30 @@
+id: writing-project
+summary: Deliverable-oriented policy bundle for proposal, manuscript, patent-application, and technical-writing repos.
+repo_purpose: writing-project
+workflow_subtypes:
+  - grant-proposal-writing
+  - grant-proposal-review
+  - journal-article-writing
+  - patent-application-writing
+  - technical-report-writing
+modules:
+  - policy-management
+  - policy-upgrade-management
+  - policy-adoption-feedback-loop
+  - graph-backed-memory-usage
+  - planning-discipline
+  - commit-history-discipline
+  - commit-and-push-cadence
+  - versioning-and-release
+  - turn-closeout
+  - subagent-workflow-optimization
+  - writing-environment-aware-workflow
+  - writing-authoritative-deliverables
+  - writing-document-edit-safety
+  - writing-review-evidence-discipline
+overrides:
+  expects_runbook: optional
+  expects_roadmap: optional
+  deliverable_driven: true
+  evidence_and_provenance_bias: true
+  execution_bias: balanced

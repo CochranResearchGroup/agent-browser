@@ -1,4 +1,13 @@
-# Policy | Validation And Handoff
+---
+id: validation-and-handoff
+title: Validation And Handoff
+summary: Run relevant verification before commit or handoff and leave concise evidence-backed closeout notes.
+tags:
+  - validation
+  - tests
+  - handoff
+  - verification
+---
 
 ## Policy
 

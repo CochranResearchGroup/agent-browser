@@ -1,0 +1,20 @@
+id: standalone-library
+summary: Lighter policy bundle for simpler repos without heavyweight roadmap machinery.
+repo_purpose: library-cli
+modules:
+  - policy-management
+  - policy-upgrade-management
+  - policy-adoption-feedback-loop
+  - graph-backed-memory-usage
+  - codegraph-usage
+  - git-worktree-hygiene
+  - commit-history-discipline
+  - branch-and-integration-strategy
+  - commit-and-push-cadence
+  - versioning-and-release
+  - turn-closeout
+overrides:
+  expects_runbook: false
+  expects_roadmap: false
+  parallel_execution_bias: false
+  execution_bias: max-token-efficiency

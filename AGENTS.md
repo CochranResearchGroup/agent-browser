@@ -282,21 +282,11 @@ npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
 - re-read planning-related policy before opening, revising, or closing a substantive plan
 - re-read documentation-related policy before changing docs, contracts, or canonical authorities
 - re-read validation and closeout policy before claiming work complete
-- re-read graph-backed memory policy before Graphiti discovery, writes, cleanup, or memory-derived handoff claims
-- re-read CodeGraph policy before non-trivial source exploration, architecture tracing, refactor planning, or source edits
+- re-read runtime or environment-boundary policy before touching live state, tenant state, deploy state, or off-repo operator data
 
 ## Policy Entry
 
 This repo keeps its durable repo-local policy under `docs/dev/policies/`.
-
-Installed policy bundle:
-- `repo-policy-selector` `v0.1.13`
-- selected profile: `standalone-library`
-- local policy overrides: `graph-backed-memory-usage`, `codegraph-usage`
-
-Treat the files present in that directory as the source of truth for the
-currently adopted repo-local policy. Do not rely on the bullet list below
-alone if the directory contents and this list ever drift.
 
 Read and follow:
 - `docs/dev/policies/0001-policy-management.md`
@@ -311,10 +301,19 @@ Read and follow:
 - `docs/dev/policies/0010-validation-and-handoff.md`
 - `docs/dev/policies/0011-graph-backed-memory-usage.md`
 - `docs/dev/policies/0012-codegraph-usage.md`
+- `docs/dev/policies/0014-website-surface-targeting.md`
+- `docs/dev/policies/0015-db-backed-state-governance.md`
+- `docs/dev/policies/0016-live-drift-reconciliation.md`
+- `docs/dev/policies/0017-backup-and-recovery-operations.md`
+- `docs/dev/policies/0018-visual-release-qa.md`
+- `docs/dev/policies/0019-web-interface-quality.md`
+- `docs/dev/policies/0020-documentation-change-control.md`
+- `docs/dev/policies/0021-subagent-workflow-optimization.md`
+- `docs/dev/policies/0022-preview-artifact-review.md`
+- `docs/dev/policies/0023-upstream-fork-maintenance.md`
 
 ## Scope
 
 - `AGENTS.md` includes repo-local guidance plus the policy entry section.
 - The durable policy body lives under `docs/dev/policies/`.
-- Record policy adoption and upgrade notes under `docs/dev/notes/`.
 - Keep repo-specific commands, environment details, and operational caveats in this file or adjacent local docs.

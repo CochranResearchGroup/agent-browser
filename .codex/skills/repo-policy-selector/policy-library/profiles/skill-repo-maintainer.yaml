@@ -1,0 +1,28 @@
+id: skill-repo-maintainer
+summary: Policy bundle for repos that curate reusable skills, prompts, or shared agent assets.
+repo_purpose: workspace-agent
+modules:
+  - policy-management
+  - policy-upgrade-management
+  - policy-adoption-feedback-loop
+  - notes-and-memories
+  - graph-backed-memory-usage
+  - codegraph-usage
+  - planning-discipline
+  - goal-execution-governance
+  - parallel-plan-design
+  - git-worktree-hygiene
+  - commit-history-discipline
+  - branch-and-integration-strategy
+  - commit-and-push-cadence
+  - multi-agent-reconciliation
+  - subagent-workflow-optimization
+  - versioning-and-release
+  - turn-closeout
+  - policy-harvest-loop
+  - validation-and-handoff
+overrides:
+  expects_runbook: optional
+  expects_roadmap: optional
+  parallel_execution_bias: true
+  execution_bias: balanced

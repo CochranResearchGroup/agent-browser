@@ -1,0 +1,7 @@
+interface:
+  display_name: "Repo Policy Selector"
+  short_description: "Choose policy bundles for repos"
+  default_prompt: "Use $repo-policy-selector to inspect this repo and recommend the right shared policy profile and module mix."
+
+policy:
+  allow_implicit_invocation: true

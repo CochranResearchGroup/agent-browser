@@ -1,0 +1,29 @@
+id: website-maintenance
+summary: Website operations and owned-code profile for repos where conservative live-surface maintenance is the dominant workflow.
+repo_purpose: website-maintenance
+modules:
+  - policy-management
+  - policy-upgrade-management
+  - policy-adoption-feedback-loop
+  - notes-and-memories
+  - graph-backed-memory-usage
+  - codegraph-usage
+  - planning-discipline
+  - website-surface-targeting
+  - db-backed-state-governance
+  - live-drift-reconciliation
+  - backup-and-recovery-operations
+  - visual-release-qa
+  - web-interface-quality
+  - documentation-change-control
+  - git-worktree-hygiene
+  - commit-history-discipline
+  - branch-and-integration-strategy
+  - commit-and-push-cadence
+  - versioning-and-release
+  - turn-closeout
+  - validation-and-handoff
+overrides:
+  expects_runbook: optional
+  expects_roadmap: optional
+  execution_bias: balanced
