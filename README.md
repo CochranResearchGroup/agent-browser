@@ -305,6 +305,9 @@ agent-browser batch "open https://example.com" "snapshot -i" "screenshot"
 # With --bail to stop on first error
 agent-browser batch --bail "open https://example.com" "click @e1" "screenshot"
 
+# One daemon queue lease with target identity checks and structured timings
+agent-browser batch --dependent --bail "click @e1" "wait 1000" "screenshot"
+
 # Stdin mode: pipe commands as JSON
 echo '[
   ["open", "https://example.com"],
@@ -313,6 +316,14 @@ echo '[
   ["screenshot", "result.png"]
 ]' | agent-browser batch --json
 ```
+
+`--dependent` parses every step before execution, submits one daemon-owned job,
+and returns ordered step results with queue, preparation, action, serialization,
+and total timings. Target-stable steps fail if active target identity changes.
+Navigation and tab commands explicitly rebind the following step. Nested
+batches and daemon lifecycle actions such as `launch`, `close`, and CDP attach
+or detach are rejected in this mode. The existing batch behavior is unchanged
+when `--dependent` is absent.
 
 ### Clipboard
 

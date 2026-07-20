@@ -250,6 +250,8 @@ git diff --check
 
 ## Slice D | Page-Command Timing And Dependent Batch Execution
 
+Status: Source Complete, Installed Live Proof Pending
+
 - Add bounded timing fields for queue wait, browser and target resolution, CDP
   session acquisition or reuse, action execution, and response serialization.
 - Expose timings in JSON action output and service traces without raw debug
@@ -267,6 +269,34 @@ Exit criteria:
 - A target-stable menu workflow resolves one target/session binding.
 - A target-changing step cannot cause later steps to run against stale identity.
 - Existing CLI batch behavior remains compatible or has a documented migration.
+
+Source completion evidence:
+
+- `batch --dependent` parses every step before dispatch and submits one
+  `dependent_batch` command through the control-plane queue. Existing batch
+  behavior is unchanged without the flag.
+- Target-stable steps compare active CDP session identity before and after the
+  action. Navigation and tab commands explicitly rebind the following step.
+- Nested batches and daemon lifecycle actions are rejected instead of silently
+  changing outer worker or connection lifecycle semantics.
+- `--bail` stops after the first failed, rejected, or target-invalid step.
+- Requested timing output reports `queueWaitMs`, `commandPreparationMs`,
+  `actionExecutionMs`, `responseSerializationMs`, `daemonTotalMs`, and
+  `totalMs`. Each dependent step also retains its daemon timing object.
+- Unit tests cover action classification, nested rejection, ordered results,
+  bail behavior, and queue plus daemon timing shape.
+
+Focused validation:
+
+```bash
+cargo test --manifest-path cli/Cargo.toml dependent -- --nocapture
+cargo test --manifest-path cli/Cargo.toml command_timings -- --nocapture
+cargo fmt --manifest-path cli/Cargo.toml -- --check
+cargo clippy --manifest-path cli/Cargo.toml -- -D warnings
+pnpm --config.verify-deps-before-run=false test:service-api-mcp-parity
+pnpm --config.verify-deps-before-run=false --dir docs build
+git diff --check
+```
 
 ## Slice E | Accessible Role Locator Repair
 

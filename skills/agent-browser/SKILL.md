@@ -1006,7 +1006,16 @@ agent-browser batch "click @e1" "wait 1000" "screenshot"
 
 # With --bail to stop on first error
 agent-browser batch --bail "open https://example.com" "click @e1" "screenshot"
+
+# One daemon queue lease with target identity checks and step timings
+agent-browser batch --dependent --bail "click @e1" "wait 1000" "screenshot"
 ```
+
+Use `--dependent` when later steps are already known and should run under one
+daemon queue lease. Target-stable steps must keep the same active target;
+navigation and tab commands rebind the next step. Nested batches and daemon
+lifecycle actions are rejected. Without `--dependent`, existing batch behavior
+is unchanged.
 
 Only use a single command (not batch) when you need to read the output before deciding the next command. For example, you must run `snapshot -i` as a single command when you need to read the refs to decide what to click. After reading the snapshot, batch the remaining steps.
 

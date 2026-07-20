@@ -4200,8 +4200,18 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
         // === Batch ===
         "batch" => {
             let bail = rest.contains(&"--bail");
-            let commands: Vec<&str> = rest.iter().filter(|a| **a != "--bail").copied().collect();
-            let mut cmd = json!({ "id": id, "action": "batch", "bail": bail });
+            let dependent = rest.contains(&"--dependent");
+            let commands: Vec<&str> = rest
+                .iter()
+                .filter(|a| **a != "--bail" && **a != "--dependent")
+                .copied()
+                .collect();
+            let mut cmd = json!({
+                "id": id,
+                "action": "batch",
+                "bail": bail,
+                "dependent": dependent,
+            });
             if !commands.is_empty() {
                 cmd["commands"] = json!(commands);
             }
@@ -8643,6 +8653,14 @@ mod tests {
     fn test_batch_with_bail() {
         let cmd = parse_command(&args("batch --bail"), &default_flags()).unwrap();
         assert_eq!(cmd["action"], "batch");
+        assert_eq!(cmd["bail"], true);
+    }
+
+    #[test]
+    fn test_batch_with_dependent_daemon_execution() {
+        let cmd = parse_command(&args("batch --dependent --bail"), &default_flags()).unwrap();
+        assert_eq!(cmd["action"], "batch");
+        assert_eq!(cmd["dependent"], true);
         assert_eq!(cmd["bail"], true);
     }
 

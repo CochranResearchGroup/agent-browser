@@ -2622,13 +2622,17 @@ fn main() {
     // Handle batch command: from args or stdin
     if cmd.get("action").and_then(|v| v.as_str()) == Some("batch") {
         let bail = cmd.get("bail").and_then(|v| v.as_bool()).unwrap_or(false);
+        let dependent = cmd
+            .get("dependent")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         let arg_commands = cmd.get("commands").and_then(|v| v.as_array()).map(|arr| {
             arr.iter()
                 .filter_map(|v| v.as_str())
                 .map(commands::shell_words_split)
                 .collect::<Vec<Vec<String>>>()
         });
-        run_batch(&flags, bail, arg_commands);
+        run_batch(&flags, bail, dependent, arg_commands);
         return;
     }
 
@@ -2714,7 +2718,7 @@ fn main() {
     }
 }
 
-fn run_batch(flags: &Flags, bail: bool, arg_commands: Option<Vec<Vec<String>>>) {
+fn run_batch(flags: &Flags, bail: bool, dependent: bool, arg_commands: Option<Vec<Vec<String>>>) {
     let commands: Vec<Vec<String>> = if let Some(cmds) = arg_commands {
         cmds
     } else {
@@ -2754,6 +2758,11 @@ fn run_batch(flags: &Flags, bail: bool, arg_commands: Option<Vec<Vec<String>>>) 
         if flags.json {
             println!("[]");
         }
+        return;
+    }
+
+    if dependent {
+        run_dependent_batch(flags, bail, &commands);
         return;
     }
 
@@ -2853,6 +2862,60 @@ fn run_batch(flags: &Flags, bail: bool, arg_commands: Option<Vec<Vec<String>>>) 
         );
     }
 
+    if had_error {
+        exit(1);
+    }
+}
+
+fn run_dependent_batch(flags: &Flags, bail: bool, commands: &[Vec<String>]) {
+    let parsed_commands = commands
+        .iter()
+        .map(|command| parse_command(command, flags))
+        .collect::<Result<Vec<_>, _>>();
+    let mut parsed_commands = match parsed_commands {
+        Ok(commands) => commands,
+        Err(error) => {
+            if flags.json {
+                print_json_error(error.format());
+            } else {
+                eprintln!("{} {}", color::error_indicator(), error.format());
+            }
+            exit(1);
+        }
+    };
+    for command in &mut parsed_commands {
+        command["includeTimings"] = json!(true);
+    }
+    let command = json!({
+        "id": gen_id(),
+        "action": "dependent_batch",
+        "commands": parsed_commands,
+        "bail": bail,
+        "includeTimings": true,
+    });
+    let response = match send_command(command, &flags.session) {
+        Ok(response) => response,
+        Err(error) => {
+            if flags.json {
+                print_json_error(&error);
+            } else {
+                eprintln!("{} {}", color::error_indicator(), error);
+            }
+            exit(1);
+        }
+    };
+    let had_error = !response.success
+        || response
+            .data
+            .as_ref()
+            .and_then(|data| data.get("hadError"))
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false);
+    print_response_with_opts(
+        &response,
+        Some("dependent_batch"),
+        &OutputOptions::from_flags(flags),
+    );
     if had_error {
         exit(1);
     }

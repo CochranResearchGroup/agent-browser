@@ -257,6 +257,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "state_clear"
             | "state_clean"
             | "state_rename"
+            | "dependent_batch"
             | "device_list"
             | "stream_enable"
             | "stream_disable"
@@ -4125,6 +4126,130 @@ where
     }
 }
 
+fn active_target_binding(state: &DaemonState) -> Option<String> {
+    state
+        .browser
+        .as_ref()
+        .and_then(|manager| manager.active_session_id().ok())
+        .map(str::to_string)
+}
+
+/// Executes parsed commands under the outer control-plane request. Stable
+/// steps must preserve the active target identity; target-changing steps make
+/// the next step bind to the new active target.
+async fn handle_dependent_batch(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+    let commands = cmd
+        .get("commands")
+        .and_then(Value::as_array)
+        .ok_or("Missing 'commands' array for dependent batch")?;
+    if commands.is_empty() {
+        return Ok(json!({
+            "results": [],
+            "completed": 0,
+            "hadError": false,
+            "bail": cmd.get("bail").and_then(Value::as_bool).unwrap_or(false),
+            "initialTargetBinding": active_target_binding(state),
+            "finalTargetBinding": active_target_binding(state),
+        }));
+    }
+
+    let bail = cmd.get("bail").and_then(Value::as_bool).unwrap_or(false);
+    let initial_binding = active_target_binding(state);
+    let mut expected_binding = initial_binding.clone();
+    let mut results = Vec::with_capacity(commands.len());
+    let mut had_error = false;
+
+    for (index, command) in commands.iter().enumerate() {
+        let action = command.get("action").and_then(Value::as_str).unwrap_or("");
+        if !super::dependent_batch::nested_batch_allowed(action) {
+            had_error = true;
+            results.push(json!({
+                "index": index,
+                "action": action,
+                "success": false,
+                "error": format!("Action '{action}' cannot run inside a dependent batch"),
+                "targetBindingBefore": active_target_binding(state),
+                "targetBindingAfter": active_target_binding(state),
+            }));
+            if bail {
+                break;
+            }
+            continue;
+        }
+
+        let effect = super::dependent_batch::target_effect(action);
+        let binding_before = active_target_binding(state);
+        if effect == super::dependent_batch::TargetEffect::Stable
+            && expected_binding.is_some()
+            && binding_before != expected_binding
+        {
+            had_error = true;
+            results.push(json!({
+                "index": index,
+                "action": action,
+                "success": false,
+                "error": "Active target changed before a target-stable dependent step",
+                "expectedTargetBinding": expected_binding,
+                "targetBindingBefore": binding_before,
+                "targetBindingAfter": active_target_binding(state),
+            }));
+            if bail {
+                break;
+            }
+            expected_binding = active_target_binding(state);
+            continue;
+        }
+
+        let step_started = std::time::Instant::now();
+        let response = Box::pin(execute_command(command, state)).await;
+        let action_execution_ms =
+            u64::try_from(step_started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        let binding_after = active_target_binding(state);
+        let mut success = response
+            .get("success")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let mut error = response.get("error").cloned().unwrap_or(Value::Null);
+        if effect == super::dependent_batch::TargetEffect::Stable && binding_before != binding_after
+        {
+            success = false;
+            error = json!("Target identity changed during a target-stable dependent step");
+        }
+        if !success {
+            had_error = true;
+        }
+        results.push(json!({
+            "index": index,
+            "action": action,
+            "success": success,
+            "result": response.get("data").cloned().unwrap_or(Value::Null),
+            "error": error,
+            "daemonTimings": response.get("timings").cloned().unwrap_or(Value::Null),
+            "targetBindingBefore": binding_before,
+            "targetBindingAfter": binding_after,
+            "targetRebound": effect == super::dependent_batch::TargetEffect::Rebind,
+            "timings": {
+                "actionExecutionMs": action_execution_ms,
+            }
+        }));
+        expected_binding = binding_after;
+        if had_error && bail {
+            break;
+        }
+    }
+
+    let completed = results.len();
+    Ok(json!({
+        "results": results,
+        "completed": completed,
+        "requested": commands.len(),
+        "hadError": had_error,
+        "bail": bail,
+        "initialTargetBinding": initial_binding,
+        "finalTargetBinding": active_target_binding(state),
+    }))
+}
+
 pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
     let action = cmd.get("action").and_then(|v| v.as_str()).unwrap_or("");
     let id = cmd
@@ -4193,6 +4318,35 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
                 });
             }
         }
+    }
+
+    if action == "dependent_batch" {
+        let action_started = std::time::Instant::now();
+        let mut response = match handle_dependent_batch(cmd, state).await {
+            Ok(data) => success_response(&id, data),
+            Err(error) => error_response(&id, &error),
+        };
+        if cmd
+            .get("includeTimings")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        {
+            let action_execution_ms =
+                u64::try_from(action_started.elapsed().as_millis()).unwrap_or(u64::MAX);
+            let serialization_started = std::time::Instant::now();
+            let _ = serde_json::to_vec(&response);
+            let response_serialization_ms =
+                u64::try_from(serialization_started.elapsed().as_millis()).unwrap_or(u64::MAX);
+            let daemon_total_ms =
+                u64::try_from(cmd_start.elapsed().as_millis()).unwrap_or(u64::MAX);
+            response["timings"] = json!({
+                "commandPreparationMs": daemon_total_ms.saturating_sub(action_execution_ms),
+                "actionExecutionMs": action_execution_ms,
+                "responseSerializationMs": response_serialization_ms,
+                "daemonTotalMs": daemon_total_ms,
+            });
+        }
+        return response;
     }
 
     let skip_launch = action_skips_browser_launch(action)
@@ -4276,6 +4430,8 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         );
     }
 
+    let command_preparation_ms = u64::try_from(cmd_start.elapsed().as_millis()).unwrap_or(u64::MAX);
+    let action_started = std::time::Instant::now();
     let result = match action {
         "launch" => handle_launch(cmd, state).await,
         "cdp_free_launch" => handle_cdp_free_launch(cmd, state).await,
@@ -4557,6 +4713,9 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         Err(e) => error_response(&id, &super::browser::to_ai_friendly_error(&e)),
     };
 
+    let action_execution_ms =
+        u64::try_from(action_started.elapsed().as_millis()).unwrap_or(u64::MAX);
+
     // Auto-report pending JavaScript dialog so agents know why commands may hang
     if action != "dialog" {
         if let Some(ref dialog) = state.pending_dialog {
@@ -4594,6 +4753,29 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
                 server.set_cdp_session_id(session_id).await;
                 server.notify_client_changed();
             }
+        }
+    }
+
+    if cmd
+        .get("includeTimings")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        let serialization_started = std::time::Instant::now();
+        let _ = serde_json::to_vec(&resp);
+        let response_serialization_ms =
+            u64::try_from(serialization_started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        let daemon_total_ms = u64::try_from(cmd_start.elapsed().as_millis()).unwrap_or(u64::MAX);
+        if let Some(response) = resp.as_object_mut() {
+            response.insert(
+                "timings".to_string(),
+                json!({
+                    "commandPreparationMs": command_preparation_ms,
+                    "actionExecutionMs": action_execution_ms,
+                    "responseSerializationMs": response_serialization_ms,
+                    "daemonTotalMs": daemon_total_ms,
+                }),
+            );
         }
     }
 
@@ -22599,6 +22781,58 @@ mod tests {
             .map(|(_, diagnostic)| diagnostic)
             .expect("route pool error should include diagnostic JSON");
         serde_json::from_str(diagnostic).expect("route pool diagnostic should be valid JSON")
+    }
+
+    #[tokio::test]
+    async fn dependent_batch_executes_ordered_steps_under_one_command() {
+        let mut state = DaemonState::new();
+        let result = execute_command(
+            &json!({
+                "id": "dependent-1",
+                "action": "dependent_batch",
+                "bail": true,
+                "commands": [
+                    { "id": "step-1", "action": "__test_sleep", "ms": 2 },
+                    { "id": "step-2", "action": "__test_sleep", "ms": 1 }
+                ]
+            }),
+            &mut state,
+        )
+        .await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["completed"], 2);
+        assert_eq!(result["data"]["hadError"], false);
+        assert_eq!(result["data"]["results"][0]["result"]["sleptMs"], 2);
+        assert_eq!(result["data"]["results"][1]["result"]["sleptMs"], 1);
+        assert!(result["data"]["results"][0]["timings"]["actionExecutionMs"].is_u64());
+    }
+
+    #[tokio::test]
+    async fn dependent_batch_bails_before_a_step_after_rejected_lifecycle_action() {
+        let mut state = DaemonState::new();
+        let result = execute_command(
+            &json!({
+                "id": "dependent-bail-1",
+                "action": "dependent_batch",
+                "bail": true,
+                "commands": [
+                    { "id": "step-1", "action": "close" },
+                    { "id": "step-2", "action": "__test_sleep", "ms": 1 }
+                ]
+            }),
+            &mut state,
+        )
+        .await;
+
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["completed"], 1);
+        assert_eq!(result["data"]["hadError"], true);
+        assert_eq!(result["data"]["results"][0]["action"], "close");
+        assert!(result["data"]["results"][0]["error"]
+            .as_str()
+            .unwrap()
+            .contains("cannot run"));
     }
 
     #[test]

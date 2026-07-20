@@ -996,6 +996,9 @@ agent-browser batch "open https://example.com" "snapshot -i" "screenshot"
 # With --bail to stop on first error
 agent-browser batch --bail "open https://example.com" "click @e1" "screenshot"
 
+# One daemon queue lease with target identity checks and step timings
+agent-browser batch --dependent --bail "click @e1" "wait 1000" "screenshot"
+
 # Stdin mode: pipe commands as JSON
 echo '[
   ["open", "https://example.com"],
@@ -1011,9 +1014,17 @@ echo '[
   </thead>
   <tbody>
     <tr><td><code>--bail</code></td><td>Stop on first error (default: continue all commands)</td></tr>
+    <tr><td><code>--dependent</code></td><td>Run parsed steps under one daemon queue lease with target identity checks and structured timings</td></tr>
     <tr><td><code>--json</code></td><td>Output results as a JSON array</td></tr>
   </tbody>
 </table>
+
+With <code>--dependent</code>, every step is parsed before execution. Stable
+steps fail if active target identity changes, while navigation and tab commands
+rebind the following step. Nested batches and daemon lifecycle actions are
+rejected. The response includes queue wait, command preparation, action,
+serialization, daemon total, and overall total timings. Existing batch behavior
+is unchanged when the option is absent.
 
 ## Command chaining
 

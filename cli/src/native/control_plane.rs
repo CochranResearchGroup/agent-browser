@@ -101,6 +101,7 @@ pub struct ControlRequest {
     pub timeout_ms: Option<u64>,
     pub cancellation: RunningJobCancel,
     pub submitted_at_wall: String,
+    pub submitted_at_mono: Instant,
     pub profile_lease_wait_started_at: Option<Instant>,
     pub profile_lease_wait_profile_id: Option<String>,
     pub profile_lease_wait_conflict_session_ids: Vec<String>,
@@ -288,6 +289,7 @@ impl ControlPlaneHandle {
             timeout_ms,
             cancellation: RunningJobCancel::new(),
             submitted_at_wall: current_timestamp(),
+            submitted_at_mono: Instant::now(),
             profile_lease_wait_started_at: None,
             profile_lease_wait_profile_id: None,
             profile_lease_wait_conflict_session_ids: Vec::new(),
@@ -988,6 +990,7 @@ fn enqueue_due_monitor_run(
         timeout_ms: service_job_timeout_ms,
         cancellation: RunningJobCancel::new(),
         submitted_at_wall: current_timestamp(),
+        submitted_at_mono: Instant::now(),
         profile_lease_wait_started_at: None,
         profile_lease_wait_profile_id: None,
         profile_lease_wait_conflict_session_ids: Vec::new(),
@@ -1369,6 +1372,10 @@ async fn run_worker(
                 match message {
                     WorkerMessage::Request(request) => {
                         let mut request = *request;
+                        let queue_wait_ms = u64::try_from(
+                            request.submitted_at_mono.elapsed().as_millis(),
+                        )
+                        .unwrap_or(u64::MAX);
                         status.queue_depth.fetch_sub(1, Ordering::Relaxed);
                         if service_job_cancelled(&request.job_id) {
                             if request.profile_lease_wait_started_at.is_some() {
@@ -1470,7 +1477,7 @@ async fn run_worker(
                         let previous_cancellation = state
                             .current_cancellation
                             .replace(request.cancellation.clone());
-                        let response = match timeout_ms {
+                        let mut response = match timeout_ms {
                             Some(ms) if ms > 0 => {
                                 tokio::select! {
                                     response = execute_command(&request.command, &mut state) => response,
@@ -1522,6 +1529,20 @@ async fn run_worker(
                                 }
                             }
                         };
+                        if request
+                            .command
+                            .get("includeTimings")
+                            .and_then(Value::as_bool)
+                            .unwrap_or(false)
+                        {
+                            let daemon_total_ms = response
+                                .pointer("/timings/daemonTotalMs")
+                                .and_then(Value::as_u64)
+                                .unwrap_or(0);
+                            response["timings"]["queueWaitMs"] = json!(queue_wait_ms);
+                            response["timings"]["totalMs"] =
+                                json!(queue_wait_ms.saturating_add(daemon_total_ms));
+                        }
                         state.current_cancellation = previous_cancellation;
                         if let Ok(mut running) = running_cancellations.lock() {
                             running.remove(&request.job_id);
@@ -1872,6 +1893,7 @@ mod tests {
             timeout_ms: None,
             cancellation: RunningJobCancel::new(),
             submitted_at_wall: current_timestamp(),
+            submitted_at_mono: Instant::now(),
             profile_lease_wait_started_at: None,
             profile_lease_wait_profile_id: None,
             profile_lease_wait_conflict_session_ids: Vec::new(),
@@ -1931,6 +1953,40 @@ mod tests {
 
         handle.shutdown().await;
         let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn requested_command_timings_include_queue_and_daemon_components() {
+        let home = temp_home("control-plane-command-timings");
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+        let handle = ControlPlaneWorker::start(DaemonState::new());
+
+        let response = handle
+            .submit(json!({
+                "id": "test-command-timings",
+                "action": "state_list",
+                "includeTimings": true,
+            }))
+            .await;
+
+        assert_eq!(response["success"], true);
+        for field in [
+            "queueWaitMs",
+            "commandPreparationMs",
+            "actionExecutionMs",
+            "responseSerializationMs",
+            "daemonTotalMs",
+            "totalMs",
+        ] {
+            assert!(response["timings"][field].is_u64(), "{field}");
+        }
+        assert!(
+            response["timings"]["totalMs"].as_u64().unwrap()
+                >= response["timings"]["daemonTotalMs"].as_u64().unwrap()
+        );
+
+        handle.shutdown().await;
     }
 
     #[tokio::test]

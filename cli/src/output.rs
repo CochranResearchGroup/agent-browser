@@ -5768,6 +5768,9 @@ separated by blank lines (or as a JSON array with --json).
 
 Options:
   --bail               Stop on first error (default: continue all commands)
+  --dependent          Send parsed steps as one daemon-owned queue job. Stable
+                       steps must preserve target identity; target-changing
+                       steps rebind before the next step.
   --json               Output results as a JSON array
 
 Argument Mode:
@@ -5787,6 +5790,7 @@ Stdin Mode (JSON):
 Examples:
   agent-browser batch "open https://example.com" "screenshot"
   agent-browser batch --bail "open https://example.com" "click @e1" "screenshot"
+  agent-browser batch --dependent --bail "click @e1" "wait 1000" "screenshot"
   echo '[["open", "https://example.com"], ["snapshot"]]' | agent-browser batch
   agent-browser batch --bail < commands.json
 "##
@@ -6050,7 +6054,8 @@ MCP:
   mcp read <uri>             Read a service resource as JSON
 
 Batch:
-  batch [--bail] ["cmd" ...]  Execute multiple commands sequentially (args or stdin)
+  batch [--bail] [--dependent] ["cmd" ...]
+                              Execute multiple commands sequentially (args or stdin)
                               --bail stops on first error (default: continue all)
 
 Auth Vault:
