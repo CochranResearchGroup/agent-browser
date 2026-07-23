@@ -1581,6 +1581,15 @@ are reported as doctor issues before remote-view work proceeds. The remote-view
 doctor prefers reusing the existing
 `agent-browser-rdp` user and only points toward route-specific users when the
 current state shows they are actually needed.
+
+Service reconciliation treats the live X11 socket as part of each retained RDP
+route's readiness. If a reboot removes a configured route display, the
+route-pool entry becomes `unavailable`, a linked checked-out route becomes
+`orphaned`, and `remote-view open` rejects that route before launching Chrome.
+Agent-browser does not create an XRDP login session automatically. Establish
+the route desktop, then run `agent-browser service status --json` or
+`agent-browser service reconcile --json`; reconciliation returns the pool entry
+to `available` and clears its stale checkout when the socket is live again.
 Run
 `agent-browser setup windows-browser --print-powershell` to print a reviewed
 Windows PowerShell helper for mirrored networking, scoped Hyper-V firewall
@@ -2191,7 +2200,7 @@ The persisted service state includes a `reconciliation` snapshot with `lastRecon
 
 The persisted service state also includes bounded audit records for recent control-plane jobs in `jobs`, a derived `incidents` collection that groups retained incident signals by browser or service scope, plus an `events` log with reconciliation summaries, browser health transitions, browser recovery starts, profile lease wait transitions, ownership-repair details, and tab lifecycle changes such as discovered tabs, URL or title changes, and closed tabs. Job records track request action, priority, timestamps, final success or failure, requested remote-headed `displayIsolation`, and error text without storing large command payloads.
 
-Use `service reconcile` to run the persisted browser health and target probes intentionally without requesting a control-plane status snapshot. This command updates the same `reconciliation` snapshot, expires due session leases without launching a browser, returns `expiredSessionLeases`, `expiredSessionLeaseCount`, and `remoteViewRepair` counts for remote-view display, route, viewer lease, and controller lease repairs, refreshes live tab records for reachable browser CDP endpoints, and appends service events.
+Use `service reconcile` to run the persisted browser health and target probes intentionally without requesting a control-plane status snapshot. This command updates the same `reconciliation` snapshot, expires due session leases without launching a browser, returns `expiredSessionLeases`, `expiredSessionLeaseCount`, and `remoteViewRepair` counts for route-pool entries invalidated or restored from live X11 socket evidence plus remote-view display, route, viewer lease, and controller lease repairs, refreshes live tab records for reachable browser CDP endpoints, and appends service events.
 
 Use `service resources` or HTTP `GET /api/service/resources` to inspect the
 read-only resource monitor summary without launching a browser. Use

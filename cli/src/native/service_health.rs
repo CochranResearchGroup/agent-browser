@@ -7,6 +7,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use super::browser::BrowserShutdownOutcome;
+use super::remote_view::{route_display_socket_available, route_pool_target_string};
 use super::remote_view_attachability::refresh_remote_view_attachability;
 use super::service_lifecycle::{upsert_service_profile_and_session, ServiceLaunchMetadata};
 use super::service_model::{
@@ -1675,6 +1676,8 @@ async fn reconcile_live_browser_targets(state: &mut ServiceState) {
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct RemoteViewReconcileRepair {
+    pub unavailable_route_pool_entries: usize,
+    pub restored_route_pool_entries: usize,
     pub orphaned_display_allocations: usize,
     pub orphaned_routes: usize,
     pub released_viewer_leases: usize,
@@ -1685,12 +1688,17 @@ pub struct RemoteViewReconcileRepair {
 impl RemoteViewReconcileRepair {
     pub fn to_json(self) -> serde_json::Value {
         json!({
+            "unavailableRoutePoolEntries": self.unavailable_route_pool_entries,
+            "restoredRoutePoolEntries": self.restored_route_pool_entries,
             "orphanedDisplayAllocations": self.orphaned_display_allocations,
             "orphanedRoutes": self.orphaned_routes,
             "releasedViewerLeases": self.released_viewer_leases,
             "expiredViewerLeases": self.expired_viewer_leases,
             "clearedControllerLeases": self.cleared_controller_leases,
-            "repaired": self.orphaned_display_allocations + self.orphaned_routes,
+            "repaired": self.unavailable_route_pool_entries
+                + self.restored_route_pool_entries
+                + self.orphaned_display_allocations
+                + self.orphaned_routes,
             "released": self.released_viewer_leases + self.expired_viewer_leases,
             "skippedUnsafe": 0,
         })
@@ -1698,6 +1706,14 @@ impl RemoteViewReconcileRepair {
 }
 
 fn reconcile_remote_view_state(state: &mut ServiceState) -> RemoteViewReconcileRepair {
+    reconcile_remote_view_state_with_display_probe(state, route_display_socket_available)
+}
+
+/// Reconciles retained remote-view state against a current route-display probe.
+fn reconcile_remote_view_state_with_display_probe(
+    state: &mut ServiceState,
+    display_socket_available: impl Fn(&str) -> bool,
+) -> RemoteViewReconcileRepair {
     let now = current_timestamp();
     let browser_health = state
         .browsers
@@ -1705,6 +1721,77 @@ fn reconcile_remote_view_state(state: &mut ServiceState) -> RemoteViewReconcileR
         .map(|(id, browser)| (id.clone(), browser.health))
         .collect::<BTreeMap<_, _>>();
     let mut repair = RemoteViewReconcileRepair::default();
+
+    let mut unavailable_route_displays = BTreeMap::new();
+    for entry in state.route_pool.values_mut() {
+        if entry.provider != ViewStreamProvider::RdpGateway {
+            continue;
+        }
+        let display_name = route_pool_target_string(entry, "displayName");
+        let failure_reason = match display_name.as_deref() {
+            Some(display_name) if !display_socket_available(display_name) => {
+                Some("route_display_socket_missing")
+            }
+            None => Some("route_display_missing"),
+            Some(_) => None,
+        };
+
+        if let Some(reason) = failure_reason {
+            let route_id = entry
+                .current_route_allocation_id
+                .clone()
+                .unwrap_or_else(|| entry.route_id.clone());
+            unavailable_route_displays.insert(
+                route_id,
+                (
+                    entry.id.clone(),
+                    display_name
+                        .clone()
+                        .unwrap_or_else(|| "missing".to_string()),
+                    reason.to_string(),
+                ),
+            );
+            let already_unavailable = entry.state == "unavailable"
+                && entry.readiness.as_ref().is_some_and(|readiness| {
+                    readiness.get("component").and_then(Value::as_str) == Some("route_display")
+                        && readiness.get("reason").and_then(Value::as_str) == Some(reason)
+                });
+            if already_unavailable {
+                continue;
+            }
+            let retained_state = entry.state.clone();
+            let retained_readiness = entry.readiness.clone();
+            entry.state = "unavailable".to_string();
+            entry.readiness = Some(json!({
+                "state": "unavailable",
+                "component": "route_display",
+                "reason": reason,
+                "routePoolEntryId": entry.id,
+                "displayName": display_name,
+                "retainedState": retained_state,
+                "retainedReadiness": retained_readiness,
+                "updatedAt": now,
+            }));
+            repair.unavailable_route_pool_entries += 1;
+            continue;
+        }
+
+        let invalidated_readiness = entry.readiness.as_ref().filter(|readiness| {
+            readiness.get("component").and_then(Value::as_str) == Some("route_display")
+                && matches!(
+                    readiness.get("reason").and_then(Value::as_str),
+                    Some("route_display_socket_missing" | "route_display_missing")
+                )
+        });
+        let Some(invalidated_readiness) = invalidated_readiness else {
+            continue;
+        };
+        let retained_readiness = invalidated_readiness.get("retainedReadiness").cloned();
+        entry.state = "available".to_string();
+        entry.current_route_allocation_id = None;
+        entry.readiness = retained_readiness.filter(|value| !value.is_null());
+        repair.restored_route_pool_entries += 1;
+    }
 
     for allocation in state.display_allocations.values_mut() {
         if matches!(allocation.state.as_str(), "released" | "failed") {
@@ -1743,34 +1830,45 @@ fn reconcile_remote_view_state(state: &mut ServiceState) -> RemoteViewReconcileR
         if matches!(route.state.as_str(), "released" | "failed") {
             continue;
         }
-        let display_problem = route
-            .display_allocation_id
-            .as_ref()
-            .and_then(|id| {
-                display_states
-                    .get(id)
-                    .map(|state| (id.clone(), state.clone()))
-            })
-            .and_then(|(id, state)| {
-                if matches!(state.as_str(), "ready" | "allocating") {
-                    None
-                } else {
-                    Some(("display_allocation_unavailable", id, state))
-                }
-            })
-            .or_else(|| {
-                route
-                    .display_allocation_id
-                    .as_ref()
-                    .filter(|id| !display_states.contains_key(*id))
-                    .map(|id| {
-                        (
-                            "display_allocation_missing",
-                            id.clone(),
-                            "missing".to_string(),
-                        )
-                    })
-            });
+        let route_display_problem = unavailable_route_displays.get(&route.id).map(
+            |(route_pool_entry_id, display_name, reason)| {
+                (
+                    reason.as_str(),
+                    format!("{route_pool_entry_id}:{display_name}"),
+                    "unavailable".to_string(),
+                )
+            },
+        );
+        let display_problem = route_display_problem.or_else(|| {
+            route
+                .display_allocation_id
+                .as_ref()
+                .and_then(|id| {
+                    display_states
+                        .get(id)
+                        .map(|state| (id.clone(), state.clone()))
+                })
+                .and_then(|(id, state)| {
+                    if matches!(state.as_str(), "ready" | "allocating") {
+                        None
+                    } else {
+                        Some(("display_allocation_unavailable", id, state))
+                    }
+                })
+                .or_else(|| {
+                    route
+                        .display_allocation_id
+                        .as_ref()
+                        .filter(|id| !display_states.contains_key(*id))
+                        .map(|id| {
+                            (
+                                "display_allocation_missing",
+                                id.clone(),
+                                "missing".to_string(),
+                            )
+                        })
+                })
+        });
         let browser_problem = route
             .browser_id
             .as_ref()
@@ -1800,7 +1898,13 @@ fn reconcile_remote_view_state(state: &mut ServiceState) -> RemoteViewReconcileR
         route.last_provider_event = Some(reason.to_string());
         route.readiness = Some(json!({
             "state": "orphaned",
-            "component": if reason.starts_with("display") { "display_allocation" } else { "browser_process" },
+            "component": if reason.starts_with("route_display") {
+                "route_display"
+            } else if reason.starts_with("display") {
+                "display_allocation"
+            } else {
+                "browser_process"
+            },
             "reason": reason,
             "entityId": entity_id,
             "entityState": entity_state,
@@ -3047,6 +3151,141 @@ mod tests {
             .iter()
             .any(|event| event.kind == ServiceEventKind::Reconciliation));
         let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn reconcile_invalidates_and_restores_route_pool_entries_with_display_sockets() {
+        let ready = json!({
+            "state": "ready",
+            "component": "rdp_route_readiness",
+            "observedAt": "2026-07-21T23:55:00Z",
+        });
+        let route_entry =
+            |id: &str, route_id: &str, display_name: &str, state: &str| RoutePoolEntry {
+                id: id.to_string(),
+                provider: ViewStreamProvider::RdpGateway,
+                route_id: route_id.to_string(),
+                frame_url: Some(format!(
+                    "http://127.0.0.1:8080/guacamole/#/client/{route_id}"
+                )),
+                target: json!({ "displayName": display_name }),
+                state: state.to_string(),
+                current_route_allocation_id: (state == "checked_out").then(|| route_id.to_string()),
+                readiness: Some(ready.clone()),
+                ..RoutePoolEntry::default()
+            };
+        let mut state = ServiceState {
+            route_pool: BTreeMap::from([
+                (
+                    "guacamole-rdp-a".to_string(),
+                    route_entry("guacamole-rdp-a", "guacamole:4", ":10", "checked_out"),
+                ),
+                (
+                    "guacamole-rdp-b".to_string(),
+                    route_entry("guacamole-rdp-b", "guacamole:5", ":11", "available"),
+                ),
+            ]),
+            remote_view_routes: BTreeMap::from([(
+                "guacamole:4".to_string(),
+                RemoteViewRoute {
+                    id: "guacamole:4".to_string(),
+                    provider: ViewStreamProvider::RdpGateway,
+                    state: "ready".to_string(),
+                    readiness: Some(ready.clone()),
+                    ..RemoteViewRoute::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let invalidated =
+            reconcile_remote_view_state_with_display_probe(&mut state, |_display_name| false);
+
+        assert_eq!(invalidated.unavailable_route_pool_entries, 2);
+        assert_eq!(invalidated.restored_route_pool_entries, 0);
+        for entry_id in ["guacamole-rdp-a", "guacamole-rdp-b"] {
+            let entry = &state.route_pool[entry_id];
+            assert_eq!(entry.state, "unavailable");
+            assert_eq!(
+                entry
+                    .readiness
+                    .as_ref()
+                    .and_then(|value| value.get("reason"))
+                    .and_then(Value::as_str),
+                Some("route_display_socket_missing")
+            );
+        }
+        assert_eq!(state.remote_view_routes["guacamole:4"].state, "orphaned");
+        assert_eq!(
+            state.remote_view_routes["guacamole:4"]
+                .readiness
+                .as_ref()
+                .and_then(|value| value.get("component"))
+                .and_then(Value::as_str),
+            Some("route_display")
+        );
+
+        for (entry_id, route_id) in [
+            ("guacamole-rdp-a", "guacamole:4"),
+            ("guacamole-rdp-b", "guacamole:5"),
+        ] {
+            let intent = super::super::remote_view::normalize_remote_view_open_intent(&json!({
+                "action": "remote_view_open",
+                "routePoolEntryId": entry_id,
+                "routeId": route_id,
+                "dryRun": true,
+            }))
+            .unwrap();
+            let error = super::super::remote_view::plan_remote_view_acquisition(
+                &state,
+                &intent,
+                None,
+                "session:boot-smoke",
+                "boot-smoke",
+            )
+            .unwrap_err();
+            assert!(error.starts_with("route_pool_entry_unavailable:"));
+        }
+
+        let restored =
+            reconcile_remote_view_state_with_display_probe(&mut state, |_display_name| true);
+
+        assert_eq!(restored.unavailable_route_pool_entries, 0);
+        assert_eq!(restored.restored_route_pool_entries, 2);
+        for entry_id in ["guacamole-rdp-a", "guacamole-rdp-b"] {
+            let entry = &state.route_pool[entry_id];
+            assert_eq!(entry.state, "available");
+            assert_eq!(entry.current_route_allocation_id, None);
+            assert_eq!(
+                entry
+                    .readiness
+                    .as_ref()
+                    .and_then(|value| value.get("state"))
+                    .and_then(Value::as_str),
+                Some("ready")
+            );
+        }
+
+        let restored_intent =
+            super::super::remote_view::normalize_remote_view_open_intent(&json!({
+                "action": "remote_view_open",
+                "routePoolEntryId": "guacamole-rdp-b",
+                "routeId": "guacamole:5",
+                "dryRun": true,
+            }))
+            .unwrap();
+        let restored_plan = super::super::remote_view::plan_remote_view_acquisition(
+            &state,
+            &restored_intent,
+            None,
+            "session:boot-smoke",
+            "boot-smoke",
+        )
+        .unwrap();
+        assert_eq!(
+            restored_plan.selected_route_pool_entry_id.as_deref(),
+            Some("guacamole-rdp-b")
+        );
     }
 
     #[tokio::test]

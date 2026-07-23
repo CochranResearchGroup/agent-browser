@@ -271,7 +271,8 @@ pub fn route_pool_target_string(entry: &RoutePoolEntry, key: &str) -> Option<Str
 }
 
 #[cfg(all(unix, not(test)))]
-fn route_display_socket_available(display_name: &str) -> bool {
+/// Returns whether the named X11 display currently has a filesystem or abstract socket.
+pub(crate) fn route_display_socket_available(display_name: &str) -> bool {
     let Some(display_number) = display_name.strip_prefix(':') else {
         return false;
     };
@@ -294,7 +295,8 @@ fn route_display_socket_available(display_name: &str) -> bool {
 }
 
 #[cfg(any(not(unix), test))]
-fn route_display_socket_available(_display_name: &str) -> bool {
+/// Treats display sockets as available where Linux socket inspection is unsupported or injected by tests.
+pub(crate) fn route_display_socket_available(_display_name: &str) -> bool {
     true
 }
 

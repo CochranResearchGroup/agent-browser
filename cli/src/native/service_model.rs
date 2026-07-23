@@ -2015,6 +2015,8 @@ pub fn assert_service_reconcile_response_contract(value: &serde_json::Value) {
     assert!(value["expiredSessionLeases"].is_array());
     assert!(value["expiredSessionLeaseCount"].is_u64());
     assert!(value["remoteViewRepair"].is_object());
+    assert!(value["remoteViewRepair"]["unavailableRoutePoolEntries"].is_u64());
+    assert!(value["remoteViewRepair"]["restoredRoutePoolEntries"].is_u64());
     assert!(value["remoteViewRepair"]["orphanedDisplayAllocations"].is_u64());
     assert!(value["remoteViewRepair"]["orphanedRoutes"].is_u64());
     assert!(value["remoteViewRepair"]["releasedViewerLeases"].is_u64());
@@ -7493,6 +7495,8 @@ mod tests {
             "expiredSessionLeases": [],
             "expiredSessionLeaseCount": 0,
             "remoteViewRepair": {
+                "unavailableRoutePoolEntries": 0,
+                "restoredRoutePoolEntries": 0,
                 "orphanedDisplayAllocations": 0,
                 "orphanedRoutes": 0,
                 "releasedViewerLeases": 0,

@@ -38,6 +38,8 @@
     "remoteViewRepair": {
       "type": "object",
       "required": [
+        "unavailableRoutePoolEntries",
+        "restoredRoutePoolEntries",
         "orphanedDisplayAllocations",
         "orphanedRoutes",
         "releasedViewerLeases",
@@ -48,6 +50,14 @@
         "skippedUnsafe"
       ],
       "properties": {
+        "unavailableRoutePoolEntries": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "restoredRoutePoolEntries": {
+          "type": "integer",
+          "minimum": 0
+        },
         "orphanedDisplayAllocations": {
           "type": "integer",
           "minimum": 0

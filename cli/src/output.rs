@@ -5125,6 +5125,11 @@ If the selected tab has no CDP target id,
 operatorVisible.state=cdp_target_unavailable.
 If retained route-pool metadata points at a stale route allocation,
 operatorVisible.state=stale_route_record.
+Service reconciliation also compares every retained RDP route with its current
+X11 socket. A missing display changes the route-pool entry to unavailable and
+orphans its checked-out route before another browser launch is planned. Once
+the operator restores the RDP desktop, reconciliation returns the pool entry
+to available and clears the stale checkout.
 Responses also include browserBuildProof with the requested browser build,
 selected build, executable path when known, and mismatch state.
 When a likely one-time operator handoff passes a new arbitrary runtime profile,
@@ -5503,7 +5508,7 @@ Notes:
   - Persisted browser records are probed for dead PIDs, unreachable CDP endpoints, and failed target-list probes.
   - Non-ready browsers close their known tabs during reconciliation so stale tab state does not look active.
   - Reconciliation emits a reconciliation event with details.action=session_tab_ownership_repaired when it removes stale session/tab ownership links.
-  - The reconciliation snapshot records lastReconciledAt, browserCount, changedBrowsers, and lastError. service_reconcile responses also include expiredSessionLeases, expiredSessionLeaseCount, and remoteViewRepair counts for orphaned remote-view displays, routes, viewer leases, and controller leases repaired during reconcile.
+  - The reconciliation snapshot records lastReconciledAt, browserCount, changedBrowsers, and lastError. service_reconcile responses also include expiredSessionLeases, expiredSessionLeaseCount, and remoteViewRepair counts for route-pool entries invalidated or restored from live X11 socket evidence plus orphaned remote-view displays, routes, viewer leases, and controller leases repaired during reconcile.
   - The bounded events log records reconciliation summaries, browser launch metadata including profileSelectionReason and profileLeaseDisposition when known, browser health transitions, browser recovery starts, profile lease wait transitions, and tab lifecycle changes.
   - Event filters match kind, browser ID, profile ID, session ID, service name, agent name, task name, and RFC 3339 timestamps before applying --limit.
   - The stream server exposes named browser control endpoints at /api/browser/url, /api/browser/title, /api/browser/tabs, /api/browser/navigate, /api/browser/back, /api/browser/forward, /api/browser/reload, /api/browser/new-tab, /api/browser/switch-tab, /api/browser/close-tab, /api/browser/viewport, /api/browser/user-agent, /api/browser/media, /api/browser/timezone, /api/browser/locale, /api/browser/geolocation, /api/browser/permissions, /api/browser/cookies/get, /api/browser/cookies/set, /api/browser/cookies/clear, /api/browser/storage/get, /api/browser/storage/set, /api/browser/storage/clear, /api/browser/console, /api/browser/errors, /api/browser/set-content, /api/browser/headers, /api/browser/offline, /api/browser/dialog, /api/browser/clipboard, /api/browser/upload, /api/browser/download, /api/browser/wait-for-download, /api/browser/pdf, /api/browser/response-body, /api/browser/har/start, /api/browser/har/stop, /api/browser/route, /api/browser/unroute, /api/browser/requests, /api/browser/request-detail, /api/browser/snapshot, /api/browser/screenshot, /api/browser/click, /api/browser/fill, /api/browser/wait, /api/browser/type, /api/browser/press, /api/browser/hover, /api/browser/select, /api/browser/get-text, /api/browser/get-value, /api/browser/is-visible, /api/browser/get-attribute, /api/browser/get-html, /api/browser/get-styles, /api/browser/count, /api/browser/get-box, /api/browser/is-enabled, /api/browser/is-checked, /api/browser/check, /api/browser/uncheck, /api/browser/scroll, /api/browser/scroll-into-view, /api/browser/focus, and /api/browser/clear.

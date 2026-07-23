@@ -974,6 +974,8 @@ export interface ServiceReconcileResponse {
   expiredSessionLeases: string[];
   expiredSessionLeaseCount: number;
   remoteViewRepair: {
+    unavailableRoutePoolEntries: number;
+    restoredRoutePoolEntries: number;
     orphanedDisplayAllocations: number;
     orphanedRoutes: number;
     releasedViewerLeases: number;
