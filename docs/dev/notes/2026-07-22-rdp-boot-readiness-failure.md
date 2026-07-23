@@ -276,6 +276,13 @@ Final install doctor returned `success=true`, no issues,
 `runtimeConvergence.status=converged`, and zero stale runtimes. The installed,
 workspace-reference, and dashboard-manifest executable hashes agree.
 
+A final process and socket audit found two orphaned validation daemons outside
+the normal runtime inventory because their temporary socket directories had
+already been removed. Both validation-only processes were terminated, and the
+default proof daemon was closed after reconciliation. Only the converged
+dashboard service remains running; no stale or validation daemon listener
+remains.
+
 Current reconciliation clears stale route checkout ownership and reports both
 Route A and Route B as `unavailable` with reason
 `route_display_socket_missing`. The remote-view doctor now completes without
