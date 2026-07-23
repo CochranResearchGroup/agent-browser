@@ -75,12 +75,19 @@ For a persistent local dashboard and self-healing RDP route plane, run
 <code>bash scripts/install-dashboard-user-service.sh</code> from the checkout.
 Alongside <code>agent-browser-dashboard.service</code>, it installs
 <code>agent-browser-runtime-interlock.timer</code>. The interlock runs after
-boot and five minutes after each completed pass by default, closes only stale daemon sessions proven
-by install doctor, restores missing route displays, and records its latest
+boot and five minutes after each completed pass by default, hands stale daemon
+sessions proven by install doctor to the current executable without closing
+their browsers, restores missing route displays, and records its latest
 receipt under
 <code>~/.agent-browser/convergence/local-runtime-latest.json</code>. Set
 <code>AGENT_BROWSER_RUNTIME_INTERLOCK_INTERVAL</code> before installation to a
 systemd duration such as <code>5min</code> to change the cadence.
+
+During development, run <code>pnpm publish:local-dashboard</code> to rebuild
+and replace the user-scoped executable. The publisher transfers active sessions
+to replacement daemons while preserving browser PIDs, CDP endpoints, profiles,
+and open tabs. It fails before replacement if an active older daemon cannot
+support the handoff protocol.
 
 ## Stealth CDP Chromium
 

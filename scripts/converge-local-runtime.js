@@ -48,6 +48,7 @@ const report = {
   apply: options.apply,
   steps: [],
   safeRemedies: [],
+  handoffRemedies: [],
   staleMetadataRemedies: [],
   skippedRemedies: [],
   evidencePath: null,
@@ -182,6 +183,7 @@ function readDoctors(label, { required = true } = {}) {
 function summarizeInstallDoctor(payload) {
   const data = payload.data ?? {};
   const inventory = data.runtimeInventory ?? {};
+  const listenerInventory = data.daemonListenerInventory ?? {};
   const issues = Array.isArray(data.issues) ? data.issues : [];
   return {
     success: payload.success === true,
@@ -192,6 +194,12 @@ function summarizeInstallDoctor(payload) {
       runtimeCount: inventory.runtimeCount ?? 0,
       staleCount: inventory.staleCount ?? 0,
       convergedCount: inventory.convergedCount ?? 0,
+    },
+    daemonListenerInventory: {
+      state: listenerInventory.state ?? null,
+      listeners: Array.isArray(listenerInventory.listeners)
+        ? listenerInventory.listeners
+        : [],
     },
   };
 }
@@ -222,8 +230,45 @@ function staleDaemonRemedies(install) {
     }));
 }
 
+function staleDaemonListenerSessions(install) {
+  return install.daemonListenerInventory.listeners
+    .filter((listener) => (
+      listener?.deletedExecutable === true
+      || listener?.matchesCurrentExecutable === false
+    ))
+    .map((listener) => {
+      const match = String(listener?.socketPath ?? '').match(/([^/\\]+)\.(?:sock|port)$/);
+      return {
+        session: match?.[1] ?? null,
+        pid: Number.isInteger(listener?.pid) && listener.pid > 0 ? listener.pid : null,
+      };
+    })
+    .filter((listener) => (
+      typeof listener.session === 'string'
+      && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(listener.session)
+    ));
+}
+
+function staleDaemonCandidates(install) {
+  const candidates = new Map();
+  for (const remedy of staleDaemonRemedies(install)) {
+    if (!remedy.session) continue;
+    candidates.set(remedy.session, { ...remedy, listenerAuthority: false });
+  }
+  for (const listener of staleDaemonListenerSessions(install)) {
+    const prior = candidates.get(listener.session);
+    candidates.set(listener.session, {
+      session: listener.session,
+      argv: prior?.argv ?? [],
+      listenerAuthority: true,
+      listenerPid: listener.pid,
+    });
+  }
+  return [...candidates.values()];
+}
+
 function repairConfirmedStaleDaemons(install, label) {
-  const candidates = staleDaemonRemedies(install);
+  const candidates = staleDaemonCandidates(install);
   if (candidates.length === 0) return false;
 
   sleep(2000);
@@ -233,18 +278,71 @@ function repairConfirmedStaleDaemons(install, label) {
     ['install', 'doctor', '--json'],
     { required: false },
   );
+  const confirmedInstall = summarizeInstallDoctor(confirmationPayload);
   const confirmedSessions = new Set(
-    staleDaemonRemedies(summarizeInstallDoctor(confirmationPayload))
-      .map((remedy) => remedy.session),
+    staleDaemonCandidates(confirmedInstall).map((remedy) => remedy.session),
   );
   for (const remedy of candidates) {
     if (!confirmedSessions.has(remedy.session)) continue;
-    if (isSafeStaleDaemonRemedy(remedy.argv)) {
-      runStep(
-        `close_stale_daemon_${remedy.session}`,
+    if (remedy.listenerAuthority || isSafeStaleDaemonRemedy(remedy.argv)) {
+      const prepared = runJsonStep(
+        `${label}_prepare_stale_daemon_handoff_${remedy.session}`,
         agentBrowserCommand,
-        remedy.argv.slice(1),
+        ['--json', '--session', remedy.session, 'handoff', 'prepare'],
+        { required: false },
       );
+      if (prepared.success !== true) {
+        report.skippedRemedies.push({
+          session: remedy.session,
+          argv: remedy.argv,
+          reason: 'runtime_handoff_prepare_failed',
+          error: prepared.error ?? null,
+        });
+        continue;
+      }
+      const handoff = {
+        session: remedy.session,
+        prepared: prepared.data?.prepared === true,
+        browserPid: prepared.data?.browserPid ?? null,
+        cdpUrl: prepared.data?.cdpUrl ?? null,
+        resumed: false,
+      };
+      if (handoff.prepared) {
+        const resumed = runJsonStep(
+          `${label}_resume_stale_daemon_handoff_${remedy.session}`,
+          agentBrowserCommand,
+          ['--json', '--session', remedy.session, 'handoff', 'resume'],
+          { required: false },
+        );
+        handoff.resumed = resumed.success === true;
+        handoff.resumedBrowserPid = resumed.data?.browserPid ?? null;
+        handoff.resumedCdpUrl = resumed.data?.cdpUrl ?? null;
+        if (
+          !handoff.resumed ||
+          handoff.resumedBrowserPid !== handoff.browserPid ||
+          handoff.resumedCdpUrl !== handoff.cdpUrl
+        ) {
+          report.skippedRemedies.push({
+            session: remedy.session,
+            argv: remedy.argv,
+            reason: 'runtime_handoff_resume_failed',
+            error: resumed.error ?? null,
+          });
+        }
+      } else {
+        handoff.idleDaemonRetired = retireConfirmedIdleDaemon(remedy.listenerPid);
+        if (!handoff.idleDaemonRetired) {
+          report.skippedRemedies.push({
+            session: remedy.session,
+            argv: remedy.argv,
+            reason: 'idle_stale_daemon_retirement_failed',
+            error: remedy.listenerPid
+              ? `daemon process ${remedy.listenerPid} remained live`
+              : 'confirmed listener PID unavailable',
+          });
+        }
+      }
+      report.handoffRemedies.push(handoff);
     } else {
       report.skippedRemedies.push({
         session: remedy.session,
@@ -254,6 +352,24 @@ function repairConfirmedStaleDaemons(install, label) {
     }
   }
   return true;
+}
+
+function retireConfirmedIdleDaemon(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 'SIGTERM');
+  } catch (error) {
+    return error?.code === 'ESRCH';
+  }
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    sleep(100);
+    try {
+      process.kill(pid, 0);
+    } catch (error) {
+      return error?.code === 'ESRCH';
+    }
+  }
+  return false;
 }
 
 function isSafeStaleDaemonRemedy(argv) {
@@ -413,9 +529,10 @@ function printHelp() {
 Dry-run by default. Reports install doctor, remote-view doctor, runtime
 inventory, and safe stale-daemon remedies. With --apply, synchronizes the local
 dashboard runtime, closes only agent-browser stale daemon sessions reported by
-doctor remedies, ensures Guacamole Postgres schema state, restores missing RDP
-route displays, applies display grants only when doctor asks for them, writes an
-evidence JSON file, and reruns doctors.
+doctor remedies through browser-preserving daemon handoff, ensures Guacamole
+Postgres schema state, restores missing RDP route displays, applies display
+grants only when doctor asks for them, writes an evidence JSON file, and reruns
+doctors.
 
 Options:
   --apply                 Apply safe local repairs. Default is dry-run.

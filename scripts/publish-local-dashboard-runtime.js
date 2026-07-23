@@ -2,9 +2,19 @@
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, statSync, chmodSync, renameSync, rmSync, readFileSync } from 'node:fs';
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  statSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 const rootDir = new URL('..', import.meta.url).pathname;
 const args = process.argv.slice(2);
@@ -69,10 +79,18 @@ const report = {
     before: null,
     after: null,
     action: 'none',
+    quiesced: false,
   },
   smoke: null,
   runtimeManifest: null,
   referenceBinaries: [],
+  handoffs: {
+    prepared: [],
+    resumed: [],
+    rollbackResumed: [],
+    retiredIdleSessions: [],
+    unsupportedActiveSessions: [],
+  },
 };
 
 try {
@@ -113,12 +131,15 @@ async function run() {
     report.backupPath = backupPath;
   }
 
+  quiesceDashboardForRuntimeHandoff();
   try {
+    prepareRuntimeHandoffs(builtBin, installBin);
     installBinaryAtomically(builtBin, installBin, beforeStat ? beforeStat.mode & 0o777 : 0o755);
     if (options.syncReferenceBinaries) {
       report.referenceBinaries = syncReferenceBinaries(builtBin);
     }
 
+    resumeRuntimeHandoffs(installBin);
     await restartOrStartDashboard(installBin);
 
     if (!options.skipSmoke) {
@@ -126,14 +147,15 @@ async function run() {
       report.runtimeManifest = verifyRuntimeManifestReadback(installBin, report.smoke.runtimeManifest);
     }
   } catch (error) {
-    if (backupPath && existsSync(backupPath)) {
+    const browserHandoffStarted = report.handoffs.prepared.length > 0;
+    if (!browserHandoffStarted && backupPath && existsSync(backupPath)) {
       installBinaryAtomically(backupPath, installBin, beforeStat ? beforeStat.mode & 0o777 : 0o755);
       report.restoredBackup = true;
-      try {
-        await restartOrStartDashboard(installBin, { restoring: true });
-      } catch (restoreError) {
-        report.restoreRestartError = restoreError instanceof Error ? restoreError.message : String(restoreError);
-      }
+    }
+    try {
+      await restartOrStartDashboard(installBin, { restoring: true });
+    } catch (restoreError) {
+      report.restoreRestartError = restoreError instanceof Error ? restoreError.message : String(restoreError);
     }
     throw error;
   } finally {
@@ -201,6 +223,219 @@ function installBinaryAtomically(source, target, mode) {
   }
 }
 
+function runtimeSocketDir() {
+  if (process.env.AGENT_BROWSER_SOCKET_DIR) return resolve(process.env.AGENT_BROWSER_SOCKET_DIR);
+  if (process.env.XDG_RUNTIME_DIR) return resolve(process.env.XDG_RUNTIME_DIR, 'agent-browser');
+  return resolve(homedir(), '.agent-browser');
+}
+
+function runtimeSessionNames() {
+  const socketDir = runtimeSocketDir();
+  if (!existsSync(socketDir)) return [];
+  const suffix = process.platform === 'win32' ? '.port' : '.sock';
+  return readdirSync(socketDir)
+    .filter((name) => name.endsWith(suffix))
+    .map((name) => name.slice(0, -suffix.length))
+    .filter((name) => /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name))
+    .sort();
+}
+
+function prepareRuntimeHandoffs(clientBin, rollbackBin) {
+  try {
+    for (const sessionName of runtimeSessionNames()) {
+      const daemonPid = readRuntimePid(sessionName);
+      const daemonClientBin = runtimeDaemonClientBinary(daemonPid, rollbackBin);
+      const serviceReadback = serviceBrowserForSession(daemonClientBin, sessionName);
+      if (!serviceReadback.success) {
+        throw new Error(
+          `Could not prove whether daemon session '${sessionName}' owns a browser before executable replacement: ` +
+          serviceReadback.error,
+        );
+      }
+      const browser = serviceReadback.browser;
+      const browserAppearsActive = browser
+        && (
+          browserProcessIsLive(browser.pid)
+          || (
+            typeof browser.cdpEndpoint === 'string'
+            && browser.cdpEndpoint.length > 0
+            && !['closed', 'not_started'].includes(browser.health)
+          )
+        );
+      if (!browserAppearsActive) {
+        const closed = runAgentJson(daemonClientBin, sessionName, ['close']);
+        if (closed.status !== 0 || closed.json?.success !== true) {
+          throw new Error(
+            `Could not retire idle daemon session '${sessionName}' before executable replacement: ${closed.error}`,
+          );
+        }
+        waitForDaemonExit(sessionName, daemonPid);
+        report.handoffs.retiredIdleSessions.push({
+          sessionName,
+          daemonPid,
+          compatibilityClose: true,
+        });
+        continue;
+      }
+
+      const prepared = runAgentJson(clientBin, sessionName, ['handoff', 'prepare']);
+      if (prepared.status === 0 && prepared.json?.success === true) {
+        const data = prepared.json.data || {};
+        if (data.prepared === true) {
+          report.handoffs.prepared.push({
+            sessionName,
+            daemonPid,
+            browserPid: data.browserPid ?? null,
+            cdpUrl: data.cdpUrl ?? null,
+            runtimeProfile: data.runtimeProfile ?? null,
+            handoffPath: data.handoffPath ?? null,
+          });
+        } else {
+          report.handoffs.retiredIdleSessions.push({ sessionName, daemonPid });
+        }
+        waitForDaemonExit(sessionName, daemonPid);
+        continue;
+      }
+
+      report.handoffs.unsupportedActiveSessions.push({
+        sessionName,
+        daemonPid,
+        browserPid: browser.pid ?? null,
+        cdpUrl: browser.cdpEndpoint ?? null,
+        error: prepared.error,
+      });
+      throw new Error(
+        `Installed daemon cannot hand off active browser session '${sessionName}'. ` +
+        'The publish was stopped before replacing the executable.',
+      );
+    }
+  } catch (error) {
+    for (const prepared of report.handoffs.prepared) {
+      const resumed = runAgentJson(rollbackBin, prepared.sessionName, ['handoff', 'resume']);
+      report.handoffs.rollbackResumed.push({
+        sessionName: prepared.sessionName,
+        success: resumed.status === 0 && resumed.json?.success === true,
+        error: resumed.status === 0 && resumed.json?.success === true ? null : resumed.error,
+      });
+    }
+    throw error;
+  }
+}
+
+function resumeRuntimeHandoffs(installBin) {
+  for (const prepared of report.handoffs.prepared) {
+    let resumed;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      resumed = runAgentJson(installBin, prepared.sessionName, ['handoff', 'resume']);
+      if (resumed.status === 0 && resumed.json?.success === true) break;
+      if (attempt < 3) sleep(250);
+    }
+    if (resumed.status !== 0 || resumed.json?.success !== true) {
+      throw new Error(
+        `Replacement daemon could not resume browser session '${prepared.sessionName}'. ` +
+        `The browser and retry record remain available: ${resumed.error}`,
+      );
+    }
+    const data = resumed.json.data || {};
+    if (prepared.browserPid !== null && data.browserPid !== prepared.browserPid) {
+      throw new Error(
+        `Runtime handoff changed browser PID for session '${prepared.sessionName}': ` +
+        `${prepared.browserPid} -> ${data.browserPid}`,
+      );
+    }
+    if (prepared.cdpUrl && data.cdpUrl !== prepared.cdpUrl) {
+      throw new Error(
+        `Runtime handoff changed CDP endpoint for session '${prepared.sessionName}': ` +
+        `${prepared.cdpUrl} -> ${data.cdpUrl}`,
+      );
+    }
+    report.handoffs.resumed.push({
+      sessionName: prepared.sessionName,
+      browserPid: data.browserPid ?? null,
+      cdpUrl: data.cdpUrl ?? null,
+      runtimeProfile: data.runtimeProfile ?? null,
+      targetsReattached: data.targetsReattached ?? null,
+      retryRecordRemoved: data.retryRecordRemoved === true,
+      daemonPid: readRuntimePid(prepared.sessionName),
+    });
+  }
+}
+
+function runtimeDaemonClientBinary(daemonPid, fallbackBin) {
+  if (process.platform === 'linux' && Number.isInteger(daemonPid) && daemonPid > 0) {
+    const procExecutable = `/proc/${daemonPid}/exe`;
+    if (existsSync(procExecutable)) return procExecutable;
+  }
+  return fallbackBin;
+}
+
+function runAgentJson(binary, sessionName, commandArgs) {
+  const result = spawnSync(binary, ['--json', '--session', sessionName, ...commandArgs], {
+    cwd: rootDir,
+    env: process.env,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    maxBuffer: 16 * 1024 * 1024,
+  });
+  let json = null;
+  try {
+    json = JSON.parse(String(result.stdout || '').trim());
+  } catch {
+    // The compatibility path uses the structured error below.
+  }
+  return {
+    status: result.status,
+    json,
+    error: json?.error || result.error?.message || result.stderr?.trim() || result.stdout?.trim() || 'unknown error',
+  };
+}
+
+function serviceBrowserForSession(binary, sessionName) {
+  const result = runAgentJson(binary, sessionName, ['service', 'browsers']);
+  const browsers = result.json?.data?.browsers || [];
+  return {
+    success: result.status === 0 && result.json?.success === true,
+    browser: browsers.find((browser) => browser?.id === `session:${sessionName}`) || null,
+    error: result.error,
+  };
+}
+
+function readRuntimePid(sessionName) {
+  try {
+    const value = Number.parseInt(
+      readFileSync(join(runtimeSocketDir(), `${sessionName}.pid`), 'utf8').trim(),
+      10,
+    );
+    return Number.isInteger(value) && value > 0 ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function browserProcessIsLive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function waitForDaemonExit(sessionName, priorPid) {
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline) {
+    const currentPid = readRuntimePid(sessionName);
+    if (currentPid === null && !browserProcessIsLive(priorPid)) return;
+    sleep(50);
+  }
+  throw new Error(`Daemon session '${sessionName}' did not exit for executable handoff`);
+}
+
+function sleep(milliseconds) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
+
 function resolveInstallBin() {
   if (options.installBin) return resolve(options.installBin);
   const defaultPath = resolve(homedir(), '.local/bin/agent-browser');
@@ -216,6 +451,17 @@ function guardInstallPath(path) {
   const resolved = resolve(path);
   if (resolved !== home && !resolved.startsWith(`${home}/`)) {
     throw new Error(`Refusing to replace a binary outside the current user's home without --allow-outside-home: ${resolved}`);
+  }
+}
+
+function quiesceDashboardForRuntimeHandoff() {
+  if (
+    report.service.before?.loadState === 'loaded'
+    && report.service.before?.activeState === 'active'
+  ) {
+    runCommand('systemctl', ['--user', 'stop', 'agent-browser-dashboard.service']);
+    report.service.quiesced = true;
+    report.service.action = 'stop-for-runtime-handoff';
   }
 }
 
@@ -415,7 +661,9 @@ function printHelp() {
   console.log(`Usage: node scripts/publish-local-dashboard-runtime.js [options]
 
 Build and install the dashboard-embedded local agent-browser binary, restart the
-user dashboard service, and verify the externally visible dashboard runtime.
+user dashboard service, hand active browser sessions to replacement daemons
+without changing their browser PIDs or CDP endpoints, and verify the externally
+visible dashboard runtime.
 
 Options:
   --dashboard-url <url>       Dashboard URL to smoke. Default: http://127.0.0.1:4848/

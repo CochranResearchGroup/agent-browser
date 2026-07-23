@@ -974,6 +974,7 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                 cdp: cdp_port_str.as_deref(),
                 runtime_attach_managed: attach_to_existing,
                 no_auto_dialog: flags.no_auto_dialog,
+                allow_stale_daemon_handoff: false,
             };
 
             let daemon_result = match ensure_daemon(&flags.session, &daemon_opts) {
@@ -2037,6 +2038,8 @@ fn main() {
         cdp: flags.cdp.as_deref().or(live_runtime_cdp.as_deref()),
         runtime_attach_managed: live_runtime_status.is_some(),
         no_auto_dialog: flags.no_auto_dialog,
+        allow_stale_daemon_handoff: cmd.get("action").and_then(|value| value.as_str())
+            == Some("runtime_handoff_prepare"),
     };
 
     let daemon_result = match ensure_daemon(&flags.session, &daemon_opts) {

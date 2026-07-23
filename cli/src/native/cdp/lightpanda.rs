@@ -17,6 +17,7 @@ const MAX_LOG_LINES: usize = 40;
 pub struct LightpandaProcess {
     child: Child,
     pub ws_url: String,
+    owns_process: bool,
     _log_drainers: Vec<std::thread::JoinHandle<()>>,
 }
 
@@ -25,11 +26,22 @@ impl LightpandaProcess {
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
+
+    pub fn id(&self) -> u32 {
+        self.child.id()
+    }
+
+    /// Relinquish process ownership while preserving the live CDP endpoint.
+    pub fn relinquish_for_handoff(&mut self) {
+        self.owns_process = false;
+    }
 }
 
 impl Drop for LightpandaProcess {
     fn drop(&mut self) {
-        self.kill();
+        if self.owns_process {
+            self.kill();
+        }
     }
 }
 
@@ -190,6 +202,7 @@ pub async fn launch_lightpanda(
     Ok(LightpandaProcess {
         child,
         ws_url,
+        owns_process: true,
         _log_drainers: log_drainers,
     })
 }

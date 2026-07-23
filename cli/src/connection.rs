@@ -320,6 +320,9 @@ pub struct DaemonOptions<'a> {
     pub cdp: Option<&'a str>,
     pub runtime_attach_managed: bool,
     pub no_auto_dialog: bool,
+    /// Permit only `handoff prepare` to reach an authenticated daemon whose
+    /// executable metadata differs from the current client.
+    pub allow_stale_daemon_handoff: bool,
 }
 
 fn apply_daemon_env(cmd: &mut Command, session: &str, opts: &DaemonOptions) {
@@ -569,10 +572,20 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
                 .as_deref()
                 .map(|sha| daemon_executable_sha_matches(session, sha))
                 .unwrap_or(true);
-            if !daemon_version_matches(session)
-                || !sha_matches
-                || !daemon_auth_token_available(session)
-            {
+            let version_matches = daemon_version_matches(session);
+            let auth_token_available = daemon_auth_token_available(session);
+            if opts.allow_stale_daemon_handoff && auth_token_available {
+                return Ok(DaemonResult {
+                    already_running: true,
+                });
+            }
+            if opts.allow_stale_daemon_handoff && !auth_token_available {
+                return Err(format!(
+                    "Cannot prepare executable handoff for session '{}': daemon authentication metadata is unavailable",
+                    session
+                ));
+            }
+            if !version_matches || !sha_matches || !auth_token_available {
                 eprintln!(
                     "{} Daemon metadata mismatch detected, restarting...",
                     crate::color::warning_indicator()
@@ -1304,6 +1317,7 @@ mod tests {
             cdp: None,
             runtime_attach_managed: false,
             no_auto_dialog: false,
+            allow_stale_daemon_handoff: false,
         };
 
         apply_daemon_env(&mut cmd, "default", &opts);

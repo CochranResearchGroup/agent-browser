@@ -164,6 +164,8 @@ agent-browser pdf <path>              # Save as PDF
 agent-browser snapshot                # Accessibility tree with refs (best for AI)
 agent-browser eval <js>               # Run JavaScript (-b for base64, --stdin for piped input)
 agent-browser connect <port>          # Connect to browser via CDP
+agent-browser handoff prepare         # Relinquish the browser and stop this daemon
+agent-browser handoff resume          # Reattach a replacement daemon to the browser
 agent-browser stream enable [--port <port>]  # Start runtime WebSocket streaming
 agent-browser stream status           # Show runtime streaming state and bound port
 agent-browser stream disable          # Stop runtime WebSocket streaming
@@ -220,6 +222,17 @@ agent-browser close --all             # Close all active sessions
 agent-browser chat "<instruction>"    # AI chat: natural language browser control (single-shot)
 agent-browser chat                    # AI chat: interactive REPL mode
 ```
+
+`handoff prepare` writes a mode-0600 retry record containing the session
+identity, browser PID, and CDP endpoint before the daemon relinquishes process
+ownership and exits. `handoff resume` reconnects a replacement daemon to that
+same process and its existing targets, refreshes service and stream state, and
+removes the retry record only after a successful attach. The local development
+publisher runs this protocol automatically around executable replacement, so
+active browsers, DevTools ports, profiles, and tabs remain live. If an older
+installed daemon owns an active browser but does not support handoff, publishing
+fails before replacing the executable. A normal `close` after resume retains
+the original browser shutdown behavior.
 
 Service mode is the persistent control plane for long-lived automation. It keeps profile, session, browser, tab, monitor, job, incident, event, site-policy, provider, and challenge state aligned across CLI commands, the HTTP API, MCP resources/tools, and the dashboard. Agents should include `serviceName`, `agentName`, and `taskName` when available so multi-service work remains traceable. The normal service request is identity-first: ask for a tab or browser action, target site or login identity, and the owning service, agent, and task. agent-browser selects or reuses the managed profile and browser, serializes CDP work through the queue, and records the state needed for debugging. Service profile records and profile allocation rows include `targetReadiness`, a no-launch readiness view for target services. Google targets without authenticated evidence report `needs_manual_seeding` and recommend detached `runtime login` before attachable automation. Once a managed profile lists the target in `authenticatedServiceIds`, readiness changes to `seeded_unknown_freshness` and access-plan no longer treats first-login seeding as a required manual action. Access-plan responses also include `monitorFindings` and `decision.monitorAttentionRequired` when an active `profile_readiness` monitor is faulted for the requested target identity. When a matching active `profile_readiness` monitor is due or never checked, access-plan sets `monitorFindings.profileReadinessProbeDue`, fills `decision.monitorRunDue`, and recommends `run_due_profile_readiness_monitor` before the caller trusts the profile. Use an explicit managed runtime profile when you know where the needed login state lives; use `--profile <path>` only when bringing an external profile is part of the contract.
 
@@ -1241,8 +1254,8 @@ restart-on-failure behavior, and starts at user login. Set
 `AGENT_BROWSER_DASHBOARD_PORT` before running the script to choose another
 port. The installer also enables `agent-browser-runtime-interlock.timer`. At
 boot and five minutes after each completed pass, the interlock runs bounded local convergence without
-replacing installed artifacts: it closes only stale daemon sessions identified
-by install doctor, reconciles retained service state, restores missing
+replacing installed artifacts: it hands doctor-confirmed stale daemon sessions
+to the current executable without closing their browsers, reconciles retained service state, restores missing
 Guacamole/XRDP route displays, reapplies route-display access when required,
 and writes the latest receipt to
 `~/.agent-browser/convergence/local-runtime-latest.json`. Set
@@ -1259,8 +1272,11 @@ pnpm publish:local-dashboard -- --expect-marker "Stream port"
 ```
 
 That command builds the dashboard, rebuilds the local CLI, backs up and replaces
-the user-scoped binary, restarts `agent-browser-dashboard.service`, and smokes
-the live dashboard URL. The smoke reads `/api/runtime/manifest` from the
+the user-scoped binary, hands active browser sessions to replacement daemons,
+restarts `agent-browser-dashboard.service`, and smokes the live dashboard URL.
+Browser PIDs, CDP endpoints, profiles, and tabs remain unchanged across the
+replacement. The publish fails closed before replacement when an active older
+daemon cannot perform the handoff. The smoke reads `/api/runtime/manifest` from the
 running service and records the served package version, service UI contract,
 embedded dashboard asset SHA-256, supported UI features, current executable
 path, and current executable SHA-256. The publish command fails when that live

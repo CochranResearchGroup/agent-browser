@@ -280,7 +280,14 @@ impl BrowserProcess {
     pub fn pid(&self) -> Option<u32> {
         match self {
             BrowserProcess::Chrome(p) => Some(p.id()),
-            BrowserProcess::Lightpanda(_) => None,
+            BrowserProcess::Lightpanda(p) => Some(p.id()),
+        }
+    }
+
+    pub fn relinquish_for_handoff(&mut self) {
+        match self {
+            BrowserProcess::Chrome(process) => process.relinquish_for_handoff(),
+            BrowserProcess::Lightpanda(process) => process.relinquish_for_handoff(),
         }
     }
 
@@ -947,16 +954,23 @@ impl BrowserManager {
     /// shutting it down. This intentionally relinquishes process ownership so
     /// the daemon can end while Chrome keeps running for later reuse.
     pub fn detach_runtime_browser(&mut self) -> Result<(), String> {
-        let process = self
+        let runtime_profile = self
             .browser_process
-            .take()
-            .ok_or_else(|| "No launched browser is available to detach".to_string())?;
-        if process.runtime_profile().is_none() {
-            self.browser_process = Some(process);
+            .as_ref()
+            .and_then(BrowserProcess::runtime_profile);
+        if runtime_profile.is_none() {
             return Err("Can only leave open a launched managed runtime profile".to_string());
         }
-        std::mem::forget(process);
+        self.relinquish_browser_for_handoff();
         Ok(())
+    }
+
+    /// Relinquish an owned local browser, or disconnect from an already
+    /// attached browser, without closing the browser process.
+    pub fn relinquish_browser_for_handoff(&mut self) {
+        if let Some(mut process) = self.browser_process.take() {
+            process.relinquish_for_handoff();
+        }
     }
 
     pub fn has_pages(&self) -> bool {

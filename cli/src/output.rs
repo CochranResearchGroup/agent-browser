@@ -4225,6 +4225,33 @@ Examples:
 "##
         }
 
+        // === Runtime executable handoff ===
+        "handoff" => {
+            r##"
+agent-browser handoff - Transfer a live browser to a replacement daemon
+
+Usage: agent-browser handoff <prepare|resume>
+
+Subcommands:
+  prepare    Persist the browser PID and CDP endpoint, relinquish process
+             ownership, and stop the current daemon without closing the browser
+  resume     Start a replacement daemon, reconnect to the same browser and
+             targets, then remove the durable retry record
+
+This command is used by the local development publisher and runtime interlock.
+The browser process, DevTools port, profile, and open tabs remain live during
+the changeover. A later normal `close` still shuts down an owned browser.
+
+Global Options:
+  --json               Output as JSON
+  --session <name>     Use specific session
+
+Examples:
+  agent-browser --session work handoff prepare
+  agent-browser --session work handoff resume
+"##
+        }
+
         // === Inspect ===
         "inspect" => {
             r##"
@@ -6005,6 +6032,7 @@ Core Commands:
   snapshot                   Accessibility tree with refs (for AI)
   eval <js>                  Run JavaScript
   connect <port|url>         Connect to browser via CDP
+  handoff <prepare|resume>   Transfer a live browser to a replacement daemon
   close [--all]              Close browser (--all closes every session)
 
 Navigation:

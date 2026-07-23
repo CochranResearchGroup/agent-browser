@@ -1906,6 +1906,22 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
 
         // === Close ===
         "close" | "quit" | "exit" => Ok(json!({ "id": id, "action": "close" })),
+        "handoff" => {
+            let subcommand = rest.first().copied().ok_or_else(|| {
+                ParseError::MissingArguments {
+                    context: "handoff".to_string(),
+                    usage: "handoff <prepare|resume>",
+                }
+            })?;
+            match subcommand {
+                "prepare" => Ok(json!({ "id": id, "action": "runtime_handoff_prepare" })),
+                "resume" => Ok(json!({ "id": id, "action": "runtime_handoff_resume" })),
+                _ => Err(ParseError::UnknownSubcommand {
+                    subcommand: subcommand.to_string(),
+                    valid_options: &["prepare", "resume"],
+                }),
+            }
+        }
 
         // === Inspect ===
         "inspect" => Ok(json!({ "id": id, "action": "inspect" })),
@@ -8650,6 +8666,18 @@ mod tests {
     fn test_get_cdp_url() {
         let cmd = parse_command(&args("get cdp-url"), &default_flags()).unwrap();
         assert_eq!(cmd["action"], "cdp_url");
+    }
+
+    #[test]
+    fn test_runtime_handoff_commands() {
+        let prepare = parse_command(&args("handoff prepare"), &default_flags()).unwrap();
+        assert_eq!(prepare["action"], "runtime_handoff_prepare");
+
+        let resume = parse_command(&args("handoff resume"), &default_flags()).unwrap();
+        assert_eq!(resume["action"], "runtime_handoff_resume");
+
+        assert!(parse_command(&args("handoff"), &default_flags()).is_err());
+        assert!(parse_command(&args("handoff unknown"), &default_flags()).is_err());
     }
 
     // === Batch Tests ===

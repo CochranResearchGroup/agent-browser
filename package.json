@@ -47,6 +47,7 @@
     "test:dashboard-workspace-nodes": "node --no-warnings --experimental-strip-types scripts/test-dashboard-workspace-nodes.js",
     "test:dashboard-workspace-navigator": "node scripts/test-dashboard-workspace-navigator.js",
     "test:local-runtime-convergence": "node scripts/test-local-runtime-convergence.js",
+    "test:runtime-executable-handoff-live": "node scripts/smoke-runtime-executable-handoff.js",
     "test:route-handoff-audit": "node scripts/test-route-handoff-audit.js",
     "test:rdp-route-xsession": "node scripts/test-rdp-route-xsession.js",
     "test:rdp-guac-postgres-hardening": "node scripts/test-rdp-guac-postgres-hardening.js",

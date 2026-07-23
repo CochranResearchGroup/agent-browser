@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 
 const script = readFileSync('scripts/converge-local-runtime.js', 'utf8');
 const installer = readFileSync('scripts/install-dashboard-user-service.sh', 'utf8');
+const publisher = readFileSync('scripts/publish-local-dashboard-runtime.js', 'utf8');
 const packageJson = JSON.parse(readFileSync('package.json', 'utf8'));
 const plan = readFileSync('docs/dev/plans/0042-2026-06-22-runtime-convergence-plan.md', 'utf8');
 
@@ -48,6 +49,30 @@ assert.match(
   script,
   /function repairConfirmedStaleDaemons\(install, label\)[\s\S]*sleep\(2000\)[\s\S]*confirm_stale_daemons_install_doctor[\s\S]*confirmedSessions\.has\(remedy\.session\)/,
   'stale daemon cleanup must confirm the same session after the startup metadata grace period',
+);
+
+assert.match(
+  script,
+  /daemonListenerInventory[\s\S]*function staleDaemonListenerSessions\(install\)[\s\S]*deletedExecutable === true[\s\S]*matchesCurrentExecutable === false[\s\S]*staleDaemonCandidates\(confirmedInstall\)/,
+  'interlock must map confirmed deleted or mismatched daemon listeners back to scoped sessions',
+);
+
+assert.match(
+  script,
+  /prepare_stale_daemon_handoff_[\s\S]*handoff', 'prepare'[\s\S]*resume_stale_daemon_handoff_[\s\S]*handoff', 'resume'[\s\S]*resumedBrowserPid !== handoff\.browserPid[\s\S]*resumedCdpUrl !== handoff\.cdpUrl/,
+  'stale daemon repair must preserve and verify browser PID and CDP endpoint through handoff',
+);
+
+assert.match(
+  script,
+  /retireConfirmedIdleDaemon\(remedy\.listenerPid\)[\s\S]*function retireConfirmedIdleDaemon\(pid\)[\s\S]*process\.kill\(pid, 'SIGTERM'\)/,
+  'idle stale daemons must retire after confirming there is no browser to hand off',
+);
+
+assert.doesNotMatch(
+  script,
+  /close_stale_daemon_/,
+  'stale executable repair must not close active browser sessions',
 );
 
 assert.match(
@@ -108,6 +133,36 @@ assert.match(
   installer,
   /Description=agent-browser runtime health interlock[\s\S]*converge:local-runtime -- --apply --skip-publish --json/,
   'dashboard service installation must install the runtime-health interlock service',
+);
+
+assert.match(
+  publisher,
+  /prepareRuntimeHandoffs\(builtBin, installBin\)[\s\S]*installBinaryAtomically\(builtBin, installBin[\s\S]*resumeRuntimeHandoffs\(installBin\)/,
+  'local publishing must bracket executable replacement with daemon handoff',
+);
+
+assert.match(
+  publisher,
+  /data\.browserPid !== prepared\.browserPid[\s\S]*data\.cdpUrl !== prepared\.cdpUrl/,
+  'local publishing must verify browser PID and CDP endpoint continuity',
+);
+
+assert.match(
+  publisher,
+  /unsupportedActiveSessions[\s\S]*publish was stopped before replacing the executable/,
+  'local publishing must fail closed when an old daemon cannot hand off an active browser',
+);
+
+assert.match(
+  publisher,
+  /const daemonClientBin = runtimeDaemonClientBinary\(daemonPid, rollbackBin\)[\s\S]*serviceBrowserForSession\(daemonClientBin[\s\S]*runAgentJson\(daemonClientBin, sessionName, \['close'\]\)/,
+  'publisher inventory and idle retirement must use the running daemon executable without triggering hash replacement',
+);
+
+assert.match(
+  publisher,
+  /function runtimeDaemonClientBinary\(daemonPid, fallbackBin\)[\s\S]*`\/proc\/\$\{daemonPid\}\/exe`/,
+  'Linux publisher preflight must resolve the running daemon executable through procfs',
 );
 
 assert.match(

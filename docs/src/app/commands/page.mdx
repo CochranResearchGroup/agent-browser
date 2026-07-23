@@ -30,6 +30,8 @@ agent-browser pdf <path>              # Save page as PDF
 agent-browser snapshot                # Accessibility tree with refs
 agent-browser eval <js>               # Run JavaScript
 agent-browser connect <port|url>      # Connect to browser via CDP
+agent-browser handoff prepare         # Relinquish the browser and stop this daemon
+agent-browser handoff resume          # Reattach a replacement daemon to the browser
 agent-browser doctor windows-browser  # Diagnose WSL to Windows browser CDP routing
 agent-browser doctor windows-browser --scan-ports --firewall # Scan bounded ports and query firewall state
 agent-browser doctor remote-view # Diagnose Guacamole, XRDP, RDP users, privileges, displays, and issue codes
@@ -97,6 +99,21 @@ Recurring managed profiles should also have a retained `profile_readiness`
 monitor for the same target identity. Software clients can call
 `upsertServiceProfileReadinessMonitor()` or persist the monitor through
 `POST /api/service/monitors/<id>`.
+
+## Runtime executable handoff
+
+`agent-browser handoff prepare` writes a private retry record with the session
+identity, browser PID, and CDP endpoint, relinquishes browser-process ownership,
+and exits the current daemon without closing the browser. `agent-browser
+handoff resume` starts a replacement daemon, reconnects to the same browser and
+open targets, refreshes the runtime stream record, and removes the retry record
+only after the attach succeeds.
+
+The local development publisher runs this protocol automatically around
+executable replacement. Browser PIDs, DevTools ports, profiles, and tabs remain
+live during the changeover. Publishing fails before replacement if an active
+older daemon cannot support handoff. A later normal `close` still terminates an
+owned browser.
 
 Use service request `action: "probe"` for generic identity, account, readiness,
 or compact page-state checks against a leased service tab. A probe request

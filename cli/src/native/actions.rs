@@ -1,5 +1,6 @@
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use chrono::{DateTime, FixedOffset};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -178,6 +179,20 @@ enum CloseBehavior {
     Detach,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RuntimeHandoffDescriptor {
+    schema_version: u8,
+    session_name: String,
+    cdp_url: String,
+    browser_pid: Option<u32>,
+    runtime_profile: Option<String>,
+    engine: String,
+    host: ServiceBrowserHost,
+    close_browser_on_close: bool,
+    prepared_at: String,
+}
+
 fn debug_session_events_enabled() -> bool {
     env::var("AGENT_BROWSER_DEBUG_SESSIONS")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
@@ -236,6 +251,8 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
     matches!(
         action,
         "" | "launch"
+            | "runtime_handoff_prepare"
+            | "runtime_handoff_resume"
             | "cdp_free_launch"
             | "external_byop_adopt"
             | "cdp_attach"
@@ -2151,12 +2168,13 @@ fn persist_current_browser_health(
     health: ServiceBrowserHealth,
     metadata: Option<ServiceLaunchMetadata>,
 ) {
+    let preserves_existing_metadata = metadata.is_none();
     let (pid, cdp_endpoint, browser_stderr_log_path) = state
         .browser
         .as_ref()
         .map(|mgr| {
             (
-                mgr.browser_pid(),
+                mgr.browser_pid().or(state.attached_browser_pid),
                 Some(mgr.get_cdp_url().to_string()),
                 mgr.browser_stderr_log_path()
                     .map(|path| path.to_string_lossy().to_string()),
@@ -2190,6 +2208,14 @@ fn persist_current_browser_health(
         None,
         metadata,
     );
+    if preserves_existing_metadata {
+        if let Ok(repository) = LockedServiceStateRepository::default_json() {
+            let _ = repository.mutate(|service_state| {
+                refresh_cdp_screencast_view_streams(service_state);
+                Ok(())
+            });
+        }
+    }
 }
 
 /// Enforces service-owned profile leases before Chrome starts.
@@ -2280,7 +2306,10 @@ fn service_profile_lease_metadata_for_command(command: &Value) -> Option<Service
     if command
         .get("action")
         .and_then(|value| value.as_str())
-        .is_some_and(|action| action.starts_with("service_"))
+        .is_some_and(|action| {
+            action.starts_with("service_")
+                || matches!(action, "runtime_handoff_prepare" | "runtime_handoff_resume")
+        })
     {
         return None;
     }
@@ -4451,6 +4480,8 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "title" => handle_title(state).await,
         "content" => handle_content(state).await,
         "evaluate" => handle_evaluate(cmd, state).await,
+        "runtime_handoff_prepare" => handle_runtime_handoff_prepare(state).await,
+        "runtime_handoff_resume" => handle_runtime_handoff_resume(state).await,
         "close" => handle_close(state).await,
         "snapshot" => handle_snapshot(cmd, state).await,
         "screenshot" => handle_screenshot(cmd, state).await,
@@ -9150,6 +9181,200 @@ fn truncate_utf8(value: &str, max_bytes: usize) -> String {
     value[..end].to_string()
 }
 
+fn runtime_handoff_path(session_name: &str) -> PathBuf {
+    get_socket_dir().join(format!("{}.handoff.json", session_name))
+}
+
+fn write_runtime_handoff(descriptor: &RuntimeHandoffDescriptor) -> Result<PathBuf, String> {
+    let path = runtime_handoff_path(&descriptor.session_name);
+    let parent = path
+        .parent()
+        .ok_or_else(|| format!("Runtime handoff path has no parent: {}", path.display()))?;
+    fs::create_dir_all(parent).map_err(|error| {
+        format!(
+            "Failed to create runtime handoff directory {}: {}",
+            parent.display(),
+            error
+        )
+    })?;
+    let staged = path.with_extension(format!("handoff.json.next-{}", std::process::id()));
+    let payload = serde_json::to_vec_pretty(descriptor)
+        .map_err(|error| format!("Failed to serialize runtime handoff: {}", error))?;
+    fs::write(&staged, payload).map_err(|error| {
+        format!(
+            "Failed to stage runtime handoff {}: {}",
+            staged.display(),
+            error
+        )
+    })?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&staged, fs::Permissions::from_mode(0o600)).map_err(|error| {
+            format!(
+                "Failed to secure runtime handoff {}: {}",
+                staged.display(),
+                error
+            )
+        })?;
+    }
+    if path.exists() {
+        fs::remove_file(&path).map_err(|error| {
+            format!(
+                "Failed to replace runtime handoff {}: {}",
+                path.display(),
+                error
+            )
+        })?;
+    }
+    fs::rename(&staged, &path).map_err(|error| {
+        format!(
+            "Failed to publish runtime handoff {}: {}",
+            path.display(),
+            error
+        )
+    })?;
+    Ok(path)
+}
+
+fn read_runtime_handoff(session_name: &str) -> Result<RuntimeHandoffDescriptor, String> {
+    let path = runtime_handoff_path(session_name);
+    let payload = fs::read(&path).map_err(|error| {
+        format!(
+            "No prepared runtime handoff is available for session '{}': {}",
+            session_name, error
+        )
+    })?;
+    serde_json::from_slice(&payload).map_err(|error| {
+        format!(
+            "Runtime handoff for session '{}' is invalid: {}",
+            session_name, error
+        )
+    })
+}
+
+fn current_service_browser_host(session_name: &str) -> ServiceBrowserHost {
+    LockedServiceStateRepository::default_json()
+        .ok()
+        .and_then(|repository| repository.load_snapshot().ok())
+        .and_then(|service_state| {
+            service_state
+                .browsers
+                .get(&service_browser_id(session_name))
+                .map(|browser| browser.host)
+        })
+        .unwrap_or(ServiceBrowserHost::AttachedExisting)
+}
+
+async fn handle_runtime_handoff_prepare(state: &mut DaemonState) -> Result<Value, String> {
+    let Some(manager) = state.browser.as_mut() else {
+        let path = runtime_handoff_path(&state.session_id);
+        let _ = fs::remove_file(path);
+        return Ok(json!({
+            "prepared": false,
+            "browserPresent": false,
+            "sessionName": state.session_id,
+        }));
+    };
+    if !manager.is_connection_alive().await {
+        return Err(format!(
+            "Cannot prepare runtime handoff for session '{}': browser CDP connection is not alive",
+            state.session_id
+        ));
+    }
+
+    let descriptor = RuntimeHandoffDescriptor {
+        schema_version: 1,
+        session_name: state.session_id.clone(),
+        cdp_url: manager.get_cdp_url().to_string(),
+        browser_pid: manager.browser_pid().or(state.attached_browser_pid),
+        runtime_profile: manager
+            .runtime_profile_name()
+            .map(str::to_string)
+            .or_else(|| state.attached_runtime_profile.clone()),
+        engine: state.engine.clone(),
+        host: current_service_browser_host(&state.session_id),
+        close_browser_on_close: state.close_behavior == CloseBehavior::CloseBrowser,
+        prepared_at: OffsetDateTime::now_utc()
+            .format(&Rfc3339)
+            .unwrap_or_else(|_| OffsetDateTime::now_utc().unix_timestamp().to_string()),
+    };
+    let path = write_runtime_handoff(&descriptor)?;
+    manager.relinquish_browser_for_handoff();
+    state.browser = None;
+    state.screencasting = false;
+    state.reset_input_state();
+    state.update_stream_client().await;
+
+    Ok(json!({
+        "prepared": true,
+        "browserPresent": true,
+        "sessionName": descriptor.session_name,
+        "browserPid": descriptor.browser_pid,
+        "cdpUrl": descriptor.cdp_url,
+        "runtimeProfile": descriptor.runtime_profile,
+        "handoffPath": path,
+    }))
+}
+
+async fn handle_runtime_handoff_resume(state: &mut DaemonState) -> Result<Value, String> {
+    if state.browser.is_some() {
+        return Err(format!(
+            "Cannot resume runtime handoff for session '{}': daemon already has a browser",
+            state.session_id
+        ));
+    }
+    let descriptor = read_runtime_handoff(&state.session_id)?;
+    if descriptor.schema_version != 1 || descriptor.session_name != state.session_id {
+        return Err(format!(
+            "Runtime handoff identity mismatch for session '{}'",
+            state.session_id
+        ));
+    }
+    if descriptor
+        .browser_pid
+        .is_some_and(|browser_pid| !pid_is_running(browser_pid))
+    {
+        return Err(format!(
+            "Runtime handoff browser PID is no longer running for session '{}'",
+            state.session_id
+        ));
+    }
+
+    let manager = BrowserManager::connect_cdp(&descriptor.cdp_url).await?;
+    state.reset_input_state();
+    state.attached_runtime_profile = descriptor.runtime_profile.clone();
+    state.attached_browser_pid = descriptor.browser_pid;
+    state.close_behavior = if descriptor.close_browser_on_close {
+        CloseBehavior::CloseBrowser
+    } else {
+        CloseBehavior::Detach
+    };
+    state.engine = descriptor.engine.clone();
+    write_engine_file(&state.session_id, &state.engine);
+    state.browser = Some(manager);
+    state.subscribe_to_browser_events();
+    state.start_fetch_handler();
+    state.start_dialog_handler();
+    state.update_stream_client().await;
+    persist_current_browser_health(state, descriptor.host, ServiceBrowserHealth::Ready, None);
+    let retry_record_removed = fs::remove_file(runtime_handoff_path(&state.session_id)).is_ok();
+
+    Ok(json!({
+        "resumed": true,
+        "sessionName": descriptor.session_name,
+        "browserPid": descriptor.browser_pid,
+        "cdpUrl": descriptor.cdp_url,
+        "runtimeProfile": descriptor.runtime_profile,
+        "retryRecordRemoved": retry_record_removed,
+        "targetsReattached": state
+            .browser
+            .as_ref()
+            .map(BrowserManager::page_count)
+            .unwrap_or(0),
+    }))
+}
+
 async fn handle_close(state: &mut DaemonState) -> Result<Value, String> {
     let attached_runtime_profile = state.attached_runtime_profile.take();
     let attached_browser_pid = state.attached_browser_pid.take();
@@ -9179,7 +9404,9 @@ async fn handle_close(state: &mut DaemonState) -> Result<Value, String> {
     }
     if let Some(ref mut mgr) = state.browser {
         let runtime_profile = mgr.runtime_profile_name().map(str::to_string);
-        if attached_runtime_profile.is_some() && close_behavior == CloseBehavior::CloseBrowser {
+        if (attached_runtime_profile.is_some() || attached_browser_pid.is_some())
+            && close_behavior == CloseBehavior::CloseBrowser
+        {
             let _ = mgr
                 .client
                 .send_command_no_params("Browser.close", None)
@@ -9215,6 +9442,17 @@ async fn handle_close(state: &mut DaemonState) -> Result<Value, String> {
                 shutdown_outcome.errors.extend(outcome.errors);
             }
             let _ = clear_runtime_state(&runtime_profile);
+        }
+    } else if close_behavior == CloseBehavior::CloseBrowser {
+        if let Some(pid) = attached_browser_pid {
+            let outcome = terminate_runtime_browser(pid).await;
+            shutdown_outcome.polite_close_attempted |= outcome.polite_close_attempted;
+            shutdown_outcome.polite_close_succeeded |= outcome.polite_close_succeeded;
+            shutdown_outcome.polite_close_failed |= outcome.polite_close_failed;
+            shutdown_outcome.force_kill_attempted |= outcome.force_kill_attempted;
+            shutdown_outcome.force_kill_succeeded |= outcome.force_kill_succeeded;
+            shutdown_outcome.force_kill_failed |= outcome.force_kill_failed;
+            shutdown_outcome.errors.extend(outcome.errors);
         }
     }
     state.browser = None;
@@ -10781,7 +11019,7 @@ async fn handle_tab_list(cmd: &Value, state: &DaemonState) -> Result<Value, Stri
 
 fn handle_browser_pid(state: &DaemonState) -> Result<Value, String> {
     let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
-    Ok(json!({ "pid": mgr.browser_pid() }))
+    Ok(json!({ "pid": mgr.browser_pid().or(state.attached_browser_pid) }))
 }
 
 async fn handle_tab_new(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
@@ -26783,6 +27021,8 @@ mod tests {
             .expect("service state should be persisted");
 
         for action in [
+            "runtime_handoff_prepare",
+            "runtime_handoff_resume",
             "service_status",
             "service_reconcile",
             "service_job_cancel",

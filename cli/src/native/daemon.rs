@@ -519,7 +519,7 @@ async fn handle_connection<S>(
                 }
 
                 let action = cmd.get("action").and_then(|v| v.as_str());
-                let is_close = action == Some("close");
+                let exits_daemon = matches!(action, Some("close" | "runtime_handoff_prepare"));
 
                 let response = if action == Some("worker_status") {
                     let id = cmd.get("id").and_then(|v| v.as_str()).unwrap_or("");
@@ -556,13 +556,13 @@ async fn handle_connection<S>(
                     break;
                 }
 
-                if is_close {
+                if exits_daemon {
                     if let Some(ref path) = stream_file_cleanup {
                         let _ = fs::remove_file(path);
                     }
-                    // Signal the daemon loop to exit gracefully instead of
-                    // calling process::exit(), which skips destructors and
-                    // can leave Chrome processes orphaned (issue #1113).
+                    // Signal the daemon loop to exit gracefully. Close has
+                    // already shut down the browser, while handoff prepare has
+                    // explicitly relinquished browser process ownership.
                     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                     close_notify.notify_one();
                     return;

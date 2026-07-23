@@ -64,6 +64,7 @@ pub struct ChromeProcess {
     child: Child,
     aux_processes: Vec<Child>,
     pub ws_url: String,
+    owns_process: bool,
     temp_user_data_dir: Option<PathBuf>,
     user_data_dir: PathBuf,
     runtime_profile: Option<String>,
@@ -132,6 +133,17 @@ impl ChromeStderrLogBuffer {
 }
 
 impl ChromeProcess {
+    /// Relinquish process ownership without closing Chrome.
+    ///
+    /// This is used by daemon executable handoff. `std::process::Child` does
+    /// not kill the child when dropped, so disabling owned cleanup preserves
+    /// the browser PID, CDP listener, profile, and helper processes while a
+    /// replacement daemon reconnects.
+    pub fn relinquish_for_handoff(&mut self) {
+        self.owns_process = false;
+        self.temp_user_data_dir = None;
+    }
+
     pub fn kill(&mut self) {
         let _ = self.kill_with_outcome();
     }
@@ -336,6 +348,9 @@ fn kill_aux_processes(
 
 impl Drop for ChromeProcess {
     fn drop(&mut self) {
+        if !self.owns_process {
+            return;
+        }
         self.kill();
         self.join_stderr_drainer();
         if let Some(ref dir) = self.temp_user_data_dir {
@@ -1358,6 +1373,7 @@ fn try_launch_chrome(
     Ok(ChromeProcess {
         child,
         ws_url,
+        owns_process: true,
         temp_user_data_dir,
         user_data_dir,
         runtime_profile,
@@ -3406,6 +3422,7 @@ mod tests {
                 child,
                 aux_processes: Vec::new(),
                 ws_url: String::new(),
+                owns_process: true,
                 temp_user_data_dir: Some(dir.clone()),
                 user_data_dir: dir.clone(),
                 runtime_profile: None,
@@ -3419,6 +3436,39 @@ mod tests {
         }
 
         assert!(!dir.exists(), "Temp dir should be cleaned up on drop");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_chrome_process_handoff_preserves_child_and_temp_dir() {
+        let dir = std::env::temp_dir().join(format!(
+            "agent-browser-chrome-handoff-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let child = spawn_sleep_child();
+        let pid = child.id();
+        let mut process = ChromeProcess {
+            child,
+            aux_processes: Vec::new(),
+            ws_url: "ws://127.0.0.1:9222/devtools/browser/handoff".to_string(),
+            owns_process: true,
+            temp_user_data_dir: Some(dir.clone()),
+            user_data_dir: dir.clone(),
+            runtime_profile: None,
+            display_name: None,
+            stderr_log_path: None,
+            stderr_drainer: None,
+            pgid: None,
+        };
+        process.relinquish_for_handoff();
+        drop(process);
+
+        assert_eq!(unsafe { libc::kill(pid as i32, 0) }, 0);
+        assert!(dir.exists(), "Handoff must preserve the browser profile");
+
+        let _ = unsafe { libc::kill(pid as i32, libc::SIGKILL) };
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

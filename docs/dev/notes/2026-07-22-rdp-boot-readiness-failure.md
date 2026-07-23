@@ -312,8 +312,10 @@ oneshot after boot and five minutes after each completed pass. The convergence
 pass:
 
 1. Runs install and remote-view doctors.
-2. Confirms executable-backed stale runtime findings before closing the same
-   still-stale sessions.
+2. Confirms executable-backed stale runtime findings, prepares a durable
+   browser handoff, stops the stale daemon without closing its browser, and
+   resumes the session through the current executable. Browser PID and CDP
+   endpoint equality are required before the remedy passes.
 3. Confirms aged token-only runtime metadata across two observations, then
    removes it through the scoped close command.
 4. Ensures the Guacamole PostgreSQL dependency and route-pool fixtures.
@@ -350,3 +352,56 @@ The installed timer and live recovery prove the recurring and boot-triggered
 mechanism from a boot-equivalent missing-display state. A true host cold reboot
 has not been performed in this slice, so that final smoke remains explicit
 follow-up evidence rather than an inferred pass.
+
+## Development executable freshness
+
+The local development publisher now keeps the installed executable fresh
+without closing active browsers. Before replacing the user-scoped binary, it
+quiesces the dashboard service, inventories daemon sessions through a no-launch
+service readback, and classifies each session:
+
+- Idle daemons are retired before replacement.
+- Active daemons must prepare a private retry record containing the browser
+  PID, CDP endpoint, profile ownership, close behavior, and service host.
+- The old daemon relinquishes browser-process ownership and exits.
+- The replacement daemon reconnects to the same CDP endpoint and targets,
+  refreshes runtime stream metadata, and removes the retry record only after
+  attach succeeds.
+- An active daemon that does not support the protocol blocks publication
+  before executable replacement.
+
+The dashboard is restarted on both success and rollback paths. The publisher
+does not restore an older executable after an active handoff has begun because
+that would recreate executable drift while the retry record belongs to the new
+runtime contract.
+
+A direct live handoff and the full installed publish path both passed. In the
+installed publish proof:
+
+```text
+daemonPid=4107334 -> 4141131
+browserPid=4107727 -> 4107727
+cdpUrl=ws://127.0.0.1:36811/devtools/browser/d73a5144-85a6-4331-ada9-f37b870a2e3b
+title=Runtime Handoff Smoke
+streamPort=37143 -> 37703
+targetsReattached=1
+retryRecordRemoved=true
+```
+
+The browser PID, DevTools port, profile, and tab survived executable
+replacement. The daemon and its stream listener changed, and the scoped stream
+metadata changed with them. A final normal `close` terminated the handed-off
+browser, proving that ownership cleanup was restored after the transition.
+This final proof intentionally started from an installed daemon whose
+executable hash differed from the newly built client. Publisher inventory used
+the running daemon's own executable, and only the bounded `handoff prepare`
+command was allowed to cross the hash boundary.
+
+The recurring interlock also repaired listener-authority drift left by earlier
+validation attempts. It mapped three confirmed deleted-executable listeners
+back to their scoped sessions, requested handoff preparation for each, and
+terminated only the idle daemons that reported no browser to preserve. The
+final convergence receipt reported `success=true`, zero skipped remedies,
+install doctor success, remote control ready, no stale runtimes, and one live
+listener matching the current executable. This closes the stale-session
+health gap without weakening the active-browser handoff guarantee.
