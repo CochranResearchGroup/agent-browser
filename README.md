@@ -1239,7 +1239,15 @@ bash scripts/install-dashboard-user-service.sh
 The service runs the bundled dashboard in foreground mode on port 4848, enables
 restart-on-failure behavior, and starts at user login. Set
 `AGENT_BROWSER_DASHBOARD_PORT` before running the script to choose another
-port.
+port. The installer also enables `agent-browser-runtime-interlock.timer`. At
+boot and five minutes after each completed pass, the interlock runs bounded local convergence without
+replacing installed artifacts: it closes only stale daemon sessions identified
+by install doctor, reconciles retained service state, restores missing
+Guacamole/XRDP route displays, reapplies route-display access when required,
+and writes the latest receipt to
+`~/.agent-browser/convergence/local-runtime-latest.json`. Set
+`AGENT_BROWSER_RUNTIME_INTERLOCK_INTERVAL` before installation to another
+systemd duration such as `5min` when a different cadence is needed.
 
 When changing dashboard source, remember that `pnpm build:dashboard` only
 refreshes `packages/dashboard/out`. The running user service serves the

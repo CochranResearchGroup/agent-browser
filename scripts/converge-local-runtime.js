@@ -1,15 +1,26 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 const args = process.argv.slice(2);
 const options = {
   apply: false,
   json: false,
   evidencePath: '',
+  skipPublish: false,
 };
 
 for (let index = 0; index < args.length; index += 1) {
@@ -22,6 +33,8 @@ for (let index = 0; index < args.length; index += 1) {
     options.json = true;
   } else if (arg === '--evidence-path') {
     options.evidencePath = requiredValue(args, ++index, arg);
+  } else if (arg === '--skip-publish') {
+    options.skipPublish = true;
   } else if (arg === '--help' || arg === '-h') {
     printHelp();
     process.exit(0);
@@ -35,50 +48,82 @@ const report = {
   apply: options.apply,
   steps: [],
   safeRemedies: [],
+  staleMetadataRemedies: [],
   skippedRemedies: [],
   evidencePath: null,
   initial: null,
   final: null,
 };
+const agentBrowserCommand = process.env.AGENT_BROWSER_BIN || 'agent-browser';
+const pnpmCommand = process.env.PNPM_BIN || 'pnpm';
+
+const lockPath = resolve(`${homedir()}/.agent-browser/convergence/local-runtime.lock`);
+acquireLock(lockPath);
+process.on('exit', () => releaseLock(lockPath));
+process.on('SIGINT', () => process.exit(130));
+process.on('SIGTERM', () => process.exit(143));
 
 try {
   report.initial = readDoctors('initial', { required: !options.apply });
   report.safeRemedies = staleDaemonRemedies(report.initial.install);
 
   if (options.apply) {
-    runStep('publish_local_dashboard', 'pnpm', [
-      'publish:local-dashboard',
-      '--',
-      '--skip-browser',
-      '--json',
-    ]);
-
-    const afterPublish = readDoctors('after_publish');
-    for (const remedy of staleDaemonRemedies(afterPublish.install)) {
-      if (isSafeStaleDaemonRemedy(remedy.argv)) {
-        runStep(`close_stale_daemon_${remedy.session}`, remedy.argv[0], remedy.argv.slice(1));
-      } else {
-        report.skippedRemedies.push({
-          session: remedy.session,
-          argv: remedy.argv,
-          reason: 'unsupported_remedy_shape',
-        });
-      }
+    if (!options.skipPublish) {
+      runStep('publish_local_dashboard', pnpmCommand, [
+        'publish:local-dashboard',
+        '--',
+        '--skip-browser',
+        '--json',
+      ]);
     }
 
-    runOptionalStep('ensure_rdp_guac_postgres', 'pnpm', [
+    const afterPublish = options.skipPublish
+      ? report.initial
+      : readDoctors('after_publish', { required: false });
+    repairConfirmedStaleDaemons(afterPublish.install, 'after_publish');
+    const staleMetadataCandidates = staleSessionMetadataNames();
+    if (staleMetadataCandidates.length > 0) sleep(2000);
+    const confirmedStaleMetadata = new Set(staleSessionMetadataNames());
+    for (const session of staleMetadataCandidates) {
+      if (!confirmedStaleMetadata.has(session)) continue;
+      runStep(
+        `close_stale_session_metadata_${session}`,
+        agentBrowserCommand,
+        ['close', '--session', session],
+      );
+      report.staleMetadataRemedies.push({
+        session,
+        action: 'close_stale_session_metadata',
+      });
+    }
+
+    runOptionalStep('ensure_rdp_guac_postgres', pnpmCommand, [
       'ensure:rdp-guac-postgres',
       '--',
       '--apply',
     ]);
-    runOptionalStep('rdp_guac_route_pool_readiness', 'pnpm', [
+    runOptionalStep('rdp_guac_route_pool_readiness', pnpmCommand, [
       'test:rdp-guac-route-pool-readiness',
       '--',
       '--report-only',
     ]);
-    const afterRoutePool = readDoctors('after_route_pool');
+    let afterRoutePool = readDoctors('after_route_pool', { required: false });
+    if (repairConfirmedStaleDaemons(afterRoutePool.install, 'after_route_pool')) {
+      afterRoutePool = readDoctors('after_route_pool_stale_repair', { required: false });
+    }
+    if (routeDisplayRecoveryRequired(afterRoutePool.remoteView.nextAction)) {
+      runOptionalStep('restore_rdp_route_displays', pnpmCommand, [
+        'open:rdp-route-displays',
+      ]);
+      afterRoutePool = readDoctors('after_route_display_restore', { required: false });
+      if (repairConfirmedStaleDaemons(afterRoutePool.install, 'after_route_display_restore')) {
+        afterRoutePool = readDoctors('after_route_display_restore_stale_repair', {
+          required: false,
+        });
+      }
+    }
     if (afterRoutePool.remoteView.nextAction === 'grant_route_display_access') {
-      runOptionalStep('grant_route_display_access', 'pnpm', [
+      runOptionalStep('grant_route_display_access', pnpmCommand, [
         'grant:rdp-route-display-access',
         '--',
         '--apply',
@@ -86,7 +131,10 @@ try {
     }
   }
 
-  report.final = readDoctors('final');
+  report.final = readDoctors('final', { required: false });
+  if (options.apply && repairConfirmedStaleDaemons(report.final.install, 'final')) {
+    report.final = readDoctors('final_after_stale_repair', { required: false });
+  }
   const successful = report.final.install.success === true &&
     report.final.remoteView.remoteControlReady === true &&
     report.skippedRemedies.length === 0 &&
@@ -115,12 +163,12 @@ try {
 }
 
 function readDoctors(label, { required = true } = {}) {
-  const install = runJsonStep(`${label}_install_doctor`, 'agent-browser', [
+  const install = runJsonStep(`${label}_install_doctor`, agentBrowserCommand, [
     'install',
     'doctor',
     '--json',
   ], { required });
-  const remoteView = runJsonStep(`${label}_remote_view_doctor`, 'agent-browser', [
+  const remoteView = runJsonStep(`${label}_remote_view_doctor`, agentBrowserCommand, [
     'doctor',
     'remote-view',
     '--json',
@@ -174,6 +222,40 @@ function staleDaemonRemedies(install) {
     }));
 }
 
+function repairConfirmedStaleDaemons(install, label) {
+  const candidates = staleDaemonRemedies(install);
+  if (candidates.length === 0) return false;
+
+  sleep(2000);
+  const confirmationPayload = runJsonStep(
+    `${label}_confirm_stale_daemons_install_doctor`,
+    agentBrowserCommand,
+    ['install', 'doctor', '--json'],
+    { required: false },
+  );
+  const confirmedSessions = new Set(
+    staleDaemonRemedies(summarizeInstallDoctor(confirmationPayload))
+      .map((remedy) => remedy.session),
+  );
+  for (const remedy of candidates) {
+    if (!confirmedSessions.has(remedy.session)) continue;
+    if (isSafeStaleDaemonRemedy(remedy.argv)) {
+      runStep(
+        `close_stale_daemon_${remedy.session}`,
+        agentBrowserCommand,
+        remedy.argv.slice(1),
+      );
+    } else {
+      report.skippedRemedies.push({
+        session: remedy.session,
+        argv: remedy.argv,
+        reason: 'unsupported_remedy_shape',
+      });
+    }
+  }
+  return true;
+}
+
 function isSafeStaleDaemonRemedy(argv) {
   return Array.isArray(argv) &&
     argv.length === 4 &&
@@ -185,10 +267,46 @@ function isSafeStaleDaemonRemedy(argv) {
     !argv[3].startsWith('-');
 }
 
+function routeDisplayRecoveryRequired(nextAction) {
+  return new Set([
+    'open_route_specific_rdp_sessions_then_rerun_doctor',
+    'open_two_rdp_route_sessions_for_existing_agent_browser_rdp_user_then_rerun_doctor',
+    'repair_rdp_route_display_session',
+  ]).has(nextAction);
+}
+
+function sleep(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function staleSessionMetadataNames({ minimumAgeMs = 60_000 } = {}) {
+  const socketDir = process.env.AGENT_BROWSER_SOCKET_DIR ||
+    (process.env.XDG_RUNTIME_DIR
+      ? join(process.env.XDG_RUNTIME_DIR, 'agent-browser')
+      : join(homedir(), '.agent-browser'));
+  if (!existsSync(socketDir)) return [];
+  const observedAt = Date.now();
+
+  return readdirSync(socketDir)
+    .filter((name) => name.endsWith('.token'))
+    .filter((name) => observedAt - statSync(join(socketDir, name)).mtimeMs >= minimumAgeMs)
+    .map((name) => name.slice(0, -'.token'.length))
+    .filter((session) => /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(session))
+    .filter((session) => ![
+      '.pid',
+      '.port',
+      '.sha256',
+      '.sock',
+      '.stream',
+      '.version',
+    ].some((suffix) => existsSync(join(socketDir, `${session}${suffix}`))))
+    .sort();
+}
+
 function runJsonStep(name, command, commandArgs, { required = true } = {}) {
   const result = runStep(name, command, commandArgs, { capture: true, required });
   try {
-    return JSON.parse(result.stdout.trim());
+    return JSON.parse((result.stdout ?? '').trim());
   } catch (error) {
     throw new Error(`Failed to parse ${name} JSON: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -210,9 +328,12 @@ function runStep(name, command, commandArgs, { capture = false, required = true 
     status: result.status,
     required,
     stdoutBytes: result.stdout?.length ?? 0,
-    stderr: (result.stderr ?? '').trim(),
+    stderr: (result.stderr ?? result.error?.message ?? '').trim(),
   };
   report.steps.push(step);
+  if (result.error) {
+    throw new Error(`${name} could not start ${command}: ${result.error.message}`);
+  }
   if (required && result.status !== 0) {
     throw new Error(`${name} failed with status ${result.status}: ${(result.stderr || result.stdout || '').trim()}`);
   }
@@ -240,6 +361,41 @@ function writeEvidence(payload) {
   return path;
 }
 
+function acquireLock(path) {
+  mkdirSync(dirname(path), { recursive: true });
+  try {
+    const descriptor = openSync(path, 'wx', 0o600);
+    writeFileSync(descriptor, `${process.pid}\n`);
+    closeSync(descriptor);
+    return;
+  } catch (error) {
+    if (error?.code !== 'EEXIST') throw error;
+  }
+
+  const ownerPid = Number.parseInt(readFileSync(path, 'utf8').trim(), 10);
+  if (Number.isInteger(ownerPid) && ownerPid > 0) {
+    try {
+      process.kill(ownerPid, 0);
+      throw new Error(`Local runtime convergence is already active in process ${ownerPid}`);
+    } catch (error) {
+      if (error?.code !== 'ESRCH') throw error;
+    }
+  }
+  rmSync(path, { force: true });
+  const descriptor = openSync(path, 'wx', 0o600);
+  writeFileSync(descriptor, `${process.pid}\n`);
+  closeSync(descriptor);
+}
+
+function releaseLock(path) {
+  try {
+    const ownerPid = Number.parseInt(readFileSync(path, 'utf8').trim(), 10);
+    if (ownerPid === process.pid) rmSync(path, { force: true });
+  } catch {
+    // Best-effort cleanup. A later run can recover a stale lock.
+  }
+}
+
 function requiredValue(values, index, flag) {
   const value = values[index];
   if (!value) fail(`Missing value for ${flag}`);
@@ -252,17 +408,20 @@ function fail(message) {
 }
 
 function printHelp() {
-  console.log(`Usage: node scripts/converge-local-runtime.js [--apply] [--json]
+  console.log(`Usage: node scripts/converge-local-runtime.js [--apply] [--json] [--skip-publish]
 
 Dry-run by default. Reports install doctor, remote-view doctor, runtime
 inventory, and safe stale-daemon remedies. With --apply, synchronizes the local
 dashboard runtime, closes only agent-browser stale daemon sessions reported by
-doctor remedies, ensures Guacamole Postgres schema state, applies display grants
-only when doctor asks for them, writes an evidence JSON file, and reruns doctors.
+doctor remedies, ensures Guacamole Postgres schema state, restores missing RDP
+route displays, applies display grants only when doctor asks for them, writes an
+evidence JSON file, and reruns doctors.
 
 Options:
   --apply                 Apply safe local repairs. Default is dry-run.
   --json                  Emit JSON.
+  --skip-publish          Keep the installed binary/dashboard unchanged. Used by
+                          the recurring runtime-health interlock.
   --evidence-path <path>  Apply-mode evidence path. Default:
                           ~/.agent-browser/convergence/local-runtime-latest.json`);
 }

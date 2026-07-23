@@ -71,6 +71,17 @@ installed helper's route desktop template as
 <code>remote_view_route_desktop_helper_stale</code> when that helper still
 starts a terminal-first route desktop.
 
+For a persistent local dashboard and self-healing RDP route plane, run
+<code>bash scripts/install-dashboard-user-service.sh</code> from the checkout.
+Alongside <code>agent-browser-dashboard.service</code>, it installs
+<code>agent-browser-runtime-interlock.timer</code>. The interlock runs after
+boot and five minutes after each completed pass by default, closes only stale daemon sessions proven
+by install doctor, restores missing route displays, and records its latest
+receipt under
+<code>~/.agent-browser/convergence/local-runtime-latest.json</code>. Set
+<code>AGENT_BROWSER_RUNTIME_INTERLOCK_INTERVAL</code> before installation to a
+systemd duration such as <code>5min</code> to change the cadence.
+
 ## Stealth CDP Chromium
 
 Use <code>agent-browser install stealthcdp-chromium</code> to install the

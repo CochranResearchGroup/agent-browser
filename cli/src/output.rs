@@ -5224,6 +5224,11 @@ Timeout handling:
   issue's direct nextCommand, while a completed missing-display inspection
   remains the primary route-session remediation.
 
+Runtime-health interlock:
+  On Linux, bash scripts/install-dashboard-user-service.sh installs the
+  dashboard plus a recurring user-scoped interlock. It closes only
+  doctor-proven stale daemon sessions and restores missing RDP route displays.
+
 Examples:
   agent-browser doctor windows-browser
   agent-browser doctor windows-browser --port 9222
@@ -6124,6 +6129,8 @@ Dashboard:
   dashboard [start]          Start the dashboard server (default port: 4848)
   dashboard start --port <n> Start on a specific port
   dashboard stop             Stop the dashboard server
+  Linux repo installs can run bash scripts/install-dashboard-user-service.sh
+  to enable the dashboard and recurring runtime-health interlock.
 
 Setup:
   install                    Install browser binaries

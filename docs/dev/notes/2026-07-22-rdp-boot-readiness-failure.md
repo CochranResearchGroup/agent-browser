@@ -1,7 +1,7 @@
 # RDP boot readiness failure
 
 Date: 2026-07-22
-Status: Mitigated; runtime converged, route desktops remain operator-managed
+Status: Resolved by automatic runtime interlock; cold-reboot smoke remains
 
 ## Summary
 
@@ -300,3 +300,53 @@ the earlier child-command timeout. It returns `success=true`, `status=blocked`,
 and `nextAction=repair_rdp_route_display_session`, with explicit missing-socket
 issues for `:10` and `:11`. This is the supported operator-prerequisite state,
 not install or retained-readiness drift.
+
+## Automatic interlock completion
+
+The supported contract changed on 2026-07-23. Route desktop recovery is now an
+agent-browser responsibility rather than an operator prerequisite.
+
+The dashboard installer now installs and enables
+`agent-browser-runtime-interlock.timer`. The timer starts a convergence
+oneshot after boot and five minutes after each completed pass. The convergence
+pass:
+
+1. Runs install and remote-view doctors.
+2. Confirms executable-backed stale runtime findings before closing the same
+   still-stale sessions.
+3. Confirms aged token-only runtime metadata across two observations, then
+   removes it through the scoped close command.
+4. Ensures the Guacamole PostgreSQL dependency and route-pool fixtures.
+5. Opens both configured Guacamole route desktops when doctor reports missing
+   route display sessions.
+6. Re-runs both doctors and grants display access when requested.
+7. Writes the final result to
+   `~/.agent-browser/convergence/local-runtime-latest.json`.
+
+Intermediate doctor failures are repair inputs. Only the final doctor results
+decide whether the oneshot succeeds. Explicit binary and pnpm paths keep the
+interlock independent of an interactive shell environment, and a lock file
+prevents overlapping convergence passes.
+
+A live boot-equivalent recovery started with both abstract X11 sockets absent.
+The installed interlock established displays `:10` and `:11`, restored both
+route-pool entries, and finished with:
+
+```text
+install.success=true
+runtimeConvergence.status=converged
+runtimeConvergence.staleCount=0
+remoteView.status=ready
+remoteView.remoteControlReady=true
+remoteView.nextAction=run_many_to_many_live_gate
+```
+
+A real Route B open to `https://example.com/` then checked out
+`guacamole-rdp-b`, attached to display `:11`, proved
+`browser_window_visible`, and returned `attached_ready`. The browser title was
+`Example Domain`.
+
+The installed timer and live recovery prove the recurring and boot-triggered
+mechanism from a boot-equivalent missing-display state. A true host cold reboot
+has not been performed in this slice, so that final smoke remains explicit
+follow-up evidence rather than an inferred pass.

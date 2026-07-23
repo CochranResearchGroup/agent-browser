@@ -877,6 +877,16 @@ bash scripts/install-dashboard-user-service.sh
 Set `AGENT_BROWSER_DASHBOARD_PORT` before running the script to use a port
 other than `4848`.
 
+The installer also enables the user-scoped
+<code>agent-browser-runtime-interlock.timer</code>. It runs after boot and
+five minutes after each completed pass by default. Each pass closes only doctor-proven stale daemon
+sessions, reconciles retained service state, restores missing Guacamole/XRDP
+route displays, reapplies display access when required, and records
+<code>~/.agent-browser/convergence/local-runtime-latest.json</code>. It does
+not publish or replace the installed binary. Set
+<code>AGENT_BROWSER_RUNTIME_INTERLOCK_INTERVAL</code> before installation to a
+systemd duration such as <code>5min</code> when a different cadence is needed.
+
 The Service view can inspect retained browser, session, and tab records. When
 a browser record includes an embeddable view stream such as an HTML5 RDP
 gateway, operators can open it from the browser details or from a service tab
