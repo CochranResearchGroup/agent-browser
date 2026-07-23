@@ -270,5 +270,11 @@ local convergence command is currently blocked by the pre-existing pnpm
 ignored-build configuration, so installed-runtime convergence remains a
 separate closeout step.
 
+A later readback after stale-daemon activity preserved both route-pool entries
+as `unavailable`, but Route A's orphan diagnostic reverted to the older
+`display_allocation_unavailable` reason. Fail-closed route selection remains
+effective; stable `route_display` diagnostic attribution requires restarting
+or replacing the retained daemon processes with the current executable.
+
 The remote-view doctor's child-command timeout classification is unchanged in
 this slice and remains an open diagnostic defect.
