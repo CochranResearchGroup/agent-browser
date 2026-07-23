@@ -3,6 +3,7 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -13,10 +14,11 @@ struct DoctorArgs {
     allow_shared_target: bool,
 }
 
-const DOCTOR_JSON_COMMAND_TIMEOUT: Duration = Duration::from_secs(20);
+const DOCTOR_JSON_COMMAND_TIMEOUT: Duration = Duration::from_secs(45);
 const DOCTOR_TEXT_COMMAND_TIMEOUT: Duration = Duration::from_secs(3);
 const DOCTOR_DISPLAY_ACCESS_TIMEOUT: Duration = Duration::from_secs(3);
 const DOCTOR_COMMAND_POLL_INTERVAL: Duration = Duration::from_millis(25);
+static DOCTOR_COMMAND_OUTPUT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 enum DoctorCommandResult {
     Output(Output),
@@ -869,6 +871,7 @@ fn remote_control_status(
     route_displays: &Value,
 ) -> Value {
     let install_ready = nested_bool(install, &["success"]);
+    let install_doctor_timed_out = doctor_command_timed_out(install);
     let route_pool_ready = nested_bool(route_pool, &["data", "success"]);
     let rdp_gateway_ready = nested_bool(rdp_gateway, &["data", "success"]);
     let private_display_allocator_ready =
@@ -933,6 +936,8 @@ fn remote_control_status(
     };
     let next_action = if ready {
         "run_remote_view_open_live_gate".to_string()
+    } else if install_doctor_timed_out {
+        "rerun_install_doctor_after_timeout".to_string()
     } else if !install_ready {
         "repair_install_drift".to_string()
     } else if !rdp_gateway_ready {
@@ -954,6 +959,7 @@ fn remote_control_status(
         "status": status,
         "ready": ready,
         "installReady": install_ready,
+        "installDoctorTimedOut": install_doctor_timed_out,
         "rdpGatewayReady": rdp_gateway_ready,
         "privateDisplayAllocatorReady": private_display_allocator_ready,
         "routePoolReady": route_pool_ready,
@@ -1056,6 +1062,64 @@ struct RecommendationContext<'a> {
     privileges: &'a Value,
 }
 
+/// Returns true only when a child diagnostic exceeded its bound without returning a result.
+fn doctor_command_timed_out(result: &Value) -> bool {
+    nested_bool(result, &["timedOut"])
+}
+
+fn route_display_recovery_action(route_displays: &Value, users: &Value) -> Option<String> {
+    if doctor_command_timed_out(route_displays) || nested_bool(route_displays, &["data", "success"])
+    {
+        return None;
+    }
+    let route_specific_users_ready = users
+        .get("entries")
+        .and_then(Value::as_array)
+        .map(|entries| {
+            ["agent-browser-rdp-a", "agent-browser-rdp-b"]
+                .iter()
+                .all(|name| {
+                    entries.iter().any(|entry| {
+                        entry.get("user").and_then(Value::as_str) == Some(*name)
+                            && entry.get("exists").and_then(Value::as_bool) == Some(true)
+                    })
+                })
+        })
+        .unwrap_or(false);
+    if route_specific_users_ready {
+        return Some("open_route_specific_rdp_sessions_then_rerun_doctor".to_string());
+    }
+    let existing_route_count = route_displays
+        .pointer("/data/existingUserRoutes")
+        .and_then(Value::as_array)
+        .map(Vec::len)
+        .unwrap_or(0);
+    if existing_route_count == 1 {
+        return Some(
+            "existing_agent_browser_rdp_routes_collapsed_to_one_display_use_route_specific_user_or_xrdp_policy_isolation"
+                .to_string(),
+        );
+    }
+    let existing_user = users
+        .get("entries")
+        .and_then(Value::as_array)
+        .and_then(|entries| {
+            entries
+                .iter()
+                .find(|entry| entry["user"] == "agent-browser-rdp")
+        })
+        .and_then(|entry| entry.get("exists"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if existing_user {
+        return Some(
+            "open_two_rdp_route_sessions_for_existing_agent_browser_rdp_user_then_rerun_doctor"
+                .to_string(),
+        );
+    }
+    Some("create_or_repair_single_agent_browser_rdp_user_before_route_specific_users".to_string())
+}
+
 fn recommend_next_action(context: RecommendationContext<'_>) -> String {
     let RecommendationContext {
         install,
@@ -1067,7 +1131,7 @@ fn recommend_next_action(context: RecommendationContext<'_>) -> String {
         users,
         privileges,
     } = context;
-    if !nested_bool(install, &["success"]) {
+    if !nested_bool(install, &["success"]) && !doctor_command_timed_out(install) {
         if install_has_issue_code(install, "active_runtime_stale_executable")
             || install_has_issue_code(install, "active_runtime_stale_stream_backend")
         {
@@ -1077,6 +1141,21 @@ fn recommend_next_action(context: RecommendationContext<'_>) -> String {
             return "converge_local_runtime_then_rerun_doctor".to_string();
         }
         return "repair_install_drift".to_string();
+    }
+    if doctor_command_timed_out(install)
+        || doctor_command_timed_out(rdp_gateway)
+        || doctor_command_timed_out(route_pool)
+    {
+        if let Some(action) = route_display_recovery_action(route_displays, users) {
+            return action;
+        }
+        if doctor_command_timed_out(install) {
+            return "rerun_install_doctor_after_timeout".to_string();
+        }
+        if doctor_command_timed_out(rdp_gateway) {
+            return "rerun_rdp_gateway_readiness_after_timeout".to_string();
+        }
+        return "rerun_route_pool_readiness_after_timeout".to_string();
     }
     if !nested_bool(rdp_gateway, &["available"]) {
         return "run_rdp_gateway_readiness".to_string();
@@ -1090,48 +1169,8 @@ fn recommend_next_action(context: RecommendationContext<'_>) -> String {
         }
         return "repair_or_sync_guacamole_route_pool_before_creating_more_users".to_string();
     }
-    if !nested_bool(route_displays, &["data", "success"]) {
-        let route_specific_users_ready = users
-            .get("entries")
-            .and_then(Value::as_array)
-            .map(|entries| {
-                ["agent-browser-rdp-a", "agent-browser-rdp-b"]
-                    .iter()
-                    .all(|name| {
-                        entries.iter().any(|entry| {
-                            entry.get("user").and_then(Value::as_str) == Some(*name)
-                                && entry.get("exists").and_then(Value::as_bool) == Some(true)
-                        })
-                    })
-            })
-            .unwrap_or(false);
-        if route_specific_users_ready {
-            return "open_route_specific_rdp_sessions_then_rerun_doctor".to_string();
-        }
-        let existing_route_count = route_displays
-            .pointer("/data/existingUserRoutes")
-            .and_then(Value::as_array)
-            .map(Vec::len)
-            .unwrap_or(0);
-        if existing_route_count == 1 {
-            return "existing_agent_browser_rdp_routes_collapsed_to_one_display_use_route_specific_user_or_xrdp_policy_isolation".to_string();
-        }
-        let existing_user = users
-            .get("entries")
-            .and_then(Value::as_array)
-            .and_then(|entries| {
-                entries
-                    .iter()
-                    .find(|entry| entry["user"] == "agent-browser-rdp")
-            })
-            .and_then(|entry| entry.get("exists"))
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        if existing_user {
-            return "open_two_rdp_route_sessions_for_existing_agent_browser_rdp_user_then_rerun_doctor".to_string();
-        }
-        return "create_or_repair_single_agent_browser_rdp_user_before_route_specific_users"
-            .to_string();
+    if let Some(action) = route_display_recovery_action(route_displays, users) {
+        return action;
     }
     if !display_access
         .get("ready")
@@ -1201,6 +1240,11 @@ fn recommend_next_command(next_action: &str) -> Value {
             "requiresInteractiveSudo": false,
             "why": "Open both existing-user Guacamole route clients, authenticate them, then inspect whether XRDP allocated distinct displays."
         }),
+        "repair_rdp_route_display_session" => json!({
+            "command": "pnpm open:rdp-route-displays",
+            "requiresInteractiveSudo": false,
+            "why": "The configured Guacamole routes have no live X11 display sockets. Open and authenticate the route desktops, then rerun the doctor."
+        }),
         "install_privileged_helper_then_grant_route_display_access" => json!({
             "command": "pnpm install:privileges -- --apply && newgrp agent-browser",
             "requiresInteractiveSudo": true,
@@ -1225,6 +1269,26 @@ fn recommend_next_command(next_action: &str) -> Value {
             "command": "agent-browser install doctor --json",
             "requiresInteractiveSudo": false,
             "why": "The installed command, current executable, package binary, workspace binary, or launch configuration is out of sync."
+        }),
+        "rerun_install_doctor_after_timeout" => json!({
+            "command": "agent-browser install doctor --json",
+            "requiresInteractiveSudo": false,
+            "why": "The embedded install doctor timed out without proving install drift. Run it directly before changing installed state."
+        }),
+        "rerun_rdp_gateway_readiness_after_timeout" => json!({
+            "command": "pnpm test:rdp-gateway-readiness-live",
+            "requiresInteractiveSudo": false,
+            "why": "The embedded RDP gateway readiness helper timed out without returning a failed readiness result."
+        }),
+        "rerun_route_pool_readiness_after_timeout" => json!({
+            "command": "pnpm test:rdp-guac-route-pool-readiness -- --report-only",
+            "requiresInteractiveSudo": false,
+            "why": "The embedded route-pool readiness helper timed out without returning a failed readiness result."
+        }),
+        "rerun_route_display_inspection_after_timeout" => json!({
+            "command": "node scripts/inspect-rdp-route-displays.js",
+            "requiresInteractiveSudo": false,
+            "why": "The embedded route-display inspection helper timed out without returning a display result."
         }),
         "restart_stale_daemon_sessions_then_rerun_doctor" => json!({
             "command": "agent-browser install doctor --json",
@@ -1281,40 +1345,59 @@ fn remote_view_issues(context: RemoteViewIssueContext<'_>) -> Vec<Value> {
     } = context;
 
     if !nested_bool(install, &["success"]) {
-        let install_issues = install
-            .pointer("/data/data/issues")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
-        for issue in install_issues {
-            let code = issue
-                .get("code")
-                .and_then(Value::as_str)
-                .unwrap_or("install_doctor_not_ready");
-            let message = issue
-                .get("message")
-                .and_then(Value::as_str)
-                .unwrap_or("agent-browser install doctor reported an issue");
+        if doctor_command_timed_out(install) {
             issues.push(remote_view_issue(
-                &format!("install_{code}"),
-                message,
-                "run agent-browser install doctor --json and resolve the reported install drift before relying on remote-view setup",
+                "install_doctor_timed_out",
+                "the embedded install doctor timed out without proving install drift",
+                "run agent-browser install doctor --json directly and use its result as the install authority",
                 false,
-                "repair_install_drift",
+                "rerun_install_doctor_after_timeout",
             ));
-        }
-        if issues.is_empty() {
-            issues.push(remote_view_issue(
-                "install_doctor_not_ready",
-                "agent-browser install doctor did not report success",
-                "run agent-browser install doctor --json and resolve the reported install drift",
-                false,
-                "repair_install_drift",
-            ));
+        } else {
+            let initial_issue_count = issues.len();
+            let install_issues = install
+                .pointer("/data/data/issues")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            for issue in install_issues {
+                let code = issue
+                    .get("code")
+                    .and_then(Value::as_str)
+                    .unwrap_or("install_doctor_not_ready");
+                let message = issue
+                    .get("message")
+                    .and_then(Value::as_str)
+                    .unwrap_or("agent-browser install doctor reported an issue");
+                issues.push(remote_view_issue(
+                    &format!("install_{code}"),
+                    message,
+                    "run agent-browser install doctor --json and resolve the reported install drift before relying on remote-view setup",
+                    false,
+                    "repair_install_drift",
+                ));
+            }
+            if issues.len() == initial_issue_count {
+                issues.push(remote_view_issue(
+                    "install_doctor_not_ready",
+                    "agent-browser install doctor did not report success",
+                    "run agent-browser install doctor --json and resolve the reported install drift",
+                    false,
+                    "repair_install_drift",
+                ));
+            }
         }
     }
 
-    if !nested_bool(route_pool, &["available"]) {
+    if doctor_command_timed_out(route_pool) {
+        issues.push(remote_view_issue(
+            "route_pool_readiness_timed_out",
+            "the embedded Guacamole route-pool readiness helper timed out",
+            "run pnpm test:rdp-guac-route-pool-readiness -- --report-only directly and use its returned readiness result",
+            false,
+            "rerun_route_pool_readiness_after_timeout",
+        ));
+    } else if !nested_bool(route_pool, &["available"]) {
         issues.push(remote_view_issue(
             "route_pool_readiness_unavailable",
             "the Guacamole route-pool readiness helper could not be run",
@@ -1371,7 +1454,15 @@ fn remote_view_issues(context: RemoteViewIssueContext<'_>) -> Vec<Value> {
         }
     }
 
-    if !nested_bool(rdp_gateway, &["available"]) {
+    if doctor_command_timed_out(rdp_gateway) {
+        issues.push(remote_view_issue(
+            "rdp_gateway_readiness_timed_out",
+            "the embedded RDP gateway readiness helper timed out",
+            "run pnpm test:rdp-gateway-readiness-live directly and use its returned readiness result",
+            false,
+            "rerun_rdp_gateway_readiness_after_timeout",
+        ));
+    } else if !nested_bool(rdp_gateway, &["available"]) {
         issues.push(remote_view_issue(
             "rdp_gateway_readiness_unavailable",
             "the RDP gateway readiness helper could not be run",
@@ -1419,9 +1510,15 @@ fn remote_view_issues(context: RemoteViewIssueContext<'_>) -> Vec<Value> {
         }
     }
 
-    if nested_bool(route_pool, &["data", "success"])
-        && !nested_bool(route_displays, &["data", "success"])
-    {
+    if doctor_command_timed_out(route_displays) {
+        issues.push(remote_view_issue(
+            "route_display_inspection_timed_out",
+            "the embedded route-display inspection helper timed out",
+            "run node scripts/inspect-rdp-route-displays.js directly before changing route-display state",
+            false,
+            "rerun_route_display_inspection_after_timeout",
+        ));
+    } else if !nested_bool(route_displays, &["data", "success"]) {
         let route_specific_users_ready = users
             .get("entries")
             .and_then(Value::as_array)
@@ -1700,37 +1797,73 @@ fn state_sources() -> Vec<Value> {
 }
 
 fn run_command_with_timeout(mut command: Command, timeout: Duration) -> DoctorCommandResult {
-    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let output_id = DOCTOR_COMMAND_OUTPUT_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let output_prefix = env::temp_dir().join(format!(
+        "agent-browser-remote-view-doctor-command-{}-{output_id}",
+        std::process::id()
+    ));
+    let stdout_path = output_prefix.with_extension("stdout");
+    let stderr_path = output_prefix.with_extension("stderr");
+    let stdout_file = match fs::File::create(&stdout_path) {
+        Ok(file) => file,
+        Err(error) => return DoctorCommandResult::SpawnError(error.to_string()),
+    };
+    let stderr_file = match fs::File::create(&stderr_path) {
+        Ok(file) => file,
+        Err(error) => {
+            let _ = fs::remove_file(&stdout_path);
+            return DoctorCommandResult::SpawnError(error.to_string());
+        }
+    };
+    command
+        .stdout(Stdio::from(stdout_file))
+        .stderr(Stdio::from(stderr_file));
     let mut child = match command.spawn() {
         Ok(child) => child,
-        Err(error) => return DoctorCommandResult::SpawnError(error.to_string()),
+        Err(error) => {
+            let _ = fs::remove_file(&stdout_path);
+            let _ = fs::remove_file(&stderr_path);
+            return DoctorCommandResult::SpawnError(error.to_string());
+        }
     };
     let started = Instant::now();
     loop {
         match child.try_wait() {
             Ok(Some(_)) => {
-                return match child.wait_with_output() {
-                    Ok(output) => DoctorCommandResult::Output(output),
+                return match child.wait() {
+                    Ok(status) => {
+                        let stdout = fs::read(&stdout_path).unwrap_or_default();
+                        let stderr = fs::read(&stderr_path).unwrap_or_default();
+                        let _ = fs::remove_file(&stdout_path);
+                        let _ = fs::remove_file(&stderr_path);
+                        DoctorCommandResult::Output(Output {
+                            status,
+                            stdout,
+                            stderr,
+                        })
+                    }
                     Err(error) => DoctorCommandResult::SpawnError(error.to_string()),
                 };
             }
             Ok(None) => {
                 if started.elapsed() >= timeout {
                     let _ = child.kill();
-                    return match child.wait_with_output() {
-                        Ok(output) => DoctorCommandResult::Timeout {
-                            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
-                            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
-                        },
-                        Err(error) => DoctorCommandResult::Timeout {
-                            stdout: String::new(),
-                            stderr: error.to_string(),
-                        },
-                    };
+                    let wait_error = child.wait().err().map(|error| error.to_string());
+                    let stdout = fs::read_to_string(&stdout_path).unwrap_or_default();
+                    let stderr = wait_error
+                        .or_else(|| fs::read_to_string(&stderr_path).ok())
+                        .unwrap_or_default();
+                    let _ = fs::remove_file(&stdout_path);
+                    let _ = fs::remove_file(&stderr_path);
+                    return DoctorCommandResult::Timeout { stdout, stderr };
                 }
                 thread::sleep(DOCTOR_COMMAND_POLL_INTERVAL);
             }
-            Err(error) => return DoctorCommandResult::SpawnError(error.to_string()),
+            Err(error) => {
+                let _ = fs::remove_file(&stdout_path);
+                let _ = fs::remove_file(&stderr_path);
+                return DoctorCommandResult::SpawnError(error.to_string());
+            }
         }
     }
 }
@@ -2074,6 +2207,38 @@ mod tests {
         fs::create_dir_all(script_root).unwrap();
         for script in REMOTE_VIEW_HELPER_SCRIPTS {
             fs::write(script_root.join(script), "console.log('{}');\n").unwrap();
+        }
+    }
+
+    #[test]
+    fn doctor_command_large_output_helper() {
+        if env::var("AGENT_BROWSER_REMOTE_VIEW_DOCTOR_LARGE_OUTPUT_HELPER").as_deref() == Ok("1") {
+            print!("{}", "x".repeat(256 * 1024));
+        }
+    }
+
+    #[test]
+    fn doctor_command_capture_does_not_deadlock_on_large_json_output() {
+        let mut command = Command::new(env::current_exe().unwrap());
+        command
+            .args([
+                "--exact",
+                "remote_view_doctor::tests::doctor_command_large_output_helper",
+                "--nocapture",
+            ])
+            .env("AGENT_BROWSER_REMOTE_VIEW_DOCTOR_LARGE_OUTPUT_HELPER", "1");
+
+        let output = run_command_with_timeout(command, Duration::from_secs(10));
+
+        match output {
+            DoctorCommandResult::Output(output) => {
+                assert!(output.status.success());
+                assert!(output.stdout.len() >= 256 * 1024);
+            }
+            DoctorCommandResult::Timeout { .. } => {
+                panic!("large child output blocked until the doctor timeout")
+            }
+            DoctorCommandResult::SpawnError(error) => panic!("child command failed: {error}"),
         }
     }
 
@@ -2459,6 +2624,112 @@ MaxSessions=50
     }
 
     #[test]
+    fn recommend_next_action_prefers_known_missing_route_displays_over_helper_timeouts() {
+        let timed_out = json!({"available": true, "success": false, "timedOut": true});
+        let route_displays = json!({
+            "available": true,
+            "success": false,
+            "timedOut": false,
+            "data": {"success": false, "existingUserRoutes": []}
+        });
+        let users = json!({
+            "entries": [
+                {"user": "agent-browser-rdp", "exists": true},
+                {"user": "agent-browser-rdp-a", "exists": true},
+                {"user": "agent-browser-rdp-b", "exists": true}
+            ]
+        });
+
+        assert_eq!(
+            recommend_next_action(RecommendationContext {
+                install: &timed_out,
+                rdp_gateway: &timed_out,
+                route_pool: &timed_out,
+                route_displays: &route_displays,
+                display_access: &json!({"ready": false}),
+                viewer_prerequisites: &json!({"ready": true}),
+                users: &users,
+                privileges: &json!({"ready": true}),
+            }),
+            "open_route_specific_rdp_sessions_then_rerun_doctor"
+        );
+    }
+
+    #[test]
+    fn remote_control_distinguishes_install_timeout_from_install_drift() {
+        let install = json!({"available": true, "success": false, "timedOut": true});
+        let status = remote_control_status(
+            &install,
+            &ready_rdp_gateway(),
+            &json!({"data": {"success": false}}),
+            &json!({"data": {"success": false}}),
+        );
+
+        assert_eq!(status["installReady"], false);
+        assert_eq!(status["installDoctorTimedOut"], true);
+        assert_eq!(status["nextAction"], "rerun_install_doctor_after_timeout");
+    }
+
+    #[test]
+    fn remote_view_issues_classifies_timeouts_without_claiming_install_drift() {
+        let timed_out = json!({"available": true, "success": false, "timedOut": true});
+        let route_displays = json!({
+            "available": true,
+            "success": false,
+            "timedOut": false,
+            "data": {"success": false}
+        });
+        let users = json!({
+            "entries": [
+                {"user": "agent-browser-rdp-a", "exists": true},
+                {"user": "agent-browser-rdp-b", "exists": true}
+            ]
+        });
+        let privileges = json!({
+            "groupExists": true,
+            "userInGroup": true,
+            "helperExists": true,
+            "sudoersExists": true,
+            "helperCheck": {"success": true},
+            "helperDesktopSession": {"ready": true},
+            "helperStatus": {
+                "success": true,
+                "parsed": {
+                    "schemaVersion": 1,
+                    "routeDesktopSession": {"ready": true, "terminalStartupDetected": false},
+                    "displayAccess": {
+                        "supportsFilesystemX11Socket": true,
+                        "supportsAbstractX11Socket": true,
+                        "boundedXhostTimeoutSeconds": 2
+                    }
+                }
+            }
+        });
+
+        let issues = remote_view_issues(RemoteViewIssueContext {
+            install: &timed_out,
+            rdp_gateway: &timed_out,
+            route_pool: &timed_out,
+            route_displays: &route_displays,
+            display_access: &json!({"ready": false}),
+            viewer_prerequisites: &json!({"ready": true}),
+            users: &users,
+            privileges: &privileges,
+            next_action: "open_route_specific_rdp_sessions_then_rerun_doctor",
+        });
+        let codes = issues
+            .iter()
+            .filter_map(|issue| issue.get("code").and_then(Value::as_str))
+            .collect::<Vec<_>>();
+
+        assert!(codes.contains(&"install_doctor_timed_out"));
+        assert!(codes.contains(&"route_pool_readiness_timed_out"));
+        assert!(codes.contains(&"rdp_gateway_readiness_timed_out"));
+        assert!(codes.contains(&"route_displays_missing_or_collapsed"));
+        assert!(!codes.contains(&"install_doctor_not_ready"));
+    }
+
+    #[test]
     fn recommend_next_command_points_stale_daemon_action_at_issue_remedies() {
         let command = recommend_next_command("restart_stale_daemon_sessions_then_rerun_doctor");
 
@@ -2514,6 +2785,7 @@ MaxSessions=50
         for next_action in [
             "open_route_specific_rdp_sessions_then_rerun_doctor",
             "open_two_rdp_route_sessions_for_existing_agent_browser_rdp_user_then_rerun_doctor",
+            "repair_rdp_route_display_session",
         ] {
             let command = recommend_next_command(next_action);
             assert_eq!(command["command"], "pnpm open:rdp-route-displays");

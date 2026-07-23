@@ -147,6 +147,12 @@ mismatch, missing Guacamole schema, permission gap, or unroutable dashboard
 embed is not a healthy remote-control browser even if the Chrome process is
 alive.
 
+Treat remote-view doctor child timeouts as inconclusive, not as failed install
+or readiness evidence. The doctor reports distinct `*_timed_out` issue codes
+and a direct helper command for each timeout. Follow a completed missing-route-
+display result first when it exists; otherwise run the direct helper before
+mutating install or runtime state.
+
 After a host reboot, do not trust retained route-pool `ready` evidence by
 itself. Service reconciliation checks each configured RDP route's live X11
 socket, changes missing-display entries to `unavailable`, and orphans linked

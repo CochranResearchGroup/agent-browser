@@ -5218,6 +5218,12 @@ Post-setup validation:
   When profileSmoke.available is true, run pnpm test:wsl-windows-chromium-profile-live
   from the repo to verify Windows chromium-stealthcdp profile writes from WSL.
 
+Timeout handling:
+  remote-view doctor reports child-command timeouts with distinct *_timed_out
+  issue codes. A timeout does not prove install or readiness drift. Run the
+  issue's direct nextCommand, while a completed missing-display inspection
+  remains the primary route-session remediation.
+
 Examples:
   agent-browser doctor windows-browser
   agent-browser doctor windows-browser --port 9222

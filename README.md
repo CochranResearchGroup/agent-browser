@@ -1572,6 +1572,11 @@ stable issue codes with remediation text, drift findings, and the next setup
 action. It also reports the installed helper's route desktop template readiness
 as `helperDesktopSession` and emits `remote_view_route_desktop_helper_stale`
 when the root-owned helper still writes a terminal-first route desktop.
+Embedded diagnostic timeouts use distinct `*_timed_out` issue codes and do not
+claim that the underlying install or readiness check failed. Run the reported
+direct helper command to resolve an inconclusive timeout. When route-display
+inspection completed and proves that route sessions are missing, that result
+remains the primary remediation even if another embedded helper timed out.
 `agent-browser install doctor --json` also reports `remoteViewPrivileges` with
 helper, sudoers, group, membership, `helperDesktopSession`, and
 `requiresInteractiveSudo` fields plus `service` readiness from a no-launch

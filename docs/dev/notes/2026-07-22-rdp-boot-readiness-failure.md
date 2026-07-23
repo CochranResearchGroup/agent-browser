@@ -283,6 +283,16 @@ default proof daemon was closed after reconciliation. Only the converged
 dashboard service remains running; no stale or validation daemon listener
 remains.
 
+The final completion audit reproduced the remote-view doctor timeout and
+identified its concrete cause: the parent polled for child exit without
+draining piped output, while the large embedded install-doctor JSON blocked in
+`pipe_write` after filling the pipe buffer. Remote-view doctor child capture
+now uses bounded temporary files, so large output cannot deadlock before the
+parent reads it. A regression emits more than 256 KiB from a child process and
+proves capture completes before the timeout. Timeouts that still occur for
+other reasons use distinct `*_timed_out` issue codes and never become proven
+install drift.
+
 Current reconciliation clears stale route checkout ownership and reports both
 Route A and Route B as `unavailable` with reason
 `route_display_socket_missing`. The remote-view doctor now completes without
