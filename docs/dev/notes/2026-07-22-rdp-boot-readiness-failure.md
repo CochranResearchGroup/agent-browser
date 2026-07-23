@@ -1,7 +1,7 @@
 # RDP boot readiness failure
 
 Date: 2026-07-22
-Status: Mitigated; runtime convergence and diagnostic follow-up remain open
+Status: Mitigated; runtime converged, route desktops remain operator-managed
 
 ## Summary
 
@@ -263,18 +263,23 @@ in `native::parity_tests` and was terminated after the focused changed-module
 partitions had passed. That runner-level contention remains a validation
 limitation; it is not recorded as a full-suite pass.
 
-The standalone and ignored workspace binaries were updated. The dashboard and
-four unrelated active daemon sessions still hold the previous executable. They
-were not interrupted because two retained browsers remain active. The normal
-local convergence command is currently blocked by the pre-existing pnpm
-ignored-build configuration, so installed-runtime convergence remains a
-separate closeout step.
+The first installed-runtime update left the dashboard and four active daemon
+sessions on the previous executable. A later readback preserved both
+route-pool entries as `unavailable`, but stale-daemon activity rewrote Route
+A's orphan diagnostic to the older `display_allocation_unavailable` reason.
 
-A later readback after stale-daemon activity preserved both route-pool entries
-as `unavailable`, but Route A's orphan diagnostic reverted to the older
-`display_allocation_unavailable` reason. Fail-closed route selection remains
-effective; stable `route_display` diagnostic attribution requires restarting
-or replacing the retained daemon processes with the current executable.
+The drift-closeout pass explicitly approved the five locked pnpm build-script
+dependencies, restoring frozen installs and repo-native build commands. It
+then republished the dashboard and current binary, restarted the dashboard,
+and closed the four daemon sessions that install doctor identified as stale.
+Final install doctor returned `success=true`, no issues,
+`runtimeConvergence.status=converged`, and zero stale runtimes. The installed,
+workspace-reference, and dashboard-manifest executable hashes agree.
 
-The remote-view doctor's child-command timeout classification is unchanged in
-this slice and remains an open diagnostic defect.
+Current reconciliation clears stale route checkout ownership and reports both
+Route A and Route B as `unavailable` with reason
+`route_display_socket_missing`. The remote-view doctor now completes without
+the earlier child-command timeout. It returns `success=true`, `status=blocked`,
+and `nextAction=repair_rdp_route_display_session`, with explicit missing-socket
+issues for `:10` and `:11`. This is the supported operator-prerequisite state,
+not install or retained-readiness drift.

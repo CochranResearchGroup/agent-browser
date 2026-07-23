@@ -3,3 +3,9 @@ packages:
   - 'packages/*'
   - 'docs'
   - 'examples/service-client'
+allowBuilds:
+  '@mongodb-js/zstd': true
+  msw: true
+  node-liblzma: true
+  sharp: true
+  unrs-resolver: true
