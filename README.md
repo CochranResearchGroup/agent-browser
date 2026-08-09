@@ -3054,7 +3054,9 @@ daemon-wide `--service-job-timeout` setting.
 For a security-sensitive Google profile that was seeded in ordinary non-CDP
 Chrome and then closed normally, add `--manual-login-launch`. This preserves
 the minimal headed Chrome flag posture used by `runtime login --attachable`
-while keeping CDP, Route B visibility, and service-owned lifecycle control.
+and opens the requested URL as Chrome's initial destination, while keeping CDP,
+Route B visibility, and service-owned lifecycle control. The initial
+same-origin target is reused instead of replacing a blank CDP-created tab.
 It does not perform sign-in or pairing and must target the exact seeded
 profile and browser build.
 When `AGENT_BROWSER_RDP_ROUTE_POOL_JSON` is present, the CLI copies that
@@ -3150,7 +3152,8 @@ agent-browser --json remote-view open https://www.facebook.com/ --runtime-profil
 The equivalent service request field is top-level
 `"manualLoginLaunch": true`. Use it only for a headed
 `remote_view_open` after the operator has seeded and closed the exact profile;
-headless requests fail closed.
+the requested URL becomes Chrome's initial destination and the resulting
+same-origin target is reused. Headless requests fail closed.
 
 Use route descriptors as structured diagnostic data.
 `routeDescriptor.localEmbedUrl` and `dashboardEmbedUrl` are for dashboard and

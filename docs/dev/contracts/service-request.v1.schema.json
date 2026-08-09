@@ -461,7 +461,7 @@
     },
     "manualLoginLaunch": {
       "type": "boolean",
-      "description": "For action=remote_view_open, use the minimal headed Chrome flag posture from runtime login while retaining managed CDP and service-owned Route B lifecycle. Use only after the exact profile has been manually seeded and closed."
+      "description": "For action=remote_view_open, use the minimal headed Chrome flag posture from runtime login, pass the requested URL as Chrome's initial destination, and reuse that same-origin target while retaining managed CDP and service-owned Route B lifecycle. Use only after the exact profile has been manually seeded and closed."
     }
   },
   "additionalProperties": false

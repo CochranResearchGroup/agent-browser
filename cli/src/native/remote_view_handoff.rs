@@ -893,6 +893,33 @@ pub fn route_bound_handoff_launch_command(
         "providerMode".to_string(),
         Value::String(route_binding.provider_mode.clone()),
     );
+    if command
+        .get("manualLoginLaunch")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        if let Some(url) = command
+            .get("url")
+            .and_then(Value::as_str)
+            .filter(|url| !url.trim().is_empty() && !url.starts_with('-'))
+            .map(str::to_string)
+        {
+            let mut args = command
+                .get("args")
+                .and_then(Value::as_array)
+                .map(|args| {
+                    args.iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_string)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            if !args.iter().any(|arg| arg == &url) {
+                args.push(url);
+            }
+            command.insert("args".to_string(), json!(args));
+        }
+    }
     if let Some(value) = route_binding.launch_display_name.clone() {
         command.insert("remoteHeadedDisplay".to_string(), Value::String(value));
     }
@@ -3049,6 +3076,7 @@ mod tests {
         assert_eq!(launch["viewStreamProvider"], "rdp_gateway");
         assert_eq!(launch["controlInput"], "manual_attached_desktop");
         assert_eq!(launch["manualLoginLaunch"], true);
+        assert_eq!(launch["args"], json!(["https://example.com/"]));
         assert_eq!(launch["remoteHeadedDisplay"], ":31");
         assert_eq!(launch["routeId"], "route-a");
         assert_eq!(launch["displayAllocationId"], "display-a");
@@ -3056,6 +3084,29 @@ mod tests {
         assert_eq!(launch["connectionId"], "conn-a");
         assert!(launch.get("provider").is_none());
         assert!(launch.get("dryRun").is_none());
+
+        let automated_launch = route_bound_handoff_launch_command(
+            &json!({
+                "action": "remote_view_open",
+                "url": "https://example.com/"
+            }),
+            &route_binding,
+        );
+        assert!(automated_launch.get("args").is_none());
+
+        let launch_with_existing_args = route_bound_handoff_launch_command(
+            &json!({
+                "action": "remote_view_open",
+                "manualLoginLaunch": true,
+                "url": "https://example.com/",
+                "args": ["--start-maximized", "https://example.com/"]
+            }),
+            &route_binding,
+        );
+        assert_eq!(
+            launch_with_existing_args["args"],
+            json!(["--start-maximized", "https://example.com/"])
+        );
 
         let checkout =
             route_bound_handoff_checkout_command(&cmd, &route_binding, "browser-a", "session-a");
