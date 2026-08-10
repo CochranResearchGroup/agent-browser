@@ -224,7 +224,26 @@ memory swap peak: 0B
 ```
 
 This is an implementation checkpoint, not Slice A acceptance. Remaining Slice
-A work includes control-plane cancellation handoff through the coordinator,
-default deadline propagation, terminal failure/quarantine persistence, removal
-of superseded state-coupled recovery helpers, and decomposition of the current
-route-open recovery file into cohesive private owners.
+A work includes terminal failure/quarantine persistence, removal of superseded
+state-coupled recovery helpers, and decomposition of the current route-open
+recovery file into cohesive private owners.
+
+### Control-plane completion handoff
+
+The worker now materializes its configured default timeout into
+`jobTimeoutMs`, so the route supervisor and the worker share one total budget.
+For direct route-bound open and durable handoff resolution, outer timeout or
+cancellation signals the shared token and retains the coordinator future until
+bounded compensation returns. The worker then emits the existing timeout or
+cancellation envelope. Other commands preserve their prior outer deadline
+behavior.
+
+```text
+coordinated_cancellation_awaits_terminal_compensation ... ok
+coordinated_timeout_signals_then_awaits_compensation ... ok
+default_job_timeout_is_materialized_for_the_route_supervisor ... ok
+strict clippy ... ok
+```
+
+The control-plane tests use only deterministic futures and cooperative tokens.
+They perform no browser or live runtime effect.

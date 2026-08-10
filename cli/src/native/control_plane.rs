@@ -323,11 +323,9 @@ impl ControlPlaneHandle {
             id.clone()
         };
         let command = command_with_service_job_id(command, &job_id);
-        let timeout_ms = command
-            .get("jobTimeoutMs")
-            .and_then(|v| v.as_u64())
-            .filter(|ms| *ms > 0)
-            .or(self.service_job_timeout_ms);
+        let (command, timeout_ms) =
+            command_with_effective_job_timeout(command, self.service_job_timeout_ms);
+        let timeout_ms = timeout_ms.filter(|ms| *ms > 0);
         let service_name = optional_command_string(&command, "serviceName");
         let agent_name = optional_command_string(&command, "agentName");
         let task_name = optional_command_string(&command, "taskName");
@@ -494,6 +492,128 @@ fn command_with_service_job_id(mut command: Value, job_id: &str) -> Value {
         );
     }
     command
+}
+
+fn command_with_effective_job_timeout(
+    mut command: Value,
+    default_timeout_ms: Option<u64>,
+) -> (Value, Option<u64>) {
+    let timeout_ms = command
+        .get("jobTimeoutMs")
+        .and_then(Value::as_u64)
+        .filter(|timeout_ms| *timeout_ms > 0)
+        .or(default_timeout_ms.filter(|timeout_ms| *timeout_ms > 0));
+    if command.get("jobTimeoutMs").is_none() {
+        if let (Some(timeout_ms), Some(command)) = (timeout_ms, command.as_object_mut()) {
+            command.insert("jobTimeoutMs".to_string(), json!(timeout_ms));
+        }
+    }
+    (command, timeout_ms)
+}
+
+fn route_bound_action_owns_completion(action: &str) -> bool {
+    matches!(
+        action,
+        "remote_view_open" | "service_remote_view_handoff_resolve"
+    )
+}
+
+enum CoordinatedExecution {
+    Completed(Value),
+    CancelledAfterCompensation(Value),
+    TimedOutAfterCompensation { response: Value, timeout_ms: u64 },
+}
+
+async fn await_coordinated_execution<F>(
+    execution: F,
+    cancellation: RunningJobCancel,
+    timeout_ms: Option<u64>,
+) -> CoordinatedExecution
+where
+    F: Future<Output = Value>,
+{
+    let mut execution = Box::pin(execution);
+    match timeout_ms {
+        Some(timeout_ms) if timeout_ms > 0 => {
+            tokio::select! {
+                biased;
+                response = &mut execution => CoordinatedExecution::Completed(response),
+                _ = cancellation.cancelled() => {
+                    let response = execution.await;
+                    CoordinatedExecution::CancelledAfterCompensation(response)
+                }
+                _ = tokio::time::sleep(Duration::from_millis(timeout_ms)) => {
+                    // Signal the same token observed by the route supervisor,
+                    // then retain ownership of the future until its bounded
+                    // compensation has produced a terminal outcome.
+                    cancellation.cancel();
+                    let response = execution.await;
+                    CoordinatedExecution::TimedOutAfterCompensation { response, timeout_ms }
+                }
+            }
+        }
+        _ => {
+            tokio::select! {
+                biased;
+                response = &mut execution => CoordinatedExecution::Completed(response),
+                _ = cancellation.cancelled() => {
+                    let response = execution.await;
+                    CoordinatedExecution::CancelledAfterCompensation(response)
+                }
+            }
+        }
+    }
+}
+
+fn service_job_cancelled_response(request: &ControlRequest) -> Value {
+    json!({
+        "id": request.id.clone(),
+        "success": false,
+        "error": "Service job was cancelled while running",
+        "data": { "cancelled": true },
+    })
+}
+
+fn service_job_timed_out_response(request: &ControlRequest, timeout_ms: u64) -> Value {
+    json!({
+        "id": request.id.clone(),
+        "success": false,
+        "error": format!("Service job timed out after {}ms", timeout_ms),
+        "data": {
+            "timedOut": true,
+            "timeoutMs": timeout_ms,
+        },
+    })
+}
+
+fn coordinated_execution_response(
+    request: &ControlRequest,
+    execution: CoordinatedExecution,
+    timeout_ms: Option<u64>,
+) -> Value {
+    match execution {
+        CoordinatedExecution::CancelledAfterCompensation(terminal_response) => {
+            let _ = terminal_response;
+            service_job_cancelled_response(request)
+        }
+        CoordinatedExecution::TimedOutAfterCompensation {
+            response: terminal_response,
+            timeout_ms,
+        } => {
+            let _ = terminal_response;
+            service_job_timed_out_response(request, timeout_ms)
+        }
+        CoordinatedExecution::Completed(response) => {
+            let error = response.get("error").and_then(Value::as_str).unwrap_or("");
+            if error.contains("Service job was cancelled while running") {
+                service_job_cancelled_response(request)
+            } else if error.contains("Service job timed out during route-bound open") {
+                service_job_timed_out_response(request, timeout_ms.unwrap_or_default())
+            } else {
+                response
+            }
+        }
+    }
 }
 
 enum SchedulerLeaseDecision {
@@ -1551,32 +1671,24 @@ async fn run_worker(
                         let previous_cancellation = state
                             .current_cancellation
                             .replace(request.cancellation.clone());
-                        let mut response = match timeout_ms {
+                        let mut response = if route_bound_action_owns_completion(&request.action) {
+                            let execution = await_coordinated_execution(
+                                execute_command(&request.command, &mut state),
+                                request.cancellation.clone(),
+                                timeout_ms,
+                            )
+                            .await;
+                            coordinated_execution_response(&request, execution, timeout_ms)
+                        } else {
+                            match timeout_ms {
                             Some(ms) if ms > 0 => {
                                 tokio::select! {
                                     response = execute_command(&request.command, &mut state) => response,
                                     _ = request.cancellation.cancelled() => {
-                                        persist_service_job_cancelled(&request, "Service job was cancelled while running");
-                                        json!({
-                                            "id": request.id.clone(),
-                                            "success": false,
-                                            "error": "Service job was cancelled while running",
-                                            "data": {
-                                                "cancelled": true,
-                                            },
-                                        })
+                                        service_job_cancelled_response(&request)
                                     }
                                     _ = tokio::time::sleep(Duration::from_millis(ms)) => {
-                                        persist_service_job_timed_out(&request);
-                                        json!({
-                                            "id": request.id.clone(),
-                                            "success": false,
-                                            "error": format!("Service job timed out after {}ms", ms),
-                                            "data": {
-                                                "timedOut": true,
-                                                "timeoutMs": ms,
-                                            },
-                                        })
+                                        service_job_timed_out_response(&request, ms)
                                     }
                                 }
                             }
@@ -1584,17 +1696,10 @@ async fn run_worker(
                                 tokio::select! {
                                     response = execute_command(&request.command, &mut state) => response,
                                     _ = request.cancellation.cancelled() => {
-                                        persist_service_job_cancelled(&request, "Service job was cancelled while running");
-                                        json!({
-                                            "id": request.id.clone(),
-                                            "success": false,
-                                            "error": "Service job was cancelled while running",
-                                            "data": {
-                                                "cancelled": true,
-                                            },
-                                        })
+                                        service_job_cancelled_response(&request)
                                     }
                                 }
+                            }
                             }
                         };
                         if request
@@ -1625,6 +1730,9 @@ async fn run_worker(
                             == Some(true);
                         if cancelled {
                             persist_service_job_cancelled(&request, "Service job was cancelled while running");
+                        }
+                        if timed_out {
+                            persist_service_job_timed_out(&request);
                         }
                         if !timed_out && !cancelled {
                             persist_service_job_finished(&request, &response);
@@ -3494,5 +3602,67 @@ mod tests {
             command_with_service_job_id(json!({"action": "remote_view_open"}), "job-handoff-a");
 
         assert_eq!(command["serviceJobId"], "job-handoff-a");
+    }
+
+    #[test]
+    fn default_job_timeout_is_materialized_for_the_route_supervisor() {
+        let (command, timeout_ms) =
+            command_with_effective_job_timeout(json!({"action": "remote_view_open"}), Some(12_345));
+        assert_eq!(timeout_ms, Some(12_345));
+        assert_eq!(command["jobTimeoutMs"], 12_345);
+
+        let (explicit, timeout_ms) = command_with_effective_job_timeout(
+            json!({"action": "remote_view_open", "jobTimeoutMs": 4_321}),
+            Some(12_345),
+        );
+        assert_eq!(timeout_ms, Some(4_321));
+        assert_eq!(explicit["jobTimeoutMs"], 4_321);
+    }
+
+    #[tokio::test]
+    async fn coordinated_timeout_signals_then_awaits_compensation() {
+        let cancellation = RunningJobCancel::new();
+        let observed = cancellation.clone();
+        let execution = async move {
+            observed.cancelled().await;
+            tokio::task::yield_now().await;
+            json!({"terminalState": "rolled_back"})
+        };
+
+        let outcome = await_coordinated_execution(execution, cancellation, Some(1)).await;
+        match outcome {
+            CoordinatedExecution::TimedOutAfterCompensation {
+                response,
+                timeout_ms,
+            } => {
+                assert_eq!(timeout_ms, 1);
+                assert_eq!(response["terminalState"], "rolled_back");
+            }
+            _ => panic!("timeout must retain the coordinator future through compensation"),
+        }
+    }
+
+    #[tokio::test]
+    async fn coordinated_cancellation_awaits_terminal_compensation() {
+        let cancellation = RunningJobCancel::new();
+        let observed = cancellation.clone();
+        let trigger = cancellation.clone();
+        tokio::spawn(async move {
+            tokio::task::yield_now().await;
+            trigger.cancel();
+        });
+        let execution = async move {
+            observed.cancelled().await;
+            tokio::task::yield_now().await;
+            json!({"terminalState": "rollback_incomplete"})
+        };
+
+        let outcome = await_coordinated_execution(execution, cancellation, Some(1_000)).await;
+        match outcome {
+            CoordinatedExecution::CancelledAfterCompensation(response) => {
+                assert_eq!(response["terminalState"], "rollback_incomplete");
+            }
+            _ => panic!("cancellation must retain the coordinator future through compensation"),
+        }
     }
 }

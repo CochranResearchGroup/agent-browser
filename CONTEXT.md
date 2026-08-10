@@ -55,3 +55,7 @@ _Avoid_: Cleanup timeout, grace period
 **Scripted runtime**:
 A deterministic test implementation of the route-bound runtime seam that records invoked effects and advances a fake clock without browser or live runtime effects.
 _Avoid_: Mock browser, integration runtime
+
+**Coordinator-owned completion**:
+The worker signals timeout or cancellation through the route-bound token and retains the coordinator future until bounded compensation reports a terminal state.
+_Avoid_: Post-timeout join, background cleanup
