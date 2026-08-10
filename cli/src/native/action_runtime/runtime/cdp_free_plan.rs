@@ -28,7 +28,7 @@ use crate::native::stream_runtime::{
     stream_file_path, write_engine_file, write_extensions_file, write_provider_file,
 };
 use crate::runtime_profile::{
-    clear_runtime_state, looks_like_path, pid_is_running, read_devtools_port, read_runtime_state,
+    clear_runtime_state, looks_like_path, read_devtools_port, read_runtime_state,
     runtime_profile_user_data_dir,
 };
 use serde_json::{json, Map, Value};

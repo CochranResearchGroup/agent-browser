@@ -1739,8 +1739,8 @@ pub(crate) mod service_commands {
     use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
     use crate::native::state;
     use crate::runtime_profile::{
-        clear_runtime_state, looks_like_path, pid_is_running, read_devtools_port,
-        read_runtime_state, runtime_profile_user_data_dir,
+        clear_runtime_state, looks_like_path, read_devtools_port, read_runtime_state,
+        runtime_profile_user_data_dir,
     };
     use serde::{Deserialize, Serialize};
     use serde_json::{json, Map, Value};

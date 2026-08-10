@@ -62,7 +62,7 @@ pub(crate) use crate::native::service_store::{
 pub(crate) use crate::native::service_trace::service_event_kind_name;
 pub(crate) use crate::native::state;
 pub(crate) use crate::runtime_profile::{
-    clear_runtime_state, looks_like_path, pid_is_running, read_devtools_port, read_runtime_state,
+    clear_runtime_state, looks_like_path, read_devtools_port, read_runtime_state,
     runtime_profile_user_data_dir,
 };
 pub(crate) use serde::{Deserialize, Serialize};

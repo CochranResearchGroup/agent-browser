@@ -891,7 +891,7 @@ pub fn launch_chrome_detached(options: &LaunchOptions) -> Result<ManualChromeLau
     // waits for the fresh port written by the new browser instance.
     let _ = std::fs::remove_file(user_data_dir.join("DevToolsActivePort"));
 
-    let mut cmd = Command::new(chrome_path);
+    let mut cmd = Command::new(&chrome_path);
     cmd.args(&args)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -948,13 +948,30 @@ pub fn launch_chrome_detached(options: &LaunchOptions) -> Result<ManualChromeLau
     } else {
         None
     };
-    drop(child);
-
+    let process_identity = if runtime_profile.is_some() {
+        match crate::process_identity::capture_process_identity(
+            pid,
+            Some(&chrome_path),
+            options.expected_browser_family.as_deref(),
+        ) {
+            Some(identity) => Some(identity),
+            None => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!(
+                    "Failed to capture process identity for manual browser PID {pid}"
+                ));
+            }
+        }
+    } else {
+        None
+    };
     if let Some(ref runtime_profile_name) = runtime_profile {
-        let _ = write_runtime_state(&RuntimeState {
+        let state = RuntimeState {
             runtime_profile: runtime_profile_name.clone(),
             user_data_dir: user_data_dir.display().to_string(),
             browser_pid: pid,
+            process_identity,
             headed: !options.headless,
             launch_mode: if options.attachable {
                 "manual-attachable".to_string()
@@ -976,8 +993,14 @@ pub fn launch_chrome_detached(options: &LaunchOptions) -> Result<ManualChromeLau
                     .ok(),
                 ..RuntimeLaunchRecord::default()
             }),
-        });
+        };
+        if let Err(error) = write_runtime_state(&state) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(error);
+        }
     }
+    drop(child);
 
     Ok(ManualChromeLaunch {
         pid,
@@ -991,7 +1014,9 @@ fn ensure_profile_not_in_use(user_data_dir: &Path) -> Result<(), String> {
     #[cfg(unix)]
     {
         if let Some(pid) = singleton_lock_pid(user_data_dir) {
-            if pid != std::process::id() && pid_is_running(pid) {
+            let assessment =
+                crate::runtime_profile::profile_lock_process_assessment(user_data_dir, pid);
+            if assessment.preserves_evidence() {
                 return Err(locked_profile_message(user_data_dir, pid));
             }
         }
@@ -1011,7 +1036,14 @@ fn locked_profile_message(user_data_dir: &Path, pid: u32) -> String {
 }
 
 fn profile_lock_diagnostic(user_data_dir: &Path, pid: u32) -> Value {
-    let runtime_profiles = matching_runtime_profiles(user_data_dir, pid);
+    let process_ownership =
+        crate::runtime_profile::profile_lock_process_assessment(user_data_dir, pid).ownership;
+    let runtime_profiles =
+        if process_ownership == crate::process_identity::RuntimeProcessOwnership::MatchingBrowser {
+            matching_runtime_profiles(user_data_dir, pid)
+        } else {
+            Vec::new()
+        };
     let runtime_profile_names = runtime_profiles
         .iter()
         .map(|profile| profile.runtime_profile.clone())
@@ -1031,12 +1063,26 @@ fn profile_lock_diagnostic(user_data_dir: &Path, pid: u32) -> Value {
         });
     json!({
         "lockPid": pid,
+        "processOwnership": process_ownership_name(process_ownership),
         "userDataDir": user_data_dir.display().to_string(),
         "owner": primary_owner,
         "runtimeProfiles": runtime_profiles.iter().map(runtime_profile_diagnostic).collect::<Vec<_>>(),
         "serviceBrowsers": service_browsers,
         "remedies": remedies,
     })
+}
+
+fn process_ownership_name(
+    ownership: crate::process_identity::RuntimeProcessOwnership,
+) -> &'static str {
+    match ownership {
+        crate::process_identity::RuntimeProcessOwnership::MatchingBrowser => "matching_browser",
+        crate::process_identity::RuntimeProcessOwnership::Missing => "missing",
+        crate::process_identity::RuntimeProcessOwnership::ReusedUnrelated => "reused_unrelated",
+        crate::process_identity::RuntimeProcessOwnership::AmbiguousLegacyBrowser => {
+            "ambiguous_legacy_browser"
+        }
+    }
 }
 
 fn matching_runtime_profiles(user_data_dir: &Path, pid: u32) -> Vec<RuntimeProfileSummary> {
@@ -1200,7 +1246,9 @@ fn cleanup_stale_profile_lock(user_data_dir: &Path) {
     #[cfg(unix)]
     {
         if let Some(pid) = singleton_lock_pid(user_data_dir) {
-            if !pid_is_running(pid) {
+            let assessment =
+                crate::runtime_profile::profile_lock_process_assessment(user_data_dir, pid);
+            if assessment.authorizes_cleanup() {
                 for name in [
                     "SingletonLock",
                     "SingletonSocket",
@@ -1220,12 +1268,6 @@ fn singleton_lock_pid(user_data_dir: &Path) -> Option<u32> {
     let target = std::fs::read_link(lock_path).ok()?;
     let value = target.to_string_lossy();
     value.rsplit('-').next()?.parse().ok()
-}
-
-#[cfg(unix)]
-fn pid_is_running(pid: u32) -> bool {
-    let rc = unsafe { libc::kill(pid as i32, 0) };
-    rc == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
 }
 
 fn try_launch_chrome(
@@ -1369,11 +1411,35 @@ fn try_launch_chrome(
         Some(pid)
     };
 
+    let process_identity = if runtime_profile.is_some() {
+        match crate::process_identity::capture_process_identity(
+            child.id(),
+            Some(chrome_path),
+            options.expected_browser_family.as_deref(),
+        ) {
+            Some(identity) => Some(identity),
+            None => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let mut outcome = ProcessShutdownOutcome::default();
+                kill_aux_processes(&mut aux_processes, &mut outcome);
+                cleanup_temp_dir(&temp_user_data_dir);
+                return Err(format!(
+                    "Failed to capture process identity for browser PID {}",
+                    child.id()
+                ));
+            }
+        }
+    } else {
+        None
+    };
+
     if let Some(ref runtime_profile_name) = runtime_profile {
-        let _ = write_runtime_state(&RuntimeState {
+        let state = RuntimeState {
             runtime_profile: runtime_profile_name.clone(),
             user_data_dir: user_data_dir.display().to_string(),
             browser_pid: child.id(),
+            process_identity,
             headed: !options.headless,
             launch_mode: if remote_debugging {
                 "automation".to_string()
@@ -1391,7 +1457,15 @@ fn try_launch_chrome(
                 None
             },
             launch_record: None,
-        });
+        };
+        if let Err(error) = write_runtime_state(&state) {
+            let _ = child.kill();
+            let _ = child.wait();
+            let mut outcome = ProcessShutdownOutcome::default();
+            kill_aux_processes(&mut aux_processes, &mut outcome);
+            cleanup_temp_dir(&temp_user_data_dir);
+            return Err(error);
+        }
     }
 
     Ok(ChromeProcess {
@@ -2705,6 +2779,20 @@ mod tests {
             .unwrap()
     }
 
+    #[cfg(unix)]
+    fn spawn_browser_looking_child(root: &Path) -> (PathBuf, Child) {
+        let executable = root.join("fixture-chrome");
+        std::fs::copy("/bin/sleep", &executable).unwrap();
+        let child = Command::new(&executable)
+            .arg("30")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        (executable, child)
+    }
+
     #[cfg(windows)]
     fn spawn_noop_child() -> Child {
         Command::new("cmd.exe")
@@ -3169,18 +3257,137 @@ mod tests {
 
         cleanup_stale_profile_lock(&dir);
 
-        assert!(!dir.join("SingletonLock").exists());
-        assert!(!dir.join("SingletonCookie").exists());
-        assert!(!dir.join("SingletonSocket").exists());
+        assert!(std::fs::symlink_metadata(dir.join("SingletonLock")).is_err());
+        assert!(std::fs::symlink_metadata(dir.join("SingletonCookie")).is_err());
+        assert!(std::fs::symlink_metadata(dir.join("SingletonSocket")).is_err());
         assert!(!dir.join("DevToolsActivePort").exists());
     }
 
     #[cfg(unix)]
     #[test]
+    fn test_cleanup_stale_profile_lock_removes_reused_pid_artifacts_without_signaling_process() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = TempDir::new("reused-pid-lock-home");
+        std::fs::create_dir_all(&*home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let runtime_profile = "reused-pid-lock";
+        let user_data_dir =
+            crate::runtime_profile::runtime_profile_user_data_dir(runtime_profile).unwrap();
+        std::fs::create_dir_all(&user_data_dir).unwrap();
+        let pid = std::process::id();
+        write_runtime_state(&RuntimeState {
+            runtime_profile: runtime_profile.to_string(),
+            user_data_dir: user_data_dir.display().to_string(),
+            browser_pid: pid,
+            process_identity: Some(crate::process_identity::RecordedProcessIdentity {
+                pid,
+                start_token: "linux:stale-boot:1".to_string(),
+                executable_path: Some("/opt/chrome".to_string()),
+                browser_family: Some("chrome".to_string()),
+            }),
+            headed: true,
+            launch_mode: "automation".to_string(),
+            devtools_port: Some(9),
+            ws_url: None,
+            launch_record: None,
+        })
+        .unwrap();
+        std::os::unix::fs::symlink(format!("host-{pid}"), user_data_dir.join("SingletonLock"))
+            .unwrap();
+        std::os::unix::fs::symlink("cookie", user_data_dir.join("SingletonCookie")).unwrap();
+        std::os::unix::fs::symlink("socket", user_data_dir.join("SingletonSocket")).unwrap();
+        std::fs::write(user_data_dir.join("DevToolsActivePort"), "9\nstale").unwrap();
+
+        let diagnostic = profile_lock_diagnostic(&user_data_dir, pid);
+        assert_eq!(diagnostic["processOwnership"], "reused_unrelated");
+        assert_eq!(diagnostic["runtimeProfiles"], json!([]));
+        assert_eq!(diagnostic["serviceBrowsers"], json!([]));
+
+        cleanup_stale_profile_lock(&user_data_dir);
+
+        assert!(std::fs::symlink_metadata(user_data_dir.join("SingletonLock")).is_err());
+        assert!(std::fs::symlink_metadata(user_data_dir.join("SingletonCookie")).is_err());
+        assert!(std::fs::symlink_metadata(user_data_dir.join("SingletonSocket")).is_err());
+        assert!(!user_data_dir.join("DevToolsActivePort").exists());
+        assert!(crate::process_identity::process_exists(pid));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_cleanup_stale_profile_lock_preserves_ambiguous_legacy_browser() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = TempDir::new("ambiguous-legacy-lock-home");
+        std::fs::create_dir_all(&*home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let executable = home.join("legacy-chrome");
+        std::fs::copy("/bin/sleep", &executable).unwrap();
+        let mut child = Command::new(&executable).arg("30").spawn().unwrap();
+        let observed = match crate::process_identity::observe_process(child.id()) {
+            crate::process_identity::ProcessObservation::Observed(observed) => observed,
+            other => panic!("expected observed browser-looking process, got {other:?}"),
+        };
+        assert_eq!(observed.browser_family.as_deref(), Some("chrome"));
+        let runtime_profile = "ambiguous-legacy-lock";
+        let user_data_dir =
+            crate::runtime_profile::runtime_profile_user_data_dir(runtime_profile).unwrap();
+        std::fs::create_dir_all(&user_data_dir).unwrap();
+        write_runtime_state(&RuntimeState {
+            runtime_profile: runtime_profile.to_string(),
+            user_data_dir: user_data_dir.display().to_string(),
+            browser_pid: child.id(),
+            process_identity: None,
+            headed: true,
+            launch_mode: "manual".to_string(),
+            devtools_port: None,
+            ws_url: None,
+            launch_record: None,
+        })
+        .unwrap();
+        std::os::unix::fs::symlink(
+            format!("host-{}", child.id()),
+            user_data_dir.join("SingletonLock"),
+        )
+        .unwrap();
+
+        cleanup_stale_profile_lock(&user_data_dir);
+
+        assert!(std::fs::symlink_metadata(user_data_dir.join("SingletonLock")).is_ok());
+        let err = ensure_profile_not_in_use(&user_data_dir).unwrap_err();
+        assert!(err.contains("ambiguous_legacy_browser"));
+        assert!(crate::process_identity::process_exists(child.id()));
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn test_ensure_profile_not_in_use_rejects_live_lock() {
-        let dir = TempDir::new("live-lock");
-        std::fs::create_dir_all(&*dir).unwrap();
-        let mut child = spawn_sleep_child();
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = TempDir::new("live-lock-home");
+        std::fs::create_dir_all(&*home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let runtime_profile = "matching-live-lock";
+        let dir = crate::runtime_profile::runtime_profile_user_data_dir(runtime_profile).unwrap();
+        std::fs::create_dir_all(&dir).unwrap();
+        let (executable, mut child) = spawn_browser_looking_child(&home);
+        let process_identity = crate::process_identity::capture_process_identity(
+            child.id(),
+            Some(&executable),
+            Some("chrome"),
+        )
+        .unwrap();
+        write_runtime_state(&RuntimeState {
+            runtime_profile: runtime_profile.to_string(),
+            user_data_dir: dir.display().to_string(),
+            browser_pid: child.id(),
+            process_identity: Some(process_identity),
+            headed: true,
+            launch_mode: "manual".to_string(),
+            devtools_port: None,
+            ws_url: None,
+            launch_record: None,
+        })
+        .unwrap();
         std::os::unix::fs::symlink(format!("host-{}", child.id()), dir.join("SingletonLock"))
             .unwrap();
 
@@ -3190,6 +3397,7 @@ mod tests {
         assert!(err.contains("runtime status"));
         assert!(err.contains("service/session control plane"));
         assert!(err.contains("unauthenticated throwaway work"));
+        assert!(std::fs::symlink_metadata(dir.join("SingletonLock")).is_ok());
         let _ = child.kill();
         let _ = child.wait();
     }
@@ -3268,8 +3476,6 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn test_detached_manual_launch_records_inherited_display() {
-        use std::os::unix::fs::PermissionsExt;
-
         let guard = EnvGuard::new(&["HOME", "DISPLAY"]);
         let home = TempDir::new("manual-runtime-inherited-display");
         std::fs::create_dir_all(&*home).unwrap();
@@ -3277,8 +3483,7 @@ mod tests {
         guard.set("DISPLAY", ":91");
 
         let fake_chrome = home.join("fake-chrome");
-        std::fs::write(&fake_chrome, "#!/bin/sh\nsleep 30\n").unwrap();
-        std::fs::set_permissions(&fake_chrome, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::copy("/usr/bin/yes", &fake_chrome).unwrap();
 
         let runtime_profile = "manual-inherited-display";
         let launch = launch_chrome_detached(&LaunchOptions {
@@ -3294,7 +3499,12 @@ mod tests {
         let state = crate::runtime_profile::read_runtime_state(runtime_profile)
             .unwrap()
             .unwrap();
-        let _ = unsafe { libc::kill(launch.pid as i32, libc::SIGKILL) };
+        let process_identity = state
+            .process_identity
+            .as_ref()
+            .expect("new manual runtime state must record process identity");
+        assert_eq!(process_identity.pid, launch.pid);
+        assert!(!process_identity.start_token.is_empty());
 
         assert_eq!(
             state
@@ -3350,6 +3560,8 @@ mod tests {
             Some("guacamole:91")
         );
         assert!(manual_browser.remote_control_available);
+        let _ = unsafe { libc::kill(launch.pid as i32, libc::SIGKILL) };
+        let _ = unsafe { libc::waitpid(launch.pid as i32, std::ptr::null_mut(), 0) };
     }
 
     #[cfg(target_os = "linux")]
@@ -3614,7 +3826,7 @@ mod tests {
         process.relinquish_for_handoff();
         drop(process);
 
-        assert_eq!(unsafe { libc::kill(pid as i32, 0) }, 0);
+        assert!(crate::process_identity::process_exists(pid));
         assert!(dir.exists(), "Handoff must preserve the browser profile");
 
         let _ = unsafe { libc::kill(pid as i32, libc::SIGKILL) };
@@ -3630,10 +3842,17 @@ mod tests {
         let user_data_dir =
             crate::runtime_profile::runtime_profile_user_data_dir("last30days-facebook").unwrap();
         std::fs::create_dir_all(&user_data_dir).unwrap();
+        let (executable, mut child) = spawn_browser_looking_child(&home);
+        let pid = child.id();
         write_runtime_state(&RuntimeState {
             runtime_profile: "last30days-facebook".to_string(),
             user_data_dir: user_data_dir.display().to_string(),
-            browser_pid: 424_242,
+            browser_pid: pid,
+            process_identity: crate::process_identity::capture_process_identity(
+                pid,
+                Some(&executable),
+                Some("chrome"),
+            ),
             headed: true,
             launch_mode: "manual-attachable".to_string(),
             devtools_port: Some(9222),
@@ -3651,7 +3870,7 @@ mod tests {
                         profile_id: Some("last30days-facebook".to_string()),
                         host: crate::native::service_model::BrowserHost::RemoteHeaded,
                         health: crate::native::service_model::BrowserHealth::Ready,
-                        pid: Some(424_242),
+                        pid: Some(pid),
                         cdp_endpoint: Some("http://127.0.0.1:9222".to_string()),
                         display_name: Some(":11".to_string()),
                         display_allocation_id: Some("remote-view-display:11".to_string()),
@@ -3663,14 +3882,14 @@ mod tests {
             })
             .unwrap();
 
-        let message = locked_profile_message(&user_data_dir, 424_242);
+        let message = locked_profile_message(&user_data_dir, pid);
 
         assert!(message.contains("Chrome profile"));
-        assert!(message.contains("already in use by PID 424242"));
+        assert!(message.contains(&format!("already in use by PID {pid}")));
         assert!(message.contains("diagnostic="));
         let diagnostic: Value = serde_json::from_str(message.split_once("diagnostic=").unwrap().1)
             .expect("lock diagnostic should be valid JSON");
-        assert_eq!(diagnostic["lockPid"], 424_242);
+        assert_eq!(diagnostic["lockPid"], pid);
         assert_eq!(
             diagnostic["owner"]["browserId"],
             "session:last30days-facebook"
@@ -3692,6 +3911,8 @@ mod tests {
             diagnostic["remedies"][1]["command"],
             "agent-browser --json --session last30days-facebook close"
         );
+        let _ = child.kill();
+        let _ = child.wait();
     }
 
     #[test]

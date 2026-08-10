@@ -10,6 +10,7 @@ mod install;
 mod mcp;
 mod native;
 mod output;
+mod process_identity;
 mod remote_view_doctor;
 mod runtime_profile;
 #[cfg(test)]

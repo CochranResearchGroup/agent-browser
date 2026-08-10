@@ -1,3 +1,7 @@
+use crate::process_identity::{
+    assess_process_ownership, observe_process, LegacyProfileProof, ProcessObservation,
+    RecordedProcessIdentity, RuntimeProcessAssessment, RuntimeProcessOwnership,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeSet;
@@ -25,6 +29,10 @@ pub struct RuntimeState {
     pub runtime_profile: String,
     pub user_data_dir: String,
     pub browser_pid: u32,
+    /// Process-start and executable evidence that distinguishes the launched
+    /// browser instance from a later unrelated process that reuses its PID.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub process_identity: Option<RecordedProcessIdentity>,
     pub headed: bool,
     pub launch_mode: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -292,14 +300,20 @@ pub fn runtime_status_with_user_data_dir(
         .or_else(|| configured_user_data_dir.map(Path::to_path_buf))
         .unwrap_or(resolved_runtime_profile_user_data_dir(runtime_profile)?);
     let browser_pid = state.as_ref().map(|s| s.browser_pid);
-    let browser_alive = browser_pid.is_some_and(pid_is_running);
     let detected_devtools_port = state
         .as_ref()
         .and_then(|s| s.devtools_port)
         .or_else(|| read_devtools_port(&user_data_dir));
-    let devtools_port = browser_alive.then_some(detected_devtools_port).flatten();
-    let target_probe = devtools_port.and_then(|port| fetch_runtime_targets(port).ok());
+    let evaluation = evaluate_runtime_process(
+        state.as_ref(),
+        &user_data_dir,
+        browser_pid.unwrap_or_default(),
+        detected_devtools_port,
+    );
+    let target_probe = evaluation.targets;
     let devtools_reachable = target_probe.is_some();
+    let browser_alive = evaluation.assessment.authorizes_adoption();
+    let devtools_port = browser_alive.then_some(detected_devtools_port).flatten();
     let targets = target_probe.unwrap_or_default();
 
     Ok(RuntimeStatus {
@@ -316,6 +330,144 @@ pub fn runtime_status_with_user_data_dir(
         targets,
         launch_record: state.and_then(|s| s.launch_record),
     })
+}
+
+pub fn profile_lock_process_assessment(user_data_dir: &Path, pid: u32) -> RuntimeProcessAssessment {
+    let state = runtime_state_for_user_data_dir(user_data_dir, pid);
+    let detected_devtools_port = state
+        .as_ref()
+        .and_then(|state| state.devtools_port)
+        .or_else(|| read_devtools_port(user_data_dir));
+    evaluate_runtime_process(state.as_ref(), user_data_dir, pid, detected_devtools_port).assessment
+}
+
+pub fn runtime_process_assessment(
+    runtime_profile: Option<&str>,
+    pid: u32,
+) -> RuntimeProcessAssessment {
+    let state = runtime_profile
+        .and_then(|name| read_runtime_state(name).ok().flatten())
+        .filter(|state| state.browser_pid == pid);
+    let user_data_dir = state
+        .as_ref()
+        .map(|state| PathBuf::from(&state.user_data_dir))
+        .or_else(|| {
+            runtime_profile.and_then(|name| resolved_runtime_profile_user_data_dir(name).ok())
+        })
+        .unwrap_or_default();
+    let detected_devtools_port = state
+        .as_ref()
+        .and_then(|state| state.devtools_port)
+        .or_else(|| read_devtools_port(&user_data_dir));
+    evaluate_runtime_process(state.as_ref(), &user_data_dir, pid, detected_devtools_port).assessment
+}
+
+struct RuntimeProcessEvaluation {
+    assessment: RuntimeProcessAssessment,
+    targets: Option<Vec<RuntimeTarget>>,
+}
+
+fn evaluate_runtime_process(
+    state: Option<&RuntimeState>,
+    user_data_dir: &Path,
+    pid: u32,
+    detected_devtools_port: Option<u16>,
+) -> RuntimeProcessEvaluation {
+    let observation = if pid == 0 {
+        ProcessObservation::Missing
+    } else {
+        observe_process(pid)
+    };
+    let initial = assess_process_ownership(
+        state.and_then(|state| state.process_identity.as_ref()),
+        observation.clone(),
+        LegacyProfileProof::Unproven,
+    );
+    let may_probe_exact = initial.ownership == RuntimeProcessOwnership::MatchingBrowser;
+    let may_probe_legacy = state.is_some_and(|state| {
+        state.process_identity.is_none()
+            && state.browser_pid == pid
+            && paths_refer_to_same_location(Path::new(&state.user_data_dir), user_data_dir)
+            && detected_devtools_port.is_some_and(|port| {
+                observation_command_line_matches_profile(&observation, user_data_dir, port)
+            })
+    });
+    let targets = if may_probe_exact || may_probe_legacy {
+        detected_devtools_port.and_then(|port| fetch_runtime_targets(port).ok())
+    } else {
+        None
+    };
+    let assessment = if may_probe_legacy && targets.is_some() {
+        assess_process_ownership(
+            state.and_then(|state| state.process_identity.as_ref()),
+            observation,
+            LegacyProfileProof::ProfileConsistent,
+        )
+    } else {
+        initial
+    };
+    RuntimeProcessEvaluation {
+        assessment,
+        targets,
+    }
+}
+
+fn observation_command_line_matches_profile(
+    observation: &ProcessObservation,
+    user_data_dir: &Path,
+    devtools_port: u16,
+) -> bool {
+    let ProcessObservation::Observed(observed) = observation else {
+        return false;
+    };
+    if observed.browser_family.is_none() {
+        return false;
+    }
+    let Some(arguments) = observed.command_line.as_deref() else {
+        return false;
+    };
+    command_line_option_value(arguments, "--user-data-dir")
+        .is_some_and(|value| paths_refer_to_same_location(Path::new(value), user_data_dir))
+        && command_line_option_value(arguments, "--remote-debugging-port")
+            .and_then(|value| value.parse::<u16>().ok())
+            == Some(devtools_port)
+}
+
+fn command_line_option_value<'a>(arguments: &'a [String], option: &str) -> Option<&'a str> {
+    for (index, argument) in arguments.iter().enumerate() {
+        if let Some(value) = argument.strip_prefix(&format!("{option}=")) {
+            return Some(value);
+        }
+        if argument == option {
+            return arguments.get(index + 1).map(String::as_str);
+        }
+    }
+    None
+}
+
+fn runtime_state_for_user_data_dir(user_data_dir: &Path, pid: u32) -> Option<RuntimeState> {
+    let root = runtime_profiles_root().ok()?;
+    fs::read_dir(root)
+        .ok()?
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            read_runtime_state(&name).ok().flatten()
+        })
+        .find(|state| {
+            state.browser_pid == pid
+                && paths_refer_to_same_location(Path::new(&state.user_data_dir), user_data_dir)
+        })
+}
+
+fn paths_refer_to_same_location(left: &Path, right: &Path) -> bool {
+    if left == right {
+        return true;
+    }
+    match (fs::canonicalize(left), fs::canonicalize(right)) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => false,
+    }
 }
 
 /// Merge configured runtime profiles with any on-disk managed profiles so
@@ -559,30 +711,6 @@ fn decode_chunked_body(body: &[u8]) -> Result<Vec<u8>, String> {
     }
 }
 
-#[cfg(unix)]
-pub fn pid_is_running(pid: u32) -> bool {
-    let rc = unsafe { libc::kill(pid as i32, 0) };
-    rc == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
-}
-
-#[cfg(windows)]
-pub fn pid_is_running(pid: u32) -> bool {
-    use windows_sys::Win32::Foundation::CloseHandle;
-    use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
-
-    let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
-    if handle == 0 {
-        return false;
-    }
-    unsafe { CloseHandle(handle) };
-    true
-}
-
-#[cfg(not(any(unix, windows)))]
-pub fn pid_is_running(_pid: u32) -> bool {
-    false
-}
-
 fn expand_tilde(path: &str) -> PathBuf {
     if let Some(rest) = path.strip_prefix("~/") {
         if let Some(home) = dirs::home_dir() {
@@ -616,6 +744,24 @@ mod tests {
         assert!(validate_runtime_profile_name("work_2").is_ok());
         assert!(validate_runtime_profile_name("bad/name").is_err());
         assert!(validate_runtime_profile_name("").is_err());
+    }
+
+    #[test]
+    fn test_legacy_runtime_state_without_process_identity_deserializes() {
+        let state: RuntimeState = serde_json::from_value(serde_json::json!({
+            "runtimeProfile": "legacy",
+            "userDataDir": "/tmp/legacy",
+            "browserPid": 42,
+            "headed": true,
+            "launchMode": "manual",
+            "devtoolsPort": null,
+            "wsUrl": null,
+            "launchRecord": null
+        }))
+        .unwrap();
+
+        assert_eq!(state.browser_pid, 42);
+        assert_eq!(state.process_identity, None);
     }
 
     #[test]
@@ -720,19 +866,25 @@ mod tests {
 
     #[test]
     fn test_runtime_status_marks_unreachable_devtools_port() {
-        let runtime_profile = format!(
-            "testunreachable{}",
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = env::temp_dir().join(format!(
+            "runtime-unreachable-{}-{}",
+            std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_micros()
-        );
-        let user_data_dir = env::temp_dir().join(format!("{}-user-data", runtime_profile));
-        let _ = clear_runtime_state(&runtime_profile);
+        ));
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let runtime_profile = "legacy-unreachable-runtime";
+        let user_data_dir = runtime_profile_user_data_dir(runtime_profile).unwrap();
+        fs::create_dir_all(&user_data_dir).unwrap();
         write_runtime_state(&RuntimeState {
-            runtime_profile: runtime_profile.clone(),
+            runtime_profile: runtime_profile.to_string(),
             user_data_dir: user_data_dir.display().to_string(),
             browser_pid: std::process::id(),
+            process_identity: None,
             headed: true,
             launch_mode: "automation".to_string(),
             devtools_port: Some(9),
@@ -741,14 +893,14 @@ mod tests {
         })
         .unwrap();
 
-        let status = runtime_status_with_user_data_dir(&runtime_profile, None).unwrap();
+        let status = runtime_status_with_user_data_dir(runtime_profile, None).unwrap();
 
-        assert!(status.browser_alive);
-        assert_eq!(status.devtools_port, Some(9));
+        assert!(!status.browser_alive);
+        assert_eq!(status.devtools_port, None);
         assert!(!status.devtools_reachable);
         assert!(status.targets.is_empty());
 
-        let _ = clear_runtime_state(&runtime_profile);
+        fs::remove_dir_all(&home).unwrap();
     }
 
     #[test]
@@ -773,6 +925,7 @@ mod tests {
             runtime_profile: runtime_profile.to_string(),
             user_data_dir: user_data_dir.display().to_string(),
             browser_pid: std::process::id(),
+            process_identity: None,
             headed: true,
             launch_mode: "automation".to_string(),
             devtools_port: Some(9),
@@ -787,8 +940,236 @@ mod tests {
             !status.browser_alive,
             "a live unrelated process that reused a stale browser PID must not own the runtime"
         );
-        assert!(pid_is_running(std::process::id()));
+        assert!(crate::process_identity::process_exists(std::process::id()));
 
+        fs::remove_dir_all(&home).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_runtime_close_refuses_to_signal_reused_unrelated_pid() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = env::temp_dir().join(format!(
+            "runtime-close-pid-reuse-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let runtime_profile = "runtime-close-reused-pid";
+        let user_data_dir = runtime_profile_user_data_dir(runtime_profile).unwrap();
+        fs::create_dir_all(&user_data_dir).unwrap();
+        let pid = std::process::id();
+        write_runtime_state(&RuntimeState {
+            runtime_profile: runtime_profile.to_string(),
+            user_data_dir: user_data_dir.display().to_string(),
+            browser_pid: pid,
+            process_identity: Some(RecordedProcessIdentity {
+                pid,
+                start_token: "linux:stale-boot:1".to_string(),
+                executable_path: Some("/opt/chrome".to_string()),
+                browser_family: Some("chrome".to_string()),
+            }),
+            headed: true,
+            launch_mode: "manual".to_string(),
+            devtools_port: None,
+            ws_url: None,
+            launch_record: None,
+        })
+        .unwrap();
+
+        let outcome = crate::native::action_runtime::runtime::terminate_runtime_browser(
+            Some(runtime_profile.to_string()),
+            pid,
+        )
+        .await;
+
+        assert!(!outcome.polite_close_attempted);
+        assert!(!outcome.force_kill_attempted);
+        assert!(outcome
+            .errors
+            .iter()
+            .any(|error| error.contains("Refusing to signal PID")));
+        assert!(
+            read_runtime_state(runtime_profile).unwrap().is_some(),
+            "a refused termination must preserve durable ownership evidence"
+        );
+        assert!(crate::process_identity::process_exists(pid));
+        fs::remove_dir_all(&home).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_runtime_status_keeps_matching_manual_no_cdp_process_live() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = env::temp_dir().join(format!(
+            "manual-process-identity-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let runtime_profile = "matching-manual-runtime";
+        let user_data_dir = runtime_profile_user_data_dir(runtime_profile).unwrap();
+        fs::create_dir_all(&user_data_dir).unwrap();
+        let executable = home.join("manual-chrome");
+        fs::copy("/bin/sleep", &executable).unwrap();
+        let mut child = std::process::Command::new(&executable)
+            .arg("30")
+            .spawn()
+            .unwrap();
+        let pid = child.id();
+        let process_identity = crate::process_identity::capture_process_identity(
+            pid,
+            Some(&executable),
+            Some("chrome"),
+        )
+        .unwrap();
+        write_runtime_state(&RuntimeState {
+            runtime_profile: runtime_profile.to_string(),
+            user_data_dir: user_data_dir.display().to_string(),
+            browser_pid: pid,
+            process_identity: Some(process_identity),
+            headed: true,
+            launch_mode: "manual".to_string(),
+            devtools_port: None,
+            ws_url: None,
+            launch_record: Some(RuntimeLaunchRecord {
+                browser_family: Some("chrome".to_string()),
+                ..RuntimeLaunchRecord::default()
+            }),
+        })
+        .unwrap();
+
+        let status = runtime_status_with_user_data_dir(runtime_profile, None).unwrap();
+
+        assert!(status.browser_alive);
+        assert_eq!(status.devtools_port, None);
+        assert!(!status.devtools_reachable);
+        let _ = child.kill();
+        let _ = child.wait();
+        fs::remove_dir_all(&home).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_legacy_browser_with_unrelated_devtools_endpoint_stays_ambiguous() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = env::temp_dir().join(format!(
+            "legacy-browser-endpoint-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let executable = home.join("legacy-chrome");
+        fs::copy("/bin/sleep", &executable).unwrap();
+        let mut child = std::process::Command::new(&executable)
+            .arg("30")
+            .spawn()
+            .unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let runtime_profile = "legacy-browser-endpoint";
+        let user_data_dir = runtime_profile_user_data_dir(runtime_profile).unwrap();
+        fs::create_dir_all(&user_data_dir).unwrap();
+        write_runtime_state(&RuntimeState {
+            runtime_profile: runtime_profile.to_string(),
+            user_data_dir: user_data_dir.display().to_string(),
+            browser_pid: child.id(),
+            process_identity: None,
+            headed: true,
+            launch_mode: "automation".to_string(),
+            devtools_port: Some(port),
+            ws_url: None,
+            launch_record: None,
+        })
+        .unwrap();
+
+        let status = runtime_status_with_user_data_dir(runtime_profile, None).unwrap();
+
+        assert!(!status.browser_alive);
+        assert!(!status.devtools_reachable);
+        assert_eq!(status.devtools_port, None);
+        assert!(status.targets.is_empty());
+        drop(listener);
+        let _ = child.kill();
+        let _ = child.wait();
+        fs::remove_dir_all(&home).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_profile_consistent_legacy_browser_retains_compatibility() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = env::temp_dir().join(format!(
+            "legacy-profile-consistent-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let runtime_profile = "legacy-profile-consistent";
+        let user_data_dir = runtime_profile_user_data_dir(runtime_profile).unwrap();
+        fs::create_dir_all(&user_data_dir).unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let executable = home.join("legacy-chrome");
+        fs::copy("/bin/bash", &executable).unwrap();
+        let mut child = std::process::Command::new(&executable)
+            .arg("-c")
+            .arg("sleep 30 & wait")
+            .arg("legacy-chrome")
+            .arg(format!("--user-data-dir={}", user_data_dir.display()))
+            .arg(format!("--remote-debugging-port={port}"))
+            .spawn()
+            .unwrap();
+        let server = thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut request = [0u8; 1024];
+                let _ = stream.read(&mut request);
+                let body = r#"[{"id":"page-legacy","type":"page","title":"Legacy","url":"https://example.test"}]"#;
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\nContent-Type: application/json\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = stream.write_all(response.as_bytes());
+            }
+        });
+        write_runtime_state(&RuntimeState {
+            runtime_profile: runtime_profile.to_string(),
+            user_data_dir: user_data_dir.display().to_string(),
+            browser_pid: child.id(),
+            process_identity: None,
+            headed: true,
+            launch_mode: "automation".to_string(),
+            devtools_port: Some(port),
+            ws_url: None,
+            launch_record: None,
+        })
+        .unwrap();
+
+        let status = runtime_status_with_user_data_dir(runtime_profile, None).unwrap();
+
+        assert!(status.browser_alive);
+        assert!(status.devtools_reachable);
+        assert_eq!(status.devtools_port, Some(port));
+        assert_eq!(status.targets[0].id, "page-legacy");
+        server.join().unwrap();
+        let _ = child.kill();
+        let _ = child.wait();
         fs::remove_dir_all(&home).unwrap();
     }
 
@@ -836,8 +1217,20 @@ mod tests {
         let _ = fs::remove_dir_all(&disk_root);
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_list_manual_runtime_browsers_keeps_non_cdp_browser_visible() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = env::temp_dir().join(format!(
+            "manual-inventory-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
         let runtime_profile = format!(
             "testmanual{}",
             std::time::SystemTime::now()
@@ -845,11 +1238,24 @@ mod tests {
                 .unwrap()
                 .as_micros()
         );
-        let user_data_dir = env::temp_dir().join(format!("{}-user-data", runtime_profile));
+        let user_data_dir = runtime_profile_user_data_dir(&runtime_profile).unwrap();
+        fs::create_dir_all(&user_data_dir).unwrap();
+        let executable = home.join("inventory-chrome");
+        fs::copy("/bin/sleep", &executable).unwrap();
+        let mut child = std::process::Command::new(&executable)
+            .arg("30")
+            .spawn()
+            .unwrap();
+        let pid = child.id();
         write_runtime_state(&RuntimeState {
             runtime_profile: runtime_profile.clone(),
             user_data_dir: user_data_dir.display().to_string(),
-            browser_pid: std::process::id(),
+            browser_pid: pid,
+            process_identity: crate::process_identity::capture_process_identity(
+                pid,
+                Some(&executable),
+                Some("chrome"),
+            ),
             headed: true,
             launch_mode: "manual_detached_login".to_string(),
             devtools_port: None,
@@ -872,7 +1278,7 @@ mod tests {
             .find(|browser| browser.runtime_profile == runtime_profile)
             .expect("manual runtime browser should remain in the operator inventory");
 
-        assert_eq!(browser.pid, std::process::id());
+        assert_eq!(browser.pid, pid);
         assert_eq!(browser.target_url.as_deref(), Some("https://x.com/"));
         assert_eq!(browser.display.as_deref(), Some(":11"));
         assert!(!browser.automation_available);
@@ -881,7 +1287,9 @@ mod tests {
             "finish_login_then_close_or_relaunch_attachable"
         );
 
+        let _ = child.kill();
+        let _ = child.wait();
         let _ = clear_runtime_state(&runtime_profile);
-        let _ = fs::remove_dir_all(user_data_dir);
+        let _ = fs::remove_dir_all(home);
     }
 }

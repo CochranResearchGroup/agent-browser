@@ -6,8 +6,6 @@
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::runtime_profile::pid_is_running;
-
 use super::service_model::{
     profile_seeding_handoff_id, BrowserCapabilityRegistry, BrowserProfile, BrowserSession,
     MonitorState, ProfileAllocationPolicy, ProfileKeyringPolicy, ProfileReadinessState,
@@ -644,7 +642,9 @@ pub fn refresh_profile_seeding_handoff_lifecycles(state: &mut ServiceState) -> u
         let Some(pid) = record.pid else {
             continue;
         };
-        if pid_is_running(pid) {
+        if crate::runtime_profile::runtime_process_assessment(Some(&record.profile_id), pid)
+            .preserves_evidence()
+        {
             continue;
         }
         let now = now_rfc3339();
@@ -1044,6 +1044,7 @@ pub fn reset_monitor_failures_in_repository(
 mod tests {
     use super::super::service_store::{JsonServiceStateStore, ServiceStateStore};
     use super::*;
+    use crate::test_utils::EnvGuard;
     use serde_json::json;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -1265,6 +1266,47 @@ mod tests {
             ProfileSeedingHandoffState::SeedingClosedUnverified
         );
         assert!(refreshed.closed_at.is_some());
+    }
+
+    #[test]
+    fn profile_seeding_handoff_treats_live_unrelated_pid_as_closed() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = unique_state_path("seeding-pid-reuse-home")
+            .parent()
+            .unwrap()
+            .to_path_buf();
+        std::fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let mut state = ServiceState::default();
+        upsert_profile(
+            &mut state,
+            "reused-pid-profile",
+            json!({
+                "name": "Reused PID Profile",
+                "allocation": "per_service",
+                "keyring": "basic_password_store",
+                "persistent": true,
+                "targetServiceIds": ["example"]
+            }),
+        )
+        .unwrap();
+        record_profile_seeding_handoff_launch(
+            &mut state,
+            "reused-pid-profile",
+            "example",
+            std::process::id(),
+            None,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(refresh_profile_seeding_handoff_lifecycles(&mut state), 1);
+        assert_eq!(
+            state.profile_seeding_handoffs["reused-pid-profile:example"].state,
+            ProfileSeedingHandoffState::SeedingClosedUnverified
+        );
+        assert!(crate::process_identity::process_exists(std::process::id()));
+        std::fs::remove_dir_all(home).unwrap();
     }
 
     #[test]
@@ -1713,8 +1755,8 @@ pub(crate) mod service_commands {
     use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
     use crate::native::state;
     use crate::runtime_profile::{
-        clear_runtime_state, looks_like_path, pid_is_running, read_devtools_port,
-        read_runtime_state, runtime_profile_user_data_dir,
+        clear_runtime_state, looks_like_path, read_devtools_port, read_runtime_state,
+        runtime_profile_user_data_dir,
     };
     use serde::{Deserialize, Serialize};
     use serde_json::{json, Map, Value};

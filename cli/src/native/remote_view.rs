@@ -11,8 +11,6 @@ use std::process::Command;
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use crate::runtime_profile::read_runtime_state;
-
 use super::service_model::{
     BrowserHost, DisplayAllocation, RoutePoolEntry, ServiceState, ViewStreamProvider,
 };
@@ -487,10 +485,8 @@ fn runtime_profile_pid_matches(runtime_profile: &str, browser_pid: Option<u32>) 
     let Some(browser_pid) = browser_pid else {
         return false;
     };
-    read_runtime_state(runtime_profile)
-        .ok()
-        .flatten()
-        .is_some_and(|state| state.browser_pid == browser_pid)
+    crate::runtime_profile::runtime_process_assessment(Some(runtime_profile), browser_pid)
+        .authorizes_adoption()
 }
 
 fn profile_id_matches_request(

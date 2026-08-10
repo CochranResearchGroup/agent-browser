@@ -74,7 +74,7 @@ use crate::native::webdriver::backend::{
 };
 use crate::native::webdriver::safari;
 use crate::runtime_profile::{
-    clear_runtime_state, looks_like_path, pid_is_running, read_devtools_port, read_runtime_state,
+    clear_runtime_state, looks_like_path, read_devtools_port, read_runtime_state,
     runtime_profile_user_data_dir,
 };
 use serde_json::{json, Map, Value};
@@ -1070,9 +1070,11 @@ impl DaemonState {
     }
 }
 pub(crate) fn runtime_profile_pid(runtime_profile: Option<&str>) -> Option<u32> {
-    runtime_profile
-        .and_then(|name| read_runtime_state(name).ok().flatten())
-        .map(|state| state.browser_pid)
+    let runtime_profile = runtime_profile?;
+    let state = read_runtime_state(runtime_profile).ok().flatten()?;
+    crate::runtime_profile::runtime_process_assessment(Some(runtime_profile), state.browser_pid)
+        .authorizes_adoption()
+        .then_some(state.browser_pid)
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ManagedRuntimeAttachTarget {
@@ -1093,15 +1095,20 @@ pub(crate) fn managed_runtime_attach_target(
 ) -> Option<ManagedRuntimeAttachTarget> {
     let runtime_profile = runtime_profile?;
     let state = read_runtime_state(runtime_profile).ok().flatten()?;
-    if !pid_is_running(state.browser_pid) {
+    let assessment = crate::runtime_profile::runtime_process_assessment(
+        Some(runtime_profile),
+        state.browser_pid,
+    );
+    if !assessment.authorizes_adoption() {
         return None;
     }
+    let browser_pid = state.browser_pid;
     let cdp_port = state
         .devtools_port
         .or_else(|| read_devtools_port(std::path::Path::new(&state.user_data_dir)))?;
     Some(ManagedRuntimeAttachTarget {
         runtime_profile: runtime_profile.to_string(),
-        browser_pid: state.browser_pid,
+        browser_pid,
         cdp_port,
     })
 }

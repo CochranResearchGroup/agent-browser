@@ -2106,6 +2106,7 @@ fn test_runtime_handoff_descriptor_accepts_legacy_schema_v1_without_active_targe
     .expect("schema-v1 handoff descriptor should remain readable");
     assert_eq!(descriptor.active_target_id, None);
 }
+#[cfg(unix)]
 #[test]
 fn test_managed_runtime_attach_target_uses_runtime_state() {
     let guard = EnvGuard::new(&["HOME"]);
@@ -2115,10 +2116,21 @@ fn test_managed_runtime_attach_target_uses_runtime_state() {
     let runtime_profile = "managed-attach-test";
     let user_data_dir = home.join("managed-user-data");
     fs::create_dir_all(&user_data_dir).expect("user data dir should be created");
+    let executable = home.join("managed-chrome");
+    fs::copy("/bin/sleep", &executable).expect("browser-looking fixture should be copied");
+    let mut child = std::process::Command::new(&executable)
+        .arg("30")
+        .spawn()
+        .expect("browser-looking fixture should start");
     crate::runtime_profile::write_runtime_state(&crate::runtime_profile::RuntimeState {
         runtime_profile: runtime_profile.to_string(),
         user_data_dir: user_data_dir.display().to_string(),
-        browser_pid: std::process::id(),
+        browser_pid: child.id(),
+        process_identity: crate::process_identity::capture_process_identity(
+            child.id(),
+            Some(&executable),
+            Some("chrome"),
+        ),
         headed: true,
         launch_mode: "automation".to_string(),
         devtools_port: Some(9333),
@@ -2129,9 +2141,13 @@ fn test_managed_runtime_attach_target_uses_runtime_state() {
     let target = managed_runtime_attach_target(Some(runtime_profile))
         .expect("live runtime state should produce attach target");
     assert_eq!(target.runtime_profile, runtime_profile);
-    assert_eq!(target.browser_pid, std::process::id());
+    assert_eq!(target.browser_pid, child.id());
     assert_eq!(target.cdp_port, 9333);
+    let _ = child.kill();
+    let _ = child.wait();
+    let _ = fs::remove_dir_all(&home);
 }
+#[cfg(unix)]
 #[test]
 fn test_managed_runtime_attach_target_reads_devtools_active_port() {
     let guard = EnvGuard::new(&["HOME"]);
@@ -2146,10 +2162,21 @@ fn test_managed_runtime_attach_target_reads_devtools_active_port() {
         "9444\n/devtools/browser/test",
     )
     .expect("DevToolsActivePort should be written");
+    let executable = home.join("managed-chrome");
+    fs::copy("/bin/sleep", &executable).expect("browser-looking fixture should be copied");
+    let mut child = std::process::Command::new(&executable)
+        .arg("30")
+        .spawn()
+        .expect("browser-looking fixture should start");
     crate::runtime_profile::write_runtime_state(&crate::runtime_profile::RuntimeState {
         runtime_profile: runtime_profile.to_string(),
         user_data_dir: user_data_dir.display().to_string(),
-        browser_pid: std::process::id(),
+        browser_pid: child.id(),
+        process_identity: crate::process_identity::capture_process_identity(
+            child.id(),
+            Some(&executable),
+            Some("chrome"),
+        ),
         headed: true,
         launch_mode: "automation".to_string(),
         devtools_port: None,
@@ -2160,8 +2187,11 @@ fn test_managed_runtime_attach_target_reads_devtools_active_port() {
     let target = managed_runtime_attach_target(Some(runtime_profile))
         .expect("DevToolsActivePort should produce attach target");
     assert_eq!(target.runtime_profile, runtime_profile);
-    assert_eq!(target.browser_pid, std::process::id());
+    assert_eq!(target.browser_pid, child.id());
     assert_eq!(target.cdp_port, 9444);
+    let _ = child.kill();
+    let _ = child.wait();
+    let _ = fs::remove_dir_all(&home);
 }
 #[test]
 fn test_managed_runtime_attach_is_only_for_compatible_headless_launches() {

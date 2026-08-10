@@ -95,7 +95,7 @@ use crate::native::stream_runtime::{
 use crate::native::webdriver::ios;
 use crate::native::webdriver::safari;
 use crate::runtime_profile::{
-    clear_runtime_state, looks_like_path, pid_is_running, read_devtools_port, read_runtime_state,
+    clear_runtime_state, looks_like_path, read_devtools_port, read_runtime_state,
     runtime_profile_user_data_dir,
 };
 use serde_json::{json, Map, Value};
@@ -279,59 +279,94 @@ pub(crate) fn browser_recovery_policy_source_from_env(
             }
         })
 }
-pub(crate) async fn terminate_runtime_browser(pid: u32) -> BrowserShutdownOutcome {
+pub(crate) async fn terminate_runtime_browser(
+    runtime_profile: Option<String>,
+    pid: u32,
+) -> BrowserShutdownOutcome {
     tokio::task::spawn_blocking(move || {
         let mut outcome = BrowserShutdownOutcome::default();
-        #[cfg(unix)]
+        let recorded = match runtime_browser_termination_identity(runtime_profile.as_deref(), pid) {
+            Ok(Some(recorded)) => recorded,
+            Ok(None) => return outcome,
+            Err(error) => {
+                outcome.errors.push(error);
+                return outcome;
+            }
+        };
+        let process = match crate::process_identity::VerifiedProcessTermination::open(&recorded) {
+            Ok(Some(process)) => process,
+            Ok(None) => return outcome,
+            Err(error) => {
+                outcome.errors.push(error);
+                return outcome;
+            }
+        };
+        for _ in 0..20 {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            match process.is_running() {
+                Ok(true) => {}
+                Ok(false) => return outcome,
+                Err(error) => {
+                    outcome.errors.push(error);
+                    return outcome;
+                }
+            }
+        }
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         {
-            for _ in 0..20 {
-                std::thread::sleep(std::time::Duration::from_millis(100));
-                if !pid_is_running(pid) {
-                    return outcome;
-                }
-            }
             outcome.polite_close_attempted = true;
-            let term_rc = unsafe { libc::kill(pid as i32, libc::SIGTERM) };
-            if term_rc != 0 {
-                let err = std::io::Error::last_os_error();
-                if err.raw_os_error() == Some(libc::ESRCH) {
+            match process.signal(crate::process_identity::VerifiedProcessSignal::Terminate) {
+                Ok(true) => {}
+                Ok(false) => {
                     outcome.polite_close_succeeded = true;
                     return outcome;
                 }
-                outcome.errors.push(format!(
-                    "Failed to politely terminate runtime browser PID {}: {}",
-                    pid, err
-                ));
-                outcome.polite_close_failed = true;
+                Err(error) => {
+                    outcome.errors.push(error);
+                    outcome.polite_close_failed = true;
+                    return outcome;
+                }
             }
             for _ in 0..20 {
                 std::thread::sleep(std::time::Duration::from_millis(100));
-                if !pid_is_running(pid) {
-                    outcome.polite_close_succeeded = true;
-                    return outcome;
+                match process.is_running() {
+                    Ok(true) => {}
+                    Ok(false) => {
+                        outcome.polite_close_succeeded = true;
+                        return outcome;
+                    }
+                    Err(error) => {
+                        outcome.errors.push(error);
+                        return outcome;
+                    }
                 }
             }
             outcome.polite_close_failed = true;
             outcome.force_kill_attempted = true;
-            let kill_rc = unsafe { libc::kill(pid as i32, libc::SIGKILL) };
-            if kill_rc != 0 {
-                let err = std::io::Error::last_os_error();
-                if err.raw_os_error() == Some(libc::ESRCH) {
+            match process.signal(crate::process_identity::VerifiedProcessSignal::Kill) {
+                Ok(true) => {}
+                Ok(false) => {
                     outcome.force_kill_succeeded = true;
                     return outcome;
                 }
-                outcome.errors.push(format!(
-                    "Failed to force kill runtime browser PID {}: {}",
-                    pid, err
-                ));
-                outcome.force_kill_failed = true;
-                return outcome;
+                Err(error) => {
+                    outcome.errors.push(error);
+                    outcome.force_kill_failed = true;
+                    return outcome;
+                }
             }
             for _ in 0..20 {
                 std::thread::sleep(std::time::Duration::from_millis(100));
-                if !pid_is_running(pid) {
-                    outcome.force_kill_succeeded = true;
-                    return outcome;
+                match process.is_running() {
+                    Ok(true) => {}
+                    Ok(false) => {
+                        outcome.force_kill_succeeded = true;
+                        return outcome;
+                    }
+                    Err(error) => {
+                        outcome.errors.push(error);
+                        return outcome;
+                    }
                 }
             }
             outcome.errors.push(format!(
@@ -343,21 +378,9 @@ pub(crate) async fn terminate_runtime_browser(pid: u32) -> BrowserShutdownOutcom
         #[cfg(windows)]
         {
             outcome.force_kill_attempted = true;
-            let status = std::process::Command::new("taskkill")
-                .args(["/PID", &pid.to_string(), "/T", "/F"])
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status();
-            match status {
-                Ok(status) if status.success() => outcome.force_kill_succeeded = true,
-                Ok(status) => outcome.errors.push(format!(
-                    "taskkill failed for runtime browser PID {} with status {}",
-                    pid, status
-                )),
-                Err(err) => outcome.errors.push(format!(
-                    "Failed to start taskkill for runtime browser PID {}: {}",
-                    pid, err
-                )),
+            match process.signal(crate::process_identity::VerifiedProcessSignal::Kill) {
+                Ok(_) => outcome.force_kill_succeeded = true,
+                Err(error) => outcome.errors.push(error),
             }
             if outcome.force_kill_attempted && !outcome.force_kill_succeeded {
                 outcome.force_kill_failed = true;
@@ -375,6 +398,45 @@ pub(crate) async fn terminate_runtime_browser(pid: u32) -> BrowserShutdownOutcom
         )],
         ..BrowserShutdownOutcome::default()
     })
+}
+
+fn runtime_browser_termination_identity(
+    runtime_profile: Option<&str>,
+    pid: u32,
+) -> Result<Option<crate::process_identity::RecordedProcessIdentity>, String> {
+    let assessment = crate::runtime_profile::runtime_process_assessment(runtime_profile, pid);
+    if assessment.ownership == crate::process_identity::RuntimeProcessOwnership::Missing {
+        return Ok(None);
+    }
+    if !assessment.authorizes_adoption() {
+        return Err(format!(
+            "Refusing to signal PID {} because runtime browser ownership is not proven ({})",
+            pid, assessment.reason
+        ));
+    }
+    let runtime_profile = runtime_profile.ok_or_else(|| {
+        format!(
+            "Refusing to signal PID {} without an authoritative runtime profile identity",
+            pid
+        )
+    })?;
+    let state = crate::runtime_profile::read_runtime_state(runtime_profile)?
+        .ok_or_else(|| format!("Refusing to signal PID {} without runtime state", pid))?;
+    if state.browser_pid != pid {
+        return Err(format!(
+            "Refusing to signal PID {} because runtime state records PID {}",
+            pid, state.browser_pid
+        ));
+    }
+    state
+        .process_identity
+        .ok_or_else(|| {
+            format!(
+            "Refusing to signal PID {} because legacy runtime state has no exact process identity",
+            pid
+        )
+        })
+        .map(Some)
 }
 impl Drop for DaemonState {
     fn drop(&mut self) {

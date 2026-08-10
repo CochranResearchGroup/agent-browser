@@ -1683,15 +1683,47 @@ async fn refresh_browser_record_health(browser: &mut BrowserProcess) {
         return;
     }
 
+    let endpoint = browser.cdp_endpoint.clone();
     if let Some(pid) = browser.pid {
-        if !pid_is_running(pid) {
+        let ownership =
+            crate::runtime_profile::runtime_process_assessment(browser.profile_id.as_deref(), pid)
+                .ownership;
+        if matches!(
+            ownership,
+            crate::process_identity::RuntimeProcessOwnership::Missing
+                | crate::process_identity::RuntimeProcessOwnership::ReusedUnrelated
+        ) {
             browser.health = BrowserHealth::ProcessExited;
-            browser.last_error = Some(format!("Recorded browser PID {} is no longer running", pid));
+            let identity_mismatch =
+                ownership == crate::process_identity::RuntimeProcessOwnership::ReusedUnrelated;
+            browser.last_error = Some(if identity_mismatch {
+                format!(
+                    "Recorded browser PID {} belongs to a different live process",
+                    pid
+                )
+            } else {
+                format!("Recorded browser PID {} is no longer running", pid)
+            });
             let details = serde_json::json!({
                 "currentReasonKind": recovery_reason_kind_for_health(browser.health).as_str(),
-                "failureClass": "browser_process_exited",
+                "failureClass": if identity_mismatch { "browser_process_identity_mismatch" } else { "browser_process_exited" },
                 "processExitCause": BrowserProcessExitCause::UnexpectedProcessExit.as_str(),
-                "processExitDetection": "persisted_pid_probe",
+                "processExitDetection": "persisted_process_identity",
+                "processExitPid": pid,
+            });
+            apply_browser_health_observation(browser, Some(&details));
+            return;
+        }
+        if ownership == crate::process_identity::RuntimeProcessOwnership::AmbiguousLegacyBrowser {
+            browser.health = BrowserHealth::Degraded;
+            browser.last_error = Some(format!(
+                "Recorded browser PID {} is live but process ownership is ambiguous",
+                pid
+            ));
+            let details = serde_json::json!({
+                "currentReasonKind": recovery_reason_kind_for_health(browser.health).as_str(),
+                "failureClass": "browser_process_identity_ambiguous",
+                "processExitDetection": "persisted_process_identity",
                 "processExitPid": pid,
             });
             apply_browser_health_observation(browser, Some(&details));
@@ -1699,8 +1731,13 @@ async fn refresh_browser_record_health(browser: &mut BrowserProcess) {
         }
     }
 
-    if let Some(endpoint) = browser.cdp_endpoint.as_deref() {
-        if cdp_endpoint_reachable(endpoint).await {
+    let endpoint_reachable = if let Some(endpoint) = endpoint.as_deref() {
+        cdp_endpoint_reachable(endpoint).await
+    } else {
+        false
+    };
+    if let Some(endpoint) = endpoint.as_deref() {
+        if endpoint_reachable {
             browser.health = BrowserHealth::Ready;
             browser.last_error = None;
             browser.last_health_observation = None;
@@ -2854,32 +2891,6 @@ struct CdpHttpTargetInfo {
     title: String,
     #[serde(default)]
     url: String,
-}
-
-#[cfg(unix)]
-fn pid_is_running(pid: u32) -> bool {
-    let rc = unsafe { libc::kill(pid as i32, 0) };
-    rc == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
-}
-
-#[cfg(windows)]
-fn pid_is_running(pid: u32) -> bool {
-    use windows_sys::Win32::Foundation::CloseHandle;
-    use windows_sys::Win32::System::Threading::{
-        GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
-    };
-    const STILL_ACTIVE: u32 = 259;
-
-    unsafe {
-        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
-        if handle == 0 {
-            return false;
-        }
-        let mut exit_code = 0;
-        let ok = GetExitCodeProcess(handle, &mut exit_code);
-        CloseHandle(handle);
-        ok != 0 && exit_code == STILL_ACTIVE
-    }
 }
 
 #[cfg(test)]
@@ -5509,6 +5520,36 @@ mod tests {
             .unwrap_or_default()
             .contains("no longer running"));
     }
+
+    #[tokio::test]
+    async fn refresh_rejects_live_unrelated_reused_pid_as_browser_owner() {
+        let mut state = service_state_with_browser(BrowserProcess {
+            id: "browser-reused-pid".to_string(),
+            profile_id: Some("missing-runtime-profile".to_string()),
+            health: BrowserHealth::Ready,
+            pid: Some(std::process::id()),
+            cdp_endpoint: Some("ws://127.0.0.1:9/devtools/browser/stale".to_string()),
+            ..BrowserProcess::default()
+        });
+
+        refresh_persisted_browser_health(&mut state).await;
+
+        let browser = &state.browsers["browser-reused-pid"];
+        assert_eq!(browser.health, BrowserHealth::ProcessExited);
+        assert!(browser
+            .last_error
+            .as_deref()
+            .unwrap_or_default()
+            .contains("different live process"));
+        assert_eq!(
+            browser
+                .last_health_observation
+                .as_ref()
+                .and_then(|observation| observation.failure_class.as_deref()),
+            Some("browser_process_identity_mismatch")
+        );
+        assert!(crate::process_identity::process_exists(std::process::id()));
+    }
 }
 #[allow(dead_code, unused_imports)]
 pub(crate) mod service_commands {
@@ -5567,8 +5608,8 @@ pub(crate) mod service_commands {
     use crate::native::service_trace::service_now_timestamp;
     use crate::native::state;
     use crate::runtime_profile::{
-        clear_runtime_state, looks_like_path, pid_is_running, read_devtools_port,
-        read_runtime_state, runtime_profile_user_data_dir,
+        clear_runtime_state, looks_like_path, read_devtools_port, read_runtime_state,
+        runtime_profile_user_data_dir,
     };
     use serde::{Deserialize, Serialize};
     use serde_json::{json, Map, Value};

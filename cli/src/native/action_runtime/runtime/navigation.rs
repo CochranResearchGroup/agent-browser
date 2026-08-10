@@ -35,7 +35,7 @@ use crate::native::stream_runtime::{
 };
 use crate::native::webdriver::backend::BrowserBackend;
 use crate::runtime_profile::{
-    clear_runtime_state, looks_like_path, pid_is_running, read_devtools_port, read_runtime_state,
+    clear_runtime_state, looks_like_path, read_devtools_port, read_runtime_state,
     runtime_profile_user_data_dir,
 };
 use serde_json::{json, Map, Value};
@@ -216,14 +216,17 @@ pub(crate) async fn handle_runtime_handoff_resume(
             state.session_id
         ));
     }
-    if descriptor
-        .browser_pid
-        .is_some_and(|browser_pid| !pid_is_running(browser_pid))
-    {
-        return Err(format!(
-            "Runtime handoff browser PID is no longer running for session '{}'",
-            state.session_id
-        ));
+    if let Some(browser_pid) = descriptor.browser_pid {
+        let assessment = crate::runtime_profile::runtime_process_assessment(
+            descriptor.runtime_profile.as_deref(),
+            browser_pid,
+        );
+        if !assessment.authorizes_adoption() {
+            return Err(format!(
+                "Runtime handoff browser PID no longer matches the recorded browser for session '{}' ({})",
+                state.session_id, assessment.reason
+            ));
+        }
     }
     let manager = BrowserManager::connect_cdp_for_handoff(
         &descriptor.cdp_url,
@@ -304,15 +307,19 @@ pub(crate) async fn handle_close(state: &mut DaemonState) -> Result<Value, Strin
             shutdown_outcome.force_kill_failed |= outcome.force_kill_failed;
             shutdown_outcome.errors.extend(outcome.errors);
             if let Some(runtime_profile) = runtime_profile {
-                let _ = clear_runtime_state(&runtime_profile);
+                if attached_runtime_profile.as_deref() != Some(runtime_profile.as_str())
+                    && browser_shutdown_confirmed(&shutdown_outcome)
+                {
+                    let _ = clear_runtime_state(&runtime_profile);
+                }
             }
         }
     }
-    if let Some(runtime_profile) = attached_runtime_profile {
+    if let Some(runtime_profile) = attached_runtime_profile.as_ref() {
         if close_behavior == CloseBehavior::CloseBrowser {
-            let pid = attached_browser_pid.or_else(|| runtime_profile_pid(Some(&runtime_profile)));
+            let pid = attached_browser_pid.or_else(|| runtime_profile_pid(Some(runtime_profile)));
             if let Some(pid) = pid {
-                let outcome = terminate_runtime_browser(pid).await;
+                let outcome = terminate_runtime_browser(Some(runtime_profile.clone()), pid).await;
                 shutdown_outcome.polite_close_attempted |= outcome.polite_close_attempted;
                 shutdown_outcome.polite_close_succeeded |= outcome.polite_close_succeeded;
                 shutdown_outcome.polite_close_failed |= outcome.polite_close_failed;
@@ -321,11 +328,13 @@ pub(crate) async fn handle_close(state: &mut DaemonState) -> Result<Value, Strin
                 shutdown_outcome.force_kill_failed |= outcome.force_kill_failed;
                 shutdown_outcome.errors.extend(outcome.errors);
             }
-            let _ = clear_runtime_state(&runtime_profile);
+            if browser_shutdown_confirmed(&shutdown_outcome) {
+                let _ = clear_runtime_state(runtime_profile);
+            }
         }
     } else if close_behavior == CloseBehavior::CloseBrowser {
         if let Some(pid) = attached_browser_pid {
-            let outcome = terminate_runtime_browser(pid).await;
+            let outcome = terminate_runtime_browser(None, pid).await;
             shutdown_outcome.polite_close_attempted |= outcome.polite_close_attempted;
             shutdown_outcome.polite_close_succeeded |= outcome.polite_close_succeeded;
             shutdown_outcome.polite_close_failed |= outcome.polite_close_failed;
@@ -336,6 +345,13 @@ pub(crate) async fn handle_close(state: &mut DaemonState) -> Result<Value, Strin
         }
     }
     state.browser = None;
+    if close_behavior == CloseBehavior::CloseBrowser
+        && !browser_shutdown_confirmed(&shutdown_outcome)
+    {
+        state.attached_runtime_profile = attached_runtime_profile;
+        state.attached_browser_pid = attached_browser_pid;
+        state.close_behavior = CloseBehavior::CloseBrowser;
+    }
     state.launch_hash = None;
     state.screencasting = false;
     state.reset_input_state();
@@ -366,6 +382,10 @@ pub(crate) async fn handle_close(state: &mut DaemonState) -> Result<Value, Strin
     }
     state.ref_map.clear();
     Ok(json!({ "closed" : true }))
+}
+
+fn browser_shutdown_confirmed(outcome: &BrowserShutdownOutcome) -> bool {
+    outcome.errors.is_empty() && !outcome.polite_close_failed && !outcome.force_kill_failed
 }
 pub(crate) async fn handle_snapshot(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
     let cancellation = state.current_cancellation.clone();
