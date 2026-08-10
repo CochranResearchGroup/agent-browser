@@ -568,6 +568,10 @@ third audit and does not rewrite the truthful cohesive-checkpoint history.
 | `b4ac97a1` | Persists `rollback_incomplete` quarantine before cleanup, promotes only confirmed compensation, and bounds process plus file lock acquisition |
 | `c7e73022` | Replaces opaque route payload wrappers with validated records, seals authorization before invocation construction, and derives the exact nine fallback predicates from immutable and post-attempt evidence |
 | `f9dcf599` | Moves private-helper tests beside owner modules, retains dispatcher and `execute_command` integration tests, and labels regex checks as structural regression guards |
+| `0748fdd4` | Records the terminal repair ownership, semantic-proof, and kernel-I/O boundaries |
+| `a94d5e38` | Adds the relocated owner fixtures to the canonical serialized runner |
+| `b3643394` | Aligns the recovery fixture with quarantine semantics and serializes the environment-mutating MCP partition |
+| `a1d6735f` | Serializes the service-state lock owner tests, corrects the relocated pre-cleanup quarantine fixture, and applies final Rust formatting |
 
 The responsibility inventory remains unchanged at 615 baseline records: 609
 moved and six retained. The separately reconciled predecessor definition is
@@ -600,6 +604,24 @@ physically impossible cancellation of such a syscall.
 All executor Cargo commands used the serialized WSL guard with four bounded
 jobs, `MemoryHigh=20G`, `MemoryMax=24G`, and `MemorySwapMax=4G`. No browser,
 ignored end-to-end test, install, doctor, live route, display, tenant, release,
-push, or external effect was performed. Final consolidated no-launch gate
-results and the exact terminal identity follow in the closeout update after
-the guarded run.
+push, or external effect was performed.
+
+The exact validated source checkpoint is
+`a1d6735f7bb820dd3973b3ef929dd5853a826eec`. The deterministic responsibility
+inventory SHA-256 remains
+`85cab84cc401d357f02be825fff2d323fd036915b348461df6b8173802b038a4`.
+Final consolidated no-launch validation at that checkpoint was:
+
+| Gate | Terminal result |
+| --- | --- |
+| Canonical guarded Rust suite | Green: 1,815 passed, 0 failed, 57 ignored; 1,079 parallel-safe tests plus 736 serialized tests |
+| Strict Rust format and Clippy | Green: `cargo fmt --check` and Clippy with `-D warnings`, both through `cargo-safe.sh` |
+| Actions architecture, remediation, and WSL safety | Green: six definitions, zero in-file tests, 902 lines, zero wrappers, `final=true` |
+| Service client | Green: generated contracts, types, exports, request, observability, fixed-input, managed-profile, and no-launch example gates |
+| Dashboard inspector actions | Green |
+| Validation selector and patch checks | Green; the selector was run from `290ded00`, and `git diff --check` passed |
+
+The final host snapshot retained 37 GiB available memory with 3.4 GiB of 32
+GiB swap in use. No guarded scope reached its cgroup limit, and no cgroup or
+kernel OOM failure occurred. Selector recommendations that explicitly require
+live CDP or browser behavior remain outside this no-live terminal source pass.
