@@ -3208,7 +3208,7 @@ mod tests {
     }
 
     #[test]
-    fn test_headed_display_fallback_not_used_when_display_set() {
+    fn test_headed_display_value_uses_ambient_display_when_set() {
         let guard = EnvGuard::new(&["DISPLAY"]);
         guard.set("DISPLAY", ":9");
 
@@ -3217,7 +3217,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(headed_display_value(&opts), None);
+        assert_eq!(headed_display_value(&opts), Some(":9".to_string()));
     }
 
     #[test]

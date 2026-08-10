@@ -1,38 +1,6 @@
 //! Serialized command routing, shared gates, timing, and response envelopes.
 
 #![allow(unused_imports)]
-use super::action_runtime::browser_operations::{
-    begin_confirmation, handle_addinitscript, handle_addscript, handle_addstyle, handle_auth_login,
-    handle_auth_save, handle_auth_show, handle_back, handle_boundingbox, handle_bringtofront,
-    handle_browser_pid, handle_cdp_url, handle_check, handle_clear, handle_click, handle_clipboard,
-    handle_console, handle_content, handle_cookies_clear, handle_cookies_get, handle_cookies_set,
-    handle_count, handle_credentials_delete, handle_credentials_get, handle_credentials_list,
-    handle_credentials_set, handle_dblclick, handle_deny, handle_device, handle_device_list,
-    handle_dialog, handle_diff_screenshot, handle_diff_snapshot, handle_diff_url, handle_dispatch,
-    handle_download, handle_drag, handle_errors, handle_evalhandle, handle_evaluate, handle_expose,
-    handle_fill, handle_find, handle_focus, handle_forward, handle_frame, handle_geolocation,
-    handle_getattribute, handle_getbyalttext, handle_getbylabel, handle_getbyplaceholder,
-    handle_getbyrole, handle_getbytestid, handle_getbytext, handle_getbytitle, handle_gettext,
-    handle_har_start, handle_har_stop, handle_headers, handle_highlight, handle_hover,
-    handle_http_credentials, handle_innerhtml, handle_innertext, handle_input_keyboard,
-    handle_input_mouse, handle_input_touch, handle_inputvalue, handle_inserttext, handle_inspect,
-    handle_ischecked, handle_isenabled, handle_isvisible, handle_keyboard, handle_keydown,
-    handle_keyup, handle_locale, handle_mainframe, handle_mouse, handle_mousedown,
-    handle_mousemove, handle_mouseup, handle_multiselect, handle_nth, handle_offline, handle_pause,
-    handle_pdf, handle_permissions, handle_press, handle_profiler_start, handle_profiler_stop,
-    handle_recording_restart, handle_recording_start, handle_recording_stop, handle_reload,
-    handle_request_detail, handle_requests, handle_responsebody, handle_route, handle_screenshot,
-    handle_scroll, handle_scrollintoview, handle_select, handle_selectall, handle_service_status,
-    handle_set_media, handle_setcontent, handle_setvalue, handle_state_load, handle_state_save,
-    handle_storage_clear, handle_storage_get, handle_storage_set, handle_stream_disable,
-    handle_stream_enable, handle_stream_status, handle_styles, handle_swipe, handle_tab_close,
-    handle_tab_handle_refresh, handle_tab_handle_release, handle_tab_list, handle_tab_new,
-    handle_tab_switch, handle_tap, handle_timezone, handle_title, handle_trace_start,
-    handle_trace_stop, handle_type, handle_uncheck, handle_unroute, handle_upload, handle_url,
-    handle_video_start, handle_video_stop, handle_view_focus, handle_view_takeover, handle_wait,
-    handle_waitfordownload, handle_waitforfunction, handle_waitforloadstate, handle_waitforurl,
-    handle_wheel, handle_window_new, take_response_warning,
-};
 use super::action_runtime::common::*;
 use super::action_runtime::runtime::{
     active_browser_profile_mismatch, auto_launch, detect_browser_stale_state, handle_cdp_attach,
@@ -41,29 +9,71 @@ use super::action_runtime::runtime::{
     handle_snapshot, persist_browser_recovery_started_from_persisted_state,
     persist_current_browser_stale_health, BackendType, DaemonState, PendingConfirmation,
 };
-use super::action_runtime::service_commands::{
-    handle_screencast_start, handle_screencast_stop, handle_service_access_plan,
-    handle_service_browser_capability_preference_guide,
-    handle_service_browser_capability_preflight, handle_service_browser_capability_registry_upsert,
-    handle_service_browser_close, handle_service_browser_repair, handle_service_browser_retry,
-    handle_service_browsers, handle_service_challenges, handle_service_events, handle_service_gc,
-    handle_service_incident_acknowledge, handle_service_incident_activity,
-    handle_service_incident_resolve, handle_service_incidents, handle_service_job_cancel,
-    handle_service_jobs, handle_service_monitor_delete, handle_service_monitor_reset_failures,
-    handle_service_monitor_state_update, handle_service_monitor_triage,
-    handle_service_monitor_upsert, handle_service_monitors, handle_service_monitors_run_due,
-    handle_service_profile_delete, handle_service_profile_freshness_update,
-    handle_service_profile_lookup, handle_service_profile_seeding_handoff,
-    handle_service_profile_seeding_handoff_update, handle_service_profile_upsert,
-    handle_service_profiles, handle_service_provider_delete, handle_service_provider_upsert,
-    handle_service_providers, handle_service_prune_retained, handle_service_reconcile,
-    handle_service_remedies_apply, handle_service_repair_retained, handle_service_resources,
-    handle_service_resources_monitor_summary, handle_service_resources_write_monitor_summary,
-    handle_service_route_pool_repair, handle_service_session_delete, handle_service_session_upsert,
-    handle_service_sessions, handle_service_site_policies, handle_service_site_policy_delete,
-    handle_service_site_policy_upsert, handle_service_tabs, handle_service_trace,
+use super::auth::{
+    handle_auth_show, handle_credentials_delete, handle_credentials_get, handle_credentials_list,
+    handle_credentials_set, handle_http_credentials,
 };
+use super::auth_workflow::{begin_confirmation, handle_auth_login, handle_auth_save, handle_deny};
+use super::browser_context::{
+    handle_bringtofront, handle_geolocation, handle_locale, handle_permissions, handle_timezone,
+};
+use super::browser_download::{handle_download, handle_waitfordownload};
+use super::browser_emulation::{handle_device, handle_set_media};
 use super::browser_emulation::{handle_user_agent, handle_viewport};
+use super::browser_evaluation::handle_evaluate;
+use super::browser_frame::{
+    handle_frame, handle_mainframe, handle_waitforfunction, handle_waitforloadstate,
+    handle_waitforurl,
+};
+use super::browser_input::{
+    handle_input_keyboard, handle_input_mouse, handle_input_touch, handle_inserttext,
+    handle_keyboard, handle_keydown, handle_keyup, handle_mouse, handle_mousedown,
+    handle_mousemove, handle_mouseup, handle_wheel,
+};
+use super::browser_inspection::{
+    handle_cdp_url, handle_console, handle_content, handle_errors, handle_inspect,
+    handle_setcontent, handle_styles, handle_title, handle_url,
+};
+use super::browser_lifecycle::{
+    handle_tab_close, handle_tab_handle_refresh, handle_tab_handle_release, handle_tab_switch,
+    handle_view_focus, handle_view_takeover,
+};
+use super::browser_locator::{
+    handle_drag, handle_evalhandle, handle_expose, handle_find, handle_getbyalttext,
+    handle_getbylabel, handle_getbyplaceholder, handle_getbyrole, handle_getbytestid,
+    handle_getbytext, handle_getbytitle, handle_multiselect, handle_nth, handle_pause,
+};
+use super::browser_navigation::{
+    handle_back, handle_forward, handle_reload, take_response_warning,
+};
+use super::browser_tabs::{handle_browser_pid, handle_tab_list, handle_tab_new, handle_window_new};
+use super::clipboard::handle_clipboard;
+use super::cookies::{handle_cookies_clear, handle_cookies_get, handle_cookies_set};
+use super::diff::{handle_diff_screenshot, handle_diff_snapshot, handle_diff_url};
+use super::element::{
+    handle_boundingbox, handle_count, handle_innerhtml, handle_innertext, handle_inputvalue,
+    handle_setvalue,
+};
+use super::interaction::{
+    handle_check, handle_clear, handle_click, handle_dblclick, handle_dialog, handle_dispatch,
+    handle_fill, handle_focus, handle_getattribute, handle_gettext, handle_highlight, handle_hover,
+    handle_ischecked, handle_isenabled, handle_isvisible, handle_press, handle_scroll,
+    handle_scrollintoview, handle_select, handle_selectall, handle_tap, handle_type,
+    handle_uncheck, handle_upload, handle_wait,
+};
+use super::network::{
+    handle_headers, handle_offline, handle_responsebody, handle_route, handle_unroute,
+};
+use super::network_archive::handle_har_stop;
+use super::network_requests::{handle_request_detail, handle_requests};
+use super::page_capture::handle_screenshot;
+use super::page_injection::{handle_addinitscript, handle_addscript, handle_addstyle};
+use super::page_pdf::handle_pdf;
+use super::providers::{handle_service_provider_delete, handle_service_provider_upsert};
+use super::recording::{
+    handle_har_start, handle_recording_restart, handle_recording_start, handle_recording_stop,
+    handle_video_start, handle_video_stop,
+};
 use super::remote_view::open::{
     handle_remote_view_open, handle_service_remote_view_browser_reattach,
     handle_service_remote_view_handoff_resolve, handle_service_remote_view_route_checkout,
@@ -73,11 +83,61 @@ use super::remote_view::viewer_lease::{
     handle_service_controller_lease_takeover, handle_service_viewer_lease_heartbeat,
     handle_service_viewer_lease_release, handle_service_viewer_lease_request,
 };
+use super::service_access::{
+    handle_service_browser_capability_preference_guide,
+    handle_service_browser_capability_preflight, handle_service_browser_capability_registry_upsert,
+    handle_service_profiles,
+};
+use super::service_activity::{handle_service_events, handle_service_incident_activity};
+use super::service_config::{
+    handle_service_profile_delete, handle_service_profile_freshness_update,
+    handle_service_profile_seeding_handoff_update, handle_service_profile_upsert,
+    handle_service_site_policy_delete, handle_service_site_policy_upsert,
+};
+use super::service_configuration_inventory::{
+    handle_service_challenges, handle_service_providers, handle_service_site_policies,
+};
 use super::service_diagnostics::handle_service_diagnostics;
 use super::service_file_transfer::handle_service_file_transfer;
+use super::service_health::{
+    handle_service_browser_close, handle_service_browser_repair, handle_service_browser_retry,
+    handle_service_reconcile,
+};
+use super::service_incidents::{
+    handle_service_incident_acknowledge, handle_service_incident_resolve, handle_service_incidents,
+    handle_service_remedies_apply,
+};
+use super::service_inventory::{
+    handle_service_browsers, handle_service_monitors, handle_service_profile_lookup,
+    handle_service_profile_seeding_handoff, handle_service_sessions, handle_service_tabs,
+};
+use super::service_jobs::{handle_service_job_cancel, handle_service_jobs};
+use super::service_lifecycle::{handle_service_session_delete, handle_service_session_upsert};
+use super::service_monitors::{
+    handle_service_monitor_delete, handle_service_monitor_reset_failures,
+    handle_service_monitor_state_update, handle_service_monitor_triage,
+    handle_service_monitor_upsert, handle_service_monitors_run_due,
+};
 use super::service_network_capture::handle_service_network_capture;
 use super::service_probe::handle_service_probe;
+use super::service_resources::{
+    handle_service_access_plan, handle_service_gc, handle_service_resources,
+    handle_service_resources_monitor_summary, handle_service_resources_write_monitor_summary,
+};
+use super::service_retained_state::{
+    handle_service_prune_retained, handle_service_repair_retained, handle_service_route_pool_repair,
+};
+use super::service_status_projection::handle_service_status;
+use super::service_trace::handle_service_trace;
 use super::service_ui_action::handle_service_ui_action;
+use super::state::{handle_state_load, handle_state_save};
+use super::storage::{handle_storage_clear, handle_storage_get, handle_storage_set};
+use super::stream_runtime::{handle_stream_disable, handle_stream_enable, handle_stream_status};
+use super::stream_screencast::{handle_screencast_start, handle_screencast_stop};
+use super::tracing::{
+    handle_profiler_start, handle_profiler_stop, handle_trace_start, handle_trace_stop,
+};
+use super::webdriver::mobile_gestures::{handle_device_list, handle_swipe};
 
 pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
     matches!(

@@ -12249,5 +12249,5 @@
       "deletionTest": "Deleting native::webdriver::mobile_gestures would force dispatch or its callers to reproduce the ordered mobile gestures decisions and safety checks"
     }
   ],
-  "finalArchitecture": false
+  "finalArchitecture": true
 }

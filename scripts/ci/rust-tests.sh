@@ -18,6 +18,7 @@ serial_filters=(
   "agent_env::tests"
   "connection::tests"
   "flags::tests"
+  "native::action_runtime::tests"
   "native::actions::tests"
   "native::auth::tests"
   "native::cdp::chrome::tests"

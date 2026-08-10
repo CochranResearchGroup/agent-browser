@@ -1,15 +1,18 @@
 #![allow(unused_imports)]
-use super::super::browser_operations::{
-    add_manual_login_hint_warning, har_cdp_protocol_to_http_version, har_extract_headers,
-    persist_service_owned_navigate_tab, resolve_fetch_paused, stream_file_path, write_engine_file,
-    write_extensions_file, write_provider_file,
-};
 use super::super::common::*;
 use super::capability::service_browser_id;
 use super::daemon::{launch_hash, BackendType, CloseBehavior, RuntimeHandoffDescriptor};
 use super::launch::terminate_runtime_browser;
 use super::recovery::{persist_closed_browser_health, runtime_profile_pid, DaemonState};
 use super::remote_headed::persist_current_browser_health;
+use crate::native::browser_navigation::{
+    add_manual_login_hint_warning, persist_service_owned_navigate_tab,
+};
+use crate::native::network::resolve_fetch_paused;
+use crate::native::network_archive::{har_cdp_protocol_to_http_version, har_extract_headers};
+use crate::native::stream_runtime::{
+    stream_file_path, write_engine_file, write_extensions_file, write_provider_file,
+};
 pub(crate) async fn handle_navigate(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
     let cancellation = state.current_cancellation.clone();
     let url = cmd

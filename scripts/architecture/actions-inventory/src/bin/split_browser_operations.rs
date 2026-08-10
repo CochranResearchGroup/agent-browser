@@ -200,11 +200,7 @@ fn target_file(repo: &Path, target: &str) -> Result<PathBuf, String> {
     Ok(repo.join("cli/src/native").join(format!("{relative}.rs")))
 }
 
-fn import_for(
-    target: &str,
-    nested_module: &str,
-    names: &[String],
-) -> Result<ItemUse, String> {
+fn import_for(target: &str, nested_module: &str, names: &[String]) -> Result<ItemUse, String> {
     let path = target
         .strip_prefix("native::")
         .ok_or_else(|| format!("unsupported_import_target:{target}"))?;
@@ -250,10 +246,10 @@ fn module_source(
                 browser_build_from_command, browser_build_label, browser_host_from_command,
                 handle_close, is_stale_page_session_error, launch_profile_from_sources,
                 optional_command_string, parse_control_input_provider, parse_view_stream_provider,
-                recover_browser_command_channel, registry_string_field,
-                relaunch_and_restore_page, remote_headed_display_isolation_from_command,
-                runtime_profile_from_sources, service_browser_id, target_service_ids_from_command,
-                target_url_from_command, validate_service_tab_handle_for_current_session,
+                recover_browser_command_channel, registry_string_field, relaunch_and_restore_page,
+                remote_headed_display_isolation_from_command, runtime_profile_from_sources,
+                service_browser_id, target_service_ids_from_command, target_url_from_command,
+                validate_service_tab_handle_for_current_session,
                 validate_service_tab_handle_route_for_current_session, DaemonState,
                 FetchPausedRequest, HarEntry, MouseState, RouteEntry, RouteResponse,
                 TrackedRequest, AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS,

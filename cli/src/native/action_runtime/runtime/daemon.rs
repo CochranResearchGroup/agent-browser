@@ -1,9 +1,4 @@
 #![allow(unused_imports)]
-use super::super::browser_operations::{
-    add_manual_login_hint_warning, har_cdp_protocol_to_http_version, har_extract_headers,
-    persist_service_owned_navigate_tab, resolve_fetch_paused, stream_file_path, write_engine_file,
-    write_extensions_file, write_provider_file,
-};
 use super::super::common::*;
 use super::capability::{
     browser_build_label, browser_capability_service_state, executable_path_is_operator_supplied,
@@ -17,6 +12,14 @@ use super::cdp_free_plan::{
 use super::launch::auto_launch;
 use super::recovery::DaemonState;
 use super::remote_headed::{parse_control_input_provider, parse_view_stream_provider};
+use crate::native::browser_navigation::{
+    add_manual_login_hint_warning, persist_service_owned_navigate_tab,
+};
+use crate::native::network::resolve_fetch_paused;
+use crate::native::network_archive::{har_cdp_protocol_to_http_version, har_extract_headers};
+use crate::native::stream_runtime::{
+    stream_file_path, write_engine_file, write_extensions_file, write_provider_file,
+};
 /// Wait strategy used by `auth_login` when navigating to the login page.
 ///
 /// We intentionally use `Load` (instead of `NetworkIdle`) because many modern

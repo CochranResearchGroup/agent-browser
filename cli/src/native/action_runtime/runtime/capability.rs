@@ -1,14 +1,17 @@
 #![allow(unused_imports)]
-use super::super::browser_operations::{
-    add_manual_login_hint_warning, har_cdp_protocol_to_http_version, har_extract_headers,
-    persist_service_owned_navigate_tab, resolve_fetch_paused, stream_file_path, write_engine_file,
-    write_extensions_file, write_provider_file,
-};
 use super::super::common::*;
 use super::cdp_free_plan::optional_command_string;
 use super::daemon::{
     account_ids_from_command, target_service_ids_from_command, BrowserCapabilityLaunchSelection,
     CloseBehavior,
+};
+use crate::native::browser_navigation::{
+    add_manual_login_hint_warning, persist_service_owned_navigate_tab,
+};
+use crate::native::network::resolve_fetch_paused;
+use crate::native::network_archive::{har_cdp_protocol_to_http_version, har_extract_headers};
+use crate::native::stream_runtime::{
+    stream_file_path, write_engine_file, write_extensions_file, write_provider_file,
 };
 pub(crate) fn browser_capability_service_state(cmd: &Value) -> Result<ServiceState, String> {
     if let Some(service_state) = cmd.get("serviceState") {

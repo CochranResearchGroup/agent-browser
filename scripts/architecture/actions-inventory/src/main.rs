@@ -8,7 +8,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use syn::spanned::Spanned;
 use syn::visit::{self, Visit};
-use syn::{Attribute, FnArg, ImplItemFn, ItemFn, ItemImpl, ItemMod, Pat, Signature, TraitItemFn};
+use syn::{
+    Attribute, FnArg, ImplItemFn, Item, ItemFn, ItemImpl, ItemMod, Pat, Signature, TraitItemFn,
+};
 
 const SCHEMA_VERSION: &str = "actions-responsibility-inventory.v1";
 const GENERATOR_VERSION: &str = "actions-inventory-syn.v1";
@@ -862,6 +864,72 @@ fn read_source(path: &Path) -> Result<String, String> {
         .map_err(|error| format!("source_read_failed:{}:{error}", path.display()))
 }
 
+fn rust_files_below(directory: &Path) -> Result<Vec<PathBuf>, String> {
+    let mut files = Vec::new();
+    for entry in fs::read_dir(directory)
+        .map_err(|error| format!("native_source_read_failed:{}:{error}", directory.display()))?
+    {
+        let path = entry
+            .map_err(|error| format!("native_source_entry_failed:{error}"))?
+            .path();
+        if path.is_dir() {
+            files.extend(rust_files_below(&path)?);
+        } else if path.extension().is_some_and(|extension| extension == "rs") {
+            files.push(path);
+        }
+    }
+    Ok(files)
+}
+
+fn check_final_module_boundaries(source_path: &Path, source: &str) -> Result<(), String> {
+    let parsed = syn::parse_file(source).map_err(|error| format!("parse_failed:{error}"))?;
+    if parsed
+        .items
+        .iter()
+        .any(|item| matches!(item, Item::Struct(_) | Item::Enum(_) | Item::Union(_)))
+    {
+        return Err("typed_domain_definition_in_actions".to_string());
+    }
+    let native_dir = source_path
+        .parent()
+        .ok_or_else(|| "actions_parent_missing".to_string())?;
+    for facade in [
+        native_dir.join("action_runtime/browser_operations.rs"),
+        native_dir.join("action_runtime/service_commands.rs"),
+        native_dir.join("action_runtime/remote_view_operations.rs"),
+    ] {
+        if facade.exists() {
+            return Err(format!(
+                "transitional_facade_still_present:{}",
+                facade.display()
+            ));
+        }
+    }
+    let allowed_dispatch_consumers = BTreeSet::from([
+        PathBuf::from("action_runtime/tests.rs"),
+        PathBuf::from("control_plane.rs"),
+        PathBuf::from("e2e_tests.rs"),
+        PathBuf::from("parity_tests.rs"),
+        PathBuf::from("stream/http.rs"),
+    ]);
+    for path in rust_files_below(native_dir)? {
+        let relative = path
+            .strip_prefix(native_dir)
+            .map_err(|error| format!("native_relative_path_failed:{error}"))?;
+        if relative == Path::new("actions.rs") || allowed_dispatch_consumers.contains(relative) {
+            continue;
+        }
+        let candidate = read_source(&path)?;
+        if candidate.contains("crate::native::actions")
+            || candidate.contains("super::actions")
+            || candidate.contains("native::actions")
+        {
+            return Err(format!("reverse_actions_import:{}", relative.display()));
+        }
+    }
+    Ok(())
+}
+
 fn record_for(definition: &RawDefinition, test_ids: &[String]) -> DefinitionRecord {
     let (id, full_digest, signature) = stable_identity(definition);
     let (packet, responsibility, target_module) =
@@ -1143,6 +1211,7 @@ fn check(source_path: &Path, inventory_path: &Path) -> Result<(), String> {
         .filter(|record| record.wrapper_owner.is_some())
         .count();
     if inventory.final_architecture {
+        check_final_module_boundaries(source_path, &source)?;
         if source.lines().count() > 2_500 {
             return Err(format!(
                 "actions_line_budget_exceeded:{}",
@@ -1174,6 +1243,10 @@ fn check(source_path: &Path, inventory_path: &Path) -> Result<(), String> {
         for forbidden in [
             "reqwest::",
             "std::process::Command",
+            "LockedServiceStateRepository",
+            "ServiceState",
+            ".mutate(",
+            "send_command(",
             "route_pool_entries",
             "acquisition_leases",
             "durable_remote_view_handoffs",

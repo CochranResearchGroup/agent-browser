@@ -1,9 +1,4 @@
 #![allow(unused_imports)]
-use super::super::browser_operations::{
-    add_manual_login_hint_warning, har_cdp_protocol_to_http_version, har_extract_headers,
-    persist_service_owned_navigate_tab, resolve_fetch_paused, stream_file_path, write_engine_file,
-    write_extensions_file, write_provider_file,
-};
 use super::super::common::*;
 use super::capability::service_browser_id;
 use super::cdp_free_plan::{
@@ -18,6 +13,14 @@ use super::daemon::{
 use super::launch::browser_recovery_policy_config_from_env;
 use super::profile_lease::{
     allow_duplicate_profile_lane_from_command, service_browser_health_counts_as_live,
+};
+use crate::native::browser_navigation::{
+    add_manual_login_hint_warning, persist_service_owned_navigate_tab,
+};
+use crate::native::network::resolve_fetch_paused;
+use crate::native::network_archive::{har_cdp_protocol_to_http_version, har_extract_headers};
+use crate::native::stream_runtime::{
+    stream_file_path, write_engine_file, write_extensions_file, write_provider_file,
 };
 pub(crate) fn persist_browser_recovery_started_from_persisted_state(
     state: &DaemonState,
