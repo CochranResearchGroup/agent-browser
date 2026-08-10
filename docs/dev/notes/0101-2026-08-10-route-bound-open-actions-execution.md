@@ -284,3 +284,10 @@ actions architecture: definitions=8 tests=0 lines=815 wrappers=0
 The untracked `scripts/architecture/actions-inventory/target/` directory is a
 225 MiB build-only cache. It remains preserved locally and excluded from
 source checkpoints.
+
+Structural caller analysis found no caller for the superseded
+`remote_view_open_acquire_tab` state-coupled path; its only wait-helper caller
+was inside that same dead path. Both functions were removed with deterministic
+source-range verification. The generic runtime target coordinator remains at
+366 lines, strict Clippy is green, and all four scripted runtime tests still
+pass.
