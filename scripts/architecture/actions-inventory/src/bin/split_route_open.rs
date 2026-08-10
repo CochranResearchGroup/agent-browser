@@ -103,8 +103,12 @@ fn module_for(item: &Item) -> Option<&'static str> {
 
 fn add_native_parent(path: &mut syn::Path) {
     let mut segments = path.segments.iter();
-    if segments.next().is_some_and(|segment| segment.ident == "super")
-        && segments.next().is_some_and(|segment| segment.ident == "super")
+    if segments
+        .next()
+        .is_some_and(|segment| segment.ident == "super")
+        && segments
+            .next()
+            .is_some_and(|segment| segment.ident == "super")
     {
         path.segments.insert(
             0,
@@ -146,9 +150,15 @@ fn declarations(grouped: &BTreeMap<&str, Vec<Item>>) -> BTreeMap<String, String>
                 declarations.insert(name, (*module).to_string());
             }
             if let Item::Impl(item_impl) = item {
-                let self_type = item_impl.self_ty.to_token_stream().to_string().replace(' ', "");
+                let self_type = item_impl
+                    .self_ty
+                    .to_token_stream()
+                    .to_string()
+                    .replace(' ', "");
                 if item_impl.trait_.is_none() {
-                    declarations.entry(self_type).or_insert_with(|| (*module).to_string());
+                    declarations
+                        .entry(self_type)
+                        .or_insert_with(|| (*module).to_string());
                 }
             }
         }
@@ -164,14 +174,20 @@ fn module_file(
     for item in &mut items {
         NativeParentRewriter.visit_item_mut(item);
     }
-    let body = items.iter().map(ToTokens::to_token_stream).map(|value| value.to_string()).collect::<String>();
+    let body = items
+        .iter()
+        .map(ToTokens::to_token_stream)
+        .map(|value| value.to_string())
+        .collect::<String>();
     let mut imports: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
     for (name, owner) in declarations {
         if owner != module && body.contains(name) {
             imports.entry(owner.as_str()).or_default().insert(name);
         }
     }
-    let mut generated: Vec<Item> = vec![parse_quote!(use super::shared::*;)];
+    let mut generated: Vec<Item> = vec![parse_quote!(
+        use super::shared::*;
+    )];
     for (owner, names) in imports {
         let owner = syn::Ident::new(owner, Span::call_site());
         let names: Vec<_> = names
@@ -222,7 +238,11 @@ fn run() -> Result<(), String> {
     for module in MODULES {
         write(
             &directory.join(format!("{module}.rs")),
-            module_file(module, grouped.remove(module).unwrap_or_default(), &declarations),
+            module_file(
+                module,
+                grouped.remove(module).unwrap_or_default(),
+                &declarations,
+            ),
         )?;
     }
     let declarations = MODULES
@@ -236,7 +256,10 @@ fn run() -> Result<(), String> {
             "//! Route-bound browser acquisition and durable handoff resolution.\n\n{declarations}\nmod shared;\n\n#[cfg(test)]\nmod tests;\n"
         ),
     )?;
-    println!("split route-bound open into {} explicit modules", MODULES.len());
+    println!(
+        "split route-bound open into {} explicit modules",
+        MODULES.len()
+    );
     Ok(())
 }
 
