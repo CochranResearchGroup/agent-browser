@@ -389,7 +389,8 @@ fn evaluate_runtime_process(
             && state.browser_pid == pid
             && paths_refer_to_same_location(Path::new(&state.user_data_dir), user_data_dir)
             && detected_devtools_port.is_some_and(|port| {
-                observation_command_line_matches_profile(&observation, user_data_dir, port)
+                read_devtools_port(user_data_dir) == Some(port)
+                    && observation_command_line_matches_profile(&observation, user_data_dir, port)
             })
     });
     let targets = if may_probe_exact || may_probe_legacy {
@@ -426,11 +427,11 @@ fn observation_command_line_matches_profile(
     let Some(arguments) = observed.command_line.as_deref() else {
         return false;
     };
+    let requested_port = command_line_option_value(arguments, "--remote-debugging-port")
+        .and_then(|value| value.parse::<u16>().ok());
     command_line_option_value(arguments, "--user-data-dir")
         .is_some_and(|value| paths_refer_to_same_location(Path::new(value), user_data_dir))
-        && command_line_option_value(arguments, "--remote-debugging-port")
-            .and_then(|value| value.parse::<u16>().ok())
-            == Some(devtools_port)
+        && (requested_port == Some(0) || requested_port == Some(devtools_port))
 }
 
 fn command_line_option_value<'a>(arguments: &'a [String], option: &str) -> Option<&'a str> {
@@ -1081,6 +1082,11 @@ mod tests {
         let runtime_profile = "legacy-browser-endpoint";
         let user_data_dir = runtime_profile_user_data_dir(runtime_profile).unwrap();
         fs::create_dir_all(&user_data_dir).unwrap();
+        fs::write(
+            user_data_dir.join("DevToolsActivePort"),
+            format!("{port}\n/devtools/browser/unrelated\n"),
+        )
+        .unwrap();
         write_runtime_state(&RuntimeState {
             runtime_profile: runtime_profile.to_string(),
             user_data_dir: user_data_dir.display().to_string(),
@@ -1108,7 +1114,7 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn test_profile_consistent_legacy_browser_retains_compatibility() {
+    fn test_profile_consistent_legacy_browser_with_ephemeral_port_retains_compatibility() {
         let guard = EnvGuard::new(&["HOME"]);
         let home = env::temp_dir().join(format!(
             "legacy-profile-consistent-{}-{}",
@@ -1132,9 +1138,14 @@ mod tests {
             .arg("sleep 30 & wait")
             .arg("legacy-chrome")
             .arg(format!("--user-data-dir={}", user_data_dir.display()))
-            .arg(format!("--remote-debugging-port={port}"))
+            .arg("--remote-debugging-port=0")
             .spawn()
             .unwrap();
+        fs::write(
+            user_data_dir.join("DevToolsActivePort"),
+            format!("{port}\n/devtools/browser/profile-consistent\n"),
+        )
+        .unwrap();
         let server = thread::spawn(move || {
             if let Ok((mut stream, _)) = listener.accept() {
                 let mut request = [0u8; 1024];
