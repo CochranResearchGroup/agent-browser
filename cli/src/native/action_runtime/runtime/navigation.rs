@@ -5,7 +5,6 @@ use super::super::browser_operations::{
     write_extensions_file, write_provider_file,
 };
 use super::super::common::*;
-use super::super::service_workflows::{runtime_handoff_path, write_runtime_handoff};
 use super::capability::service_browser_id;
 use super::daemon::{launch_hash, BackendType, CloseBehavior, RuntimeHandoffDescriptor};
 use super::launch::terminate_runtime_browser;
@@ -386,4 +385,60 @@ pub(crate) async fn handle_snapshot(cmd: &Value, state: &mut DaemonState) -> Res
         })
         .collect();
     Ok(json!({ "snapshot" : tree, "origin" : url, "refs" : refs }))
+}
+pub(crate) fn runtime_handoff_path(session_name: &str) -> PathBuf {
+    get_socket_dir().join(format!("{}.handoff.json", session_name))
+}
+pub(crate) fn write_runtime_handoff(
+    descriptor: &RuntimeHandoffDescriptor,
+) -> Result<PathBuf, String> {
+    let path = runtime_handoff_path(&descriptor.session_name);
+    let parent = path
+        .parent()
+        .ok_or_else(|| format!("Runtime handoff path has no parent: {}", path.display()))?;
+    fs::create_dir_all(parent).map_err(|error| {
+        format!(
+            "Failed to create runtime handoff directory {}: {}",
+            parent.display(),
+            error
+        )
+    })?;
+    let staged = path.with_extension(format!("handoff.json.next-{}", std::process::id()));
+    let payload = serde_json::to_vec_pretty(descriptor)
+        .map_err(|error| format!("Failed to serialize runtime handoff: {}", error))?;
+    fs::write(&staged, payload).map_err(|error| {
+        format!(
+            "Failed to stage runtime handoff {}: {}",
+            staged.display(),
+            error
+        )
+    })?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&staged, fs::Permissions::from_mode(0o600)).map_err(|error| {
+            format!(
+                "Failed to secure runtime handoff {}: {}",
+                staged.display(),
+                error
+            )
+        })?;
+    }
+    if path.exists() {
+        fs::remove_file(&path).map_err(|error| {
+            format!(
+                "Failed to replace runtime handoff {}: {}",
+                path.display(),
+                error
+            )
+        })?;
+    }
+    fs::rename(&staged, &path).map_err(|error| {
+        format!(
+            "Failed to publish runtime handoff {}: {}",
+            path.display(),
+            error
+        )
+    })?;
+    Ok(path)
 }

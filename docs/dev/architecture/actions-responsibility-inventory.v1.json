@@ -4071,12 +4071,12 @@
       "baselineStartLine": 9340,
       "baselineEndLine": 9342,
       "associatedTestIds": [],
-      "packet": "P0101-D01",
-      "responsibility": "service diagnostics workflow",
-      "targetModule": "native::service_diagnostics",
+      "packet": "P0101-C",
+      "responsibility": "browser lifecycle and shared command preparation",
+      "targetModule": "native::browser_lifecycle",
       "movementStatus": "moved",
       "wrapperOwner": null,
-      "deletionPacket": "P0101-D01",
+      "deletionPacket": "P0101-C",
       "finalDisposition": "move"
     },
     {
@@ -11475,6 +11475,7 @@
       "targetModule": "native::browser_lifecycle",
       "ownedInvariant": "browser lifecycle and shared command preparation",
       "interfaceOperations": [
+        "runtime_handoff_path",
         "write_runtime_handoff",
         "read_runtime_handoff",
         "current_service_browser_host",
@@ -11916,8 +11917,7 @@
         "bounded_usize",
         "cap_array_items",
         "recent_request_summaries",
-        "truncate_utf8",
-        "runtime_handoff_path"
+        "truncate_utf8"
       ],
       "productionCallers": [
         "native::action_dispatch"

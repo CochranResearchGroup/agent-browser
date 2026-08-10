@@ -5,7 +5,6 @@ use super::super::browser_operations::{
     write_extensions_file, write_provider_file,
 };
 use super::super::common::*;
-use super::super::service_workflows::{runtime_handoff_path, write_runtime_handoff};
 use super::remote_headed::remote_headed_view_streams_from_command;
 pub(crate) struct CdpFreeLaunchPlan {
     pub(crate) launch_options: LaunchOptions,

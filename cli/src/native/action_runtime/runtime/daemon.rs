@@ -5,7 +5,6 @@ use super::super::browser_operations::{
     write_extensions_file, write_provider_file,
 };
 use super::super::common::*;
-use super::super::service_workflows::{runtime_handoff_path, write_runtime_handoff};
 use super::capability::{
     browser_build_label, browser_capability_service_state, executable_path_is_operator_supplied,
     select_browser_capability_launch_binding,

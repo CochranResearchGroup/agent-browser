@@ -1,4 +1,5 @@
 #![allow(unused_imports)]
+use super::super::service_diagnostics::truncate_utf8;
 use super::common::*;
 use super::runtime::{
     is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
@@ -8,7 +9,6 @@ use super::runtime::{
     AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
     AUTH_LOGIN_WAIT_UNTIL,
 };
-use super::service_workflows::truncate_utf8;
 pub(crate) fn persist_service_owned_navigate_tab(
     cmd: &Value,
     session_id: &str,

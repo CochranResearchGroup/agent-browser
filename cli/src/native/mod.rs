@@ -60,6 +60,10 @@ pub mod service_config;
 #[allow(dead_code)]
 pub mod service_contracts;
 #[allow(dead_code)]
+pub mod service_diagnostics;
+#[allow(dead_code)]
+pub mod service_file_transfer;
+#[allow(dead_code)]
 pub mod service_health;
 #[allow(dead_code)]
 pub mod service_incidents;
@@ -72,6 +76,10 @@ pub mod service_model;
 #[allow(dead_code)]
 pub mod service_monitors;
 #[allow(dead_code)]
+pub mod service_network_capture;
+#[allow(dead_code)]
+pub mod service_probe;
+#[allow(dead_code)]
 pub mod service_request;
 #[allow(dead_code)]
 pub mod service_resources;
@@ -81,6 +89,8 @@ pub mod service_status_projection;
 pub mod service_store;
 #[allow(dead_code)]
 pub mod service_trace;
+#[allow(dead_code)]
+pub mod service_ui_action;
 #[allow(dead_code)]
 pub mod snapshot;
 #[allow(dead_code)]

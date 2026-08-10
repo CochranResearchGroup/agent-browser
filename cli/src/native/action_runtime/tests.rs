@@ -3,6 +3,8 @@ use super::common::*;
 use super::*;
 use crate::native::actions::*;
 use crate::native::remote_view::open::*;
+use crate::native::service_diagnostics::*;
+use crate::native::service_file_transfer::*;
 use crate::native::service_health::{
     close_health_from_outcome, recovery_policy_for_next_attempt, stale_browser_process_record,
 };
@@ -35,7 +37,10 @@ use crate::native::service_model::{
 };
 use crate::native::service_model::{JobState, ServiceJob};
 use crate::native::service_model::{LeaseState, ProfileAllocationPolicy};
+use crate::native::service_network_capture::*;
+use crate::native::service_probe::*;
 use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
+use crate::native::service_ui_action::*;
 use crate::test_utils::EnvGuard;
 use std::collections::BTreeMap;
 use std::fs;

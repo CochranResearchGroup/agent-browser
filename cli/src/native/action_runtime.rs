@@ -3,7 +3,6 @@ pub(crate) mod common;
 pub(crate) mod remote_view_operations;
 pub(crate) mod runtime;
 pub(crate) mod service_commands;
-pub(crate) mod service_workflows;
 
 #[cfg(test)]
 pub(crate) use browser_operations::{
@@ -26,9 +25,6 @@ pub(crate) use runtime::*;
 #[cfg(test)]
 #[allow(unused_imports)]
 pub(crate) use service_commands::*;
-#[cfg(test)]
-#[allow(unused_imports)]
-pub(crate) use service_workflows::*;
 
 #[cfg(test)]
 mod tests;

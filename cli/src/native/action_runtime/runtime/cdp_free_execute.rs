@@ -5,7 +5,6 @@ use super::super::browser_operations::{
     write_extensions_file, write_provider_file,
 };
 use super::super::common::*;
-use super::super::service_workflows::{runtime_handoff_path, write_runtime_handoff};
 use super::capability::service_browser_id;
 use super::cdp_free_plan::{
     optional_command_string, remote_headed_display_isolation, CdpFreeLaunchPlan,

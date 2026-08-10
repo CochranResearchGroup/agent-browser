@@ -68,15 +68,16 @@ use super::action_runtime::service_commands::{
     handle_service_sessions, handle_service_site_policies, handle_service_site_policy_delete,
     handle_service_site_policy_upsert, handle_service_tabs, handle_service_trace,
 };
-use super::action_runtime::service_workflows::{
-    handle_service_diagnostics, handle_service_file_transfer, handle_service_network_capture,
-    handle_service_probe, handle_service_ui_action,
-};
 use super::remote_view::open::{
     handle_remote_view_open, handle_service_remote_view_browser_reattach,
     handle_service_remote_view_handoff_resolve, handle_service_remote_view_route_checkout,
     handle_service_remote_view_route_preflight, handle_service_remote_view_route_release,
 };
+use super::service_diagnostics::handle_service_diagnostics;
+use super::service_file_transfer::handle_service_file_transfer;
+use super::service_network_capture::handle_service_network_capture;
+use super::service_probe::handle_service_probe;
+use super::service_ui_action::handle_service_ui_action;
 
 pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
     matches!(
