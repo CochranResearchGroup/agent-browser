@@ -59,3 +59,7 @@ _Avoid_: Mock browser, integration runtime
 **Coordinator-owned completion**:
 The worker signals timeout or cancellation through the route-bound token and retains the coordinator future until bounded compensation reports a terminal state.
 _Avoid_: Post-timeout join, background cleanup
+
+**Rollback quarantine**:
+A terminal fail-closed acquisition record used when compensation cannot confirm every owned external effect before the total deadline. It removes active checkout and blocks an equivalent acquisition until explicit recovery.
+_Avoid_: Partial rollback, cleanup warning

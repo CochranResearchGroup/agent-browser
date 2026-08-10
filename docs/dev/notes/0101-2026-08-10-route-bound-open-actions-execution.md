@@ -247,3 +247,40 @@ strict clippy ... ok
 
 The control-plane tests use only deterministic futures and cooperative tokens.
 They perform no browser or live runtime effect.
+
+### Deep route-open ownership and terminal quarantine
+
+The 4,655-line recovery file is now a 30-line facade over eleven explicit
+owners. No sibling module uses a wildcard import and no child imports the root
+facade. The production module sizes after formatting are:
+
+```text
+shared 14        proof 78          compensation 116
+deadline 237     operator_route 265 route_pool 305
+runtime 310      planner 407        preflight 478
+route_lifecycle 687                 target 818
+coordinator 853
+```
+
+`rollback_incomplete` is now a typed terminal lease lifecycle state. A failed
+cleanup confirmation records the unconfirmed external effects, removes the
+active route checkout, quarantines the affected route-pool identity, and blocks
+a new acquisition matching the quarantined browser, session, route, or display.
+Established route, display, browser, and reused-target state remains restored
+or preserved.
+
+Guarded validation:
+
+```text
+cargo check ... green (17.01s after path repair)
+rollback_failure_restores_lease_and_summarizes_cleanup ... ok
+rollback_incomplete_is_terminal_and_never_publishable ... ok
+remote_view::open::tests ... 4 passed
+strict clippy ... green (55.10s)
+largest scope: run-u1667.scope, 5.2G memory peak, 0B swap peak
+actions architecture: definitions=8 tests=0 lines=815 wrappers=0
+```
+
+The untracked `scripts/architecture/actions-inventory/target/` directory is a
+225 MiB build-only cache. It remains preserved locally and excluded from
+source checkpoints.

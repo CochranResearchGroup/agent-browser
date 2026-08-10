@@ -13,6 +13,7 @@ pub enum RouteBoundLeaseState {
     ProofReady,
     Finalized,
     RolledBack,
+    RollbackIncomplete,
     FailedDiagnostic,
 }
 
@@ -28,6 +29,7 @@ impl RouteBoundLeaseState {
             Self::ProofReady => ("pending", "proof_ready"),
             Self::Finalized => ("completed", "checked_out"),
             Self::RolledBack => ("failed", "rollback_complete"),
+            Self::RollbackIncomplete => ("failed", "rollback_incomplete"),
             Self::FailedDiagnostic => ("failed", "failed_diagnostic"),
         }
     }
@@ -43,6 +45,7 @@ impl RouteBoundLeaseState {
             ("pending", "proof_ready") => Some(Self::ProofReady),
             ("completed", "checked_out") => Some(Self::Finalized),
             ("failed", "rollback_complete") => Some(Self::RolledBack),
+            ("failed", "rollback_incomplete") => Some(Self::RollbackIncomplete),
             ("failed", "failed_diagnostic") => Some(Self::FailedDiagnostic),
             _ => None,
         }
@@ -66,6 +69,14 @@ impl RouteBoundLeaseState {
                 | (BrowserAttached, RolledBack)
                 | (TabAcquired, RolledBack)
                 | (ProofReady, RolledBack)
+                | (Requested, RollbackIncomplete)
+                | (Planned, RollbackIncomplete)
+                | (Reserved, RollbackIncomplete)
+                | (DisplayReady, RollbackIncomplete)
+                | (BrowserAttached, RollbackIncomplete)
+                | (TabAcquired, RollbackIncomplete)
+                | (ProofReady, RollbackIncomplete)
+                | (RolledBack, RollbackIncomplete)
                 | (Requested, FailedDiagnostic)
                 | (Planned, FailedDiagnostic)
                 | (Reserved, FailedDiagnostic)
@@ -81,8 +92,10 @@ impl RouteBoundLeaseState {
     }
 
     pub fn failure_publishable_as_live_control(self) -> bool {
-        matches!(self, Self::RolledBack | Self::FailedDiagnostic)
-            && self.can_publish_live_control_row()
+        matches!(
+            self,
+            Self::RolledBack | Self::RollbackIncomplete | Self::FailedDiagnostic
+        ) && self.can_publish_live_control_row()
     }
 }
 
@@ -216,5 +229,21 @@ mod tests {
         assert_eq!(lifecycle.state, RouteBoundLeaseState::ProofReady);
         assert_eq!(lifecycle.state_phase(), ("pending", "proof_ready"));
         assert!(RouteBoundLeaseLifecycle::from_state_phase("completed", "reserved").is_none());
+    }
+
+    #[test]
+    fn rollback_incomplete_is_terminal_and_never_publishable() {
+        let mut lifecycle = RouteBoundLeaseLifecycle {
+            state: RouteBoundLeaseState::RolledBack,
+        };
+        lifecycle
+            .transition_to(RouteBoundLeaseState::RollbackIncomplete)
+            .unwrap();
+        assert_eq!(lifecycle.state_phase(), ("failed", "rollback_incomplete"));
+        assert!(!lifecycle.state.can_publish_live_control_row());
+        assert!(!lifecycle.state.failure_publishable_as_live_control());
+        assert!(lifecycle
+            .transition_to(RouteBoundLeaseState::Finalized)
+            .is_err());
     }
 }

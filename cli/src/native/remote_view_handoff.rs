@@ -1234,6 +1234,22 @@ pub fn begin_route_bound_handoff_acquisition(
         .map_err(|error| error.to_string())?;
     let (lease_state, lease_phase) = lifecycle.state_phase();
     repository.mutate(|state| {
+        if let Some(quarantined) = state.remote_view_acquisition_leases.values().find(|lease| {
+            lease.state == "failed"
+                && lease.phase == "rollback_incomplete"
+                && (lease.browser_id == input.browser_id
+                    || lease.session_id == input.session_id
+                    || lease.route_id == input.acquisition_plan.selected_route_id
+                    || lease.display_allocation_id == input.acquisition_plan.display_allocation_id)
+        }) {
+            return Err(format!(
+                "route_bound_acquisition_quarantined: lease={} browser={} route={} display={}",
+                quarantined.id,
+                quarantined.browser_id,
+                quarantined.route_id,
+                quarantined.display_allocation_id
+            ));
+        }
         if let Some(entry) = input.inline_route_pool_entry {
             state.route_pool.insert(entry.id.clone(), entry.clone());
         }
@@ -2211,15 +2227,85 @@ pub fn update_route_bound_handoff_acquisition_cleanup(
     observed_at: &str,
 ) -> Result<Value, String> {
     let mut updated_rollback = rollback.clone();
+    let cleanup_state = cleanup
+        .get("state")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let rollback_incomplete = cleanup_state.starts_with("failed_")
+        || cleanup
+            .get("error")
+            .and_then(Value::as_str)
+            .is_some_and(|error| error.contains("rollback_incomplete"));
     if let Some(object) = updated_rollback.as_object_mut() {
         object.insert("cleanup".to_string(), cleanup.clone());
+        object.insert(
+            "state".to_string(),
+            Value::String(
+                if rollback_incomplete {
+                    "rollback_incomplete"
+                } else {
+                    "rolled_back"
+                }
+                .to_string(),
+            ),
+        );
         object.insert(
             "updatedAt".to_string(),
             Value::String(observed_at.to_string()),
         );
     }
     repository.mutate(|state| {
-        if let Some(lease) = state.remote_view_acquisition_leases.get_mut(lease_id) {
+        let lease_snapshot = state
+            .remote_view_acquisition_leases
+            .get(lease_id)
+            .cloned()
+            .ok_or_else(|| format!("remote_view_acquisition_lease_missing: {lease_id}"))?;
+        if rollback_incomplete {
+            let quarantine = json!({
+                "state": "active",
+                "reason": "rollback_incomplete",
+                "leaseId": lease_id,
+                "browserId": lease_snapshot.browser_id,
+                "sessionId": lease_snapshot.session_id,
+                "routeId": lease_snapshot.route_id,
+                "displayAllocationId": lease_snapshot.display_allocation_id,
+                "routePoolEntryId": lease_snapshot.route_pool_entry_id,
+                "unconfirmedExternalEffects": cleanup,
+                "updatedAt": observed_at,
+            });
+            if let Some(object) = updated_rollback.as_object_mut() {
+                object.insert("quarantine".to_string(), quarantine.clone());
+            }
+            if let Some(route_pool_entry_id) = lease_snapshot.route_pool_entry_id.as_ref() {
+                if let Some(entry) = state.route_pool.get_mut(route_pool_entry_id) {
+                    entry.state = "quarantined".to_string();
+                    entry.current_route_allocation_id = None;
+                    entry.readiness = Some(json!({
+                        "state": "blocked",
+                        "reason": "rollback_incomplete",
+                        "leaseId": lease_id,
+                        "updatedAt": observed_at,
+                    }));
+                }
+            }
+            if let Some(lease) = state.remote_view_acquisition_leases.get_mut(lease_id) {
+                let mut lifecycle =
+                    RouteBoundLeaseLifecycle::from_state_phase(&lease.state, &lease.phase)
+                        .unwrap_or_default();
+                lifecycle
+                    .transition_to(RouteBoundLeaseState::RollbackIncomplete)
+                    .map_err(|error| error.to_string())?;
+                let (lease_state, lease_phase) = lifecycle.state_phase();
+                lease.state = lease_state.to_string();
+                lease.phase = lease_phase.to_string();
+                lease.failure_reason = Some(format!(
+                    "rollback_incomplete: cleanup state {cleanup_state}"
+                ));
+                lease.updated_at = Some(observed_at.to_string());
+                lease.failed_at = Some(observed_at.to_string());
+                lease.cleanup = Some(updated_rollback.clone());
+            }
+        } else if let Some(lease) = state.remote_view_acquisition_leases.get_mut(lease_id) {
             lease.updated_at = Some(observed_at.to_string());
             lease.cleanup = Some(updated_rollback.clone());
         }
@@ -3447,6 +3533,38 @@ mod tests {
         let summary: Value = serde_json::from_str(&failure.summary).unwrap();
         assert_eq!(summary["cleanup"]["state"], "closed_opened_tab");
         assert_eq!(summary["leaseRollback"]["leaseId"], "lease-a");
+
+        let incomplete_cleanup = json!({
+            "state": "failed_opened_tab_close",
+            "index": 2,
+            "error": "rollback_incomplete: close confirmation missed the total deadline",
+        });
+        let incomplete = complete_route_bound_handoff_failure_cleanup(
+            &repository,
+            RouteBoundHandoffFailureCleanupInput {
+                lease_id: "lease-a",
+                rollback: &failure.rollback,
+                cleanup: &incomplete_cleanup,
+                observed_at: "2026-07-06T12:00:02Z",
+            },
+        )
+        .unwrap();
+        let quarantined = store.load().unwrap();
+        assert_eq!(
+            quarantined.remote_view_acquisition_leases["lease-a"].phase,
+            "rollback_incomplete"
+        );
+        assert_eq!(quarantined.route_pool["pool-a"].state, "quarantined");
+        assert_eq!(
+            quarantined.route_pool["pool-a"].current_route_allocation_id,
+            None
+        );
+        assert_eq!(incomplete.rollback["state"], "rollback_incomplete");
+        assert_eq!(incomplete.rollback["quarantine"]["state"], "active");
+        assert_eq!(
+            incomplete.rollback["quarantine"]["unconfirmedExternalEffects"]["state"],
+            "failed_opened_tab_close"
+        );
 
         let _ = std::fs::remove_file(path);
     }
