@@ -2180,4 +2180,3 @@ fn test_managed_runtime_attach_is_only_for_compatible_headless_launches() {
     };
     assert!(!can_attach_managed_runtime_for_launch(&remote_headed));
 }
-

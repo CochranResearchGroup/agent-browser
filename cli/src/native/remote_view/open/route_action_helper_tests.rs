@@ -154,7 +154,7 @@ async fn test_remote_view_open_cleanup_reports_new_browser_close_on_failure() {
     assert_eq!(cleanup["result"]["closed"], true);
 }
 #[test]
-fn test_remote_view_open_acquisition_lease_rollback_restores_route_state() {
+fn test_remote_view_open_acquisition_lease_rollback_quarantines_until_cleanup_confirmation() {
     let guard = EnvGuard::new(&["HOME"]);
     let home = unique_socket_dir("remote-view-open-lease-rollback-home");
     fs::create_dir_all(&home).unwrap();
@@ -216,9 +216,14 @@ fn test_remote_view_open_acquisition_lease_rollback_restores_route_state() {
         "2026-07-06T12:00:00Z",
     )
     .unwrap();
-    assert_eq!(rollback["state"], "rolled_back");
+    assert_eq!(rollback["state"], "rollback_incomplete");
+    assert_eq!(rollback["quarantine"]["state"], "active");
     let restored = repository.load_snapshot().unwrap();
-    assert_eq!(restored.route_pool["pool-a"].state, "available");
+    assert_eq!(restored.route_pool["pool-a"].state, "quarantined");
+    assert_eq!(
+        restored.route_pool["pool-a"].readiness.as_ref().unwrap()["reason"],
+        "rollback_incomplete"
+    );
     assert!(!restored
         .display_allocations
         .contains_key("remote-view-display:41"));
@@ -229,7 +234,7 @@ fn test_remote_view_open_acquisition_lease_rollback_restores_route_state() {
     );
     assert_eq!(
         restored.remote_view_acquisition_leases[&lease.id].phase,
-        "rollback_complete"
+        "rollback_incomplete"
     );
     let _ = fs::remove_dir_all(&home);
 }

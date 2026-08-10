@@ -13,12 +13,12 @@ use crate::native::cancellation::CancellationToken;
 use crate::native::cdp::chrome::{launch_chrome_detached, LaunchOptions, ManualChromeLaunch};
 use crate::native::cookies;
 use crate::native::network::{self, DomainFilter, EventTracker};
+use crate::native::network_archive::handle_har_stop;
 use crate::native::network_archive::{
     browser_metadata_from_version, get_har_dir, har_cdp_protocol_to_http_version,
     har_compute_timings, har_entry_to_json, har_parse_request_cookies, har_wall_time_to_rfc3339,
     unix_timestamp_millis,
 };
-use crate::native::network_archive::handle_har_stop;
 use crate::native::policy::{ActionPolicy, ConfirmActions, PolicyResult};
 use crate::native::providers;
 use crate::native::remote_view::open::*;
