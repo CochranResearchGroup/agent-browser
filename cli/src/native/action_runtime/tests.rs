@@ -6749,51 +6749,6 @@ async fn test_remote_view_route_checkout_and_release_clear_stale_acquisition_pen
     );
     let _ = fs::remove_dir_all(&home);
 }
-#[test]
-fn test_remote_view_handoff_provider_fallback_preserves_retained_rdp_route() {
-    let handoff = RemoteViewHandoff {
-        id: "handoff-a".to_string(),
-        browser_id: Some("session:im-receipts".to_string()),
-        session_name: Some("im-receipts".to_string()),
-        tab_id: Some("target:tab-a".to_string()),
-        target_id: Some("tab-a".to_string()),
-        profile_id: Some("im-receipts-main".to_string()),
-        view_stream_provider: Some(ViewStreamProvider::RdpGateway),
-        last_route_id: Some("guacamole:2".to_string()),
-        ..RemoteViewHandoff::default()
-    };
-    let state = ServiceState {
-        remote_view_routes: BTreeMap::from([(
-            "guacamole:2".to_string(),
-            RemoteViewRoute {
-                id: "guacamole:2".to_string(),
-                provider: ViewStreamProvider::RdpGateway,
-                external_url: Some(
-                    "https://dashboard.example/guacamole/#/client/route-b".to_string(),
-                ),
-                ..RemoteViewRoute::default()
-            },
-        )]),
-        ..ServiceState::default()
-    };
-    let fallback = remote_view_handoff_provider_fallback(
-        &state,
-        &handoff,
-        "Chrome profile /tmp/profile is already in use by PID 42",
-    )
-    .unwrap();
-    assert_eq!(fallback["status"], "ready");
-    assert_eq!(fallback["resolved"], true);
-    assert_eq!(fallback["providerFallback"], true);
-    assert_eq!(
-        fallback["providerFallbackUrl"],
-        "https://dashboard.example/guacamole/#/client/route-b"
-    );
-    assert!(
-        remote_view_handoff_provider_fallback(&state, &handoff, "route provider unavailable")
-            .is_none()
-    );
-}
 #[tokio::test]
 async fn test_remote_view_browser_reattach_reuses_retained_browser_without_duplicate_row() {
     let guard = EnvGuard::new(&["HOME"]);

@@ -3,8 +3,8 @@ use super::compensation::{
     remote_view_open_rollback_failure_after_cleanup, RemoteViewOpenFailureCleanupInput,
 };
 use super::deadline::{
-    route_bound_execution_error_with_cleanup, RouteBoundOpenExecutionError,
-    RouteBoundOpenSupervisor, RouteBoundRuntimeIssue,
+    route_bound_execution_error_with_cleanup, route_bound_message_error_with_cleanup,
+    RouteBoundOpenExecutionError, RouteBoundOpenSupervisor, RouteBoundRuntimeIssue,
 };
 use super::operator_route::{remote_view_open_dry_run, route_binding_with_operator_access};
 use super::planner::{
@@ -18,26 +18,134 @@ use super::route_lifecycle::service_remote_view_timestamp;
 use super::runtime::{
     CheckoutRouteRequest, DaemonRouteBoundOpenRepository, DaemonRouteBoundOpenRuntime,
     DisplayAccessRequest, FocusTargetRequest, LaunchBrowserRequest, OperatorAccessRequest,
-    RouteBoundOpenRepository, RouteBoundOpenRuntime, VisibleWindowRequest,
+    OperatorAccessResult, RouteBoundOpenRepository, RouteBoundOpenRuntime, VisibleWindowRequest,
 };
 use super::shared::*;
 use super::target::route_bound_open_acquire_target;
+use crate::native::remote_view::RemoteViewOpenIntent;
 /// Transport-neutral attribution supplied after the ingress has authorized a
 /// route-bound open. Cookies, headers, and transport sessions never cross this
 /// seam.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RouteBoundOpenAuthorization {
+    AuthenticatedDaemonCommand,
+    Rejected,
+}
+
+impl RouteBoundOpenAuthorization {
+    pub(crate) fn is_authorized(self) -> bool {
+        matches!(self, Self::AuthenticatedDaemonCommand)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RouteBoundOpenAttribution {
     pub(crate) caller_id: Option<String>,
     pub(crate) service_job_id: Option<String>,
+    pub(crate) authorization: RouteBoundOpenAuthorization,
 }
+
+#[derive(Debug, Clone)]
+pub(crate) struct RouteBoundResolutionSnapshot {
+    pub(crate) state: ServiceState,
+    pub(crate) handoff: RemoteViewHandoff,
+    pub(crate) loaded_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RouteBoundFallbackEligibility {
+    pub(crate) prior_provider: bool,
+    pub(crate) snapshot_identity: bool,
+    pub(crate) snapshot_timing: bool,
+    pub(crate) exact_ownership_cause: bool,
+    pub(crate) retained_route: bool,
+    pub(crate) authorized_ingress: bool,
+    pub(crate) operator_evidence: bool,
+    pub(crate) browser_preserved: bool,
+    pub(crate) duplicate_lane_prohibited: bool,
+}
+
+impl RouteBoundFallbackEligibility {
+    pub(crate) fn is_eligible(&self) -> bool {
+        self.prior_provider
+            && self.snapshot_identity
+            && self.snapshot_timing
+            && self.exact_ownership_cause
+            && self.retained_route
+            && self.authorized_ingress
+            && self.operator_evidence
+            && self.browser_preserved
+            && self.duplicate_lane_prohibited
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct RouteBoundOpenDocument(Value);
+
+impl RouteBoundOpenDocument {
+    pub(crate) fn new(value: Value) -> Self {
+        Self(value)
+    }
+
+    pub(crate) fn into_value(self) -> Value {
+        self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct RouteBoundOpenCommand(Value);
+
+impl RouteBoundOpenCommand {
+    fn as_value(&self) -> &Value {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct RouteBoundDirectOpenRequest {
+    command: RouteBoundOpenCommand,
+    intent: RemoteViewOpenIntent,
+    dry_run: bool,
+    handoff_id: Option<String>,
+}
+
+impl RouteBoundDirectOpenRequest {
+    pub(crate) fn from_compatibility_command(
+        mut command: Value,
+        handoff_id: Option<String>,
+        attribution: RouteBoundOpenAttribution,
+    ) -> Result<Self, String> {
+        if !attribution.authorization.is_authorized() {
+            return Err("Unauthorized route-bound open invocation".to_string());
+        }
+        if let Some(handoff_id) = handoff_id.as_ref() {
+            command["remoteViewHandoffId"] = Value::String(handoff_id.clone());
+        }
+        if command.get("serviceJobId").is_none() {
+            if let Some(service_job_id) = attribution.service_job_id {
+                command["serviceJobId"] = Value::String(service_job_id);
+            }
+        }
+        let intent = normalize_remote_view_open_intent(&command)?;
+        let dry_run = remote_view_open_dry_run(&command);
+        Ok(Self {
+            command: RouteBoundOpenCommand(command),
+            intent,
+            dry_run,
+            handoff_id,
+        })
+    }
+
+    fn command(&self) -> &Value {
+        self.command.as_value()
+    }
+}
+
 /// The only two ways a caller can ask the route-bound coordinator to work.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum RouteBoundOpenInvocation {
-    DirectOpen {
-        request: Value,
-        handoff_id: Option<String>,
-        attribution: RouteBoundOpenAttribution,
-    },
+    DirectOpen(Box<RouteBoundDirectOpenRequest>),
     DurableResolution {
         handoff_id: String,
         allow_reopen_closed: bool,
@@ -60,19 +168,19 @@ pub(crate) struct RouteBoundOpenCompensation {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum RouteBoundOpenOutcome {
     Planned {
-        plan: Value,
+        plan: RouteBoundOpenDocument,
     },
     NotFound {
-        result: Value,
+        result: RouteBoundOpenDocument,
     },
     ExplicitlyClosed {
-        result: Value,
+        result: RouteBoundOpenDocument,
     },
     Reopened {
-        opened: Value,
+        opened: RouteBoundOpenDocument,
     },
     Opened {
-        opened: Value,
+        opened: RouteBoundOpenDocument,
     },
     RolledBack {
         blocker: RouteBoundOpenBlocker,
@@ -80,7 +188,7 @@ pub(crate) enum RouteBoundOpenOutcome {
         compatibility_error: String,
     },
     ProviderFallback {
-        fallback: Value,
+        fallback: RouteBoundOpenDocument,
     },
 }
 impl RouteBoundOpenOutcome {
@@ -91,7 +199,7 @@ impl RouteBoundOpenOutcome {
             | Self::ExplicitlyClosed { result: plan }
             | Self::Reopened { opened: plan }
             | Self::Opened { opened: plan }
-            | Self::ProviderFallback { fallback: plan } => Ok(plan),
+            | Self::ProviderFallback { fallback: plan } => Ok(plan.into_value()),
             Self::RolledBack {
                 compatibility_error,
                 ..
@@ -110,24 +218,15 @@ impl RouteBoundOpenCoordinator {
         supervisor: &RouteBoundOpenSupervisor,
     ) -> Result<RouteBoundOpenOutcome, String> {
         match invocation {
-            RouteBoundOpenInvocation::DirectOpen {
-                mut request,
-                handoff_id,
-                attribution,
-            } => {
-                if let Some(handoff_id) = handoff_id {
-                    request["remoteViewHandoffId"] = Value::String(handoff_id);
-                }
-                if request.get("serviceJobId").is_none() {
-                    if let Some(service_job_id) = attribution.service_job_id {
-                        request["serviceJobId"] = Value::String(service_job_id);
+            RouteBoundOpenInvocation::DirectOpen(request) => {
+                match execute_direct_open(*request, runtime, repository, supervisor).await {
+                    Ok(RouteBoundDirectOpenResult::Planned(plan)) => {
+                        Ok(RouteBoundOpenOutcome::Planned { plan })
                     }
-                }
-                let planned = remote_view_open_dry_run(&request);
-                match execute_direct_open(&request, runtime, repository, supervisor).await {
-                    Ok(result) if planned => Ok(RouteBoundOpenOutcome::Planned { plan: result }),
-                    Ok(result) => Ok(RouteBoundOpenOutcome::Opened { opened: result }),
-                    Err(error) => rolled_back_outcome(error.message),
+                    Ok(RouteBoundDirectOpenResult::Opened(opened)) => {
+                        Ok(RouteBoundOpenOutcome::Opened { opened })
+                    }
+                    Err(error) => rolled_back_outcome(error),
                 }
             }
             RouteBoundOpenInvocation::DurableResolution {
@@ -135,73 +234,60 @@ impl RouteBoundOpenCoordinator {
                 allow_reopen_closed,
                 attribution,
             } => {
-                let mut request = json!(
-                    { "handoffId" : handoff_id, "allowReopenClosed" :
-                    allow_reopen_closed, }
-                );
-                if let Some(service_job_id) = attribution.service_job_id {
-                    request["serviceJobId"] = Value::String(service_job_id);
+                if !attribution.authorization.is_authorized() {
+                    return Err("Unauthorized route-bound open invocation".to_string());
                 }
-                let result = execute_durable_resolution(&request, runtime, repository, supervisor)
-                    .await
-                    .map_err(|error| error.message)?;
-                match result.get("status").and_then(Value::as_str) {
-                    Some("not_found") => Ok(RouteBoundOpenOutcome::NotFound { result }),
-                    Some("closed") => Ok(RouteBoundOpenOutcome::ExplicitlyClosed { result }),
-                    Some("best_effort") => {
-                        Ok(RouteBoundOpenOutcome::ProviderFallback { fallback: result })
-                    }
-                    _ if allow_reopen_closed => {
-                        Ok(RouteBoundOpenOutcome::Reopened { opened: result })
-                    }
-                    _ => Ok(RouteBoundOpenOutcome::Opened { opened: result }),
+                match execute_durable_resolution(
+                    handoff_id,
+                    allow_reopen_closed,
+                    attribution,
+                    runtime,
+                    repository,
+                    supervisor,
+                )
+                .await
+                {
+                    Ok(outcome) => Ok(outcome),
+                    Err(error) => rolled_back_outcome(error),
                 }
             }
         }
     }
 }
-pub(crate) fn rolled_back_outcome(error: String) -> Result<RouteBoundOpenOutcome, String> {
-    let Some((message, cleanup)) = error.split_once("; cleanup=") else {
-        return Err(error);
+pub(crate) fn rolled_back_outcome(
+    error: RouteBoundOpenExecutionError,
+) -> Result<RouteBoundOpenOutcome, String> {
+    let Some(failure) = error.terminal_failure else {
+        return Err(error.message);
     };
-    let evidence =
-        serde_json::from_str(cleanup).unwrap_or_else(|_| Value::String(cleanup.to_string()));
-    let state = if cleanup.contains("rollback_incomplete") {
-        "rollback_incomplete"
-    } else {
-        "rolled_back"
-    };
-    let code = message
-        .split_once(':')
-        .map(|(code, _)| code)
-        .unwrap_or("route_bound_open_failed")
-        .trim()
-        .to_string();
     Ok(RouteBoundOpenOutcome::RolledBack {
         blocker: RouteBoundOpenBlocker {
-            code,
-            message: message.to_string(),
+            code: failure.blocker_code,
+            message: failure.blocker_message,
         },
         compensation: RouteBoundOpenCompensation {
-            state: state.to_string(),
-            evidence,
+            state: failure.compensation_state.as_str().to_string(),
+            evidence: failure.evidence,
         },
-        compatibility_error: error,
+        compatibility_error: failure.compatibility_error,
     })
 }
 pub(crate) async fn handle_remote_view_open(
     cmd: &Value,
     state: &mut DaemonState,
 ) -> Result<Value, String> {
-    let invocation = RouteBoundOpenInvocation::DirectOpen {
-        request: cmd.clone(),
-        handoff_id: optional_command_string(cmd, "remoteViewHandoffId")
-            .or_else(|| optional_command_string(cmd, "serviceJobId")),
-        attribution: RouteBoundOpenAttribution {
-            caller_id: optional_command_string(cmd, "callerId"),
-            service_job_id: optional_command_string(cmd, "serviceJobId"),
-        },
-    };
+    let invocation = RouteBoundOpenInvocation::DirectOpen(Box::new(
+        RouteBoundDirectOpenRequest::from_compatibility_command(
+            cmd.clone(),
+            optional_command_string(cmd, "remoteViewHandoffId")
+                .or_else(|| optional_command_string(cmd, "serviceJobId")),
+            RouteBoundOpenAttribution {
+                caller_id: optional_command_string(cmd, "callerId"),
+                service_job_id: optional_command_string(cmd, "serviceJobId"),
+                authorization: RouteBoundOpenAuthorization::AuthenticatedDaemonCommand,
+            },
+        )?,
+    ));
     let supervisor = RouteBoundOpenSupervisor::system(
         cmd.get("jobTimeoutMs").and_then(Value::as_u64),
         state.current_cancellation.clone(),
@@ -227,6 +313,7 @@ pub(crate) async fn handle_service_remote_view_handoff_resolve(
         attribution: RouteBoundOpenAttribution {
             caller_id: optional_command_string(cmd, "callerId"),
             service_job_id: optional_command_string(cmd, "serviceJobId"),
+            authorization: RouteBoundOpenAuthorization::AuthenticatedDaemonCommand,
         },
     };
     let supervisor = RouteBoundOpenSupervisor::system(
@@ -239,15 +326,20 @@ pub(crate) async fn handle_service_remote_view_handoff_resolve(
         .await?
         .into_compatibility_result()
 }
+pub(crate) enum RouteBoundDirectOpenResult {
+    Planned(RouteBoundOpenDocument),
+    Opened(RouteBoundOpenDocument),
+}
+
 pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundOpenRepository>(
-    cmd: &Value,
+    request: RouteBoundDirectOpenRequest,
     runtime: &mut R,
     repository: &P,
     supervisor: &RouteBoundOpenSupervisor,
-) -> Result<Value, RouteBoundOpenExecutionError> {
-    let mut intent = normalize_remote_view_open_intent(cmd)?;
-    let handoff_id = optional_command_string(cmd, "remoteViewHandoffId")
-        .or_else(|| optional_command_string(cmd, "serviceJobId"));
+) -> Result<RouteBoundDirectOpenResult, RouteBoundOpenExecutionError> {
+    let cmd = request.command().clone();
+    let mut intent = request.intent;
+    let handoff_id = request.handoff_id;
     let initial_browser = supervisor
         .forward("observe_browser", runtime.observe_browser())
         .await?;
@@ -262,7 +354,7 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
     let mut service_state = supervisor
         .forward("repository_load_snapshot", repository.snapshot())
         .await?;
-    let dry_run = remote_view_open_dry_run(cmd);
+    let dry_run = request.dry_run;
     let managed_one_time_profile = supervisor
         .forward(
             "repository_managed_one_time_profile",
@@ -276,7 +368,7 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
             }),
         )
         .await?;
-    let effective_cmd = remote_view_open_command_with_effective_intent(cmd, &intent);
+    let effective_cmd = remote_view_open_command_with_effective_intent(&cmd, &intent);
     let inline_route_pool_entries = inline_route_pool_entries_from_command(&effective_cmd)?;
     let inline_route_pool_entry = inline_route_pool_entry_from_command(&effective_cmd)?;
     for entry in &inline_route_pool_entries {
@@ -314,20 +406,22 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
             None,
             tab_command.get("url").and_then(Value::as_str),
         );
-        return Ok(planned_route_bound_handoff_response(
-            RouteBoundHandoffPlannedResponseInput {
-                intent: &intent,
-                route_binding: &route_binding,
-                acquisition_plan: &acquisition_plan,
-                browser_id: &browser_id,
-                session_name: &session_id,
-                managed_one_time_profile: &managed_one_time_profile,
-                one_time_profile_warning: &one_time_profile_warning,
-                operator_visible: &operator_visible,
-                launch_command: &launch_command,
-                tab_command: &tab_command,
-                checkout_command: &checkout_command,
-            },
+        return Ok(RouteBoundDirectOpenResult::Planned(
+            RouteBoundOpenDocument::new(planned_route_bound_handoff_response(
+                RouteBoundHandoffPlannedResponseInput {
+                    intent: &intent,
+                    route_binding: &route_binding,
+                    acquisition_plan: &acquisition_plan,
+                    browser_id: &browser_id,
+                    session_name: &session_id,
+                    managed_one_time_profile: &managed_one_time_profile,
+                    one_time_profile_warning: &one_time_profile_warning,
+                    operator_visible: &operator_visible,
+                    launch_command: &launch_command,
+                    tab_command: &tab_command,
+                    checkout_command: &checkout_command,
+                },
+            )),
         ));
     }
     supervisor
@@ -387,10 +481,13 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
                 .await?;
             return Err(route_bound_execution_error_with_cleanup(
                 error,
+                "display_access_failed",
+                failure.rollback,
                 &failure.summary,
             ));
         }
-    };
+    }
+    .into_value();
     let reused_current_browser = remote_view_open_should_reuse_current_browser(
         &acquisition_plan,
         &initial_browser,
@@ -409,12 +506,12 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
             .forward(
                 "launch_browser",
                 runtime.launch_browser(LaunchBrowserRequest {
-                    command: effective_launch_command,
+                    command: effective_launch_command.into(),
                 }),
             )
             .await
         {
-            Ok(launch) => launch,
+            Ok(launch) => launch.into_value(),
             Err(error) => {
                 let error_message = error.compatibility_message().to_string();
                 let cleanup = route_bound_handoff_launch_failure_cleanup("browser_launch_failed");
@@ -438,6 +535,8 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
                     .await?;
                 return Err(route_bound_execution_error_with_cleanup(
                     error,
+                    "browser_launch_failed",
+                    failure.rollback,
                     &failure.summary,
                 ));
             }
@@ -474,21 +573,23 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
             .await?;
             return Err(route_bound_execution_error_with_cleanup(
                 error,
+                failure_context.phase,
+                failure.rollback,
                 &failure.summary,
             ));
         }
     };
-    let focus_command = route_bound_handoff_focus_command(cmd, &tab, &session_id);
+    let focus_command = route_bound_handoff_focus_command(&cmd, &tab, &session_id);
     let focus = match supervisor
         .forward(
             "focus_target",
             runtime.focus_target(FocusTargetRequest {
-                command: focus_command,
+                command: focus_command.into(),
             }),
         )
         .await
     {
-        Ok(focus) => focus,
+        Ok(focus) => focus.into_value(),
         Err(error) => {
             let error_message = error.compatibility_message().to_string();
             let failure_context = route_bound_handoff_focus_failure();
@@ -508,6 +609,8 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
             .await?;
             return Err(route_bound_execution_error_with_cleanup(
                 error,
+                failure_context.phase,
+                failure.rollback,
                 &failure.summary,
             ));
         }
@@ -521,7 +624,7 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
         )
         .await
     {
-        Ok(proof) => proof,
+        Ok(proof) => proof.into_value(),
         Err(error) => {
             let error_message = error.compatibility_message().to_string();
             let failure_context = route_bound_handoff_visible_window_proof_failure();
@@ -541,6 +644,8 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
             .await?;
             return Err(route_bound_execution_error_with_cleanup(
                 error,
+                failure_context.phase,
+                failure.rollback,
                 &failure.summary,
             ));
         }
@@ -553,7 +658,10 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
             }),
         )
         .await?;
-    route_binding = route_binding_with_operator_access(route_binding, operator_access);
+    route_binding = route_binding_with_operator_access(
+        route_binding,
+        operator_access.map(OperatorAccessResult::into_value),
+    );
     let operator_visible = route_bound_handoff_operator_visible(
         &route_binding,
         &browser_id,
@@ -584,7 +692,12 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
             },
         )
         .await?;
-        return Err(format!("{}; cleanup={}", handoff_failure.error, failure.summary).into());
+        return Err(route_bound_message_error_with_cleanup(
+            "proof_failed",
+            handoff_failure.error,
+            failure.rollback,
+            &failure.summary,
+        ));
     }
     let checkout_command = route_bound_handoff_checkout_command_with_visible_window_proof(
         &checkout_command,
@@ -594,12 +707,12 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
         .forward(
             "checkout_route",
             runtime.checkout_route(CheckoutRouteRequest {
-                command: checkout_command.clone(),
+                command: checkout_command.clone().into(),
             }),
         )
         .await
     {
-        Ok(checkout) => checkout,
+        Ok(checkout) => checkout.into_value(),
         Err(error) => {
             let error_message = error.compatibility_message().to_string();
             let failure_context = route_bound_handoff_checkout_failure();
@@ -619,6 +732,8 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
             .await?;
             return Err(route_bound_execution_error_with_cleanup(
                 error,
+                failure_context.phase,
+                failure.rollback,
                 &failure.summary,
             ));
         }
@@ -667,10 +782,15 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
             },
         )
         .await?;
-        return Err(format!("{}; cleanup={}", handoff_failure.error, failure.summary).into());
+        return Err(route_bound_message_error_with_cleanup(
+            "final_proof_failed",
+            handoff_failure.error.clone(),
+            failure.rollback,
+            &failure.summary,
+        ));
     }
     let observed_at = service_remote_view_timestamp();
-    supervisor
+    let opened = supervisor
         .forward(
             "repository_finalize_open",
             repository.execute("repository_finalize_open", |repository| {
@@ -699,8 +819,10 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
                 })
             }),
         )
-        .await
-        .map_err(Into::into)
+        .await?;
+    Ok(RouteBoundDirectOpenResult::Opened(
+        RouteBoundOpenDocument::new(opened),
+    ))
 }
 /// Resolve an opaque remote-view handoff by reacquiring ephemeral route state
 /// and preferring the originally retained browser target when it still exists.
@@ -708,27 +830,34 @@ pub(crate) async fn execute_durable_resolution<
     R: RouteBoundOpenRuntime,
     P: RouteBoundOpenRepository,
 >(
-    cmd: &Value,
+    handoff_id: String,
+    allow_reopen_closed: bool,
+    attribution: RouteBoundOpenAttribution,
     runtime: &mut R,
     repository: &P,
     supervisor: &RouteBoundOpenSupervisor,
-) -> Result<Value, RouteBoundOpenExecutionError> {
-    let handoff_id = optional_command_or_params_string(cmd, "handoffId")
-        .or_else(|| optional_command_or_params_string(cmd, "remoteViewHandoffId"))
-        .ok_or_else(|| "service_remote_view_handoff_resolve requires handoffId".to_string())?;
-    let allow_reopen_closed =
-        optional_command_or_params_bool(cmd, "allowReopenClosed").unwrap_or(false);
+) -> Result<RouteBoundOpenOutcome, RouteBoundOpenExecutionError> {
     let service_state = supervisor
         .forward("repository_load_handoff_snapshot", repository.snapshot())
         .await?;
     let Some(handoff) = service_state.remote_view_handoffs.get(&handoff_id).cloned() else {
-        return Ok(json!(
+        return Ok(RouteBoundOpenOutcome::NotFound {
+            result: RouteBoundOpenDocument::new(json!(
             { "status" : "not_found", "resolved" : false, "handoffId" : handoff_id,
             "message" : "Remote-view handoff was not found", }
-        ));
+            )),
+        });
     };
-    if !allow_reopen_closed && remote_view_handoff_was_explicitly_closed(&service_state, &handoff) {
-        return Ok(json!(
+    let resolution_snapshot = RouteBoundResolutionSnapshot {
+        state: service_state,
+        handoff: handoff.clone(),
+        loaded_at: service_remote_view_timestamp(),
+    };
+    let service_state = &resolution_snapshot.state;
+    let handoff = &resolution_snapshot.handoff;
+    if !allow_reopen_closed && remote_view_handoff_was_explicitly_closed(service_state, handoff) {
+        return Ok(RouteBoundOpenOutcome::ExplicitlyClosed {
+            result: RouteBoundOpenDocument::new(json!(
             { "status" : "closed", "resolved" : false, "reopenRequired" : true,
             "handoffId" : handoff.id, "handoffUrl" : handoff.handoff_url, "browserId"
             : handoff.browser_id, "sessionName" : handoff.session_name, "tabId" :
@@ -737,32 +866,43 @@ pub(crate) async fn execute_durable_resolution<
             "message" :
             "The retained tab was deliberately closed. Reopen requires an explicit operator action.",
             }
-        ));
+            )),
+        });
     }
-    let service_job_id = optional_command_string(cmd, "serviceJobId")
+    let service_job_id = attribution
+        .service_job_id
+        .clone()
         .unwrap_or_else(|| format!("resolve:{}", handoff.id));
     let mut resolution_command =
-        remote_view_handoff_resolution_command(&handoff, &service_job_id, allow_reopen_closed)?;
-    apply_retained_remote_view_route(&service_state, &handoff, &mut resolution_command);
-    let opened =
-        match execute_direct_open(&resolution_command, runtime, repository, supervisor).await {
-            Ok(opened) => opened,
-            Err(error) => {
-                if let Some(fallback) = typed_remote_view_handoff_provider_fallback(
-                    &service_state,
-                    &handoff,
-                    error.runtime_issue.as_ref(),
-                    runtime,
-                    supervisor,
-                )
-                .await
-                {
-                    return Ok(fallback);
-                }
-                return Err(error);
+        remote_view_handoff_resolution_command(handoff, &service_job_id, allow_reopen_closed)?;
+    apply_retained_remote_view_route(service_state, handoff, &mut resolution_command);
+    let authorization = attribution.authorization;
+    let direct_request = RouteBoundDirectOpenRequest::from_compatibility_command(
+        resolution_command,
+        Some(handoff.id.clone()),
+        attribution,
+    )?;
+    let opened = match execute_direct_open(direct_request, runtime, repository, supervisor).await {
+        Ok(RouteBoundDirectOpenResult::Planned(plan)) => {
+            return Ok(RouteBoundOpenOutcome::Planned { plan });
+        }
+        Ok(RouteBoundDirectOpenResult::Opened(opened)) => opened.into_value(),
+        Err(error) => {
+            if let Some(fallback) = remote_view_handoff_provider_fallback_if_eligible(
+                &resolution_snapshot,
+                error.runtime_issue.as_ref(),
+                authorization,
+                runtime,
+                supervisor,
+            )
+            .await
+            {
+                return Ok(RouteBoundOpenOutcome::ProviderFallback { fallback });
             }
-        };
-    Ok(json!(
+            return Err(error);
+        }
+    };
+    let opened = RouteBoundOpenDocument::new(json!(
         { "status" : "ready", "resolved" : true, "reopenedClosedTab" :
         allow_reopen_closed, "handoffId" : handoff.id, "handoffUrl" : opened
         .get("handoffUrl"), "externalUrl" : opened.get("externalUrl"),
@@ -770,15 +910,22 @@ pub(crate) async fn execute_durable_resolution<
         opened.get("browserId"), "sessionName" : opened.get("sessionName"), "tab" :
         opened.get("tab"), "viewStreamProvider" : handoff.view_stream_provider,
         "controlInput" : handoff.control_input, "open" : opened, }
-    ))
+    ));
+    if allow_reopen_closed {
+        Ok(RouteBoundOpenOutcome::Reopened { opened })
+    } else {
+        Ok(RouteBoundOpenOutcome::Opened { opened })
+    }
 }
-pub(crate) async fn typed_remote_view_handoff_provider_fallback<R: RouteBoundOpenRuntime>(
-    service_state: &ServiceState,
-    handoff: &RemoteViewHandoff,
+pub(crate) async fn remote_view_handoff_provider_fallback_if_eligible<R: RouteBoundOpenRuntime>(
+    snapshot: &RouteBoundResolutionSnapshot,
     issue: Option<&RouteBoundRuntimeIssue>,
+    authorization: RouteBoundOpenAuthorization,
     runtime: &mut R,
     supervisor: &RouteBoundOpenSupervisor,
-) -> Option<Value> {
+) -> Option<RouteBoundOpenDocument> {
+    let service_state = &snapshot.state;
+    let handoff = &snapshot.handoff;
     let RouteBoundRuntimeIssue::RequestedProfileInUseByPid {
         profile_id,
         owner_browser_id,
@@ -788,23 +935,55 @@ pub(crate) async fn typed_remote_view_handoff_provider_fallback<R: RouteBoundOpe
     else {
         return None;
     };
-    if handoff.view_stream_provider != Some(ViewStreamProvider::RdpGateway)
-        || handoff.profile_id.as_deref() != Some(profile_id.as_str())
-        || owner_browser_id.as_deref() != handoff.browser_id.as_deref()
-        || owner_session_id.as_deref() != handoff.session_name.as_deref()
-    {
-        return None;
-    }
     let route = handoff
         .last_route_id
         .as_ref()
-        .and_then(|route_id| service_state.remote_view_routes.get(route_id))?;
-    if route.browser_id.as_deref() != handoff.browser_id.as_deref()
-        || route.session_id.as_deref() != handoff.session_name.as_deref()
-        || route.state == "released"
+        .and_then(|route_id| service_state.remote_view_routes.get(route_id));
+    let exact_owner = handoff.profile_id.as_deref() == Some(profile_id.as_str())
+        && owner_browser_id.as_deref() == handoff.browser_id.as_deref()
+        && owner_session_id.as_deref() == handoff.session_name.as_deref();
+    let retained_route = route.is_some_and(|route| {
+        route.provider == ViewStreamProvider::RdpGateway
+            && route.browser_id.as_deref() == handoff.browser_id.as_deref()
+            && route.session_id.as_deref() == handoff.session_name.as_deref()
+            && route.state != "released"
+            && (route
+                .external_url
+                .as_deref()
+                .is_some_and(|url| !url.trim().is_empty())
+                || route
+                    .route_descriptor
+                    .as_ref()
+                    .and_then(|descriptor| descriptor.get("publicOperatorUrl"))
+                    .and_then(Value::as_str)
+                    .is_some_and(|url| !url.trim().is_empty()))
+    });
+    let mut eligibility = RouteBoundFallbackEligibility {
+        prior_provider: handoff.view_stream_provider == Some(ViewStreamProvider::RdpGateway),
+        snapshot_identity: handoff.last_route_id.is_some()
+            && handoff.browser_id.is_some()
+            && handoff.session_name.is_some()
+            && handoff.profile_id.is_some(),
+        snapshot_timing: !snapshot.loaded_at.is_empty(),
+        exact_ownership_cause: exact_owner,
+        retained_route,
+        authorized_ingress: authorization.is_authorized(),
+        operator_evidence: false,
+        browser_preserved: exact_owner,
+        duplicate_lane_prohibited: exact_owner,
+    };
+    if !eligibility.prior_provider
+        || !eligibility.snapshot_identity
+        || !eligibility.snapshot_timing
+        || !eligibility.exact_ownership_cause
+        || !eligibility.retained_route
+        || !eligibility.authorized_ingress
+        || !eligibility.browser_preserved
+        || !eligibility.duplicate_lane_prohibited
     {
         return None;
     }
+    let route = route?;
     let display_allocation_id = route
         .display_allocation_id
         .clone()
@@ -842,23 +1021,19 @@ pub(crate) async fn typed_remote_view_handoff_provider_fallback<R: RouteBoundOpe
         )
         .await
         .ok()
-        .flatten()?;
+        .flatten()?
+        .into_value();
     if readiness_state(&operator_access).as_deref() != Some("ready") {
         return None;
     }
-    remote_view_handoff_provider_fallback_response(service_state, handoff)
-}
-pub(crate) fn remote_view_handoff_provider_fallback(
-    service_state: &ServiceState,
-    handoff: &RemoteViewHandoff,
-    error: &str,
-) -> Option<Value> {
-    if handoff.view_stream_provider != Some(ViewStreamProvider::RdpGateway)
-        || !error.contains("already in use by PID")
-    {
+    eligibility.operator_evidence = true;
+    if !eligibility.is_eligible() {
         return None;
     }
-    remote_view_handoff_provider_fallback_response(service_state, handoff)
+    let mut fallback = remote_view_handoff_provider_fallback_response(service_state, handoff)?;
+    fallback["resolutionSnapshotLoadedAt"] = Value::String(snapshot.loaded_at.clone());
+    fallback["fallbackEligibility"] = serde_json::to_value(eligibility).ok()?;
+    Some(RouteBoundOpenDocument::new(fallback))
 }
 pub(crate) fn remote_view_handoff_provider_fallback_response(
     service_state: &ServiceState,

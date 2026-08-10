@@ -139,6 +139,7 @@ pub(crate) async fn route_bound_open_acquire_target<R: RouteBoundOpenRuntime>(
                     }),
                 )
                 .await?
+                .into_value()
         };
         let selected_target_id = switch
             .get("targetId")
@@ -169,10 +170,11 @@ pub(crate) async fn route_bound_open_acquire_target<R: RouteBoundOpenRuntime>(
             .forward(
                 "open_target",
                 runtime.open_target(OpenTargetRequest {
-                    command: remote_view_open_tab_creation_command(cmd),
+                    command: remote_view_open_tab_creation_command(cmd).into(),
                 }),
             )
-            .await?;
+            .await?
+            .into_value();
         opened["tabAcquisitionDecision"] = json!("opened_new_target");
         opened["reusedExistingTarget"] = Value::Bool(false);
         opened
@@ -275,7 +277,7 @@ pub(crate) async fn route_bound_open_wait_for_target<R: RouteBoundOpenRuntime>(
         )
         .await
     {
-        tab["targetSwitch"] = switched;
+        tab["targetSwitch"] = switched.into_value();
     }
     let observed_url = tab
         .pointer("/targetSwitch/url")
@@ -294,7 +296,7 @@ pub(crate) async fn route_bound_open_wait_for_target<R: RouteBoundOpenRuntime>(
             Ok(result) => {
                 tab["targetNavigation"] = json!(
                     { "state" : "requested", "requestedUrl" : expected_url, "result" :
-                    result, }
+                    result.into_value(), }
                 );
             }
             Err(error) => {

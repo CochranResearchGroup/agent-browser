@@ -204,12 +204,46 @@ pub(crate) type RouteBoundOpenFuture<'a, T> =
 pub(crate) struct RouteBoundOpenExecutionError {
     pub(crate) message: String,
     pub(crate) runtime_issue: Option<RouteBoundRuntimeIssue>,
+    pub(crate) terminal_failure: Option<RouteBoundTerminalFailure>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RouteBoundCompensationState {
+    RolledBack,
+    RollbackIncomplete,
+}
+
+impl RouteBoundCompensationState {
+    pub(crate) fn from_evidence(evidence: &Value) -> Self {
+        if evidence.get("state").and_then(Value::as_str) == Some("rollback_incomplete") {
+            Self::RollbackIncomplete
+        } else {
+            Self::RolledBack
+        }
+    }
+
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::RolledBack => "rolled_back",
+            Self::RollbackIncomplete => "rollback_incomplete",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RouteBoundTerminalFailure {
+    pub(crate) blocker_code: String,
+    pub(crate) blocker_message: String,
+    pub(crate) compensation_state: RouteBoundCompensationState,
+    pub(crate) evidence: Value,
+    pub(crate) compatibility_error: String,
 }
 impl From<String> for RouteBoundOpenExecutionError {
     fn from(message: String) -> Self {
         Self {
             message,
             runtime_issue: None,
+            terminal_failure: None,
         }
     }
 }
@@ -223,15 +257,47 @@ impl From<RouteBoundRuntimeIssue> for RouteBoundOpenExecutionError {
         Self {
             message: issue.compatibility_message().to_string(),
             runtime_issue: Some(issue),
+            terminal_failure: None,
         }
     }
 }
 pub(crate) fn route_bound_execution_error_with_cleanup(
     issue: RouteBoundRuntimeIssue,
-    cleanup: &str,
+    blocker_code: &'static str,
+    evidence: Value,
+    cleanup_summary: &str,
 ) -> RouteBoundOpenExecutionError {
+    let blocker_message = issue.compatibility_message().to_string();
+    let compatibility_error = format!("{blocker_message}; cleanup={cleanup_summary}");
     RouteBoundOpenExecutionError {
-        message: format!("{}; cleanup={}", issue.compatibility_message(), cleanup),
+        message: compatibility_error.clone(),
         runtime_issue: Some(issue),
+        terminal_failure: Some(RouteBoundTerminalFailure {
+            blocker_code: blocker_code.to_string(),
+            blocker_message,
+            compensation_state: RouteBoundCompensationState::from_evidence(&evidence),
+            evidence,
+            compatibility_error,
+        }),
+    }
+}
+
+pub(crate) fn route_bound_message_error_with_cleanup(
+    blocker_code: &'static str,
+    blocker_message: String,
+    evidence: Value,
+    cleanup_summary: &str,
+) -> RouteBoundOpenExecutionError {
+    let compatibility_error = format!("{blocker_message}; cleanup={cleanup_summary}");
+    RouteBoundOpenExecutionError {
+        message: compatibility_error.clone(),
+        runtime_issue: None,
+        terminal_failure: Some(RouteBoundTerminalFailure {
+            blocker_code: blocker_code.to_string(),
+            blocker_message,
+            compensation_state: RouteBoundCompensationState::from_evidence(&evidence),
+            evidence,
+            compatibility_error,
+        }),
     }
 }

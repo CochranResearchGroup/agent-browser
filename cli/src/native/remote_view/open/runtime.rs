@@ -23,7 +23,7 @@ pub(crate) struct RouteBoundBrowserObservation {
 }
 #[derive(Debug, Clone)]
 pub(crate) struct LaunchBrowserRequest {
-    pub(crate) command: Value,
+    pub(crate) command: LaunchBrowserCommand,
 }
 #[derive(Debug, Clone)]
 pub(crate) struct SwitchTargetRequest {
@@ -35,11 +35,11 @@ pub(crate) struct NavigateTargetRequest {
 }
 #[derive(Debug, Clone)]
 pub(crate) struct OpenTargetRequest {
-    pub(crate) command: Value,
+    pub(crate) command: OpenTargetCommand,
 }
 #[derive(Debug, Clone)]
 pub(crate) struct FocusTargetRequest {
-    pub(crate) command: Value,
+    pub(crate) command: FocusTargetCommand,
 }
 #[derive(Debug, Clone)]
 pub(crate) struct CloseCreatedTargetRequest {
@@ -51,7 +51,7 @@ pub(crate) struct CloseCreatedBrowserRequest {
 }
 #[derive(Debug, Clone)]
 pub(crate) struct CheckoutRouteRequest {
-    pub(crate) command: Value,
+    pub(crate) command: CheckoutRouteCommand,
 }
 #[derive(Debug, Clone)]
 pub(crate) struct DisplayAccessRequest {
@@ -65,40 +65,98 @@ pub(crate) struct VisibleWindowRequest {
 pub(crate) struct OperatorAccessRequest {
     pub(crate) binding: RemoteViewRouteBinding,
 }
+
+macro_rules! route_bound_document_type {
+    ($($name:ident),+ $(,)?) => {
+        $(
+            #[derive(Debug, Clone, PartialEq)]
+            pub(crate) struct $name(Value);
+
+            impl $name {
+                pub(crate) fn as_value(&self) -> &Value {
+                    &self.0
+                }
+
+                pub(crate) fn into_value(self) -> Value {
+                    self.0
+                }
+            }
+
+            impl From<Value> for $name {
+                fn from(value: Value) -> Self {
+                    Self(value)
+                }
+            }
+        )+
+    };
+}
+
+route_bound_document_type!(
+    LaunchBrowserCommand,
+    OpenTargetCommand,
+    FocusTargetCommand,
+    CheckoutRouteCommand,
+    LaunchBrowserResult,
+    SwitchTargetResult,
+    NavigateTargetResult,
+    OpenTargetResult,
+    FocusTargetResult,
+    CloseCreatedTargetResult,
+    CloseCreatedBrowserResult,
+    CheckoutRouteResult,
+    DisplayAccessResult,
+    VisibleWindowResult,
+    OperatorAccessResult,
+);
 /// The frozen route-bound effect ledger. It deliberately has no generic
 /// execute command or daemon-state escape hatch.
 pub(crate) trait RouteBoundOpenRuntime {
     fn observe_browser(&mut self) -> RouteBoundOpenFuture<'_, RouteBoundBrowserObservation>;
-    fn launch_browser(&mut self, request: LaunchBrowserRequest) -> RouteBoundOpenFuture<'_, Value>;
+    fn launch_browser(
+        &mut self,
+        request: LaunchBrowserRequest,
+    ) -> RouteBoundOpenFuture<'_, LaunchBrowserResult>;
     fn refresh_targets(&mut self) -> RouteBoundOpenFuture<'_, RouteBoundBrowserObservation>;
-    fn switch_target(&mut self, request: SwitchTargetRequest) -> RouteBoundOpenFuture<'_, Value>;
+    fn switch_target(
+        &mut self,
+        request: SwitchTargetRequest,
+    ) -> RouteBoundOpenFuture<'_, SwitchTargetResult>;
     fn navigate_target(
         &mut self,
         request: NavigateTargetRequest,
-    ) -> RouteBoundOpenFuture<'_, Value>;
-    fn open_target(&mut self, request: OpenTargetRequest) -> RouteBoundOpenFuture<'_, Value>;
-    fn focus_target(&mut self, request: FocusTargetRequest) -> RouteBoundOpenFuture<'_, Value>;
+    ) -> RouteBoundOpenFuture<'_, NavigateTargetResult>;
+    fn open_target(
+        &mut self,
+        request: OpenTargetRequest,
+    ) -> RouteBoundOpenFuture<'_, OpenTargetResult>;
+    fn focus_target(
+        &mut self,
+        request: FocusTargetRequest,
+    ) -> RouteBoundOpenFuture<'_, FocusTargetResult>;
     fn close_created_target(
         &mut self,
         request: CloseCreatedTargetRequest,
-    ) -> RouteBoundOpenFuture<'_, Value>;
+    ) -> RouteBoundOpenFuture<'_, CloseCreatedTargetResult>;
     fn close_created_browser(
         &mut self,
         request: CloseCreatedBrowserRequest,
-    ) -> RouteBoundOpenFuture<'_, Value>;
-    fn checkout_route(&mut self, request: CheckoutRouteRequest) -> RouteBoundOpenFuture<'_, Value>;
+    ) -> RouteBoundOpenFuture<'_, CloseCreatedBrowserResult>;
+    fn checkout_route(
+        &mut self,
+        request: CheckoutRouteRequest,
+    ) -> RouteBoundOpenFuture<'_, CheckoutRouteResult>;
     fn ensure_display_access(
         &mut self,
         request: DisplayAccessRequest,
-    ) -> RouteBoundOpenFuture<'_, Value>;
+    ) -> RouteBoundOpenFuture<'_, DisplayAccessResult>;
     fn observe_visible_window(
         &mut self,
         request: VisibleWindowRequest,
-    ) -> RouteBoundOpenFuture<'_, Value>;
+    ) -> RouteBoundOpenFuture<'_, VisibleWindowResult>;
     fn observe_operator_access(
         &mut self,
         request: OperatorAccessRequest,
-    ) -> RouteBoundOpenFuture<'_, Option<Value>>;
+    ) -> RouteBoundOpenFuture<'_, Option<OperatorAccessResult>>;
 }
 
 /// Deadline-supervised repository work used by route-bound coordination.
@@ -232,12 +290,20 @@ impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
     fn observe_browser(&mut self) -> RouteBoundOpenFuture<'_, RouteBoundBrowserObservation> {
         Box::pin(observe_daemon_browser(self.state))
     }
-    fn launch_browser(&mut self, request: LaunchBrowserRequest) -> RouteBoundOpenFuture<'_, Value> {
+    fn launch_browser(
+        &mut self,
+        request: LaunchBrowserRequest,
+    ) -> RouteBoundOpenFuture<'_, LaunchBrowserResult> {
         Box::pin(async move {
-            handle_launch(&request.command, self.state)
+            handle_launch(request.command.as_value(), self.state)
                 .await
+                .map(LaunchBrowserResult::from)
                 .map_err(|message| {
-                    route_bound_runtime_issue("launch_browser", message, Some(&request.command))
+                    route_bound_runtime_issue(
+                        "launch_browser",
+                        message,
+                        Some(request.command.as_value()),
+                    )
                 })
         })
     }
@@ -247,7 +313,10 @@ impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
             observe_daemon_browser(self.state).await
         })
     }
-    fn switch_target(&mut self, request: SwitchTargetRequest) -> RouteBoundOpenFuture<'_, Value> {
+    fn switch_target(
+        &mut self,
+        request: SwitchTargetRequest,
+    ) -> RouteBoundOpenFuture<'_, SwitchTargetResult> {
         Box::pin(async move {
             let manager = self.state.browser.as_mut().ok_or_else(|| {
                 route_bound_runtime_issue("switch_target", "Browser not launched".to_string(), None)
@@ -255,13 +324,14 @@ impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
             manager
                 .tab_switch_target_id(&request.target_id)
                 .await
+                .map(SwitchTargetResult::from)
                 .map_err(|message| route_bound_runtime_issue("switch_target", message, None))
         })
     }
     fn navigate_target(
         &mut self,
         request: NavigateTargetRequest,
-    ) -> RouteBoundOpenFuture<'_, Value> {
+    ) -> RouteBoundOpenFuture<'_, NavigateTargetResult> {
         Box::pin(async move {
             let manager = self.state.browser.as_mut().ok_or_else(|| {
                 route_bound_runtime_issue(
@@ -273,31 +343,48 @@ impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
             manager
                 .navigate(&request.url, WaitUntil::None)
                 .await
+                .map(NavigateTargetResult::from)
                 .map_err(|message| route_bound_runtime_issue("navigate_target", message, None))
         })
     }
-    fn open_target(&mut self, request: OpenTargetRequest) -> RouteBoundOpenFuture<'_, Value> {
+    fn open_target(
+        &mut self,
+        request: OpenTargetRequest,
+    ) -> RouteBoundOpenFuture<'_, OpenTargetResult> {
         Box::pin(async move {
-            handle_tab_new(&request.command, self.state)
+            handle_tab_new(request.command.as_value(), self.state)
                 .await
+                .map(OpenTargetResult::from)
                 .map_err(|message| {
-                    route_bound_runtime_issue("open_target", message, Some(&request.command))
+                    route_bound_runtime_issue(
+                        "open_target",
+                        message,
+                        Some(request.command.as_value()),
+                    )
                 })
         })
     }
-    fn focus_target(&mut self, request: FocusTargetRequest) -> RouteBoundOpenFuture<'_, Value> {
+    fn focus_target(
+        &mut self,
+        request: FocusTargetRequest,
+    ) -> RouteBoundOpenFuture<'_, FocusTargetResult> {
         Box::pin(async move {
-            handle_view_focus(&request.command, self.state)
+            handle_view_focus(request.command.as_value(), self.state)
                 .await
+                .map(FocusTargetResult::from)
                 .map_err(|message| {
-                    route_bound_runtime_issue("focus_target", message, Some(&request.command))
+                    route_bound_runtime_issue(
+                        "focus_target",
+                        message,
+                        Some(request.command.as_value()),
+                    )
                 })
         })
     }
     fn close_created_target(
         &mut self,
         request: CloseCreatedTargetRequest,
-    ) -> RouteBoundOpenFuture<'_, Value> {
+    ) -> RouteBoundOpenFuture<'_, CloseCreatedTargetResult> {
         Box::pin(async move {
             let manager = self.state.browser.as_mut().ok_or_else(|| {
                 route_bound_runtime_issue(
@@ -309,55 +396,73 @@ impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
             manager
                 .tab_close_target_id(&request.target_id)
                 .await
+                .map(CloseCreatedTargetResult::from)
                 .map_err(|message| route_bound_runtime_issue("close_created_target", message, None))
         })
     }
     fn close_created_browser(
         &mut self,
         request: CloseCreatedBrowserRequest,
-    ) -> RouteBoundOpenFuture<'_, Value> {
+    ) -> RouteBoundOpenFuture<'_, CloseCreatedBrowserResult> {
         Box::pin(async move {
             let _ = request.browser_identity;
-            handle_close(self.state).await.map_err(|message| {
-                route_bound_runtime_issue("close_created_browser", message, None)
-            })
+            handle_close(self.state)
+                .await
+                .map(CloseCreatedBrowserResult::from)
+                .map_err(|message| {
+                    route_bound_runtime_issue("close_created_browser", message, None)
+                })
         })
     }
-    fn checkout_route(&mut self, request: CheckoutRouteRequest) -> RouteBoundOpenFuture<'_, Value> {
+    fn checkout_route(
+        &mut self,
+        request: CheckoutRouteRequest,
+    ) -> RouteBoundOpenFuture<'_, CheckoutRouteResult> {
         Box::pin(async move {
-            handle_service_remote_view_route_checkout(&request.command, self.state)
+            handle_service_remote_view_route_checkout(request.command.as_value(), self.state)
                 .await
+                .map(CheckoutRouteResult::from)
                 .map_err(|message| {
-                    route_bound_runtime_issue("checkout_route", message, Some(&request.command))
+                    route_bound_runtime_issue(
+                        "checkout_route",
+                        message,
+                        Some(request.command.as_value()),
+                    )
                 })
         })
     }
     fn ensure_display_access(
         &mut self,
         request: DisplayAccessRequest,
-    ) -> RouteBoundOpenFuture<'_, Value> {
+    ) -> RouteBoundOpenFuture<'_, DisplayAccessResult> {
         Box::pin(async move {
-            remote_view_open_ensure_display_access(&request.binding).map_err(|message| {
-                route_bound_runtime_issue("ensure_display_access", message, None)
-            })
+            remote_view_open_ensure_display_access(&request.binding)
+                .map(DisplayAccessResult::from)
+                .map_err(|message| {
+                    route_bound_runtime_issue("ensure_display_access", message, None)
+                })
         })
     }
     fn observe_visible_window(
         &mut self,
         request: VisibleWindowRequest,
-    ) -> RouteBoundOpenFuture<'_, Value> {
+    ) -> RouteBoundOpenFuture<'_, VisibleWindowResult> {
         Box::pin(async move {
-            remote_view_open_visible_window_proof(&request.binding).map_err(|message| {
-                route_bound_runtime_issue("observe_visible_window", message, None)
-            })
+            remote_view_open_visible_window_proof(&request.binding)
+                .map(VisibleWindowResult::from)
+                .map_err(|message| {
+                    route_bound_runtime_issue("observe_visible_window", message, None)
+                })
         })
     }
     fn observe_operator_access(
         &mut self,
         request: OperatorAccessRequest,
-    ) -> RouteBoundOpenFuture<'_, Option<Value>> {
-        Box::pin(
-            async move { Ok(remote_view_open_operator_access_readiness(&request.binding).await) },
-        )
+    ) -> RouteBoundOpenFuture<'_, Option<OperatorAccessResult>> {
+        Box::pin(async move {
+            Ok(remote_view_open_operator_access_readiness(&request.binding)
+                .await
+                .map(OperatorAccessResult::from))
+        })
     }
 }

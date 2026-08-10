@@ -14,32 +14,30 @@ pub(crate) async fn remote_view_open_cleanup_after_failure<R: RouteBoundOpenRunt
 ) -> Value {
     let result = match task {
         RouteBoundHandoffFailureCleanupTask::CloseOpenedTab { .. } => match created_target_id {
-            Some(target_id) => {
-                supervisor
-                    .compensate(
-                        "close_created_target",
-                        runtime.close_created_target(CloseCreatedTargetRequest {
-                            target_id: target_id.to_string(),
-                        }),
-                    )
-                    .await
-            }
+            Some(target_id) => supervisor
+                .compensate(
+                    "close_created_target",
+                    runtime.close_created_target(CloseCreatedTargetRequest {
+                        target_id: target_id.to_string(),
+                    }),
+                )
+                .await
+                .map(|result| result.into_value()),
             None => Err(route_bound_runtime_issue(
                 "close_created_target",
                 "rollback_incomplete: created target identity was unavailable".to_string(),
                 None,
             )),
         },
-        RouteBoundHandoffFailureCleanupTask::CloseNewBrowser { command } => {
-            supervisor
-                .compensate(
-                    "close_created_browser",
-                    runtime.close_created_browser(CloseCreatedBrowserRequest {
-                        browser_identity: command.clone(),
-                    }),
-                )
-                .await
-        }
+        RouteBoundHandoffFailureCleanupTask::CloseNewBrowser { command } => supervisor
+            .compensate(
+                "close_created_browser",
+                runtime.close_created_browser(CloseCreatedBrowserRequest {
+                    browser_identity: command.clone(),
+                }),
+            )
+            .await
+            .map(|result| result.into_value()),
         RouteBoundHandoffFailureCleanupTask::Skipped { cleanup } => {
             return cleanup.clone();
         }
