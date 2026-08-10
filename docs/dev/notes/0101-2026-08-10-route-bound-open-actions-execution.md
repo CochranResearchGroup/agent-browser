@@ -486,9 +486,18 @@ reviewable commit boundary. No history rewrite is required or authorized.
 ### Current responsibility and architecture state
 
 The deterministic inventory retains exactly 615 baseline responsibility
-records. Its current disposition is 609 moved and six retained, with zero
-compatibility wrappers and the exact reviewed six-definition dispatcher
-allowlist. The final checker reports:
+records. Its current disposition is 609 moved and six retained. The separately
+reconciled P0100-added definition is also moved, producing 610 moved rows and
+six retained rows across the baseline plus predecessor reconciliation. There
+are zero compatibility wrappers and the dispatcher allowlist contains exactly
+six definitions. The current identities are:
+
+```text
+validated source and documentation checkpoint: 0a44e480cdb5471eed0225069f7b75218f3236e0
+actions responsibility inventory SHA-256: 85cab84cc401d357f02be825fff2d323fd036915b348461df6b8173802b038a4
+```
+
+The final checker reports:
 
 ```text
 actions architecture check passed definitions=6 tests=0 lines=897 wrappers=0 final=true
@@ -518,19 +527,18 @@ The migrated test distribution is exact:
 | Structural remediation gate | Green: seven outcomes, nine predicates, four store boundaries, deadline-drop fixtures, exact 261-test layout |
 | WSL Cargo entrypoint gate | Green |
 | Guarded Rust check with tests | Green |
-| Guarded strict CLI Clippy | Green with `-D warnings`; final W1-04 run completed in 30.55 seconds |
+| Guarded strict CLI Clippy | Green with `-D warnings`; the consolidated checkpoint rerun was cache-hot after the earlier 30.55-second guarded compile |
 | Migrated dispatcher partition | 193 passed, 0 failed |
 | Migrated public-owner partitions | 68 passed, 0 failed |
-| Canonical partitioned suite before final path-only ownership reconciliation | 1,810 executed, 0 failed, 57 ignored; every serial partition green |
+| Canonical partitioned suite at `0a44e480` | 1,810 passed, 0 failed, 57 ignored; parallel-safe lane and every serial partition green |
 | Formatting and patch checks | Green |
 
-The final ownership move changed module paths and imports, not test bodies or
-production behavior. After that move, all 261 migrated tests were executed
-again and passed, guarded check with tests and strict Clippy passed, and the
-structural checker rejected any reverse import outside the unchanged four-site
-allowlist. Host memory remained between 38 and 39 GiB available at the final
-compile boundaries, swap remained 2.0 GiB of 32 GiB used, and no cgroup or OOM
-failure occurred.
+The consolidated post-receipt validation reran the complete canonical suite,
+all 261 migrated tests passed in their current owner partitions, guarded check
+with tests and strict Clippy passed, and the structural checker rejected any
+reverse import outside the unchanged four-site allowlist. Host memory remained
+between 38 and 39 GiB available at the final compile boundaries, swap remained
+2.0 GiB of 32 GiB used, and no cgroup or OOM failure occurred.
 
 ### Remaining acceptance boundary
 
