@@ -32,6 +32,12 @@ export type ServiceViewStream = {
   displayContent?: unknown;
 };
 
+export type ServiceViewStreamReadinessEvidence = {
+  state: string | null;
+  reason: string | null;
+  blocked: boolean;
+};
+
 const EMBEDDABLE_VIEW_STREAM_PROVIDERS = new Set([
   "cdp_screencast",
   "cdp_snapshot",
@@ -65,6 +71,10 @@ const BLOCKING_VIEW_STREAM_READINESS_STATES = new Set([
   "dashboard_unavailable",
   "proxy_failed",
   "timed_out",
+  "wrong_tab",
+  "guacamole_route_unavailable",
+  "cdp_target_unavailable",
+  "stale_route_record",
 ]);
 
 export function viewStreamLabel(stream: ServiceViewStream): string {
@@ -127,7 +137,7 @@ export function canOpenControlViewStream(stream?: ServiceViewStream | null): boo
 export function viewStreamOpenTitle(stream?: ServiceViewStream | null): string {
   if (!stream) return "No service-owned view stream is registered for this browser.";
   if (hasBlockingViewStreamReadiness(stream)) {
-    const reason = readinessReason(stream.remoteReadiness ?? stream.readiness);
+    const reason = viewStreamReadinessEvidence(stream).reason;
     return reason
       ? `${viewStreamLabel(stream)} is unavailable: ${reason}.`
       : `${viewStreamLabel(stream)} is unavailable: ${viewStreamReadinessLabel(stream)}.`;
@@ -172,11 +182,30 @@ export function viewStreamLeaseLabel(stream?: ServiceViewStream | null): string 
 
 export function viewStreamReadinessLabel(stream?: ServiceViewStream | null): string {
   if (!stream) return "readiness unknown";
-  const readiness = stream.remoteReadiness ?? stream.readiness;
-  const state = readinessState(readiness);
+  const state = viewStreamReadinessEvidence(stream).state;
   if (state) return state.replaceAll("_", " ");
   if (canOpenViewStream(stream)) return "ready";
   return "readiness unknown";
+}
+
+/** Returns the source-reported readiness evidence without interpreting browser lifecycle authority. */
+export function viewStreamReadinessEvidence(stream?: ServiceViewStream | null): ServiceViewStreamReadinessEvidence {
+  if (!stream) return { state: null, reason: null, blocked: false };
+  const readiness = stream.remoteReadiness ?? stream.readiness;
+  const readinessState = normalizeReadinessState(viewStreamReadinessState(readiness));
+  const displayContent = displayContentValue(stream);
+  const displayState = normalizeReadinessState(viewStreamReadinessState(displayContent));
+  const blockingState = [readinessState, displayState]
+    .find((state): state is string => Boolean(state && BLOCKING_VIEW_STREAM_READINESS_STATES.has(state)))
+    ?? null;
+  const reason = readinessReason(blockingState === displayState ? displayContent : readiness)
+    ?? readinessReason(readiness)
+    ?? readinessReason(displayContent);
+  return {
+    state: blockingState ?? readinessState ?? displayState,
+    reason,
+    blocked: Boolean(blockingState),
+  };
 }
 
 export function viewStreamRouteSummary(stream?: ServiceViewStream | null): string {
@@ -190,51 +219,67 @@ export function viewStreamRouteSummary(stream?: ServiceViewStream | null): strin
   ].filter(Boolean).join(" / ");
 }
 
-function readinessState(readiness: unknown): string | null {
+export function viewStreamReadinessState(readiness: unknown): string | null {
   if (!readiness) return null;
   if (typeof readiness === "string") return readiness.trim() || null;
   if (typeof readiness !== "object") return null;
   if (Array.isArray(readiness)) {
-    const failed = readiness.find((item) => readinessState(item) && readinessState(item) !== "ready");
-    return failed ? readinessState(failed) : null;
+    const failed = readiness.find((item) => viewStreamReadinessState(item) && viewStreamReadinessState(item) !== "ready");
+    return failed ? viewStreamReadinessState(failed) : null;
   }
   const record = readiness as Record<string, unknown>;
   for (const key of ["state", "status", "readiness", "lastProviderEvent"]) {
     const value = record[key];
     if (typeof value === "string" && value.trim()) return value.trim();
   }
+  const operatorVisible = viewStreamReadinessState(record.operatorVisible);
+  if (operatorVisible && normalizeReadinessState(operatorVisible) !== "ready") return operatorVisible;
   const components = record.components ?? record.checks ?? record.results;
   if (Array.isArray(components)) {
-    const failed = components.find((item) => readinessState(item) && readinessState(item) !== "ready");
-    return failed ? readinessState(failed) : null;
+    const failed = components.find((item) => viewStreamReadinessState(item) && viewStreamReadinessState(item) !== "ready");
+    return failed ? viewStreamReadinessState(failed) : null;
+  }
+  if (components && typeof components === "object") {
+    for (const component of Object.values(components as Record<string, unknown>)) {
+      const state = viewStreamReadinessState(component);
+      if (state && normalizeReadinessState(state) !== "ready") return state;
+    }
   }
   return null;
 }
 
 function hasBlockingViewStreamReadiness(stream: ServiceViewStream): boolean {
-  const state = normalizeReadinessState(readinessState(stream.remoteReadiness ?? stream.readiness));
-  if (state && BLOCKING_VIEW_STREAM_READINESS_STATES.has(state)) return true;
-  const displayState = normalizeReadinessState(displayContentState(stream));
-  return Boolean(displayState && BLOCKING_VIEW_STREAM_READINESS_STATES.has(displayState));
+  return viewStreamReadinessEvidence(stream).blocked;
 }
 
 function readinessReason(readiness: unknown): string | null {
-  if (!readiness || typeof readiness !== "object" || Array.isArray(readiness)) return null;
+  if (!readiness || typeof readiness !== "object") return null;
+  if (Array.isArray(readiness)) {
+    for (const item of readiness) {
+      const reason = readinessReason(item);
+      if (reason) return reason;
+    }
+    return null;
+  }
   const record = readiness as Record<string, unknown>;
   const reason = record.reason ?? record.message ?? record.lastProviderEvent;
-  return typeof reason === "string" && reason.trim() ? reason.trim().replaceAll("_", " ") : null;
-}
-
-function displayContentState(stream: ServiceViewStream): string | null {
-  for (const source of [
-    stream.displayContent,
-    recordValue(stream.remoteReadiness, "displayContent"),
-    recordValue(stream.readiness, "displayContent"),
-  ]) {
-    const state = recordValue(source, "state");
-    if (typeof state === "string" && state.trim()) return state.trim();
+  if (typeof reason === "string" && reason.trim()) return reason.trim().replaceAll("_", " ");
+  for (const nested of [record.operatorVisible, record.components, record.checks, record.results]) {
+    if (!nested || typeof nested !== "object") continue;
+    const values = Array.isArray(nested) ? nested : Object.values(nested as Record<string, unknown>);
+    for (const value of values) {
+      const nestedReason = readinessReason(value);
+      if (nestedReason) return nestedReason;
+    }
   }
   return null;
+}
+
+function displayContentValue(stream: ServiceViewStream): unknown {
+  return stream.displayContent
+    ?? recordValue(stream.remoteReadiness, "displayContent")
+    ?? recordValue(stream.readiness, "displayContent")
+    ?? null;
 }
 
 function recordValue(value: unknown, key: string): unknown {

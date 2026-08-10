@@ -107,7 +107,7 @@ assert.match(
 
 assert.match(
   remoteViewport,
-  /function workspaceViewportBrowserFromSelectedContext[\s\S]*selectedWorkspaceContextCanRenderViewport\(selectedWorkspaceContext\)[\s\S]*const browser = chooseWorkspaceViewportBrowser\(serviceBrowser, selectedContextBrowser \?\? daemonBrowser\)/,
+  /const selectedProjection = projection\.selected;[\s\S]*const browser = selectedProjection\?\.browser \?\? null;[\s\S]*const stream = selectedProjection\?\.stream \?\? null/,
   'Workspace viewport must use any selected embeddable navigator stream as fallback, including manual-runtime RDP streams without a service-owned browser record',
 );
 
@@ -450,7 +450,7 @@ assert.match(
 
 assert.match(
   page,
-  /type RightPaneTab = "workspace"[\s\S]*selectedWorkspaceContextEnabled = !rightPaneCollapsed[\s\S]*hasWorkspaceViewportRoute[\s\S]*useSelectedWorkspaceContext\(selectedWorkspaceContextEnabled\)[\s\S]*<WorkspaceRemoteViewport fallback=\{<Viewport \/>\} selectedWorkspaceContext=\{selectedWorkspace\.context\}[\s\S]*<Tabs value=\{sidePanelTab\}[\s\S]*<TabsTrigger value="workspace"[\s\S]*<WorkspaceSelectionPanel[\s\S]*selectedWorkspace\.context/,
+  /type RightPaneTab = "workspace"[\s\S]*selectedWorkspaceContextEnabled = !rightPaneCollapsed[\s\S]*hasWorkspaceViewportRoute[\s\S]*useSelectedWorkspaceContext\([\s\S]*workspaceViewPreferences\.snapshot[\s\S]*<WorkspaceRemoteViewport[\s\S]*selectedWorkspaceContext=\{selectedWorkspace\.context\}[\s\S]*projection=\{selectedWorkspace\.projection\}[\s\S]*<Tabs value=\{sidePanelTab\}[\s\S]*<TabsTrigger value="workspace"[\s\S]*<WorkspaceSelectionPanel[\s\S]*selectedWorkspace\.context/,
   'Dashboard viewport and right pane must consume the shared selected workspace context',
 );
 

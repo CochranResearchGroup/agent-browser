@@ -103,19 +103,19 @@ import {
 import {
   canControlViewStream,
   canEmbedViewStream,
-  canOpenControlViewStream,
-  canOpenViewStream,
   controlInputLabel,
   viewStreamCapabilityLabel,
-  viewStreamControlTitle,
   viewStreamLabel,
-  viewStreamOpenTitle,
   viewStreamReadinessLabel,
   viewStreamRouteLabel,
-  viewStreamRouteSummary,
   viewStreamLeaseLabel,
   type ServiceViewStream,
 } from "@/lib/service-view-streams";
+import type { ProjectedWorkspaceView } from "@/lib/workspace-view-projection";
+import {
+  projectServiceWorkspaceViews,
+  type WorkspaceBrowserSessionAuthority,
+} from "@/lib/service-workspaces";
 import {
   browserRowCloseTitle,
   browserRowRepairTitle,
@@ -344,7 +344,7 @@ export type ServiceJob = {
 };
 
 export type ServiceInspectorSelection =
-  | { kind: "browser"; browser: ServiceBrowser }
+  | { kind: "browser"; browser: ServiceBrowser; projectedView?: ProjectedWorkspaceView }
   | { kind: "profile"; allocation: ServiceProfileAllocation }
   | { kind: "incident"; incident: IncidentRecord }
   | { kind: "session"; session: ServiceSession }
@@ -428,6 +428,7 @@ type ServiceStatusData = {
   control_plane?: ControlPlaneSnapshot;
   service_state?: ServiceState;
   profileAllocations?: ServiceProfileAllocation[];
+  browserSessionAuthority?: WorkspaceBrowserSessionAuthority | null;
 };
 
 type ServiceResourcesData = {
@@ -2568,10 +2569,6 @@ function ViewStreamCard({
   );
 }
 
-function browserPrimaryViewStream(browser?: ServiceBrowser | null): ServiceViewStream | null {
-  return browser?.viewStreams?.find(canEmbedViewStream) ?? browser?.viewStreams?.[0] ?? null;
-}
-
 function stripSessionBrowserPrefix(value?: string | null): string | null {
   const trimmed = value?.trim();
   if (!trimmed) return null;
@@ -2585,8 +2582,8 @@ function daemonSessionNameForBrowser(browser?: ServiceBrowser | null): string | 
   return stripSessionBrowserPrefix(browser.id);
 }
 
-function browserViewStreamCapability(browser?: ServiceBrowser | null): string {
-  const stream = browserPrimaryViewStream(browser);
+function browserViewStreamCapability(projectedView?: ProjectedWorkspaceView | null): string {
+  const stream = projectedView?.stream;
   if (!stream) return "none";
   return viewStreamCapabilityLabel(stream);
 }
@@ -2632,11 +2629,11 @@ function browserLifecycleLabel(browser: ServiceBrowser): string {
   return browser.health ?? "unknown";
 }
 
-function browserDescription(browser: ServiceBrowser): string {
+function browserDescription(browser: ServiceBrowser, projectedView?: ProjectedWorkspaceView | null): string {
   const executableSource = browserExecutableSource(browser);
   const kind = browserExecutableKind(executableSource);
   const platform = browser.platform ?? browserExecutablePlatformLabel(browserExecutablePlatform(executableSource));
-  const stream = browserPrimaryViewStream(browser);
+  const stream = projectedView?.stream;
   const streamLabel = stream ? viewStreamCapabilityLabel(stream) : "no view stream";
   return `${browserExecutableLabel(kind)} on ${platform}; ${streamLabel}.`;
 }
@@ -2723,9 +2720,10 @@ function serviceJobTargetIds(job: ServiceJob): {
   };
 }
 
-function RemoteViewReadinessStrip({ browser, stream }: { browser: ServiceBrowser; stream?: ServiceViewStream | null }) {
-  const viewReady = canOpenViewStream(stream);
-  const controlReady = canOpenControlViewStream(stream);
+function RemoteViewReadinessStrip({ browser, projectedView }: { browser: ServiceBrowser; projectedView?: ProjectedWorkspaceView | null }) {
+  const stream = projectedView?.stream;
+  const viewReady = projectedView?.canView ?? false;
+  const controlReady = projectedView?.canControl ?? false;
   return (
     <div className="service-remote-view-readiness" aria-label="Remote view readiness">
       <div>
@@ -2760,13 +2758,13 @@ function RemoteViewReadinessStrip({ browser, stream }: { browser: ServiceBrowser
       </div>
       <div>
         <span>Readiness</span>
-        <strong>{stream ? viewStreamReadinessLabel(stream) : "unknown"}</strong>
+        <strong>{projectedView?.readiness.state.replaceAll("_", " ") ?? "unknown"}</strong>
       </div>
       <p>
-        {stream?.url
-          ? `Gateway URL: ${stream.url}${browser.displayName ? ` / Display: ${browser.displayName}` : ""} / ${viewStreamRouteSummary(stream)}`
+        {projectedView?.frameUrl
+          ? `Gateway URL: ${projectedView.frameUrl}${browser.displayName ? ` / Display: ${browser.displayName}` : ""} / ${projectedView.routeSummary}`
           : stream
-            ? viewStreamOpenTitle(stream)
+            ? projectedView?.readiness.reason ?? "The projected stream is not ready."
             : "No service-owned view stream has been recorded for this browser."}
       </p>
     </div>
@@ -3224,6 +3222,7 @@ function BrowserTableHeaderCell({
 function BrowserTable({
   browsers,
   sessions,
+  projectedViewByBrowserId,
   onSelect,
   onViewStream,
   onFocusViewStream,
@@ -3237,6 +3236,7 @@ function BrowserTable({
 }: {
   browsers: ServiceBrowser[];
   sessions: ServiceSession[];
+  projectedViewByBrowserId: ReadonlyMap<string, ProjectedWorkspaceView>;
   onSelect: (browser: ServiceBrowser) => void;
   onViewStream?: (browser: ServiceBrowser) => void;
   onFocusViewStream?: (browser: ServiceBrowser) => void;
@@ -3675,6 +3675,7 @@ function BrowserTable({
                 <BrowserTableRow
                   key={browser.id || browser.cdpEndpoint || `browser-${index}`}
                   browser={browser}
+                  projectedView={projectedViewByBrowserId.get(browser.id)}
                   ownership={browserOwnershipById.get(browser.id) ?? EMPTY_BROWSER_OWNERSHIP}
                   selected={Boolean(browser.id && browser.id === selectedBrowserId)}
                   visibleColumns={visibleColumnSet}
@@ -3706,6 +3707,7 @@ function BrowserTable({
             <BrowserTableCard
               key={browser.id || browser.cdpEndpoint || `browser-card-${index}`}
               browser={browser}
+              projectedView={projectedViewByBrowserId.get(browser.id)}
               ownership={browserOwnershipById.get(browser.id) ?? EMPTY_BROWSER_OWNERSHIP}
               selected={Boolean(browser.id && browser.id === selectedBrowserId)}
               onSelect={onSelect}
@@ -3746,6 +3748,7 @@ function BrowserTable({
 
 function BrowserRowActions({
   browser,
+  projectedView,
   onSelect,
   onViewStream,
   onFocusViewStream,
@@ -3758,6 +3761,7 @@ function BrowserRowActions({
   density,
 }: {
   browser: ServiceBrowser;
+  projectedView?: ProjectedWorkspaceView;
   onSelect: (browser: ServiceBrowser) => void;
   onViewStream?: (browser: ServiceBrowser) => void;
   onFocusViewStream?: (browser: ServiceBrowser) => void;
@@ -3769,9 +3773,14 @@ function BrowserRowActions({
   acting?: boolean;
   density: BrowserTableDensity;
 }) {
-  const primaryViewStream = browserPrimaryViewStream(browser);
-  const viewStreamAvailable = canOpenViewStream(primaryViewStream);
-  const controlAvailable = canOpenControlViewStream(primaryViewStream);
+  const viewStreamAvailable = projectedView?.canView ?? false;
+  const controlAvailable = projectedView?.canControl ?? false;
+  const viewTitle = viewStreamAvailable
+    ? "Open the projected workspace view."
+    : projectedView?.readiness.reason ?? "No projected workspace view is available.";
+  const controlTitle = controlAvailable
+    ? "Focus the browser and open projected remote control."
+    : projectedView?.readiness.reason ?? "The projected workspace view is not controllable.";
   const closeAvailable = Boolean(closeSupported && onCloseBrowser && isLiveBrowserRecord(browser));
   const repairAvailable = Boolean(repairSupported && onRepairBrowser && ["degraded", "faulted"].includes((browser.health ?? "").toLowerCase()));
   const closeTitle = browserRowCloseTitle({
@@ -3809,7 +3818,7 @@ function BrowserRowActions({
           size="sm"
           variant="outline"
           className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
-          title={viewStreamOpenTitle(primaryViewStream)}
+          title={viewTitle}
           onClick={() => onViewStream(browser)}
         >
           View
@@ -3821,7 +3830,7 @@ function BrowserRowActions({
           size="sm"
           variant="outline"
           className={cn("px-2 text-[10px]", density === "compact" ? "h-6" : "h-7")}
-          title={viewStreamControlTitle(primaryViewStream)}
+          title={controlTitle}
           onClick={() => onFocusViewStream(browser)}
         >
           Control
@@ -3885,13 +3894,13 @@ function BrowserRowActions({
           <DropdownMenuContent align="end" className="w-64">
             <DropdownMenuLabel>Unavailable actions</DropdownMenuLabel>
             {(!viewStreamAvailable || !onViewStream) && (
-              <DropdownMenuItem disabled title={viewStreamOpenTitle(primaryViewStream)}>
-                View: {viewStreamOpenTitle(primaryViewStream)}
+              <DropdownMenuItem disabled title={viewTitle}>
+                View: {viewTitle}
               </DropdownMenuItem>
             )}
             {(!controlAvailable || !onFocusViewStream) && (
-              <DropdownMenuItem disabled title={viewStreamControlTitle(primaryViewStream)}>
-                Control: {viewStreamControlTitle(primaryViewStream)}
+              <DropdownMenuItem disabled title={controlTitle}>
+                Control: {controlTitle}
               </DropdownMenuItem>
             )}
             {!closeAvailable && (
@@ -3913,6 +3922,7 @@ function BrowserRowActions({
 
 function BrowserTableRow({
   browser,
+  projectedView,
   ownership,
   selected,
   visibleColumns,
@@ -3930,6 +3940,7 @@ function BrowserTableRow({
   density,
 }: {
   browser: ServiceBrowser;
+  projectedView?: ProjectedWorkspaceView;
   ownership: BrowserOwnershipSummary;
   selected: boolean;
   visibleColumns: Set<BrowserTableColumnKey>;
@@ -3949,7 +3960,7 @@ function BrowserTableRow({
   const tone = healthTone(browser.health);
   const sessionCount = browser.activeSessionIds?.length ?? 0;
   const viewStreamCount = browser.viewStreams?.length ?? 0;
-  const viewStreamCapability = browserViewStreamCapability(browser);
+  const viewStreamCapability = browserViewStreamCapability(projectedView);
   const processLabel = browser.pid ? `pid ${browser.pid}` : "retained";
   return (
     <tr className={cn("service-browser-table-row", selected && "service-browser-table-row-selected")} aria-selected={selected}>
@@ -4022,6 +4033,7 @@ function BrowserTableRow({
       <td>
         <BrowserRowActions
           browser={browser}
+          projectedView={projectedView}
           onSelect={onSelect}
           onViewStream={onViewStream}
           onFocusViewStream={onFocusViewStream}
@@ -4040,6 +4052,7 @@ function BrowserTableRow({
 
 function BrowserTableCard({
   browser,
+  projectedView,
   ownership,
   selected,
   onSelect,
@@ -4053,6 +4066,7 @@ function BrowserTableCard({
   acting,
 }: {
   browser: ServiceBrowser;
+  projectedView?: ProjectedWorkspaceView;
   ownership: BrowserOwnershipSummary;
   selected: boolean;
   onSelect: (browser: ServiceBrowser) => void;
@@ -4067,7 +4081,7 @@ function BrowserTableCard({
 }) {
   const tone = healthTone(browser.health);
   const processLabel = browser.pid ? `pid ${browser.pid}` : "retained";
-  const viewStreamCapability = browserViewStreamCapability(browser);
+  const viewStreamCapability = browserViewStreamCapability(projectedView);
   return (
     <article className={cn("service-browser-card", selected && "service-browser-card-selected")}>
       <button
@@ -4123,6 +4137,7 @@ function BrowserTableCard({
       <BrowserOwnershipCell ownership={ownership} />
       <BrowserRowActions
         browser={browser}
+        projectedView={projectedView}
         onSelect={onSelect}
         onViewStream={onViewStream}
         onFocusViewStream={onFocusViewStream}
@@ -4294,10 +4309,12 @@ function ViewStreamInspectDialog({
 
 function BrowserDetailDialog({
   browser,
+  projectedView,
   onInspectViewStream,
   onOpenChange,
 }: {
   browser: ServiceBrowser | null;
+  projectedView?: ProjectedWorkspaceView | null;
   onInspectViewStream?: (stream: ServiceViewStream, browser: ServiceBrowser) => void;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -4314,7 +4331,7 @@ function BrowserDetailDialog({
                 {browser.host ?? "unknown host"} / {browser.health ?? "unknown health"}
               </DialogDescription>
             </DialogHeader>
-            <BrowserDetailContent browser={browser} onInspectViewStream={onInspectViewStream} />
+            <BrowserDetailContent browser={browser} projectedView={projectedView} onInspectViewStream={onInspectViewStream} />
           </>
         )}
       </DialogContent>
@@ -4324,20 +4341,22 @@ function BrowserDetailDialog({
 
 function BrowserDetailContent({
   browser,
+  projectedView,
   onInspectViewStream,
   onControlBrowser,
   onSelectProfileId,
   onSelectSessionId,
 }: {
   browser: ServiceBrowser;
+  projectedView?: ProjectedWorkspaceView | null;
   onInspectViewStream?: (stream: ServiceViewStream, browser: ServiceBrowser) => void;
   onControlBrowser?: (browser: ServiceBrowser) => void;
   onSelectProfileId?: (profileId: string) => void;
   onSelectSessionId?: (sessionId: string) => void;
 }) {
   const viewStreamCount = browser.viewStreams?.length ?? 0;
-  const primaryViewStream = browserPrimaryViewStream(browser);
-  const controlAvailable = canOpenControlViewStream(primaryViewStream);
+  const primaryViewStream = projectedView?.stream ?? null;
+  const controlAvailable = projectedView?.canControl ?? false;
   const executableSource = browserExecutableSource(browser);
   const executableKind = browserExecutableKind(executableSource);
   const executablePlatform = browserExecutablePlatform(executableSource);
@@ -4350,7 +4369,7 @@ function BrowserDetailContent({
         title={browser.id || "Browser process"}
         state={formatHealthLabel(browser.health)}
         tone={healthTone(browser.health)}
-        description={browserDescription(browser)}
+        description={browserDescription(browser, projectedView)}
         ownership={browserOwnershipLine(browser)}
         chips={[
           browserExecutableLabel(executableKind),
@@ -4373,7 +4392,9 @@ function BrowserDetailContent({
               size="sm"
               className="gap-1.5 rounded-full"
               disabled={!controlAvailable}
-              title={viewStreamControlTitle(primaryViewStream)}
+              title={controlAvailable
+                ? "Open projected remote control."
+                : projectedView?.readiness.reason ?? "The projected workspace view is not controllable."}
               onClick={() => onControlBrowser(browser)}
             >
               <Eye className="size-3.5" />
@@ -4443,7 +4464,7 @@ function BrowserDetailContent({
             { label: "Display", value: browser.displayName ?? displayIsolationLabel(browser.displayIsolation) },
           ]}
         />
-        <RemoteViewReadinessStrip browser={browser} stream={primaryViewStream} />
+        <RemoteViewReadinessStrip browser={browser} projectedView={projectedView} />
       </InspectorSection>
       {activeSessionIds.length > 0 && (
         <InspectorSection title="Ownership" detail={`${activeSessionIds.length} active session${activeSessionIds.length === 1 ? "" : "s"}`}>
@@ -4457,7 +4478,13 @@ function BrowserDetailContent({
               <ViewStreamCard
                 key={`${stream.id ?? stream.provider ?? "stream"}-${index}`}
                 stream={stream}
-                onInspect={onInspectViewStream ? (selectedStream) => onInspectViewStream(selectedStream, browser) : undefined}
+                onInspect={onInspectViewStream
+                  && projectedView?.canView
+                  && stream.id === projectedView.stream?.id
+                  && stream.provider === projectedView.stream?.provider
+                  && stream.routeId === projectedView.stream?.routeId
+                  ? (selectedStream) => onInspectViewStream(selectedStream, browser)
+                  : undefined}
               />
             ))}
           </div>
@@ -4503,6 +4530,7 @@ export function ServiceDetailInspector({
         {selection.kind === "browser" && (
           <BrowserDetailContent
             browser={selection.browser}
+            projectedView={selection.projectedView}
             onControlBrowser={actions.onControlBrowser}
             onSelectProfileId={actions.onSelectProfileId}
             onSelectSessionId={actions.onSelectSessionId}
@@ -7190,6 +7218,43 @@ export function ServicePanel({
     () => Object.values(serviceState?.tabs ?? {}),
     [serviceState?.tabs],
   );
+  const projectedViewByBrowserId = useMemo(() => {
+    const workspaceInput = {
+      serviceBrowsers: browserRecords,
+      serviceSessions: sessionRecords,
+      serviceTabs: tabRecords,
+      profileAllocations,
+      jobs: retainedServiceJobs,
+      incidents: incidentRecords.map((incident) => ({
+        id: incident.id,
+        browserId: incident.browserId,
+        label: incident.label,
+        severity: incident.severity,
+        escalation: incident.escalation,
+        recommendedAction: incident.recommendedAction,
+        latestMessage: incident.latestMessage,
+        currentHealth: incident.currentHealth,
+        acknowledgedAt: incident.acknowledgedAt,
+        resolvedAt: incident.resolvedAt,
+      })),
+      browserSessionAuthority: status?.browserSessionAuthority ?? null,
+      serviceRequestActions,
+    };
+    const projection = projectServiceWorkspaceViews(workspaceInput, {
+      mode: "inspect",
+      dashboardHref: typeof window === "undefined" ? null : window.location.href,
+    });
+    return new Map(projection.candidates.map((candidate) => [candidate.browser.id, candidate]));
+  }, [
+    browserRecords,
+    incidentRecords,
+    profileAllocations,
+    retainedServiceJobs,
+    serviceRequestActions,
+    sessionRecords,
+    status?.browserSessionAuthority,
+    tabRecords,
+  ]);
   const sessionTabQueryText = sessionTabQuery.trim().toLowerCase();
   const filteredSessionRecords = useMemo(
     () =>
@@ -7273,7 +7338,7 @@ export function ServicePanel({
       }, options.historyMode);
     }
     if (onInspectSelection) {
-      onInspectSelection({ kind: "browser", browser });
+      onInspectSelection({ kind: "browser", browser, projectedView: projectedViewByBrowserId.get(browser.id) });
       return;
     }
     if (onBrowserInspect) {
@@ -7281,7 +7346,7 @@ export function ServicePanel({
       return;
     }
     setSelectedBrowser(browser);
-  }, [onBrowserInspect, onInspectSelection, syncWorkspaceSelection]);
+  }, [onBrowserInspect, onInspectSelection, projectedViewByBrowserId, syncWorkspaceSelection]);
   const inspectSession = useCallback((
     session: ServiceSession,
     options: { syncWorkspace?: boolean; historyMode?: "push" | "replace" } = {},
@@ -7301,7 +7366,9 @@ export function ServicePanel({
     tab: ServiceTab,
     options: { syncWorkspace?: boolean; historyMode?: "push" | "replace" } = {},
   ) => {
-    const viewStreamAvailable = tab.browserId ? canOpenViewStream(browserPrimaryViewStream(browserById.get(tab.browserId))) : false;
+    const viewStreamAvailable = tab.browserId
+      ? projectedViewByBrowserId.get(tab.browserId)?.canControl ?? false
+      : false;
     if (options.syncWorkspace !== false && tab.id) {
       syncWorkspaceSelection({
         tabId: tab.id,
@@ -7312,7 +7379,7 @@ export function ServicePanel({
       return;
     }
     setSelectedTab(tab);
-  }, [browserById, onInspectSelection, syncWorkspaceSelection]);
+  }, [onInspectSelection, projectedViewByBrowserId, syncWorkspaceSelection]);
   const sessionById = useMemo(
     () => new Map(sessionRecords.map((session) => [session.id, session])),
     [sessionRecords],
@@ -7437,25 +7504,27 @@ export function ServicePanel({
     workspaceUrlSelection,
   ]);
   const openBrowserViewStream = useCallback((browser: ServiceBrowser) => {
-    const stream = browserPrimaryViewStream(browser);
+    const projectedView = projectedViewByBrowserId.get(browser.id);
+    const stream = projectedView?.stream;
     if (!stream) {
       setError("No view stream is registered for this browser.");
       return;
     }
-    if (!canEmbedViewStream(stream)) {
-      setError(viewStreamOpenTitle(stream));
+    if (!projectedView.canView) {
+      setError(projectedView.readiness.reason ?? "The projected workspace view is not ready.");
       return;
     }
     openViewStream(stream, browser);
-  }, [openViewStream]);
+  }, [openViewStream, projectedViewByBrowserId]);
   const focusBrowserViewStream = useCallback(async (browser: ServiceBrowser) => {
-    const stream = browserPrimaryViewStream(browser);
+    const projectedView = projectedViewByBrowserId.get(browser.id);
+    const stream = projectedView?.stream;
     if (!stream) {
       setError("No view stream is registered for this browser.");
       return;
     }
-    if (!canOpenControlViewStream(stream)) {
-      setError(viewStreamControlTitle(stream));
+    if (!projectedView.canControl) {
+      setError(projectedView.readiness.reason ?? "The projected workspace view is not controllable.");
       return;
     }
 
@@ -7495,7 +7564,7 @@ export function ServicePanel({
     }
 
     openViewStream(stream, browser, primaryTab, focusMessage);
-  }, [activePort, activeSession, browserTabsById, canFetch, openViewStream, operatorIdentity, tabIndexById]);
+  }, [activePort, activeSession, browserTabsById, canFetch, openViewStream, operatorIdentity, projectedViewByBrowserId, tabIndexById]);
 
   const closeServiceBrowser = useCallback(async (browser: ServiceBrowser) => {
     if (!canFetch || !browser.id) return;
@@ -7597,13 +7666,14 @@ export function ServicePanel({
   }, [activePort, activeSession, canFetch, fetchService, operatorIdentity, selectWorkspaceTab, serviceState]);
   const inspectTabViewStream = useCallback(async (tab: ServiceTab) => {
     const browser = tab.browserId ? browserById.get(tab.browserId) : null;
-    const stream = browserPrimaryViewStream(browser);
+    const projectedView = browser ? projectedViewByBrowserId.get(browser.id) : null;
+    const stream = projectedView?.stream;
     if (!browser || !stream) {
       setError("No view stream is registered for this tab's browser.");
       return;
     }
-    if (!canOpenControlViewStream(stream)) {
-      setError(viewStreamControlTitle(stream));
+    if (!projectedView.canControl) {
+      setError(projectedView.readiness.reason ?? "The projected workspace view is not controllable.");
       return;
     }
 
@@ -7641,7 +7711,7 @@ export function ServicePanel({
     }
 
     openViewStream(stream, browser, tab, focusMessage);
-  }, [activePort, activeSession, browserById, canFetch, openViewStream, operatorIdentity, tabIndexById]);
+  }, [activePort, activeSession, browserById, canFetch, openViewStream, operatorIdentity, projectedViewByBrowserId, tabIndexById]);
 
   useEffect(() => {
     if (!onInspectorActionsChange) return;
@@ -7817,6 +7887,7 @@ export function ServicePanel({
       />
       <BrowserDetailDialog
         browser={selectedBrowser}
+        projectedView={selectedBrowser ? projectedViewByBrowserId.get(selectedBrowser.id) : null}
         onInspectViewStream={(stream, browser) => openViewStream(stream, browser)}
         onOpenChange={(open) => {
           if (!open) setSelectedBrowser(null);
@@ -7838,7 +7909,7 @@ export function ServicePanel({
       />
       <TabDetailDialog
         tab={selectedTab}
-        viewStreamAvailable={selectedTab?.browserId ? canOpenControlViewStream(browserPrimaryViewStream(browserById.get(selectedTab.browserId))) : false}
+        viewStreamAvailable={selectedTab?.browserId ? projectedViewByBrowserId.get(selectedTab.browserId)?.canControl ?? false : false}
         onInspect={inspectTabViewStream}
         onOpenChange={(open) => {
           if (!open) setSelectedTab(null);
@@ -8094,6 +8165,7 @@ export function ServicePanel({
                   <BrowserTable
                     browsers={browserRecords}
                     sessions={sessionRecords}
+                    projectedViewByBrowserId={projectedViewByBrowserId}
                     onSelect={inspectBrowser}
                     onViewStream={openBrowserViewStream}
                     onFocusViewStream={focusBrowserViewStream}
@@ -8466,7 +8538,7 @@ export function ServicePanel({
                     <ServiceTabRow
                       key={tab.id || tab.targetId || `tab-${index}`}
                       tab={tab}
-                      viewStreamAvailable={tab.browserId ? canOpenControlViewStream(browserPrimaryViewStream(browserById.get(tab.browserId))) : false}
+                      viewStreamAvailable={tab.browserId ? projectedViewByBrowserId.get(tab.browserId)?.canControl ?? false : false}
                       onInspect={inspectTabViewStream}
                       onSelect={inspectTab}
                     />

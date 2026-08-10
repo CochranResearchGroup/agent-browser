@@ -714,6 +714,13 @@ canonical inventory and one live projection used by the navigator. Delete any
 component-local filter that can recreate attention, retained, or terminal-only
 rows in the live rail.
 
+Plan 0099 implements the dashboard side of this direction. Raw Service Status
+records enter a compatibility authority ledger before presentation selection,
+and `projectWorkspaceViews` is the single presentation seam for nodes,
+selected context, viewport tiles, and Service inspection. Presentation facts
+may reduce View or Control availability but cannot upgrade lifecycle ownership,
+inventory class, or route-bound proof.
+
 For foreign CDP discovery, keep the current discovery improvements, but move
 them behind a separate `foreign_cdp` boundary before expanding mutating
 capability. The only initial actions should remain inspect, stream, and
@@ -964,6 +971,9 @@ Deliverables:
   workspace inventory endpoint.
 - Update `service-workspaces.ts` to consume canonical classes first and retain
   local fallback only for old service versions.
+- Keep the Plan 0099 authority-ledger compatibility classifier upstream of the
+  workspace view projection until the Rust canonical inventory record covers
+  every dashboard row.
 - Remove the live left-rail attention group.
 - Keep incident and retained-history browsing in non-live diagnostic views.
 - Add a dashboard compatibility guard that prevents old or unknown inventory

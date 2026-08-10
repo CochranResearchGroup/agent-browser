@@ -1,9 +1,14 @@
 import type { SessionInfo, TabInfo } from "../types.ts";
+import type { ServiceViewStream } from "./service-view-streams.ts";
 import {
-  canOpenControlViewStream,
-  canOpenViewStream,
-  type ServiceViewStream as DashboardServiceViewStream,
-} from "./service-view-streams.ts";
+  projectWorkspaceViews,
+  type ProjectedWorkspaceView,
+  type WorkspaceViewAuthorityEntry,
+  type WorkspaceViewAuthorityLedger,
+  type WorkspaceViewBrowserSource,
+  type WorkspaceViewIntent,
+  type WorkspaceViewProjection,
+} from "./workspace-view-projection.ts";
 
 export type WorkspaceNodeState =
   | "active"
@@ -265,6 +270,14 @@ export type WorkspaceServiceBrowser = {
   attachability?: unknown;
   activeSessionIds?: string[];
   lastError?: string | null;
+  inventoryClass?: WorkspaceInventoryClass | null;
+  inventoryPlacement?: WorkspaceInventoryPlacement | null;
+  lifecycleState?: WorkspaceNodeState | null;
+  routeBoundOwnership?: WorkspaceRouteBoundOwnership | null;
+  operatorVisibleProof?: WorkspaceViewAuthorityEntry["operatorVisibleProof"];
+  lifecycleActions?: WorkspaceNodeAction[];
+  presentationActionCeilings?: WorkspaceViewAuthorityEntry["presentationActionCeilings"];
+  diagnostics?: WorkspaceOwnershipDiagnostic[];
 };
 
 export type WorkspaceServiceViewStream = {
@@ -439,6 +452,7 @@ export type WorkspaceNodeInput = {
   serviceBrowsers?: WorkspaceServiceBrowser[];
   serviceSessions?: WorkspaceServiceSession[];
   serviceTabs?: WorkspaceServiceTab[];
+  remoteViewRoutes?: Record<string, WorkspaceServiceViewStream>;
   profileAllocations?: WorkspaceServiceProfileAllocation[];
   jobs?: WorkspaceServiceJob[];
   incidents?: WorkspaceServiceIncident[];
@@ -449,6 +463,128 @@ export type WorkspaceNodeInput = {
   includeRetained?: boolean;
   includeHidden?: boolean;
 };
+
+/**
+ * Classifies canonical lifecycle and inventory authority before presentation
+ * stream selection. Projection may reduce presentation actions but cannot
+ * upgrade these entries.
+ */
+export function deriveWorkspaceViewAuthorityLedger(input: WorkspaceNodeInput): WorkspaceViewAuthorityLedger {
+  const sessions = input.serviceSessions ?? [];
+  const tabs = input.serviceTabs ?? [];
+  const allocations = input.profileAllocations ?? [];
+  const jobs = input.jobs ?? [];
+  const incidents = input.incidents ?? [];
+  const verdicts = browserAuthorityVerdictsByBrowserId(input.browserSessionAuthority);
+  return Object.fromEntries((input.serviceBrowsers ?? []).map((browser) => {
+    const browserSessions = sessions.filter((session) =>
+      session.browserIds?.includes(browser.id) || browser.activeSessionIds?.includes(session.id),
+    );
+    const browserTabs = tabs.filter((tab) => tab.browserId === browser.id);
+    const allocation = allocations.find((candidate) =>
+      candidate.profileId === browser.profileId || candidate.browserIds?.includes(browser.id),
+    );
+    const ownership = firstOwnership(browserSessions, allocation);
+    const viewerClient = classifyViewerClient({
+      ids: uniqueStrings([browser.id, browser.profileId, ...(browser.activeSessionIds ?? [])]),
+      ownership,
+      tabs: browserTabs,
+    });
+    const authority = browserAuthorityPlacement(verdicts.get(browser.id));
+    const live = isLiveBrowser(browser) && authority.live;
+    const explicitOwnership = browser.routeBoundOwnership ?? null;
+    const routeBoundOwnership: WorkspaceRouteBoundOwnership | null = explicitOwnership
+      ? {
+          state: !live
+            ? "retained"
+            : normalizeRouteBoundOwnershipState(explicitOwnership.state) ?? "diagnostic",
+          routeId: explicitOwnership.routeId ?? null,
+          displayAllocationId: explicitOwnership.displayAllocationId ?? browser.displayAllocationId ?? null,
+          routePoolEntryId: explicitOwnership.routePoolEntryId ?? null,
+          reason: !live
+            ? "Retained route-bound browser records are not live control targets."
+            : explicitOwnership.reason ?? null,
+        }
+      : null;
+    const operatorVisibleProof = browser.operatorVisibleProof ?? null;
+    const busy = jobs.some((job) => jobMatches({ job, browser, sessions: browserSessions, allocation, tabs: browserTabs }) && isActiveJob(job));
+    const relatedIncidents = incidents.filter((incident) => incident.browserId === browser.id);
+    const attention = authority.reason
+      ?? (routeBoundOwnership && routeBoundOwnership.state !== "finalized" ? routeBoundOwnership.reason : null)
+      ?? (operatorVisibleProof && normalize(operatorVisibleProof.state) !== "ready" ? operatorVisibleProof.reason : null)
+      ?? browserAttentionReason(browser, allocation, relatedIncidents);
+    const operatorProofAllowsView = !operatorVisibleProof || normalize(operatorVisibleProof.state) === "ready";
+    const authorityControlAllowed = live
+      && !viewerClient.active
+      && operatorProofAllowsView
+      && (!routeBoundOwnership || routeBoundOwnership.state === "finalized");
+    const authorityViewAllowed = live && !viewerClient.active && operatorProofAllowsView;
+    const state: WorkspaceNodeState = browser.lifecycleState ?? (viewerClient.active
+      ? "needs-attention"
+      : authority.forceAttention
+        ? "needs-attention"
+      : attention
+        ? "needs-attention"
+      : busy
+        ? "busy"
+      : authorityControlAllowed
+        ? "controllable"
+        : authorityViewAllowed
+          ? "view-only"
+          : live
+            ? "active"
+            : "retained");
+    const inventoryClass: WorkspaceInventoryClass = browser.inventoryClass ?? (viewerClient.active
+      ? "viewer-client"
+      : !live
+        ? "retained-history"
+        : authorityControlAllowed
+          ? "service-owned-controllable-browser"
+          : authorityViewAllowed
+            ? "service-owned-view-only-browser"
+            : "service-owned-diagnostic-browser");
+    const subjectKey = `browser:${browser.id}`;
+    const viewReason = authorityViewAllowed ? null : attention ?? "Canonical browser authority does not permit viewing.";
+    const controlReason = authorityControlAllowed ? null : attention ?? routeBoundOwnership?.reason ?? "Canonical browser authority does not permit control.";
+    const presentationActionCeilings = browser.presentationActionCeilings ?? {
+      view: { allowed: authorityViewAllowed, reason: viewReason },
+      control: { allowed: authorityControlAllowed, reason: controlReason },
+      stream: { allowed: authorityViewAllowed, reason: viewReason },
+      screenshot: { allowed: live, reason: live ? null : "Browser is retained, not live." },
+    };
+    const closeSupported = input.serviceRequestActions === undefined
+      || new Set(input.serviceRequestActions).has("service_browser_close");
+    const lifecycleActions = browser.lifecycleActions ?? [
+      { id: "focus" as const, label: "Focus", enabled: live, reason: live ? null : "Browser is retained, not live." },
+      { id: "repair" as const, label: "Repair", enabled: Boolean(attention), reason: attention ? null : "No service-owned repair reason is present." },
+      {
+        id: "close" as const,
+        label: "Close",
+        enabled: live && closeSupported,
+        reason: !live
+          ? "Browser is already retained."
+          : closeSupported
+            ? null
+            : "Service contract does not advertise service_browser_close.",
+      },
+    ];
+    const entry: WorkspaceViewAuthorityEntry = {
+      subjectKey,
+      authoritySource: "service-status-compatibility",
+      browserId: browser.id,
+      workspaceId: subjectKey,
+      inventoryClass,
+      inventoryPlacement: browser.inventoryPlacement ?? undefined,
+      lifecycle: { state, live, retained: !live, health: browser.health ?? null, reason: attention },
+      routeBoundOwnership,
+      operatorVisibleProof,
+      lifecycleActions,
+      presentationActionCeilings,
+      diagnostics: browser.diagnostics ?? [],
+    };
+    return [subjectKey, entry];
+  }));
+}
 
 const TERMINAL_BROWSER_HEALTH = new Set([
   "cdp_disconnected",
@@ -503,6 +639,7 @@ const INTERNAL_DASHBOARD_SERVICE_NAMES = new Set([
 ]);
 
 export function deriveWorkspaceNodes(input: WorkspaceNodeInput): WorkspaceNode[] {
+  const authorityLedger = deriveWorkspaceViewAuthorityLedger(input);
   const daemonSessions = input.daemonSessions ?? [];
   const daemonTabsByPort = input.daemonTabsByPort ?? {};
   const daemonEngineByPort = input.daemonEngineByPort ?? {};
@@ -513,9 +650,10 @@ export function deriveWorkspaceNodes(input: WorkspaceNodeInput): WorkspaceNode[]
   const jobs = input.jobs ?? [];
   const incidents = input.incidents ?? [];
   const manualBrowsers = input.manualBrowsers ?? [];
-  const browserCloseSupported = input.serviceRequestActions === undefined ||
-    new Set(input.serviceRequestActions).has("service_browser_close");
-  const authorityVerdictsByBrowserId = browserAuthorityVerdictsByBrowserId(input.browserSessionAuthority);
+  const workspaceViewProjection = projectServiceWorkspaceViews(input, { mode: "inspect" }, authorityLedger);
+  const projectedViewByBrowserId = new Map(
+    workspaceViewProjection.candidates.map((candidate) => [candidate.browser.id, candidate]),
+  );
   const ownershipDiagnostics = deriveWorkspaceOwnershipDiagnostics({
     serviceBrowsers,
     serviceSessions,
@@ -590,8 +728,8 @@ export function deriveWorkspaceNodes(input: WorkspaceNodeInput): WorkspaceNode[]
       jobs: relatedJobs,
       incidents: relatedIncidents,
       diagnostics,
-      authorityVerdict: authorityVerdictsByBrowserId.get(browser.id),
-      browserCloseSupported,
+      authorityEntry: authorityLedger[`browser:${browser.id}`],
+      projectedView: projectedViewByBrowserId.get(browser.id),
     });
     nodes.push(applyWorkspaceInventoryPlacement(node));
     browserIdsWithNodes.add(browser.id);
@@ -669,6 +807,53 @@ export function deriveWorkspaceNodes(input: WorkspaceNodeInput): WorkspaceNode[]
     .filter((node) => input.includeHidden || node.inventoryPlacement.lane !== "hidden")
     .filter((node) => input.includeRetained || node.inventoryPlacement.lane !== "retained")
     .sort(compareWorkspaceNodes);
+}
+
+/** Projects one immutable Service Status snapshot for node and inspector consumers. */
+export function projectServiceWorkspaceViews(
+  input: WorkspaceNodeInput,
+  intent: WorkspaceViewIntent = { mode: "inspect" },
+  authorityLedger: WorkspaceViewAuthorityLedger = deriveWorkspaceViewAuthorityLedger(input),
+): WorkspaceViewProjection {
+  return projectWorkspaceViews({
+    sources: {
+      serviceBrowsers: (input.serviceBrowsers ?? []).map(workspaceViewBrowserSource),
+      serviceTabs: input.serviceTabs ?? [],
+      daemonSessions: input.daemonSessions ?? [],
+      remoteViewRoutes: workspaceRemoteViewRouteSources(input.remoteViewRoutes),
+    },
+    authorityLedger,
+    intent,
+  });
+}
+
+function workspaceRemoteViewRouteSources(
+  routes: Record<string, WorkspaceServiceViewStream> | undefined,
+): Record<string, ServiceViewStream> | undefined {
+  if (!routes) return undefined;
+  return Object.fromEntries(
+    Object.entries(routes).map(([routeId, stream]) => [
+      routeId,
+      {
+        ...stream,
+        id: stream.id ?? undefined,
+        provider: stream.provider ?? undefined,
+        readOnly: stream.readOnly ?? undefined,
+      },
+    ]),
+  );
+}
+
+function workspaceViewBrowserSource(browser: WorkspaceServiceBrowser): WorkspaceViewBrowserSource {
+  return {
+    ...browser,
+    viewStreams: (browser.viewStreams ?? []).map((stream) => ({
+      ...stream,
+      id: stream.id ?? undefined,
+      provider: stream.provider ?? undefined,
+      readOnly: stream.readOnly ?? undefined,
+    })),
+  };
 }
 
 export function deriveLiveWorkspaceNodes(input: WorkspaceNodeInput): WorkspaceNode[] {
@@ -1044,8 +1229,8 @@ function createBrowserWorkspaceNode({
   jobs,
   incidents,
   diagnostics,
-  authorityVerdict,
-  browserCloseSupported,
+  authorityEntry,
+  projectedView,
 }: {
   browser: WorkspaceServiceBrowser;
   sessions: WorkspaceServiceSession[];
@@ -1054,15 +1239,12 @@ function createBrowserWorkspaceNode({
   jobs: WorkspaceServiceJob[];
   incidents: WorkspaceServiceIncident[];
   diagnostics: WorkspaceOwnershipDiagnostic[];
-  authorityVerdict?: WorkspaceBrowserSessionAuthorityVerdict;
-  browserCloseSupported: boolean;
+  authorityEntry?: WorkspaceViewAuthorityEntry;
+  projectedView?: ProjectedWorkspaceView;
 }): WorkspaceNode {
   const ownership = firstOwnership(sessions, allocation);
   const primaryTab = primaryServiceTab(tabs);
-  const rawViewStream = selectPrimaryWorkspaceViewStream(browser.viewStreams);
-  const rawPrimaryViewStream = rawViewStream
-    ? cdpSnapshotFallbackViewStream(browser, rawViewStream) ?? primaryViewStream([rawViewStream])
-    : null;
+  const viewStream = workspaceNodeViewFromProjection(projectedView);
   const takeover = takeoverForSessions(sessions, allocation, jobs);
   const busy = jobs.some(isActiveJob);
   const terminal = isTerminalBrowser(browser);
@@ -1085,50 +1267,23 @@ function createBrowserWorkspaceNode({
   const attentionReason = browserAttentionReason(browser, allocation, incidents, {
     includeTerminalHealth: !terminal || busy || incidents.some((incident) => !incident.resolvedAt) || Boolean(takeover),
   });
-  const authority = browserAuthorityPlacement(authorityVerdict);
-  const live = isLiveBrowser(browser) && authority.live;
-  const routeProofDiagnostic = live
-    ? idleRouteDisplayDiagnosticFor({
-        browser,
-        stream: rawViewStream,
-        relatedIds: diagnosticRelatedIds,
-      })
+  const live = authorityEntry?.lifecycle.live ?? isLiveBrowser(browser);
+  const projectedAttentionReason = projectedView && !projectedView.canView
+    ? projectedView.readiness.reason
     : null;
-  const disabledStreamReason = !live
-    ? "Browser is retained, not live."
-    : viewerClient.reason ?? routeProofDiagnostic?.message ?? null;
-  const proofGatedViewStream = rawPrimaryViewStream && disabledStreamReason
-    ? disableViewStream(rawPrimaryViewStream, disabledStreamReason)
-    : rawPrimaryViewStream;
-  const routeBoundOwnership = routeBoundOwnershipFor({
-    live,
-    viewerClient: viewerClient.active,
-    stream: rawViewStream,
-    viewStream: proofGatedViewStream,
-  });
-  const routeBoundOwnershipReason = routeBoundOwnershipControlReason(routeBoundOwnership, rawViewStream);
-  const viewStream = proofGatedViewStream && routeBoundOwnershipReason
-    ? disableViewStream(proofGatedViewStream, routeBoundOwnershipReason)
-    : proofGatedViewStream;
-  const routeBoundAttentionReason = live ? routeBoundViewStreamAttentionReason(viewStream) : null;
-  const viewStreamAttentionReason = live ? disabledViewStreamAttentionReason(viewStream) : null;
-  const effectiveAttentionReason = authority.reason ?? routeBoundAttentionReason ?? viewStreamAttentionReason ?? attentionReason;
-  const blockedReason = takeover?.queueImpact ?? (terminal ? null : live && viewStream?.controllable ? null : profileBlockedReason(allocation));
-  const state = viewerClient.active ? "needs-attention" : workspaceState({
-    busy,
-    blockedReason,
-    attentionReason: effectiveAttentionReason,
-    live,
-    viewStream,
-  });
-  const effectiveState = !viewerClient.active && authority.forceAttention ? "needs-attention" : state;
+  const effectiveAttentionReason = authorityEntry?.lifecycle.reason ?? attentionReason ?? projectedAttentionReason;
+  const blockedReason = takeover?.queueImpact ?? (terminal ? null : profileBlockedReason(allocation));
+  const effectiveState = (authorityEntry?.lifecycle.state as WorkspaceNodeState | undefined)
+    ?? (viewerClient.active
+      ? "needs-attention"
+      : workspaceState({ busy, blockedReason, attentionReason: effectiveAttentionReason, live }));
   const viewerClientDiagnostic = viewerClientDiagnosticFor({
     reason: viewerClient.reason,
     relatedIds: diagnosticRelatedIds,
   });
   const nodeDiagnostics = uniqueDiagnostics([
     ...(viewerClientDiagnostic ? [viewerClientDiagnostic] : []),
-    ...(routeProofDiagnostic ? [routeProofDiagnostic] : []),
+    ...((authorityEntry?.diagnostics ?? []) as WorkspaceOwnershipDiagnostic[]),
     ...diagnostics,
   ]);
   const label = browserWorkspaceLabel({
@@ -1148,7 +1303,7 @@ function createBrowserWorkspaceNode({
     live,
     viewerClient: viewerClient.active,
     viewStream,
-    rawViewStream,
+    projectedView,
   });
   const secondaryLabel = compactLabels([
     workspaceSessionLabel(sessions[0]?.id ?? browser.activeSessionIds?.[0]),
@@ -1170,12 +1325,12 @@ function createBrowserWorkspaceNode({
     role: viewerClient.active ? "viewer-client" : "target-browser",
     roleReason: viewerClient.reason,
     group: groupForState(effectiveState),
-    inventoryClass: browserInventoryClass({
-      viewerClient: viewerClient.active,
-      live,
-      state: effectiveState,
-      viewStream,
-    }),
+    inventoryClass: (authorityEntry?.inventoryClass as WorkspaceInventoryClass | undefined)
+      ?? (viewerClient.active
+        ? "viewer-client"
+        : live
+          ? "service-owned-diagnostic-browser"
+          : "retained-history"),
     state: effectiveState,
     label,
     secondaryLabel,
@@ -1193,7 +1348,7 @@ function createBrowserWorkspaceNode({
     ownership,
     primaryTab,
     viewStream,
-    routeBoundOwnership,
+    routeBoundOwnership: (authorityEntry?.routeBoundOwnership as WorkspaceRouteBoundOwnership | null | undefined) ?? null,
     profileActionability,
     takeover,
     diagnostics: nodeDiagnostics,
@@ -1212,29 +1367,96 @@ function createBrowserWorkspaceNode({
       jobIds: uniqueStrings(jobs.map((job) => job.id)),
       incidentIds: uniqueStrings(incidents.map((incident) => incident.id)),
     },
-    actions: viewerClient.active
-      ? viewerClientActions(
-          browserActions(
-            browser,
-            live,
-            viewStream,
-            blockedReason ?? effectiveAttentionReason,
-            takeover,
-            undefined,
-            browserCloseSupported,
-          ),
-          viewerClient.reason,
-        )
-      : browserActions(
-          browser,
-          live,
-          viewStream,
-          blockedReason ?? effectiveAttentionReason,
-          takeover,
-          profileActionability,
-          browserCloseSupported,
-        ),
+    actions: browserProjectionActions({
+      authority: authorityEntry,
+      projectedView,
+      profileActionability,
+      takeover,
+      viewerClientReason: viewerClient.active ? viewerClient.reason : null,
+    }),
   };
+}
+
+function workspaceNodeViewFromProjection(projected?: ProjectedWorkspaceView): WorkspaceNodeViewStream | null {
+  const stream = projected?.stream;
+  if (!projected || !stream) return null;
+  return {
+    provider: stream.provider ?? null,
+    url: projected.frameUrl ?? projected.externalUrl,
+    routeId: stream.routeId ?? null,
+    displayAllocationId: stream.displayAllocationId ?? null,
+    routePoolEntryId: null,
+    connectionId: stream.connectionId ?? null,
+    connectionName: stream.connectionName ?? null,
+    routeSource: stream.routeSource ?? null,
+    providerMode: stream.providerMode ?? null,
+    viewerLeaseIds: stream.viewerLeaseIds ?? [],
+    controllerLeaseId: stream.controllerLeaseId ?? null,
+    embeddable: projected.canView,
+    controllable: projected.canControl,
+    readOnly: stream.readOnly === true || !projected.canControl,
+    controlInput: projected.canControl ? stream.controlInput ?? null : null,
+    operatorVisibleState: projected.readiness.state,
+    operatorVisibleReason: projected.readiness.reason,
+    routeSummary: projected.routeSummary,
+  };
+}
+
+function browserProjectionActions({
+  authority,
+  projectedView,
+  profileActionability,
+  takeover,
+  viewerClientReason,
+}: {
+  authority?: WorkspaceViewAuthorityEntry;
+  projectedView?: ProjectedWorkspaceView;
+  profileActionability?: WorkspaceProfileActionability | null;
+  takeover?: WorkspaceNodeTakeover | null;
+  viewerClientReason?: string | null;
+}): WorkspaceNodeAction[] {
+  const lifecycleActions = (authority?.lifecycleActions ?? []).filter(isWorkspaceNodeAction);
+  const lifecycleIds = new Set(lifecycleActions.map((action) => action.id));
+  const actions = [...lifecycleActions];
+  if (takeover && !lifecycleIds.has("resume")) {
+    actions.push({ id: "resume", label: "Resume", enabled: takeover.resumeSupported, reason: takeover.resumeReason });
+  }
+  if (!lifecycleIds.has("add-tab")) {
+    const canAddTab = profileActionability?.recommendedAction === "openSharedProfileTab" && profileActionability.enabled;
+    actions.push({
+      id: "add-tab",
+      label: "Add tab",
+      enabled: Boolean(canAddTab),
+      reason: canAddTab ? null : profileActionability?.reason ?? "No compatible retained profile owner is available for tab creation.",
+    });
+  }
+  const viewReason = projectedView?.readiness.reason
+    ?? authority?.presentationActionCeilings.view.reason
+    ?? "No embeddable service-owned view stream.";
+  const controlReason = projectedView?.readiness.reason
+    ?? authority?.presentationActionCeilings.control.reason
+    ?? "No controllable service-owned view stream.";
+  actions.push(
+    { id: "view", label: "View", enabled: projectedView?.canView ?? false, reason: projectedView?.canView ? null : viewReason },
+    { id: "control", label: "Control", enabled: projectedView?.canControl ?? false, reason: projectedView?.canControl ? null : controlReason },
+  );
+  if (projectedView?.externalUrl) {
+    actions.push({
+      id: "external-open",
+      label: "Open externally",
+      enabled: projectedView.canView,
+      reason: projectedView.canView ? null : viewReason,
+    });
+  }
+  return viewerClientReason ? viewerClientActions(actions, viewerClientReason) : actions;
+}
+
+function isWorkspaceNodeAction(value: unknown): value is WorkspaceNodeAction {
+  if (!value || typeof value !== "object") return false;
+  const action = value as Partial<WorkspaceNodeAction>;
+  return typeof action.id === "string"
+    && typeof action.label === "string"
+    && typeof action.enabled === "boolean";
 }
 
 function browserAuthorityVerdictsByBrowserId(
@@ -1607,16 +1829,12 @@ function workspaceState({
   blockedReason,
   attentionReason,
   live,
-  viewStream,
 }: {
   busy: boolean;
   blockedReason?: string | null;
   attentionReason?: string | null;
   live: boolean;
-  viewStream?: WorkspaceNodeViewStream | null;
 }): WorkspaceNodeState {
-  if (live && viewStream?.controllable) return "controllable";
-  if (live && viewStream?.embeddable) return "view-only";
   if (blockedReason) return "blocked";
   if (attentionReason) return "needs-attention";
   if (busy) return "busy";
@@ -1627,28 +1845,6 @@ function groupForState(state: WorkspaceNodeState): WorkspaceNodeGroup {
   if (state === "blocked" || state === "needs-attention") return "needs-attention";
   if (state === "retained") return "retained";
   return "active";
-}
-
-function browserInventoryClass({
-  viewerClient,
-  live,
-  state,
-  viewStream,
-}: {
-  viewerClient: boolean;
-  live: boolean;
-  state: WorkspaceNodeState;
-  viewStream?: WorkspaceNodeViewStream | null;
-}): WorkspaceInventoryClass {
-  if (viewerClient) return "viewer-client";
-  if (!live) return "retained-history";
-  if (state === "controllable" && viewStream?.controllable) {
-    return "service-owned-controllable-browser";
-  }
-  if (state === "view-only" && viewStream?.embeddable) {
-    return "service-owned-view-only-browser";
-  }
-  return "service-owned-diagnostic-browser";
 }
 
 function daemonInventoryClass({
@@ -1725,7 +1921,7 @@ function profileActionabilityForBrowser({
   live,
   viewerClient,
   viewStream,
-  rawViewStream,
+  projectedView,
 }: {
   browser: WorkspaceServiceBrowser;
   sessions: WorkspaceServiceSession[];
@@ -1734,7 +1930,7 @@ function profileActionabilityForBrowser({
   live: boolean;
   viewerClient: boolean;
   viewStream?: WorkspaceNodeViewStream | null;
-  rawViewStream?: WorkspaceServiceViewStream | null;
+  projectedView?: ProjectedWorkspaceView;
 }): WorkspaceProfileActionability | null {
   const profileId = browser.profileId ?? allocation?.profileId;
   if (!profileId || viewerClient) return null;
@@ -1772,32 +1968,22 @@ function profileActionabilityForBrowser({
   }
 
   if (live) {
-    const attachability = recordFromUnknown(browser.attachability) ?? recordFromUnknown(rawViewStream?.attachability);
-    const attachabilityAction = normalize(stringOrNull(
-      attachability?.recommendedAction ??
-      attachability?.action ??
-      attachability?.nextAction,
-    ));
-    if (
-      attachabilityAction === "service_remote_view_route_switch" ||
-      attachabilityAction === "route_switch" ||
-      attachabilityAction === "switch_route"
-    ) {
+    if (projectedView?.readiness.recoveryAction === "service_remote_view_route_switch") {
       return {
         ...common,
         recommendedAction: "routeSwitch",
         enabled: true,
-        reason: stringOrNull(attachability?.reason) ??
+        reason: projectedView.readiness.reason ??
           `Profile ${profileId} is owned by ${browser.id}, but the route/display evidence recommends switching route before the next operation.`,
       };
     }
 
-    if (viewStream?.controllerLeaseId) {
+    if (projectedView?.stream?.controllerLeaseId) {
       return {
         ...common,
         recommendedAction: "takeOverViewer",
         enabled: true,
-        reason: `Profile ${profileId} is owned by ${browser.id}, but controller lease ${viewStream.controllerLeaseId} is active; take over the viewer before control.`,
+        reason: `Profile ${profileId} is owned by ${browser.id}, but controller lease ${projectedView.stream.controllerLeaseId} is active; take over the viewer before control.`,
       };
     }
 
@@ -2182,145 +2368,6 @@ function viewerClientDiagnosticFor(input: {
   };
 }
 
-function idleRouteDisplayDiagnosticFor(input: {
-  browser: WorkspaceServiceBrowser;
-  stream: WorkspaceServiceViewStream | null;
-  relatedIds: string[];
-}): WorkspaceOwnershipDiagnostic | null {
-  const reason = idleRouteDisplayReason(input.browser, input.stream);
-  if (!reason) return null;
-  return {
-    kind: "idle-route-display",
-    severity: "warning",
-    message: reason,
-    relatedIds: input.relatedIds,
-  };
-}
-
-function idleRouteDisplayReason(browser: WorkspaceServiceBrowser, stream?: WorkspaceServiceViewStream | null): string | null {
-  if (!stream || normalize(stream.provider) !== "rdp_gateway") return null;
-  if (browser.host === "remote_headed" && !hasRouteDisplayBinding(stream)) {
-    return compactLabels([
-      "Remote-headed browser has no service-owned Guacamole route or display binding.",
-      browser.displayName ? `Recorded browser display is ${browser.displayName}.` : null,
-      "The projected route may show a shared terminal desktop instead of this browser.",
-    ]).join(" ");
-  }
-  const proof = routeProofState(stream);
-  if (proof.state === "route_bound_proof_missing") {
-    return "Remote route operator-visible proof missing; run route-bound open or focus proof before using the Guacamole stream.";
-  }
-  const explicitState = readinessState(stream.remoteReadiness ?? stream.readiness);
-  const normalizedState = normalize(explicitState);
-  if (["idle_display", "terminal_only", "no_browser_window", "display_idle"].includes(normalizedState)) {
-    return "Remote route display is idle or terminal-only; launch or focus the target browser on this display before using the Guacamole stream.";
-  }
-
-  const values = deepStringValues([stream.remoteReadiness, stream.readiness, stream.displayContent])
-    .map((value) => value.toLowerCase());
-  if (values.length === 0) return null;
-  const hasTerminalWindow = values.some((value) =>
-    value.includes("xterm") ||
-    value.includes("linux terminal") ||
-    value.includes("terminal-only") ||
-    value.includes("terminal only") ||
-    value.includes("shell window"),
-  );
-  const hasBrowserWindow = values.some((value) =>
-    value.includes("chromium") ||
-    value.includes("google chrome") ||
-    value.includes("chrome browser") ||
-    value.includes("firefox") ||
-    value.includes("browser window"),
-  );
-  if (hasTerminalWindow && !hasBrowserWindow) {
-    return "Remote route display appears to contain only terminal windows; launch or focus the target browser on this display before using the Guacamole stream.";
-  }
-  return null;
-}
-
-function hasRouteDisplayBinding(stream: WorkspaceServiceViewStream): boolean {
-  const streamUrl = stream.frameUrl || stream.url || stream.externalUrl;
-  return Boolean(
-    stream.routeId?.trim() ||
-    stream.displayAllocationId?.trim() ||
-    stream.connectionId?.trim() ||
-    stream.connectionName?.trim() ||
-    stream.routeSource?.trim() ||
-    isSpecificGuacamoleClientUrl(streamUrl),
-  );
-}
-
-function isSpecificGuacamoleClientUrl(value?: string | null): boolean {
-  return Boolean(value && /\/guacamole\/#\/client\/[^/?#]+/i.test(value));
-}
-
-function disableViewStream(
-  stream: WorkspaceNodeViewStream,
-  reason: string,
-): WorkspaceNodeViewStream {
-  return {
-    ...stream,
-    url: null,
-    embeddable: false,
-    controllable: false,
-    readOnly: true,
-    controlInput: null,
-    operatorVisibleState: stream.operatorVisibleState === "ready" ? "disabled" : stream.operatorVisibleState,
-    operatorVisibleReason: reason,
-    routeSummary: reason,
-  };
-}
-
-function routeBoundViewStreamAttentionReason(stream?: WorkspaceNodeViewStream | null): string | null {
-  if (!stream || normalize(stream.provider) !== "rdp_gateway") return null;
-  if (stream.operatorVisibleState === "ready") return null;
-  return stream.operatorVisibleReason || stream.routeSummary || "Route-bound operator-visible proof is not ready.";
-}
-
-function disabledViewStreamAttentionReason(stream?: WorkspaceNodeViewStream | null): string | null {
-  if (!stream || stream.embeddable) return null;
-  return stream.operatorVisibleReason || stream.routeSummary || "View stream readiness is not openable.";
-}
-
-function viewStreamBlockedReason(stream: WorkspaceServiceViewStream): string | null {
-  const readiness = stream.remoteReadiness ?? stream.readiness;
-  const state = readinessState(readiness);
-  const normalizedState = normalize(state);
-  if (!state || normalizedState === "ready" || normalizedState === "unknown" || normalizedState === "probing") {
-    return null;
-  }
-  const reason = readinessReason(readiness);
-  return reason
-    ? `View stream readiness is ${state.replaceAll("_", " ")}: ${reason}.`
-    : `View stream readiness is ${state.replaceAll("_", " ")}.`;
-}
-
-function readinessReason(readiness: unknown): string | null {
-  if (!readiness || typeof readiness !== "object") return null;
-  if (Array.isArray(readiness)) {
-    for (const item of readiness) {
-      const state = readinessState(item);
-      if (state && normalize(state) !== "ready") {
-        return readinessReason(item);
-      }
-    }
-    return null;
-  }
-  const record = recordFromUnknown(readiness);
-  return stringOrNull(record?.reason ?? record?.message ?? record?.lastProviderEvent);
-}
-
-function deepStringValues(value: unknown): string[] {
-  if (typeof value === "string") return [value];
-  if (typeof value === "number" || typeof value === "boolean" || value == null) return [];
-  if (Array.isArray(value)) return value.flatMap((item) => deepStringValues(item));
-  if (typeof value === "object") {
-    return Object.values(value as Record<string, unknown>).flatMap((item) => deepStringValues(item));
-  }
-  return [];
-}
-
 function uniqueDiagnostics(diagnostics: WorkspaceOwnershipDiagnostic[]): WorkspaceOwnershipDiagnostic[] {
   const seen = new Set<string>();
   const result: WorkspaceOwnershipDiagnostic[] = [];
@@ -2366,162 +2413,6 @@ function primaryServiceTab(tabs: WorkspaceServiceTab[]): WorkspaceNodePrimaryTab
   };
 }
 
-function primaryViewStream(streams?: WorkspaceServiceViewStream[]): WorkspaceNodeViewStream | null {
-  const stream = selectPrimaryWorkspaceViewStream(streams);
-  if (!stream) return null;
-  const operatorVisible = routeProofState(stream);
-  const readOnly = stream.readOnly === true || !stream.controlInput;
-  const routeProofReady = operatorVisible.state === "ready";
-  const routeProofRequired = normalize(stream.provider) === "rdp_gateway";
-  const streamUrl = stream.frameUrl || stream.url || stream.externalUrl || null;
-  const blockedStreamReason = viewStreamBlockedReason(stream);
-  const readinessCheckedStream: DashboardServiceViewStream = {
-    id: stream.id ?? undefined,
-    provider: stream.provider ?? undefined,
-    controlInput: stream.controlInput ?? null,
-    url: streamUrl,
-    frameUrl: streamUrl,
-    externalUrl: stream.externalUrl ?? null,
-    routeId: stream.routeId ?? null,
-    displayAllocationId: stream.displayAllocationId ?? null,
-    connectionId: stream.connectionId ?? null,
-    connectionName: stream.connectionName ?? null,
-    routeSource: stream.routeSource ?? null,
-    providerMode: stream.providerMode ?? null,
-    viewerLeaseIds: stream.viewerLeaseIds,
-    controllerLeaseId: stream.controllerLeaseId ?? null,
-    readOnly: stream.readOnly ?? undefined,
-    readiness: stream.readiness,
-    remoteReadiness: stream.remoteReadiness,
-    attachability: stream.attachability,
-    displayContent: stream.displayContent,
-  };
-  const canOpenView = canOpenViewStream(readinessCheckedStream);
-  const effectiveOperatorVisible = operatorVisible.state === "ready" && !canOpenView
-    ? {
-        state: readinessState(stream.remoteReadiness ?? stream.readiness) ?? "unavailable",
-        reason: blockedStreamReason,
-      }
-    : operatorVisible;
-  const embeddable = Boolean(streamUrl) &&
-    (!routeProofRequired || routeProofReady) &&
-    canOpenView;
-  return {
-    provider: stream.provider ?? null,
-    url: streamUrl,
-    routeId: stream.routeId ?? null,
-    displayAllocationId: stream.displayAllocationId ?? null,
-    routePoolEntryId: stream.routePoolEntryId ?? null,
-    connectionId: stream.connectionId ?? null,
-    connectionName: stream.connectionName ?? null,
-    routeSource: stream.routeSource ?? null,
-    providerMode: stream.providerMode ?? null,
-    viewerLeaseIds: stream.viewerLeaseIds ?? [],
-    controllerLeaseId: stream.controllerLeaseId ?? null,
-    embeddable,
-    controllable: embeddable &&
-      !readOnly &&
-      (!routeProofRequired || routeProofReady) &&
-      canOpenControlViewStream(readinessCheckedStream),
-    readOnly: readOnly || (routeProofRequired && !routeProofReady),
-    controlInput: routeProofRequired && !routeProofReady ? null : stream.controlInput ?? null,
-    operatorVisibleState: effectiveOperatorVisible.state,
-    operatorVisibleReason: effectiveOperatorVisible.reason,
-    routeSummary: viewStreamRouteSummary(stream, effectiveOperatorVisible),
-  };
-}
-
-function cdpSnapshotFallbackViewStream(
-  browser: WorkspaceServiceBrowser,
-  stream: WorkspaceServiceViewStream,
-): WorkspaceNodeViewStream | null {
-  if (normalize(stream.provider) !== "cdp_screencast") return null;
-  if (stream.frameUrl || stream.url || stream.externalUrl) return null;
-  const cdpPort = portFromUrl(browser.cdpEndpoint);
-  if (!cdpPort) return null;
-  const streamReason = stringOrNull(
-    recordFromUnknown(stream.readiness)?.reason ??
-      recordFromUnknown(stream.readiness)?.state ??
-      recordFromUnknown(stream.remoteReadiness)?.reason ??
-      recordFromUnknown(stream.remoteReadiness)?.state,
-  );
-  const streamUrl = `/api/session-screenshot?port=${encodeURIComponent(String(cdpPort))}`;
-  return {
-    provider: "cdp_snapshot",
-    url: streamUrl,
-    routeId: stream.routeId ?? `service-cdp-snapshot:${browser.id}`,
-    displayAllocationId: stream.displayAllocationId ?? null,
-    routePoolEntryId: stream.routePoolEntryId ?? null,
-    connectionId: stream.connectionId ?? null,
-    connectionName: stream.connectionName ?? browser.id,
-    routeSource: "service-cdp-snapshot",
-    providerMode: "read_only_snapshot_poll",
-    viewerLeaseIds: stream.viewerLeaseIds ?? [],
-    controllerLeaseId: null,
-    embeddable: true,
-    controllable: false,
-    readOnly: true,
-    controlInput: null,
-    operatorVisibleState: "ready",
-    operatorVisibleReason: streamReason ? `CDP screencast unavailable: ${streamReason}` : null,
-    routeSummary: streamReason
-      ? `CDP snapshot ${cdpPort} / read-only fallback / ${streamReason}`
-      : `CDP snapshot ${cdpPort} / read-only fallback`,
-  };
-}
-
-function routeBoundOwnershipFor({
-  live,
-  viewerClient,
-  stream,
-  viewStream,
-}: {
-  live: boolean;
-  viewerClient: boolean;
-  stream: WorkspaceServiceViewStream | null;
-  viewStream: WorkspaceNodeViewStream | null;
-}): WorkspaceRouteBoundOwnership | null {
-  if (viewerClient) {
-    return {
-      state: "viewer-client",
-      routeId: stream?.routeId ?? viewStream?.routeId ?? null,
-      displayAllocationId: stream?.displayAllocationId ?? viewStream?.displayAllocationId ?? null,
-      routePoolEntryId: stream?.routePoolEntryId ?? viewStream?.routePoolEntryId ?? null,
-      reason: "Viewer clients cannot own route-bound browser control.",
-    };
-  }
-  if (!stream || normalize(stream.provider) !== "rdp_gateway") return null;
-  if (!live) {
-    return {
-      state: "retained",
-      routeId: stream.routeId ?? null,
-      displayAllocationId: stream.displayAllocationId ?? null,
-      routePoolEntryId: stream.routePoolEntryId ?? null,
-      reason: "Retained route-bound browser records are not live control targets.",
-    };
-  }
-  const explicitState = normalizeRouteBoundOwnershipState(stream.routeBoundOwnership?.state);
-  const state = explicitState ?? (viewStream?.operatorVisibleState === "ready" && viewStream.controllable ? "finalized" : "diagnostic");
-  return {
-    state,
-    routeId: stream.routeBoundOwnership?.routeId ?? stream.routeId ?? null,
-    displayAllocationId: stream.routeBoundOwnership?.displayAllocationId ?? stream.displayAllocationId ?? null,
-    routePoolEntryId: stream.routeBoundOwnership?.routePoolEntryId ?? stream.routePoolEntryId ?? null,
-    reason: stream.routeBoundOwnership?.reason
-      ?? (state === "diagnostic" ? viewStream?.operatorVisibleReason : null)
-      ?? routeBoundOwnershipDefaultReason(state),
-  };
-}
-
-function routeBoundOwnershipControlReason(
-  ownership: WorkspaceRouteBoundOwnership | null,
-  stream: WorkspaceServiceViewStream | null,
-): string | null {
-  if (!ownership || !stream || normalize(stream.provider) !== "rdp_gateway") return null;
-  if (ownership.state === "finalized") return null;
-  return ownership.reason ?? routeBoundOwnershipDefaultReason(ownership.state);
-}
-
 function normalizeRouteBoundOwnershipState(value: unknown): WorkspaceRouteBoundOwnershipState | null {
   if (typeof value !== "string") return null;
   const normalized = value.toLowerCase().replaceAll("_", "-");
@@ -2532,23 +2423,6 @@ function normalizeRouteBoundOwnershipState(value: unknown): WorkspaceRouteBoundO
   if (normalized === "retained") return "retained";
   if (normalized === "viewer-client") return "viewer-client";
   return null;
-}
-
-function routeBoundOwnershipDefaultReason(state: WorkspaceRouteBoundOwnershipState): string {
-  switch (state) {
-    case "pending":
-      return "Route-bound browser ownership is still pending finalization.";
-    case "rolled-back":
-      return "Route-bound browser ownership was rolled back.";
-    case "diagnostic":
-      return "Route-bound browser ownership is diagnostic, not finalized.";
-    case "retained":
-      return "Retained route-bound browser records are not live control targets.";
-    case "viewer-client":
-      return "Viewer clients cannot own route-bound browser control.";
-    case "finalized":
-      return "Route-bound browser ownership is finalized.";
-  }
 }
 
 function browserProcessIndicators(
@@ -2578,225 +2452,6 @@ function portFromUrl(value?: string | null): number | null {
     const match = value.match(/:(\d{2,5})(?:\/|$)/);
     return match ? Number(match[1]) : null;
   }
-}
-
-function selectPrimaryWorkspaceViewStream(streams?: WorkspaceServiceViewStream[]): WorkspaceServiceViewStream | null {
-  if (!streams?.length) return null;
-  return [...streams].sort((left, right) => workspaceViewStreamScore(right) - workspaceViewStreamScore(left))[0] ?? null;
-}
-
-function workspaceViewStreamScore(stream: WorkspaceServiceViewStream): number {
-  const provider = normalize(stream.provider);
-  const routeSource = normalize(stream.routeSource);
-  const providerMode = normalize(stream.providerMode);
-  const displayAllocationId = normalize(stream.displayAllocationId);
-  const streamUrl = stream.frameUrl || stream.url || stream.externalUrl;
-  let score = 0;
-  if (streamUrl) score += 50;
-  if (provider && provider !== "cdp_screencast") score += 40;
-  if (provider === "rdp_gateway") score += 20;
-  if (stream.controlInput && stream.readOnly !== true) score += 15;
-  if (stream.routeId || stream.connectionId || stream.connectionName) score += 20;
-  if (displayAllocationId) score += 10;
-  if (displayAllocationId && !displayAllocationId.includes("shared")) score += 35;
-  if (routeSource === "pool" || routeSource === "generated" || routeSource === "discovered") score += 40;
-  if (providerMode === "simultaneous_view") score += 20;
-  if (providerMode === "single_controller") score += 10;
-  if (readinessState(stream.remoteReadiness ?? stream.readiness) === "ready") score += 10;
-  return score;
-}
-
-function viewStreamRouteSummary(
-  stream: WorkspaceServiceViewStream,
-  operatorVisible: { state: string; reason: string | null } = routeProofState(stream),
-): string {
-  const viewerCount = stream.viewerLeaseIds?.length ?? 0;
-  const leaseLabel = stream.controllerLeaseId
-    ? `${viewerCount} viewer${viewerCount === 1 ? "" : "s"}, controller leased`
-    : `${viewerCount} viewer${viewerCount === 1 ? "" : "s"}`;
-  return compactLabels([
-    stream.routeId || stream.connectionName || stream.connectionId || stream.displayAllocationId || "unrouted",
-    stream.displayAllocationId ? `display ${stream.displayAllocationId}` : null,
-    stream.providerMode?.replaceAll("_", " ") ?? null,
-    leaseLabel,
-    operatorVisible.state === "ready" ? "operator visible" : operatorVisible.reason,
-    viewStreamReadinessLabel(stream),
-  ]).join(" / ");
-}
-
-function routeProofState(stream: WorkspaceServiceViewStream): { state: string; reason: string | null } {
-  const provider = normalize(stream.provider);
-  if (provider !== "rdp_gateway") return { state: "ready", reason: null };
-  const structuredProof = structuredRouteProofState(stream);
-  if (structuredProof) return structuredProof;
-  const displayStateValue = routeDisplayStateValue(stream);
-  const displayState = normalize(typeof displayStateValue === "string" ? displayStateValue : null);
-  if (displayState === "browser_window_visible") return { state: "ready", reason: null };
-  if (displayState === "terminal_only") {
-    return {
-      state: "route_bound_terminal_only",
-      reason: "Remote route display is terminal-only.",
-    };
-  }
-  if (displayState === "empty_display" || displayState === "display_idle" || displayState === "idle_display") {
-    return {
-      state: "route_bound_display_idle",
-      reason: "Remote route display has no visible browser window.",
-    };
-  }
-  if (displayState === "non_browser_windows" || displayState === "no_browser_window") {
-    return {
-      state: "route_bound_browser_not_visible",
-      reason: "Remote route display does not show a browser window.",
-    };
-  }
-  const readiness = normalize(readinessState(stream.remoteReadiness ?? stream.readiness));
-  if (readiness === "terminal_only_route" || readiness === "terminal_only") {
-    return {
-      state: "route_bound_terminal_only",
-      reason: "Remote route readiness reports a terminal-only display.",
-    };
-  }
-  const attachability = recordFromUnknown(stream.attachability);
-  if (stringOrNull(attachability?.proofState) === "ready" && normalize(stringOrNull(attachability?.state)) === "attached_ready") {
-    return { state: "ready", reason: null };
-  }
-  return {
-    state: "route_bound_proof_missing",
-    reason: "operator-visible proof missing",
-  };
-}
-
-function routeDisplayStateValue(stream: WorkspaceServiceViewStream): unknown {
-  for (const source of [
-    stream.displayContent,
-    recordValue(stream.remoteReadiness, "displayContent"),
-    recordValue(stream.readiness, "displayContent"),
-  ]) {
-    const state = recordValue(source, "state");
-    if (typeof state === "string" && state.trim()) return state;
-  }
-  return null;
-}
-
-function structuredRouteProofState(stream: WorkspaceServiceViewStream): { state: string; reason: string | null } | null {
-  for (const source of [stream.remoteReadiness, stream.readiness]) {
-    const sourceRecord = recordFromUnknown(source);
-    const operatorVisible = recordFromUnknown(sourceRecord?.operatorVisible) ?? sourceRecord;
-    const operatorState = normalizedRecordState(operatorVisible);
-    if (isOperatorVisibleProofState(operatorState)) {
-      return routeProofResult(operatorState, stringOrNull(operatorVisible?.reason));
-    }
-    const components = recordFromUnknown(operatorVisible?.components);
-    for (const key of ["route", "tab", "guacamole", "operatorAccess"]) {
-      const component = recordFromUnknown(components?.[key]);
-      const componentState = normalizedRecordState(component);
-      if (isOperatorVisibleProofState(componentState)) {
-        return routeProofResult(componentState, stringOrNull(component?.reason));
-      }
-    }
-  }
-  return null;
-}
-
-function normalizedRecordState(record: Record<string, unknown> | null): string | null {
-  const state = stringOrNull(record?.state);
-  return state ? normalize(state) : null;
-}
-
-function isOperatorVisibleProofState(state: string | null): state is string {
-  return Boolean(
-    state &&
-      state !== "ready" &&
-      state !== "not_checked" &&
-      [
-        "wrong_tab",
-        "guacamole_route_unavailable",
-        "cdp_target_unavailable",
-        "stale_route_record",
-        "public_operator_not_checked",
-        "public_operator_unavailable",
-        "invalid_operator_route",
-        "dashboard_unavailable",
-        "proxy_failed",
-        "timed_out",
-      ].includes(state),
-  );
-}
-
-function routeProofResult(state: string, reason: string | null): { state: string; reason: string | null } {
-  return {
-    state,
-    reason: reason ?? routeProofReason(state),
-  };
-}
-
-function routeProofReason(state: string): string {
-  switch (state) {
-    case "wrong_tab":
-      return "Remote route display is browser-visible, but the selected tab URL does not match the requested target.";
-    case "guacamole_route_unavailable":
-      return "Remote route display and tab are ready, but the Guacamole operator route is unavailable.";
-    case "public_operator_not_checked":
-      return "Remote route display and local Guacamole are ready, but the public operator URL has not been checked.";
-    case "public_operator_unavailable":
-    case "dashboard_unavailable":
-    case "proxy_failed":
-    case "timed_out":
-      return "Remote route display and local Guacamole are ready, but the public operator URL is unavailable.";
-    case "invalid_operator_route":
-      return "Remote route display and local Guacamole are ready, but the operator route URL is malformed.";
-    case "cdp_target_unavailable":
-      return "Remote route selected tab has no CDP target id.";
-    case "stale_route_record":
-      return "Remote route metadata points at a stale route allocation.";
-    default:
-      return state.replaceAll("_", " ");
-  }
-}
-
-function viewStreamReadinessLabel(stream: WorkspaceServiceViewStream): string {
-  const attachabilityState = stringOrNull(recordFromUnknown(stream.attachability)?.state);
-  if (attachabilityState) return attachabilityState.replaceAll("_", " ");
-  const readiness = stream.remoteReadiness ?? stream.readiness;
-  const state = readinessState(readiness);
-  if (state) return state.replaceAll("_", " ");
-  return "readiness unknown";
-}
-
-function readinessState(readiness: unknown): string | null {
-  if (!readiness) return null;
-  if (typeof readiness === "string") return readiness.trim() || null;
-  if (typeof readiness !== "object") return null;
-  if (Array.isArray(readiness)) {
-    for (const item of readiness) {
-      const state = readinessState(item);
-      if (state && state !== "ready") return state;
-    }
-    return null;
-  }
-  const record = readiness as Record<string, unknown>;
-  for (const key of ["state", "status", "readiness", "lastProviderEvent"]) {
-    const value = record[key];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  const components = record.components ?? record.checks ?? record.results;
-  if (Array.isArray(components)) return readinessState(components);
-  return null;
-}
-
-function recordValue(source: unknown, key: string): unknown {
-  return source && typeof source === "object" ? (source as Record<string, unknown>)[key] : undefined;
-}
-
-function recordFromUnknown(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null;
-}
-
-function stringOrNull(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function actorLabel(value: unknown): string {
@@ -2854,50 +2509,6 @@ function takeoverForSession(
     resumeSupported: false,
     resumeReason: "Service contracts expose human_takeover lease state but do not yet expose a service-owned resume action.",
   };
-}
-
-function browserActions(
-  browser: WorkspaceServiceBrowser,
-  live: boolean,
-  viewStream: WorkspaceNodeViewStream | null,
-  attentionReason?: string | null,
-  takeover?: WorkspaceNodeTakeover | null,
-  profileActionability?: WorkspaceProfileActionability | null,
-  closeSupported = true,
-): WorkspaceNodeAction[] {
-  const canViewStream = live && Boolean(viewStream?.embeddable);
-  const canControlStream = live && Boolean(viewStream?.controllable);
-  const streamUnavailableReason = viewStream?.operatorVisibleReason ?? viewStream?.routeSummary;
-  const canOpenSharedProfileTab =
-    profileActionability?.recommendedAction === "openSharedProfileTab" &&
-    profileActionability.enabled;
-  const actions: WorkspaceNodeAction[] = [
-    ...(takeover ? [{ id: "resume" as const, label: "Resume", enabled: takeover.resumeSupported, reason: takeover.resumeReason }] : []),
-    { id: "focus", label: "Focus", enabled: live, reason: live ? null : "Browser is retained, not live." },
-    {
-      id: "add-tab",
-      label: "Add tab",
-      enabled: canOpenSharedProfileTab,
-      reason: canOpenSharedProfileTab
-        ? null
-        : profileActionability?.reason ?? "No compatible retained profile owner is available for tab creation.",
-    },
-    { id: "view", label: "View", enabled: canViewStream, reason: canViewStream ? null : live ? streamUnavailableReason || "No embeddable service-owned view stream." : "Browser is retained, not live." },
-    { id: "control", label: "Control", enabled: canControlStream, reason: canControlStream ? null : live ? streamUnavailableReason || "No controllable service-owned view stream." : "Browser is retained, not live." },
-    { id: "repair", label: "Repair", enabled: Boolean(attentionReason), reason: attentionReason ? null : "No service-owned repair reason is present." },
-    {
-      id: "close",
-      label: "Close",
-      enabled: live && closeSupported,
-      reason: !live
-        ? "Browser is already retained."
-        : closeSupported
-          ? null
-          : "Service contract does not advertise service_browser_close.",
-    },
-    { id: "external-open", label: "Open externally", enabled: canViewStream, reason: canViewStream ? null : live ? streamUnavailableReason || "No external stream URL is recorded." : "Browser is retained, not live." },
-  ];
-  return actions.filter((action) => action.id !== "external-open" || browser.viewStreams?.length);
 }
 
 function serviceSessionActions(

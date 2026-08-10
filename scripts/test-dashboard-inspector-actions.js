@@ -214,8 +214,8 @@ for (const label of ['Raw allocation', 'Raw session record', 'Raw tab record', '
 
 assert.match(
   servicePanel,
-  /const controlAvailable = canOpenControlViewStream\(primaryViewStream\);[\s\S]*disabled=\{!controlAvailable\}[\s\S]*title=\{viewStreamControlTitle\(primaryViewStream\)\}[\s\S]*onClick=\{\(\) => onControlBrowser\(browser\)\}[\s\S]*Open remote control/,
-  'Browser inspector remote-control action must use service stream control metadata for gating and disabled copy',
+  /const controlAvailable = projectedView\?\.canControl \?\? false;[\s\S]*disabled=\{!controlAvailable\}[\s\S]*projectedView\?\.readiness\.reason[\s\S]*onClick=\{\(\) => onControlBrowser\(browser\)\}[\s\S]*Open remote control/,
+  'Browser inspector remote-control action must use projected control authority and readiness copy',
 );
 
 assert.match(
@@ -250,7 +250,7 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /const inspectTabViewStream = useCallback\(async \(tab: ServiceTab\) => \{[\s\S]*const browser = tab\.browserId \? browserById\.get\(tab\.browserId\) : null;[\s\S]*const stream = browserPrimaryViewStream\(browser\);[\s\S]*if \(!canOpenControlViewStream\(stream\)\)[\s\S]*const tabIndex = tabIndexById\.get\(tab\.id\);[\s\S]*const targetId = tab\.targetId\?\.trim\(\);[\s\S]*const sessionName = daemonSessionNameForBrowser\(browser\);[\s\S]*action: "view_focus"[\s\S]*taskName: "inspect-hidden-rdp-tab"[\s\S]*params: targetId[\s\S]*sessionName[\s\S]*openViewStream\(stream, browser, tab, focusMessage\);/,
+  /const inspectTabViewStream = useCallback\(async \(tab: ServiceTab\) => \{[\s\S]*const browser = tab\.browserId \? browserById\.get\(tab\.browserId\) : null;[\s\S]*projectedViewByBrowserId\.get\(browser\.id\)[\s\S]*if \(!projectedView\.canControl\)[\s\S]*const tabIndex = tabIndexById\.get\(tab\.id\);[\s\S]*const targetId = tab\.targetId\?\.trim\(\);[\s\S]*const sessionName = daemonSessionNameForBrowser\(browser\);[\s\S]*action: "view_focus"[\s\S]*taskName: "inspect-hidden-rdp-tab"[\s\S]*params: targetId[\s\S]*sessionName[\s\S]*openViewStream\(stream, browser, tab, focusMessage\);/,
   'Service tab remote-control action must queue target-specific view_focus on the selected browser daemon before opening the stream',
 );
 

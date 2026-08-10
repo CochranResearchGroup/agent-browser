@@ -90,7 +90,7 @@ const live = packet({ browserId: 'browser-live' });
 assert.equal(live.version, SELECTED_WORKSPACE_CHAT_PACKET_VERSION);
 assert.equal(live.provider, CONTEXTUAL_CHAT_PROVIDER_ID);
 assert.equal(live.workspace.id, 'browser:browser-live');
-assert.equal(live.workspace.state, 'controllable');
+assert.equal(live.workspace.state, 'needs-attention');
 assert.equal(live.runtime.pid, 1234);
 assert.equal(live.page.targetId, 'target-live');
 assert.equal(live.stream.provider, 'cdp_screencast');

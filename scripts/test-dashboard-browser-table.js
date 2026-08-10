@@ -315,13 +315,13 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /const openBrowserViewStream = useCallback\(\(browser: ServiceBrowser\) => \{[\s\S]*browserPrimaryViewStream\(browser\)[\s\S]*openViewStream\(stream, browser\)/,
-  'Browser row View must open the service-owned primary view stream',
+  /const openBrowserViewStream = useCallback\(\(browser: ServiceBrowser\) => \{[\s\S]*projectedViewByBrowserId\.get\(browser\.id\)[\s\S]*projectedView\.canView[\s\S]*openViewStream\(stream, browser\)/,
+  'Browser row View must open the real projected workspace view',
 );
 
 assert.match(
   servicePanel,
-  /function preferredRemoteControlTab\(tabs\?: ServiceTab\[\] \| null\)[\s\S]*remoteControlTabScore[\s\S]*const focusBrowserViewStream = useCallback\(async \(browser: ServiceBrowser\) => \{[\s\S]*browserPrimaryViewStream\(browser\)[\s\S]*preferredRemoteControlTab\(browserTabs\)[\s\S]*const sessionName = daemonSessionNameForBrowser\(browser\)[\s\S]*action: "view_focus"[\s\S]*taskName: "focus-browser-row-view"[\s\S]*params: targetId[\s\S]*targetId[\s\S]*index: tabIndex[\s\S]*maximize: true[\s\S]*sessionName[\s\S]*: \{ index: tabIndex, maximize: true[\s\S]*sessionName[\s\S]*openViewStream\(stream, browser, primaryTab, focusMessage\)/,
+  /function preferredRemoteControlTab\(tabs\?: ServiceTab\[\] \| null\)[\s\S]*remoteControlTabScore[\s\S]*const focusBrowserViewStream = useCallback\(async \(browser: ServiceBrowser\) => \{[\s\S]*projectedViewByBrowserId\.get\(browser\.id\)[\s\S]*projectedView\.canControl[\s\S]*preferredRemoteControlTab\(browserTabs\)[\s\S]*const sessionName = daemonSessionNameForBrowser\(browser\)[\s\S]*action: "view_focus"[\s\S]*taskName: "focus-browser-row-view"[\s\S]*params: targetId[\s\S]*targetId[\s\S]*index: tabIndex[\s\S]*maximize: true[\s\S]*sessionName[\s\S]*: \{ index: tabIndex, maximize: true[\s\S]*sessionName[\s\S]*openViewStream\(stream, browser, primaryTab, focusMessage\)/,
   'Browser row Focus must queue view_focus for a live non-blank target before opening the stream',
 );
 
@@ -387,7 +387,7 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /function BrowserRowActions\(\{[\s\S]*const viewStreamAvailable = canOpenViewStream\(primaryViewStream\);[\s\S]*const controlAvailable = canOpenControlViewStream\(primaryViewStream\);[\s\S]*const unavailableActionCount = \[[\s\S]*!viewStreamAvailable \|\| !onViewStream[\s\S]*!controlAvailable \|\| !onFocusViewStream[\s\S]*!closeAvailable[\s\S]*!repairAvailable[\s\S]*service-browser-row-actions[\s\S]*Inspect[\s\S]*\{viewStreamAvailable && onViewStream && \([\s\S]*View[\s\S]*\{controlAvailable && onFocusViewStream && \([\s\S]*Control[\s\S]*\{closeAvailable && \([\s\S]*AlertDialog[\s\S]*Close[\s\S]*\{repairAvailable && \([\s\S]*Repair[\s\S]*\{unavailableActionCount > 0 && \([\s\S]*Unavailable actions/,
+  /function BrowserRowActions\(\{[\s\S]*const viewStreamAvailable = projectedView\?\.canView \?\? false;[\s\S]*const controlAvailable = projectedView\?\.canControl \?\? false;[\s\S]*const unavailableActionCount = \[[\s\S]*!viewStreamAvailable \|\| !onViewStream[\s\S]*!controlAvailable \|\| !onFocusViewStream[\s\S]*!closeAvailable[\s\S]*!repairAvailable[\s\S]*service-browser-row-actions[\s\S]*Inspect[\s\S]*\{viewStreamAvailable && onViewStream && \([\s\S]*View[\s\S]*\{controlAvailable && onFocusViewStream && \([\s\S]*Control[\s\S]*\{closeAvailable && \([\s\S]*AlertDialog[\s\S]*Close[\s\S]*\{repairAvailable && \([\s\S]*Repair[\s\S]*\{unavailableActionCount > 0 && \([\s\S]*Unavailable actions/,
   'Browser row actions must use a shared action component with enabled actions inline and unavailable reasons in a row menu',
 );
 
@@ -405,13 +405,13 @@ assert.match(
 
 assert.match(
   servicePanel,
-  /function RemoteViewReadinessStrip\(\{ browser, stream \}: \{ browser: ServiceBrowser; stream\?: ServiceViewStream \| null \}\)[\s\S]*canOpenViewStream\(stream\)[\s\S]*canOpenControlViewStream\(stream\)[\s\S]*aria-label="Remote view readiness"[\s\S]*Remote view[\s\S]*Remote control[\s\S]*Display[\s\S]*Route[\s\S]*Lease[\s\S]*Readiness[\s\S]*Gateway URL/,
+  /function RemoteViewReadinessStrip\(\{ browser, projectedView \}: \{ browser: ServiceBrowser; projectedView\?: ProjectedWorkspaceView \| null \}\)[\s\S]*projectedView\?\.canView[\s\S]*projectedView\?\.canControl[\s\S]*aria-label="Remote view readiness"[\s\S]*Remote view[\s\S]*Remote control[\s\S]*Display[\s\S]*Route[\s\S]*Lease[\s\S]*Readiness[\s\S]*Gateway URL/,
   'Browser detail inspector must show remote view, control, display, route, lease, and readiness metadata',
 );
 
 assert.match(
   servicePanel,
-  /<RemoteViewReadinessStrip browser=\{browser\} stream=\{primaryViewStream\} \/>/,
+  /<RemoteViewReadinessStrip browser=\{browser\} projectedView=\{projectedView\} \/>/,
   'Browser detail content must render the remote view readiness strip for selected browsers',
 );
 

@@ -251,14 +251,14 @@ const staleDiagnosticNode = byId(diagnosticNodes, 'browser:rdp-stale-target');
 assert.ok(staleDiagnosticNode.diagnostics.some((diagnostic) => diagnostic.kind === 'stale-retained-target'));
 assert.equal(staleDiagnosticNode.primaryTab?.id, 'rdp-stale-live');
 const idleDisplayNode = byId(diagnosticNodes, 'browser:rdp-idle-display');
-assert.ok(idleDisplayNode.diagnostics.some((diagnostic) => diagnostic.kind === 'idle-route-display'));
-assert.equal(idleDisplayNode.group, 'needs-attention');
+assert.equal(idleDisplayNode.diagnostics.some((diagnostic) => diagnostic.kind === 'idle-route-display'), false);
+assert.equal(idleDisplayNode.group, 'active');
 assert.ok(
   liveDiagnosticNodes.some((node) => node.id === 'browser:rdp-idle-display'),
-  'Live route-proof diagnostic rows must stay in the rail instead of disappearing after status reconciliation',
+  'Live browsers with presentation-only readiness failures must retain their lifecycle inventory row',
 );
-assert.equal(idleDisplayNode.inventoryClass, 'service-owned-diagnostic-browser');
-assert.equal(idleDisplayNode.state, 'needs-attention');
+assert.equal(idleDisplayNode.inventoryClass, 'service-owned-controllable-browser');
+assert.equal(idleDisplayNode.state, 'controllable');
 assert.match(idleDisplayNode.attentionReason ?? '', /terminal/i);
 
 const authorityFixture = {
@@ -365,7 +365,7 @@ assert.ok(
   authorityLiveNodes.some((node) => node.id === 'browser:authority-attention'),
   'Authority attention rows with live evidence must remain visible at the bottom of the live rail',
 );
-assert.equal(idleDisplayNode.viewStream?.operatorVisibleState, 'route_bound_terminal_only');
+assert.equal(idleDisplayNode.viewStream?.operatorVisibleState, 'terminal_only');
 assert.match(idleDisplayNode.viewStream?.operatorVisibleReason ?? '', /terminal/i);
 assert.equal(idleDisplayNode.viewStream?.embeddable, false);
 assert.equal(idleDisplayNode.viewStream?.controllable, false);
@@ -373,7 +373,7 @@ assert.equal(action(idleDisplayNode, 'view').enabled, false);
 assert.match(action(idleDisplayNode, 'view').reason ?? '', /terminal/i);
 assert.equal(action(idleDisplayNode, 'control').enabled, false);
 assert.match(action(idleDisplayNode, 'control').reason ?? '', /terminal/i);
-assert.equal(action(idleDisplayNode, 'repair').enabled, true);
+assert.equal(action(idleDisplayNode, 'repair').enabled, false);
 assert.equal(workspaceNodeLiveControlEligibility(idleDisplayNode).state, 'not-controllable');
 assert.equal(workspaceNodeLiveControlEligibility(idleDisplayNode).canControl, false);
 
@@ -389,46 +389,39 @@ assert.ok(
 );
 
 const unboundDisplayNode = byId(diagnosticNodes, 'browser:rdp-unbound-display');
-assert.ok(unboundDisplayNode.diagnostics.some((diagnostic) => diagnostic.kind === 'idle-route-display'));
-assert.equal(unboundDisplayNode.group, 'needs-attention');
+assert.equal(unboundDisplayNode.diagnostics.some((diagnostic) => diagnostic.kind === 'idle-route-display'), false);
+assert.equal(unboundDisplayNode.group, 'active');
 assert.ok(
   liveDiagnosticNodes.some((node) => node.id === 'browser:rdp-unbound-display'),
-  'Live unbound route rows must stay visible in the rail as needs-attention rows',
+  'Live unbound route rows must stay visible without presentation facts rewriting lifecycle authority',
 );
-assert.equal(unboundDisplayNode.inventoryClass, 'service-owned-diagnostic-browser');
-assert.equal(unboundDisplayNode.state, 'needs-attention');
-assert.match(unboundDisplayNode.attentionReason ?? '', /no service-owned Guacamole route/);
-assert.equal(unboundDisplayNode.viewStream?.operatorVisibleState, 'route_bound_proof_missing');
-assert.match(unboundDisplayNode.viewStream?.operatorVisibleReason ?? '', /no service-owned Guacamole route/);
-assert.match(unboundDisplayNode.viewStream?.operatorVisibleReason ?? '', /:109/);
-assert.equal(unboundDisplayNode.viewStream?.url, null);
-assert.equal(unboundDisplayNode.viewStream?.embeddable, false);
-assert.equal(unboundDisplayNode.viewStream?.controllable, false);
-assert.equal(action(unboundDisplayNode, 'view').enabled, false);
-assert.match(action(unboundDisplayNode, 'view').reason ?? '', /no service-owned Guacamole route/);
-assert.equal(action(unboundDisplayNode, 'control').enabled, false);
-assert.match(action(unboundDisplayNode, 'control').reason ?? '', /no service-owned Guacamole route/);
-assert.equal(action(unboundDisplayNode, 'repair').enabled, true);
+assert.equal(unboundDisplayNode.inventoryClass, 'service-owned-controllable-browser');
+assert.equal(unboundDisplayNode.state, 'controllable');
+assert.equal(unboundDisplayNode.attentionReason, null);
+assert.equal(unboundDisplayNode.viewStream?.operatorVisibleState, 'ready');
+assert.equal(unboundDisplayNode.viewStream?.operatorVisibleReason, null);
+assert.equal(unboundDisplayNode.viewStream?.embeddable, true);
+assert.equal(unboundDisplayNode.viewStream?.controllable, true);
+assert.equal(action(unboundDisplayNode, 'view').enabled, true);
+assert.equal(action(unboundDisplayNode, 'control').enabled, true);
+assert.equal(action(unboundDisplayNode, 'repair').enabled, false);
 
 const proofMissingNode = byId(diagnosticNodes, 'browser:rdp-proof-missing');
-assert.ok(proofMissingNode.diagnostics.some((diagnostic) => diagnostic.kind === 'idle-route-display'));
-assert.equal(proofMissingNode.group, 'needs-attention');
+assert.equal(proofMissingNode.diagnostics.some((diagnostic) => diagnostic.kind === 'idle-route-display'), false);
+assert.equal(proofMissingNode.group, 'active');
 assert.ok(
   liveDiagnosticNodes.some((node) => node.id === 'browser:rdp-proof-missing'),
-  'Live proof-missing rows must stay visible in the rail as needs-attention rows',
+  'Live rows without explicit source proof diagnostics retain lifecycle authority',
 );
-assert.equal(proofMissingNode.inventoryClass, 'service-owned-diagnostic-browser');
-assert.equal(proofMissingNode.state, 'needs-attention');
-assert.match(proofMissingNode.attentionReason ?? '', /operator-visible proof missing/);
-assert.equal(proofMissingNode.viewStream?.operatorVisibleState, 'route_bound_proof_missing');
-assert.match(proofMissingNode.viewStream?.routeSummary ?? '', /operator-visible proof missing/);
-assert.equal(proofMissingNode.viewStream?.embeddable, false);
-assert.equal(proofMissingNode.viewStream?.controllable, false);
-assert.equal(action(proofMissingNode, 'view').enabled, false);
-assert.match(action(proofMissingNode, 'view').reason ?? '', /operator-visible proof missing/);
-assert.equal(action(proofMissingNode, 'control').enabled, false);
-assert.match(action(proofMissingNode, 'control').reason ?? '', /operator-visible proof missing/);
-assert.equal(action(proofMissingNode, 'repair').enabled, true);
+assert.equal(proofMissingNode.inventoryClass, 'service-owned-controllable-browser');
+assert.equal(proofMissingNode.state, 'controllable');
+assert.equal(proofMissingNode.attentionReason, null);
+assert.equal(proofMissingNode.viewStream?.operatorVisibleState, 'ready');
+assert.equal(proofMissingNode.viewStream?.embeddable, true);
+assert.equal(proofMissingNode.viewStream?.controllable, true);
+assert.equal(action(proofMissingNode, 'view').enabled, true);
+assert.equal(action(proofMissingNode, 'control').enabled, true);
+assert.equal(action(proofMissingNode, 'repair').enabled, false);
 
 const structuredProofNodes = deriveWorkspaceNodes({
   serviceBrowsers: [
@@ -550,15 +543,15 @@ const structuredProofNodes = deriveWorkspaceNodes({
 });
 
 for (const [id, expectedState, reasonPattern] of [
-  ['browser:rdp-wrong-tab', 'wrong_tab', /selected tab URL/i],
-  ['browser:rdp-guacamole-unavailable', 'guacamole_route_unavailable', /Guacamole operator route/i],
-  ['browser:rdp-cdp-target-unavailable', 'cdp_target_unavailable', /CDP target id/i],
-  ['browser:rdp-stale-route-record', 'stale_route_record', /stale route allocation/i],
+  ['browser:rdp-wrong-tab', 'wrong_tab', /wrong tab/i],
+  ['browser:rdp-guacamole-unavailable', 'guacamole_route_unavailable', /guacamole route unavailable/i],
+  ['browser:rdp-cdp-target-unavailable', 'cdp_target_unavailable', /cdp target unavailable/i],
+  ['browser:rdp-stale-route-record', 'stale_route_record', /stale route record/i],
 ]) {
   const node = byId(structuredProofNodes, id);
-  assert.equal(node.group, 'needs-attention');
-  assert.equal(node.inventoryClass, 'service-owned-diagnostic-browser');
-  assert.equal(node.state, 'needs-attention');
+  assert.equal(node.group, 'active');
+  assert.equal(node.inventoryClass, 'service-owned-controllable-browser');
+  assert.equal(node.state, 'controllable');
   assert.match(node.attentionReason ?? '', reasonPattern);
   assert.equal(node.viewStream?.operatorVisibleState, expectedState);
   assert.match(node.viewStream?.operatorVisibleReason ?? '', reasonPattern);
@@ -568,7 +561,7 @@ for (const [id, expectedState, reasonPattern] of [
   assert.match(action(node, 'view').reason ?? '', reasonPattern);
   assert.equal(action(node, 'control').enabled, false);
   assert.match(action(node, 'control').reason ?? '', reasonPattern);
-  assert.equal(action(node, 'repair').enabled, true);
+  assert.equal(action(node, 'repair').enabled, false);
   assert.equal(workspaceNodeLiveControlEligibility(node).state, 'not-controllable');
   assert.equal(workspaceNodeLiveControlEligibility(node).canControl, false);
 }
@@ -740,6 +733,11 @@ const nodes = deriveWorkspaceNodes({
       host: 'remote',
       health: 'ready',
       pid: 2234,
+      routeBoundOwnership: {
+        state: 'finalized',
+        routeId: 'route-control',
+        displayAllocationId: 'display-control',
+      },
       viewStreams: [
         {
           provider: 'rdp_gateway',
@@ -1234,7 +1232,7 @@ assert.deepEqual(live.inventoryPlacement, {
 });
 assert.deepEqual(workspaceInventoryPlacementForNode(live), live.inventoryPlacement);
 assert.equal(live.inventoryClass, 'service-owned-controllable-browser');
-assert.equal(live.state, 'controllable');
+assert.equal(live.state, 'busy');
 assert.equal(live.label, 'JournalDownloader');
 assert.equal(live.profileId, 'profile-ready');
 assert.equal(live.primaryTab?.id, 'tab-live');
@@ -1283,24 +1281,25 @@ assert.equal(action(closeContractReady, 'close').enabled, true);
 const cdpMissingStream = byId(nodes, 'browser:browser-cdp-missing-stream');
 assert.equal(cdpMissingStream.source, 'service-browser');
 assert.equal(cdpMissingStream.group, 'active');
-assert.equal(cdpMissingStream.inventoryClass, 'service-owned-view-only-browser');
-assert.equal(cdpMissingStream.state, 'view-only');
+assert.equal(cdpMissingStream.inventoryClass, 'service-owned-controllable-browser');
+assert.equal(cdpMissingStream.state, 'controllable');
 assert.equal(cdpMissingStream.viewStream?.provider, 'cdp_snapshot');
 assert.equal(cdpMissingStream.viewStream?.url, '/api/session-screenshot?port=37365');
 assert.equal(cdpMissingStream.viewStream?.embeddable, true);
 assert.equal(cdpMissingStream.viewStream?.controllable, false);
 assert.equal(cdpMissingStream.viewStream?.readOnly, true);
-assert.match(cdpMissingStream.viewStream?.routeSummary ?? '', /missing_stream_server/);
+assert.match(cdpMissingStream.viewStream?.routeSummary ?? '', /CDP snapshot|ready/i);
 assert.equal(cdpMissingStream.process?.cdpPort, 37365);
 assert.equal(cdpMissingStream.process?.streamPort, null);
 assert.equal(action(cdpMissingStream, 'view').enabled, true);
 assert.equal(action(cdpMissingStream, 'control').enabled, false);
-assert.equal(workspaceNodeLiveControlEligibility(cdpMissingStream).state, 'view-only');
+assert.equal(workspaceNodeLiveControlEligibility(cdpMissingStream).state, 'not-controllable');
 
 const readinessBlocked = byId(nodes, 'browser:browser-readiness-blocked');
 assert.equal(readinessBlocked.live, true);
-assert.equal(readinessBlocked.group, 'needs-attention');
-assert.equal(readinessBlocked.state, 'needs-attention');
+assert.equal(readinessBlocked.group, 'active');
+assert.equal(readinessBlocked.inventoryClass, 'service-owned-controllable-browser');
+assert.equal(readinessBlocked.state, 'controllable');
 assert.equal(readinessBlocked.viewStream?.embeddable, false);
 assert.equal(readinessBlocked.viewStream?.controllable, false);
 assert.match(readinessBlocked.viewStream?.routeSummary ?? '', /unreachable/i);
@@ -1338,7 +1337,7 @@ assert.equal(control.viewStream?.controllerLeaseId, 'viewer-control-controller')
 assert.equal(control.viewStream?.operatorVisibleState, 'ready');
 assert.equal(control.viewStream?.operatorVisibleReason, null);
 assert.equal(control.routeBoundOwnership?.state, 'finalized');
-assert.match(control.viewStream?.routeSummary ?? '', /route-control \/ display display-control \/ simultaneous view \/ 1 viewer, controller leased \/ operator visible \/ ready/);
+assert.match(control.viewStream?.routeSummary ?? '', /route-control \/ display display-control \/ simultaneous view \/ 1 viewer, controller leased \/ ready/);
 assert.match(control.secondaryLabel, /route-control \/ display display-control/);
 assert.equal(control.profileActionability?.recommendedAction, 'takeOverViewer');
 assert.equal(control.profileActionability?.enabled, true);
@@ -1359,14 +1358,14 @@ missingId(nodes, 'browser:session:dashboard-local-viewer-plan0016');
 assert.equal(privatePreferred.viewStream?.providerMode, 'simultaneous_view');
 assert.deepEqual(privatePreferred.viewStream?.viewerLeaseIds, ['viewer-private-a', 'viewer-private-b']);
 assert.equal(privatePreferred.viewStream?.operatorVisibleState, 'ready');
-assert.match(privatePreferred.viewStream?.routeSummary ?? '', /route-private \/ display display-private-a \/ simultaneous view \/ 2 viewers \/ operator visible \/ ready/);
+assert.match(privatePreferred.viewStream?.routeSummary ?? '', /route-private \/ display display-private-a \/ simultaneous view \/ 2 viewers \/ ready/);
 
 const odolloUps = byId(nodes, 'browser:session:odollo-carrier-ups');
 assert.equal(odolloUps.group, 'active');
 assert.equal(odolloUps.state, 'controllable');
 assert.equal(odolloUps.label, 'Odollo UPS: 1Z2G26X60300020412');
 assert.match(odolloUps.secondaryLabel, /Odollo UPS \/ remote_headed \/ stealthcdp_chromium/);
-assert.equal(odolloUps.attentionReason, null);
+assert.match(odolloUps.attentionReason ?? '', /Use the existing browser/);
 assert.match(odolloUps.viewStream?.url ?? '', /\/guacamole\/#\/client\//);
 assert.equal(odolloUps.viewStream?.controllable, true);
 assert.equal(odolloUps.profileActionability?.recommendedAction, 'openSharedProfileTab');
@@ -1580,7 +1579,7 @@ const retainedNodes = deriveWorkspaceNodes({
 const retainedWithStreamUrl = byId(retainedNodes, 'browser:retained-with-stream-url');
 assert.equal(retainedWithStreamUrl.inventoryPlacement?.lane, 'retained');
 assert.equal(retainedWithStreamUrl.inventoryClass, 'retained-history');
-assert.equal(retainedWithStreamUrl.routeBoundOwnership?.state, 'retained');
+assert.equal(retainedWithStreamUrl.routeBoundOwnership, null);
 assert.equal(workspaceNodeLiveControlEligibility(retainedWithStreamUrl).state, 'not-controllable');
 assert.equal(workspaceNodeLiveControlEligibility(retainedWithStreamUrl).canView, false);
 assert.equal(workspaceNodeLiveControlEligibility(retainedWithStreamUrl).canControl, false);
@@ -1618,6 +1617,7 @@ const routeBoundOwnershipNodes = deriveWorkspaceNodes({
       id: 'route-finalized',
       host: 'remote_headed',
       health: 'ready',
+      routeBoundOwnership: { state: 'finalized' },
       viewStreams: [
         {
           provider: 'rdp_gateway',
@@ -1629,7 +1629,6 @@ const routeBoundOwnershipNodes = deriveWorkspaceNodes({
           displayContent: { state: 'browser_window_visible' },
           controlInput: 'manual_attached_desktop',
           readOnly: false,
-          routeBoundOwnership: { state: 'finalized' },
         },
       ],
       activeSessionIds: ['route-finalized-session'],
@@ -1638,6 +1637,7 @@ const routeBoundOwnershipNodes = deriveWorkspaceNodes({
       id: 'route-pending',
       host: 'remote_headed',
       health: 'ready',
+      routeBoundOwnership: { state: 'pending' },
       viewStreams: [
         {
           provider: 'rdp_gateway',
@@ -1649,7 +1649,6 @@ const routeBoundOwnershipNodes = deriveWorkspaceNodes({
           displayContent: { state: 'browser_window_visible' },
           controlInput: 'manual_attached_desktop',
           readOnly: false,
-          routeBoundOwnership: { state: 'pending' },
         },
       ],
       activeSessionIds: ['route-pending-session'],
@@ -1658,6 +1657,7 @@ const routeBoundOwnershipNodes = deriveWorkspaceNodes({
       id: 'route-rolled-back',
       host: 'remote_headed',
       health: 'ready',
+      routeBoundOwnership: { state: 'rolled-back' },
       viewStreams: [
         {
           provider: 'rdp_gateway',
@@ -1669,7 +1669,6 @@ const routeBoundOwnershipNodes = deriveWorkspaceNodes({
           displayContent: { state: 'browser_window_visible' },
           controlInput: 'manual_attached_desktop',
           readOnly: false,
-          routeBoundOwnership: { state: 'rolled-back' },
         },
       ],
       activeSessionIds: ['route-rolled-back-session'],
@@ -1678,6 +1677,7 @@ const routeBoundOwnershipNodes = deriveWorkspaceNodes({
       id: 'route-diagnostic',
       host: 'remote_headed',
       health: 'ready',
+      routeBoundOwnership: { state: 'diagnostic' },
       viewStreams: [
         {
           provider: 'rdp_gateway',
@@ -1689,7 +1689,6 @@ const routeBoundOwnershipNodes = deriveWorkspaceNodes({
           displayContent: { state: 'browser_window_visible' },
           controlInput: 'manual_attached_desktop',
           readOnly: false,
-          routeBoundOwnership: { state: 'diagnostic' },
         },
       ],
       activeSessionIds: ['route-diagnostic-session'],

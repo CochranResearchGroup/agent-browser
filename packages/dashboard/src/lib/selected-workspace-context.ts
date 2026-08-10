@@ -1,5 +1,7 @@
 import type { SessionInfo, TabInfo } from "../types.ts";
 import type { DashboardWorkspaceUrlSelection } from "./workspace-url-selection.ts";
+import type { ProjectedWorkspaceView } from "./workspace-view-projection.ts";
+import type { ServiceViewStream } from "./service-view-streams.ts";
 import {
   deriveWorkspaceNodes,
   type WorkspaceNode,
@@ -76,6 +78,8 @@ export type SelectedWorkspaceContext = {
   diagnostics: WorkspaceOwnershipDiagnostic[];
   evidence: SelectedWorkspaceEvidence;
   refreshedAt: number;
+  projectedView: ProjectedWorkspaceView | null;
+  projectionSnapshotIdentity: number;
 };
 
 export type SelectedWorkspaceContextInput = WorkspaceNodeInput & {
@@ -83,6 +87,7 @@ export type SelectedWorkspaceContextInput = WorkspaceNodeInput & {
   nodes?: WorkspaceNode[];
   lastFrameAtByStreamPort?: Record<number, number>;
   refreshedAt?: number;
+  remoteViewRoutes?: Record<string, ServiceViewStream>;
 };
 
 const EMPTY_RUNTIME: SelectedWorkspaceRuntime = {
@@ -188,6 +193,8 @@ export function buildSelectedWorkspaceContext(input: SelectedWorkspaceContextInp
     diagnostics: node?.diagnostics ?? [],
     evidence,
     refreshedAt,
+    projectedView: null,
+    projectionSnapshotIdentity: refreshedAt,
   };
 }
 

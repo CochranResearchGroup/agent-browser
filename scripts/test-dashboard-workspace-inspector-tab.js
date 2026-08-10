@@ -211,6 +211,6 @@ const streamUnavailable = buildSelectedWorkspaceContext({
 
 assert.equal(streamUnavailable.live, true);
 assert.equal(streamUnavailable.viewable, false);
-assert.ok(streamUnavailable.actions.some((action) => action.id === 'view' && !action.enabled && action.reason?.includes('No embeddable')));
+assert.ok(streamUnavailable.actions.some((action) => action.id === 'view' && !action.enabled && action.reason?.includes('No workspace view stream')));
 
 console.log('dashboard workspace inspector tab tests passed');

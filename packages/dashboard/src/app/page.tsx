@@ -10,6 +10,7 @@ import { activeExtensionsAtom } from "@/store/sessions";
 import { useChatStatusSync } from "@/store/chat";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useSelectedWorkspaceContext } from "@/hooks/use-selected-workspace-context";
+import { useWorkspaceViewPreferences } from "@/hooks/use-workspace-view-preferences";
 import { Viewport } from "@/components/viewport";
 import { WorkspaceRemoteViewport } from "@/components/workspace-remote-viewport";
 import { WorkspaceSelectionPanel } from "@/components/workspace-selection-panel";
@@ -576,7 +577,11 @@ function DashboardExperience({
     hasWorkspaceViewportRoute ||
     mobilePanel === "viewport" ||
     mobilePanel === "activity";
-  const selectedWorkspace = useSelectedWorkspaceContext(selectedWorkspaceContextEnabled);
+  const workspaceViewPreferences = useWorkspaceViewPreferences();
+  const selectedWorkspace = useSelectedWorkspaceContext(
+    selectedWorkspaceContextEnabled,
+    workspaceViewPreferences.snapshot,
+  );
   const changeDashboardSection = useCallback((section: DashboardSection) => {
     setActiveSection(section);
     if (typeof window === "undefined") return;
@@ -710,7 +715,15 @@ function DashboardExperience({
     )
     : activeSection === "activity"
       ? <ActivityFeed />
-      : <WorkspaceRemoteViewport fallback={<Viewport />} selectedWorkspaceContext={selectedWorkspace.context} />;
+      : (
+        <WorkspaceRemoteViewport
+          fallback={<Viewport />}
+          selectedWorkspaceContext={selectedWorkspace.context}
+          projection={selectedWorkspace.projection}
+          onRefresh={selectedWorkspace.refresh}
+          onSelectStream={workspaceViewPreferences.write}
+        />
+      );
   const serviceInspectorPanel = (
     <ServiceDetailInspector selection={serviceInspectorSelection} actions={serviceInspectorActions} />
   );
@@ -946,7 +959,13 @@ function DashboardExperience({
           <WorkspaceNavigator />
         </TabsContent>
         <TabsContent value="viewport" className="dashboard-mobile-panel min-h-0 overflow-hidden p-3">
-          <WorkspaceRemoteViewport fallback={<Viewport />} selectedWorkspaceContext={selectedWorkspace.context} />
+          <WorkspaceRemoteViewport
+            fallback={<Viewport />}
+            selectedWorkspaceContext={selectedWorkspace.context}
+            projection={selectedWorkspace.projection}
+            onRefresh={selectedWorkspace.refresh}
+            onSelectStream={workspaceViewPreferences.write}
+          />
         </TabsContent>
         <TabsContent value="activity" className="dashboard-mobile-panel min-h-0 overflow-hidden p-3">
           {sidePanel}

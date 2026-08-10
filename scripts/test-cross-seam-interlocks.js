@@ -75,6 +75,16 @@ const fixture = {
       holderSessionIds: ['owned-attention-session'],
     },
   ],
+  manualBrowsers: [],
+  closedTabProjection: {
+    mode: 'bounded',
+    cap: 50,
+    totalClosedCount: 0,
+    retainedClosedCount: 0,
+    omittedClosedCount: 0,
+    ordering: 'tab_id_descending',
+    diagnosticAvailable: true,
+  },
   browserSessionAuthority: {
     schemaVersion: 1,
     summary: {

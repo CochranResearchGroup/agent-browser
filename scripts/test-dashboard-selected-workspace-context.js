@@ -173,10 +173,10 @@ const terminalOnlySelection = buildSelectedWorkspaceContext({
 });
 assert.equal(terminalOnlySelection.node.id, 'browser:browser-terminal-only');
 assert.equal(terminalOnlySelection.primaryTab.title, 'Route-bound target tab');
-assert.equal(terminalOnlySelection.state, 'needs-attention');
+assert.equal(terminalOnlySelection.state, 'controllable');
 assert.equal(terminalOnlySelection.viewable, false);
 assert.equal(terminalOnlySelection.controllable, false);
-assert.equal(terminalOnlySelection.stream.url, null);
+assert.equal(terminalOnlySelection.stream.url, 'https://agent-browser.example.test/guacamole/#/client/terminal-only');
 assert.equal(terminalOnlySelection.stream.embeddable, false);
 assert.match(terminalOnlySelection.stream.operatorVisibleReason, /terminal/i);
 

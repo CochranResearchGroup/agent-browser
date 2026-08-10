@@ -217,6 +217,13 @@ It should normalize:
 This context should be derived from service state and daemon/session stream
 state, not local-only component state.
 
+Plan 0099 now supplies that shared path through
+`projectWorkspaceViews`. `DashboardExperience` owns one preference controller,
+the selected-context hook builds the authority ledger and projection from one
+Service Status snapshot, and the viewport consumes the completed projection.
+Right-pane consumers must not restore route descriptors, rescore streams, or
+create a second status snapshot for presentation.
+
 ### Evidence Providers
 
 Each non-chat tab becomes an evidence provider with a small stable contract:
