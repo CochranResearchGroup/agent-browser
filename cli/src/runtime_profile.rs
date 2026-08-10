@@ -595,6 +595,7 @@ fn expand_tilde(path: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::EnvGuard;
     use std::env;
     use std::net::TcpListener;
     use std::thread;
@@ -748,6 +749,47 @@ mod tests {
         assert!(status.targets.is_empty());
 
         let _ = clear_runtime_state(&runtime_profile);
+    }
+
+    #[test]
+    fn test_runtime_status_rejects_reused_unrelated_pid() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let fixture_id = format!(
+            "pid-reuse-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        );
+        let home = env::temp_dir().join(&fixture_id);
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+
+        let runtime_profile = "reused-unrelated-pid";
+        let user_data_dir = runtime_profile_user_data_dir(runtime_profile).unwrap();
+        fs::create_dir_all(&user_data_dir).unwrap();
+        write_runtime_state(&RuntimeState {
+            runtime_profile: runtime_profile.to_string(),
+            user_data_dir: user_data_dir.display().to_string(),
+            browser_pid: std::process::id(),
+            headed: true,
+            launch_mode: "automation".to_string(),
+            devtools_port: Some(9),
+            ws_url: Some("ws://127.0.0.1:9/devtools/browser/stale".to_string()),
+            launch_record: None,
+        })
+        .unwrap();
+
+        let status = runtime_status_with_user_data_dir(runtime_profile, None).unwrap();
+
+        assert!(
+            !status.browser_alive,
+            "a live unrelated process that reused a stale browser PID must not own the runtime"
+        );
+        assert!(pid_is_running(std::process::id()));
+
+        fs::remove_dir_all(&home).unwrap();
     }
 
     #[test]

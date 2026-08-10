@@ -2,7 +2,7 @@
 
 Date: 2026-08-10
 
-State: DRAFT | RED FIRST REQUIRED
+State: ACTIVE | RED OBSERVED
 
 Authority:
 
@@ -152,6 +152,17 @@ test process or a controlled child, records mismatching browser identity, uses
 an unreachable disposable DevTools port, and expects `browserAlive=false`.
 The current implementation must fail this assertion. Preserve the red output
 in the execution receipt.
+
+Red checkpoint observed on 2026-08-10 at source base `85bc9a68`:
+
+- the guarded command ran exactly one test;
+- `test_runtime_status_rejects_reused_unrelated_pid` failed at the
+  `browserAlive=false` assertion;
+- the current implementation classified the live non-browser test process as
+  runtime owner;
+- 1,872 unrelated tests were filtered;
+- the fixture used a temporary HOME and left the unrelated process alive;
+- no browser, installed runtime, real profile, route, or X effect occurred.
 
 Then add one vertical green slice through the shared ownership decision and
 runtime status before extending it to profile locks and other consumers.
