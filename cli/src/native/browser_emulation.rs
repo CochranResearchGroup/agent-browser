@@ -181,5 +181,35 @@ pub(crate) mod action_commands {
             "deviceScaleFactor" : scale, "mobile" : mobile, }
         ))
     }
+    pub(crate) async fn handle_viewport(cmd: &Value, state: &DaemonState) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let width = cmd.get("width").and_then(|v| v.as_i64()).unwrap_or(1280) as i32;
+        let height = cmd.get("height").and_then(|v| v.as_i64()).unwrap_or(720) as i32;
+        let scale = cmd
+            .get("deviceScaleFactor")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(1.0);
+        let mobile = cmd.get("mobile").and_then(|v| v.as_bool()).unwrap_or(false);
+        mgr.set_viewport(width, height, scale, mobile).await?;
+        if let Some(ref server) = state.stream_server {
+            server.set_viewport(width as u32, height as u32).await;
+        }
+        Ok(json!(
+            { "width" : width, "height" : height, "deviceScaleFactor" : scale, "mobile" :
+            mobile }
+        ))
+    }
+    pub(crate) async fn handle_user_agent(
+        cmd: &Value,
+        state: &DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let ua = cmd
+            .get("userAgent")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'userAgent' parameter")?;
+        mgr.set_user_agent(ua).await?;
+        Ok(json!({ "userAgent" : ua }))
+    }
 }
 pub(crate) use action_commands::*;

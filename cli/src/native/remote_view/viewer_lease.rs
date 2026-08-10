@@ -1,21 +1,11 @@
-#![allow(unused_imports)]
-use super::super::remote_view::open::{
+use super::open::{
     push_remote_view_service_event, remote_view_lease_is_active, required_remote_view_route_id,
     service_remote_view_timestamp,
 };
-use super::browser_operations::{
-    close_compatible_duplicate_targets, handle_tab_close, handle_tab_new, handle_view_focus,
-    is_blank_url, no_duplicate_target_cleanup, origin_for_url, persist_service_owned_tab_new,
-    tab_new_shared_acquisition_evidence,
+use crate::native::action_runtime::common::*;
+use crate::native::action_runtime::runtime::{
+    optional_command_string, service_browser_id, DaemonState,
 };
-use super::common::*;
-use super::runtime::{
-    command_or_params_value, default_control_input_provider, handle_close, handle_launch,
-    managed_runtime_attach_target, optional_command_or_params_bool,
-    optional_command_or_params_string, optional_command_string, parse_control_input_provider,
-    service_browser_id, DaemonState, REMOTE_VIEW_DISPLAY_ACCESS_GRANT_TIMEOUT_SECONDS,
-};
-use super::service_commands::service_event_kind_name;
 pub(crate) async fn handle_service_viewer_lease_request(
     cmd: &Value,
     daemon_state: &DaemonState,
@@ -340,31 +330,4 @@ pub(crate) async fn handle_service_viewer_lease_release(
             viewer_lease_id), "updatedAt" : now, }
         ))
     })
-}
-pub(crate) async fn handle_viewport(cmd: &Value, state: &DaemonState) -> Result<Value, String> {
-    let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
-    let width = cmd.get("width").and_then(|v| v.as_i64()).unwrap_or(1280) as i32;
-    let height = cmd.get("height").and_then(|v| v.as_i64()).unwrap_or(720) as i32;
-    let scale = cmd
-        .get("deviceScaleFactor")
-        .and_then(|v| v.as_f64())
-        .unwrap_or(1.0);
-    let mobile = cmd.get("mobile").and_then(|v| v.as_bool()).unwrap_or(false);
-    mgr.set_viewport(width, height, scale, mobile).await?;
-    if let Some(ref server) = state.stream_server {
-        server.set_viewport(width as u32, height as u32).await;
-    }
-    Ok(json!(
-        { "width" : width, "height" : height, "deviceScaleFactor" : scale, "mobile" :
-        mobile }
-    ))
-}
-pub(crate) async fn handle_user_agent(cmd: &Value, state: &DaemonState) -> Result<Value, String> {
-    let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
-    let ua = cmd
-        .get("userAgent")
-        .and_then(|v| v.as_str())
-        .ok_or("Missing 'userAgent' parameter")?;
-    mgr.set_user_agent(ua).await?;
-    Ok(json!({ "userAgent" : ua }))
 }

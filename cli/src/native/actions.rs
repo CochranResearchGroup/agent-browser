@@ -34,11 +34,6 @@ use super::action_runtime::browser_operations::{
     handle_wheel, handle_window_new, take_response_warning,
 };
 use super::action_runtime::common::*;
-use super::action_runtime::remote_view_operations::{
-    handle_service_controller_lease_takeover, handle_service_viewer_lease_heartbeat,
-    handle_service_viewer_lease_release, handle_service_viewer_lease_request, handle_user_agent,
-    handle_viewport,
-};
 use super::action_runtime::runtime::{
     active_browser_profile_mismatch, auto_launch, detect_browser_stale_state, handle_cdp_attach,
     handle_cdp_detach, handle_cdp_free_launch, handle_close, handle_external_byop_adopt,
@@ -68,10 +63,15 @@ use super::action_runtime::service_commands::{
     handle_service_sessions, handle_service_site_policies, handle_service_site_policy_delete,
     handle_service_site_policy_upsert, handle_service_tabs, handle_service_trace,
 };
+use super::browser_emulation::{handle_user_agent, handle_viewport};
 use super::remote_view::open::{
     handle_remote_view_open, handle_service_remote_view_browser_reattach,
     handle_service_remote_view_handoff_resolve, handle_service_remote_view_route_checkout,
     handle_service_remote_view_route_preflight, handle_service_remote_view_route_release,
+};
+use super::remote_view::viewer_lease::{
+    handle_service_controller_lease_takeover, handle_service_viewer_lease_heartbeat,
+    handle_service_viewer_lease_release, handle_service_viewer_lease_request,
 };
 use super::service_diagnostics::handle_service_diagnostics;
 use super::service_file_transfer::handle_service_file_transfer;

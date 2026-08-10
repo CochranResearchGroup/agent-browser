@@ -1,6 +1,5 @@
 pub(crate) mod browser_operations;
 pub(crate) mod common;
-pub(crate) mod remote_view_operations;
 pub(crate) mod runtime;
 pub(crate) mod service_commands;
 
@@ -16,9 +15,6 @@ pub(crate) use runtime::{
 #[cfg(test)]
 #[allow(unused_imports)]
 pub(crate) use browser_operations::*;
-#[cfg(test)]
-#[allow(unused_imports)]
-pub(crate) use remote_view_operations::*;
 #[cfg(test)]
 #[allow(unused_imports)]
 pub(crate) use runtime::*;
