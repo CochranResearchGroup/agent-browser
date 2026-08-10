@@ -8,6 +8,29 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const failures = [];
 const compilingCargo = /\bcargo\s+(?:build|check|clippy|fmt|run|test)\b/;
 
+function launchesRawCargo(line) {
+  return (
+    /command:\s*['"]cargo['"]/.test(line) ||
+    /^\s*cargo\s+(?:build|check|clippy|fmt|run|test)\b/.test(line) ||
+    /['"`]cargo\s+(?:build|check|clippy|fmt|run|test)\b/.test(line) ||
+    /\b(?:runCommand|spawn|spawnSync|execFileSync)\s*\(\s*['"]cargo['"]/.test(line)
+  );
+}
+
+for (const [label, source, expectedRaw] of [
+  ['shell', 'cargo test --manifest-path cli/Cargo.toml', true],
+  ['command-field', "command: 'cargo'", true],
+  ['run-command', "runCommand('cargo', cargoArgs)", true],
+  ['spawn', "spawn('cargo', cargoArgs(args), options)", true],
+  ['spawn-sync', "spawnSync('cargo', ['check'])", true],
+  ['exec-file', "execFileSync('cargo', ['build'])", true],
+  ['guarded', "spawn('scripts/ci/cargo-safe.sh', ['test'])", false],
+]) {
+  if (launchesRawCargo(source) !== expectedRaw) {
+    failures.push(`detector_fixture:${label}:expected_raw=${expectedRaw}`);
+  }
+}
+
 const packageJson = JSON.parse(readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
 for (const [name, command] of Object.entries(packageJson.scripts ?? {})) {
   if (compilingCargo.test(command) && !command.includes('scripts/ci/cargo-safe.sh')) {
@@ -21,6 +44,7 @@ function visit(directory) {
     const relative = path.relative(repoRoot, absolute);
     if (
       relative === 'scripts/ci/cargo-safe.sh' ||
+      relative === 'scripts/test-wsl-cargo-entrypoints.js' ||
       relative.startsWith('scripts/windows-debug/') ||
       relative.includes('/target/') ||
       relative.includes('/node_modules/')
@@ -34,10 +58,7 @@ function visit(directory) {
     if (!/\.(?:js|mjs|sh)$/.test(entry)) continue;
     const lines = readFileSync(absolute, 'utf8').split('\n');
     for (const [index, line] of lines.entries()) {
-      const executableCargo =
-        /command:\s*['"]cargo['"]/.test(line) ||
-        /^\s*cargo\s+(?:build|check|clippy|fmt|run|test)\b/.test(line) ||
-        /['"`]cargo\s+(?:build|check|clippy|fmt|run|test)\b/.test(line);
+      const executableCargo = launchesRawCargo(line);
       if (executableCargo && !line.includes('cargo-safe.sh')) {
         failures.push(`${relative}:${index + 1}:raw_compiling_cargo`);
       }

@@ -114,7 +114,7 @@ async function run() {
 
   const cargoArgs = ['build', '--manifest-path', 'cli/Cargo.toml'];
   if (options.release) cargoArgs.push('--release');
-  runCommand('cargo', cargoArgs);
+  runCommand(join(rootDir, 'scripts', 'ci', 'cargo-safe.sh'), cargoArgs);
 
   const builtBin = resolve(rootDir, 'cli', 'target', options.release ? 'release' : 'debug', 'agent-browser');
   if (!existsSync(builtBin)) {

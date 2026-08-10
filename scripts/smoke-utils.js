@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 export const rootDir = new URL('..', import.meta.url).pathname;
+const cargoSafeCommand = join(rootDir, 'scripts', 'ci', 'cargo-safe.sh');
 
 export function createSmokeContext({ prefix, session, sessionPrefix, socketDir: customSocketDir, socketSubdir = 's' }) {
   const tempHome = mkdtempSync(join(tmpdir(), prefix));
@@ -50,7 +51,7 @@ export function runCli(context, args, timeoutMs = 60000) {
   return new Promise((resolve, reject) => {
     const installedCommand = context.env.AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD ||
       process.env.AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD;
-    const command = installedCommand || 'cargo';
+    const command = installedCommand || cargoSafeCommand;
     const commandArgs = installedCommand ? args : cargoArgs(args);
     const label = installedCommand ? command : `agent-browser ${args.join(' ')}`;
     const proc = spawn(command, commandArgs, {
@@ -1238,7 +1239,7 @@ export function sendRawCommand(context, command) {
 }
 
 export function createMcpStdioClient({ context, args, onFatal }) {
-  const child = spawn('cargo', cargoArgs(args), {
+  const child = spawn(cargoSafeCommand, cargoArgs(args), {
     cwd: rootDir,
     env: context.env,
     stdio: ['pipe', 'pipe', 'pipe'],
