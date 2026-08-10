@@ -1695,13 +1695,28 @@ fn service_browser_process_assessment(
     identity: Option<&ServiceBrowserProcessIdentity>,
     pid: u32,
 ) -> Option<crate::process_identity::RuntimeProcessAssessment> {
-    identity.map(|identity| {
-        crate::process_identity::assess_process_ownership(
+    let observation = crate::process_identity::observe_process(pid);
+    if let Some(identity) = identity {
+        return Some(crate::process_identity::assess_process_ownership(
             Some(&identity.process_identity),
-            crate::process_identity::observe_process(pid),
+            observation,
             crate::process_identity::LegacyProfileProof::Unproven,
-        )
-    })
+        ));
+    }
+
+    // Legacy service-browser rows have no persisted process identity. Missing
+    // and failed observations are still authoritative enough to prevent a dead
+    // or unobservable PID from remaining modeled as a live browser. A live
+    // observed process remains on the legacy endpoint-health path until a new
+    // launch persists exact identity evidence.
+    match observation {
+        crate::process_identity::ProcessObservation::Observed(_) => None,
+        observation => Some(crate::process_identity::assess_process_ownership(
+            None,
+            observation,
+            crate::process_identity::LegacyProfileProof::Unproven,
+        )),
+    }
 }
 
 async fn refresh_browser_record_health(
