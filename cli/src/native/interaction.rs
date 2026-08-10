@@ -1234,3 +1234,867 @@ mod tests {
         assert_eq!(key_text("Delete"), None);
     }
 }
+#[allow(dead_code, unused_imports)]
+pub(crate) mod action_commands {
+    use crate::native::action_runtime::common::*;
+    use crate::native::action_runtime::runtime::{
+        is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
+        relaunch_and_restore_page, service_browser_id,
+        validate_service_tab_handle_for_current_session,
+        validate_service_tab_handle_route_for_current_session, DaemonState, FetchPausedRequest,
+        HarEntry, MouseState, RouteEntry, RouteResponse, TrackedRequest,
+        AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
+        AUTH_LOGIN_WAIT_UNTIL,
+    };
+    use crate::native::browser_wait::{
+        wait_for_function, wait_for_selector, wait_for_text, wait_for_url,
+    };
+    use crate::native::service_diagnostics::truncate_utf8;
+    pub(crate) async fn handle_click(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let capture_clipboard_write = cmd
+            .get("captureClipboardWrite")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false);
+        if !capture_clipboard_write {
+            return handle_click_action(cmd, state).await;
+        }
+        let (client, session_id) = {
+            let mgr = state
+                .browser
+                .as_ref()
+                .ok_or("--capture-clipboard-write requires the native Chrome browser backend")?;
+            (mgr.client.clone(), mgr.active_session_id()?.to_string())
+        };
+        let action = handle_click_action(cmd, state);
+        let action_timeout = cmd
+            .get("jobTimeoutMs")
+            .and_then(|value| value.as_u64())
+            .map(|timeout_ms| {
+                tokio::time::Duration::from_millis(timeout_ms.saturating_sub(1000).max(1))
+            })
+            .unwrap_or(super::super::clipboard::DEFAULT_WRITE_CAPTURE_ACTION_TIMEOUT);
+        let (action_result, capture) = super::super::clipboard::capture_write_during(
+            &client,
+            &session_id,
+            super::super::clipboard::DEFAULT_WRITE_CAPTURE_LIMIT,
+            action_timeout,
+            action,
+        )
+        .await?;
+        match action_result {
+            Ok(mut response) => {
+                response["clipboardCapture"] = json!(
+                    { "supported" : capture.supported, "invoked" : capture.invoked,
+                    "text" : capture.text, "truncated" : capture.truncated,
+                    "originalLength" : capture.original_length, "restored" : capture
+                    .restored, "reason" : capture.reason, }
+                );
+                Ok(response)
+            }
+            Err(error) => Err(format!(
+                "{error}; clipboardCaptureRestored={}",
+                capture.restored
+            )),
+        }
+    }
+    pub(crate) async fn handle_click_action(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let selector = cmd
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'selector' parameter")?;
+        if let Some(ref wb) = state.webdriver_backend {
+            if state.browser.is_none() {
+                wb.click(selector).await?;
+                return Ok(json!({ "clicked" : selector }));
+            }
+        }
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let client = mgr.client.clone();
+        let session_id = mgr.active_session_id()?.to_string();
+        let new_tab = cmd.get("newTab").and_then(|v| v.as_bool()).unwrap_or(false);
+        if new_tab {
+            use super::super::element::resolve_element_object_id;
+            let (object_id, effective_session_id) = resolve_element_object_id(
+                &client,
+                &session_id,
+                &state.ref_map,
+                selector,
+                &state.iframe_sessions,
+            )
+            .await?;
+            let call_params = json!(
+                { "objectId" : object_id, "functionDeclaration" :
+                "function() { var h = this.getAttribute('href'); if (!h) return null; try { return new URL(h, document.baseURI).toString(); } catch(e) { return null; } }",
+                "returnByValue" : true }
+            );
+            let call_result = client
+                .send_command(
+                    "Runtime.callFunctionOn",
+                    Some(call_params),
+                    Some(&effective_session_id),
+                )
+                .await?;
+            let href = call_result
+                .get("result")
+                .and_then(|r| r.get("value"))
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| {
+                    format!(
+                        "Element '{}' does not have an href attribute. --new-tab only works on links.",
+                        selector
+                    )
+                })?
+                .to_string();
+            let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
+            state.ref_map.clear();
+            mgr.tab_new(Some(&href)).await?;
+            return Ok(json!({ "clicked" : selector, "newTab" : true, "url" : href }));
+        }
+        let button = cmd.get("button").and_then(|v| v.as_str()).unwrap_or("left");
+        let click_count = cmd.get("clickCount").and_then(|v| v.as_i64()).unwrap_or(1) as i32;
+        if button == "left" && click_count == 1 {
+            if let Some(ref_id) = super::super::element::parse_ref(selector) {
+                if let Some(entry) = state.ref_map.get(&ref_id) {
+                    if entry.role == "link" {
+                        let nth = entry.nth.unwrap_or(0);
+                        let link_lookup: Value = client
+                            .send_command_typed(
+                                "Runtime.evaluate",
+                                &super::super::cdp::types::EvaluateParams {
+                                    expression: format!(
+                                        r#"(function() {{
+                                        const targetName = {name};
+                                        const targetIndex = {nth};
+                                        const links = Array.from(document.querySelectorAll('a[href]'))
+                                            .filter((el) => {{
+                                                const rect = el.getBoundingClientRect();
+                                                const style = window.getComputedStyle(el);
+                                                if (rect.width <= 0 || rect.height <= 0) return false;
+                                                if (style.display === 'none' || style.visibility === 'hidden' || Number.parseFloat(style.opacity || '1') === 0) return false;
+                                                const label = (el.getAttribute('aria-label') || el.getAttribute('title') || el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ');
+                                                return label === targetName;
+                                            }});
+                                        const el = links[targetIndex];
+                                        return el ? el.href : null;
+                                    }})()"#,
+                                        name = serde_json::to_string(& entry.name).unwrap_or_else(|
+                                        _ | "\"\"".to_string()), nth = nth,
+                                    ),
+                                    return_by_value: Some(true),
+                                    await_promise: Some(true),
+                                },
+                                Some(&session_id),
+                            )
+                            .await
+                            .ok()
+                            .and_then(|r: super::super::cdp::types::EvaluateResult| {
+                                r.result.value
+                            })
+                            .unwrap_or(Value::Null);
+                        if let Some(href) = link_lookup.as_str() {
+                            if let Some(mgr) = state.browser.as_mut() {
+                                mgr.set_active_page_url(href);
+                            }
+                            let _ = client
+                                .send_command_typed::<_, super::super::cdp::types::EvaluateResult>(
+                                    "Runtime.evaluate",
+                                    &super::super::cdp::types::EvaluateParams {
+                                        expression: format!(
+                                            "window.location.assign({});",
+                                            serde_json::to_string(href)
+                                                .unwrap_or_else(|_| "\"\"".to_string())
+                                        ),
+                                        return_by_value: Some(true),
+                                        await_promise: Some(false),
+                                    },
+                                    Some(&session_id),
+                                )
+                                .await;
+                            return Ok(json!(
+                                { "clicked" : selector, "url" : href, "fallbackNavigation" :
+                                true }
+                            ));
+                        }
+                    }
+                }
+            }
+            use super::super::element::resolve_element_object_id;
+            let (object_id, effective_session_id) = resolve_element_object_id(
+                &client,
+                &session_id,
+                &state.ref_map,
+                selector,
+                &state.iframe_sessions,
+            )
+            .await?;
+            let call_result = client
+                .send_command(
+                    "Runtime.callFunctionOn",
+                    Some(json!(
+                        { "objectId" : object_id, "functionDeclaration" :
+                        r#"function() {
+                        const el = this.closest?.('a[href]') || this;
+                        if (!el || !el.href) return null;
+                        const href = String(el.href);
+                        const target = el.getAttribute('target') || '';
+                        if (target && target !== '_self') return null;
+                        if (href.startsWith('javascript:')) return null;
+                        return href;
+                    }"#,
+                        "returnByValue" : true }
+                    )),
+                    Some(&effective_session_id),
+                )
+                .await?;
+            if let Some(href) = call_result
+                .get("result")
+                .and_then(|r| r.get("value"))
+                .and_then(|v| v.as_str())
+            {
+                interaction::focus(
+                    &client,
+                    &session_id,
+                    &state.ref_map,
+                    selector,
+                    &state.iframe_sessions,
+                )
+                .await?;
+                let press_client = client.clone();
+                let press_session_id = session_id.clone();
+                tokio::spawn(async move {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(75)).await;
+                    let _ = interaction::press_key(&press_client, &press_session_id, "Enter").await;
+                });
+                return Ok(json!(
+                    { "clicked" : selector, "url" : href, "deferredActivation" : true
+                    }
+                ));
+            }
+        }
+        interaction::click(
+            &client,
+            &session_id,
+            &state.ref_map,
+            selector,
+            button,
+            click_count,
+            &state.iframe_sessions,
+        )
+        .await?;
+        Ok(json!({ "clicked" : selector }))
+    }
+    pub(crate) async fn handle_dblclick(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let selector = cmd
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'selector' parameter")?;
+        interaction::dblclick(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            selector,
+            &state.iframe_sessions,
+        )
+        .await?;
+        Ok(json!({ "clicked" : selector }))
+    }
+    pub(crate) async fn handle_fill(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+        let selector = cmd
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'selector' parameter")?;
+        let value = cmd
+            .get("value")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'value' parameter")?;
+        if let Some(ref wb) = state.webdriver_backend {
+            if state.browser.is_none() {
+                wb.fill(selector, value).await?;
+                return Ok(json!({ "filled" : selector }));
+            }
+        }
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        interaction::fill(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            selector,
+            value,
+            &state.iframe_sessions,
+        )
+        .await?;
+        Ok(json!({ "filled" : selector }))
+    }
+    pub(crate) async fn handle_type(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let selector = cmd
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'selector' parameter")?;
+        let text = cmd
+            .get("text")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'text' parameter")?;
+        let clear = cmd.get("clear").and_then(|v| v.as_bool()).unwrap_or(false);
+        let delay = cmd.get("delay").and_then(|v| v.as_u64());
+        interaction::type_text(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            selector,
+            text,
+            clear,
+            delay,
+            &state.iframe_sessions,
+        )
+        .await?;
+        Ok(json!({ "typed" : text }))
+    }
+    pub(crate) async fn handle_press(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let key = cmd
+            .get("key")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'key' parameter")?;
+        let (actual_key, modifiers) = parse_key_chord(key);
+        interaction::press_key_with_modifiers(&mgr.client, &session_id, &actual_key, modifiers)
+            .await?;
+        Ok(json!({ "pressed" : key }))
+    }
+    /// Parse a key chord string like "Control+a" or "Control+Shift+Enter" into
+    /// the actual key name and an optional CDP modifier bitmask.
+    ///
+    /// CDP modifier values: 1 = Alt, 2 = Control, 4 = Meta (Cmd), 8 = Shift.
+    pub(crate) fn parse_key_chord(input: &str) -> (String, Option<i32>) {
+        let parts: Vec<&str> = input.split('+').collect();
+        if parts.len() < 2 {
+            return (input.to_string(), None);
+        }
+        let mut modifiers = 0i32;
+        let mut key_parts: Vec<&str> = Vec::new();
+        for part in &parts {
+            match part.to_lowercase().as_str() {
+                "alt" => modifiers |= 1,
+                "control" | "ctrl" => modifiers |= 2,
+                "meta" | "cmd" | "command" => modifiers |= 4,
+                "shift" => modifiers |= 8,
+                _ => key_parts.push(part),
+            }
+        }
+        if modifiers == 0 {
+            return (input.to_string(), None);
+        }
+        let actual_key = if key_parts.is_empty() {
+            input.to_string()
+        } else {
+            key_parts.join("+")
+        };
+        (actual_key, Some(modifiers))
+    }
+    pub(crate) async fn handle_hover(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let selector = cmd
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'selector' parameter")?;
+        interaction::hover(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            selector,
+            &state.iframe_sessions,
+        )
+        .await?;
+        Ok(json!({ "hovered" : selector }))
+    }
+    pub(crate) async fn handle_scroll(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let selector = cmd.get("selector").and_then(|v| v.as_str());
+        let (mut dx, mut dy) = (
+            cmd.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0),
+            cmd.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0),
+        );
+        if let Some(direction) = cmd.get("direction").and_then(|v| v.as_str()) {
+            let amount = cmd.get("amount").and_then(|v| v.as_f64()).unwrap_or(300.0);
+            match direction {
+                "up" => dy = -amount,
+                "down" => dy = amount,
+                "left" => dx = -amount,
+                "right" => dx = amount,
+                _ => {}
+            }
+        }
+        interaction::scroll(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            selector,
+            dx,
+            dy,
+            &state.iframe_sessions,
+        )
+        .await?;
+        Ok(json!({ "scrolled" : true }))
+    }
+    pub(crate) async fn handle_select(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let selector = cmd
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'selector' parameter")?;
+        let values: Vec<String> = match cmd.get("values") {
+            Some(Value::Array(arr)) => arr
+                .iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect(),
+            Some(Value::String(s)) => vec![s.clone()],
+            _ => cmd
+                .get("value")
+                .and_then(|v| v.as_str())
+                .map(|s| vec![s.to_string()])
+                .unwrap_or_default(),
+        };
+        interaction::select_option(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            selector,
+            &values,
+            &state.iframe_sessions,
+        )
+        .await?;
+        Ok(json!({ "selected" : values }))
+    }
+    pub(crate) async fn handle_check(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let selector = cmd
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'selector' parameter")?;
+        interaction::check(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            selector,
+            &state.iframe_sessions,
+        )
+        .await?;
+        Ok(json!({ "checked" : selector }))
+    }
+    pub(crate) async fn handle_uncheck(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let selector = cmd
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'selector' parameter")?;
+        interaction::uncheck(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            selector,
+            &state.iframe_sessions,
+        )
+        .await?;
+        Ok(json!({ "unchecked" : selector }))
+    }
+    pub(crate) async fn handle_wait(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let timeout_ms = state.timeout_ms(cmd);
+        if let Some(text) = cmd.get("text").and_then(|v| v.as_str()) {
+            wait_for_text(&mgr.client, &session_id, text, timeout_ms).await?;
+            return Ok(json!({ "waited" : "text", "text" : text }));
+        }
+        if let Some(selector) = cmd.get("selector").and_then(|v| v.as_str()) {
+            let state_str = cmd
+                .get("state")
+                .and_then(|v| v.as_str())
+                .unwrap_or("visible");
+            wait_for_selector(&mgr.client, &session_id, selector, state_str, timeout_ms).await?;
+            return Ok(json!({ "waited" : "selector", "selector" : selector }));
+        }
+        if let Some(url_pattern) = cmd.get("url").and_then(|v| v.as_str()) {
+            wait_for_url(&mgr.client, &session_id, url_pattern, timeout_ms).await?;
+            return Ok(json!({ "waited" : "url", "url" : url_pattern }));
+        }
+        if let Some(fn_str) = cmd.get("function").and_then(|v| v.as_str()) {
+            wait_for_function(&mgr.client, &session_id, fn_str, timeout_ms).await?;
+            return Ok(json!({ "waited" : "function" }));
+        }
+        if let Some(load_state) = cmd.get("loadState").and_then(|v| v.as_str()) {
+            let wait_until = WaitUntil::from_str(load_state);
+            mgr.wait_for_lifecycle_external(wait_until, &session_id)
+                .await?;
+            return Ok(json!({ "waited" : "load", "state" : load_state }));
+        }
+        tokio::time::sleep(tokio::time::Duration::from_millis(timeout_ms)).await;
+        Ok(json!({ "waited" : "timeout", "ms" : timeout_ms }))
+    }
+    pub(crate) async fn handle_gettext(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let selector = cmd
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'selector' parameter")?;
+        let text = super::super::element::get_element_text(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            selector,
+            &state.iframe_sessions,
+        )
+        .await?;
+        let url = mgr.get_url().await.unwrap_or_default();
+        Ok(json!({ "text" : text, "origin" : url }))
+    }
+    pub(crate) async fn handle_getattribute(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let selector = cmd
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'selector' parameter")?;
+        let attribute = cmd
+            .get("attribute")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'attribute' parameter")?;
+        let value = super::super::element::get_element_attribute(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            selector,
+            attribute,
+            &state.iframe_sessions,
+        )
+        .await?;
+        let url = mgr.get_url().await.unwrap_or_default();
+        Ok(json!({ "value" : value, "origin" : url }))
+    }
+    pub(crate) async fn handle_isvisible(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let selector = cmd
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'selector' parameter")?;
+        let visible = super::super::element::is_element_visible(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            selector,
+            &state.iframe_sessions,
+        )
+        .await?;
+        let url = mgr.get_url().await.unwrap_or_default();
+        Ok(json!({ "visible" : visible, "origin" : url }))
+    }
+    pub(crate) async fn handle_isenabled(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let selector = cmd
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'selector' parameter")?;
+        let enabled = super::super::element::is_element_enabled(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            selector,
+            &state.iframe_sessions,
+        )
+        .await?;
+        let url = mgr.get_url().await.unwrap_or_default();
+        Ok(json!({ "enabled" : enabled, "origin" : url }))
+    }
+    pub(crate) async fn handle_ischecked(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let selector = cmd
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'selector' parameter")?;
+        let checked = super::super::element::is_element_checked(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            selector,
+            &state.iframe_sessions,
+        )
+        .await?;
+        let url = mgr.get_url().await.unwrap_or_default();
+        Ok(json!({ "checked" : checked, "origin" : url }))
+    }
+    pub(crate) async fn handle_focus(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let selector = cmd
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'selector' parameter")?;
+        interaction::focus(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            selector,
+            &state.iframe_sessions,
+        )
+        .await?;
+        Ok(json!({ "focused" : selector }))
+    }
+    pub(crate) async fn handle_clear(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let selector = cmd
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'selector' parameter")?;
+        interaction::clear(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            selector,
+            &state.iframe_sessions,
+        )
+        .await?;
+        Ok(json!({ "cleared" : selector }))
+    }
+    pub(crate) async fn handle_selectall(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let selector = cmd
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'selector' parameter")?;
+        interaction::select_all(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            selector,
+            &state.iframe_sessions,
+        )
+        .await?;
+        Ok(json!({ "selected" : selector }))
+    }
+    pub(crate) async fn handle_scrollintoview(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let selector = cmd
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'selector' parameter")?;
+        interaction::scroll_into_view(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            selector,
+            &state.iframe_sessions,
+        )
+        .await?;
+        Ok(json!({ "scrolled" : selector }))
+    }
+    pub(crate) async fn handle_dispatch(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let selector = cmd
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'selector' parameter")?;
+        let event_type = cmd
+            .get("event")
+            .or_else(|| cmd.get("eventType"))
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'event' parameter")?;
+        let event_init = cmd.get("eventInit");
+        interaction::dispatch_event(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            selector,
+            event_type,
+            event_init,
+            &state.iframe_sessions,
+        )
+        .await?;
+        Ok(json!({ "dispatched" : event_type, "selector" : selector }))
+    }
+    pub(crate) async fn handle_highlight(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let selector = cmd
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'selector' parameter")?;
+        interaction::highlight(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            selector,
+            &state.iframe_sessions,
+        )
+        .await?;
+        Ok(json!({ "highlighted" : selector }))
+    }
+    pub(crate) async fn handle_tap(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+        let selector = cmd.get("selector").and_then(|v| v.as_str());
+        if let Some(ref appium) = state.appium {
+            if state.browser.is_none() {
+                let x = cmd.get("x").and_then(|v| v.as_f64()).unwrap_or(200.0);
+                let y = cmd.get("y").and_then(|v| v.as_f64()).unwrap_or(200.0);
+                appium.tap(x, y).await?;
+                return Ok(json!({ "tapped" : true, "x" : x, "y" : y }));
+            }
+        }
+        let sel = selector.ok_or("Missing 'selector' parameter")?;
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        interaction::tap_touch(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            sel,
+            &state.iframe_sessions,
+        )
+        .await?;
+        Ok(json!({ "tapped" : sel }))
+    }
+    pub(crate) async fn handle_dialog(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let response = cmd.get("response").and_then(|v| v.as_str());
+        if response == Some("status") {
+            return Ok(match &state.pending_dialog {
+                Some(dialog) => {
+                    let mut obj = json!(
+                        { "hasDialog" : true, "type" : dialog.dialog_type, "message"
+                        : dialog.message, }
+                    );
+                    if let Some(ref prompt) = dialog.default_prompt {
+                        obj["defaultPrompt"] = json!(prompt);
+                    }
+                    obj
+                }
+                None => json!({ "hasDialog" : false }),
+            });
+        }
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let accept = response
+            .map(|r| r == "accept")
+            .or_else(|| cmd.get("accept").and_then(|v| v.as_bool()))
+            .unwrap_or(true);
+        let prompt_text = cmd.get("promptText").and_then(|v| v.as_str());
+        mgr.handle_dialog(accept, prompt_text).await?;
+        state.pending_dialog = None;
+        Ok(json!({ "handled" : true, "accepted" : accept }))
+    }
+    pub(crate) async fn handle_upload(cmd: &Value, state: &DaemonState) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let selector = cmd
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'selector' parameter")?;
+        let files: Vec<String> = cmd
+            .get("files")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
+            .or_else(|| {
+                cmd.get("file")
+                    .and_then(|v| v.as_str())
+                    .map(|s| vec![s.to_string()])
+            })
+            .unwrap_or_default();
+        let session_id = mgr.active_session_id()?.to_string();
+        let (object_id, effective_session_id) = super::super::element::resolve_element_object_id(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            selector,
+            &state.iframe_sessions,
+        )
+        .await?;
+        mgr.client
+            .send_command(
+                "DOM.setFileInputFiles",
+                Some(json!({ "files" : files, "objectId" : object_id, })),
+                Some(&effective_session_id),
+            )
+            .await?;
+        Ok(json!({ "uploaded" : files.len(), "selector" : selector }))
+    }
+}
+pub(crate) use action_commands::*;

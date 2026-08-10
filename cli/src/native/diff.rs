@@ -272,3 +272,165 @@ mod tests {
         );
     }
 }
+#[allow(dead_code, unused_imports)]
+pub(crate) mod action_commands {
+    use crate::native::action_runtime::common::*;
+    use crate::native::action_runtime::runtime::{
+        is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
+        relaunch_and_restore_page, service_browser_id,
+        validate_service_tab_handle_for_current_session,
+        validate_service_tab_handle_route_for_current_session, DaemonState, FetchPausedRequest,
+        HarEntry, MouseState, RouteEntry, RouteResponse, TrackedRequest,
+        AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
+        AUTH_LOGIN_WAIT_UNTIL,
+    };
+    use crate::native::service_diagnostics::truncate_utf8;
+    pub(crate) async fn handle_diff_snapshot(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let compact = cmd
+            .get("compact")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let max_depth = cmd
+            .get("maxDepth")
+            .and_then(|v| v.as_u64())
+            .map(|d| d as usize);
+        let selector = cmd
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+        let options = SnapshotOptions {
+            compact,
+            depth: max_depth,
+            selector,
+            ..SnapshotOptions::default()
+        };
+        let current = snapshot::take_snapshot(
+            &mgr.client,
+            &session_id,
+            &options,
+            &mut state.ref_map,
+            state.active_frame_id.as_deref(),
+            &state.iframe_sessions,
+        )
+        .await?;
+        let baseline = cmd.get("baseline").and_then(|v| v.as_str());
+        let baseline_text = match baseline {
+            Some(b) if std::path::Path::new(b).exists() => {
+                std::fs::read_to_string(b).map_err(|e| format!("Failed to read baseline: {}", e))?
+            }
+            Some(b) => b.to_string(),
+            None => String::new(),
+        };
+        let result = diff::diff_snapshots(&baseline_text, &current);
+        Ok(json!(
+            { "diff" : result.diff, "additions" : result.additions, "removals" :
+            result.removals, "unchanged" : result.unchanged, "changed" : result
+            .changed, }
+        ))
+    }
+    pub(crate) async fn handle_diff_url(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
+        let url1 = cmd
+            .get("url1")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'url1' parameter")?;
+        let url2 = cmd
+            .get("url2")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'url2' parameter")?;
+        let wait_until = cmd
+            .get("waitUntil")
+            .and_then(|v| v.as_str())
+            .map(WaitUntil::from_str)
+            .unwrap_or(WaitUntil::Load);
+        mgr.navigate(url1, wait_until).await?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let options = SnapshotOptions::default();
+        let snap1 = snapshot::take_snapshot(
+            &mgr.client,
+            &session_id,
+            &options,
+            &mut state.ref_map,
+            None,
+            &state.iframe_sessions,
+        )
+        .await?;
+        mgr.navigate(url2, wait_until).await?;
+        state.ref_map.clear();
+        let snap2 = snapshot::take_snapshot(
+            &mgr.client,
+            &session_id,
+            &options,
+            &mut state.ref_map,
+            None,
+            &state.iframe_sessions,
+        )
+        .await?;
+        let result = diff::diff_text(&snap1, &snap2);
+        Ok(json!(
+            { "diff" : result, "url1" : url1, "url2" : url2, "snapshot1" : snap1,
+            "snapshot2" : snap2, }
+        ))
+    }
+    pub(crate) async fn handle_diff_screenshot(
+        cmd: &Value,
+        state: &DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let baseline_path = cmd
+            .get("baseline")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'baseline' parameter")?;
+        let threshold = cmd.get("threshold").and_then(|v| v.as_f64()).unwrap_or(0.1);
+        let options = ScreenshotOptions {
+            selector: cmd
+                .get("selector")
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            path: None,
+            full_page: cmd
+                .get("fullPage")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
+            format: "png".to_string(),
+            quality: None,
+            annotate: false,
+            output_dir: None,
+        };
+        let result = screenshot::take_screenshot(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            &options,
+            &state.iframe_sessions,
+        )
+        .await?;
+        let current_bytes =
+            base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &result.base64)
+                .map_err(|e| format!("Failed to decode screenshot: {}", e))?;
+        let baseline_bytes =
+            std::fs::read(baseline_path).map_err(|e| format!("Failed to read baseline: {}", e))?;
+        let result = diff::diff_screenshot(&baseline_bytes, &current_bytes, threshold)?;
+        let output_path = cmd.get("output").and_then(|v| v.as_str());
+        if let (Some(out_path), Some(ref diff_data)) = (output_path, &result.diff_image) {
+            std::fs::write(out_path, diff_data)
+                .map_err(|e| format!("Failed to write diff image: {}", e))?;
+        }
+        Ok(json!(
+            { "match" : result.matched, "mismatchPercentage" : result
+            .mismatch_percentage, "totalPixels" : result.total_pixels,
+            "differentPixels" : result.different_pixels, "diffPath" : output_path,
+            "dimensionMismatch" : result.dimension_mismatch, }
+        ))
+    }
+}
+pub(crate) use action_commands::*;

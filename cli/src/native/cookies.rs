@@ -98,3 +98,70 @@ pub async fn clear_cookies(client: &CdpClient, session_id: &str) -> Result<(), S
         .await?;
     Ok(())
 }
+#[allow(dead_code, unused_imports)]
+pub(crate) mod action_commands {
+    use crate::native::action_runtime::common::*;
+    use crate::native::action_runtime::runtime::{
+        is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
+        relaunch_and_restore_page, service_browser_id,
+        validate_service_tab_handle_for_current_session,
+        validate_service_tab_handle_route_for_current_session, DaemonState, FetchPausedRequest,
+        HarEntry, MouseState, RouteEntry, RouteResponse, TrackedRequest,
+        AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
+        AUTH_LOGIN_WAIT_UNTIL,
+    };
+    use crate::native::service_diagnostics::truncate_utf8;
+    pub(crate) async fn handle_cookies_get(
+        cmd: &Value,
+        state: &DaemonState,
+    ) -> Result<Value, String> {
+        if let Some(ref wb) = state.webdriver_backend {
+            if state.browser.is_none() {
+                let cookies_list = wb.get_cookies().await?;
+                return Ok(json!({ "cookies" : cookies_list }));
+            }
+        }
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let urls = cmd.get("urls").and_then(|v| v.as_array()).map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        });
+        let cookies_list = cookies::get_cookies(&mgr.client, &session_id, urls).await?;
+        Ok(json!({ "cookies" : cookies_list }))
+    }
+    pub(crate) async fn handle_cookies_set(
+        cmd: &Value,
+        state: &DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let url = mgr.get_url().await.ok();
+        let cookie_values = if let Some(arr) = cmd.get("cookies").and_then(|v| v.as_array()) {
+            arr.clone()
+        } else {
+            let mut cookie = serde_json::Map::new();
+            for key in &[
+                "name", "value", "domain", "path", "expires", "httpOnly", "secure", "sameSite",
+                "url",
+            ] {
+                if let Some(v) = cmd.get(*key) {
+                    if !v.is_null() {
+                        cookie.insert(key.to_string(), v.clone());
+                    }
+                }
+            }
+            vec![Value::Object(cookie)]
+        };
+        cookies::set_cookies(&mgr.client, &session_id, cookie_values, url.as_deref()).await?;
+        Ok(json!({ "set" : true }))
+    }
+    pub(crate) async fn handle_cookies_clear(state: &DaemonState) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        cookies::clear_cookies(&mgr.client, &session_id).await?;
+        Ok(json!({ "cleared" : true }))
+    }
+}
+pub(crate) use action_commands::*;

@@ -1257,3 +1257,137 @@ mod tests {
         assert_eq!(session, "parent-session");
     }
 }
+#[allow(dead_code, unused_imports)]
+pub(crate) mod action_commands {
+    use crate::native::action_runtime::common::*;
+    use crate::native::action_runtime::runtime::{
+        is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
+        relaunch_and_restore_page, service_browser_id,
+        validate_service_tab_handle_for_current_session,
+        validate_service_tab_handle_route_for_current_session, DaemonState, FetchPausedRequest,
+        HarEntry, MouseState, RouteEntry, RouteResponse, TrackedRequest,
+        AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
+        AUTH_LOGIN_WAIT_UNTIL,
+    };
+    use crate::native::service_diagnostics::truncate_utf8;
+    pub(crate) async fn handle_boundingbox(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let selector = cmd
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'selector' parameter")?;
+        let bbox = super::super::element::get_element_bounding_box(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            selector,
+            &state.iframe_sessions,
+        )
+        .await?;
+        Ok(bbox)
+    }
+    pub(crate) async fn handle_innertext(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let selector = cmd
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'selector' parameter")?;
+        let text = super::super::element::get_element_inner_text(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            selector,
+            &state.iframe_sessions,
+        )
+        .await?;
+        Ok(json!({ "text" : text }))
+    }
+    pub(crate) async fn handle_innerhtml(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let selector = cmd
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'selector' parameter")?;
+        let html = super::super::element::get_element_inner_html(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            selector,
+            &state.iframe_sessions,
+        )
+        .await?;
+        Ok(json!({ "html" : html }))
+    }
+    pub(crate) async fn handle_inputvalue(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let selector = cmd
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'selector' parameter")?;
+        let value = super::super::element::get_element_input_value(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            selector,
+            &state.iframe_sessions,
+        )
+        .await?;
+        Ok(json!({ "value" : value }))
+    }
+    pub(crate) async fn handle_setvalue(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let selector = cmd
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'selector' parameter")?;
+        let value = cmd
+            .get("value")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'value' parameter")?;
+        super::super::element::set_element_value(
+            &mgr.client,
+            &session_id,
+            &state.ref_map,
+            selector,
+            value,
+            &state.iframe_sessions,
+        )
+        .await?;
+        Ok(json!({ "set" : selector, "value" : value }))
+    }
+    pub(crate) async fn handle_count(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let selector = cmd
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'selector' parameter")?;
+        let count =
+            super::super::element::get_element_count(&mgr.client, &session_id, selector).await?;
+        Ok(json!({ "count" : count, "selector" : selector }))
+    }
+}
+pub(crate) use action_commands::*;

@@ -976,3 +976,55 @@ mod tests {
         assert_eq!(result.unwrap_err(), "Missing 'name' parameter");
     }
 }
+#[allow(dead_code, unused_imports)]
+pub(crate) mod action_commands {
+    use crate::native::action_runtime::common::*;
+    use crate::native::action_runtime::runtime::{
+        is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
+        relaunch_and_restore_page, service_browser_id,
+        validate_service_tab_handle_for_current_session,
+        validate_service_tab_handle_route_for_current_session, DaemonState, FetchPausedRequest,
+        HarEntry, MouseState, RouteEntry, RouteResponse, TrackedRequest,
+        AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
+        AUTH_LOGIN_WAIT_UNTIL,
+    };
+    use crate::native::service_diagnostics::truncate_utf8;
+    pub(crate) async fn handle_state_save(
+        cmd: &Value,
+        state: &DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let path = cmd.get("path").and_then(|v| v.as_str());
+        let tracked_origins = state
+            .tracked_origin_storage
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        let saved_path = state::save_state(
+            &mgr.client,
+            &session_id,
+            path,
+            state.session_name.as_deref(),
+            &state.session_id,
+            mgr.visited_origins(),
+            &tracked_origins,
+        )
+        .await?;
+        Ok(json!({ "saved" : true, "path" : saved_path }))
+    }
+    pub(crate) async fn handle_state_load(
+        cmd: &Value,
+        state: &DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let path = cmd
+            .get("path")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'path' parameter")?;
+        state::load_state(&mgr.client, &session_id, path).await?;
+        Ok(json!({ "loaded" : true, "path" : path }))
+    }
+}
+pub(crate) use action_commands::*;

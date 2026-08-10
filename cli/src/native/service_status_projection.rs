@@ -500,3 +500,109 @@ fn format_timestamp(value: DateTime<Utc>) -> String {
 
 #[cfg(test)]
 mod tests;
+#[allow(dead_code, unused_imports)]
+pub(crate) mod action_commands {
+    use crate::native::action_runtime::common::*;
+    use crate::native::action_runtime::runtime::{
+        is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
+        relaunch_and_restore_page, service_browser_id,
+        validate_service_tab_handle_for_current_session,
+        validate_service_tab_handle_route_for_current_session, DaemonState, FetchPausedRequest,
+        HarEntry, MouseState, RouteEntry, RouteResponse, TrackedRequest,
+        AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
+        AUTH_LOGIN_WAIT_UNTIL,
+    };
+    use crate::native::service_diagnostics::truncate_utf8;
+    pub(crate) async fn handle_service_status(cmd: &Value) -> Result<Value, String> {
+        let repository = LockedServiceStateRepository::default_json()?;
+        let projector = super::super::service_status_projection::ServiceStatusProjector::local();
+        handle_service_status_with_dependencies(
+            cmd,
+            super::super::service_status_projection::ServiceStatusProjectionDependencies::new(
+                &repository,
+                &super::super::service_status_projection::ReconcileServiceStatusAuthority,
+                &super::super::service_status_projection::ReconciledBrowserSessionAuthority,
+                &projector,
+            ),
+        )
+        .await
+    }
+    pub(crate) async fn handle_service_status_with_dependencies<
+        Repository,
+        Preparer,
+        BrowserAuthority,
+    >(
+        cmd: &Value,
+        dependencies: super::super::service_status_projection::ServiceStatusProjectionDependencies<
+            '_,
+            Repository,
+            Preparer,
+            BrowserAuthority,
+        >,
+    ) -> Result<Value, String>
+    where
+        Repository: ServiceStateRepository,
+        Preparer: super::super::service_status_projection::ServiceStatusAuthorityPreparer,
+        BrowserAuthority:
+            super::super::service_status_projection::ServiceStatusBrowserAuthorityProvider,
+    {
+        let mut service_state = cmd
+            .get("serviceState")
+            .cloned()
+            .map(serde_json::from_value::<ServiceState>)
+            .transpose()
+            .map_err(|err| format!("Invalid serviceState: {}", err))?
+            .unwrap_or_default();
+        let before = service_state.clone();
+        let waiting_profile_lease_job_count = service_state
+            .jobs
+            .values()
+            .filter(|job| job.state == ServiceJobState::WaitingProfileLease)
+            .count();
+        if let Some(control_plane) = service_state.control_plane.as_mut() {
+            control_plane.waiting_profile_lease_job_count = waiting_profile_lease_job_count;
+        } else {
+            service_state.control_plane = Some(super::super::service_model::ControlPlaneSnapshot {
+                worker_state: "Ready".to_string(),
+                browser_health: "NotStarted".to_string(),
+                waiting_profile_lease_job_count,
+                ..super::super::service_model::ControlPlaneSnapshot::default()
+            });
+        }
+        dependencies.preparer.prepare(&mut service_state).await;
+        persist_reconciled_service_state_in_repository(
+            dependencies.repository,
+            &before,
+            &service_state,
+        )?;
+        let browser_session_authority = dependencies.browser_authority.snapshot(&service_state);
+        let control_plane = service_state
+            .control_plane
+            .as_ref()
+            .expect("service status always creates a control-plane snapshot");
+        let control_plane =
+            super::super::service_status_projection::StatusControlPlaneAuthority::try_from(
+                control_plane,
+            )
+            .map_err(|error| error.to_string())?;
+        let launch_config =
+            super::super::service_status_projection::launch_configuration_from_status_command(cmd);
+        let full_tab_history = cmd
+            .get("fullTabHistory")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let response =
+            super::super::service_status_projection::project_status_with_launch_configuration(
+                dependencies.projector,
+                service_state,
+                control_plane,
+                browser_session_authority,
+                launch_config,
+                full_tab_history,
+            )
+            .await
+            .map_err(|error| error.to_string())?;
+        serde_json::to_value(response).map_err(|error| error.to_string())
+    }
+}
+pub(crate) use action_commands::*;

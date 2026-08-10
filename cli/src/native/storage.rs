@@ -92,3 +92,83 @@ async fn eval_simple(client: &CdpClient, session_id: &str, js: &str) -> Result<V
 
     Ok(result.result.value.unwrap_or(Value::Null))
 }
+#[allow(dead_code, unused_imports)]
+pub(crate) mod action_commands {
+    use crate::native::action_runtime::common::*;
+    use crate::native::action_runtime::runtime::{
+        is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
+        relaunch_and_restore_page, service_browser_id,
+        validate_service_tab_handle_for_current_session,
+        validate_service_tab_handle_route_for_current_session, DaemonState, FetchPausedRequest,
+        HarEntry, MouseState, RouteEntry, RouteResponse, TrackedRequest,
+        AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
+        AUTH_LOGIN_WAIT_UNTIL,
+    };
+    use crate::native::service_diagnostics::truncate_utf8;
+    pub(crate) async fn handle_storage_get(
+        cmd: &Value,
+        state: &DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let storage_type = cmd.get("type").and_then(|v| v.as_str()).unwrap_or("local");
+        let key = cmd.get("key").and_then(|v| v.as_str());
+        storage::storage_get(&mgr.client, &session_id, storage_type, key).await
+    }
+    pub(crate) async fn handle_storage_set(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let storage_type = cmd.get("type").and_then(|v| v.as_str()).unwrap_or("local");
+        let key = cmd
+            .get("key")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'key' parameter")?;
+        let value = cmd
+            .get("value")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'value' parameter")?;
+        storage::storage_set(&mgr.client, &session_id, storage_type, key, value).await?;
+        let current_url = mgr.get_url().await.unwrap_or_default();
+        if let Ok(parsed) = url::Url::parse(&current_url) {
+            let origin = parsed.origin().ascii_serialization();
+            if origin != "null" {
+                let tracked = state
+                    .tracked_origin_storage
+                    .entry(origin.clone())
+                    .or_insert_with(|| state::OriginStorage {
+                        origin,
+                        local_storage: Vec::new(),
+                        session_storage: Vec::new(),
+                    });
+                let entries = if storage_type == "session" {
+                    &mut tracked.session_storage
+                } else {
+                    &mut tracked.local_storage
+                };
+                if let Some(existing) = entries.iter_mut().find(|entry| entry.name == key) {
+                    existing.value = value.to_string();
+                } else {
+                    entries.push(state::StorageEntry {
+                        name: key.to_string(),
+                        value: value.to_string(),
+                    });
+                }
+            }
+        }
+        Ok(json!({ "set" : true }))
+    }
+    pub(crate) async fn handle_storage_clear(
+        cmd: &Value,
+        state: &DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let storage_type = cmd.get("type").and_then(|v| v.as_str()).unwrap_or("local");
+        storage::storage_clear(&mgr.client, &session_id, storage_type).await?;
+        Ok(json!({ "cleared" : true }))
+    }
+}
+pub(crate) use action_commands::*;

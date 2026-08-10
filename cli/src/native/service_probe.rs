@@ -331,3 +331,113 @@ pub(crate) fn probe_recipe_fingerprint(probe: &Map<String, Value>) -> String {
     let digest = Sha256::digest(raw.as_bytes());
     format!("{digest:x}").chars().take(16).collect()
 }
+#[allow(dead_code, unused_imports)]
+pub(crate) mod action_commands {
+    use crate::native::action_runtime::common::*;
+    use crate::native::action_runtime::runtime::{
+        is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
+        relaunch_and_restore_page, service_browser_id,
+        validate_service_tab_handle_for_current_session,
+        validate_service_tab_handle_route_for_current_session, DaemonState, FetchPausedRequest,
+        HarEntry, MouseState, RouteEntry, RouteResponse, TrackedRequest,
+        AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
+        AUTH_LOGIN_WAIT_UNTIL,
+    };
+    use crate::native::service_diagnostics::truncate_utf8;
+    pub(crate) async fn handle_bounded_service_evaluate(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let handle = cmd
+            .get("serviceTabHandle")
+            .and_then(Value::as_object)
+            .ok_or_else(|| "evaluate requires serviceTabHandle".to_string())?;
+        validate_service_tab_handle_for_current_session(handle, &state.session_id)?;
+        if cmd.get("returnByValue").and_then(Value::as_bool) == Some(false) {
+            return Err(
+                "evaluate requires returnByValue=true so results can be capped".to_string(),
+            );
+        }
+        let script = cmd
+            .get("script")
+            .or_else(|| cmd.get("expression"))
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| "evaluate requires script or expression".to_string())?;
+        let timeout_ms = cmd
+            .get("timeoutMs")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| "evaluate requires positive timeoutMs".to_string())?;
+        let max_return_bytes = cmd
+            .get("maxReturnBytes")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| "evaluate requires positive maxReturnBytes".to_string())?;
+        let mgr = state.browser.as_mut().ok_or_else(|| {
+            "Cannot evaluate: target browser session is not running; request a service tab first"
+                .to_string()
+        })?;
+        let target_id = handle
+            .get("targetId")
+            .and_then(Value::as_str)
+            .ok_or_else(|| "evaluate requires serviceTabHandle.targetId".to_string())?;
+        if mgr.active_target_id().ok() != Some(target_id) {
+            let _ = mgr.tab_switch_target_id(target_id).await?;
+        }
+        let started_at = OffsetDateTime::now_utc()
+            .format(&Rfc3339)
+            .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string());
+        let evaluate_outcome = tokio::time::timeout(
+            tokio::time::Duration::from_millis(timeout_ms),
+            mgr.evaluate_with_timeout(script, timeout_ms),
+        )
+        .await;
+        let url = mgr.active_page_url().unwrap_or_default().to_string();
+        let title = mgr.active_page_title().unwrap_or_default().to_string();
+        let result = match evaluate_outcome {
+            Ok(Ok(result)) => result,
+            Ok(Err(error)) => {
+                return Ok(json!(
+                    { "ok" : false, "action" : "evaluate", "errorKind" : "exception",
+                    "error" : error, "timeoutMs" : timeout_ms, "maxReturnBytes" :
+                    max_return_bytes, "url" : url, "title" : title, "targetId" :
+                    target_id, "tabId" : handle.get("tabId").cloned()
+                    .unwrap_or(Value::Null), "profileId" : handle.get("profileId")
+                    .cloned().unwrap_or(Value::Null), "serviceTabHandle" : cmd
+                    .get("serviceTabHandle").cloned().unwrap_or(Value::Null),
+                    "evaluatedAt" : started_at, }
+                ));
+            }
+            Err(_) => {
+                return Ok(json!(
+                    { "ok" : false, "action" : "evaluate", "errorKind" : "timeout",
+                    "error" : format!("evaluate timed out after {timeout_ms}ms"),
+                    "timeoutMs" : timeout_ms, "maxReturnBytes" : max_return_bytes,
+                    "url" : url, "title" : title, "targetId" : target_id, "tabId" :
+                    handle.get("tabId").cloned().unwrap_or(Value::Null), "profileId"
+                    : handle.get("profileId").cloned().unwrap_or(Value::Null),
+                    "serviceTabHandle" : cmd.get("serviceTabHandle").cloned()
+                    .unwrap_or(Value::Null), "evaluatedAt" : started_at, }
+                ));
+            }
+        };
+        let serialized = serde_json::to_string(&result).unwrap_or_else(|_| "null".to_string());
+        let serialized_len = serialized.len() as u64;
+        let truncated = serialized_len > max_return_bytes;
+        let returned = if truncated {
+            Value::String(truncate_utf8(&serialized, max_return_bytes as usize))
+        } else {
+            result
+        };
+        Ok(json!(
+            { "ok" : true, "action" : "evaluate", "result" : returned,
+            "resultTruncated" : truncated, "resultBytes" : serialized_len,
+            "maxReturnBytes" : max_return_bytes, "timeoutMs" : timeout_ms,
+            "returnByValue" : true, "url" : url, "title" : title, "targetId" :
+            target_id, "tabId" : handle.get("tabId").cloned().unwrap_or(Value::Null),
+            "profileId" : handle.get("profileId").cloned().unwrap_or(Value::Null),
+            "serviceTabHandle" : cmd.get("serviceTabHandle").cloned()
+            .unwrap_or(Value::Null), "evaluatedAt" : started_at, }
+        ))
+    }
+}
+pub(crate) use action_commands::*;

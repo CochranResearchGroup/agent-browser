@@ -556,3 +556,149 @@ mod tests {
         });
     }
 }
+#[allow(dead_code, unused_imports)]
+pub(crate) mod action_commands {
+    use crate::native::action_runtime::common::*;
+    use crate::native::action_runtime::runtime::{
+        is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
+        relaunch_and_restore_page, service_browser_id,
+        validate_service_tab_handle_for_current_session,
+        validate_service_tab_handle_route_for_current_session, DaemonState, FetchPausedRequest,
+        HarEntry, MouseState, RouteEntry, RouteResponse, TrackedRequest,
+        AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
+        AUTH_LOGIN_WAIT_UNTIL,
+    };
+    use crate::native::service_diagnostics::truncate_utf8;
+    pub(crate) async fn handle_credentials_set(cmd: &Value) -> Result<Value, String> {
+        let name = cmd
+            .get("name")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'name'")?;
+        let username = cmd
+            .get("username")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'username'")?;
+        let password = cmd
+            .get("password")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'password'")?;
+        let url = cmd.get("url").and_then(|v| v.as_str());
+        auth::credentials_set(name, username, password, url)
+    }
+    pub(crate) async fn handle_credentials_get(cmd: &Value) -> Result<Value, String> {
+        let name = cmd
+            .get("name")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'name'")?;
+        auth::credentials_get(name)
+    }
+    pub(crate) async fn handle_credentials_delete(cmd: &Value) -> Result<Value, String> {
+        let name = cmd
+            .get("name")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'name'")?;
+        auth::credentials_delete(name)
+    }
+    pub(crate) async fn handle_credentials_list() -> Result<Value, String> {
+        auth::credentials_list()
+    }
+    pub(crate) async fn handle_auth_show(cmd: &Value) -> Result<Value, String> {
+        let name = cmd
+            .get("name")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'name'")?;
+        auth::auth_show(name)
+    }
+    pub(crate) async fn handle_http_credentials(
+        cmd: &Value,
+        state: &DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let username = cmd
+            .get("username")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'username' parameter")?;
+        let password = cmd
+            .get("password")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'password' parameter")?;
+        let encoded = base64::Engine::encode(
+            &base64::engine::general_purpose::STANDARD,
+            format!("{}:{}", username, password),
+        );
+        let mut headers = HashMap::new();
+        headers.insert("Authorization".to_string(), format!("Basic {}", encoded));
+        network::set_extra_headers(&mgr.client, &session_id, &headers).await?;
+        Ok(json!({ "set" : true }))
+    }
+    /// Wait for any selector in `selectors` to appear and return the first match.
+    ///
+    /// This is used by `auth_login` auto-detection so SPA login forms can render
+    /// after initial navigation without requiring global network-idle.
+    pub(crate) async fn wait_for_any_selector(
+        client: &super::super::cdp::client::CdpClient,
+        session_id: &str,
+        selectors: &[&str],
+        timeout_ms: u64,
+    ) -> Result<String, String> {
+        let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_millis(timeout_ms);
+        loop {
+            for selector in selectors {
+                let expression = format!(
+                    r#"(() => {{
+                    const el = document.querySelector({sel});
+                    if (!el) return false;
+
+                    const r = el.getBoundingClientRect();
+                    const s = window.getComputedStyle(el);
+                    const opacity = parseFloat(s.opacity || '1');
+                    const isVisible =
+                        r.width > 0 &&
+                        r.height > 0 &&
+                        s.visibility !== 'hidden' &&
+                        s.display !== 'none' &&
+                        (!Number.isFinite(opacity) || opacity > 0);
+
+                    if (!isVisible) return false;
+                    if (el.matches(':disabled')) return false;
+
+                    if (el instanceof HTMLInputElement && el.type === 'hidden') return false;
+                    if ((el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) && el.readOnly) return false;
+
+                    return true;
+                }})()"#,
+                    sel = serde_json::to_string(selector).unwrap_or_default()
+                );
+                let result: super::super::cdp::types::EvaluateResult = client
+                    .send_command_typed(
+                        "Runtime.evaluate",
+                        &super::super::cdp::types::EvaluateParams {
+                            expression,
+                            return_by_value: Some(true),
+                            await_promise: Some(true),
+                        },
+                        Some(session_id),
+                    )
+                    .await?;
+                if result
+                    .result
+                    .value
+                    .as_ref()
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false)
+                {
+                    return Ok((*selector).to_string());
+                }
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return Err(format!("Wait timed out after {}ms", timeout_ms));
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(
+                AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
+            ))
+            .await;
+        }
+    }
+}
+pub(crate) use action_commands::*;

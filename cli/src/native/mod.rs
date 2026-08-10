@@ -4,9 +4,35 @@ pub mod actions;
 #[allow(dead_code)]
 pub mod auth;
 #[allow(dead_code)]
+pub mod auth_workflow;
+#[allow(dead_code)]
 pub mod browser;
 #[allow(dead_code)]
+pub mod browser_context;
+#[allow(dead_code)]
+pub mod browser_download;
+#[allow(dead_code)]
+pub mod browser_emulation;
+#[allow(dead_code)]
+pub mod browser_evaluation;
+#[allow(dead_code)]
+pub mod browser_frame;
+#[allow(dead_code)]
+pub mod browser_input;
+#[allow(dead_code)]
+pub mod browser_inspection;
+#[allow(dead_code)]
+pub mod browser_lifecycle;
+#[allow(dead_code)]
+pub mod browser_locator;
+#[allow(dead_code)]
+pub mod browser_navigation;
+#[allow(dead_code)]
 pub mod browser_session_authority;
+#[allow(dead_code)]
+pub mod browser_tabs;
+#[allow(dead_code)]
+pub mod browser_wait;
 #[allow(dead_code)]
 pub mod cancellation;
 #[allow(dead_code)]
@@ -31,6 +57,16 @@ pub mod inspect_server;
 pub mod interaction;
 #[allow(dead_code)]
 pub mod network;
+#[allow(dead_code)]
+pub mod network_archive;
+#[allow(dead_code)]
+pub mod network_requests;
+#[allow(dead_code)]
+pub mod page_capture;
+#[allow(dead_code)]
+pub mod page_injection;
+#[allow(dead_code)]
+pub mod page_pdf;
 #[allow(dead_code)]
 pub mod policy;
 #[allow(dead_code)]
@@ -99,6 +135,8 @@ pub mod state;
 pub mod storage;
 #[allow(dead_code)]
 pub mod stream;
+#[allow(dead_code)]
+pub mod stream_runtime;
 #[allow(dead_code)]
 pub mod tracing;
 #[allow(dead_code)]

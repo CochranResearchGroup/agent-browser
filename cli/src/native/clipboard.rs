@@ -974,3 +974,86 @@ mod tests {
         server.await.unwrap();
     }
 }
+#[allow(dead_code, unused_imports)]
+pub(crate) mod action_commands {
+    use crate::native::action_runtime::common::*;
+    use crate::native::action_runtime::runtime::{
+        is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
+        relaunch_and_restore_page, service_browser_id,
+        validate_service_tab_handle_for_current_session,
+        validate_service_tab_handle_route_for_current_session, DaemonState, FetchPausedRequest,
+        HarEntry, MouseState, RouteEntry, RouteResponse, TrackedRequest,
+        AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
+        AUTH_LOGIN_WAIT_UNTIL,
+    };
+    use crate::native::service_diagnostics::truncate_utf8;
+    pub(crate) async fn handle_clipboard(
+        cmd: &Value,
+        state: &DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let action = cmd
+            .get("subAction")
+            .or_else(|| cmd.get("operation"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("read");
+        let session_id = mgr.active_session_id()?.to_string();
+        let modifier: i32 = if cfg!(target_os = "macos") { 4 } else { 2 };
+        match action {
+            "write" => {
+                let text = cmd
+                    .get("text")
+                    .or_else(|| cmd.get("value"))
+                    .and_then(|v| v.as_str())
+                    .ok_or("Missing 'text' parameter")?;
+                let js = format!(
+                    "navigator.clipboard.writeText({})",
+                    serde_json::to_string(text).unwrap_or_default()
+                );
+                mgr.evaluate(&js, None).await?;
+                Ok(json!({ "written" : text }))
+            }
+            "copy" => {
+                interaction::press_key_with_modifiers(
+                    &mgr.client,
+                    &session_id,
+                    "c",
+                    Some(modifier),
+                )
+                .await?;
+                Ok(json!({ "copied" : true }))
+            }
+            "paste" => {
+                interaction::press_key_with_modifiers(
+                    &mgr.client,
+                    &session_id,
+                    "v",
+                    Some(modifier),
+                )
+                .await?;
+                Ok(json!({ "pasted" : true }))
+            }
+            _ => {
+                match super::super::clipboard::read_text(
+                    &mgr.client,
+                    &session_id,
+                    super::super::clipboard::DEFAULT_READ_TIMEOUT,
+                )
+                .await
+                {
+                    Ok(outcome) => Ok(json!(
+                        { "text" : outcome.text, "empty" : outcome.empty,
+                        "clipboardOutcome" : if outcome.empty { "success_empty" }
+                        else { "success_text" }, }
+                    )),
+                    Err(error) => Err(format!(
+                        "Clipboard read failed: {}; diagnostic={}",
+                        error.message(),
+                        error.diagnostic()
+                    )),
+                }
+            }
+        }
+    }
+}
+pub(crate) use action_commands::*;

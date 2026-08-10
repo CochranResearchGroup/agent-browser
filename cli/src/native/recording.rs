@@ -321,3 +321,221 @@ mod tests {
         assert!(args_str.contains(&"/tmp/out.mp4"));
     }
 }
+#[allow(dead_code, unused_imports)]
+pub(crate) mod action_commands {
+    use crate::native::action_runtime::common::*;
+    use crate::native::action_runtime::runtime::{
+        is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
+        relaunch_and_restore_page, service_browser_id,
+        validate_service_tab_handle_for_current_session,
+        validate_service_tab_handle_route_for_current_session, DaemonState, FetchPausedRequest,
+        HarEntry, MouseState, RouteEntry, RouteResponse, TrackedRequest,
+        AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
+        AUTH_LOGIN_WAIT_UNTIL,
+    };
+    use crate::native::service_diagnostics::truncate_utf8;
+    pub(crate) async fn handle_recording_start(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let path = cmd
+            .get("path")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'path' parameter")?;
+        let recording_url = cmd
+            .get("url")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty());
+        let (client, recording_session_id) = {
+            let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
+            let active_session_id = mgr.active_session_id()?.to_string();
+            let current_url = mgr
+                .get_url()
+                .await
+                .unwrap_or_else(|_| "about:blank".to_string());
+            if recording_url.is_none_or(|u| u == current_url) {
+                (mgr.client.clone(), active_session_id)
+            } else {
+                let nav_url = recording_url.unwrap_or("about:blank").to_string();
+                let cookies_result = mgr
+                    .client
+                    .send_command_no_params("Network.getAllCookies", Some(&active_session_id))
+                    .await
+                    .ok();
+                let ctx_result = mgr
+                    .client
+                    .send_command_no_params("Target.createBrowserContext", None)
+                    .await?;
+                let context_id = ctx_result
+                    .get("browserContextId")
+                    .and_then(|v| v.as_str())
+                    .ok_or("Failed to get browserContextId")?
+                    .to_string();
+                let create_result: CreateTargetResult = mgr
+                    .client
+                    .send_command_typed(
+                        "Target.createTarget",
+                        &json!(
+                            { "url" : "about:blank", "browserContextId" : context_id }
+                        ),
+                        None,
+                    )
+                    .await?;
+                let attach_result: AttachToTargetResult = mgr
+                    .client
+                    .send_command_typed(
+                        "Target.attachToTarget",
+                        &AttachToTargetParams {
+                            target_id: create_result.target_id.clone(),
+                            flatten: true,
+                        },
+                        None,
+                    )
+                    .await?;
+                let new_session_id = attach_result.session_id.clone();
+                mgr.enable_domains_pub(&new_session_id).await?;
+                if let Some(ref dl_path) = mgr.download_path {
+                    let _ = mgr
+                        .client
+                        .send_command(
+                            "Browser.setDownloadBehavior",
+                            Some(json!(
+                                { "behavior" : "allow", "downloadPath" : dl_path,
+                                "browserContextId" : context_id, "eventsEnabled" : true }
+                            )),
+                            None,
+                        )
+                        .await;
+                }
+                if let Some(ref cr) = cookies_result {
+                    if let Some(cookie_arr) = cr.get("cookies").and_then(|v| v.as_array()) {
+                        if !cookie_arr.is_empty() {
+                            let _ = mgr
+                                .client
+                                .send_command(
+                                    "Network.setCookies",
+                                    Some(json!({ "cookies" : cookie_arr })),
+                                    Some(&new_session_id),
+                                )
+                                .await;
+                        }
+                    }
+                }
+                if mgr.ignore_https_errors {
+                    let _ = mgr
+                        .client
+                        .send_command(
+                            "Security.setIgnoreCertificateErrors",
+                            Some(json!({ "ignore" : true })),
+                            Some(&new_session_id),
+                        )
+                        .await;
+                }
+                mgr.add_page(super::super::browser::PageInfo {
+                    target_id: create_result.target_id,
+                    session_id: new_session_id.clone(),
+                    url: nav_url.clone(),
+                    title: String::new(),
+                    target_type: "page".to_string(),
+                });
+                if nav_url != "about:blank" {
+                    let _ = mgr
+                        .client
+                        .send_command(
+                            "Page.navigate",
+                            Some(json!({ "url" : nav_url })),
+                            Some(&new_session_id),
+                        )
+                        .await;
+                    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+                }
+                (mgr.client.clone(), new_session_id)
+            }
+        };
+        let result = recording::recording_start(&mut state.recording_state, path)?;
+        state
+            .start_recording_task(client, recording_session_id)
+            .await?;
+        if let Some(ref server) = state.stream_server {
+            server.set_recording(true, &state.engine).await;
+        }
+        Ok(result)
+    }
+    pub(crate) async fn handle_recording_stop(state: &mut DaemonState) -> Result<Value, String> {
+        state.stop_recording_task().await?;
+        let result = recording::recording_stop(&mut state.recording_state);
+        if let Some(ref server) = state.stream_server {
+            server.set_recording(false, &state.engine).await;
+        }
+        result
+    }
+    pub(crate) async fn handle_recording_restart(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let path = cmd
+            .get("path")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'path' parameter")?;
+        let _ = state.stop_recording_task().await;
+        let result = recording::recording_restart(&mut state.recording_state, path)?;
+        if let Some(ref browser) = state.browser {
+            let session_id = browser.active_session_id()?.to_string();
+            state
+                .start_recording_task(browser.client.clone(), session_id)
+                .await?;
+        }
+        Ok(result)
+    }
+    pub(crate) async fn handle_video_start(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let path = cmd
+            .get("path")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'path' parameter")?;
+        if state.recording_state.active {
+            return Err("A recording is already in progress".to_string());
+        }
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        recording::recording_start(&mut state.recording_state, path)?;
+        state
+            .start_recording_task(mgr.client.clone(), session_id)
+            .await?;
+        Ok(json!(
+            { "started" : true, "note" :
+            "Video recording started. Use video_stop to save the recording." }
+        ))
+    }
+    pub(crate) async fn handle_video_stop(state: &mut DaemonState) -> Result<Value, String> {
+        if !state.recording_state.active {
+            return Ok(json!(
+                { "stopped" : false, "note" :
+                "No video recording was started. Use recording_stop if you used recording_start."
+                }
+            ));
+        }
+        state.stop_recording_task().await?;
+        recording::recording_stop(&mut state.recording_state)
+    }
+    /// Begin capturing network traffic for a later HAR export.
+    pub(crate) async fn handle_har_start(state: &mut DaemonState) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        mgr.client
+            .send_command_no_params("Network.enable", Some(&session_id))
+            .await?;
+        for iframe_sid in state.iframe_sessions.values() {
+            let _ = mgr
+                .client
+                .send_command_no_params("Network.enable", Some(iframe_sid.as_str()))
+                .await;
+        }
+        state.har_recording = true;
+        state.har_entries.clear();
+        Ok(json!({ "started" : true }))
+    }
+}
+pub(crate) use action_commands::*;

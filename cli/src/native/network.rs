@@ -670,3 +670,414 @@ mod tests {
         assert_eq!(format_console_args(&args), "before after");
     }
 }
+#[allow(dead_code, unused_imports)]
+pub(crate) mod action_commands {
+    use crate::native::action_runtime::common::*;
+    use crate::native::action_runtime::runtime::{
+        is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
+        relaunch_and_restore_page, service_browser_id,
+        validate_service_tab_handle_for_current_session,
+        validate_service_tab_handle_route_for_current_session, DaemonState, FetchPausedRequest,
+        HarEntry, MouseState, RouteEntry, RouteResponse, TrackedRequest,
+        AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
+        AUTH_LOGIN_WAIT_UNTIL,
+    };
+    use crate::native::service_diagnostics::truncate_utf8;
+    pub(crate) async fn handle_headers(cmd: &Value, state: &DaemonState) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let headers_value = cmd.get("headers").ok_or("Missing 'headers' parameter")?;
+        let headers: HashMap<String, String> = headers_value
+            .as_object()
+            .map(|m| {
+                m.iter()
+                    .map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        network::set_extra_headers(&mgr.client, &session_id, &headers).await?;
+        Ok(json!({ "set" : true }))
+    }
+    pub(crate) async fn handle_offline(cmd: &Value, state: &DaemonState) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let offline = cmd.get("offline").and_then(|v| v.as_bool()).unwrap_or(true);
+        network::set_offline(&mgr.client, &session_id, offline).await?;
+        Ok(json!({ "offline" : offline }))
+    }
+    pub(crate) async fn handle_responsebody(
+        cmd: &Value,
+        state: &DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let url_pattern = cmd
+            .get("url")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'url' parameter")?;
+        let timeout_ms = state.timeout_ms(cmd);
+        let mut rx = mgr.client.subscribe();
+        let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_millis(timeout_ms);
+        loop {
+            let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+            if remaining.is_zero() {
+                return Err(format!(
+                    "Timeout waiting for response matching '{}'",
+                    url_pattern
+                ));
+            }
+            match tokio::time::timeout(remaining, rx.recv()).await {
+                Ok(Ok(event)) => {
+                    if event.method == "Network.responseReceived"
+                        && event.session_id.as_deref() == Some(&session_id)
+                    {
+                        if let Some(resp_url) = event
+                            .params
+                            .get("response")
+                            .and_then(|r| r.get("url"))
+                            .and_then(|u| u.as_str())
+                        {
+                            if resp_url.contains(url_pattern) {
+                                let request_id = event
+                                    .params
+                                    .get("requestId")
+                                    .and_then(|v| v.as_str())
+                                    .ok_or("No requestId in response event")?;
+                                let status = event
+                                    .params
+                                    .get("response")
+                                    .and_then(|r| r.get("status"))
+                                    .and_then(|v| v.as_i64())
+                                    .unwrap_or(0);
+                                let headers = event
+                                    .params
+                                    .get("response")
+                                    .and_then(|r| r.get("headers"))
+                                    .cloned()
+                                    .unwrap_or(json!({}));
+                                let body_result = mgr
+                                    .client
+                                    .send_command(
+                                        "Network.getResponseBody",
+                                        Some(json!({ "requestId" : request_id })),
+                                        Some(&session_id),
+                                    )
+                                    .await?;
+                                let body = body_result
+                                    .get("body")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("");
+                                return Ok(json!(
+                                    { "body" : body, "status" : status, "headers" : headers }
+                                ));
+                            }
+                        }
+                    }
+                }
+                Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(_))) => continue,
+                Ok(Err(_)) => return Err("Event stream closed".to_string()),
+                Err(_) => {
+                    return Err(format!(
+                        "Timeout waiting for response matching '{}'",
+                        url_pattern
+                    ));
+                }
+            }
+        }
+    }
+    pub(crate) async fn resolve_fetch_paused(
+        client: &CdpClient,
+        domain_filter: Option<&DomainFilter>,
+        routes: &[RouteEntry],
+        origin_headers: &HashMap<String, HashMap<String, String>>,
+        paused: &FetchPausedRequest,
+    ) {
+        let session_id = &paused.session_id;
+        if let Some(filter) = domain_filter {
+            if let Ok(parsed) = url::Url::parse(&paused.url) {
+                let scheme = parsed.scheme();
+                if scheme != "http" && scheme != "https" {
+                    if paused.resource_type.eq_ignore_ascii_case("document") {
+                        let _ = client
+                            .send_command(
+                                "Fetch.failRequest",
+                                Some(json!(
+                                    { "requestId" : paused.request_id, "errorReason" :
+                                    "BlockedByClient" }
+                                )),
+                                Some(session_id),
+                            )
+                            .await;
+                    } else {
+                        let _ = client
+                            .send_command(
+                                "Fetch.continueRequest",
+                                Some(json!({ "requestId" : paused.request_id })),
+                                Some(session_id),
+                            )
+                            .await;
+                    }
+                    return;
+                }
+                if let Some(hostname) = parsed.host_str() {
+                    if !filter.is_allowed(hostname) {
+                        if paused.resource_type.eq_ignore_ascii_case("document") {
+                            let error_body = format!(
+                                "<html><body><h1>Blocked</h1><p>Navigation to {} is not allowed by domain filter.</p></body></html>",
+                                hostname
+                            );
+                            let encoded = base64::Engine::encode(
+                                &base64::engine::general_purpose::STANDARD,
+                                error_body.as_bytes(),
+                            );
+                            let _ = client
+                                .send_command(
+                                    "Fetch.fulfillRequest",
+                                    Some(json!(
+                                        { "requestId" : paused.request_id, "responseCode" : 403,
+                                        "responseHeaders" : [{ "name" : "Content-Type", "value" :
+                                        "text/html" },], "body" : encoded, }
+                                    )),
+                                    Some(session_id),
+                                )
+                                .await;
+                        } else {
+                            let _ = client
+                                .send_command(
+                                    "Fetch.failRequest",
+                                    Some(json!(
+                                        { "requestId" : paused.request_id, "errorReason" :
+                                        "BlockedByClient" }
+                                    )),
+                                    Some(session_id),
+                                )
+                                .await;
+                        }
+                        return;
+                    }
+                }
+            }
+        }
+        for route in routes {
+            let matches = if route.url_pattern == "*" {
+                true
+            } else if route.url_pattern.contains('*') {
+                let parts: Vec<&str> = route.url_pattern.split('*').collect();
+                if parts.len() == 2 {
+                    paused.url.starts_with(parts[0]) && paused.url.ends_with(parts[1])
+                } else {
+                    paused.url.contains(&route.url_pattern)
+                }
+            } else {
+                paused.url.contains(&route.url_pattern)
+            };
+            if matches {
+                if route.abort {
+                    let _ = client
+                        .send_command(
+                            "Fetch.failRequest",
+                            Some(json!(
+                                { "requestId" : paused.request_id, "errorReason" : "Failed"
+                                }
+                            )),
+                            Some(session_id),
+                        )
+                        .await;
+                    return;
+                }
+                if let Some(ref resp) = route.response {
+                    let status = resp.status.unwrap_or(200);
+                    let body_str = resp.body.as_deref().unwrap_or("");
+                    let encoded = base64::Engine::encode(
+                        &base64::engine::general_purpose::STANDARD,
+                        body_str.as_bytes(),
+                    );
+                    let mut headers = vec![];
+                    if let Some(ct) = &resp.content_type {
+                        headers.push(json!({ "name" : "Content-Type", "value" : ct }));
+                    }
+                    if let Some(h) = &resp.headers {
+                        for (k, v) in h {
+                            headers.push(json!({ "name" : k, "value" : v }));
+                        }
+                    }
+                    let _ = client
+                        .send_command(
+                            "Fetch.fulfillRequest",
+                            Some(json!(
+                                { "requestId" : paused.request_id, "responseCode" : status,
+                                "responseHeaders" : headers, "body" : encoded, }
+                            )),
+                            Some(session_id),
+                        )
+                        .await;
+                    return;
+                }
+            }
+        }
+        let extra = url::Url::parse(&paused.url)
+            .ok()
+            .map(|u| u.origin().ascii_serialization())
+            .and_then(|o| origin_headers.get(&o));
+        if let Some(extra_headers) = extra {
+            let mut combined: Vec<Value> = Vec::new();
+            if let Some(ref orig) = paused.request_headers {
+                for (k, v) in orig {
+                    if !extra_headers.keys().any(|ek| ek.eq_ignore_ascii_case(k)) {
+                        if let Some(s) = v.as_str() {
+                            combined.push(json!({ "name" : k, "value" : s }));
+                        }
+                    }
+                }
+            }
+            for (k, v) in extra_headers {
+                combined.push(json!({ "name" : k, "value" : v }));
+            }
+            let _ = client
+                .send_command(
+                    "Fetch.continueRequest",
+                    Some(json!({ "requestId" : paused.request_id, "headers" : combined })),
+                    Some(session_id),
+                )
+                .await;
+        } else {
+            let _ = client
+                .send_command(
+                    "Fetch.continueRequest",
+                    Some(json!({ "requestId" : paused.request_id })),
+                    Some(session_id),
+                )
+                .await;
+        }
+    }
+    /// Build the Fetch.enable patterns list from current routes, domain filter,
+    /// and origin headers state.  When domain filtering or origin-scoped headers
+    /// are active a wildcard pattern is included so all requests are intercepted.
+    pub(crate) async fn build_fetch_patterns(state: &DaemonState) -> Vec<Value> {
+        let routes = state.routes.read().await;
+        let mut patterns: Vec<Value> = routes
+            .iter()
+            .map(|r| json!({ "urlPattern" : r.url_pattern }))
+            .collect();
+        let has_domain_filter = state.domain_filter.read().await.is_some();
+        let has_origin_headers = !state.origin_headers.read().await.is_empty();
+        let has_proxy_creds = state.proxy_credentials.read().await.is_some();
+        if (has_domain_filter || has_origin_headers || has_proxy_creds)
+            && !patterns.iter().any(|p| p["urlPattern"] == "*")
+        {
+            patterns.push(json!({ "urlPattern" : "*" }));
+        }
+        patterns
+    }
+    /// Build the full Fetch.enable params object, including `handleAuthRequests`
+    /// when proxy credentials are configured.
+    pub(crate) async fn build_fetch_enable_params(
+        state: &DaemonState,
+        patterns: Vec<Value>,
+    ) -> Value {
+        let has_proxy_creds = state.proxy_credentials.read().await.is_some();
+        if has_proxy_creds {
+            json!({ "patterns" : patterns, "handleAuthRequests" : true })
+        } else {
+            json!({ "patterns" : patterns })
+        }
+    }
+    pub(crate) async fn handle_route(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let url_pattern = cmd
+            .get("url")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'url' parameter")?
+            .to_string();
+        let abort = cmd.get("abort").and_then(|v| v.as_bool()).unwrap_or(false);
+        let response = cmd.get("response").and_then(|v| {
+            if v.is_null() {
+                return None;
+            }
+            Some(RouteResponse {
+                status: v.get("status").and_then(|s| s.as_u64()).map(|s| s as u16),
+                body: v.get("body").and_then(|s| s.as_str()).map(String::from),
+                content_type: v
+                    .get("contentType")
+                    .and_then(|s| s.as_str())
+                    .map(String::from),
+                headers: v.get("headers").and_then(|h| {
+                    h.as_object().map(|m| {
+                        m.iter()
+                            .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                            .collect()
+                    })
+                }),
+            })
+        });
+        {
+            let mut routes = state.routes.write().await;
+            routes.push(RouteEntry {
+                url_pattern: url_pattern.clone(),
+                response,
+                abort,
+            });
+        }
+        let patterns = build_fetch_patterns(state).await;
+        let params = build_fetch_enable_params(state, patterns).await;
+        mgr.client
+            .send_command("Fetch.enable", Some(params), Some(&session_id))
+            .await?;
+        Ok(json!({ "routed" : url_pattern }))
+    }
+    pub(crate) async fn handle_unroute(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let url = cmd.get("url").and_then(|v| v.as_str());
+        {
+            let mut routes = state.routes.write().await;
+            match url {
+                Some(pattern) => {
+                    routes.retain(|r| r.url_pattern != pattern);
+                }
+                None => {
+                    routes.clear();
+                }
+            }
+        }
+        let patterns = build_fetch_patterns(state).await;
+        if patterns.is_empty() {
+            mgr.client
+                .send_command("Fetch.disable", None, Some(&session_id))
+                .await?;
+        } else {
+            let params = build_fetch_enable_params(state, patterns).await;
+            mgr.client
+                .send_command("Fetch.enable", Some(params), Some(&session_id))
+                .await?;
+        }
+        let label = url.unwrap_or("all");
+        Ok(json!({ "unrouted" : label }))
+    }
+    pub(crate) fn matches_status_filter(status: Option<i64>, filter: &str) -> bool {
+        let Some(code) = status else { return false };
+        let f = filter.to_lowercase();
+        if let Ok(exact) = f.parse::<i64>() {
+            return code == exact;
+        }
+        if f.len() == 3 && f.ends_with("xx") {
+            if let Ok(prefix) = f[..1].parse::<i64>() {
+                return code / 100 == prefix;
+            }
+        }
+        if let Some((lo, hi)) = f.split_once('-') {
+            if let (Ok(lo), Ok(hi)) = (lo.parse::<i64>(), hi.parse::<i64>()) {
+                return code >= lo && code <= hi;
+            }
+        }
+        false
+    }
+}
+pub(crate) use action_commands::*;
