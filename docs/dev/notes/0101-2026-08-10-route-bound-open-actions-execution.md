@@ -549,3 +549,57 @@ their fixes; no third broad work-audit cycle is authorized. Installed and
 operator-visible acceptance remains separate and requires explicit authority
 for ignored end-to-end tests, release-candidate installation, doctors, and a
 neutral live remote-view proof. None of those effects is claimed here.
+
+## Plan 0107 terminal residual-repair receipt
+
+Disposition: **TERMINAL SOURCE REPAIR IMPLEMENTED; DISTINCT TESTER
+DISPOSITION REMAINS OPEN**
+
+Plan 0107 supersedes the Plan 0106 completion claims only where the second and
+terminal work-audit cycle found reproducible residuals. It does not reopen a
+third audit and does not rewrite the truthful cohesive-checkpoint history.
+
+### Terminal checkpoint manifest
+
+| Commit | Terminal repair |
+| --- | --- |
+| `290ded00` | Authorizes Plan 0107 as the terminal residual-repair packet |
+| `ba644025` | Routes both remaining dynamic JavaScript Cargo launchers through `cargo-safe.sh` and extends fail-closed detector fixtures |
+| `b4ac97a1` | Persists `rollback_incomplete` quarantine before cleanup, promotes only confirmed compensation, and bounds process plus file lock acquisition |
+| `c7e73022` | Replaces opaque route payload wrappers with validated records, seals authorization before invocation construction, and derives the exact nine fallback predicates from immutable and post-attempt evidence |
+| `f9dcf599` | Moves private-helper tests beside owner modules, retains dispatcher and `execute_command` integration tests, and labels regex checks as structural regression guards |
+
+The responsibility inventory remains unchanged at 615 baseline records: 609
+moved and six retained. The separately reconciled predecessor definition is
+moved, so the combined ledger remains 610 moved and six retained. The
+dispatcher allowlist remains six definitions, with zero wrappers.
+
+The 261-test migration ledger now contains 82 dispatcher or dispatcher-helper
+tests and 179 owner tests across 33 physical modules. Of the tests remaining
+under `native::actions`, 78 invoke `execute_command`; the four others exercise
+dispatcher-owned response, launch-skip, and route-gating interfaces. No test
+that directly exercises another owner's private helper remains in an action
+bucket.
+
+The architecture and remediation scripts are structural regression guards.
+They verify source topology, exact counts, forbidden imports, typed record
+shape, named outcome and fallback fields, and required behavioral fixture
+presence. They do not claim to prove transaction, timeout, authorization, or
+fallback semantics. Rust tests own those semantic claims, including the
+four-boundary two-file transaction matrix, pre-cleanup quarantine and success
+promotion, cleanup-timeout preservation, repository-future drop, terminal
+control-plane drop, concrete route-record rejection, authenticated invocation
+construction, all nine fallback predicates, and unchanged ownership evidence.
+
+The total deadline bounds lock acquisition and all in-process futures, and no
+repository task is detached. A filesystem syscall that has already entered an
+uninterruptible kernel wait cannot be preempted by a Rust future. That kernel
+I/O residual is reported explicitly; the source contract does not claim the
+physically impossible cancellation of such a syscall.
+
+All executor Cargo commands used the serialized WSL guard with four bounded
+jobs, `MemoryHigh=20G`, `MemoryMax=24G`, and `MemorySwapMax=4G`. No browser,
+ignored end-to-end test, install, doctor, live route, display, tenant, release,
+push, or external effect was performed. Final consolidated no-launch gate
+results and the exact terminal identity follow in the closeout update after
+the guarded run.
