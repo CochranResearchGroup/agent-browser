@@ -122,10 +122,14 @@ Runs all unit tests (~320 tests). These are fast and don't require Chrome.
 
 On WSL, every Cargo command that can compile code must run through
 `scripts/ci/cargo-safe.sh`. The wrapper serializes repository Cargo builds,
-sets `CARGO_BUILD_JOBS=1`, and runs the compiler in a user-systemd scope with
+defaults to four parallel Cargo jobs, and runs the compiler in a user-systemd scope with
 `MemoryHigh=20G`, `MemoryMax=24G`, and `MemorySwapMax=4G`. It fails closed when
 the WSL user-systemd manager is unavailable. Do not invoke `cargo check`,
 `cargo build`, `cargo clippy`, or `cargo test` directly from WSL agent sessions.
+Set `AGENT_BROWSER_CARGO_BUILD_JOBS` only when a particular build needs a
+different bounded parallelism level. The repository lock still permits only
+one Agent Browser Cargo invocation at a time, while the cgroup cap applies to
+the aggregate compiler process tree.
 
 ### End-to-End Tests
 

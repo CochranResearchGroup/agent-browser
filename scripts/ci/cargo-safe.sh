@@ -8,7 +8,7 @@ fi
 
 runtime_dir="${XDG_RUNTIME_DIR:-/tmp}"
 lock_file="${AGENT_BROWSER_CARGO_LOCK_FILE:-${runtime_dir}/agent-browser-cargo-${UID}.lock}"
-build_jobs="${AGENT_BROWSER_CARGO_BUILD_JOBS:-1}"
+build_jobs="${AGENT_BROWSER_CARGO_BUILD_JOBS:-4}"
 
 exec 9>"$lock_file"
 if ! flock -n 9; then
