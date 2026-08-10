@@ -7,9 +7,8 @@ use std::time::{Duration, Instant};
 
 use tokio::sync::{mpsc, oneshot};
 
-use super::actions::{
-    execute_command, service_profile_lease_gate, DaemonState, ServiceProfileLeaseGate,
-};
+use super::action_runtime::{service_profile_lease_gate, DaemonState, ServiceProfileLeaseGate};
+use super::actions::execute_command;
 use super::cancellation::CancellationToken as RunningJobCancel;
 use super::service_health::{
     apply_browser_health_observation, browser_health_observation_details,
@@ -2382,7 +2381,7 @@ mod tests {
         let guard = EnvGuard::new(&["HOME"]);
         guard.set("HOME", home.to_str().unwrap());
 
-        let action_error = super::super::actions::handle_service_status(&json!({
+        let action_error = super::super::action_runtime::handle_service_status(&json!({
             "serviceState": {},
             "launchConfig": {},
         }))
@@ -2429,7 +2428,7 @@ mod tests {
             "launchConfig": fixed_launch_configuration(),
             "fullTabHistory": false,
         });
-        let action = super::super::actions::handle_service_status_with_dependencies(
+        let action = super::super::action_runtime::handle_service_status_with_dependencies(
             &command,
             super::super::service_status_projection::ServiceStatusProjectionDependencies::new(
                 &repository,

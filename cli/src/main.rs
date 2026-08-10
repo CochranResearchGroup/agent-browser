@@ -1835,7 +1835,7 @@ fn main() {
     if command_executes_locally_before_daemon(&cmd) {
         let action = cmd.get("action").and_then(|value| value.as_str());
         let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
-        let mut state = native::actions::DaemonState::new();
+        let mut state = native::action_runtime::DaemonState::new();
         let raw = rt.block_on(native::actions::execute_command(&cmd, &mut state));
         let resp = connection::Response {
             success: raw

@@ -3533,7 +3533,8 @@ async fn relay_service_command(session_name: &str, cmd: Value) -> Result<String,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::native::actions::{execute_command, DaemonState};
+    use crate::native::action_runtime::DaemonState;
+    use crate::native::actions::execute_command;
     use crate::native::service_model::{
         assert_service_event_record_contract, assert_service_incident_record_contract,
         assert_service_job_naming_warning_contract, service_job_naming_warning_values,

@@ -17,6 +17,8 @@ use super::service_model::{
     BrowserHost, DisplayAllocation, RoutePoolEntry, ServiceState, ViewStreamProvider,
 };
 
+pub(crate) mod open;
+
 const ROUTE_DISPLAY_CONTENT_TTL: Duration = Duration::from_secs(5);
 const ROUTE_DISPLAY_NAME_TTL: Duration = Duration::from_secs(10);
 

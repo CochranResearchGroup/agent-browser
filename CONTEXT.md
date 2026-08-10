@@ -43,3 +43,15 @@ _Avoid_: Guacamole URL, provider URL
 **Provider fallback**:
 A best-effort retained-route outcome that preserves an existing browser without claiming normal managed control or creating another ownership lane.
 _Avoid_: Successful reopen, automatic recovery
+
+**Forward deadline**:
+The route-bound open deadline for new effects, computed from the existing total job timeout after reserving bounded time for compensation.
+_Avoid_: Operation timeout, extended timeout
+
+**Compensation reserve**:
+The final portion of the existing total job timeout available only to undo effects that the coordinator recorded as completed. It does not extend the public deadline.
+_Avoid_: Cleanup timeout, grace period
+
+**Scripted runtime**:
+A deterministic test implementation of the route-bound runtime seam that records invoked effects and advances a fake clock without browser or live runtime effects.
+_Avoid_: Mock browser, integration runtime

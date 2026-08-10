@@ -7,7 +7,8 @@
 
 use serde_json::{json, Value};
 
-use super::actions::{execute_command, DaemonState};
+use super::action_runtime::DaemonState;
+use super::actions::execute_command;
 use crate::test_utils::EnvGuard;
 
 const ENCRYPTION_KEY_ENV: &str = "AGENT_BROWSER_ENCRYPTION_KEY";
@@ -567,7 +568,7 @@ async fn test_daemon_state_new_defaults() {
 
 #[tokio::test]
 async fn test_tracked_request_struct() {
-    use super::actions::TrackedRequest;
+    use super::action_runtime::TrackedRequest;
     let tr = TrackedRequest {
         url: "https://example.com/api".to_string(),
         method: "GET".to_string(),
@@ -593,30 +594,34 @@ async fn test_request_tracking_state() {
     assert!(!state.request_tracking);
     assert!(state.tracked_requests.is_empty());
 
-    state.tracked_requests.push(super::actions::TrackedRequest {
-        url: "https://example.com".to_string(),
-        method: "GET".to_string(),
-        headers: json!({}),
-        timestamp: 1,
-        resource_type: "Document".to_string(),
-        request_id: "1.1".to_string(),
-        post_data: None,
-        status: None,
-        response_headers: None,
-        mime_type: None,
-    });
-    state.tracked_requests.push(super::actions::TrackedRequest {
-        url: "https://other.com".to_string(),
-        method: "POST".to_string(),
-        headers: json!({}),
-        timestamp: 2,
-        resource_type: "XHR".to_string(),
-        request_id: "1.2".to_string(),
-        post_data: None,
-        status: None,
-        response_headers: None,
-        mime_type: None,
-    });
+    state
+        .tracked_requests
+        .push(super::action_runtime::TrackedRequest {
+            url: "https://example.com".to_string(),
+            method: "GET".to_string(),
+            headers: json!({}),
+            timestamp: 1,
+            resource_type: "Document".to_string(),
+            request_id: "1.1".to_string(),
+            post_data: None,
+            status: None,
+            response_headers: None,
+            mime_type: None,
+        });
+    state
+        .tracked_requests
+        .push(super::action_runtime::TrackedRequest {
+            url: "https://other.com".to_string(),
+            method: "POST".to_string(),
+            headers: json!({}),
+            timestamp: 2,
+            resource_type: "XHR".to_string(),
+            request_id: "1.2".to_string(),
+            post_data: None,
+            status: None,
+            response_headers: None,
+            mime_type: None,
+        });
     assert_eq!(state.tracked_requests.len(), 2);
 
     // Filter
@@ -635,7 +640,7 @@ async fn test_request_tracking_state() {
 
 #[test]
 fn test_matches_status_filter() {
-    use super::actions::matches_status_filter;
+    use super::action_runtime::matches_status_filter;
 
     // Exact match
     assert!(matches_status_filter(Some(200), "200"));

@@ -9,7 +9,8 @@ Plan authority:
 - `docs/dev/plans/0101-2026-08-09-route-bound-open-actions-deepening-plan.md`
 - `docs/dev/plans/0102-2026-08-09-route-bound-open-cycle2-residual-repair-plan.md`
 
-Runtime handle: `/root/execute_actions_deepening`
+Runtime handle: `/root/resume_actions_deepening` (replacement for the
+OOM-terminated `/root/execute_actions_deepening` executor)
 
 Effects authorized: local source, tests, documentation, deterministic generated
 architecture artifacts, and green local checkpoint commits. No push, install,
@@ -143,7 +144,7 @@ before checkpoint `24265340`.
 | Packet | State | Commit | Evidence |
 | --- | --- | --- | --- |
 | `P0101-P00` | complete | `24265340` | 615 of 615 classified; current reconciliation clean; checker and self-test green |
-| `P0101-A` | pending | none | Route-bound open extraction is the first source packet |
+| `P0101-A` | implementation checkpoint | this commit | Route-bound coordinator, exact 13-operation typed runtime seam, deadline supervisor, typed outcomes, typed profile-owner collision, deterministic scripted-runtime tests, and stable-ID reconciliation are green; residual Slice A work remains listed below |
 | `P0101-B` | pending | none | Handoff surface deepening follows the coordinator |
 | `P0101-C` | pending | none | Daemon runtime and browser lifecycle extraction |
 | `P0101-D01` through `P0101-D05` | pending | none | Service workflows |
@@ -159,5 +160,71 @@ before checkpoint `24265340`.
   executor. The next roles are intentionally independent work audit and final
   test, so implementation is kept within this executor rather than delegated
   into overlapping shared source.
-- Runtime handle: `/root/execute_actions_deepening`
+- Runtime handle: `/root/resume_actions_deepening`
 - Status: active after P0
+
+## Slice A implementation checkpoint evidence
+
+The recovered Slice A source no longer uses the compile-pathological cyclic
+wildcard module graph. `actions.rs` now owns only the reviewed dispatcher and
+shared coordination allowlist: 815 lines, eight production definitions, and no
+in-file tests. The other 608 current responsibility records are marked moved,
+with zero compatibility wrappers. Route-bound open is owned by
+`remote_view::open`. The route-bound coordinator depends on an exact
+13-operation typed runtime interface; the production adapter converts launch
+failures into typed runtime issues at the adapter boundary.
+
+The deadline supervisor uses the existing `jobTimeoutMs` total deadline. It
+reserves `min(15000, max(250, total / 5))` milliseconds for compensation and
+does not extend the public timeout. Forward effects observe cancellation and
+the forward deadline. Compensation ignores cancellation and remains bounded by
+the original total deadline.
+
+Focused deterministic evidence:
+
+```text
+scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml remote_view::open::tests -- --test-threads=1
+4 passed; 0 failed; 1847 filtered out
+scope: run-u771.scope
+memory peak: 5.3G
+memory swap peak: 0B
+```
+
+The scripted runtime implements all 13 operations and covers the deadline
+formula, cancellation before each mutating effect, forward-reserve exhaustion,
+bounded compensation, and completed-effect recording. It launches no browser
+and performs no live runtime effect.
+
+The same focused tests were repeated after restoring the eight frozen
+dispatcher stable IDs to `actions.rs`:
+
+```text
+4 passed; 0 failed; 1847 filtered out
+scope: run-u1278.scope
+memory peak: 2.4G
+memory swap peak: 0B
+```
+
+Architecture reconciliation evidence:
+
+```text
+actions architecture check passed definitions=8 tests=0 lines=815 wrappers=0 final=false
+self-test passed classified_fixture=accepted
+movement: 608 moved; 8 retained
+```
+
+Strict Rust lint evidence after the focused tests:
+
+```text
+scripts/ci/cargo-safe.sh clippy --manifest-path cli/Cargo.toml -- -D warnings
+finished successfully in 55.76s
+scope: run-u894.scope
+memory peak: 3.3G
+memory swap peak: 0B
+```
+
+This is an implementation checkpoint, not Slice A acceptance. Remaining Slice
+A work includes control-plane cancellation handoff through the coordinator,
+default deadline propagation, terminal failure/quarantine persistence, removal
+of superseded state-coupled recovery helpers, and decomposition of the current
+route-open recovery file into cohesive private owners.

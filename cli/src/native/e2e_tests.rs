@@ -20,7 +20,8 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use crate::test_utils::EnvGuard;
 
-use super::actions::{execute_command, DaemonState};
+use super::action_runtime::DaemonState;
+use super::actions::execute_command;
 use super::control_plane::ControlPlaneWorker;
 use super::service_model::{BrowserHealth as ServiceBrowserHealth, JobState};
 use super::service_store::{JsonServiceStateStore, ServiceStateStore};

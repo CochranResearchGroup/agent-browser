@@ -426,7 +426,7 @@ impl ServiceStatusProjector {
         input.browser_session_authority.validate()?;
 
         let mut authority_state = input.service_state.clone();
-        super::actions::refresh_cdp_screencast_view_streams(&mut authority_state);
+        super::action_runtime::refresh_cdp_screencast_view_streams(&mut authority_state);
         super::remote_view_attachability::refresh_remote_view_attachability(&mut authority_state);
         authority_state.refresh_profile_readiness();
 
