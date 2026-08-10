@@ -3,8 +3,9 @@ set -euo pipefail
 
 manifest_path="${CARGO_MANIFEST_PATH:-cli/Cargo.toml}"
 profile="${CARGO_TEST_PROFILE:-}"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-cargo_test=(cargo test --manifest-path "$manifest_path")
+cargo_test=("$script_dir/cargo-safe.sh" test --manifest-path "$manifest_path")
 if [[ -n "$profile" ]]; then
   cargo_test+=(--profile "$profile")
 fi

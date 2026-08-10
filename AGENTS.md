@@ -115,15 +115,22 @@ This is a Rust codebase. The browser automation daemon lives in `cli/src/native/
 ### Unit Tests
 
 ```bash
-cd cli && cargo test
+scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml
 ```
 
 Runs all unit tests (~320 tests). These are fast and don't require Chrome.
 
+On WSL, every Cargo command that can compile code must run through
+`scripts/ci/cargo-safe.sh`. The wrapper serializes repository Cargo builds,
+sets `CARGO_BUILD_JOBS=1`, and runs the compiler in a user-systemd scope with
+`MemoryHigh=20G`, `MemoryMax=24G`, and `MemorySwapMax=4G`. It fails closed when
+the WSL user-systemd manager is unavailable. Do not invoke `cargo check`,
+`cargo build`, `cargo clippy`, or `cargo test` directly from WSL agent sessions.
+
 ### End-to-End Tests
 
 ```bash
-cd cli && cargo test e2e -- --ignored --test-threads=1
+scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml e2e -- --ignored --test-threads=1
 ```
 
 Runs the ignored e2e suite that launches real headless Chrome instances and exercises the full native daemon command pipeline. Requirements:
@@ -166,8 +173,8 @@ leave the run URL and move on unless the user asked for active monitoring.
 ### Linting and Formatting
 
 ```bash
-cd cli && cargo fmt -- --check   # Check formatting
-cd cli && cargo clippy            # Lint
+scripts/ci/cargo-safe.sh fmt --manifest-path cli/Cargo.toml -- --check
+scripts/ci/cargo-safe.sh clippy --manifest-path cli/Cargo.toml
 ```
 
 ## Graphiti Memory Discovery
