@@ -1,11 +1,16 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const cargoSafe = path.join(repoRoot, 'scripts/ci/cargo-safe.sh');
 
 const commands = [
   {
     label: 'wrong flag placement parser fixture',
-    command: 'cargo',
+    command: cargoSafe,
     args: [
       'test',
       '--manifest-path',
@@ -17,7 +22,7 @@ const commands = [
   },
   {
     label: 'named-session route pool mismatch fixture',
-    command: 'cargo',
+    command: cargoSafe,
     args: [
       'test',
       '--manifest-path',
@@ -29,7 +34,7 @@ const commands = [
   },
   {
     label: 'same-owner route-pool repeat fixture',
-    command: 'cargo',
+    command: cargoSafe,
     args: [
       'test',
       '--manifest-path',
@@ -41,7 +46,7 @@ const commands = [
   },
   {
     label: 'profile lock known-owner fixture',
-    command: 'cargo',
+    command: cargoSafe,
     args: [
       'test',
       '--manifest-path',
@@ -75,6 +80,7 @@ const commands = [
 
 for (const item of commands) {
   const result = spawnSync(item.command, item.args, {
+    cwd: repoRoot,
     encoding: 'utf8',
     stdio: 'pipe',
   });

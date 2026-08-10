@@ -24,7 +24,7 @@ tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
 
 script_path="$tmpdir/windows-browser-setup.ps1"
-cargo run --quiet --manifest-path "$ROOT/cli/Cargo.toml" -- \
+"$ROOT/scripts/ci/cargo-safe.sh" run --quiet --manifest-path "$ROOT/cli/Cargo.toml" -- \
   setup windows-browser \
   --print-powershell \
   --port "$PORT" \

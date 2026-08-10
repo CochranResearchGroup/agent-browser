@@ -15,7 +15,7 @@ STDERR_MATCHES="$TMP_WORK/stderr-matches.txt"
 
 cleanup() {
   AGENT_BROWSER_SOCKET_DIR="$SOCKET_DIR" \
-    cargo run --quiet --manifest-path "$ROOT/cli/Cargo.toml" -- \
+    "$ROOT/scripts/ci/cargo-safe.sh" run --quiet --manifest-path "$ROOT/cli/Cargo.toml" -- \
     --session "$SESSION" close --all --json >/dev/null 2>&1 || true
   if [[ "$KEEP_PROFILE" != "1" ]]; then
     rm -rf "$PROFILE_DIR"
@@ -48,7 +48,7 @@ before_latest="$(find "$HOME/.agent-browser/tmp/chrome-launches" -type f -printf
 TMPDIR="$PROFILE_ROOT" \
 AGENT_BROWSER_SOCKET_DIR="$SOCKET_DIR" \
 AGENT_BROWSER_EXECUTABLE_PATH="$CHROME_PATH" \
-  cargo run --quiet --manifest-path "$ROOT/cli/Cargo.toml" -- \
+  "$ROOT/scripts/ci/cargo-safe.sh" run --quiet --manifest-path "$ROOT/cli/Cargo.toml" -- \
   --session "$SESSION" \
   --profile "$PROFILE_DIR" \
   open about:blank \

@@ -24,7 +24,7 @@ const targetPath = join(binDir, targetName);
 
 if (!existsSync(sourcePath)) {
   console.error(`Error: Native binary not found at ${sourcePath}`);
-  console.error('Run "cargo build --release --manifest-path cli/Cargo.toml" first');
+  console.error('Run "scripts/ci/cargo-safe.sh build --release --manifest-path cli/Cargo.toml" first');
   process.exit(1);
 }
 

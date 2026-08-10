@@ -37,7 +37,10 @@ function changedFiles(ref) {
     ...(worktree ? worktree.split('\n') : []),
     ...(staged ? staged.split('\n') : []),
     ...(untracked ? untracked.split('\n') : []),
-  ])].filter(Boolean).sort();
+  ])]
+    .filter(Boolean)
+    .filter((file) => !file.startsWith('scripts/architecture/actions-inventory/target/'))
+    .sort();
 }
 
 function git(args) {
@@ -76,8 +79,8 @@ function selectRecommendations(files, base) {
   }
 
   if (files.some((file) => file.startsWith('cli/src/') || file === 'cli/Cargo.toml' || file === 'cli/Cargo.lock')) {
-    add('cargo fmt --manifest-path cli/Cargo.toml -- --check', 'Rust source or manifest changed');
-    add('cargo clippy --manifest-path cli/Cargo.toml -- -D warnings', 'Rust Quality CI gate');
+    add('scripts/ci/cargo-safe.sh fmt --manifest-path cli/Cargo.toml -- --check', 'Rust source or manifest changed');
+    add('scripts/ci/cargo-safe.sh clippy --manifest-path cli/Cargo.toml -- -D warnings', 'Rust Quality CI gate');
   }
 
   if (files.some(isCdpTabStreamingSurface)) {
@@ -135,7 +138,7 @@ function selectRecommendations(files, base) {
     }
   } else if (files.some((file) => file.startsWith('cli/src/'))) {
     add(
-      'cargo test --manifest-path cli/Cargo.toml <focused-filter> -- --test-threads=1',
+      'scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml <focused-filter> -- --test-threads=1',
       'Rust source changed; replace <focused-filter> with the touched module or contract test',
     );
   }
@@ -403,70 +406,70 @@ function focusedRustTestCommands(files) {
 
   if (files.includes('cli/src/workstation_install.rs')) {
     add(
-      'cargo test --manifest-path cli/Cargo.toml workstation_install -- --nocapture',
+      'scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml workstation_install -- --nocapture',
       'workstation install, locking, manifest, or route projection behavior changed',
     );
   }
 
   if (files.includes('cli/src/install.rs')) {
     add(
-      'cargo test --manifest-path cli/Cargo.toml workstation_payload_status -- --nocapture',
+      'scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml workstation_payload_status -- --nocapture',
       'workstation payload doctor provenance changed',
     );
   }
 
   if (files.includes('cli/src/native/service_model.rs')) {
     add(
-      'cargo test --manifest-path cli/Cargo.toml service_model -- --test-threads=1',
+      'scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml service_model -- --test-threads=1',
       'service model wire-shape and contract fixtures changed',
     );
   }
 
   if (files.includes('cli/src/native/service_access.rs')) {
     add(
-      'cargo test --manifest-path cli/Cargo.toml service_access_plan -- --test-threads=1',
+      'scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml service_access_plan -- --test-threads=1',
       'access-plan decision model changed',
     );
   }
 
   if (files.includes('cli/src/native/service_health.rs')) {
     add(
-      'cargo test --manifest-path cli/Cargo.toml service_health -- --test-threads=1',
+      'scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml service_health -- --test-threads=1',
       'browser health, recovery, or launch event model changed',
     );
   }
 
   if (files.includes('cli/src/native/stream/mod.rs') || files.includes('cli/src/native/stream/cdp_loop.rs')) {
     add(
-      'cargo test --manifest-path cli/Cargo.toml set_cdp_session_id -- --nocapture',
+      'scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml set_cdp_session_id -- --nocapture',
       'stream server target switching or frame cache behavior changed',
     );
   }
 
   if (files.includes('cli/src/native/actions.rs')) {
     add(
-      'cargo test --manifest-path cli/Cargo.toml cdp_screencast_view_stream -- --nocapture',
+      'scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml cdp_screencast_view_stream -- --nocapture',
       'service-owned CDP stream derivation changed',
     );
   }
 
   if (files.includes('cli/src/native/service_contracts.rs')) {
     add(
-      'cargo test --manifest-path cli/Cargo.toml service_contracts -- --test-threads=1',
+      'scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml service_contracts -- --test-threads=1',
       'service contract metadata changed',
     );
   }
 
   if (files.includes('cli/src/native/service_config.rs')) {
     add(
-      'cargo test --manifest-path cli/Cargo.toml service_config -- --test-threads=1',
+      'scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml service_config -- --test-threads=1',
       'service config mutation model changed',
     );
   }
 
   if (files.includes('cli/src/native/service_monitors.rs')) {
     add(
-      'cargo test --manifest-path cli/Cargo.toml service_monitors -- --test-threads=1',
+      'scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml service_monitors -- --test-threads=1',
       'service monitor state or run-due logic changed',
     );
   }

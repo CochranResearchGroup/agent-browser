@@ -1022,7 +1022,7 @@ try {
     browserB,
     dashboardTileUrl,
     routePoolHydratedFromDoctor: doctorHydration.usedDoctor,
-    agentBrowserCommand: context.env.AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD || 'cargo run --manifest-path cli/Cargo.toml',
+    agentBrowserCommand: context.env.AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD || 'scripts/ci/cargo-safe.sh run --manifest-path cli/Cargo.toml',
     routePool: routes,
     viewerLeaseCount: Object.keys(afterLeases.data?.service_state?.viewerLeases || {}).length,
   });
@@ -1153,7 +1153,7 @@ try {
 } catch (err) {
   writeArtifact('failure.json', {
     error: err.stack || err.message,
-    agentBrowserCommand: context.env.AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD || 'cargo run --manifest-path cli/Cargo.toml',
+    agentBrowserCommand: context.env.AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD || 'scripts/ci/cargo-safe.sh run --manifest-path cli/Cargo.toml',
     routePoolConfigHint: {
       json: 'AGENT_BROWSER_RDP_ROUTE_POOL_JSON',
       routeA: 'AGENT_BROWSER_RDP_ROUTE_A_ID, AGENT_BROWSER_RDP_ROUTE_A_FRAME_URL, AGENT_BROWSER_RDP_ROUTE_A_CONNECTION_ID',
