@@ -32,9 +32,9 @@ use crate::native::service_model::{
     ControlInputProvider, DisplayAllocation, JobState as ServiceJobState, LeaseState, MonitorState,
     ProfileAllocationPolicy, ProfileClass, ProfileKeyringPolicy, ProfileLeaseDisposition,
     ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease, RemoteViewHandoff,
-    RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent, ServiceEventKind,
-    ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle, ViewStream,
-    ViewStreamProvider, ViewerLease,
+    RemoteViewRoute, RoutePoolEntry, ServiceBrowserProcessIdentity, ServiceEntitySource,
+    ServiceEvent, ServiceEventKind, ServiceState, ServiceTabHandle, SessionCleanupPolicy,
+    TabLifecycle, ViewStream, ViewStreamProvider, ViewerLease,
 };
 use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use crate::native::state;
@@ -280,6 +280,7 @@ pub(crate) fn service_browser_host_for_launch(cmd: &Value, headless: bool) -> Se
         ServiceBrowserHost::LocalHeaded
     }
 }
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn persist_service_browser_record(
     session_id: &str,
     host: ServiceBrowserHost,
@@ -288,6 +289,7 @@ pub(crate) fn persist_service_browser_record(
     cdp_endpoint: Option<String>,
     last_error: Option<String>,
     metadata: Option<ServiceLaunchMetadata>,
+    process_identity: Option<ServiceBrowserProcessIdentity>,
 ) {
     if let Ok(repository) = LockedServiceStateRepository::default_json() {
         let _ = persist_service_browser_record_in_repository(
@@ -299,6 +301,7 @@ pub(crate) fn persist_service_browser_record(
             cdp_endpoint,
             last_error,
             metadata,
+            process_identity,
         );
     }
 }
@@ -477,6 +480,18 @@ pub(crate) fn persist_current_browser_health(
             )
         })
         .unwrap_or((None, None, None));
+    let process_identity = state.browser.as_ref().and_then(|manager| {
+        let pid = manager.browser_pid().or(state.attached_browser_pid)?;
+        crate::process_identity::capture_process_identity(pid, None, None).map(|process_identity| {
+            ServiceBrowserProcessIdentity {
+                process_identity,
+                user_data_dir: manager
+                    .browser_user_data_dir()
+                    .map(|path| path.to_string_lossy().into_owned()),
+                runtime_profile: manager.runtime_profile_name().map(str::to_string),
+            }
+        })
+    });
     let metadata = metadata.map(|mut metadata| {
         metadata.browser_stderr_log_path = browser_stderr_log_path;
         if metadata.display_name.is_none() {
@@ -503,6 +518,7 @@ pub(crate) fn persist_current_browser_health(
         cdp_endpoint,
         None,
         metadata,
+        process_identity,
     );
     if preserves_existing_metadata {
         if let Ok(repository) = LockedServiceStateRepository::default_json() {

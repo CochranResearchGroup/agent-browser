@@ -202,8 +202,7 @@ pub fn process_exists(pid: u32) -> bool {
 ///
 /// Linux and Windows retain a kernel handle so PID reuse after authorization
 /// cannot redirect a signal. macOS lacks an equivalent stable public handle,
-/// so every signal is preceded by a conservative identity recheck; the final
-/// metadata-check-to-signal interval is an unavoidable kernel boundary there.
+/// so attached runtimes cannot be signaled safely by PID and fail closed.
 pub struct VerifiedProcessTermination {
     pid: u32,
     #[cfg(target_os = "macos")]
@@ -363,30 +362,18 @@ fn platform_verified_process_is_running(
 
 #[cfg(target_os = "macos")]
 fn platform_signal_verified_process(
-    process: &VerifiedProcessTermination,
-    signal: VerifiedProcessSignal,
+    _process: &VerifiedProcessTermination,
+    _signal: VerifiedProcessSignal,
 ) -> Result<bool, String> {
-    if !verify_recorded_process_observation(&process.recorded, observe_process(process.pid))? {
-        return Ok(false);
-    }
-    let signal = match signal {
-        VerifiedProcessSignal::Terminate => libc::SIGTERM,
-        VerifiedProcessSignal::Kill => libc::SIGKILL,
-    };
-    let result = unsafe { libc::kill(process.pid as libc::pid_t, signal) };
-    if result == 0 {
-        Ok(true)
-    } else {
-        let error = std::io::Error::last_os_error();
-        if error.raw_os_error() == Some(libc::ESRCH) {
-            Ok(false)
-        } else {
-            Err(format!(
-                "Failed to signal verified runtime browser PID {}: {}",
-                process.pid, error
-            ))
-        }
-    }
+    attached_runtime_signal_unavailable()
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn attached_runtime_signal_unavailable() -> Result<bool, String> {
+    Err(
+        "Safe termination is unavailable for an attached macOS runtime without an owned process handle"
+            .to_string(),
+    )
 }
 
 #[cfg(windows)]
@@ -395,11 +382,11 @@ fn platform_open_verified_process(
 ) -> Result<Option<VerifiedProcessTermination>, String> {
     use windows_sys::Win32::Foundation::{GetLastError, ERROR_INVALID_PARAMETER};
     use windows_sys::Win32::System::Threading::{
-        OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE, SYNCHRONIZE,
+        OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
     };
     let handle = unsafe {
         OpenProcess(
-            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE | SYNCHRONIZE,
+            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE | PROCESS_SYNCHRONIZE,
             0,
             recorded.pid,
         )
@@ -649,13 +636,50 @@ fn platform_process_identity(pid: u32) -> ProcessObservation {
     } else {
         None
     };
+    let command_line = match macos_process_command_line(pid) {
+        Ok(arguments) => Some(arguments),
+        Err(reason) => return ProcessObservation::Failed { reason },
+    };
     ProcessObservation::Observed(ObservedProcessIdentity {
         pid,
         start_token,
         browser_family: browser_family_for_path(executable_path.as_deref()),
         executable_path: executable_path.map(|path| path.to_string_lossy().into_owned()),
-        command_line: None,
+        command_line,
     })
+}
+
+#[cfg(target_os = "macos")]
+fn macos_process_command_line(pid: u32) -> Result<Vec<String>, String> {
+    let arg_max = unsafe { libc::sysconf(libc::_SC_ARG_MAX) };
+    if arg_max <= 0 {
+        return Err(format!(
+            "macos_process_command_line_arg_max_failed: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    let mut buffer = vec![0u8; arg_max as usize];
+    let mut buffer_len = buffer.len();
+    let mut mib = [libc::CTL_KERN, libc::KERN_PROCARGS2, pid as libc::c_int];
+    if unsafe {
+        libc::sysctl(
+            mib.as_mut_ptr(),
+            mib.len() as libc::c_uint,
+            buffer.as_mut_ptr().cast(),
+            &mut buffer_len,
+            std::ptr::null_mut(),
+            0,
+        )
+    } != 0
+    {
+        return Err(format!(
+            "macos_process_command_line_sysctl_failed: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    buffer.truncate(buffer_len);
+    parse_macos_kern_procargs2(&buffer)
+        .ok_or_else(|| "macos_process_command_line_parse_failed".to_string())
 }
 
 #[cfg(windows)]
@@ -722,13 +746,153 @@ fn windows_process_identity_from_handle(
         } else {
             None
         };
+    let command_line = match windows_process_command_line(handle) {
+        Ok(arguments) => Some(arguments),
+        Err(reason) => return ProcessObservation::Failed { reason },
+    };
     ProcessObservation::Observed(ObservedProcessIdentity {
         pid,
         start_token,
         browser_family: browser_family_for_path(executable_path.as_deref()),
         executable_path: executable_path.map(|path| path.to_string_lossy().into_owned()),
-        command_line: None,
+        command_line,
     })
+}
+
+#[cfg(windows)]
+fn windows_process_command_line(
+    handle: windows_sys::Win32::Foundation::HANDLE,
+) -> Result<Vec<String>, String> {
+    use std::ffi::c_void;
+    use std::mem::size_of;
+    use windows_sys::Wdk::System::Threading::{
+        NtQueryInformationProcess, ProcessCommandLineInformation,
+    };
+    use windows_sys::Win32::Foundation::UNICODE_STRING;
+
+    let mut required_len = 0u32;
+    unsafe {
+        NtQueryInformationProcess(
+            handle,
+            ProcessCommandLineInformation,
+            std::ptr::null_mut(),
+            0,
+            &mut required_len,
+        )
+    };
+    if required_len < size_of::<UNICODE_STRING>() as u32 {
+        return Err("windows_process_command_line_size_query_failed".to_string());
+    }
+
+    let word_len = (required_len as usize).div_ceil(size_of::<usize>());
+    let mut storage = vec![0usize; word_len];
+    let status = unsafe {
+        NtQueryInformationProcess(
+            handle,
+            ProcessCommandLineInformation,
+            storage.as_mut_ptr().cast::<c_void>(),
+            required_len,
+            &mut required_len,
+        )
+    };
+    if status < 0 {
+        return Err(format!(
+            "windows_process_command_line_query_failed: ntstatus {status:#x}"
+        ));
+    }
+
+    let info = unsafe { &*storage.as_ptr().cast::<UNICODE_STRING>() };
+    let buffer_start = storage.as_ptr() as usize;
+    let buffer_end = buffer_start + storage.len() * size_of::<usize>();
+    let command_start = info.Buffer as usize;
+    let command_end = command_start.saturating_add(info.Length as usize);
+    if info.Buffer.is_null()
+        || info.Length == 0
+        || info.Length % 2 != 0
+        || command_start < buffer_start
+        || command_end > buffer_end
+    {
+        return Err("windows_process_command_line_invalid_result".to_string());
+    }
+    let utf16 = unsafe { std::slice::from_raw_parts(info.Buffer, info.Length as usize / 2) };
+    let command_line = String::from_utf16(utf16)
+        .map_err(|error| format!("windows_process_command_line_utf16_failed: {error}"))?;
+    let arguments = parse_windows_command_line(&command_line);
+    if arguments.is_empty() {
+        Err("windows_process_command_line_parse_failed".to_string())
+    } else {
+        Ok(arguments)
+    }
+}
+
+#[cfg(any(windows, test))]
+fn parse_windows_command_line(command_line: &str) -> Vec<String> {
+    let characters = command_line.chars().collect::<Vec<_>>();
+    let mut arguments = Vec::new();
+    let mut index = 0;
+    while index < characters.len() {
+        while index < characters.len() && characters[index].is_ascii_whitespace() {
+            index += 1;
+        }
+        if index == characters.len() {
+            break;
+        }
+
+        let mut argument = String::new();
+        let mut quoted = false;
+        while index < characters.len() && (quoted || !characters[index].is_ascii_whitespace()) {
+            if characters[index] == '\\' {
+                let slash_start = index;
+                while index < characters.len() && characters[index] == '\\' {
+                    index += 1;
+                }
+                let slash_count = index - slash_start;
+                if index < characters.len() && characters[index] == '"' {
+                    argument.extend(std::iter::repeat_n('\\', slash_count / 2));
+                    if slash_count % 2 == 0 {
+                        quoted = !quoted;
+                    } else {
+                        argument.push('"');
+                    }
+                    index += 1;
+                } else {
+                    argument.extend(std::iter::repeat_n('\\', slash_count));
+                }
+            } else if characters[index] == '"' {
+                quoted = !quoted;
+                index += 1;
+            } else {
+                argument.push(characters[index]);
+                index += 1;
+            }
+        }
+        arguments.push(argument);
+    }
+    arguments
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn parse_macos_kern_procargs2(buffer: &[u8]) -> Option<Vec<String>> {
+    let argc_bytes = buffer.get(..std::mem::size_of::<libc::c_int>())?;
+    let argc = libc::c_int::from_ne_bytes(argc_bytes.try_into().ok()?);
+    if argc <= 0 {
+        return None;
+    }
+
+    let mut index = std::mem::size_of::<libc::c_int>();
+    index += buffer.get(index..)?.iter().position(|byte| *byte == 0)? + 1;
+    while buffer.get(index) == Some(&0) {
+        index += 1;
+    }
+
+    let mut arguments = Vec::with_capacity(argc as usize);
+    for _ in 0..argc {
+        let tail = buffer.get(index..)?;
+        let end = tail.iter().position(|byte| *byte == 0)?;
+        arguments.push(String::from_utf8_lossy(&tail[..end]).into_owned());
+        index += end + 1;
+    }
+    Some(arguments)
 }
 
 fn browser_family_for_path(path: Option<&Path>) -> Option<String> {
@@ -878,6 +1042,56 @@ mod tests {
     }
 
     #[test]
+    fn windows_command_line_parser_preserves_profile_and_ephemeral_port_arguments() {
+        let arguments = parse_windows_command_line(
+            r#""C:\Program Files\Google\Chrome\Application\chrome.exe" --user-data-dir="C:\Users\Agent Browser\profile" --remote-debugging-port=0 "quoted \"value\"""#,
+        );
+
+        assert_eq!(
+            arguments,
+            vec![
+                r#"C:\Program Files\Google\Chrome\Application\chrome.exe"#,
+                r#"--user-data-dir=C:\Users\Agent Browser\profile"#,
+                "--remote-debugging-port=0",
+                r#"quoted "value""#,
+            ]
+        );
+    }
+
+    #[test]
+    fn macos_kern_procargs_parser_returns_exact_declared_arguments() {
+        let mut buffer = Vec::new();
+        buffer.extend_from_slice(&3i32.to_ne_bytes());
+        buffer
+            .extend_from_slice(b"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\0\0");
+        buffer.extend_from_slice(b"Google Chrome\0");
+        buffer.extend_from_slice(b"--user-data-dir=/tmp/Agent Browser/profile\0");
+        buffer.extend_from_slice(b"--remote-debugging-port=0\0");
+
+        assert_eq!(
+            parse_macos_kern_procargs2(&buffer),
+            Some(vec![
+                "Google Chrome".to_string(),
+                "--user-data-dir=/tmp/Agent Browser/profile".to_string(),
+                "--remote-debugging-port=0".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn macos_attached_runtime_signal_policy_fails_closed_without_effect() {
+        let mut signal_effects = 0;
+        if attached_runtime_signal_unavailable() == Ok(true) {
+            signal_effects += 1;
+        }
+
+        assert_eq!(signal_effects, 0);
+        assert!(attached_runtime_signal_unavailable()
+            .unwrap_err()
+            .contains("Safe termination is unavailable"));
+    }
+
+    #[test]
     fn replacement_at_final_signal_boundary_is_refused_before_effect() {
         let recorded = RecordedProcessIdentity {
             pid: 7,
@@ -996,83 +1210,5 @@ mod tests {
         let stat = format!("7 (chrome helper) weird) {}", fields.join(" "));
         assert_eq!(linux_process_state(&stat), Some("S"));
         assert_eq!(linux_start_ticks(&stat), Some("4242"));
-    }
-
-    #[test]
-    fn browser_ownership_consumers_do_not_restore_pid_only_liveness() {
-        for (name, source, required_interface) in [
-            (
-                "runtime_profile",
-                include_str!("runtime_profile.rs"),
-                "evaluate_runtime_process(",
-            ),
-            (
-                "chrome_profile_lock",
-                include_str!("native/cdp/chrome.rs"),
-                "profile_lock_process_assessment(",
-            ),
-            (
-                "service_config",
-                include_str!("native/service_config.rs"),
-                "runtime_process_assessment(",
-            ),
-            (
-                "service_health",
-                include_str!("native/service_health.rs"),
-                "runtime_process_assessment(",
-            ),
-            (
-                "remote_view",
-                include_str!("native/remote_view.rs"),
-                "runtime_process_assessment(",
-            ),
-            (
-                "runtime_navigation",
-                include_str!("native/action_runtime/runtime/navigation.rs"),
-                "runtime_process_assessment(",
-            ),
-            (
-                "runtime_recovery",
-                include_str!("native/action_runtime/runtime/recovery.rs"),
-                "runtime_process_assessment(",
-            ),
-            (
-                "runtime_launch",
-                include_str!("native/action_runtime/runtime/launch.rs"),
-                "VerifiedProcessTermination::open(",
-            ),
-        ] {
-            assert!(
-                source.contains(required_interface),
-                "{name} must use its declared shared process identity interface"
-            );
-            assert!(
-                !source.contains("pid_is_running"),
-                "{name} must use the shared process identity decision"
-            );
-            assert!(
-                !source.contains("runtime_process_ownership"),
-                "{name} must not restore the raw ownership facade"
-            );
-            assert!(
-                !source.contains("profile_endpoint_reachable"),
-                "{name} must not pass divergent endpoint evidence"
-            );
-            assert!(
-                !source.contains("libc::kill(pid as i32, 0)")
-                    && !source.contains("libc::kill(pid, 0)"),
-                "{name} must not observe ownership through signal zero"
-            );
-            assert!(
-                !source.contains("Command::new(\"taskkill\")"),
-                "{name} must not terminate an unbound Windows PID"
-            );
-        }
-        let identity_implementation = include_str!("process_identity.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .unwrap();
-        assert!(!identity_implementation.contains("libc::kill(pid, 0)"));
-        assert!(!identity_implementation.contains("libc::kill(pid as i32, 0)"));
     }
 }

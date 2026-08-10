@@ -2363,6 +2363,8 @@ pub struct ServiceState {
     pub viewer_leases: BTreeMap<String, ViewerLease>,
     pub profiles: BTreeMap<String, BrowserProfile>,
     pub browsers: BTreeMap<String, BrowserProcess>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub browser_process_identities: BTreeMap<String, ServiceBrowserProcessIdentity>,
     pub sessions: BTreeMap<String, BrowserSession>,
     pub tabs: BTreeMap<String, BrowserTab>,
     pub jobs: BTreeMap<String, ServiceJob>,
@@ -4968,6 +4970,19 @@ pub struct BrowserProcess {
     pub tab_handles: Vec<ServiceTabHandle>,
     pub last_error: Option<String>,
     pub last_health_observation: Option<BrowserHealthObservation>,
+}
+
+/// Durable process-instance evidence for a service browser.
+///
+/// `profile_id` remains a service-domain identity. Only `runtime_profile`
+/// names the runtime-profile subsystem, so custom service profiles are never
+/// reinterpreted as runtime profiles during health assessment.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServiceBrowserProcessIdentity {
+    pub process_identity: crate::process_identity::RecordedProcessIdentity,
+    pub user_data_dir: Option<String>,
+    pub runtime_profile: Option<String>,
 }
 
 impl Default for BrowserProcess {

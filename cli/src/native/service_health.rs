@@ -12,8 +12,9 @@ use super::remote_view_attachability::refresh_remote_view_attachability;
 use super::service_lifecycle::{upsert_service_profile_and_session, ServiceLaunchMetadata};
 use super::service_model::{
     BrowserHealth, BrowserHealthObservation, BrowserHost, BrowserProcess, BrowserSession,
-    BrowserTab, DisplayAllocation, LeaseState, ServiceEvent, ServiceEventKind, ServiceIncident,
-    ServiceReconciliationSnapshot, ServiceState, TabLifecycle, ViewStreamProvider,
+    BrowserTab, DisplayAllocation, LeaseState, ServiceBrowserProcessIdentity, ServiceEvent,
+    ServiceEventKind, ServiceIncident, ServiceReconciliationSnapshot, ServiceState, TabLifecycle,
+    ViewStreamProvider,
 };
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 
@@ -636,6 +637,7 @@ pub fn persist_service_browser_record_in_repository(
     cdp_endpoint: Option<String>,
     last_error: Option<String>,
     metadata: Option<ServiceLaunchMetadata>,
+    process_identity: Option<ServiceBrowserProcessIdentity>,
 ) -> Result<(), String> {
     repository.mutate(|service_state| {
         let id = service_browser_id_for_session(session_id);
@@ -717,6 +719,13 @@ pub fn persist_service_browser_record_in_repository(
             false
         };
         record_browser_health_changed_event(service_state, &id, previous.as_ref(), &browser);
+        if let Some(process_identity) = process_identity {
+            service_state
+                .browser_process_identities
+                .insert(id.clone(), process_identity);
+        } else if pid.is_none() {
+            service_state.browser_process_identities.remove(&id);
+        }
         if metadata_changed {
             record_browser_launch_recorded_event(
                 service_state,
@@ -738,6 +747,7 @@ pub(crate) fn remove_browser_operational_record(
     explicit_session_id: Option<&str>,
 ) -> usize {
     let removed_browser = service_state.browsers.remove(browser_id);
+    service_state.browser_process_identities.remove(browser_id);
     let mut related_session_ids = BTreeSet::new();
     if let Some(session_id) = explicit_session_id {
         related_session_ids.insert(session_id.to_string());
@@ -1519,6 +1529,11 @@ pub fn merge_reconciled_service_state(
             .is_some_and(|(target_browser, before_browser)| target_browser == before_browser);
         if should_remove {
             target.browsers.remove(id);
+            let identity_unchanged = target.browser_process_identities.get(id)
+                == before.browser_process_identities.get(id);
+            if identity_unchanged {
+                target.browser_process_identities.remove(id);
+            }
         }
     }
 
@@ -1670,12 +1685,29 @@ pub fn merge_reconciled_service_state(
 }
 
 pub async fn refresh_persisted_browser_health(state: &mut ServiceState) {
+    let process_identities = &state.browser_process_identities;
     for browser in state.browsers.values_mut() {
-        refresh_browser_record_health(browser).await;
+        refresh_browser_record_health(browser, process_identities.get(&browser.id)).await;
     }
 }
 
-async fn refresh_browser_record_health(browser: &mut BrowserProcess) {
+fn service_browser_process_assessment(
+    identity: Option<&ServiceBrowserProcessIdentity>,
+    pid: u32,
+) -> Option<crate::process_identity::RuntimeProcessAssessment> {
+    identity.map(|identity| {
+        crate::process_identity::assess_process_ownership(
+            Some(&identity.process_identity),
+            crate::process_identity::observe_process(pid),
+            crate::process_identity::LegacyProfileProof::Unproven,
+        )
+    })
+}
+
+async fn refresh_browser_record_health(
+    browser: &mut BrowserProcess,
+    process_identity: Option<&ServiceBrowserProcessIdentity>,
+) {
     if matches!(
         browser.health,
         BrowserHealth::NotStarted | BrowserHealth::Launching | BrowserHealth::Closing
@@ -1685,9 +1717,10 @@ async fn refresh_browser_record_health(browser: &mut BrowserProcess) {
 
     let endpoint = browser.cdp_endpoint.clone();
     if let Some(pid) = browser.pid {
-        let ownership =
-            crate::runtime_profile::runtime_process_assessment(browser.profile_id.as_deref(), pid)
-                .ownership;
+        let Some(assessment) = service_browser_process_assessment(process_identity, pid) else {
+            return refresh_browser_endpoint_health(browser, endpoint.as_deref()).await;
+        };
+        let ownership = assessment.ownership;
         if matches!(
             ownership,
             crate::process_identity::RuntimeProcessOwnership::Missing
@@ -1731,12 +1764,16 @@ async fn refresh_browser_record_health(browser: &mut BrowserProcess) {
         }
     }
 
-    let endpoint_reachable = if let Some(endpoint) = endpoint.as_deref() {
+    refresh_browser_endpoint_health(browser, endpoint.as_deref()).await;
+}
+
+async fn refresh_browser_endpoint_health(browser: &mut BrowserProcess, endpoint: Option<&str>) {
+    let endpoint_reachable = if let Some(endpoint) = endpoint {
         cdp_endpoint_reachable(endpoint).await
     } else {
         false
     };
-    if let Some(endpoint) = endpoint.as_deref() {
+    if let Some(endpoint) = endpoint {
         if endpoint_reachable {
             browser.health = BrowserHealth::Ready;
             browser.last_error = None;
@@ -3627,6 +3664,7 @@ mod tests {
             .controller_lease_id
             .is_none());
         assert!(!state.browsers.contains_key("browser-1"));
+        assert!(!state.browser_process_identities.contains_key("browser-1"));
         let remote_view = &state.events.last().unwrap().details.as_ref().unwrap()["remoteView"];
         assert_eq!(remote_view["orphanedDisplayAllocations"], 1);
         assert_eq!(remote_view["orphanedRoutes"], 1);
@@ -3853,6 +3891,7 @@ mod tests {
                 display_name: Some(":91".to_string()),
                 ..ServiceLaunchMetadata::default()
             }),
+            None,
         )
         .unwrap();
 
@@ -3921,6 +3960,7 @@ mod tests {
                     display_name: Some(":91".to_string()),
                     ..ServiceLaunchMetadata::default()
                 }),
+                None,
             )
             .unwrap();
         }
@@ -5349,6 +5389,19 @@ mod tests {
             active_session_ids: vec!["session-1".to_string()],
             ..BrowserProcess::default()
         });
+        state.browser_process_identities.insert(
+            "browser-1".to_string(),
+            ServiceBrowserProcessIdentity {
+                process_identity: crate::process_identity::RecordedProcessIdentity {
+                    pid: i32::MAX as u32,
+                    start_token: "missing-process".to_string(),
+                    executable_path: Some("/opt/chrome".to_string()),
+                    browser_family: Some("chrome".to_string()),
+                },
+                user_data_dir: Some("/tmp/default-service-profile".to_string()),
+                runtime_profile: None,
+            },
+        );
         state.sessions.insert(
             "session-1".to_string(),
             BrowserSession {
@@ -5374,6 +5427,7 @@ mod tests {
         assert_eq!(summary.browser_count, 0);
         assert_eq!(summary.changed_browsers, 1);
         assert!(!state.browsers.contains_key("browser-1"));
+        assert!(!state.browser_process_identities.contains_key("browser-1"));
         assert!(!state.sessions.contains_key("session-1"));
         assert!(!state.tabs.contains_key("target:old"));
         let health_event = state
@@ -5509,6 +5563,19 @@ mod tests {
             cdp_endpoint: Some("ws://127.0.0.1:9/devtools/browser/abc".to_string()),
             ..BrowserProcess::default()
         });
+        state.browser_process_identities.insert(
+            "browser-1".to_string(),
+            ServiceBrowserProcessIdentity {
+                process_identity: crate::process_identity::RecordedProcessIdentity {
+                    pid: i32::MAX as u32,
+                    start_token: "missing-process".to_string(),
+                    executable_path: Some("/opt/chrome".to_string()),
+                    browser_family: Some("chrome".to_string()),
+                },
+                user_data_dir: Some("/tmp/default-service-profile".to_string()),
+                runtime_profile: None,
+            },
+        );
 
         refresh_persisted_browser_health(&mut state).await;
 
@@ -5525,12 +5592,25 @@ mod tests {
     async fn refresh_rejects_live_unrelated_reused_pid_as_browser_owner() {
         let mut state = service_state_with_browser(BrowserProcess {
             id: "browser-reused-pid".to_string(),
-            profile_id: Some("missing-runtime-profile".to_string()),
+            profile_id: Some("custom:service-profile".to_string()),
             health: BrowserHealth::Ready,
             pid: Some(std::process::id()),
             cdp_endpoint: Some("ws://127.0.0.1:9/devtools/browser/stale".to_string()),
             ..BrowserProcess::default()
         });
+        state.browser_process_identities.insert(
+            "browser-reused-pid".to_string(),
+            ServiceBrowserProcessIdentity {
+                process_identity: crate::process_identity::RecordedProcessIdentity {
+                    pid: std::process::id(),
+                    start_token: "recorded-browser-instance".to_string(),
+                    executable_path: Some("/opt/chrome".to_string()),
+                    browser_family: Some("chrome".to_string()),
+                },
+                user_data_dir: Some("/tmp/custom-service-profile".to_string()),
+                runtime_profile: None,
+            },
+        );
 
         refresh_persisted_browser_health(&mut state).await;
 
@@ -5549,6 +5629,74 @@ mod tests {
             Some("browser_process_identity_mismatch")
         );
         assert!(crate::process_identity::process_exists(std::process::id()));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn refresh_accepts_live_default_named_and_custom_service_browsers() {
+        let root = std::env::temp_dir().join(format!(
+            "service-browser-identity-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let executable = root.join("service-chrome");
+        std::fs::copy("/bin/sleep", &executable).unwrap();
+        let mut child = std::process::Command::new(&executable)
+            .arg("30")
+            .spawn()
+            .unwrap();
+        let process_identity = crate::process_identity::capture_process_identity(
+            child.id(),
+            Some(&executable),
+            Some("chrome"),
+        )
+        .unwrap();
+        let mut state = ServiceState::default();
+        for (browser_id, profile_id, user_data_dir) in [
+            ("browser-default", Some("default"), root.join("default")),
+            ("browser-named", Some("work"), root.join("named")),
+            (
+                "browser-custom-profile",
+                Some("custom:service-profile"),
+                root.join("custom-path"),
+            ),
+        ] {
+            state.browsers.insert(
+                browser_id.to_string(),
+                BrowserProcess {
+                    id: browser_id.to_string(),
+                    profile_id: profile_id.map(str::to_string),
+                    health: BrowserHealth::Ready,
+                    pid: Some(child.id()),
+                    cdp_endpoint: Some("ws://127.0.0.1:9/devtools/browser/stale".to_string()),
+                    ..BrowserProcess::default()
+                },
+            );
+            state.browser_process_identities.insert(
+                browser_id.to_string(),
+                ServiceBrowserProcessIdentity {
+                    process_identity: process_identity.clone(),
+                    user_data_dir: Some(user_data_dir.to_string_lossy().into_owned()),
+                    runtime_profile: None,
+                },
+            );
+        }
+
+        refresh_persisted_browser_health(&mut state).await;
+
+        for browser_id in ["browser-default", "browser-named", "browser-custom-profile"] {
+            let browser = &state.browsers[browser_id];
+            assert_eq!(browser.health, BrowserHealth::CdpDisconnected);
+            assert_ne!(browser.health, BrowserHealth::Degraded);
+        }
+
+        let _ = child.kill();
+        let _ = child.wait();
+        let _ = std::fs::remove_dir_all(root);
     }
 }
 #[allow(dead_code, unused_imports)]

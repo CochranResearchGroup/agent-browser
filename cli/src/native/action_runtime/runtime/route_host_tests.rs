@@ -2105,6 +2105,87 @@ fn test_runtime_handoff_descriptor_accepts_legacy_schema_v1_without_active_targe
     ))
     .expect("schema-v1 handoff descriptor should remain readable");
     assert_eq!(descriptor.active_target_id, None);
+    assert_eq!(descriptor.process_identity, None);
+}
+
+#[cfg(unix)]
+#[test]
+fn test_no_runtime_profile_handoff_identity_matches_at_resume_boundary() {
+    let root = unique_socket_dir("no-runtime-handoff-identity");
+    fs::create_dir_all(&root).unwrap();
+    let executable = root.join("handoff-chrome");
+    fs::copy("/bin/sleep", &executable).unwrap();
+    let mut child = std::process::Command::new(&executable)
+        .arg("30")
+        .spawn()
+        .unwrap();
+    let process_identity = crate::process_identity::capture_process_identity(
+        child.id(),
+        Some(&executable),
+        Some("chrome"),
+    )
+    .unwrap();
+    let descriptor = RuntimeHandoffDescriptor {
+        schema_version: 1,
+        session_name: "no-runtime-profile".to_string(),
+        cdp_url: "ws://127.0.0.1:9222/devtools/browser/example".to_string(),
+        browser_pid: Some(child.id()),
+        runtime_profile: None,
+        process_identity: Some(process_identity),
+        engine: "chrome".to_string(),
+        host: ServiceBrowserHost::AttachedExisting,
+        close_browser_on_close: false,
+        active_target_id: None,
+        prepared_at: "2026-08-10T12:00:00Z".to_string(),
+    };
+
+    assert!(runtime_handoff_process_assessment(&descriptor, child.id()).authorizes_adoption());
+
+    let _ = child.kill();
+    let _ = child.wait();
+    let _ = fs::remove_dir_all(root);
+}
+
+#[cfg(unix)]
+#[test]
+fn test_no_runtime_profile_handoff_identity_mismatch_is_rejected_before_resume() {
+    let root = unique_socket_dir("no-runtime-handoff-mismatch");
+    fs::create_dir_all(&root).unwrap();
+    let executable = root.join("handoff-chrome");
+    fs::copy("/bin/sleep", &executable).unwrap();
+    let mut child = std::process::Command::new(&executable)
+        .arg("30")
+        .spawn()
+        .unwrap();
+    let mut process_identity = crate::process_identity::capture_process_identity(
+        child.id(),
+        Some(&executable),
+        Some("chrome"),
+    )
+    .unwrap();
+    process_identity.start_token.push_str(":reused");
+    let descriptor = RuntimeHandoffDescriptor {
+        schema_version: 1,
+        session_name: "no-runtime-profile".to_string(),
+        cdp_url: "ws://127.0.0.1:9222/devtools/browser/example".to_string(),
+        browser_pid: Some(child.id()),
+        runtime_profile: None,
+        process_identity: Some(process_identity),
+        engine: "chrome".to_string(),
+        host: ServiceBrowserHost::AttachedExisting,
+        close_browser_on_close: false,
+        active_target_id: None,
+        prepared_at: "2026-08-10T12:00:00Z".to_string(),
+    };
+
+    assert_eq!(
+        runtime_handoff_process_assessment(&descriptor, child.id()).ownership,
+        crate::process_identity::RuntimeProcessOwnership::ReusedUnrelated
+    );
+
+    let _ = child.kill();
+    let _ = child.wait();
+    let _ = fs::remove_dir_all(root);
 }
 #[cfg(unix)]
 #[test]

@@ -170,15 +170,26 @@ pub(crate) async fn handle_runtime_handoff_prepare(
             state.session_id
         ));
     }
+    let browser_pid = manager.browser_pid().or(state.attached_browser_pid);
+    let runtime_profile = manager
+        .runtime_profile_name()
+        .map(str::to_string)
+        .or_else(|| state.attached_runtime_profile.clone());
+    let process_identity = browser_pid
+        .and_then(|pid| crate::process_identity::capture_process_identity(pid, None, None));
+    if browser_pid.is_some() && runtime_profile.is_none() && process_identity.is_none() {
+        return Err(format!(
+            "Cannot prepare runtime handoff for session '{}': browser process identity is unavailable",
+            state.session_id
+        ));
+    }
     let descriptor = RuntimeHandoffDescriptor {
         schema_version: 1,
         session_name: state.session_id.clone(),
         cdp_url: manager.get_cdp_url().to_string(),
-        browser_pid: manager.browser_pid().or(state.attached_browser_pid),
-        runtime_profile: manager
-            .runtime_profile_name()
-            .map(str::to_string)
-            .or_else(|| state.attached_runtime_profile.clone()),
+        browser_pid,
+        runtime_profile,
+        process_identity,
         engine: state.engine.clone(),
         host: current_service_browser_host(&state.session_id),
         close_browser_on_close: state.close_behavior == CloseBehavior::CloseBrowser,
@@ -217,10 +228,7 @@ pub(crate) async fn handle_runtime_handoff_resume(
         ));
     }
     if let Some(browser_pid) = descriptor.browser_pid {
-        let assessment = crate::runtime_profile::runtime_process_assessment(
-            descriptor.runtime_profile.as_deref(),
-            browser_pid,
-        );
+        let assessment = runtime_handoff_process_assessment(&descriptor, browser_pid);
         if !assessment.authorizes_adoption() {
             return Err(format!(
                 "Runtime handoff browser PID no longer matches the recorded browser for session '{}' ({})",
@@ -258,6 +266,23 @@ pub(crate) async fn handle_runtime_handoff_resume(
         : retry_record_removed, "targetsReattached" : state.browser.as_ref()
         .map(BrowserManager::page_count).unwrap_or(0), }
     ))
+}
+
+pub(crate) fn runtime_handoff_process_assessment(
+    descriptor: &RuntimeHandoffDescriptor,
+    browser_pid: u32,
+) -> crate::process_identity::RuntimeProcessAssessment {
+    if let Some(process_identity) = descriptor.process_identity.as_ref() {
+        return crate::process_identity::assess_process_ownership(
+            Some(process_identity),
+            crate::process_identity::observe_process(browser_pid),
+            crate::process_identity::LegacyProfileProof::Unproven,
+        );
+    }
+    crate::runtime_profile::runtime_process_assessment(
+        descriptor.runtime_profile.as_deref(),
+        browser_pid,
+    )
 }
 pub(crate) async fn handle_close(state: &mut DaemonState) -> Result<Value, String> {
     let attached_runtime_profile = state.attached_runtime_profile.take();

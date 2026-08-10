@@ -156,6 +156,16 @@ fn test_persist_service_browser_record_round_trips() {
             display_isolation: Some("shared_display".to_string()),
             display_name: Some(":93".to_string()),
         }),
+        Some(ServiceBrowserProcessIdentity {
+            process_identity: crate::process_identity::RecordedProcessIdentity {
+                pid: 1234,
+                start_token: "fixture-browser-instance".to_string(),
+                executable_path: Some("/opt/chrome".to_string()),
+                browser_family: Some("chrome".to_string()),
+            },
+            user_data_dir: Some("/tmp/agent-browser-work".to_string()),
+            runtime_profile: None,
+        }),
     )
     .unwrap();
     let state = store.load().unwrap();
@@ -170,6 +180,13 @@ fn test_persist_service_browser_record_round_trips() {
         Some("http://127.0.0.1:9222")
     );
     assert_eq!(browser.profile_id.as_deref(), Some("work"));
+    let process_identity = &state.browser_process_identities["session:persist-session"];
+    assert_eq!(process_identity.process_identity.pid, 1234);
+    assert_eq!(
+        process_identity.user_data_dir.as_deref(),
+        Some("/tmp/agent-browser-work")
+    );
+    assert_eq!(process_identity.runtime_profile, None);
     let profile = &state.profiles["work"];
     assert_eq!(profile.name, "Work");
     assert_eq!(
@@ -237,6 +254,7 @@ fn test_persist_service_browser_record_clears_stale_view_streams_when_metadata_i
             display_name: Some(":10".to_string()),
             ..ServiceLaunchMetadata::default()
         }),
+        None,
     )
     .unwrap();
     persist_service_browser_record_in_repository(
@@ -254,6 +272,7 @@ fn test_persist_service_browser_record_clears_stale_view_streams_when_metadata_i
             display_name: None,
             ..ServiceLaunchMetadata::default()
         }),
+        None,
     )
     .unwrap();
     let state = store.load().unwrap();

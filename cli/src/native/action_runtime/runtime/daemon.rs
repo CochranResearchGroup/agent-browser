@@ -101,6 +101,8 @@ pub(crate) struct RuntimeHandoffDescriptor {
     pub(crate) cdp_url: String,
     pub(crate) browser_pid: Option<u32>,
     pub(crate) runtime_profile: Option<String>,
+    #[serde(default)]
+    pub(crate) process_identity: Option<crate::process_identity::RecordedProcessIdentity>,
     pub(crate) engine: String,
     pub(crate) host: ServiceBrowserHost,
     pub(crate) close_browser_on_close: bool,

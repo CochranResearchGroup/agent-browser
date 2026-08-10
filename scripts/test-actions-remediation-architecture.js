@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -32,6 +32,30 @@ function countPattern(relative, pattern) {
   return [...read(relative).matchAll(pattern)].length;
 }
 
+function listFiles(relative, suffix) {
+  const absolute = path.join(repoRoot, relative);
+  return readdirSync(absolute, { withFileTypes: true })
+    .flatMap((entry) => {
+      const child = path.join(relative, entry.name);
+      return entry.isDirectory() ? listFiles(child, suffix) : [child];
+    })
+    .filter((entry) => entry.endsWith(suffix))
+    .sort();
+}
+
+function requireExactInventory(actual, declared, finding, label) {
+  for (const item of actual) {
+    if (!declared.has(item)) {
+      failures.push(`${finding}:${item}:unclassified_${label}`);
+    }
+  }
+  for (const item of declared.keys()) {
+    if (!actual.includes(item)) {
+      failures.push(`${finding}:${item}:stale_${label}_declaration`);
+    }
+  }
+}
+
 function requireExactTestLayout(entries, expectedTotal) {
   let total = 0;
   for (const [relative, expected] of entries) {
@@ -56,6 +80,7 @@ const compensationPath = 'cli/src/native/remote_view/open/compensation.rs';
 const handoffPath = 'cli/src/native/remote_view_handoff.rs';
 const serviceStorePath = 'cli/src/native/service_store.rs';
 const routeTestsPath = 'cli/src/native/remote_view/open/tests.rs';
+const processIdentityPath = 'cli/src/process_identity.rs';
 
 rejectExisting(
   'cli/src/native/action_runtime/common.rs',
@@ -82,12 +107,118 @@ rejectPattern(
   'test_only_reexport_facade_present',
 );
 
+requirePattern(
+  processIdentityPath,
+  /\bPROCESS_SYNCHRONIZE\b/,
+  'P0108-W1-05',
+  'windows_process_handle_sync_right_missing',
+);
+
+const rustSources = listFiles('cli/src', '.rs');
+const declaredProcessIdentityConsumers = new Map([
+  ['cli/src/native/action_runtime/runtime/daemon.rs', 'handoff_schema'],
+  ['cli/src/native/action_runtime/runtime/launch.rs', 'runtime_termination_and_service_capture'],
+  ['cli/src/native/action_runtime/runtime/navigation.rs', 'handoff_assessment'],
+  ['cli/src/native/action_runtime/runtime/recovery.rs', 'runtime_recovery'],
+  ['cli/src/native/action_runtime/runtime/remote_headed.rs', 'service_capture'],
+  ['cli/src/native/action_runtime/runtime/route_host_tests.rs', 'handoff_fixtures'],
+  ['cli/src/native/cdp/chrome.rs', 'runtime_state_and_profile_lock'],
+  ['cli/src/native/remote_view.rs', 'runtime_remote_view'],
+  ['cli/src/native/service_config.rs', 'runtime_service_config'],
+  ['cli/src/native/service_health.rs', 'service_browser_assessment'],
+  ['cli/src/native/service_health/action_helper_tests.rs', 'service_persistence_fixture'],
+  ['cli/src/native/service_model.rs', 'service_identity_schema'],
+  ['cli/src/runtime_profile.rs', 'runtime_owner'],
+]);
+const processIdentityConsumers = rustSources.filter(
+  (relative) =>
+    relative !== processIdentityPath &&
+    /(?:crate::)?process_identity::|runtime_process_assessment\s*\(/.test(read(relative)),
+);
+requireExactInventory(
+  processIdentityConsumers,
+  declaredProcessIdentityConsumers,
+  'P0108-W1-05',
+  'process_identity_consumer',
+);
+
+const declaredDirectProcessPaths = new Map([
+  ['cli/src/native/e2e_tests.rs', 'windows_e2e_cleanup'],
+  ['cli/src/install.rs', 'installer_liveness'],
+  ['cli/src/main.rs', 'daemon_process_liveness'],
+  ['cli/src/native/cdp/chrome.rs', 'owned_child_and_process_group'],
+  ['cli/src/native/service_resources.rs', 'review_token_bound_resource_gc'],
+  ['cli/src/native/stream/dashboard.rs', 'dashboard_process_liveness'],
+  ['cli/src/native/stream/discovery.rs', 'session_discovery_liveness'],
+  ['cli/src/process_identity.rs', 'verified_kernel_handle_termination'],
+  ['cli/src/workstation_install.rs', 'workstation_installer_liveness'],
+]);
+const directProcessPaths = rustSources.filter((relative) =>
+  /libc::kill\s*\(|TerminateProcess\s*\(|Command::new\(["']taskkill["']\)/.test(
+    read(relative),
+  ),
+);
+requireExactInventory(
+  directProcessPaths,
+  declaredDirectProcessPaths,
+  'P0108-W1-05',
+  'direct_process_path',
+);
+rejectPattern(
+  processIdentityPath,
+  /\bSYNCHRONIZE\s*[,|]/,
+  'P0108-W1-05',
+  'windows_wrong_sync_right_constant',
+);
+rejectPattern(
+  processIdentityPath,
+  /(?:Command::new\(|command\()["']taskkill["']/i,
+  'P0108-W1-05',
+  'windows_pid_only_taskkill_present',
+);
+rejectPattern(
+  processIdentityPath,
+  /libc::kill\s*\(/,
+  'P0108-W1-05',
+  'macos_naked_pid_signal_present',
+);
+requirePattern(
+  processIdentityPath,
+  /NtQueryInformationProcess[\s\S]*ProcessCommandLineInformation/,
+  'P0108-W1-05',
+  'windows_metadata_command_line_adapter_missing',
+);
+requirePattern(
+  processIdentityPath,
+  /KERN_PROCARGS2/,
+  'P0108-W1-05',
+  'macos_metadata_command_line_adapter_missing',
+);
+rejectPattern(
+  'cli/src/native/service_health.rs',
+  /runtime_process_assessment\s*\(\s*browser\.profile_id/,
+  'P0108-W1-05',
+  'service_profile_id_reinterpreted_as_runtime_profile',
+);
+requirePattern(
+  'cli/src/native/service_model.rs',
+  /browser_process_identities:\s*BTreeMap<String,\s*ServiceBrowserProcessIdentity>/,
+  'P0108-W1-05',
+  'service_browser_process_identity_persistence_missing',
+);
+requirePattern(
+  'cli/src/native/action_runtime/runtime/daemon.rs',
+  /struct RuntimeHandoffDescriptor[\s\S]*process_identity:\s*Option<crate::process_identity::RecordedProcessIdentity>/,
+  'P0108-W1-05',
+  'runtime_handoff_process_identity_missing',
+);
+
 requireExactTestLayout(
   [
     ['cli/src/native/action_runtime/cancellation/tests.rs', 1],
     ['cli/src/native/action_runtime/runtime/close_launch_tests.rs', 6],
     ['cli/src/native/action_runtime/runtime/dispatch_runtime_tests.rs', 19],
-    ['cli/src/native/action_runtime/runtime/route_host_tests.rs', 58],
+    ['cli/src/native/action_runtime/runtime/route_host_tests.rs', 60],
     ['cli/src/native/actions/confirmation_tests.rs', 1],
     ['cli/src/native/actions/dependent_batch_tests.rs', 2],
     ['cli/src/native/actions/dispatch_tests.rs', 9],
@@ -119,7 +250,7 @@ requireExactTestLayout(
     ['cli/src/native/service_retained_state/inventory_action_helper_tests.rs', 10],
     ['cli/src/native/stream_runtime/action_tests.rs', 4],
   ],
-  261,
+  263,
 );
 
 rejectPattern(

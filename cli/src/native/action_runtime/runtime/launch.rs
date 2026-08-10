@@ -83,9 +83,9 @@ use crate::native::service_model::{
     ControlInputProvider, DisplayAllocation, JobState as ServiceJobState, LeaseState, MonitorState,
     ProfileAllocationPolicy, ProfileClass, ProfileKeyringPolicy, ProfileLeaseDisposition,
     ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease, RemoteViewHandoff,
-    RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent, ServiceEventKind,
-    ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle, ViewStream,
-    ViewStreamProvider, ViewerLease,
+    RemoteViewRoute, RoutePoolEntry, ServiceBrowserProcessIdentity, ServiceEntitySource,
+    ServiceEvent, ServiceEventKind, ServiceState, ServiceTabHandle, SessionCleanupPolicy,
+    TabLifecycle, ViewStream, ViewStreamProvider, ViewerLease,
 };
 use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use crate::native::state;
@@ -100,6 +100,7 @@ use crate::runtime_profile::{
 };
 use serde_json::{json, Map, Value};
 use std::env;
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
@@ -1173,6 +1174,19 @@ pub(crate) async fn handle_cdp_free_launch(
     ensure_service_profile_lease_available(&plan.metadata, &state.session_id, cmd).await?;
     validate_cdp_free_launch_plan(&plan)?;
     let launch = launch_chrome_detached(&plan.launch_options)?;
+    let process_identity = crate::process_identity::capture_process_identity(
+        launch.pid,
+        plan.launch_options
+            .executable_path
+            .as_deref()
+            .map(Path::new),
+        plan.launch_options.expected_browser_family.as_deref(),
+    )
+    .map(|process_identity| ServiceBrowserProcessIdentity {
+        process_identity,
+        user_data_dir: Some(launch.user_data_dir.to_string_lossy().into_owned()),
+        runtime_profile: launch.runtime_profile.clone(),
+    });
     persist_service_browser_record(
         &state.session_id,
         ServiceBrowserHost::LocalHeaded,
@@ -1181,6 +1195,7 @@ pub(crate) async fn handle_cdp_free_launch(
         None,
         None,
         Some(plan.metadata),
+        process_identity,
     );
     Ok(cdp_free_launch_response(
         state,
