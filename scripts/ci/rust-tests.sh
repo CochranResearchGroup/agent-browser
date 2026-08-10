@@ -52,6 +52,7 @@ serial_filters=(
   "native::service_health::action_helper_tests"
   "native::service_health::reconcile_action_helper_tests"
   "native::service_incidents::action_mutation_helper_tests"
+  "native::service_resources::tests"
   "native::service_retained_state::inventory_action_helper_tests"
   "native::service_store::tests"
   "native::stream_runtime::action_tests"

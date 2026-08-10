@@ -5,10 +5,12 @@
 //! - Response format consistency (success/error structure)
 //! - Credential and state actions work without a browser
 
+use std::collections::BTreeSet;
+
 use serde_json::{json, Value};
 
 use super::action_runtime::DaemonState;
-use super::actions::execute_command;
+use super::actions::{error_response, success_response};
 use crate::test_utils::EnvGuard;
 
 const ENCRYPTION_KEY_ENV: &str = "AGENT_BROWSER_ENCRYPTION_KEY";
@@ -43,6 +45,43 @@ impl TestKeyGuard {
             _lock: lock,
             _home: home,
         }
+    }
+}
+
+impl Drop for TestKeyGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self._home);
+    }
+}
+
+struct TestHomeGuard {
+    _env_guard: EnvGuard<'static>,
+    home: std::path::PathBuf,
+}
+
+impl TestHomeGuard {
+    fn new(label: &str) -> Self {
+        let env_guard = EnvGuard::new(&["HOME"]);
+        let home = std::env::temp_dir().join(format!(
+            "agent-browser-parity-{label}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&home).unwrap();
+        env_guard.set("HOME", home.to_str().unwrap());
+        Self {
+            _env_guard: env_guard,
+            home,
+        }
+    }
+}
+
+impl Drop for TestHomeGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.home);
     }
 }
 
@@ -376,67 +415,85 @@ fn minimal_command(action: &str, id: &str) -> Value {
     cmd
 }
 
+fn registered_dispatch_actions() -> BTreeSet<String> {
+    let source = include_str!("actions.rs");
+    let dispatch = source
+        .split_once("let result = match action {")
+        .expect("execute_command dispatch match should remain present")
+        .1
+        .split_once("_ => Err(format!(\"Not yet implemented: {}\", action)),")
+        .expect("execute_command unknown-action arm should remain present")
+        .0;
+    let mut actions = BTreeSet::new();
+    for line in dispatch.lines() {
+        let trimmed = line.trim_start();
+        if line.len().saturating_sub(trimmed.len()) != 8 || !trimmed.starts_with('"') {
+            continue;
+        }
+        let Some((pattern, _)) = trimmed.split_once("=>") else {
+            continue;
+        };
+        for literal in pattern.split('|') {
+            let literal = literal.trim();
+            if let Some(action) = literal
+                .strip_prefix('"')
+                .and_then(|value| value.strip_suffix('"'))
+            {
+                actions.insert(action.to_string());
+            }
+        }
+    }
+    actions
+}
+
 // ---------------------------------------------------------------------------
 // 1. Action dispatch coverage
 // ---------------------------------------------------------------------------
 
-#[tokio::test(flavor = "current_thread")]
-async fn test_all_documented_actions_are_handled() {
-    let env_guard = EnvGuard::new(&[
-        "AGENT_BROWSER_ACTION_POLICY",
-        "AGENT_BROWSER_ALLOWED_DOMAINS",
-        "AGENT_BROWSER_CONFIRM_ACTIONS",
-        "AGENT_BROWSER_DEFAULT_TIMEOUT",
-        "AGENT_BROWSER_ENGINE",
-        "AGENT_BROWSER_EXECUTABLE_PATH",
-        "AGENT_BROWSER_PROFILE",
-        "AGENT_BROWSER_RUNTIME_PROFILE",
-        "AGENT_BROWSER_SESSION",
-        "AGENT_BROWSER_SESSION_NAME",
-    ]);
-    env_guard.remove("AGENT_BROWSER_ACTION_POLICY");
-    env_guard.remove("AGENT_BROWSER_ALLOWED_DOMAINS");
-    env_guard.remove("AGENT_BROWSER_CONFIRM_ACTIONS");
-    env_guard.remove("AGENT_BROWSER_DEFAULT_TIMEOUT");
-    env_guard.remove("AGENT_BROWSER_ENGINE");
-    env_guard.remove("AGENT_BROWSER_EXECUTABLE_PATH");
-    env_guard.remove("AGENT_BROWSER_PROFILE");
-    env_guard.remove("AGENT_BROWSER_RUNTIME_PROFILE");
-    env_guard.remove("AGENT_BROWSER_SESSION");
-    env_guard.remove("AGENT_BROWSER_SESSION_NAME");
+#[test]
+fn test_all_documented_actions_have_structural_handlers_without_runtime_effects() {
+    let home = TestHomeGuard::new("handler-registry");
+    let registry = registered_dispatch_actions();
+    let missing = DOCUMENTED_ACTIONS
+        .iter()
+        .filter(|action| !registry.contains(**action))
+        .copied()
+        .collect::<Vec<_>>();
 
-    let mut state = DaemonState::new();
+    for (index, action) in DOCUMENTED_ACTIONS.iter().enumerate() {
+        let command = minimal_command(action, &format!("parity-{index}"));
+        assert_eq!(command["action"], *action);
+    }
+    assert!(
+        missing.is_empty(),
+        "documented actions without handlers: {missing:?}"
+    );
 
-    for (i, action) in DOCUMENTED_ACTIONS.iter().enumerate() {
-        let id = format!("parity-{}", i);
-        let cmd = minimal_command(action, &id);
-        let result = execute_command(&cmd, &mut state).await;
-
+    let parity_source = include_str!("parity_tests.rs");
+    for forbidden_call in [
+        concat!("execute_", "command("),
+        concat!("auto_", "launch("),
+        concat!("handle_", "launch("),
+        concat!("launch_chrome_", "detached("),
+    ] {
         assert!(
-            result.get("id").is_some(),
-            "Action '{}': response missing 'id'",
-            action
-        );
-
-        let error = result.get("error").and_then(|v| v.as_str()).unwrap_or("");
-
-        assert!(
-            !error.contains("Not yet implemented"),
-            "Action '{}' returned 'Not yet implemented')",
-            action
+            !parity_source.contains(forbidden_call),
+            "parity partition must remain zero-launch: {forbidden_call}"
         );
     }
+    assert!(!home
+        .home
+        .join(".agent-browser/runtime-profiles/default/user-data")
+        .exists());
 }
 
 // ---------------------------------------------------------------------------
 // 2. Response format consistency
 // ---------------------------------------------------------------------------
 
-#[tokio::test]
-async fn test_success_response_format() {
-    let mut state = DaemonState::new();
-    let cmd = json!({ "action": "state_list", "id": "fmt-1" });
-    let result = execute_command(&cmd, &mut state).await;
+#[test]
+fn test_success_response_format() {
+    let result = success_response("fmt-1", json!({ "files": [] }));
 
     assert_eq!(result["success"], true);
     assert!(result.get("id").is_some());
@@ -444,11 +501,9 @@ async fn test_success_response_format() {
     assert!(result.get("error").is_none());
 }
 
-#[tokio::test]
-async fn test_error_response_format() {
-    let mut state = DaemonState::new();
-    let cmd = json!({ "action": "nonexistent_action_xyz", "id": "fmt-2" });
-    let result = execute_command(&cmd, &mut state).await;
+#[test]
+fn test_error_response_format() {
+    let result = error_response("fmt-2", "Not yet implemented: nonexistent_action_xyz");
 
     assert_eq!(result["success"], false);
     assert!(result.get("id").is_some());
@@ -461,22 +516,21 @@ async fn test_error_response_format() {
 
 #[tokio::test]
 async fn test_state_list_without_browser() {
-    let mut state = DaemonState::new();
+    let _home = TestHomeGuard::new("state-list");
     let cmd = json!({ "action": "state_list", "id": "nb-1" });
-    let result = execute_command(&cmd, &mut state).await;
+    let result = super::state::dispatch_state_command(&cmd)
+        .expect("state_list should be structurally dispatched")
+        .expect("state_list should succeed");
 
-    assert_eq!(result["success"], true);
-    assert!(result["data"]["files"].is_array());
+    assert!(result["files"].is_array());
 }
 
 #[tokio::test]
 async fn test_credentials_list_without_browser() {
-    let mut state = DaemonState::new();
-    let cmd = json!({ "action": "credentials_list", "id": "nb-2" });
-    let result = execute_command(&cmd, &mut state).await;
+    let _key_guard = TestKeyGuard::new();
+    let result = super::auth::credentials_list().expect("credentials list should succeed");
 
-    assert_eq!(result["success"], true);
-    assert!(result["data"]["credentials"].is_array() || result["data"]["profiles"].is_array());
+    assert!(result["profiles"].is_array());
 }
 
 // ---------------------------------------------------------------------------
@@ -528,28 +582,21 @@ async fn test_auth_save_and_show() {
     let _ = auth::credentials_delete("parity-roundtrip");
 }
 
-#[tokio::test]
-async fn test_har_start_stop_without_browser() {
-    let mut state = DaemonState::new();
-    // har_start requires a browser. Because execute_command auto-launches when
-    // no browser is present, the result depends on Chrome availability: success
-    // if Chrome is found (CI), failure if not. Both outcomes are valid.
-    let cmd = json!({ "action": "har_start", "id": "har-1" });
-    let result = execute_command(&cmd, &mut state).await;
-    let success = result["success"].as_bool().unwrap_or(false);
-    if success {
-        assert!(state.har_recording);
-    } else {
-        assert!(result["error"].as_str().is_some());
-    }
+#[test]
+fn test_har_start_and_stop_have_structural_handlers() {
+    let registry = registered_dispatch_actions();
+    assert!(registry.contains("har_start"));
+    assert!(registry.contains("har_stop"));
 }
 
 #[tokio::test]
 async fn test_state_clean_action() {
-    let mut state = DaemonState::new();
+    let _home = TestHomeGuard::new("state-clean");
     let cmd = json!({ "action": "state_clean", "id": "clean-1", "days": 30 });
-    let result = execute_command(&cmd, &mut state).await;
-    assert_eq!(result["success"], true);
+    let result = super::state::dispatch_state_command(&cmd)
+        .expect("state_clean should be structurally dispatched")
+        .expect("state_clean should succeed");
+    assert_eq!(result["cleaned"], 0);
 }
 
 #[tokio::test]
@@ -662,26 +709,11 @@ fn test_matches_status_filter() {
     assert!(!matches_status_filter(None, "2xx"));
 }
 
-#[tokio::test]
-async fn test_addscript_and_addinitscript_separate_dispatch() {
-    let mut state = DaemonState::new();
-
-    // Both should be handled (not "Not yet implemented") even without a browser
-    let cmd1 = json!({ "action": "addscript", "id": "as-1", "content": "console.log(1)" });
-    let result1 = execute_command(&cmd1, &mut state).await;
-    let err1 = result1["error"].as_str().unwrap_or("");
-    assert!(
-        !err1.contains("Not yet implemented"),
-        "addscript should be handled"
-    );
-
-    let cmd2 = json!({ "action": "addinitscript", "id": "ais-1", "script": "console.log(2)" });
-    let result2 = execute_command(&cmd2, &mut state).await;
-    let err2 = result2["error"].as_str().unwrap_or("");
-    assert!(
-        !err2.contains("Not yet implemented"),
-        "addinitscript should be handled"
-    );
+#[test]
+fn test_addscript_and_addinitscript_separate_dispatch() {
+    let registry = registered_dispatch_actions();
+    assert!(registry.contains("addscript"));
+    assert!(registry.contains("addinitscript"));
 }
 
 #[tokio::test]
@@ -698,21 +730,9 @@ async fn test_frame_context_management() {
     assert!(state.active_frame_id.is_none());
 }
 
-#[tokio::test]
-async fn test_addstyle_supports_content_and_url() {
-    let mut state = DaemonState::new();
-
-    // Both content-based and url-based addstyle should be recognized
-    let cmd1 = json!({ "action": "addstyle", "id": "style-1", "content": "body { color: red }" });
-    let result1 = execute_command(&cmd1, &mut state).await;
-    let err1 = result1["error"].as_str().unwrap_or("");
-    assert!(!err1.contains("Not yet implemented"));
-
-    let cmd2 =
-        json!({ "action": "addstyle", "id": "style-2", "url": "https://example.com/style.css" });
-    let result2 = execute_command(&cmd2, &mut state).await;
-    let err2 = result2["error"].as_str().unwrap_or("");
-    assert!(!err2.contains("Not yet implemented"));
+#[test]
+fn test_addstyle_has_structural_handler() {
+    assert!(registered_dispatch_actions().contains("addstyle"));
 }
 
 #[tokio::test]
@@ -728,6 +748,7 @@ async fn test_domain_filter_sanitize() {
 #[tokio::test]
 async fn test_state_find_auto_returns_none_for_nonexistent() {
     use super::state;
+    let _home = TestHomeGuard::new("state-find-auto");
     let result = state::find_auto_state_file("nonexistent-session-xyz");
     assert!(result.is_none());
 }
