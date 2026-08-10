@@ -2,6 +2,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 
 import {
   assert,
@@ -24,6 +25,66 @@ const { agentHome, session } = context;
 const profileId = `mcp-read-google-${process.pid}`;
 const targetServiceId = 'google';
 let mcp;
+
+const MCP_TOOL_ALLOWLIST = [
+  'service_access_plan', 'service_request', 'service_job_cancel', 'service_browser_retry',
+  'service_incidents', 'service_remedies_apply', 'service_profile_upsert',
+  'service_profile_delete', 'service_profile_freshness_update',
+  'service_profile_seeding_handoff_update', 'service_session_upsert',
+  'service_session_delete', 'service_site_policy_upsert', 'service_site_policy_delete',
+  'service_monitor_upsert', 'service_monitor_delete', 'service_monitors_run_due',
+  'service_monitor_pause', 'service_monitor_resume', 'service_monitor_reset_failures',
+  'service_monitor_triage', 'service_provider_upsert', 'service_provider_delete',
+  'service_browser_capability_registry_upsert', 'service_browser_capability_preflight',
+  'service_remote_view_route_preflight', 'browser_snapshot', 'browser_get_url',
+  'browser_get_title', 'browser_tabs', 'browser_screenshot', 'browser_click', 'browser_fill',
+  'browser_wait', 'browser_type', 'browser_press', 'browser_hover', 'browser_select',
+  'browser_get_text', 'browser_get_value', 'browser_get_attribute', 'browser_get_html',
+  'browser_get_styles', 'browser_count', 'browser_get_box', 'browser_is_visible',
+  'browser_is_enabled', 'browser_check', 'browser_is_checked', 'browser_uncheck',
+  'browser_scroll', 'browser_scroll_into_view', 'browser_focus', 'browser_clear',
+  'browser_navigate', 'browser_requests', 'browser_request_detail', 'browser_headers',
+  'browser_offline', 'browser_cookies_get', 'browser_cookies_set',
+  'browser_cookies_clear', 'browser_storage_get', 'browser_storage_set',
+  'browser_storage_clear', 'browser_user_agent', 'browser_viewport',
+  'browser_geolocation', 'browser_permissions', 'browser_timezone', 'browser_locale',
+  'browser_media', 'browser_dialog', 'browser_upload', 'browser_download',
+  'browser_wait_for_download', 'browser_har_start', 'browser_har_stop', 'browser_route',
+  'browser_unroute', 'browser_console', 'browser_errors', 'browser_pdf',
+  'browser_response_body', 'browser_clipboard', 'browser_back', 'browser_forward',
+  'browser_reload', 'browser_tab_new', 'browser_tab_switch', 'browser_tab_close',
+  'browser_set_content', 'browser_command', 'service_trace',
+];
+
+const MCP_RESOURCE_ALLOWLIST = [
+  'agent-browser://contracts', 'agent-browser://access-plan',
+  'agent-browser://browser-capability-registry', 'agent-browser://incidents',
+  'agent-browser://profiles', 'agent-browser://sessions', 'agent-browser://browsers',
+  'agent-browser://display-allocations', 'agent-browser://remote-view-routes',
+  'agent-browser://route-pool', 'agent-browser://viewer-leases', 'agent-browser://tabs',
+  'agent-browser://monitors', 'agent-browser://site-policies', 'agent-browser://providers',
+  'agent-browser://challenges', 'agent-browser://jobs', 'agent-browser://events',
+];
+
+const MCP_TEMPLATE_ALLOWLIST = [
+  'agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,runtimeProfile,browserBuild,browserHost,viewStreamProvider,controlInputProvider,displayIsolation}',
+  'agent-browser://incidents/{incident_id}/activity',
+  'agent-browser://profiles/lookup{?query,hostname,profileId,profileName,serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,authenticationState,freshnessState,tag,url,readinessProfileId,browserBuild}',
+  'agent-browser://profiles/{profile_id}/readiness',
+  'agent-browser://profiles/{profile_id}/allocation',
+  'agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}',
+];
+
+function mcpToolResultClassification(name) {
+  if (name === 'browser_command') return 'explicit_full_status_rejection';
+  if (name.startsWith('browser_')) return 'narrow_browser_result';
+  if (['service_access_plan', 'service_incidents', 'service_trace',
+    'service_browser_capability_preflight', 'service_remote_view_route_preflight'].includes(name)) {
+    return 'narrow_service_read_result';
+  }
+  if (name.startsWith('service_')) return 'narrow_service_mutation_or_job_result';
+  return null;
+}
 
 async function cleanup() {
   try {
@@ -86,6 +147,30 @@ function assertNoLaunchSideEffects(statePath) {
   );
 }
 
+function assertMcpDoesNotProduceFullStatus(value, label) {
+  const serialized = JSON.stringify(value);
+  assert(!serialized.includes('statusProjection'), `${label} exposed statusProjection`);
+  assert(
+    !(serialized.includes('control_plane') && serialized.includes('service_state')),
+    `${label} exposed a full status envelope`,
+  );
+}
+
+async function assertStatusToolRejected(name, argumentsValue) {
+  let result;
+  try {
+    result = await mcp.send('tools/call', { name, arguments: argumentsValue });
+  } catch (error) {
+    assertMcpDoesNotProduceFullStatus({ message: error.message }, `${name} rejection`);
+    return;
+  }
+  assert(
+    result?.isError === true,
+    `${name} unexpectedly accepted full status production: ${JSON.stringify(result)}`,
+  );
+  assertMcpDoesNotProduceFullStatus(result, `${name} rejection payload`);
+}
+
 try {
   seedServiceState();
 
@@ -129,6 +214,71 @@ try {
     });
     assert(initialize.capabilities?.resources, 'MCP resources capability missing');
     mcp.notify('notifications/initialized');
+
+    const inventory = {
+      resources: await mcp.send('resources/list'),
+      templates: await mcp.send('resources/templates/list'),
+      tools: await mcp.send('tools/list'),
+    };
+    assert(
+      isDeepStrictEqual(inventory.tools.tools?.map((tool) => tool.name), MCP_TOOL_ALLOWLIST),
+      'MCP tool inventory drifted from the frozen allowlist',
+    );
+    assert(
+      isDeepStrictEqual(
+        inventory.resources.resources?.map((resource) => resource.uri),
+        MCP_RESOURCE_ALLOWLIST,
+      ),
+      'MCP resource inventory drifted from the frozen allowlist',
+    );
+    assert(
+      isDeepStrictEqual(
+        inventory.templates.resourceTemplates?.map((template) => template.uriTemplate),
+        MCP_TEMPLATE_ALLOWLIST,
+      ),
+      'MCP resource template inventory drifted from the frozen allowlist',
+    );
+    assertMcpDoesNotProduceFullStatus(inventory, 'MCP inventory');
+    assert(
+      !JSON.stringify(inventory).includes('service_status'),
+      'MCP inventory advertised service_status',
+    );
+    for (const tool of inventory.tools.tools ?? []) {
+      const classification = mcpToolResultClassification(tool.name);
+      assert(classification, `MCP tool ${tool.name} has no frozen narrower-result classification`);
+      assertMcpDoesNotProduceFullStatus(tool, `MCP tool schema ${tool.name}`);
+      assert(
+        !JSON.stringify(tool).includes('statusProjection'),
+        `MCP tool ${tool.name} schema advertised full status`,
+      );
+    }
+    for (const resource of inventory.resources.resources ?? []) {
+      const result = await mcp.send('resources/read', { uri: resource.uri });
+      assertMcpDoesNotProduceFullStatus(result, `MCP resource ${resource.uri}`);
+    }
+    for (const template of inventory.templates.resourceTemplates ?? []) {
+      const uri = template.uriTemplate.replace(/\{[^}]+\}/g, 'missing-status-inventory-id');
+      try {
+        const result = await mcp.send('resources/read', { uri });
+        assertMcpDoesNotProduceFullStatus(result, `MCP resource template ${uri}`);
+      } catch (error) {
+        assertMcpDoesNotProduceFullStatus(
+          { message: error.message },
+          `MCP resource template rejection ${uri}`,
+        );
+      }
+    }
+    await assertStatusToolRejected('browser_command', {
+      action: 'service_status',
+      params: {},
+    });
+    await assertStatusToolRejected('service_request', {
+      action: 'service_status',
+      serviceName: 'McpReadSmoke',
+      agentName: 'codex',
+      taskName: 'verifyMcpStatusNonproducer',
+      params: {},
+    });
 
     const readinessUri = `agent-browser://profiles/${profileId}/readiness`;
     const readiness = parseMcpJsonResource(

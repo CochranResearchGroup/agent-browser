@@ -148,6 +148,7 @@
       "type": "object",
       "properties": {
         "schemaVersion": { "type": "integer", "minimum": 1 },
+        "availability": { "enum": ["available", "partial", "unknown"] },
         "summary": {
           "type": "object",
           "properties": {
@@ -155,6 +156,7 @@
             "viableBrowserCount": { "type": "integer", "minimum": 0 },
             "attentionBrowserCount": { "type": "integer", "minimum": 0 },
             "nonViableBrowserCount": { "type": "integer", "minimum": 0 }
+            ,"unknownBrowserCount": { "type": "integer", "minimum": 0 }
           },
           "additionalProperties": true
         },
@@ -324,6 +326,106 @@
         }
       },
       "additionalProperties": true
+    },
+    "statusProjection": {
+      "description": "Typed provenance and freshness for host-local observations attached to the authoritative Service Status projection. Older v1 servers may omit this additive field.",
+      "type": "object",
+      "required": ["schemaVersion", "authority", "observations"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "authority": {
+          "type": "object",
+          "required": ["source", "projectedAt"],
+          "properties": {
+            "source": { "const": "reconciled_service_state" },
+            "projectedAt": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "observations": {
+          "type": "object",
+          "required": [
+            "state", "source", "sourceHostId", "observedAt", "validUntil",
+            "maxAgeMs", "manualBrowsersState", "browserProcessState", "errors", "viewStreams"
+          ],
+          "properties": {
+            "state": { "enum": ["complete", "partial", "unavailable"] },
+            "source": {
+              "enum": [
+                "local_status_observation_adapter",
+                "unavailable_status_observation_adapter",
+                "in_memory_status_observation_adapter"
+              ]
+            },
+            "sourceHostId": {
+              "type": ["string", "null"],
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "observedAt": { "type": ["string", "null"] },
+            "validUntil": { "type": ["string", "null"] },
+            "maxAgeMs": { "type": "integer", "minimum": 0 },
+            "manualBrowsersState": { "enum": ["observed", "partial", "unavailable"] },
+            "browserProcessState": { "enum": ["observed", "partial", "unavailable"] },
+            "errors": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["code", "subject", "message"],
+                "properties": {
+                  "code": {
+                    "enum": [
+                      "display_probe_timeout", "display_probe_unsupported",
+                      "display_probe_unavailable", "display_probe_failed",
+                      "runtime_profile_unavailable", "process_inventory_unavailable",
+                      "configured_route_unavailable"
+                    ]
+                  },
+                  "subject": { "type": "string" },
+                  "message": { "type": "string" }
+                },
+                "additionalProperties": false
+              }
+            },
+            "viewStreams": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "browserId", "streamId", "state", "observedAt", "validUntil",
+                  "maxAgeMs", "routePresentation", "displayContent"
+                ],
+                "properties": {
+                  "browserId": { "type": "string" },
+                  "streamId": { "type": "string" },
+                  "state": { "enum": ["observed", "timed_out", "unsupported", "unavailable", "failed"] },
+                  "observedAt": { "type": ["string", "null"] },
+                  "validUntil": { "type": ["string", "null"] },
+                  "maxAgeMs": { "type": "integer", "minimum": 0 },
+                  "routePresentation": {
+                    "oneOf": [
+                      { "type": "null" },
+                      {
+                        "type": "object",
+                        "required": ["frameUrl", "externalUrl", "source"],
+                        "properties": {
+                          "frameUrl": { "type": "string" },
+                          "externalUrl": { "type": "string" },
+                          "source": { "enum": ["route_descriptor", "retained_stream", "configured_client_url"] }
+                        },
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "displayContent": { "type": ["object", "null"] }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
     },
     "service_state": {
       "type": "object"

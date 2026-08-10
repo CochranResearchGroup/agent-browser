@@ -643,7 +643,11 @@ pub(super) async fn handle_http_request(
     }
 
     if method == "GET" && path == "/api/service/status" {
-        let result = relay_service_command(session_name, service_status_command(query)).await;
+        let result =
+            service_status_http_with_relay(session_name, query, |session, command| async move {
+                relay_service_command(&session, command).await
+            })
+            .await;
         write_json_result(&mut stream, result, "502 Bad Gateway").await;
         return;
     }
@@ -1097,6 +1101,16 @@ fn json_result_parts(result: Result<String, String>, error_status: &str) -> (&st
     }
 }
 
+#[cfg(test)]
+pub(crate) fn service_status_http_fixture(body: String) -> Vec<u8> {
+    let (status, body) = json_result_parts(Ok(body), "502 Bad Gateway");
+    format!(
+        "HTTP/1.1 {status}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n{CORS_HEADERS}\r\n{body}",
+        body.len()
+    )
+    .into_bytes()
+}
+
 async fn write_json_value(stream: &mut tokio::net::TcpStream, status: &str, value: Value) {
     let resp_body = serde_json::to_string(&value).unwrap_or_else(|_| {
         r#"{"success":false,"error":"Failed to serialize JSON response"}"#.to_string()
@@ -1222,6 +1236,18 @@ fn service_status_command(query: Option<&str>) -> Value {
         "launchConfig": launch_config_status(&flags),
         "fullTabHistory": full_tab_history,
     })
+}
+
+pub(crate) async fn service_status_http_with_relay<F, Fut>(
+    session_name: &str,
+    query: Option<&str>,
+    relay: F,
+) -> Result<String, String>
+where
+    F: FnOnce(String, Value) -> Fut,
+    Fut: std::future::Future<Output = Result<String, String>>,
+{
+    relay(session_name.to_string(), service_status_command(query)).await
 }
 
 fn service_reconcile_command() -> Value {

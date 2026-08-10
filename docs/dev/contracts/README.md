@@ -466,6 +466,10 @@ counters for filtered event list consumers.
 response, including response-only `closedTabProjection` metadata. Ordinary
 status caps unreferenced closed history while `--full-tab-history` and HTTP
 `full-tab-history=true` expose the complete persisted lifecycle authority.
+The additive `statusProjection` object records host-observation source,
+availability, and freshness while preserving reconciled `service_state` as
+authority. Older v1 servers may omit it. Current v1 servers retain all legacy
+fields and mirrors.
 response returned by `agent-browser service status` and HTTP
 `GET /api/service/status`. It includes the derived `profileAllocations` view so
 software clients can consume profile holder, waiting job, conflict, lease

@@ -115,6 +115,7 @@ import type { ProjectedWorkspaceView } from "@/lib/workspace-view-projection";
 import {
   projectServiceWorkspaceViews,
   type WorkspaceBrowserSessionAuthority,
+  type WorkspaceNodeInput,
 } from "@/lib/service-workspaces";
 import {
   browserRowCloseTitle,
@@ -429,6 +430,7 @@ type ServiceStatusData = {
   service_state?: ServiceState;
   profileAllocations?: ServiceProfileAllocation[];
   browserSessionAuthority?: WorkspaceBrowserSessionAuthority | null;
+  statusProjection?: WorkspaceNodeInput["statusProjection"];
 };
 
 type ServiceResourcesData = {
@@ -7238,6 +7240,7 @@ export function ServicePanel({
         resolvedAt: incident.resolvedAt,
       })),
       browserSessionAuthority: status?.browserSessionAuthority ?? null,
+      statusProjection: status?.statusProjection ?? null,
       serviceRequestActions,
     };
     const projection = projectServiceWorkspaceViews(workspaceInput, {
@@ -7253,6 +7256,7 @@ export function ServicePanel({
     serviceRequestActions,
     sessionRecords,
     status?.browserSessionAuthority,
+    status?.statusProjection,
     tabRecords,
   ]);
   const sessionTabQueryText = sessionTabQuery.trim().toLowerCase();

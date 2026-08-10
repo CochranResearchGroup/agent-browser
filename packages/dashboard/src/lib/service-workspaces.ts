@@ -1,6 +1,7 @@
 import type { SessionInfo, TabInfo } from "../types.ts";
 import type { ServiceViewStream } from "./service-view-streams.ts";
 import {
+  applyStatusObservationsToWorkspaceSources,
   projectWorkspaceViews,
   type ProjectedWorkspaceView,
   type WorkspaceViewAuthorityEntry,
@@ -8,6 +9,7 @@ import {
   type WorkspaceViewBrowserSource,
   type WorkspaceViewIntent,
   type WorkspaceViewProjection,
+  type WorkspaceStatusProjection,
 } from "./workspace-view-projection.ts";
 
 export type WorkspaceNodeState =
@@ -459,6 +461,7 @@ export type WorkspaceNodeInput = {
   resources?: WorkspaceResourceRecord[];
   manualBrowsers?: WorkspaceManualBrowser[];
   browserSessionAuthority?: WorkspaceBrowserSessionAuthority | null;
+  statusProjection?: WorkspaceStatusProjection | null;
   serviceRequestActions?: readonly string[] | Set<string>;
   includeRetained?: boolean;
   includeHidden?: boolean;
@@ -815,13 +818,14 @@ export function projectServiceWorkspaceViews(
   intent: WorkspaceViewIntent = { mode: "inspect" },
   authorityLedger: WorkspaceViewAuthorityLedger = deriveWorkspaceViewAuthorityLedger(input),
 ): WorkspaceViewProjection {
+  const sources = applyStatusObservationsToWorkspaceSources({
+    serviceBrowsers: (input.serviceBrowsers ?? []).map(workspaceViewBrowserSource),
+    serviceTabs: input.serviceTabs ?? [],
+    daemonSessions: input.daemonSessions ?? [],
+    remoteViewRoutes: workspaceRemoteViewRouteSources(input.remoteViewRoutes),
+  }, input.statusProjection);
   return projectWorkspaceViews({
-    sources: {
-      serviceBrowsers: (input.serviceBrowsers ?? []).map(workspaceViewBrowserSource),
-      serviceTabs: input.serviceTabs ?? [],
-      daemonSessions: input.daemonSessions ?? [],
-      remoteViewRoutes: workspaceRemoteViewRouteSources(input.remoteViewRoutes),
-    },
+    sources,
     authorityLedger,
     intent,
   });

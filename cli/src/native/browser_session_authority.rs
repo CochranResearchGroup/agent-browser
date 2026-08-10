@@ -12,6 +12,7 @@ use super::service_resources::{
 #[serde(default, rename_all = "camelCase")]
 pub(crate) struct BrowserSessionAuthoritySnapshot {
     pub(crate) schema_version: u8,
+    pub(crate) availability: BrowserSessionAuthorityAvailability,
     pub(crate) summary: BrowserSessionAuthoritySummary,
     pub(crate) resource_pressure: BrowserSessionResourcePressure,
     pub(crate) browser_verdicts: Vec<BrowserSessionAuthorityVerdict>,
@@ -24,12 +25,13 @@ pub(crate) struct BrowserSessionAuthoritySummary {
     pub(crate) viable_browser_count: usize,
     pub(crate) attention_browser_count: usize,
     pub(crate) non_viable_browser_count: usize,
+    pub(crate) unknown_browser_count: usize,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(default, rename_all = "camelCase")]
 pub(crate) struct BrowserSessionResourcePressure {
-    pub(crate) state: String,
+    pub(crate) state: BrowserSessionResourcePressureState,
     pub(crate) total_process_count: usize,
     pub(crate) correlated_process_count: usize,
     pub(crate) candidate_count: usize,
@@ -46,10 +48,125 @@ pub(crate) struct BrowserSessionResourcePressure {
 pub(crate) struct BrowserSessionAuthorityVerdict {
     pub(crate) key: String,
     pub(crate) browser_id: String,
-    pub(crate) state: String,
+    pub(crate) state: BrowserSessionAuthorityVerdictState,
     pub(crate) viable: bool,
     pub(crate) needs_attention: bool,
     pub(crate) reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum BrowserSessionAuthorityAvailability {
+    Available,
+    Partial,
+    #[default]
+    Unknown,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum BrowserSessionResourcePressureState {
+    Clear,
+    Pressure,
+    #[default]
+    Unknown,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum BrowserSessionAuthorityVerdictState {
+    Viable,
+    Attention,
+    #[default]
+    NonViable,
+}
+
+impl BrowserSessionAuthoritySnapshot {
+    pub(crate) fn validate(
+        &self,
+    ) -> Result<(), super::service_status_projection::ServiceStatusProjectionError> {
+        let summary_total = self.summary.viable_browser_count
+            + self.summary.attention_browser_count
+            + self.summary.non_viable_browser_count
+            + self.summary.unknown_browser_count;
+        if self.schema_version != 1 {
+            return Err(
+                super::service_status_projection::ServiceStatusProjectionError::InvalidAuthority(
+                    "browserSessionAuthority.schemaVersion must equal 1".to_string(),
+                ),
+            );
+        }
+        if summary_total != self.summary.modeled_browser_count {
+            return Err(
+                super::service_status_projection::ServiceStatusProjectionError::InvalidAuthority(
+                    "browserSessionAuthority summary counts do not reconcile".to_string(),
+                ),
+            );
+        }
+        if self.browser_verdicts.len() + self.summary.unknown_browser_count
+            != self.summary.modeled_browser_count
+        {
+            return Err(
+                super::service_status_projection::ServiceStatusProjectionError::InvalidAuthority(
+                    "browserSessionAuthority verdict and unknown counts do not reconcile"
+                        .to_string(),
+                ),
+            );
+        }
+        if (self.availability == BrowserSessionAuthorityAvailability::Available
+            && self.summary.unknown_browser_count != 0)
+            || (self.availability == BrowserSessionAuthorityAvailability::Unknown
+                && !self.browser_verdicts.is_empty())
+        {
+            return Err(
+                super::service_status_projection::ServiceStatusProjectionError::InvalidAuthority(
+                    "browserSessionAuthority availability contradicts verdict coverage".to_string(),
+                ),
+            );
+        }
+        if self.resource_pressure.correlated_process_count
+            > self.resource_pressure.total_process_count
+            || self.resource_pressure.candidate_count > self.resource_pressure.total_process_count
+            || self.resource_pressure.protected_count > self.resource_pressure.total_process_count
+            || self.resource_pressure.observed_count > self.resource_pressure.total_process_count
+        {
+            return Err(
+                super::service_status_projection::ServiceStatusProjectionError::InvalidAuthority(
+                    "browserSessionAuthority resource counts exceed totalProcessCount".to_string(),
+                ),
+            );
+        }
+        let mut ids = std::collections::BTreeSet::new();
+        for verdict in &self.browser_verdicts {
+            if verdict.browser_id.trim().is_empty()
+                || verdict.key != verdict.browser_id
+                || !ids.insert(verdict.browser_id.as_str())
+            {
+                return Err(
+                    super::service_status_projection::ServiceStatusProjectionError::InvalidAuthority(
+                        "browserSessionAuthority verdict IDs are invalid or duplicated".to_string(),
+                    ),
+                );
+            }
+            let booleans_match = match verdict.state {
+                BrowserSessionAuthorityVerdictState::Viable => {
+                    verdict.viable && !verdict.needs_attention
+                }
+                BrowserSessionAuthorityVerdictState::Attention
+                | BrowserSessionAuthorityVerdictState::NonViable => {
+                    !verdict.viable && verdict.needs_attention
+                }
+            };
+            if !booleans_match {
+                return Err(
+                    super::service_status_projection::ServiceStatusProjectionError::InvalidAuthority(
+                        "browserSessionAuthority verdict booleans contradict state".to_string(),
+                    ),
+                );
+            }
+        }
+        Ok(())
+    }
 }
 
 pub(crate) fn browser_session_authority_snapshot(
@@ -65,12 +182,30 @@ pub(crate) fn browser_session_authority_snapshot_from_resources(
     state: &ServiceState,
     resources: ResourceAuthoritySnapshot,
 ) -> BrowserSessionAuthoritySnapshot {
+    if !state.browsers.is_empty()
+        && resources.resources.is_empty()
+        && !resources.collection_warnings.is_empty()
+    {
+        return unavailable_browser_session_authority(state.browsers.len());
+    }
     let resource_pressure = resource_pressure(&resources);
     let candidate_reasons_by_browser = candidate_reasons_by_browser(&resources);
+    let collection_partial = !resources.collection_warnings.is_empty();
+    let evidence_by_browser = resources
+        .resources
+        .iter()
+        .filter_map(|resource| resource.correlation.browser_id.as_deref())
+        .collect::<std::collections::BTreeSet<_>>();
     let mut browser_verdicts = state
         .browsers
         .iter()
-        .map(|(browser_id, browser)| {
+        .filter_map(|(browser_id, browser)| {
+            if collection_partial
+                && !evidence_by_browser.contains(browser_id.as_str())
+                && !browser_health_non_viable(browser.health)
+            {
+                return None;
+            }
             let mut reasons = Vec::new();
             if let Some(candidate_reasons) = candidate_reasons_by_browser.get(browser_id) {
                 reasons.push("cleanup_candidate_process_correlates_to_browser".to_string());
@@ -82,51 +217,79 @@ pub(crate) fn browser_session_authority_snapshot_from_resources(
                     browser_health_label(browser.health)
                 ));
             }
-            let state = if reasons
+            let verdict_state = if reasons
                 .iter()
                 .any(|reason| reason == "cleanup_candidate_process_correlates_to_browser")
                 || browser_health_non_viable(browser.health)
             {
-                "non_viable"
+                BrowserSessionAuthorityVerdictState::NonViable
             } else if browser.pid.is_none() && browser_health_expects_process(browser.health) {
                 reasons.push("live_browser_missing_pid".to_string());
-                "attention"
+                BrowserSessionAuthorityVerdictState::Attention
             } else {
-                "viable"
+                BrowserSessionAuthorityVerdictState::Viable
             };
-            BrowserSessionAuthorityVerdict {
+            Some(BrowserSessionAuthorityVerdict {
                 key: browser_id.clone(),
                 browser_id: browser_id.clone(),
-                state: state.to_string(),
-                viable: state == "viable",
-                needs_attention: state != "viable",
+                state: verdict_state,
+                viable: verdict_state == BrowserSessionAuthorityVerdictState::Viable,
+                needs_attention: verdict_state != BrowserSessionAuthorityVerdictState::Viable,
                 reasons,
-            }
+            })
         })
         .collect::<Vec<_>>();
     browser_verdicts.sort_by(|left, right| left.browser_id.cmp(&right.browser_id));
 
     let summary = BrowserSessionAuthoritySummary {
-        modeled_browser_count: browser_verdicts.len(),
+        modeled_browser_count: state.browsers.len(),
         viable_browser_count: browser_verdicts
             .iter()
-            .filter(|verdict| verdict.state == "viable")
+            .filter(|verdict| verdict.state == BrowserSessionAuthorityVerdictState::Viable)
             .count(),
         attention_browser_count: browser_verdicts
             .iter()
-            .filter(|verdict| verdict.state == "attention")
+            .filter(|verdict| verdict.state == BrowserSessionAuthorityVerdictState::Attention)
             .count(),
         non_viable_browser_count: browser_verdicts
             .iter()
-            .filter(|verdict| verdict.state == "non_viable")
+            .filter(|verdict| verdict.state == BrowserSessionAuthorityVerdictState::NonViable)
             .count(),
+        unknown_browser_count: state.browsers.len().saturating_sub(browser_verdicts.len()),
     };
 
     BrowserSessionAuthoritySnapshot {
         schema_version: 1,
+        availability: if resources.collection_warnings.is_empty() {
+            BrowserSessionAuthorityAvailability::Available
+        } else if browser_verdicts.is_empty() {
+            BrowserSessionAuthorityAvailability::Unknown
+        } else {
+            BrowserSessionAuthorityAvailability::Partial
+        },
         summary,
         resource_pressure,
         browser_verdicts,
+    }
+}
+
+pub(crate) fn unavailable_browser_session_authority(
+    modeled_browser_count: usize,
+) -> BrowserSessionAuthoritySnapshot {
+    BrowserSessionAuthoritySnapshot {
+        schema_version: 1,
+        availability: BrowserSessionAuthorityAvailability::Unknown,
+        summary: BrowserSessionAuthoritySummary {
+            modeled_browser_count,
+            unknown_browser_count: modeled_browser_count,
+            ..BrowserSessionAuthoritySummary::default()
+        },
+        resource_pressure: BrowserSessionResourcePressure {
+            state: BrowserSessionResourcePressureState::Unknown,
+            reasons: vec!["process_inventory_unavailable".to_string()],
+            ..BrowserSessionResourcePressure::default()
+        },
+        browser_verdicts: Vec::new(),
     }
 }
 
@@ -156,9 +319,9 @@ fn resource_pressure(resources: &ResourceAuthoritySnapshot) -> BrowserSessionRes
     }
     BrowserSessionResourcePressure {
         state: if reasons.is_empty() {
-            "clear".to_string()
+            BrowserSessionResourcePressureState::Clear
         } else {
-            "pressure".to_string()
+            BrowserSessionResourcePressureState::Pressure
         },
         total_process_count: resources.summary.total_processes,
         correlated_process_count: resources.summary.correlated_processes,
@@ -253,7 +416,10 @@ mod tests {
 
         let authority = browser_session_authority_snapshot_from_resources(&state, resources);
 
-        assert_eq!(authority.resource_pressure.state, "pressure");
+        assert_eq!(
+            authority.resource_pressure.state,
+            BrowserSessionResourcePressureState::Pressure
+        );
         assert_eq!(
             authority
                 .resource_pressure
@@ -285,7 +451,10 @@ mod tests {
 
         assert_eq!(authority.summary.non_viable_browser_count, 1);
         assert_eq!(authority.browser_verdicts[0].browser_id, "browser-dead");
-        assert_eq!(authority.browser_verdicts[0].state, "non_viable");
+        assert_eq!(
+            authority.browser_verdicts[0].state,
+            BrowserSessionAuthorityVerdictState::NonViable
+        );
         assert_eq!(authority.browser_verdicts[0].viable, false);
     }
 
@@ -310,8 +479,51 @@ mod tests {
 
         let authority = browser_session_authority_snapshot_from_resources(&state, resources);
 
-        assert_eq!(authority.resource_pressure.state, "clear");
+        assert_eq!(
+            authority.resource_pressure.state,
+            BrowserSessionResourcePressureState::Clear
+        );
         assert_eq!(authority.summary.viable_browser_count, 1);
-        assert_eq!(authority.browser_verdicts[0].state, "viable");
+        assert_eq!(
+            authority.browser_verdicts[0].state,
+            BrowserSessionAuthorityVerdictState::Viable
+        );
+    }
+
+    #[test]
+    fn browser_session_authority_keeps_uncorrelated_browser_unknown_on_partial_collection() {
+        let mut state = ServiceState::default();
+        for (id, pid) in [("browser-observed", 202), ("browser-unknown", 303)] {
+            state.browsers.insert(
+                id.to_string(),
+                BrowserProcess {
+                    id: id.to_string(),
+                    host: BrowserHost::LocalHeaded,
+                    health: BrowserHealth::Ready,
+                    pid: Some(pid),
+                    ..BrowserProcess::default()
+                },
+            );
+        }
+        let mut resources = service_resource_authority_snapshot_from_samples(
+            &state,
+            vec![sample(202, &["chrome"], Some(60))],
+            Vec::new(),
+        );
+        resources
+            .collection_warnings
+            .push("process inventory was partial".to_string());
+
+        let authority = browser_session_authority_snapshot_from_resources(&state, resources);
+
+        assert_eq!(
+            authority.availability,
+            BrowserSessionAuthorityAvailability::Partial
+        );
+        assert_eq!(authority.summary.modeled_browser_count, 2);
+        assert_eq!(authority.summary.viable_browser_count, 1);
+        assert_eq!(authority.summary.unknown_browser_count, 1);
+        assert_eq!(authority.browser_verdicts.len(), 1);
+        authority.validate().unwrap();
     }
 }

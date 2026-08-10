@@ -27,7 +27,6 @@ use super::browser::{
     should_track_target, BrowserManager, BrowserShutdownOutcome, PageInfo, ProcessExitObservation,
     WaitUntil,
 };
-use super::browser_session_authority::browser_session_authority_snapshot;
 use super::cancellation::CancellationToken;
 use super::cdp::chrome::{launch_chrome_detached, LaunchOptions, ManualChromeLaunch};
 use super::cdp::client::CdpClient;
@@ -104,9 +103,9 @@ use super::service_lifecycle::{
     ProfileSelectionRequest, ServiceLaunchMetadata,
 };
 use super::service_model::{
-    retained_display_allocation_candidates, retained_display_allocation_summary,
-    service_profile_allocations, service_profile_seeding_handoff, service_profile_sources,
-    BrowserBuild, BrowserCapabilityRegistry, BrowserHealth as ServiceBrowserHealth,
+    retained_display_allocation_candidates, service_profile_allocations,
+    service_profile_seeding_handoff, service_profile_sources, BrowserBuild,
+    BrowserCapabilityRegistry, BrowserHealth as ServiceBrowserHealth,
     BrowserHost as ServiceBrowserHost, BrowserProcess, BrowserProfile, BrowserSession, BrowserTab,
     ControlInputProvider, DisplayAllocation, JobState as ServiceJobState, LeaseState, MonitorState,
     ProfileAllocationPolicy, ProfileClass, ProfileKeyringPolicy, ProfileLeaseDisposition,
@@ -1936,26 +1935,6 @@ fn guacamole_connection_id_from_url(url: &str) -> Option<String> {
     Some(connection_id.to_string())
 }
 
-fn refresh_remote_view_stream_urls(service_state: &mut ServiceState) {
-    for browser in service_state.browsers.values_mut() {
-        if browser.host != ServiceBrowserHost::RemoteHeaded {
-            continue;
-        }
-        for stream in browser.view_streams.iter_mut() {
-            if stream.provider != ViewStreamProvider::RdpGateway {
-                continue;
-            }
-            let client_url = guacamole_client_url(stream.url.as_deref());
-            if stream.frame_url.is_none() {
-                stream.frame_url = client_url.clone();
-            }
-            if stream.external_url.is_none() {
-                stream.external_url = client_url;
-            }
-        }
-    }
-}
-
 fn parse_view_stream_provider(value: &str) -> Option<ViewStreamProvider> {
     match value.trim() {
         "cdp_screencast" | "cdp-screencast" => Some(ViewStreamProvider::CdpScreencast),
@@ -2205,7 +2184,7 @@ fn upsert_browser_cdp_screencast_view_stream(browser: &mut BrowserProcess) {
     }
 }
 
-fn refresh_cdp_screencast_view_streams(service_state: &mut ServiceState) {
+pub(crate) fn refresh_cdp_screencast_view_streams(service_state: &mut ServiceState) {
     for browser in service_state.browsers.values_mut() {
         upsert_browser_cdp_screencast_view_stream(browser);
     }
@@ -17580,7 +17559,39 @@ async fn handle_stream_status(state: &DaemonState) -> Result<Value, String> {
     Ok(current_stream_status(state).await)
 }
 
-async fn handle_service_status(cmd: &Value) -> Result<Value, String> {
+pub(super) async fn handle_service_status(cmd: &Value) -> Result<Value, String> {
+    let repository = LockedServiceStateRepository::default_json()?;
+    let projector = super::service_status_projection::ServiceStatusProjector::local();
+    handle_service_status_with_dependencies(
+        cmd,
+        super::service_status_projection::ServiceStatusProjectionDependencies::new(
+            &repository,
+            &super::service_status_projection::ReconcileServiceStatusAuthority,
+            &super::service_status_projection::ReconciledBrowserSessionAuthority,
+            &projector,
+        ),
+    )
+    .await
+}
+
+pub(crate) async fn handle_service_status_with_dependencies<
+    Repository,
+    Preparer,
+    BrowserAuthority,
+>(
+    cmd: &Value,
+    dependencies: super::service_status_projection::ServiceStatusProjectionDependencies<
+        '_,
+        Repository,
+        Preparer,
+        BrowserAuthority,
+    >,
+) -> Result<Value, String>
+where
+    Repository: ServiceStateRepository,
+    Preparer: super::service_status_projection::ServiceStatusAuthorityPreparer,
+    BrowserAuthority: super::service_status_projection::ServiceStatusBrowserAuthorityProvider,
+{
     let mut service_state = cmd
         .get("serviceState")
         .cloned()
@@ -17588,6 +17599,7 @@ async fn handle_service_status(cmd: &Value) -> Result<Value, String> {
         .transpose()
         .map_err(|err| format!("Invalid serviceState: {}", err))?
         .unwrap_or_default();
+    let before = service_state.clone();
     let waiting_profile_lease_job_count = service_state
         .jobs
         .values()
@@ -17597,57 +17609,43 @@ async fn handle_service_status(cmd: &Value) -> Result<Value, String> {
         control_plane.waiting_profile_lease_job_count = waiting_profile_lease_job_count;
     } else {
         service_state.control_plane = Some(super::service_model::ControlPlaneSnapshot {
+            worker_state: "Ready".to_string(),
+            browser_health: "NotStarted".to_string(),
             waiting_profile_lease_job_count,
             ..super::service_model::ControlPlaneSnapshot::default()
         });
     }
-    refresh_remote_view_stream_urls(&mut service_state);
-    refresh_cdp_screencast_view_streams(&mut service_state);
-    refresh_remote_view_attachability(&mut service_state);
-    service_state.refresh_profile_readiness();
-
-    let profile_allocations = service_profile_allocations(&service_state);
-    let manual_browsers =
-        super::service_status_projection::manual_runtime_browser_projection(&service_state);
-    let retained_display_allocations = retained_display_allocation_summary(&service_state);
-    let browser_session_authority = browser_session_authority_snapshot(&service_state);
+    dependencies.preparer.prepare(&mut service_state).await;
+    persist_reconciled_service_state_in_repository(
+        dependencies.repository,
+        &before,
+        &service_state,
+    )?;
+    let browser_session_authority = dependencies.browser_authority.snapshot(&service_state);
     let control_plane = service_state
         .control_plane
         .as_ref()
         .expect("service status always creates a control-plane snapshot");
-    let control_plane = json!({
-        "worker_state": control_plane.worker_state,
-        "browser_health": control_plane.browser_health,
-        "queue_depth": control_plane.queue_depth,
-        "queue_capacity": control_plane.queue_capacity,
-        "waiting_profile_lease_job_count": control_plane.waiting_profile_lease_job_count,
-        "service_job_timeout_ms": control_plane.service_job_timeout_ms,
-        "service_monitor_interval_ms": control_plane.service_monitor_interval_ms,
-    });
-    let launch_config = cmd
-        .get("launchConfig")
-        .cloned()
-        .unwrap_or_else(|| json!({}));
+    let control_plane =
+        super::service_status_projection::StatusControlPlaneAuthority::try_from(control_plane)
+            .map_err(|error| error.to_string())?;
+    let launch_config =
+        super::service_status_projection::launch_configuration_from_status_command(cmd);
     let full_tab_history = cmd
         .get("fullTabHistory")
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    let (service_state, closed_tab_projection) =
-        super::service_status_projection::project_service_status(&service_state, full_tab_history);
-    let mut service_state_json =
-        serde_json::to_value(&service_state).map_err(|err| err.to_string())?;
-    inject_browser_process_stats(&mut service_state_json);
-
-    Ok(json!({
-        "control_plane": control_plane,
-        "service_state": service_state_json,
-        "profileAllocations": profile_allocations,
-        "manualBrowsers": manual_browsers,
-        "retainedDisplayAllocations": retained_display_allocations,
-        "browserSessionAuthority": browser_session_authority,
-        "closedTabProjection": closed_tab_projection,
-        "launchConfig": launch_config,
-    }))
+    let response = super::service_status_projection::project_status_with_launch_configuration(
+        dependencies.projector,
+        service_state,
+        control_plane,
+        browser_session_authority,
+        launch_config,
+        full_tab_history,
+    )
+    .await
+    .map_err(|error| error.to_string())?;
+    serde_json::to_value(response).map_err(|error| error.to_string())
 }
 
 async fn handle_service_resources(cmd: &Value) -> Result<Value, String> {
@@ -17694,69 +17692,6 @@ fn load_service_state_for_maintenance(cmd: &Value) -> Result<ServiceState, Strin
     } else {
         LockedServiceStateRepository::default_json()?.load_snapshot()
     }
-}
-
-fn inject_browser_process_stats(service_state: &mut Value) {
-    let Some(browsers) = service_state
-        .get_mut("browsers")
-        .and_then(|value| value.as_object_mut())
-    else {
-        return;
-    };
-    for browser in browsers.values_mut() {
-        let pid = browser
-            .get("pid")
-            .and_then(|value| value.as_u64())
-            .and_then(|value| u32::try_from(value).ok());
-        if let Some(pid) = pid.and_then(process_stats_for_pid) {
-            browser["processStats"] = pid;
-        }
-    }
-}
-
-fn process_stats_for_pid(pid: u32) -> Option<Value> {
-    #[cfg(target_os = "linux")]
-    {
-        linux_process_stats_for_pid(pid)
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = pid;
-        None
-    }
-}
-
-#[cfg(target_os = "linux")]
-fn linux_process_stats_for_pid(pid: u32) -> Option<Value> {
-    let stat = fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
-    let stat_tail = stat.rsplit_once(") ")?.1;
-    let fields = stat_tail.split_whitespace().collect::<Vec<_>>();
-    let clock_ticks = 100.0_f64;
-    let utime = fields
-        .get(11)
-        .and_then(|value| value.parse::<u64>().ok())
-        .unwrap_or(0);
-    let stime = fields
-        .get(12)
-        .and_then(|value| value.parse::<u64>().ok())
-        .unwrap_or(0);
-    let rss_bytes = fs::read_to_string(format!("/proc/{pid}/status"))
-        .ok()
-        .and_then(|status| {
-            status.lines().find_map(|line| {
-                let value = line.strip_prefix("VmRSS:")?.split_whitespace().next()?;
-                value.parse::<u64>().ok().map(|kib| kib * 1024)
-            })
-        });
-    let mut stats = json!({
-        "pid": pid,
-        "running": pid_is_running(pid),
-        "cpuSeconds": ((utime + stime) as f64 / clock_ticks),
-    });
-    if let Some(bytes) = rss_bytes {
-        stats["rssBytes"] = json!(bytes);
-    }
-    Some(stats)
 }
 
 /// Return the no-launch service access plan from the current service state.
@@ -28989,6 +28924,44 @@ mod tests {
                 ["viewStreams"][0]["frameUrl"]
                 .is_null()
         );
+        assert!(state.browser.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_service_status_legacy_launch_default_does_not_accept_present_malformed_value() {
+        let mut state = DaemonState::new();
+        let legacy = execute_command(
+            &json!({
+                "action": "service_status",
+                "id": "svc-legacy-launch-default"
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(legacy["success"], true);
+        assert_eq!(
+            legacy["data"]["launchConfig"]["defaultBrowserBuild"],
+            Value::Null
+        );
+        assert_eq!(
+            legacy["data"]["launchConfig"]["stealthCdpChromiumReady"],
+            true
+        );
+
+        let malformed = execute_command(
+            &json!({
+                "action": "service_status",
+                "id": "svc-malformed-launch-config",
+                "launchConfig": {}
+            }),
+            &mut state,
+        )
+        .await;
+        assert_eq!(malformed["success"], false);
+        assert!(malformed["error"]
+            .as_str()
+            .unwrap()
+            .contains("invalid launchConfig"));
         assert!(state.browser.is_none());
     }
 

@@ -987,6 +987,14 @@ agent-browser runtime attach
 ```
 
 Detached manual browsers remain visible in `agent-browser service status --json` under `manualBrowsers`, even when they expose no DevTools port. Each row includes the runtime profile, profile path, PID, target URL, display, browser family and build, remote-view route when known, automation availability, and the next safe action. The dashboard shows these browsers as explicit detected workspaces with only controls the live browser can actually support.
+
+Current status responses include additive `statusProjection` metadata.
+Reconciled `service_state` remains authority. Host-local manual-browser,
+process, route-presentation, and display observations carry adapter source,
+availability, `observedAt`, `validUntil`, and `maxAgeMs`. Derive staleness from
+`validUntil`; unavailable means unknown and cannot create or disable browser
+authority. Older v1 responses may omit the additive object, and all legacy v1
+fields remain supported.
 On Unix, detached launches retain the effective X11 display even when it came from the inherited `DISPLAY` environment variable. Service status can therefore associate the manual browser with the governed remote-view route for that display, allowing its detected dashboard tile to expose the available remote View or Control action.
 
 During development, a normal command that finds a daemon running a different executable prepares an authenticated handoff, starts the current executable, resumes the same browser PID and DevTools endpoint, and only then accepts new work. Missing handoff authority fails closed. Active browsers and their ports stay open across the daemon changeover, while orphaned retained session leases are expired during reconciliation so stale ownership cannot block a healthy profile.

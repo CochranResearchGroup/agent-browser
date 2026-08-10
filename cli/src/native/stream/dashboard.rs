@@ -1,18 +1,17 @@
-use futures_util::{SinkExt, StreamExt};
+use futures_util::{FutureExt, SinkExt, StreamExt};
 use serde_json::{json, Value};
-use std::env;
+use std::collections::HashMap;
 use std::fmt;
 use std::sync::OnceLock;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
-use tokio::sync::Mutex;
+use tokio::sync::{watch, Mutex};
 use tokio::time::{timeout, Duration, Instant};
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::connection::get_socket_dir;
 
-use super::super::remote_view::route_display_content;
 #[cfg(test)]
 use super::super::remote_view::{display_content_from_xwininfo, should_probe_route_display};
 use super::app_intelligence::{
@@ -37,17 +36,36 @@ const DASHBOARD_STREAM_FRAME_PROXY_TIMEOUT: Duration = Duration::from_secs(7);
 const DASHBOARD_CDP_SCREENSHOT_TIMEOUT: Duration = Duration::from_secs(5);
 const DASHBOARD_SERVICE_STATUS_CACHE_TTL: Duration = Duration::from_secs(5);
 const DASHBOARD_SERVICE_STATUS_PROXY_TIMEOUT: Duration = Duration::from_secs(10);
+const DASHBOARD_SERVICE_STATUS_CACHE_MAX_KEYS: usize = 32;
 
 #[derive(Default)]
 struct DashboardServiceStatusCache {
-    port: Option<u16>,
-    path: Option<String>,
-    completed_at: Option<Instant>,
-    response: Option<Vec<u8>>,
+    entries: HashMap<DashboardServiceStatusCacheKey, DashboardServiceStatusCacheEntry>,
+    next_request_id: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct DashboardServiceStatusCacheKey {
+    backend_session: &'static str,
+    port: u16,
+    path: String,
+}
+
+enum DashboardServiceStatusCacheEntry {
+    InFlight {
+        request_id: u64,
+        registered_at: Instant,
+        result: watch::Receiver<Option<Result<Vec<u8>, DashboardReadinessError>>>,
+        owner_abort: Option<tokio::task::AbortHandle>,
+    },
+    Ready {
+        completed_at: Instant,
+        response: Vec<u8>,
+    },
 }
 
 #[derive(Debug, Clone)]
-struct DashboardReadinessError {
+pub(crate) struct DashboardReadinessError {
     code: &'static str,
     message: String,
     details: Option<Value>,
@@ -502,6 +520,41 @@ async fn handle_service_api_request(
         }
     }
 
+    if dashboard_service_status_cacheable(method, path) {
+        let result = dashboard_service_status_with_transports(
+            dashboard_service_backend_port(),
+            path,
+            |port, owned_path| async move {
+                proxy_dashboard_service_api_request(
+                    port,
+                    "GET",
+                    &owned_path,
+                    "",
+                    DASHBOARD_SERVICE_STATUS_PROXY_TIMEOUT,
+                )
+                .await
+            },
+            |owned_path| async move { service_api_cli_fallback("GET", &owned_path).await },
+        )
+        .await;
+        match result {
+            Ok(response) => {
+                let _ = stream.write_all(&response).await;
+            }
+            Err(err) => {
+                write_json_error_with_code(
+                    stream,
+                    "502 Bad Gateway",
+                    &format!("Service API proxy failed: {err}"),
+                    Some(err.code),
+                    err.details.clone(),
+                )
+                .await;
+            }
+        }
+        return;
+    }
+
     if let Some(port) = dashboard_service_backend_port() {
         let request_timeout = service_api_proxy_timeout(method, path, body);
         match proxy_dashboard_service_api_request(port, method, path, body, request_timeout).await {
@@ -513,21 +566,21 @@ async fn handle_service_api_request(
                         return;
                     }
                 }
-                let response = repair_dashboard_service_status_response(path, response);
-                let response = match require_json_backend_response(response, port, path) {
-                    Ok(response) => response,
-                    Err(err) => {
-                        write_json_error_with_code(
-                            stream,
-                            "502 Bad Gateway",
-                            &format!("Service API proxy failed: {}", err),
-                            Some(err.code),
-                            err.details.clone(),
-                        )
-                        .await;
-                        return;
-                    }
-                };
+                let response =
+                    match service_api_handler_backend_response(method, path, response, port) {
+                        Ok(response) => response,
+                        Err(err) => {
+                            write_json_error_with_code(
+                                stream,
+                                "502 Bad Gateway",
+                                &format!("Service API proxy failed: {}", err),
+                                Some(err.code),
+                                err.details.clone(),
+                            )
+                            .await;
+                            return;
+                        }
+                    };
                 let _ = stream.write_all(&response).await;
                 return;
             }
@@ -560,6 +613,55 @@ async fn handle_service_api_request(
         "No agent-browser session is available to handle service API requests",
     )
     .await;
+}
+
+pub(crate) async fn dashboard_service_status_with_transports<
+    Backend,
+    BackendFuture,
+    Fallback,
+    FallbackFuture,
+>(
+    backend_port: Option<u16>,
+    path: &str,
+    backend: Backend,
+    mut fallback: Fallback,
+) -> Result<Vec<u8>, DashboardReadinessError>
+where
+    Backend: FnOnce(u16, String) -> BackendFuture,
+    BackendFuture: std::future::Future<Output = Result<Vec<u8>, DashboardReadinessError>>,
+    Fallback: FnMut(String) -> FallbackFuture,
+    FallbackFuture: std::future::Future<Output = Option<String>>,
+{
+    let owned_path = path.to_string();
+    let Some(port) = backend_port else {
+        return fallback(owned_path.clone())
+            .await
+            .map(String::into_bytes)
+            .ok_or_else(|| {
+                DashboardReadinessError::local_backend(
+                    "backend_unavailable",
+                    "no service status backend or CLI fallback was available",
+                    0,
+                    &owned_path,
+                    "request",
+                )
+            });
+    };
+    match backend(port, owned_path.clone()).await {
+        Ok(response) => {
+            let status = http_response_status(&response).unwrap_or(0);
+            if !(200..300).contains(&status) {
+                if let Some(fallback) = fallback(owned_path).await {
+                    return Ok(fallback.into_bytes());
+                }
+            }
+            service_api_handler_backend_response("GET", path, response, port)
+        }
+        Err(error) => fallback(owned_path)
+            .await
+            .map(String::into_bytes)
+            .ok_or(error),
+    }
 }
 
 fn dashboard_service_backend_port() -> Option<u16> {
@@ -709,129 +811,6 @@ fn normalize_service_request_session_name(value: &str) -> Option<String> {
     }
 }
 
-fn repair_dashboard_service_status_response(path: &str, response: Vec<u8>) -> Vec<u8> {
-    let (path, _) = split_path_query(path);
-    if path != "/api/service/status" {
-        return response;
-    }
-
-    let Some(header_end) = find_http_header_end(&response) else {
-        return response;
-    };
-    let headers = &response[..header_end];
-    let body = &response[header_end + 4..];
-    let Ok(mut value) = serde_json::from_slice::<Value>(body) else {
-        return response;
-    };
-    if !repair_dashboard_service_status_value(&mut value) {
-        return response;
-    }
-    let Ok(body) = serde_json::to_vec(&value) else {
-        return response;
-    };
-    rebuild_http_response(headers, &body).unwrap_or(response)
-}
-
-fn repair_dashboard_service_status_value(value: &mut Value) -> bool {
-    let Some(browsers) = value
-        .pointer_mut("/data/service_state/browsers")
-        .and_then(Value::as_object_mut)
-    else {
-        return false;
-    };
-    let mut changed = false;
-    for browser in browsers.values_mut() {
-        if browser.get("host").and_then(Value::as_str) != Some("remote_headed") {
-            continue;
-        }
-        let browser_display_name = browser
-            .get("displayName")
-            .and_then(Value::as_str)
-            .map(str::to_string);
-        let Some(streams) = browser.get_mut("viewStreams").and_then(Value::as_array_mut) else {
-            continue;
-        };
-        for stream in streams {
-            if stream.get("provider").and_then(Value::as_str) != Some("rdp_gateway") {
-                continue;
-            }
-            let root_url = stream.get("url").and_then(Value::as_str);
-            if let Some(url) = dashboard_guacamole_client_url(root_url) {
-                if stream.get("frameUrl").and_then(Value::as_str).is_none() {
-                    stream["frameUrl"] = Value::String(url.clone());
-                    changed = true;
-                }
-                if stream.get("externalUrl").and_then(Value::as_str).is_none() {
-                    stream["externalUrl"] = Value::String(url);
-                    changed = true;
-                }
-            }
-            if stream.get("displayContent").is_none() {
-                if let Some(display_name) = stream
-                    .get("displayName")
-                    .and_then(Value::as_str)
-                    .or(browser_display_name.as_deref())
-                {
-                    if let Some(content) = route_display_content(display_name) {
-                        stream["displayContent"] = content;
-                        changed = true;
-                    }
-                }
-            }
-        }
-    }
-    changed
-}
-
-fn dashboard_guacamole_client_url(root_url: Option<&str>) -> Option<String> {
-    if let Ok(configured_url) = env::var("AGENT_BROWSER_REMOTE_VIEW_URL") {
-        let configured_url = configured_url.trim();
-        if !configured_url.is_empty() && configured_url.contains("#/client/") {
-            return Some(configured_url.to_string());
-        }
-    }
-    let root_url = root_url.map(str::trim).filter(|url| !url.is_empty())?;
-    if root_url.contains("#/client/") {
-        return Some(root_url.to_string());
-    }
-    None
-}
-
-fn find_http_header_end(response: &[u8]) -> Option<usize> {
-    response.windows(4).position(|window| window == b"\r\n\r\n")
-}
-
-fn rebuild_http_response(headers: &[u8], body: &[u8]) -> Option<Vec<u8>> {
-    let header_text = std::str::from_utf8(headers).ok()?;
-    let mut lines = header_text.lines();
-    let status_line = lines.next().unwrap_or("HTTP/1.1 200 OK");
-    let mut rebuilt = String::new();
-    rebuilt.push_str(status_line);
-    rebuilt.push_str("\r\n");
-    let mut has_content_type = false;
-    for line in lines {
-        if line.trim().is_empty() {
-            continue;
-        }
-        let lower = line.to_ascii_lowercase();
-        if lower.starts_with("content-length:") {
-            continue;
-        }
-        if lower.starts_with("content-type:") {
-            has_content_type = true;
-        }
-        rebuilt.push_str(line);
-        rebuilt.push_str("\r\n");
-    }
-    if !has_content_type {
-        rebuilt.push_str("Content-Type: application/json; charset=utf-8\r\n");
-    }
-    rebuilt.push_str(&format!("Content-Length: {}\r\n\r\n", body.len()));
-    let mut response = rebuilt.into_bytes();
-    response.extend_from_slice(body);
-    Some(response)
-}
-
 async fn proxy_local_http_api_request(
     port: u16,
     method: &str,
@@ -855,58 +834,89 @@ async fn proxy_local_http_api_request_with_timeout(
     body: &str,
     request_timeout: Duration,
 ) -> Result<Vec<u8>, DashboardReadinessError> {
-    let mut backend = timeout(
-        request_timeout,
+    let mut backend = run_dashboard_backend_io_phase(
+        DashboardBackendIoPhase {
+            timeout_code: "backend_connect_timeout",
+            timeout_message: format!("timed out connecting to 127.0.0.1:{port}"),
+            failure_message: format!("failed connecting to 127.0.0.1:{port}"),
+            port,
+            path,
+            stage: "connect",
+            timeout: request_timeout,
+        },
         tokio::net::TcpStream::connect(("127.0.0.1", port)),
     )
-    .await
-    .map_err(|_| {
-        DashboardReadinessError::local_backend(
-            "backend_connect_timeout",
-            format!("timed out connecting to 127.0.0.1:{port}"),
-            port,
-            path,
-            "connect",
-        )
-    })?
-    .map_err(|err| {
-        DashboardReadinessError::local_backend(
-            "backend_unavailable",
-            format!("failed connecting to 127.0.0.1:{port}: {err}"),
-            port,
-            path,
-            "connect",
-        )
-    })?;
+    .await?;
     let request = format!(
         "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
         body.len()
     );
-    timeout(request_timeout, backend.write_all(request.as_bytes()))
+    run_dashboard_backend_io_phase(
+        DashboardBackendIoPhase {
+            timeout_code: "backend_write_timeout",
+            timeout_message: format!("timed out writing to 127.0.0.1:{port}{path}"),
+            failure_message: format!("failed writing to 127.0.0.1:{port}{path}"),
+            port,
+            path,
+            stage: "write",
+            timeout: request_timeout,
+        },
+        backend.write_all(request.as_bytes()),
+    )
+    .await?;
+    read_local_http_response(&mut backend, port, path, request_timeout).await
+}
+
+struct DashboardBackendIoPhase<'a> {
+    timeout_code: &'static str,
+    timeout_message: String,
+    failure_message: String,
+    port: u16,
+    path: &'a str,
+    stage: &'static str,
+    timeout: Duration,
+}
+
+async fn run_dashboard_backend_io_phase<T>(
+    phase: DashboardBackendIoPhase<'_>,
+    future: impl std::future::Future<Output = std::io::Result<T>>,
+) -> Result<T, DashboardReadinessError> {
+    timeout(phase.timeout, future)
         .await
         .map_err(|_| {
             DashboardReadinessError::local_backend(
-                "backend_write_timeout",
-                format!("timed out writing to 127.0.0.1:{port}{path}"),
-                port,
-                path,
-                "write",
+                phase.timeout_code,
+                phase.timeout_message,
+                phase.port,
+                phase.path,
+                phase.stage,
             )
         })?
-        .map_err(|err| {
+        .map_err(|error| {
             DashboardReadinessError::local_backend(
                 "backend_unavailable",
-                format!("failed writing to 127.0.0.1:{port}{path}: {err}"),
-                port,
-                path,
-                "write",
+                format!("{}: {error}", phase.failure_message),
+                phase.port,
+                phase.path,
+                phase.stage,
             )
-        })?;
-    read_local_http_response(&mut backend, port, path, request_timeout).await
+        })
 }
 
 fn dashboard_service_status_cacheable(method: &str, path: &str) -> bool {
     method == "GET" && split_path_query(path).0 == "/api/service/status"
+}
+
+fn service_api_handler_backend_response(
+    method: &str,
+    path: &str,
+    response: Vec<u8>,
+    port: u16,
+) -> Result<Vec<u8>, DashboardReadinessError> {
+    if dashboard_service_status_cacheable(method, path) {
+        return Ok(response);
+    }
+    require_json_backend_response(response, port, path)
 }
 
 fn dashboard_service_status_cache() -> &'static Mutex<DashboardServiceStatusCache> {
@@ -932,30 +942,279 @@ async fn proxy_dashboard_service_api_request(
         .await;
     }
 
-    // Hold the cache lock across the backend request so simultaneous dashboard
-    // polls coalesce into one service-status projection.
+    let key = DashboardServiceStatusCacheKey {
+        backend_session: DASHBOARD_SERVICE_BACKEND_SESSION,
+        port,
+        path: path.to_string(),
+    };
     let mut cache = dashboard_service_status_cache().lock().await;
-    if cache.port == Some(port)
-        && cache.path.as_deref() == Some(path)
-        && cache
-            .completed_at
-            .is_some_and(|completed_at| completed_at.elapsed() < DASHBOARD_SERVICE_STATUS_CACHE_TTL)
-    {
-        if let Some(response) = cache.response.as_ref() {
-            return Ok(response.clone());
+    prune_expired_dashboard_status_entries(&mut cache);
+    if let Some(entry) = cache.entries.get(&key) {
+        match entry {
+            DashboardServiceStatusCacheEntry::Ready { response, .. } => {
+                return Ok(response.clone());
+            }
+            DashboardServiceStatusCacheEntry::InFlight { result, .. } => {
+                let result = result.clone();
+                drop(cache);
+                return await_dashboard_status_flight(result, port, path).await;
+            }
         }
     }
 
-    let response =
-        proxy_local_http_api_request_with_timeout(port, method, path, body, request_timeout)
-            .await?;
-    if http_response_status(&response).is_some_and(|status| (200..300).contains(&status)) {
-        cache.port = Some(port);
-        cache.path = Some(path.to_string());
-        cache.completed_at = Some(Instant::now());
-        cache.response = Some(response.clone());
+    evict_oldest_ready_dashboard_status_entry(&mut cache);
+    if cache.entries.len() >= DASHBOARD_SERVICE_STATUS_CACHE_MAX_KEYS {
+        drop(cache);
+        return proxy_local_http_api_request_with_timeout(
+            port,
+            method,
+            path,
+            body,
+            request_timeout,
+        )
+        .await;
     }
-    Ok(response)
+
+    cache.next_request_id = cache.next_request_id.wrapping_add(1).max(1);
+    let request_id = cache.next_request_id;
+    let (result_tx, result_rx) = watch::channel(None);
+    cache.entries.insert(
+        key.clone(),
+        DashboardServiceStatusCacheEntry::InFlight {
+            request_id,
+            registered_at: Instant::now(),
+            result: result_rx.clone(),
+            owner_abort: None,
+        },
+    );
+    drop(cache);
+
+    let owned_method = method.to_string();
+    let owned_path = path.to_string();
+    let owned_body = body.to_string();
+    let owner = tokio::spawn(async move {
+        let mut cleanup = DashboardStatusFlightCleanup::new(
+            key.clone(),
+            request_id,
+            port,
+            owned_path.clone(),
+            result_tx,
+        );
+        let request = std::panic::AssertUnwindSafe(proxy_local_http_api_request_with_timeout(
+            port,
+            &owned_method,
+            &owned_path,
+            &owned_body,
+            request_timeout,
+        ))
+        .catch_unwind()
+        .await;
+        let result = match request {
+            Ok(result) => result,
+            Err(_) => Err(DashboardReadinessError::local_backend(
+                "backend_unavailable",
+                format!("service status backend task panicked for 127.0.0.1:{port}{owned_path}"),
+                port,
+                &owned_path,
+                "request",
+            )),
+        };
+        cleanup.publish(result.clone());
+        let mut cache = dashboard_service_status_cache().lock().await;
+        apply_dashboard_status_flight_completion(
+            &mut cache,
+            key,
+            request_id,
+            &result,
+            Instant::now(),
+        );
+        cleanup.disarm();
+    });
+    let owner_abort = owner.abort_handle();
+    let mut cache = dashboard_service_status_cache().lock().await;
+    if let Some(DashboardServiceStatusCacheEntry::InFlight {
+        request_id: current,
+        owner_abort: slot,
+        ..
+    }) = cache.entries.get_mut(&DashboardServiceStatusCacheKey {
+        backend_session: DASHBOARD_SERVICE_BACKEND_SESSION,
+        port,
+        path: path.to_string(),
+    }) {
+        if *current == request_id {
+            *slot = Some(owner_abort);
+        }
+    }
+    drop(cache);
+
+    await_dashboard_status_flight(result_rx, port, path).await
+}
+
+struct DashboardStatusFlightCleanup {
+    key: DashboardServiceStatusCacheKey,
+    request_id: u64,
+    port: u16,
+    path: String,
+    result: watch::Sender<Option<Result<Vec<u8>, DashboardReadinessError>>>,
+    published: bool,
+    armed: bool,
+}
+
+impl DashboardStatusFlightCleanup {
+    fn new(
+        key: DashboardServiceStatusCacheKey,
+        request_id: u64,
+        port: u16,
+        path: String,
+        result: watch::Sender<Option<Result<Vec<u8>, DashboardReadinessError>>>,
+    ) -> Self {
+        Self {
+            key,
+            request_id,
+            port,
+            path,
+            result,
+            published: false,
+            armed: true,
+        }
+    }
+
+    fn publish(&mut self, result: Result<Vec<u8>, DashboardReadinessError>) {
+        let _ = self.result.send(Some(result));
+        self.published = true;
+    }
+
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for DashboardStatusFlightCleanup {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        if !self.published {
+            let error = DashboardReadinessError::local_backend(
+                "backend_unavailable",
+                format!(
+                    "service status backend task ended before publishing 127.0.0.1:{}{}",
+                    self.port, self.path
+                ),
+                self.port,
+                &self.path,
+                "request",
+            );
+            let _ = self.result.send(Some(Err(error)));
+        }
+        let key = self.key.clone();
+        let request_id = self.request_id;
+        if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+            runtime.spawn(async move {
+                let mut cache = dashboard_service_status_cache().lock().await;
+                if matches!(
+                    cache.entries.get(&key),
+                    Some(DashboardServiceStatusCacheEntry::InFlight {
+                        request_id: current,
+                        ..
+                    }) if *current == request_id
+                ) {
+                    cache.entries.remove(&key);
+                }
+            });
+        }
+    }
+}
+
+fn apply_dashboard_status_flight_completion(
+    cache: &mut DashboardServiceStatusCache,
+    key: DashboardServiceStatusCacheKey,
+    request_id: u64,
+    result: &Result<Vec<u8>, DashboardReadinessError>,
+    completed_at: Instant,
+) {
+    let still_owned = matches!(
+        cache.entries.get(&key),
+        Some(DashboardServiceStatusCacheEntry::InFlight {
+            request_id: current,
+            ..
+        }) if *current == request_id
+    );
+    if !still_owned {
+        return;
+    }
+    match result {
+        Ok(response)
+            if http_response_status(response)
+                .is_some_and(|status| (200..300).contains(&status)) =>
+        {
+            cache.entries.insert(
+                key,
+                DashboardServiceStatusCacheEntry::Ready {
+                    completed_at,
+                    response: response.clone(),
+                },
+            );
+        }
+        _ => {
+            cache.entries.remove(&key);
+        }
+    }
+}
+
+fn prune_expired_dashboard_status_entries(cache: &mut DashboardServiceStatusCache) {
+    cache.entries.retain(|_, entry| match entry {
+        DashboardServiceStatusCacheEntry::Ready { completed_at, .. } => {
+            completed_at.elapsed() < DASHBOARD_SERVICE_STATUS_CACHE_TTL
+        }
+        DashboardServiceStatusCacheEntry::InFlight { .. } => true,
+    });
+}
+
+fn evict_oldest_ready_dashboard_status_entry(cache: &mut DashboardServiceStatusCache) {
+    if cache.entries.len() < DASHBOARD_SERVICE_STATUS_CACHE_MAX_KEYS {
+        return;
+    }
+    let oldest = cache
+        .entries
+        .iter()
+        .filter_map(|(key, entry)| match entry {
+            DashboardServiceStatusCacheEntry::Ready { completed_at, .. } => {
+                Some((key.clone(), *completed_at))
+            }
+            DashboardServiceStatusCacheEntry::InFlight { registered_at, .. } => {
+                let _ = registered_at;
+                None
+            }
+        })
+        .min_by_key(|(_, completed_at)| *completed_at)
+        .map(|(key, _)| key);
+    if let Some(key) = oldest {
+        cache.entries.remove(&key);
+    }
+}
+
+async fn await_dashboard_status_flight(
+    mut result: watch::Receiver<Option<Result<Vec<u8>, DashboardReadinessError>>>,
+    port: u16,
+    path: &str,
+) -> Result<Vec<u8>, DashboardReadinessError> {
+    loop {
+        if let Some(result) = result.borrow().clone() {
+            return result;
+        }
+        if result.changed().await.is_err() {
+            return Err(DashboardReadinessError::local_backend(
+                "backend_unavailable",
+                format!(
+                    "service status backend task ended before publishing 127.0.0.1:{port}{path}"
+                ),
+                port,
+                path,
+                "request",
+            ));
+        }
+    }
 }
 
 fn http_response_status(response: &[u8]) -> Option<u16> {
@@ -1031,26 +1290,19 @@ async fn read_local_http_response(
     let mut buffer = [0_u8; 8192];
     let max_response_bytes = 16 * 1024 * 1024;
     loop {
-        let n = timeout(request_timeout, backend.read(&mut buffer))
-            .await
-            .map_err(|_| {
-                DashboardReadinessError::local_backend(
-                    "backend_read_timeout",
-                    format!("timed out reading from 127.0.0.1:{port}{path}"),
-                    port,
-                    path,
-                    "read",
-                )
-            })?
-            .map_err(|err| {
-                DashboardReadinessError::local_backend(
-                    "backend_unavailable",
-                    format!("failed reading from 127.0.0.1:{port}{path}: {err}"),
-                    port,
-                    path,
-                    "read",
-                )
-            })?;
+        let n = run_dashboard_backend_io_phase(
+            DashboardBackendIoPhase {
+                timeout_code: "backend_read_timeout",
+                timeout_message: format!("timed out reading from 127.0.0.1:{port}{path}"),
+                failure_message: format!("failed reading from 127.0.0.1:{port}{path}"),
+                port,
+                path,
+                stage: "read",
+                timeout: request_timeout,
+            },
+            backend.read(&mut buffer),
+        )
+        .await?;
         if n == 0 {
             break;
         }
@@ -1897,12 +2149,38 @@ async fn service_api_cli_fallback(method: &str, path: &str) -> Option<String> {
         }
     }
 
-    exec_agent_browser_args(args).await.ok().map(|body| {
-        format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n{CORS_HEADERS}\r\n",
-            body.len()
-        ) + &body
-    })
+    exec_agent_browser_args(args)
+        .await
+        .ok()
+        .map(dashboard_cli_fallback_http_response)
+}
+
+fn dashboard_cli_fallback_http_response(body: String) -> String {
+    format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n{CORS_HEADERS}\r\n",
+        body.len()
+    ) + &body
+}
+
+#[cfg(test)]
+pub(crate) fn service_status_dashboard_cli_fallback_fixture(body: String) -> Vec<u8> {
+    dashboard_cli_fallback_http_response(body).into_bytes()
+}
+
+#[cfg(test)]
+pub(crate) fn service_status_http_body_fixture(response: &[u8]) -> Option<&[u8]> {
+    http_response_body(response)
+}
+
+#[cfg(test)]
+pub(crate) fn service_status_handler_fixture(response: Vec<u8>) -> Vec<u8> {
+    service_api_handler_backend_response(
+        "GET",
+        "/api/service/status?full-tab-history=false",
+        response,
+        9222,
+    )
+    .expect("status handler must forward backend success bytes")
 }
 
 fn split_path_query(raw_path: &str) -> (&str, Option<&str>) {
@@ -2208,6 +2486,13 @@ mod tests {
     use super::*;
     use crate::test_utils::EnvGuard;
     use serde_json::json;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    async fn dashboard_status_cache_test_guard() -> tokio::sync::MutexGuard<'static, ()> {
+        static TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        TEST_LOCK.get_or_init(|| Mutex::new(())).lock().await
+    }
 
     #[test]
     fn dashboard_service_backend_prefers_dedicated_session() {
@@ -2240,6 +2525,466 @@ mod tests {
         assert!(!dashboard_service_status_cacheable(
             "GET",
             "/api/service/jobs"
+        ));
+        assert_ne!(
+            DashboardServiceStatusCacheKey {
+                backend_session: DASHBOARD_SERVICE_BACKEND_SESSION,
+                port: 9222,
+                path: "/api/service/status?full-tab-history=true".to_string(),
+            },
+            DashboardServiceStatusCacheKey {
+                backend_session: DASHBOARD_SERVICE_BACKEND_SESSION,
+                port: 9222,
+                path: "/api/service/status?full-tab-history=false".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn service_status_handler_forwards_success_bytes_without_json_interpretation() {
+        let response = b"HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: 8\r\n\r\nnot-json".to_vec();
+
+        assert_eq!(
+            service_api_handler_backend_response(
+                "GET",
+                "/api/service/status?full-tab-history=true",
+                response.clone(),
+                9222,
+            )
+            .unwrap(),
+            response
+        );
+        assert_eq!(
+            service_api_handler_backend_response(
+                "GET",
+                "/api/service/jobs",
+                b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\nnot-json".to_vec(),
+                9222,
+            )
+            .unwrap_err()
+            .code,
+            "invalid_backend_payload"
+        );
+    }
+
+    #[tokio::test]
+    async fn dashboard_service_status_single_flight_forwards_backend_bytes_unchanged() {
+        let _guard = dashboard_status_cache_test_guard().await;
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let request_count = Arc::new(AtomicUsize::new(0));
+        let server_count = request_count.clone();
+        let body = r#"{"success":true,"data":{"statusProjection":{"schemaVersion":1}}}"#;
+        let expected = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .into_bytes();
+        let server_response = expected.clone();
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            server_count.fetch_add(1, Ordering::SeqCst);
+            let mut request = vec![0_u8; 4096];
+            let _ = stream.read(&mut request).await.unwrap();
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            stream.write_all(&server_response).await.unwrap();
+        });
+        let path = format!("/api/service/status?single-flight-port={port}");
+        let first =
+            proxy_dashboard_service_api_request(port, "GET", &path, "", Duration::from_secs(1));
+        let second =
+            proxy_dashboard_service_api_request(port, "GET", &path, "", Duration::from_secs(1));
+        let (first, second) = tokio::join!(first, second);
+
+        assert_eq!(first.unwrap(), expected);
+        assert_eq!(second.unwrap(), expected);
+        assert_eq!(request_count.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn dashboard_service_status_flight_survives_first_waiter_cancellation() {
+        let _guard = dashboard_status_cache_test_guard().await;
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let request_count = Arc::new(AtomicUsize::new(0));
+        let server_count = request_count.clone();
+        let accepted = Arc::new(tokio::sync::Notify::new());
+        let server_accepted = accepted.clone();
+        let body = r#"{"success":true,"data":{"survivedCancellation":true}}"#;
+        let expected = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .into_bytes();
+        let server_response = expected.clone();
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            server_count.fetch_add(1, Ordering::SeqCst);
+            let mut request = vec![0_u8; 4096];
+            let _ = stream.read(&mut request).await.unwrap();
+            server_accepted.notify_one();
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            stream.write_all(&server_response).await.unwrap();
+        });
+        let path = format!("/api/service/status?cancelled-waiter-port={port}");
+        let first_path = path.clone();
+        let first = tokio::spawn(async move {
+            proxy_dashboard_service_api_request(
+                port,
+                "GET",
+                &first_path,
+                "",
+                Duration::from_secs(1),
+            )
+            .await
+        });
+
+        accepted.notified().await;
+        first.abort();
+        let _ = first.await;
+        let second =
+            proxy_dashboard_service_api_request(port, "GET", &path, "", Duration::from_secs(1))
+                .await
+                .unwrap();
+
+        assert_eq!(second, expected);
+        assert_eq!(request_count.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn dashboard_service_status_owner_cancellation_removes_request_id_and_allows_retry() {
+        let _guard = dashboard_status_cache_test_guard().await;
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let first_accepted = Arc::new(tokio::sync::Notify::new());
+        let server_accepted = first_accepted.clone();
+        let expected_body = r#"{"success":true,"data":{"retried":true}}"#;
+        let expected = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+            expected_body.len(),
+            expected_body
+        )
+        .into_bytes();
+        let server_response = expected.clone();
+        tokio::spawn(async move {
+            let (mut first, _) = listener.accept().await.unwrap();
+            let mut request = vec![0_u8; 4096];
+            let _ = first.read(&mut request).await.unwrap();
+            server_accepted.notify_one();
+            let (mut retry, _) = listener.accept().await.unwrap();
+            let _ = retry.read(&mut request).await.unwrap();
+            retry.write_all(&server_response).await.unwrap();
+        });
+        let path = format!("/api/service/status?owned-cancellation-port={port}");
+        let request_path = path.clone();
+        let first = tokio::spawn(async move {
+            proxy_dashboard_service_api_request(
+                port,
+                "GET",
+                &request_path,
+                "",
+                Duration::from_secs(2),
+            )
+            .await
+        });
+        first_accepted.notified().await;
+        let key = DashboardServiceStatusCacheKey {
+            backend_session: DASHBOARD_SERVICE_BACKEND_SESSION,
+            port,
+            path: path.clone(),
+        };
+        let owner_abort = {
+            let cache = dashboard_service_status_cache().lock().await;
+            match cache.entries.get(&key).unwrap() {
+                DashboardServiceStatusCacheEntry::InFlight { owner_abort, .. } => {
+                    owner_abort.clone().unwrap()
+                }
+                DashboardServiceStatusCacheEntry::Ready { .. } => panic!("flight completed early"),
+            }
+        };
+        owner_abort.abort();
+        assert!(first.await.unwrap().is_err());
+        for _ in 0..100 {
+            if !dashboard_service_status_cache()
+                .lock()
+                .await
+                .entries
+                .contains_key(&key)
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        assert!(!dashboard_service_status_cache()
+            .lock()
+            .await
+            .entries
+            .contains_key(&key));
+
+        let retry =
+            proxy_dashboard_service_api_request(port, "GET", &path, "", Duration::from_secs(2))
+                .await
+                .unwrap();
+        assert_eq!(retry, expected);
+    }
+
+    #[tokio::test]
+    async fn dashboard_service_status_shares_failures_without_caching_them() {
+        let _guard = dashboard_status_cache_test_guard().await;
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let request_count = Arc::new(AtomicUsize::new(0));
+        let server_count = request_count.clone();
+        let body = r#"{"success":false,"error":"not ready"}"#;
+        let response = format!(
+            "HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .into_bytes();
+        let server_response = response.clone();
+        tokio::spawn(async move {
+            for _ in 0..2 {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                server_count.fetch_add(1, Ordering::SeqCst);
+                let mut request = vec![0_u8; 4096];
+                let _ = stream.read(&mut request).await.unwrap();
+                tokio::time::sleep(Duration::from_millis(20)).await;
+                stream.write_all(&server_response).await.unwrap();
+            }
+        });
+        let path = format!("/api/service/status?shared-failure-port={port}");
+        let first =
+            proxy_dashboard_service_api_request(port, "GET", &path, "", Duration::from_secs(1));
+        let second =
+            proxy_dashboard_service_api_request(port, "GET", &path, "", Duration::from_secs(1));
+        let (first, second) = tokio::join!(first, second);
+        assert_eq!(first.unwrap(), response);
+        assert_eq!(second.unwrap(), response);
+        assert_eq!(request_count.load(Ordering::SeqCst), 1);
+
+        let key = DashboardServiceStatusCacheKey {
+            backend_session: DASHBOARD_SERVICE_BACKEND_SESSION,
+            port,
+            path: path.clone(),
+        };
+        for _ in 0..100 {
+            if !dashboard_service_status_cache()
+                .lock()
+                .await
+                .entries
+                .contains_key(&key)
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        let retry =
+            proxy_dashboard_service_api_request(port, "GET", &path, "", Duration::from_secs(1))
+                .await
+                .unwrap();
+
+        assert_eq!(retry, response);
+        assert_eq!(request_count.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn dashboard_service_status_cache_evicts_only_oldest_ready_entry_at_capacity() {
+        let mut cache = DashboardServiceStatusCache::default();
+        let now = Instant::now();
+        for index in 0..DASHBOARD_SERVICE_STATUS_CACHE_MAX_KEYS {
+            cache.entries.insert(
+                DashboardServiceStatusCacheKey {
+                    backend_session: DASHBOARD_SERVICE_BACKEND_SESSION,
+                    port: 10_000 + index as u16,
+                    path: format!("/api/service/status?key={index}"),
+                },
+                DashboardServiceStatusCacheEntry::Ready {
+                    completed_at: now - Duration::from_millis((index + 1) as u64),
+                    response: vec![index as u8],
+                },
+            );
+        }
+
+        evict_oldest_ready_dashboard_status_entry(&mut cache);
+
+        assert_eq!(
+            cache.entries.len(),
+            DASHBOARD_SERVICE_STATUS_CACHE_MAX_KEYS - 1
+        );
+        assert!(
+            !cache.entries.contains_key(&DashboardServiceStatusCacheKey {
+                backend_session: DASHBOARD_SERVICE_BACKEND_SESSION,
+                port: 10_000 + (DASHBOARD_SERVICE_STATUS_CACHE_MAX_KEYS - 1) as u16,
+                path: format!(
+                    "/api/service/status?key={}",
+                    DASHBOARD_SERVICE_STATUS_CACHE_MAX_KEYS - 1
+                ),
+            })
+        );
+    }
+
+    #[test]
+    fn dashboard_service_status_cache_keeps_all_32_inflight_entries_at_capacity() {
+        let mut cache = DashboardServiceStatusCache::default();
+        let mut senders = Vec::new();
+        for index in 0..DASHBOARD_SERVICE_STATUS_CACHE_MAX_KEYS {
+            let (sender, receiver) = watch::channel(None);
+            senders.push(sender);
+            cache.entries.insert(
+                DashboardServiceStatusCacheKey {
+                    backend_session: DASHBOARD_SERVICE_BACKEND_SESSION,
+                    port: 20_000 + index as u16,
+                    path: format!("/api/service/status?inflight={index}"),
+                },
+                DashboardServiceStatusCacheEntry::InFlight {
+                    request_id: (index + 1) as u64,
+                    registered_at: Instant::now(),
+                    result: receiver,
+                    owner_abort: None,
+                },
+            );
+        }
+
+        evict_oldest_ready_dashboard_status_entry(&mut cache);
+
+        assert_eq!(cache.entries.len(), DASHBOARD_SERVICE_STATUS_CACHE_MAX_KEYS);
+        assert!(cache
+            .entries
+            .values()
+            .all(|entry| matches!(entry, DashboardServiceStatusCacheEntry::InFlight { .. })));
+        drop(senders);
+    }
+
+    #[tokio::test]
+    async fn dashboard_service_status_uses_uncached_transport_for_33rd_inflight_key() {
+        let _guard = dashboard_status_cache_test_guard().await;
+        let mut senders = Vec::new();
+        {
+            let mut cache = dashboard_service_status_cache().lock().await;
+            cache.entries.clear();
+            for index in 0..DASHBOARD_SERVICE_STATUS_CACHE_MAX_KEYS {
+                let (sender, receiver) = watch::channel(None);
+                senders.push(sender);
+                cache.entries.insert(
+                    DashboardServiceStatusCacheKey {
+                        backend_session: DASHBOARD_SERVICE_BACKEND_SESSION,
+                        port: 31_000 + index as u16,
+                        path: format!("/api/service/status?occupied={index}"),
+                    },
+                    DashboardServiceStatusCacheEntry::InFlight {
+                        request_id: (index + 1) as u64,
+                        registered_at: Instant::now(),
+                        result: receiver,
+                        owner_abort: None,
+                    },
+                );
+            }
+        }
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let body = r#"{"success":true,"data":{"overflow":"uncached"}}"#;
+        let expected = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .into_bytes();
+        let server_response = expected.clone();
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = [0_u8; 1024];
+            let _ = socket.read(&mut request).await.unwrap();
+            socket.write_all(&server_response).await.unwrap();
+        });
+        let path = format!("/api/service/status?overflow-port={port}");
+
+        let response =
+            proxy_dashboard_service_api_request(port, "GET", &path, "", Duration::from_secs(1))
+                .await
+                .unwrap();
+
+        assert_eq!(response, expected);
+        let mut cache = dashboard_service_status_cache().lock().await;
+        assert_eq!(cache.entries.len(), DASHBOARD_SERVICE_STATUS_CACHE_MAX_KEYS);
+        assert!(
+            !cache.entries.contains_key(&DashboardServiceStatusCacheKey {
+                backend_session: DASHBOARD_SERVICE_BACKEND_SESSION,
+                port,
+                path,
+            })
+        );
+        cache.entries.clear();
+        drop(senders);
+    }
+
+    #[test]
+    fn dashboard_service_status_cache_prunes_ready_entries_only_after_ttl() {
+        let mut cache = DashboardServiceStatusCache::default();
+        let fresh_key = DashboardServiceStatusCacheKey {
+            backend_session: DASHBOARD_SERVICE_BACKEND_SESSION,
+            port: 30001,
+            path: "/api/service/status?fresh=true".to_string(),
+        };
+        let expired_key = DashboardServiceStatusCacheKey {
+            backend_session: DASHBOARD_SERVICE_BACKEND_SESSION,
+            port: 30002,
+            path: "/api/service/status?expired=true".to_string(),
+        };
+        cache.entries.insert(
+            fresh_key.clone(),
+            DashboardServiceStatusCacheEntry::Ready {
+                completed_at: Instant::now(),
+                response: b"fresh".to_vec(),
+            },
+        );
+        cache.entries.insert(
+            expired_key.clone(),
+            DashboardServiceStatusCacheEntry::Ready {
+                completed_at: Instant::now() - DASHBOARD_SERVICE_STATUS_CACHE_TTL,
+                response: b"expired".to_vec(),
+            },
+        );
+
+        prune_expired_dashboard_status_entries(&mut cache);
+
+        assert!(cache.entries.contains_key(&fresh_key));
+        assert!(!cache.entries.contains_key(&expired_key));
+    }
+
+    #[test]
+    fn late_status_completion_cannot_replace_newer_request_id() {
+        let mut cache = DashboardServiceStatusCache::default();
+        let key = DashboardServiceStatusCacheKey {
+            backend_session: DASHBOARD_SERVICE_BACKEND_SESSION,
+            port: 30003,
+            path: "/api/service/status?late=true".to_string(),
+        };
+        let (_sender, receiver) = watch::channel(None);
+        cache.entries.insert(
+            key.clone(),
+            DashboardServiceStatusCacheEntry::InFlight {
+                request_id: 2,
+                registered_at: Instant::now(),
+                result: receiver,
+                owner_abort: None,
+            },
+        );
+        let response = Ok(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}".to_vec());
+
+        apply_dashboard_status_flight_completion(
+            &mut cache,
+            key.clone(),
+            1,
+            &response,
+            Instant::now(),
+        );
+
+        assert!(matches!(
+            cache.entries.get(&key),
+            Some(DashboardServiceStatusCacheEntry::InFlight { request_id: 2, .. })
         ));
     }
 
@@ -2390,101 +3135,6 @@ mod tests {
         assert!(!should_probe_route_display(":106"));
         assert!(!should_probe_route_display("localhost:12"));
         assert!(!should_probe_route_display(""));
-    }
-
-    #[test]
-    fn dashboard_service_status_response_adds_configured_guacamole_route_urls() {
-        let guard = EnvGuard::new(&["AGENT_BROWSER_REMOTE_VIEW_URL"]);
-        guard.set(
-            "AGENT_BROWSER_REMOTE_VIEW_URL",
-            "/guacamole/#/client/MQBjAHBvc3RncmVzcWw=",
-        );
-        let body = json!({
-            "success": true,
-            "data": {
-                "service_state": {
-                    "browsers": {
-                        "session:odollo-carrier-ups": {
-                            "id": "session:odollo-carrier-ups",
-                            "host": "remote_headed",
-                            "viewStreams": [{
-                                "id": "remote-headed-view",
-                                "provider": "rdp_gateway",
-                                "url": "https://agent-browser.example/guacamole/",
-                                "readOnly": false
-                            }]
-                        }
-                    }
-                }
-            }
-        })
-        .to_string();
-        let response = format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
-            body.len(),
-            body
-        )
-        .into_bytes();
-
-        let repaired = repair_dashboard_service_status_response("/api/service/status", response);
-        let repaired_text = String::from_utf8(repaired).unwrap();
-        let repaired_body = repaired_text.split("\r\n\r\n").nth(1).unwrap();
-        let repaired_json: Value = serde_json::from_str(repaired_body).unwrap();
-
-        assert_eq!(
-            repaired_json["data"]["service_state"]["browsers"]["session:odollo-carrier-ups"]
-                ["viewStreams"][0]["frameUrl"],
-            "/guacamole/#/client/MQBjAHBvc3RncmVzcWw="
-        );
-        assert!(repaired_text.contains(&format!("Content-Length: {}", repaired_body.len())));
-    }
-
-    #[test]
-    fn dashboard_service_status_response_leaves_guacamole_root_without_route() {
-        let _guard = EnvGuard::new(&["AGENT_BROWSER_REMOTE_VIEW_URL"]);
-        let body = json!({
-            "success": true,
-            "data": {
-                "service_state": {
-                    "browsers": {
-                        "session:odollo-carrier-ups": {
-                            "id": "session:odollo-carrier-ups",
-                            "host": "remote_headed",
-                            "viewStreams": [{
-                                "id": "remote-headed-view",
-                                "provider": "rdp_gateway",
-                                "url": "https://agent-browser.example/guacamole/",
-                                "readOnly": false
-                            }]
-                        }
-                    }
-                }
-            }
-        })
-        .to_string();
-        let response = format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
-            body.len(),
-            body
-        )
-        .into_bytes();
-
-        let repaired = repair_dashboard_service_status_response("/api/service/status", response);
-        let repaired_text = String::from_utf8(repaired).unwrap();
-        let repaired_body = repaired_text.split("\r\n\r\n").nth(1).unwrap();
-        let repaired_json: Value = serde_json::from_str(repaired_body).unwrap();
-
-        assert_eq!(
-            repaired_json["data"]["service_state"]["browsers"]["session:odollo-carrier-ups"]
-                ["viewStreams"][0]["url"],
-            "https://agent-browser.example/guacamole/"
-        );
-        assert!(
-            repaired_json["data"]["service_state"]["browsers"]["session:odollo-carrier-ups"]
-                ["viewStreams"][0]["frameUrl"]
-                .is_null()
-        );
-        assert!(repaired_text.contains(&format!("Content-Length: {}", repaired_body.len())));
     }
 
     #[test]
@@ -2750,6 +3400,32 @@ mod tests {
         );
         assert_eq!(write.code, "backend_write_timeout");
         assert_eq!(write.details.unwrap()["stage"], json!("write"));
+    }
+
+    #[tokio::test]
+    async fn dashboard_gateway_independently_bounds_connect_write_and_read_phases() {
+        for (code, stage) in [
+            ("backend_connect_timeout", "connect"),
+            ("backend_write_timeout", "write"),
+            ("backend_read_timeout", "read"),
+        ] {
+            let error = run_dashboard_backend_io_phase(
+                DashboardBackendIoPhase {
+                    timeout_code: code,
+                    timeout_message: format!("{stage} timed out"),
+                    failure_message: format!("{stage} failed"),
+                    port: 9222,
+                    path: "/api/service/status",
+                    stage,
+                    timeout: Duration::from_millis(1),
+                },
+                std::future::pending::<std::io::Result<()>>(),
+            )
+            .await
+            .unwrap_err();
+            assert_eq!(error.code, code);
+            assert_eq!(error.details.unwrap()["stage"], stage);
+        }
     }
 
     #[test]

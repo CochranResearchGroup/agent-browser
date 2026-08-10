@@ -124,6 +124,7 @@ type ServiceStatusData = {
   profileAllocations?: WorkspaceServiceProfileAllocation[];
   manualBrowsers?: WorkspaceManualBrowser[];
   browserSessionAuthority?: WorkspaceNodeInput["browserSessionAuthority"];
+  statusProjection?: WorkspaceNodeInput["statusProjection"];
 };
 
 type ServiceContractsData = {
@@ -1502,6 +1503,7 @@ export function WorkspaceNavigator() {
       jobs: Object.values(serviceState?.jobs ?? {}),
       incidents: serviceState?.incidents ?? [],
       browserSessionAuthority: serviceStatus?.browserSessionAuthority ?? null,
+      statusProjection: serviceStatus?.statusProjection ?? null,
       serviceRequestActions,
     };
   }, [getEngineForSession, getTabsForSession, serviceRequestActions, serviceStatus, sessions]);

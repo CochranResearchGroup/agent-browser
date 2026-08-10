@@ -1,3 +1,4 @@
+use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
@@ -7,7 +8,7 @@ use std::fs;
 #[cfg(all(unix, not(test)))]
 use std::path::Path;
 use std::process::Command;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use crate::runtime_profile::read_runtime_state;
@@ -19,9 +20,42 @@ use super::service_model::{
 const ROUTE_DISPLAY_CONTENT_TTL: Duration = Duration::from_secs(5);
 const ROUTE_DISPLAY_NAME_TTL: Duration = Duration::from_secs(10);
 
-struct RouteDisplayContentCacheEntry {
-    observed_at: Instant,
-    content: Value,
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct RouteDisplayContentCacheKey {
+    source_host_id: String,
+    display_name: String,
+}
+
+struct RouteDisplayContentFlight {
+    result: Mutex<Option<RouteDisplayObservation>>,
+    completed: Condvar,
+}
+
+enum RouteDisplayContentCacheEntry {
+    InFlight(Arc<RouteDisplayContentFlight>),
+    Ready {
+        cached_at: Instant,
+        observation: RouteDisplayObservation,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RouteDisplayObservationState {
+    Observed,
+    TimedOut,
+    Unsupported,
+    Unavailable,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RouteDisplayObservation {
+    pub(crate) state: RouteDisplayObservationState,
+    pub(crate) observed_at: Option<String>,
+    pub(crate) valid_until: Option<String>,
+    pub(crate) max_age_ms: u64,
+    pub(crate) content: Option<Value>,
+    pub(crate) error: Option<String>,
 }
 
 struct RouteDisplayNameCacheEntry {
@@ -30,7 +64,7 @@ struct RouteDisplayNameCacheEntry {
 }
 
 static ROUTE_DISPLAY_CONTENT_CACHE: OnceLock<
-    Mutex<HashMap<String, RouteDisplayContentCacheEntry>>,
+    Mutex<HashMap<RouteDisplayContentCacheKey, RouteDisplayContentCacheEntry>>,
 > = OnceLock::new();
 static ROUTE_DISPLAY_NAME_CACHE: OnceLock<Mutex<RouteDisplayNameCacheEntry>> = OnceLock::new();
 
@@ -1283,17 +1317,51 @@ pub fn route_binding_readiness(binding: &RemoteViewRouteBinding) -> Value {
 }
 
 pub fn route_display_content(display_name: &str) -> Option<Value> {
-    route_display_content_with_bound_display(display_name, None)
+    route_display_observation_with_bound_display("local_process_host", display_name, None)
+        .map(|observation| route_display_observation_legacy_content(display_name, observation))
+}
+
+pub(crate) fn route_display_observation_for_source(
+    source_host_id: &str,
+    display_name: &str,
+) -> Option<RouteDisplayObservation> {
+    route_display_observation_with_bound_display(source_host_id, display_name, None)
 }
 
 pub fn route_bound_display_content(display_name: &str) -> Option<Value> {
-    route_display_content_with_bound_display(display_name, Some(display_name))
+    route_display_observation_with_bound_display(
+        "local_process_host",
+        display_name,
+        Some(display_name),
+    )
+    .map(|observation| route_display_observation_legacy_content(display_name, observation))
 }
 
-fn route_display_content_with_bound_display(
+fn route_display_observation_legacy_content(
+    display_name: &str,
+    observation: RouteDisplayObservation,
+) -> Value {
+    observation.content.unwrap_or_else(|| {
+        json!({
+            "state": match observation.state {
+                RouteDisplayObservationState::TimedOut => "display_probe_timeout",
+                RouteDisplayObservationState::Unsupported => "display_probe_unsupported",
+                RouteDisplayObservationState::Unavailable => "display_probe_unavailable",
+                RouteDisplayObservationState::Failed => "display_probe_failed",
+                RouteDisplayObservationState::Observed => "display_probe_failed",
+            },
+            "displayName": display_name,
+            "windows": [],
+            "error": observation.error,
+        })
+    })
+}
+
+fn route_display_observation_with_bound_display(
+    source_host_id: &str,
     display_name: &str,
     bound_display_name: Option<&str>,
-) -> Option<Value> {
+) -> Option<RouteDisplayObservation> {
     let display_name = display_name.trim();
     if display_name.is_empty() {
         return None;
@@ -1303,33 +1371,101 @@ fn route_display_content_with_bound_display(
         bound_display_name,
         should_probe_route_display(display_name),
     ) {
-        return Some(json!({
-            "state": "display_probe_unavailable",
-            "displayName": display_name,
-            "windows": [],
-            "error": "display is not a configured RDP route display",
-        }));
+        return Some(failed_route_display_observation(
+            RouteDisplayObservationState::Unavailable,
+            "display is not a configured RDP route display".to_string(),
+        ));
     }
 
+    let key = RouteDisplayContentCacheKey {
+        source_host_id: source_host_id.trim().to_string(),
+        display_name: display_name.to_string(),
+    };
+    Some(cached_route_display_observation(key, || {
+        inspect_route_display_observation(display_name)
+    }))
+}
+
+fn cached_route_display_observation(
+    key: RouteDisplayContentCacheKey,
+    inspect: impl FnOnce() -> RouteDisplayObservation + std::panic::UnwindSafe,
+) -> RouteDisplayObservation {
     let cache = ROUTE_DISPLAY_CONTENT_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    if let Ok(mut cache) = cache.lock() {
-        if let Some(entry) = cache.get(display_name) {
-            if entry.observed_at.elapsed() < ROUTE_DISPLAY_CONTENT_TTL {
-                return Some(entry.content.clone());
+    let (flight, owns_probe) = match cache.lock() {
+        Ok(mut entries) => {
+            if let Some(RouteDisplayContentCacheEntry::Ready {
+                cached_at,
+                observation,
+            }) = entries.get(&key)
+            {
+                if cached_at.elapsed() < ROUTE_DISPLAY_CONTENT_TTL {
+                    return observation.clone();
+                }
+                entries.remove(&key);
+            }
+            if let Some(RouteDisplayContentCacheEntry::InFlight(flight)) = entries.get(&key) {
+                (flight.clone(), false)
+            } else {
+                let flight = Arc::new(RouteDisplayContentFlight {
+                    result: Mutex::new(None),
+                    completed: Condvar::new(),
+                });
+                entries.insert(
+                    key.clone(),
+                    RouteDisplayContentCacheEntry::InFlight(flight.clone()),
+                );
+                (flight, true)
             }
         }
+        Err(_) => return inspect(),
+    };
 
-        let content = inspect_route_display_content(display_name);
-        cache.insert(
-            display_name.to_string(),
-            RouteDisplayContentCacheEntry {
-                observed_at: Instant::now(),
-                content: content.clone(),
-            },
-        );
-        return Some(content);
+    if !owns_probe {
+        let Ok(result) = flight.result.lock() else {
+            return inspect();
+        };
+        let Ok((result, _)) =
+            flight
+                .completed
+                .wait_timeout_while(result, Duration::from_secs(4), |result| result.is_none())
+        else {
+            return inspect();
+        };
+        return result.clone().unwrap_or_else(|| {
+            failed_route_display_observation(
+                RouteDisplayObservationState::Failed,
+                "xwininfo display probe ended without a result".to_string(),
+            )
+        });
     }
-    Some(inspect_route_display_content(display_name))
+
+    let observation = std::panic::catch_unwind(inspect).unwrap_or_else(|_| {
+        failed_route_display_observation(
+            RouteDisplayObservationState::Failed,
+            "xwininfo probe panicked".to_string(),
+        )
+    });
+    if let Ok(mut result) = flight.result.lock() {
+        *result = Some(observation.clone());
+        flight.completed.notify_all();
+    }
+    if let Ok(mut entries) = cache.lock() {
+        let still_owned = matches!(
+            entries.get(&key),
+            Some(RouteDisplayContentCacheEntry::InFlight(current))
+                if Arc::ptr_eq(current, &flight)
+        );
+        if still_owned {
+            entries.insert(
+                key,
+                RouteDisplayContentCacheEntry::Ready {
+                    cached_at: Instant::now(),
+                    observation: observation.clone(),
+                },
+            );
+        }
+    }
+    observation
 }
 
 fn route_display_probe_authorized(
@@ -1446,7 +1582,13 @@ fn x11_display_name_from_args(args: &str) -> Option<String> {
         .map(str::to_string)
 }
 
-fn inspect_route_display_content(display_name: &str) -> Value {
+fn inspect_route_display_observation(display_name: &str) -> RouteDisplayObservation {
+    if !command_exists_on_path("timeout") || !command_exists_on_path("xwininfo") {
+        return failed_route_display_observation(
+            RouteDisplayObservationState::Unsupported,
+            "xwininfo display probing is not supported on this host".to_string(),
+        );
+    }
     let output = Command::new("timeout")
         .args([
             "--kill-after=1",
@@ -1459,12 +1601,10 @@ fn inspect_route_display_content(display_name: &str) -> Value {
         ])
         .output();
     let Ok(output) = output else {
-        return json!({
-            "state": "display_probe_unavailable",
-            "displayName": display_name,
-            "windows": [],
-            "error": "xwininfo probe could not be started",
-        });
+        return failed_route_display_observation(
+            RouteDisplayObservationState::Unavailable,
+            "xwininfo probe could not be started".to_string(),
+        );
     };
     if !output.status.success() {
         let error = String::from_utf8_lossy(if output.stderr.is_empty() {
@@ -1476,14 +1616,56 @@ fn inspect_route_display_content(display_name: &str) -> Value {
         .chars()
         .take(240)
         .collect::<String>();
-        return json!({
-            "state": "display_probe_unavailable",
-            "displayName": display_name,
-            "windows": [],
-            "error": if error.is_empty() { "xwininfo probe failed" } else { error.as_str() },
-        });
+        let state = if matches!(output.status.code(), Some(124 | 137)) {
+            RouteDisplayObservationState::TimedOut
+        } else {
+            RouteDisplayObservationState::Failed
+        };
+        return failed_route_display_observation(
+            state,
+            if error.is_empty() {
+                "xwininfo probe failed".to_string()
+            } else {
+                error
+            },
+        );
     }
-    display_content_from_xwininfo(display_name, &String::from_utf8_lossy(&output.stdout))
+    let observed_at = Utc::now();
+    RouteDisplayObservation {
+        state: RouteDisplayObservationState::Observed,
+        observed_at: Some(observed_at.to_rfc3339_opts(SecondsFormat::Millis, true)),
+        valid_until: Some(
+            (observed_at
+                + chrono::Duration::milliseconds(ROUTE_DISPLAY_CONTENT_TTL.as_millis() as i64))
+            .to_rfc3339_opts(SecondsFormat::Millis, true),
+        ),
+        max_age_ms: ROUTE_DISPLAY_CONTENT_TTL.as_millis() as u64,
+        content: Some(display_content_from_xwininfo(
+            display_name,
+            &String::from_utf8_lossy(&output.stdout),
+        )),
+        error: None,
+    }
+}
+
+fn failed_route_display_observation(
+    state: RouteDisplayObservationState,
+    error: String,
+) -> RouteDisplayObservation {
+    RouteDisplayObservation {
+        state,
+        observed_at: None,
+        valid_until: None,
+        max_age_ms: ROUTE_DISPLAY_CONTENT_TTL.as_millis() as u64,
+        content: None,
+        error: Some(error),
+    }
+}
+
+fn command_exists_on_path(command: &str) -> bool {
+    env::var_os("PATH").is_some_and(|path| {
+        env::split_paths(&path).any(|directory| directory.join(command).is_file())
+    })
 }
 
 pub fn display_content_from_xwininfo(display_name: &str, text: &str) -> Value {
@@ -1868,6 +2050,7 @@ fn display_allocation_diagnostic(allocation: &DisplayAllocation) -> Value {
 mod tests {
     use serde_json::json;
     use std::collections::BTreeMap;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     use super::super::service_model::{BrowserProcess, RemoteViewRoute};
     use super::*;
@@ -2910,6 +3093,42 @@ mod tests {
         assert!(!route_display_probe_authorized(":11", None, false));
         assert!(!route_display_probe_authorized(":11", Some(":10"), false));
         assert!(route_display_probe_authorized(":11", None, true));
+    }
+
+    #[test]
+    fn typed_display_cache_preserves_original_freshness_and_terminal_state() {
+        let key = RouteDisplayContentCacheKey {
+            source_host_id: "sha256:test-display-cache".to_string(),
+            display_name: ":987".to_string(),
+        };
+        let probe_count = AtomicUsize::new(0);
+        let expected = RouteDisplayObservation {
+            state: RouteDisplayObservationState::TimedOut,
+            observed_at: None,
+            valid_until: None,
+            max_age_ms: 5_000,
+            content: None,
+            error: Some("fixed timeout".to_string()),
+        };
+
+        let first = cached_route_display_observation(key.clone(), || {
+            probe_count.fetch_add(1, Ordering::SeqCst);
+            expected.clone()
+        });
+        let second = cached_route_display_observation(key, || {
+            probe_count.fetch_add(1, Ordering::SeqCst);
+            failed_route_display_observation(
+                RouteDisplayObservationState::Failed,
+                "should not execute".to_string(),
+            )
+        });
+
+        assert_eq!(probe_count.load(Ordering::SeqCst), 1);
+        assert_eq!(second, first);
+        assert_eq!(second.state, RouteDisplayObservationState::TimedOut);
+        assert_eq!(second.observed_at, None);
+        assert_eq!(second.valid_until, None);
+        assert_eq!(second.content, None);
     }
 
     #[test]

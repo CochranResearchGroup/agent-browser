@@ -15,6 +15,8 @@ import {
 } from "@/lib/selected-workspace-context";
 import {
   projectWorkspaceViews,
+  applyStatusObservationsToWorkspaceSources,
+  type WorkspaceStatusProjection,
   type WorkspaceViewAuthorityLedger,
   type WorkspaceViewBrowserSource,
   type WorkspaceViewProjection,
@@ -50,6 +52,7 @@ type ServiceStatusData = {
   profileAllocations?: WorkspaceServiceProfileAllocation[];
   manualBrowsers?: WorkspaceManualBrowser[];
   browserSessionAuthority?: WorkspaceBrowserSessionAuthority | null;
+  statusProjection?: WorkspaceStatusProjection | null;
 };
 
 type ServiceResourcesData = {
@@ -178,7 +181,7 @@ export function useSelectedWorkspaceContext(
     const authorityLedger = workspaceAuthorityLedger(nodes, canonicalAuthority);
     const selectedSubjectKey = baseContext.node?.id ?? "";
     const projection = projectWorkspaceViews({
-      sources: {
+      sources: applyStatusObservationsToWorkspaceSources({
         serviceBrowsers: serviceBrowsers.map(workspaceProjectionBrowser),
         serviceTabs,
         remoteViewRoutes: serviceStatus?.service_state?.remoteViewRoutes ?? {},
@@ -190,7 +193,7 @@ export function useSelectedWorkspaceContext(
             provider: baseContext.stream.provider ?? undefined,
           } : null,
         },
-      },
+      }, serviceStatus?.statusProjection),
       authorityLedger,
       intent: {
         selection,

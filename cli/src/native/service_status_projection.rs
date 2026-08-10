@@ -1,49 +1,276 @@
-use std::collections::HashSet;
+//! Canonical Service Status response projection.
+//!
+//! Reconciled Service State and Browser Session Authority cross this module as
+//! typed authority. Host-local runtime facts cross a substitutable observation
+//! adapter and carry availability and freshness without becoming persisted
+//! browser, route, proof, inventory, or actionability truth.
 
-use serde::Serialize;
+mod authority;
+mod compatibility;
+mod local_observation;
+mod observation;
 
-use crate::runtime_profile::ManualRuntimeBrowser;
+use std::sync::Arc;
 
-use super::service_model::{ServiceState, TabLifecycle};
+use chrono::{DateTime, SecondsFormat, Utc};
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
+
+use super::browser_session_authority::BrowserSessionAuthoritySnapshot;
+use super::service_model::{ControlPlaneSnapshot, ServiceProfileAllocation, ServiceState};
+
+#[cfg(test)]
+pub(crate) use local_observation::InMemoryStatusObservationAdapter;
+pub(crate) use local_observation::{
+    LocalStatusObservationAdapter, UnavailableStatusObservationAdapter,
+};
+#[cfg(test)]
+pub(crate) use observation::{
+    StatusObservationComponentState, StatusObservationError, StatusObservationErrorCode,
+    StatusObservationSourceKind, StatusObservationState, StatusRoutePresentationSource,
+    StatusViewStreamObservationState,
+};
+pub(crate) use observation::{
+    StatusObservationRequest, StatusObservationSnapshot, StatusObservationSource,
+};
 
 pub const ORDINARY_CLOSED_TAB_CAP: usize = 50;
 
-/// Builds the response-only inventory for live manual runtime browsers.
-///
-/// Manual browsers can intentionally have no CDP endpoint, so they must be
-/// projected from runtime-profile state instead of inferred from service
-/// browser records. Remote-view metadata is joined from the service authority
-/// when the browser's display has a governed route.
-pub fn manual_runtime_browser_projection(state: &ServiceState) -> Vec<ManualRuntimeBrowser> {
-    let mut manual_browsers =
-        crate::runtime_profile::list_manual_runtime_browsers().unwrap_or_default();
-    for manual_browser in &mut manual_browsers {
-        let route = state.remote_view_routes.values().find(|route| {
-            let Some(display) = manual_browser.display.as_deref() else {
-                return false;
-            };
-            route
-                .display_allocation_id
-                .as_deref()
-                .and_then(|allocation_id| state.display_allocations.get(allocation_id))
-                .and_then(|allocation| allocation.display_name.as_deref())
-                == Some(display)
-        });
-        if let Some(route) = route {
-            manual_browser.remote_view_route_id = Some(route.id.clone());
-            manual_browser.remote_view_url = route
-                .frame_url
-                .clone()
-                .or_else(|| route.external_url.clone());
-            manual_browser.remote_control_available =
-                !route.read_only && route.control_input.is_some();
-            if manual_browser.remote_view_url.is_some() {
-                manual_browser.next_safe_action =
-                    "open_remote_view_or_finish_login_then_close".to_string();
-            }
+/// Compatibility projection used by the Chrome diagnostic surface. Canonical
+/// Service Status reads obtain the same raw discovery through the observation
+/// adapter before this authority join is applied.
+pub fn manual_runtime_browser_projection(
+    state: &ServiceState,
+) -> Vec<crate::runtime_profile::ManualRuntimeBrowser> {
+    compatibility::join_manual_browsers(
+        state,
+        crate::runtime_profile::list_manual_runtime_browsers().unwrap_or_default(),
+    )
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct StatusAuthorityInput {
+    pub(crate) service_state: ServiceState,
+    pub(crate) control_plane: StatusControlPlaneAuthority,
+    pub(crate) browser_session_authority: BrowserSessionAuthoritySnapshot,
+    pub(crate) launch_config: StatusLaunchConfiguration,
+    pub(crate) full_tab_history: bool,
+}
+
+pub(crate) struct ServiceStatusProjectionDependencies<'a, Repository, Preparer, BrowserAuthority> {
+    pub(crate) repository: &'a Repository,
+    pub(crate) preparer: &'a Preparer,
+    pub(crate) browser_authority: &'a BrowserAuthority,
+    pub(crate) projector: &'a ServiceStatusProjector,
+}
+
+impl<'a, Repository, Preparer, BrowserAuthority>
+    ServiceStatusProjectionDependencies<'a, Repository, Preparer, BrowserAuthority>
+{
+    pub(crate) fn new(
+        repository: &'a Repository,
+        preparer: &'a Preparer,
+        browser_authority: &'a BrowserAuthority,
+        projector: &'a ServiceStatusProjector,
+    ) -> Self {
+        Self {
+            repository,
+            preparer,
+            browser_authority,
+            projector,
         }
     }
-    manual_browsers
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) enum StatusWorkerState {
+    #[serde(alias = "starting")]
+    Starting,
+    #[serde(alias = "ready")]
+    Ready,
+    #[serde(alias = "busy")]
+    Busy,
+    #[serde(alias = "draining")]
+    Draining,
+    #[serde(alias = "closing")]
+    Closing,
+    #[serde(alias = "stopped")]
+    Stopped,
+    #[serde(alias = "faulted")]
+    Faulted,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) enum StatusBrowserHealth {
+    #[serde(alias = "not_started")]
+    NotStarted,
+    #[serde(alias = "launching")]
+    Launching,
+    #[serde(alias = "ready")]
+    Ready,
+    #[serde(alias = "unreachable")]
+    Unreachable,
+    #[serde(alias = "process_exited")]
+    ProcessExited,
+    #[serde(alias = "cdp_disconnected")]
+    CdpDisconnected,
+    #[serde(alias = "closing")]
+    Closing,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct StatusControlPlaneAuthority {
+    pub(crate) worker_state: StatusWorkerState,
+    pub(crate) browser_health: StatusBrowserHealth,
+    pub(crate) queue_depth: usize,
+    pub(crate) queue_capacity: usize,
+    pub(crate) waiting_profile_lease_job_count: usize,
+    pub(crate) service_job_timeout_ms: Option<u64>,
+    pub(crate) service_monitor_interval_ms: Option<u64>,
+}
+
+impl TryFrom<&ControlPlaneSnapshot> for StatusControlPlaneAuthority {
+    type Error = ServiceStatusProjectionError;
+
+    fn try_from(snapshot: &ControlPlaneSnapshot) -> Result<Self, Self::Error> {
+        let authority = serde_json::from_value(serde_json::json!({
+            "worker_state": snapshot.worker_state,
+            "browser_health": snapshot.browser_health,
+            "queue_depth": snapshot.queue_depth,
+            "queue_capacity": snapshot.queue_capacity,
+            "waiting_profile_lease_job_count": snapshot.waiting_profile_lease_job_count,
+            "service_job_timeout_ms": snapshot.service_job_timeout_ms,
+            "service_monitor_interval_ms": snapshot.service_monitor_interval_ms,
+        }))
+        .map_err(|error| {
+            ServiceStatusProjectionError::InvalidAuthority(format!(
+                "invalid control-plane snapshot: {error}"
+            ))
+        })?;
+        validate_control_plane_authority(authority)
+    }
+}
+
+impl TryFrom<Value> for StatusControlPlaneAuthority {
+    type Error = ServiceStatusProjectionError;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        let authority = serde_json::from_value(value).map_err(|error| {
+            ServiceStatusProjectionError::InvalidAuthority(format!(
+                "invalid control-plane snapshot: {error}"
+            ))
+        })?;
+        validate_control_plane_authority(authority)
+    }
+}
+
+fn validate_control_plane_authority(
+    authority: StatusControlPlaneAuthority,
+) -> Result<StatusControlPlaneAuthority, ServiceStatusProjectionError> {
+    if authority.queue_depth > authority.queue_capacity {
+        return Err(ServiceStatusProjectionError::InvalidAuthority(
+            "control-plane queueDepth exceeds queueCapacity".to_string(),
+        ));
+    }
+    Ok(authority)
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct StatusLaunchConfiguration {
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    default_browser_build: Option<String>,
+    stealth_cdp_chromium_required: bool,
+    stealth_cdp_chromium_ready: bool,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    executable_path: Option<String>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    executable_path_source: Option<String>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    executable_path_exists: Option<bool>,
+    browser_build_manifests: Map<String, Value>,
+    profile_smoke: StatusLaunchProfileSmoke,
+    warnings: Vec<StatusLaunchWarning>,
+    #[serde(flatten)]
+    additional_properties: Map<String, Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StatusLaunchProfileSmoke {
+    available: bool,
+    command: String,
+    reason: String,
+    is_wsl: bool,
+    executable_on_windows_mount: bool,
+    description: String,
+    #[serde(flatten)]
+    additional_properties: Map<String, Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct StatusLaunchWarning {
+    code: String,
+    severity: String,
+    message: String,
+    #[serde(flatten)]
+    additional_properties: Map<String, Value>,
+}
+
+fn deserialize_required_nullable<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer)
+}
+
+impl TryFrom<Value> for StatusLaunchConfiguration {
+    type Error = ServiceStatusProjectionError;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        let Value::Object(value) = value else {
+            return Err(ServiceStatusProjectionError::InvalidAuthority(
+                "launchConfig must be an object".to_string(),
+            ));
+        };
+        serde_json::from_value(Value::Object(value)).map_err(|error| {
+            ServiceStatusProjectionError::InvalidAuthority(format!("invalid launchConfig: {error}"))
+        })
+    }
+}
+
+impl StatusLaunchConfiguration {
+    fn legacy_ingress_default() -> Self {
+        Self {
+            default_browser_build: None,
+            stealth_cdp_chromium_required: false,
+            stealth_cdp_chromium_ready: true,
+            executable_path: None,
+            executable_path_source: None,
+            executable_path_exists: None,
+            browser_build_manifests: Map::new(),
+            profile_smoke: StatusLaunchProfileSmoke {
+                available: false,
+                command: "pnpm test:wsl-windows-chromium-profile-live".to_string(),
+                reason: "stealthcdp_chromium_not_selected".to_string(),
+                is_wsl: false,
+                executable_on_windows_mount: false,
+                description: "Launches Windows chromium-stealthcdp from WSL with an isolated daemon socket and Windows-mounted profile, then verifies profile writes and Chrome stderr path hygiene.".to_string(),
+                additional_properties: Map::new(),
+            },
+            warnings: Vec::new(),
+            additional_properties: Map::new(),
+        }
+    }
+}
+
+pub(crate) fn launch_configuration_from_status_command(command: &Value) -> Value {
+    command.get("launchConfig").cloned().unwrap_or_else(|| {
+        serde_json::to_value(StatusLaunchConfiguration::legacy_ingress_default())
+            .expect("typed legacy launch configuration always serializes")
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -58,166 +285,218 @@ pub struct ClosedTabProjectionMetadata {
     pub diagnostic_available: bool,
 }
 
-/// Builds a response-only status projection. The input remains the persisted
-/// lifecycle authority and is never mutated by compaction.
-pub fn project_service_status(
-    state: &ServiceState,
-    full_tab_history: bool,
-) -> (ServiceState, ClosedTabProjectionMetadata) {
-    let total_closed_count = state
-        .tabs
-        .values()
-        .filter(|tab| tab.lifecycle == TabLifecycle::Closed)
-        .count();
-    if full_tab_history {
-        return (
-            state.clone(),
-            ClosedTabProjectionMetadata {
-                mode: "full",
-                cap: None,
-                total_closed_count,
-                retained_closed_count: total_closed_count,
-                omitted_closed_count: 0,
-                ordering: "tab_id_descending",
-                diagnostic_available: true,
-            },
-        );
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub(crate) struct ServiceStatusResponse {
+    pub(crate) control_plane: StatusControlPlaneAuthority,
+    pub(crate) service_state: Value,
+    #[serde(rename = "profileAllocations")]
+    pub(crate) profile_allocations: Vec<ServiceProfileAllocation>,
+    #[serde(rename = "manualBrowsers")]
+    pub(crate) manual_browsers: Vec<crate::runtime_profile::ManualRuntimeBrowser>,
+    #[serde(rename = "retainedDisplayAllocations")]
+    pub(crate) retained_display_allocations: Value,
+    #[serde(rename = "browserSessionAuthority")]
+    pub(crate) browser_session_authority: BrowserSessionAuthoritySnapshot,
+    #[serde(rename = "closedTabProjection")]
+    pub(crate) closed_tab_projection: ClosedTabProjectionMetadata,
+    #[serde(rename = "launchConfig")]
+    pub(crate) launch_config: StatusLaunchConfiguration,
+    #[serde(rename = "statusProjection")]
+    pub(crate) status_projection: StatusProjection,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct StatusProjection {
+    pub(crate) schema_version: u8,
+    pub(crate) authority: StatusProjectionAuthority,
+    pub(crate) observations: StatusObservationSnapshot,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct StatusProjectionAuthority {
+    pub(crate) source: &'static str,
+    pub(crate) projected_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ServiceStatusProjectionError {
+    InvalidAuthority(String),
+    InvalidObservation(String),
+    Serialization(String),
+}
+
+impl std::fmt::Display for ServiceStatusProjectionError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidAuthority(message) => {
+                write!(formatter, "invalid status authority: {message}")
+            }
+            Self::InvalidObservation(message) => {
+                write!(formatter, "invalid status observation: {message}")
+            }
+            Self::Serialization(message) => {
+                write!(formatter, "status serialization failed: {message}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for ServiceStatusProjectionError {}
+
+pub(crate) trait ProjectionClock: Send + Sync {
+    fn now(&self) -> DateTime<Utc>;
+}
+
+#[async_trait::async_trait]
+pub(crate) trait ServiceStatusAuthorityPreparer: Send + Sync {
+    async fn prepare(&self, service_state: &mut ServiceState);
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct ReconcileServiceStatusAuthority;
+
+#[async_trait::async_trait]
+impl ServiceStatusAuthorityPreparer for ReconcileServiceStatusAuthority {
+    async fn prepare(&self, service_state: &mut ServiceState) {
+        super::service_health::reconcile_service_state(service_state).await;
+    }
+}
+
+pub(crate) trait ServiceStatusBrowserAuthorityProvider: Send + Sync {
+    fn snapshot(&self, service_state: &ServiceState) -> BrowserSessionAuthoritySnapshot;
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct ReconciledBrowserSessionAuthority;
+
+impl ServiceStatusBrowserAuthorityProvider for ReconciledBrowserSessionAuthority {
+    fn snapshot(&self, service_state: &ServiceState) -> BrowserSessionAuthoritySnapshot {
+        super::browser_session_authority::browser_session_authority_snapshot(service_state)
+    }
+}
+
+#[derive(Debug, Default)]
+struct SystemProjectionClock;
+
+impl ProjectionClock for SystemProjectionClock {
+    fn now(&self) -> DateTime<Utc> {
+        Utc::now()
+    }
+}
+
+pub(crate) struct ServiceStatusProjector {
+    observations: Arc<dyn StatusObservationSource>,
+    clock: Arc<dyn ProjectionClock>,
+}
+
+impl ServiceStatusProjector {
+    pub(crate) fn local() -> Self {
+        Self::new(
+            Arc::new(LocalStatusObservationAdapter),
+            Arc::new(SystemProjectionClock),
+        )
     }
 
-    let session_tab_ids = state
-        .sessions
-        .values()
-        .flat_map(|session| session.tab_ids.iter().cloned())
-        .collect::<HashSet<_>>();
-    let mut compactable_closed_ids = state
-        .tabs
-        .values()
-        .filter(|tab| {
-            tab.lifecycle == TabLifecycle::Closed
-                && !session_tab_ids.contains(&tab.id)
-                && tab.owner_session_id.is_none()
-                && tab.service_tab_handle.is_none()
-                && tab.challenge_id.is_none()
-                && tab.latest_snapshot_id.is_none()
-                && tab.latest_screenshot_id.is_none()
-        })
-        .map(|tab| tab.id.clone())
-        .collect::<Vec<_>>();
-    compactable_closed_ids.sort_by(|left, right| right.cmp(left));
-    let omitted_ids = compactable_closed_ids
-        .into_iter()
-        .skip(ORDINARY_CLOSED_TAB_CAP)
-        .collect::<HashSet<_>>();
+    pub(crate) fn unavailable(reason: impl Into<String>) -> Self {
+        Self::new(
+            Arc::new(UnavailableStatusObservationAdapter::new(reason)),
+            Arc::new(SystemProjectionClock),
+        )
+    }
 
-    let mut projected = state.clone();
-    projected.tabs.retain(|id, _| !omitted_ids.contains(id));
-    let retained_closed_count = projected
-        .tabs
-        .values()
-        .filter(|tab| tab.lifecycle == TabLifecycle::Closed)
-        .count();
-    (
-        projected,
-        ClosedTabProjectionMetadata {
-            mode: "bounded",
-            cap: Some(ORDINARY_CLOSED_TAB_CAP),
-            total_closed_count,
-            retained_closed_count,
-            omitted_closed_count: omitted_ids.len(),
-            ordering: "tab_id_descending",
-            diagnostic_available: true,
-        },
-    )
+    pub(crate) fn new(
+        observations: Arc<dyn StatusObservationSource>,
+        clock: Arc<dyn ProjectionClock>,
+    ) -> Self {
+        Self {
+            observations,
+            clock,
+        }
+    }
+
+    /// Projects one complete v1 Service Status response without mutating or
+    /// persisting the supplied reconciled authority snapshot.
+    pub(crate) async fn project(
+        &self,
+        input: StatusAuthorityInput,
+    ) -> Result<ServiceStatusResponse, ServiceStatusProjectionError> {
+        authority::validate_authority(&input.service_state)?;
+        input.browser_session_authority.validate()?;
+
+        let mut authority_state = input.service_state.clone();
+        super::actions::refresh_cdp_screencast_view_streams(&mut authority_state);
+        super::remote_view_attachability::refresh_remote_view_attachability(&mut authority_state);
+        authority_state.refresh_profile_readiness();
+
+        let request = StatusObservationRequest::from_state(&authority_state);
+        let observations = self.observations.snapshot(request).await;
+        observations
+            .validate()
+            .map_err(ServiceStatusProjectionError::InvalidObservation)?;
+        let projected_at = format_timestamp(self.clock.now());
+
+        let manual_browsers = compatibility::join_manual_browsers(
+            &authority_state,
+            observations.manual_browsers.clone(),
+        );
+        let (response_state, closed_tab_projection) =
+            authority::project_closed_tabs(&authority_state, input.full_tab_history);
+        let response_state =
+            compatibility::apply_legacy_observation_mirrors(&response_state, &observations)?;
+
+        let response = ServiceStatusResponse {
+            control_plane: input.control_plane,
+            profile_allocations: super::service_model::service_profile_allocations(
+                &authority_state,
+            ),
+            manual_browsers,
+            retained_display_allocations: super::service_model::retained_display_allocation_summary(
+                &authority_state,
+            ),
+            browser_session_authority: input.browser_session_authority,
+            closed_tab_projection,
+            launch_config: input.launch_config,
+            service_state: response_state,
+            status_projection: StatusProjection {
+                schema_version: 1,
+                authority: StatusProjectionAuthority {
+                    source: "reconciled_service_state",
+                    projected_at,
+                },
+                observations,
+            },
+        };
+        serde_json::to_value(&response)
+            .map_err(|error| ServiceStatusProjectionError::Serialization(error.to_string()))?;
+        Ok(response)
+    }
+}
+
+pub(crate) async fn project_status_with_launch_configuration(
+    projector: &ServiceStatusProjector,
+    service_state: ServiceState,
+    control_plane: StatusControlPlaneAuthority,
+    browser_session_authority: BrowserSessionAuthoritySnapshot,
+    launch_config: Value,
+    full_tab_history: bool,
+) -> Result<ServiceStatusResponse, ServiceStatusProjectionError> {
+    let launch_config = StatusLaunchConfiguration::try_from(launch_config)?;
+    projector
+        .project(StatusAuthorityInput {
+            service_state,
+            control_plane,
+            browser_session_authority,
+            launch_config,
+            full_tab_history,
+        })
+        .await
+}
+
+fn format_timestamp(value: DateTime<Utc>) -> String {
+    value.to_rfc3339_opts(SecondsFormat::Millis, true)
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::native::service_model::{BrowserSession, BrowserTab, ServiceTabHandle};
-
-    fn closed_tab(id: &str) -> BrowserTab {
-        BrowserTab {
-            id: id.to_string(),
-            lifecycle: TabLifecycle::Closed,
-            ..BrowserTab::default()
-        }
-    }
-
-    #[test]
-    fn ordinary_status_caps_only_unreferenced_closed_history() {
-        let mut state = ServiceState::default();
-        for index in 0..55 {
-            let id = format!("closed-{index:03}");
-            state.tabs.insert(id.clone(), closed_tab(&id));
-        }
-        state.tabs.insert(
-            "ready".to_string(),
-            BrowserTab {
-                id: "ready".to_string(),
-                lifecycle: TabLifecycle::Ready,
-                ..BrowserTab::default()
-            },
-        );
-        let mut referenced = closed_tab("closed-referenced");
-        referenced.service_tab_handle = Some(ServiceTabHandle {
-            valid: false,
-            stale_reason: Some("target_closed".to_string()),
-            ..ServiceTabHandle::default()
-        });
-        state.tabs.insert(referenced.id.clone(), referenced);
-
-        let (projected, metadata) = project_service_status(&state, false);
-
-        assert_eq!(state.tabs.len(), 57);
-        assert_eq!(projected.tabs.len(), 52);
-        assert!(projected.tabs.contains_key("ready"));
-        assert!(projected.tabs.contains_key("closed-referenced"));
-        assert_eq!(
-            projected.tabs["closed-referenced"]
-                .service_tab_handle
-                .as_ref()
-                .and_then(|handle| handle.stale_reason.as_deref()),
-            Some("target_closed")
-        );
-        assert_eq!(metadata.total_closed_count, 56);
-        assert_eq!(metadata.retained_closed_count, 51);
-        assert_eq!(metadata.omitted_closed_count, 5);
-    }
-
-    #[test]
-    fn session_referenced_closed_tab_survives_ordinary_projection() {
-        let mut state = ServiceState::default();
-        state
-            .tabs
-            .insert("session-tab".to_string(), closed_tab("session-tab"));
-        state.sessions.insert(
-            "session-1".to_string(),
-            BrowserSession {
-                id: "session-1".to_string(),
-                tab_ids: vec!["session-tab".to_string()],
-                ..BrowserSession::default()
-            },
-        );
-        for index in 0..55 {
-            let id = format!("plain-{index:03}");
-            state.tabs.insert(id.clone(), closed_tab(&id));
-        }
-
-        let (projected, _) = project_service_status(&state, false);
-        assert!(projected.tabs.contains_key("session-tab"));
-    }
-
-    #[test]
-    fn full_history_returns_the_complete_unmodified_authority() {
-        let mut state = ServiceState::default();
-        for index in 0..55 {
-            let id = format!("closed-{index:03}");
-            state.tabs.insert(id.clone(), closed_tab(&id));
-        }
-
-        let (projected, metadata) = project_service_status(&state, true);
-        assert_eq!(projected, state);
-        assert_eq!(metadata.mode, "full");
-        assert_eq!(metadata.omitted_closed_count, 0);
-    }
-}
+mod tests;

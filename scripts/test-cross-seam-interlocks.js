@@ -24,6 +24,11 @@ assert.match(
   /browserSessionAuthority\??: ServiceBrowserSessionAuthoritySnapshot/,
   'Generated service observability types must expose browserSessionAuthority from service status.',
 );
+assert.match(
+  observabilityTypes,
+  /statusProjection\??: ServiceStatusProjection/,
+  'Generated service observability types must expose typed statusProjection metadata.',
+);
 
 assert.ok(
   serviceStatusSchema.properties.browserSessionAuthority?.properties?.browserVerdicts,
@@ -87,11 +92,13 @@ const fixture = {
   },
   browserSessionAuthority: {
     schemaVersion: 1,
+    availability: 'available',
     summary: {
       modeledBrowserCount: 3,
       viableBrowserCount: 1,
       attentionBrowserCount: 1,
       nonViableBrowserCount: 1,
+      unknownBrowserCount: 0,
     },
     resourcePressure: {
       state: 'pressure',
@@ -131,6 +138,29 @@ const fixture = {
         reasons: ['live_browser_missing_pid'],
       },
     ],
+  },
+  statusProjection: {
+    schemaVersion: 1,
+    authority: {
+      source: 'reconciled_service_state',
+      projectedAt: '2026-08-09T21:00:05.000Z',
+    },
+    observations: {
+      state: 'unavailable',
+      source: 'unavailable_status_observation_adapter',
+      sourceHostId: null,
+      observedAt: null,
+      validUntil: null,
+      maxAgeMs: 5000,
+      manualBrowsersState: 'unavailable',
+      browserProcessState: 'unavailable',
+      errors: [{
+        code: 'process_inventory_unavailable',
+        subject: 'host',
+        message: 'process inventory was unavailable',
+      }],
+      viewStreams: [],
+    },
   },
   service_state: {
     browsers: {

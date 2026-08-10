@@ -10,19 +10,16 @@ use tokio::sync::{mpsc, oneshot};
 use super::actions::{
     execute_command, service_profile_lease_gate, DaemonState, ServiceProfileLeaseGate,
 };
-use super::browser_session_authority::browser_session_authority_snapshot;
 use super::cancellation::CancellationToken as RunningJobCancel;
 use super::service_health::{
     apply_browser_health_observation, browser_health_observation_details,
     persist_reconciled_service_state_in_repository, reconcile_persisted_service_state,
-    reconcile_service_state, record_browser_health_changed_event,
-    remove_browser_operational_record,
+    record_browser_health_changed_event, remove_browser_operational_record,
 };
 use super::service_jobs::{
     cancel_persisted_service_job, load_service_job_in_repository, mutate_persisted_service_jobs,
 };
 use super::service_model::{
-    retained_display_allocation_summary, service_profile_allocations,
     BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
     ControlPlaneSnapshot, JobControlPlaneMode, JobPriority, JobState, JobTarget, ServiceActor,
     ServiceEvent, ServiceEventKind, ServiceJob, ServiceState,
@@ -197,39 +194,91 @@ impl ControlPlaneHandle {
         launch_config: Value,
         full_tab_history: bool,
     ) -> Value {
-        let mut service_state = serde_json::from_value::<ServiceState>(service_state)
-            .unwrap_or_else(|_| ServiceState::default());
+        let repository = match LockedServiceStateRepository::default_json() {
+            Ok(repository) => repository,
+            Err(error) => return json!({ "id": id, "success": false, "error": error }),
+        };
+        let projector = super::service_status_projection::ServiceStatusProjector::local();
+        self.service_status_response_with_dependencies(
+            id,
+            service_state,
+            launch_config,
+            full_tab_history,
+            super::service_status_projection::ServiceStatusProjectionDependencies::new(
+                &repository,
+                &super::service_status_projection::ReconcileServiceStatusAuthority,
+                &super::service_status_projection::ReconciledBrowserSessionAuthority,
+                &projector,
+            ),
+        )
+        .await
+    }
+
+    pub(crate) async fn service_status_response_with_dependencies<
+        Repository,
+        Preparer,
+        BrowserAuthority,
+    >(
+        &self,
+        id: &str,
+        service_state: Value,
+        launch_config: Value,
+        full_tab_history: bool,
+        dependencies: super::service_status_projection::ServiceStatusProjectionDependencies<
+            '_,
+            Repository,
+            Preparer,
+            BrowserAuthority,
+        >,
+    ) -> Value
+    where
+        Repository: ServiceStateRepository,
+        Preparer: super::service_status_projection::ServiceStatusAuthorityPreparer,
+        BrowserAuthority: super::service_status_projection::ServiceStatusBrowserAuthorityProvider,
+    {
+        let Ok(mut service_state) = serde_json::from_value::<ServiceState>(service_state) else {
+            return json!({
+                "id": id,
+                "success": false,
+                "error": "Invalid serviceState",
+            });
+        };
         let before = service_state.clone();
         let waiting_profile_lease_job_count =
             service_state_waiting_profile_lease_job_count(&service_state);
         service_state.control_plane = Some(self.status_snapshot(waiting_profile_lease_job_count));
-        reconcile_service_state(&mut service_state).await;
-        persist_reconciled_service_state(&before, &service_state);
-        let profile_allocations = service_profile_allocations(&service_state);
-        let manual_browsers =
-            super::service_status_projection::manual_runtime_browser_projection(&service_state);
-        let retained_display_allocations = retained_display_allocation_summary(&service_state);
-        let browser_session_authority = browser_session_authority_snapshot(&service_state);
-        let (service_state, closed_tab_projection) =
-            super::service_status_projection::project_service_status(
-                &service_state,
-                full_tab_history,
-            );
-
-        json!({
-            "id": id,
-            "success": true,
-            "data": {
-                "control_plane": self.status_payload(waiting_profile_lease_job_count),
-                "profileAllocations": profile_allocations,
-                "manualBrowsers": manual_browsers,
-                "retainedDisplayAllocations": retained_display_allocations,
-                "browserSessionAuthority": browser_session_authority,
-                "closedTabProjection": closed_tab_projection,
-                "launchConfig": launch_config,
-                "service_state": service_state,
-            },
-        })
+        dependencies.preparer.prepare(&mut service_state).await;
+        if let Err(error) = persist_reconciled_service_state_in_repository(
+            dependencies.repository,
+            &before,
+            &service_state,
+        ) {
+            return json!({ "id": id, "success": false, "error": error });
+        }
+        let browser_session_authority = dependencies.browser_authority.snapshot(&service_state);
+        let control_plane = service_state
+            .control_plane
+            .as_ref()
+            .expect("service status always creates a control-plane snapshot");
+        let control_plane =
+            match super::service_status_projection::StatusControlPlaneAuthority::try_from(
+                control_plane,
+            ) {
+                Ok(control_plane) => control_plane,
+                Err(error) => {
+                    return json!({ "id": id, "success": false, "error": error.to_string() })
+                }
+            };
+        let result = super::service_status_projection::project_status_with_launch_configuration(
+            dependencies.projector,
+            service_state,
+            control_plane,
+            browser_session_authority,
+            launch_config,
+            full_tab_history,
+        )
+        .await;
+        service_status_result_envelope(id, result)
     }
 
     fn status_snapshot(&self, waiting_profile_lease_job_count: usize) -> ControlPlaneSnapshot {
@@ -425,6 +474,19 @@ impl ControlPlaneHandle {
     }
 }
 
+pub(crate) fn service_status_result_envelope(
+    id: &str,
+    result: Result<
+        super::service_status_projection::ServiceStatusResponse,
+        super::service_status_projection::ServiceStatusProjectionError,
+    >,
+) -> Value {
+    match result {
+        Ok(data) => json!({ "id": id, "success": true, "data": data }),
+        Err(error) => json!({ "id": id, "success": false, "error": error.to_string() }),
+    }
+}
+
 fn command_with_service_job_id(mut command: Value, job_id: &str) -> Value {
     if let Some(object) = command.as_object_mut() {
         object.insert(
@@ -433,14 +495,6 @@ fn command_with_service_job_id(mut command: Value, job_id: &str) -> Value {
         );
     }
     command
-}
-
-fn persist_reconciled_service_state(before: &ServiceState, reconciled: &ServiceState) {
-    let before = before.clone();
-    let reconciled = reconciled.clone();
-    if let Ok(repository) = LockedServiceStateRepository::default_json() {
-        let _ = persist_reconciled_service_state_in_repository(&repository, &before, &reconciled);
-    }
 }
 
 enum SchedulerLeaseDecision {
@@ -1712,6 +1766,101 @@ mod tests {
         path
     }
 
+    #[derive(Default)]
+    struct InMemoryStatusRepository {
+        state: Mutex<ServiceState>,
+    }
+
+    impl ServiceStateRepository for InMemoryStatusRepository {
+        fn load_snapshot(&self) -> Result<ServiceState, String> {
+            self.state
+                .lock()
+                .map(|state| state.clone())
+                .map_err(|_| "in-memory status repository lock was poisoned".to_string())
+        }
+
+        fn mutate<R>(
+            &self,
+            mutator: impl FnOnce(&mut ServiceState) -> Result<R, String>,
+        ) -> Result<R, String> {
+            let mut state = self
+                .state
+                .lock()
+                .map_err(|_| "in-memory status repository lock was poisoned".to_string())?;
+            mutator(&mut state)
+        }
+    }
+
+    #[derive(Debug)]
+    struct FixedStatusAuthorityPreparer;
+
+    #[async_trait::async_trait]
+    impl super::super::service_status_projection::ServiceStatusAuthorityPreparer
+        for FixedStatusAuthorityPreparer
+    {
+        async fn prepare(&self, service_state: &mut ServiceState) {
+            service_state.control_plane = Some(ControlPlaneSnapshot {
+                worker_state: "Ready".to_string(),
+                browser_health: "NotStarted".to_string(),
+                queue_depth: 0,
+                queue_capacity: DEFAULT_QUEUE_CAPACITY,
+                waiting_profile_lease_job_count: 0,
+                service_job_timeout_ms: None,
+                service_monitor_interval_ms: None,
+                updated_at: Some("2026-08-10T12:00:00.000Z".to_string()),
+            });
+        }
+    }
+
+    #[derive(Debug)]
+    struct FixedBrowserAuthority;
+
+    impl super::super::service_status_projection::ServiceStatusBrowserAuthorityProvider
+        for FixedBrowserAuthority
+    {
+        fn snapshot(
+            &self,
+            _service_state: &ServiceState,
+        ) -> super::super::browser_session_authority::BrowserSessionAuthoritySnapshot {
+            super::super::browser_session_authority::BrowserSessionAuthoritySnapshot {
+                schema_version: 1,
+                ..Default::default()
+            }
+        }
+    }
+
+    #[derive(Debug)]
+    struct FixedStatusClock;
+
+    impl super::super::service_status_projection::ProjectionClock for FixedStatusClock {
+        fn now(&self) -> chrono::DateTime<chrono::Utc> {
+            chrono::DateTime::parse_from_rfc3339("2026-08-10T12:00:05.000Z")
+                .unwrap()
+                .with_timezone(&chrono::Utc)
+        }
+    }
+
+    fn fixed_launch_configuration() -> Value {
+        json!({
+            "defaultBrowserBuild": null,
+            "stealthCdpChromiumRequired": false,
+            "stealthCdpChromiumReady": true,
+            "executablePath": null,
+            "executablePathSource": null,
+            "executablePathExists": null,
+            "browserBuildManifests": {},
+            "profileSmoke": {
+                "available": false,
+                "command": "pnpm test:wsl-windows-chromium-profile-live",
+                "reason": "stealthcdp_chromium_not_selected",
+                "isWsl": false,
+                "executableOnWindowsMount": false,
+                "description": "fixed no-launch profile smoke"
+            },
+            "warnings": []
+        })
+    }
+
     #[tokio::test]
     async fn submit_returns_command_response() {
         let home = temp_home("control-plane-submit");
@@ -2223,6 +2372,162 @@ mod tests {
 
         handle.shutdown().await;
         let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn action_and_control_plane_status_both_surface_repository_failure() {
+        let home = temp_home("service-status-repository-failure");
+        std::fs::remove_dir(&home).unwrap();
+        std::fs::write(&home, b"not a directory").unwrap();
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+
+        let action_error = super::super::actions::handle_service_status(&json!({
+            "serviceState": {},
+            "launchConfig": {},
+        }))
+        .await
+        .unwrap_err();
+        let handle = ControlPlaneWorker::start(DaemonState::new());
+        let control_response = handle
+            .service_status_response(
+                "test-service-status-repository-failure",
+                json!({}),
+                json!({}),
+                false,
+            )
+            .await;
+
+        assert!(action_error.contains("Failed to create service state directory"));
+        assert_eq!(control_response["success"], false);
+        assert!(control_response["error"]
+            .as_str()
+            .unwrap()
+            .contains("Failed to create service state directory"));
+
+        handle.shutdown().await;
+        std::fs::remove_file(&home).unwrap();
+    }
+
+    #[tokio::test]
+    async fn fixed_input_harness_crosses_real_status_entries_and_transports() {
+        let repository = InMemoryStatusRepository::default();
+        let preparer = FixedStatusAuthorityPreparer;
+        let browser_authority = FixedBrowserAuthority;
+        let projector = super::super::service_status_projection::ServiceStatusProjector::new(
+            Arc::new(
+                super::super::service_status_projection::UnavailableStatusObservationAdapter::new(
+                    "fixed no-launch observation",
+                ),
+            ),
+            Arc::new(FixedStatusClock),
+        );
+        let command = json!({
+            "id": "fixed-action-status",
+            "action": "service_status",
+            "serviceState": {},
+            "launchConfig": fixed_launch_configuration(),
+            "fullTabHistory": false,
+        });
+        let action = super::super::actions::handle_service_status_with_dependencies(
+            &command,
+            super::super::service_status_projection::ServiceStatusProjectionDependencies::new(
+                &repository,
+                &preparer,
+                &browser_authority,
+                &projector,
+            ),
+        )
+        .await
+        .unwrap();
+
+        let (tx, _rx) = mpsc::channel(DEFAULT_QUEUE_CAPACITY);
+        let status = Arc::new(ControlPlaneStatus::new());
+        status.set_state(WorkerState::Ready);
+        let handle = ControlPlaneHandle {
+            tx,
+            status,
+            service_job_timeout_ms: None,
+            service_monitor_interval_ms: None,
+            running_cancellations: Arc::new(Mutex::new(HashMap::new())),
+        };
+        let control = handle
+            .service_status_response_with_dependencies(
+                "fixed-control-status",
+                json!({}),
+                fixed_launch_configuration(),
+                false,
+                super::super::service_status_projection::ServiceStatusProjectionDependencies::new(
+                    &repository,
+                    &preparer,
+                    &browser_authority,
+                    &projector,
+                ),
+            )
+            .await;
+        assert_eq!(control["success"], true);
+        assert_eq!(control["data"], action);
+
+        let control_text = control.to_string();
+        let direct_body = super::super::stream::service_status_http_with_relay(
+            "fixed-status-session",
+            Some("full-tab-history=false"),
+            |session, command| async move {
+                assert_eq!(session, "fixed-status-session");
+                assert_eq!(command["action"], "service_status");
+                assert_eq!(command["fullTabHistory"], false);
+                Ok(control_text)
+            },
+        )
+        .await
+        .unwrap();
+        let direct_http = super::super::stream::service_status_http_fixture(direct_body);
+        let dashboard_backend = super::super::stream::dashboard_service_status_with_transports(
+            Some(9222),
+            "/api/service/status?full-tab-history=false",
+            |_port, _path| async move { Ok(direct_http) },
+            |_path| async { None },
+        )
+        .await
+        .unwrap();
+        let dashboard_backend_body: Value = serde_json::from_slice(
+            super::super::stream::service_status_http_body_fixture(&dashboard_backend).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(dashboard_backend_body["data"], action);
+
+        let fallback_http = String::from_utf8(
+            super::super::stream::service_status_dashboard_cli_fallback_fixture(action.to_string()),
+        )
+        .unwrap();
+        let dashboard_fallback = super::super::stream::dashboard_service_status_with_transports(
+            None,
+            "/api/service/status?full-tab-history=false",
+            |_port, _path| async { Ok(Vec::new()) },
+            |_path| {
+                let fallback_http = fallback_http.clone();
+                async move { Some(fallback_http) }
+            },
+        )
+        .await
+        .unwrap();
+        let dashboard_fallback_body: Value = serde_json::from_slice(
+            super::super::stream::service_status_http_body_fixture(&dashboard_fallback).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(dashboard_fallback_body, action);
+        assert_eq!(
+            action["statusProjection"]["authority"]["projectedAt"],
+            "2026-08-10T12:00:05.000Z"
+        );
+        assert_eq!(
+            action["statusProjection"]["observations"]["state"],
+            "unavailable"
+        );
+
+        if std::env::var("AGENT_BROWSER_EMIT_FIXED_STATUS_HARNESS").as_deref() == Ok("1") {
+            println!("AGENT_BROWSER_FIXED_STATUS_DATA={action}");
+        }
     }
 
     #[test]

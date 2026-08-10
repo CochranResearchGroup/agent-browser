@@ -606,6 +606,7 @@ export interface ServiceBrowserSessionAuthoritySummary {
   viableBrowserCount: number;
   attentionBrowserCount: number;
   nonViableBrowserCount: number;
+  unknownBrowserCount?: number;
   [key: string]: unknown;
 }
 
@@ -635,10 +636,54 @@ export interface ServiceBrowserSessionAuthorityVerdict {
 
 export interface ServiceBrowserSessionAuthoritySnapshot {
   schemaVersion: number;
+  availability?: 'available' | 'partial' | 'unknown';
   summary: ServiceBrowserSessionAuthoritySummary;
   resourcePressure: ServiceBrowserSessionResourcePressure;
   browserVerdicts: ServiceBrowserSessionAuthorityVerdict[];
   [key: string]: unknown;
+}
+
+export interface ServiceStatusObservationError {
+  code: 'display_probe_timeout' | 'display_probe_unsupported' | 'display_probe_unavailable' | 'display_probe_failed' | 'runtime_profile_unavailable' | 'process_inventory_unavailable' | 'configured_route_unavailable';
+  subject: string;
+  message: string;
+}
+
+export interface ServiceStatusRoutePresentation {
+  frameUrl: string;
+  externalUrl: string;
+  source: 'route_descriptor' | 'retained_stream' | 'configured_client_url';
+}
+
+export interface ServiceStatusViewStreamObservation {
+  browserId: string;
+  streamId: string;
+  state: 'observed' | 'timed_out' | 'unsupported' | 'unavailable' | 'failed';
+  observedAt: string | null;
+  validUntil: string | null;
+  maxAgeMs: number;
+  routePresentation: ServiceStatusRoutePresentation | null;
+  displayContent: Record<string, unknown> | null;
+}
+
+export interface ServiceStatusProjection {
+  schemaVersion: 1;
+  authority: {
+    source: 'reconciled_service_state';
+    projectedAt: string;
+  };
+  observations: {
+    state: 'complete' | 'partial' | 'unavailable';
+    source: 'local_status_observation_adapter' | 'unavailable_status_observation_adapter' | 'in_memory_status_observation_adapter';
+    sourceHostId: string | null;
+    observedAt: string | null;
+    validUntil: string | null;
+    maxAgeMs: number;
+    manualBrowsersState: 'observed' | 'partial' | 'unavailable';
+    browserProcessState: 'observed' | 'partial' | 'unavailable';
+    errors: ServiceStatusObservationError[];
+    viewStreams: ServiceStatusViewStreamObservation[];
+  };
 }
 
 export interface ServiceManualRuntimeBrowser {
@@ -669,6 +714,7 @@ export interface ServiceStatusResponse {
   manualBrowsers?: ServiceManualRuntimeBrowser[];
   retainedDisplayAllocations?: ServiceRetainedDisplayAllocationSummary;
   browserSessionAuthority?: ServiceBrowserSessionAuthoritySnapshot;
+  statusProjection?: ServiceStatusProjection;
   launchConfig?: {
     defaultBrowserBuild: string | null;
     stealthCdpChromiumRequired: boolean;

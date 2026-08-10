@@ -12,10 +12,16 @@ mod websocket;
 
 pub use cdp_loop::{ack_screencast_frame, start_screencast, stop_screencast};
 pub use dashboard::run_dashboard_server;
+#[cfg(test)]
+pub(crate) use dashboard::{
+    dashboard_service_status_with_transports, service_status_dashboard_cli_fallback_fixture,
+    service_status_handler_fixture, service_status_http_body_fixture,
+};
 pub(crate) use http::{runtime_manifest_json, service_profile_lookup_response_for_state};
 #[cfg(test)]
 pub(crate) use http::{
-    service_request_adapter_fixture, SERVICE_REQUEST_HTTP_RELAY_CANONICAL_POINTERS,
+    service_request_adapter_fixture, service_status_http_fixture, service_status_http_with_relay,
+    SERVICE_REQUEST_HTTP_RELAY_CANONICAL_POINTERS,
 };
 
 use serde_json::{json, Value};

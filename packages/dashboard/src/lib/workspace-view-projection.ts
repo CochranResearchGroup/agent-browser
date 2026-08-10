@@ -126,6 +126,67 @@ export type WorkspaceViewSources = {
   selectedContext?: WorkspaceViewSelectedContextSource | null;
 };
 
+export type WorkspaceStatusProjection = {
+  schemaVersion?: number | null;
+  observations?: {
+    state?: "complete" | "partial" | "unavailable" | string;
+    validUntil?: string | null;
+    viewStreams?: Array<{
+      browserId?: string | null;
+      streamId?: string | null;
+      state?: "observed" | "timed_out" | "unsupported" | "unavailable" | "failed" | string;
+      validUntil?: string | null;
+      routePresentation?: {
+        frameUrl?: string | null;
+        externalUrl?: string | null;
+        source?: string | null;
+      } | null;
+      displayContent?: unknown;
+    }>;
+  } | null;
+};
+
+/**
+ * Applies only current, typed host presentation observations to a P99 source
+ * snapshot. It cannot add a browser, change authority, or upgrade view or
+ * control action ceilings. Unknown projection versions fail closed.
+ */
+export function applyStatusObservationsToWorkspaceSources(
+  sources: WorkspaceViewSources,
+  projection?: WorkspaceStatusProjection | null,
+  currentTimeMs: number = Date.now(),
+): WorkspaceViewSources {
+  if (projection?.schemaVersion !== 1) return sources;
+  const observations = projection.observations?.viewStreams ?? [];
+  if (!sources.serviceBrowsers?.length || observations.length === 0) return sources;
+  const byStream = new Map(
+    observations
+      .filter((observation) => {
+        if (observation.state !== "observed" || !observation.browserId || !observation.streamId) return false;
+        const validUntil = Date.parse(observation.validUntil ?? "");
+        return Number.isFinite(validUntil) && currentTimeMs <= validUntil;
+      })
+      .map((observation) => [`${observation.browserId}\u0000${observation.streamId}`, observation]),
+  );
+  if (byStream.size === 0) return sources;
+  return {
+    ...sources,
+    serviceBrowsers: sources.serviceBrowsers.map((browser) => ({
+      ...browser,
+      viewStreams: browser.viewStreams?.map((stream) => {
+        const observation = byStream.get(`${browser.id}\u0000${stream.id ?? ""}`);
+        if (!observation) return stream;
+        return {
+          ...stream,
+          frameUrl: stream.frameUrl ?? observation.routePresentation?.frameUrl ?? null,
+          externalUrl: stream.externalUrl ?? observation.routePresentation?.externalUrl ?? null,
+          displayContent: stream.displayContent ?? observation.displayContent ?? null,
+        };
+      }),
+    })),
+  };
+}
+
 export type WorkspaceViewIntent = {
   selection?: DashboardWorkspaceUrlSelection | null;
   mode: "view" | "control" | "tile" | "inspect";

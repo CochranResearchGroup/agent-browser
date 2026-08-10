@@ -570,10 +570,10 @@ async fn handle_connection<S>(
                         .get("serviceState")
                         .cloned()
                         .unwrap_or_else(|| serde_json::json!({}));
-                    let launch_config = cmd
-                        .get("launchConfig")
-                        .cloned()
-                        .unwrap_or_else(|| serde_json::json!({}));
+                    let launch_config =
+                        super::service_status_projection::launch_configuration_from_status_command(
+                            &cmd,
+                        );
                     let full_tab_history = cmd
                         .get("fullTabHistory")
                         .and_then(|value| value.as_bool())

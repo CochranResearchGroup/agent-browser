@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
-import { projectWorkspaceViews } from '../packages/dashboard/src/lib/workspace-view-projection.ts';
+import {
+  applyStatusObservationsToWorkspaceSources,
+  projectWorkspaceViews,
+} from '../packages/dashboard/src/lib/workspace-view-projection.ts';
 import {
   deriveWorkspaceNodes,
   deriveWorkspaceViewAuthorityLedger,
@@ -86,6 +89,42 @@ assert.equal(canonical.selected.frameUrl, 'https://operator.example.test/guacamo
 assert.equal(canonical.selected.tabSelection.tab.id, 'live');
 assert.equal(canonical.selected.tabSelection.recoveredFromStaleSelection, true);
 assert.equal(canonical.selected.authority.inventoryClass, 'service-owned-controllable-browser');
+
+const observedSources = applyStatusObservationsToWorkspaceSources({
+  serviceBrowsers: [{ id: 'browser-observed', viewStreams: [{ id: 'stream-observed', provider: 'rdp_gateway' }] }],
+}, {
+  schemaVersion: 1,
+  observations: {
+    viewStreams: [{
+      browserId: 'browser-observed',
+      streamId: 'stream-observed',
+      state: 'observed',
+      validUntil: '2026-08-09T21:00:09.000Z',
+      routePresentation: { frameUrl: '/fresh-frame', externalUrl: '/fresh-external' },
+    }],
+  },
+}, Date.parse('2026-08-09T21:00:05.000Z'));
+assert.equal(observedSources.serviceBrowsers[0].viewStreams[0].frameUrl, '/fresh-frame');
+const staleSources = applyStatusObservationsToWorkspaceSources({
+  serviceBrowsers: [{ id: 'browser-observed', viewStreams: [{ id: 'stream-observed', provider: 'rdp_gateway' }] }],
+}, {
+  schemaVersion: 1,
+  observations: {
+    viewStreams: [{
+      browserId: 'browser-observed',
+      streamId: 'stream-observed',
+      state: 'observed',
+      validUntil: '2026-08-09T21:00:09.000Z',
+      routePresentation: { frameUrl: '/stale-frame', externalUrl: '/stale-external' },
+    }],
+  },
+}, Date.parse('2026-08-09T21:00:10.000Z'));
+assert.equal(staleSources.serviceBrowsers[0].viewStreams[0].frameUrl, undefined);
+const unknownVersionSources = applyStatusObservationsToWorkspaceSources(canonicalInput.sources, {
+  schemaVersion: 2,
+  observations: { viewStreams: [] },
+});
+assert.equal(unknownVersionSources, canonicalInput.sources);
 
 const liveBlank = projectWorkspaceViews({
   ...canonicalInput,

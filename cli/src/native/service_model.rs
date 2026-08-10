@@ -2038,12 +2038,39 @@ pub fn assert_service_status_response_contract(value: &serde_json::Value) {
             "service_state",
             "profileAllocations",
             "manualBrowsers",
+            "browserSessionAuthority",
+            "statusProjection",
         ],
         &["serviceState"],
     );
     assert!(value["service_state"].is_object());
     assert!(value["control_plane"].is_object());
     assert!(value["manualBrowsers"].is_array());
+    assert_eq!(value["browserSessionAuthority"]["schemaVersion"], 1);
+    assert!(matches!(
+        value["browserSessionAuthority"]["availability"].as_str(),
+        Some("available" | "partial" | "unknown")
+    ));
+    let authority_summary = &value["browserSessionAuthority"]["summary"];
+    for field in [
+        "modeledBrowserCount",
+        "viableBrowserCount",
+        "attentionBrowserCount",
+        "nonViableBrowserCount",
+        "unknownBrowserCount",
+    ] {
+        assert!(authority_summary[field].is_u64(), "{field}");
+    }
+    assert_eq!(value["statusProjection"]["schemaVersion"], 1);
+    assert_eq!(
+        value["statusProjection"]["authority"]["source"],
+        "reconciled_service_state"
+    );
+    assert!(value["statusProjection"]["authority"]["projectedAt"].is_string());
+    assert!(matches!(
+        value["statusProjection"]["observations"]["state"].as_str(),
+        Some("complete" | "partial" | "unavailable")
+    ));
     if let Some(launch_config) = value.get("launchConfig") {
         assert_record_fields(
             "service status launch config",
@@ -7745,6 +7772,29 @@ mod tests {
             "service_state": {},
             "profileAllocations": [],
             "manualBrowsers": [],
+            "browserSessionAuthority": {
+                "schemaVersion": 1,
+                "availability": "unknown",
+                "summary": {
+                    "modeledBrowserCount": 0,
+                    "viableBrowserCount": 0,
+                    "attentionBrowserCount": 0,
+                    "nonViableBrowserCount": 0,
+                    "unknownBrowserCount": 0
+                },
+                "resourcePressure": {},
+                "browserVerdicts": []
+            },
+            "statusProjection": {
+                "schemaVersion": 1,
+                "authority": {
+                    "source": "reconciled_service_state",
+                    "projectedAt": "2026-08-09T21:00:05.000Z"
+                },
+                "observations": {
+                    "state": "unavailable"
+                }
+            },
         }));
 
         for (schema, field, label) in collection_schemas {

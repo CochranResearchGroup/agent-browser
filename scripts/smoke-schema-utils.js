@@ -102,6 +102,30 @@ export function assertServiceStatusResponseSchemaRecord(response, schema, label)
       );
     }
   }
+  if (response.statusProjection) {
+    const projectionSchema = schema.properties.statusProjection;
+    assertRequiredFields(response.statusProjection, projectionSchema, `${label} statusProjection`);
+    assertRequiredFields(
+      response.statusProjection.authority,
+      projectionSchema.properties.authority,
+      `${label} statusProjection authority`,
+    );
+    assertRequiredFields(
+      response.statusProjection.observations,
+      projectionSchema.properties.observations,
+      `${label} statusProjection observations`,
+    );
+    assert(
+      response.statusProjection.schemaVersion === 1,
+      `${label} statusProjection schemaVersion must be 1`,
+    );
+    assert(
+      ['complete', 'partial', 'unavailable'].includes(response.statusProjection.observations.state),
+      `${label} statusProjection observations state is invalid`,
+    );
+    assert(Array.isArray(response.statusProjection.observations.errors), `${label} statusProjection errors missing`);
+    assert(Array.isArray(response.statusProjection.observations.viewStreams), `${label} statusProjection viewStreams missing`);
+  }
 }
 
 export function assertServiceTraceSummarySchemaRecord(summary, schema, label) {

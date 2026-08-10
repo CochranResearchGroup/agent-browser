@@ -107,11 +107,13 @@ async function main() {
       profileAllocations: [],
       browserSessionAuthority: {
         schemaVersion: 1,
+        availability: 'available',
         summary: {
           modeledBrowserCount: 0,
           viableBrowserCount: 0,
           attentionBrowserCount: 0,
           nonViableBrowserCount: 0,
+          unknownBrowserCount: 0,
         },
         resourcePressure: {
           state: 'clear',
@@ -126,6 +128,29 @@ async function main() {
           reasons: [],
         },
         browserVerdicts: [],
+      },
+      statusProjection: {
+        schemaVersion: 1,
+        authority: {
+          source: 'reconciled_service_state',
+          projectedAt: '2026-08-09T21:00:05.000Z',
+        },
+        observations: {
+          state: 'unavailable',
+          source: 'unavailable_status_observation_adapter',
+          sourceHostId: null,
+          observedAt: null,
+          validUntil: null,
+          maxAgeMs: 5000,
+          manualBrowsersState: 'unavailable',
+          browserProcessState: 'unavailable',
+          errors: [{
+            code: 'process_inventory_unavailable',
+            subject: 'host',
+            message: 'process inventory was unavailable',
+          }],
+          viewStreams: [],
+        },
       },
       launchConfig: {
         defaultBrowserBuild: null,
@@ -149,6 +174,48 @@ async function main() {
   assert.equal(statusResult.control_plane.service_monitor_interval_ms, 60000);
   assert.deepEqual(statusResult.profileAllocations, []);
   assert.equal(statusResult.launchConfig.stealthCdpChromiumReady, true);
+  assert.equal(statusResult.statusProjection.observations.validUntil, null);
+  assert.equal(statusResult.statusProjection.observations.errors[0].code, 'process_inventory_unavailable');
+
+  const oldV1Status = createFetchRecorder({
+    success: true,
+    data: {
+      service_state: {},
+      profileAllocations: [],
+      browserSessionAuthority: {
+        schemaVersion: 1,
+        summary: {
+          modeledBrowserCount: 0,
+          viableBrowserCount: 0,
+          attentionBrowserCount: 0,
+          nonViableBrowserCount: 0,
+        },
+        resourcePressure: {
+          state: 'clear',
+          totalProcessCount: 0,
+          correlatedProcessCount: 0,
+          candidateCount: 0,
+          protectedCount: 0,
+          observedCount: 0,
+          observedUnownedAgentBrowserProcessCount: 0,
+          candidateRssBytes: 0,
+          totalRssBytes: 0,
+          reasons: [],
+        },
+        browserVerdicts: [],
+      },
+    },
+  });
+  const oldV1StatusResult = await getServiceStatus({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: oldV1Status.fetch,
+  });
+  assert.equal(oldV1StatusResult.browserSessionAuthority.availability, undefined);
+  assert.equal(
+    oldV1StatusResult.browserSessionAuthority.summary.unknownBrowserCount,
+    undefined,
+  );
+  assert.equal(oldV1StatusResult.statusProjection, undefined);
 
   const preflight = createFetchRecorder({
     success: true,
