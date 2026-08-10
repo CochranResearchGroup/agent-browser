@@ -106,6 +106,7 @@ use super::remote_view::open::{
     handle_remote_view_open, handle_service_remote_view_browser_reattach,
     handle_service_remote_view_handoff_resolve, handle_service_remote_view_route_checkout,
     handle_service_remote_view_route_preflight, handle_service_remote_view_route_release,
+    route_bound_open_attribution_from_authenticated_dispatch,
 };
 use super::remote_view::viewer_lease::{
     handle_service_controller_lease_takeover, handle_service_viewer_lease_heartbeat,
@@ -614,9 +615,13 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
         "tab_handle_release" => handle_tab_handle_release(cmd, state).await,
         "view_focus" => handle_view_focus(cmd, state).await,
         "view_takeover" => handle_view_takeover(cmd, state).await,
-        "remote_view_open" => handle_remote_view_open(cmd, state).await,
+        "remote_view_open" => {
+            let attribution = route_bound_open_attribution_from_authenticated_dispatch(cmd);
+            handle_remote_view_open(cmd, state, attribution).await
+        }
         "service_remote_view_handoff_resolve" => {
-            handle_service_remote_view_handoff_resolve(cmd, state).await
+            let attribution = route_bound_open_attribution_from_authenticated_dispatch(cmd);
+            handle_service_remote_view_handoff_resolve(cmd, state, attribution).await
         }
         "service_remote_view_route_preflight" => {
             handle_service_remote_view_route_preflight(cmd, state).await

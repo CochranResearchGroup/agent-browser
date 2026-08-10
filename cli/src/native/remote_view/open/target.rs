@@ -2,7 +2,7 @@
 use super::deadline::{RouteBoundOpenSupervisor, RouteBoundRuntimeIssue};
 use super::route_pool::RouteParkingPlan;
 use super::runtime::{
-    route_bound_runtime_issue, NavigateTargetRequest, OpenTargetRequest,
+    route_bound_runtime_issue, NavigateTargetRequest, OpenTargetCommand, OpenTargetRequest,
     RouteBoundBrowserObservation, RouteBoundOpenRuntime, SwitchTargetRequest,
 };
 use super::shared::*;
@@ -170,7 +170,12 @@ pub(crate) async fn route_bound_open_acquire_target<R: RouteBoundOpenRuntime>(
             .forward(
                 "open_target",
                 runtime.open_target(OpenTargetRequest {
-                    command: remote_view_open_tab_creation_command(cmd).into(),
+                    command: OpenTargetCommand::from_compatibility(
+                        remote_view_open_tab_creation_command(cmd),
+                    )
+                    .map_err(|message| {
+                        route_bound_runtime_issue("open_target", message, Some(cmd))
+                    })?,
                 }),
             )
             .await?

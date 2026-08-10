@@ -5,6 +5,7 @@ use super::operator_route::{
 };
 use super::proof::remote_view_open_visible_window_proof;
 use super::route_lifecycle::handle_service_remote_view_route_checkout;
+pub(crate) use super::runtime_model::*;
 use super::shared::*;
 use crate::native::service_store::JsonServiceStateStore;
 /// Raw browser facts observed by the coordinator. The runtime adapter does
@@ -47,7 +48,7 @@ pub(crate) struct CloseCreatedTargetRequest {
 }
 #[derive(Debug, Clone)]
 pub(crate) struct CloseCreatedBrowserRequest {
-    pub(crate) browser_identity: Value,
+    pub(crate) browser_identity: RouteBoundBrowserIdentity,
 }
 #[derive(Debug, Clone)]
 pub(crate) struct CheckoutRouteRequest {
@@ -65,49 +66,6 @@ pub(crate) struct VisibleWindowRequest {
 pub(crate) struct OperatorAccessRequest {
     pub(crate) binding: RemoteViewRouteBinding,
 }
-
-macro_rules! route_bound_document_type {
-    ($($name:ident),+ $(,)?) => {
-        $(
-            #[derive(Debug, Clone, PartialEq)]
-            pub(crate) struct $name(Value);
-
-            impl $name {
-                pub(crate) fn as_value(&self) -> &Value {
-                    &self.0
-                }
-
-                pub(crate) fn into_value(self) -> Value {
-                    self.0
-                }
-            }
-
-            impl From<Value> for $name {
-                fn from(value: Value) -> Self {
-                    Self(value)
-                }
-            }
-        )+
-    };
-}
-
-route_bound_document_type!(
-    LaunchBrowserCommand,
-    OpenTargetCommand,
-    FocusTargetCommand,
-    CheckoutRouteCommand,
-    LaunchBrowserResult,
-    SwitchTargetResult,
-    NavigateTargetResult,
-    OpenTargetResult,
-    FocusTargetResult,
-    CloseCreatedTargetResult,
-    CloseCreatedBrowserResult,
-    CheckoutRouteResult,
-    DisplayAccessResult,
-    VisibleWindowResult,
-    OperatorAccessResult,
-);
 /// The frozen route-bound effect ledger. It deliberately has no generic
 /// execute command or daemon-state escape hatch.
 pub(crate) trait RouteBoundOpenRuntime {
@@ -306,16 +264,14 @@ impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
         request: LaunchBrowserRequest,
     ) -> RouteBoundOpenFuture<'_, LaunchBrowserResult> {
         Box::pin(async move {
-            handle_launch(request.command.as_value(), self.state)
+            let command = request.command.into_value();
+            let value = handle_launch(&command, self.state)
                 .await
-                .map(LaunchBrowserResult::from)
                 .map_err(|message| {
-                    route_bound_runtime_issue(
-                        "launch_browser",
-                        message,
-                        Some(request.command.as_value()),
-                    )
-                })
+                    route_bound_runtime_issue("launch_browser", message, Some(&command))
+                })?;
+            LaunchBrowserResult::from_compatibility(value)
+                .map_err(|message| route_bound_runtime_issue("launch_browser", message, None))
         })
     }
     fn refresh_targets(&mut self) -> RouteBoundOpenFuture<'_, RouteBoundBrowserObservation> {
@@ -335,7 +291,7 @@ impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
             manager
                 .tab_switch_target_id(&request.target_id)
                 .await
-                .map(SwitchTargetResult::from)
+                .and_then(SwitchTargetResult::from_compatibility)
                 .map_err(|message| route_bound_runtime_issue("switch_target", message, None))
         })
     }
@@ -354,7 +310,7 @@ impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
             manager
                 .navigate(&request.url, WaitUntil::None)
                 .await
-                .map(NavigateTargetResult::from)
+                .and_then(NavigateTargetResult::from_compatibility)
                 .map_err(|message| route_bound_runtime_issue("navigate_target", message, None))
         })
     }
@@ -363,16 +319,14 @@ impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
         request: OpenTargetRequest,
     ) -> RouteBoundOpenFuture<'_, OpenTargetResult> {
         Box::pin(async move {
-            handle_tab_new(request.command.as_value(), self.state)
+            let command = request.command.into_value();
+            let value = handle_tab_new(&command, self.state)
                 .await
-                .map(OpenTargetResult::from)
                 .map_err(|message| {
-                    route_bound_runtime_issue(
-                        "open_target",
-                        message,
-                        Some(request.command.as_value()),
-                    )
-                })
+                    route_bound_runtime_issue("open_target", message, Some(&command))
+                })?;
+            OpenTargetResult::from_compatibility(value)
+                .map_err(|message| route_bound_runtime_issue("open_target", message, None))
         })
     }
     fn focus_target(
@@ -380,16 +334,14 @@ impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
         request: FocusTargetRequest,
     ) -> RouteBoundOpenFuture<'_, FocusTargetResult> {
         Box::pin(async move {
-            handle_view_focus(request.command.as_value(), self.state)
+            let command = request.command.into_value();
+            let value = handle_view_focus(&command, self.state)
                 .await
-                .map(FocusTargetResult::from)
                 .map_err(|message| {
-                    route_bound_runtime_issue(
-                        "focus_target",
-                        message,
-                        Some(request.command.as_value()),
-                    )
-                })
+                    route_bound_runtime_issue("focus_target", message, Some(&command))
+                })?;
+            FocusTargetResult::from_compatibility(value)
+                .map_err(|message| route_bound_runtime_issue("focus_target", message, None))
         })
     }
     fn close_created_target(
@@ -407,7 +359,7 @@ impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
             manager
                 .tab_close_target_id(&request.target_id)
                 .await
-                .map(CloseCreatedTargetResult::from)
+                .and_then(CloseCreatedTargetResult::from_compatibility)
                 .map_err(|message| route_bound_runtime_issue("close_created_target", message, None))
         })
     }
@@ -419,7 +371,7 @@ impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
             let _ = request.browser_identity;
             handle_close(self.state)
                 .await
-                .map(CloseCreatedBrowserResult::from)
+                .and_then(CloseCreatedBrowserResult::from_compatibility)
                 .map_err(|message| {
                     route_bound_runtime_issue("close_created_browser", message, None)
                 })
@@ -430,16 +382,14 @@ impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
         request: CheckoutRouteRequest,
     ) -> RouteBoundOpenFuture<'_, CheckoutRouteResult> {
         Box::pin(async move {
-            handle_service_remote_view_route_checkout(request.command.as_value(), self.state)
+            let command = request.command.into_value();
+            let value = handle_service_remote_view_route_checkout(&command, self.state)
                 .await
-                .map(CheckoutRouteResult::from)
                 .map_err(|message| {
-                    route_bound_runtime_issue(
-                        "checkout_route",
-                        message,
-                        Some(request.command.as_value()),
-                    )
-                })
+                    route_bound_runtime_issue("checkout_route", message, Some(&command))
+                })?;
+            CheckoutRouteResult::from_compatibility(value)
+                .map_err(|message| route_bound_runtime_issue("checkout_route", message, None))
         })
     }
     fn ensure_display_access(
@@ -448,7 +398,7 @@ impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
     ) -> RouteBoundOpenFuture<'_, DisplayAccessResult> {
         Box::pin(async move {
             remote_view_open_ensure_display_access(&request.binding)
-                .map(DisplayAccessResult::from)
+                .and_then(DisplayAccessResult::from_compatibility)
                 .map_err(|message| {
                     route_bound_runtime_issue("ensure_display_access", message, None)
                 })
@@ -460,7 +410,7 @@ impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
     ) -> RouteBoundOpenFuture<'_, VisibleWindowResult> {
         Box::pin(async move {
             remote_view_open_visible_window_proof(&request.binding)
-                .map(VisibleWindowResult::from)
+                .and_then(VisibleWindowResult::from_compatibility)
                 .map_err(|message| {
                     route_bound_runtime_issue("observe_visible_window", message, None)
                 })
@@ -471,9 +421,13 @@ impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
         request: OperatorAccessRequest,
     ) -> RouteBoundOpenFuture<'_, Option<OperatorAccessResult>> {
         Box::pin(async move {
-            Ok(remote_view_open_operator_access_readiness(&request.binding)
+            remote_view_open_operator_access_readiness(&request.binding)
                 .await
-                .map(OperatorAccessResult::from))
+                .map(OperatorAccessResult::from_compatibility)
+                .transpose()
+                .map_err(|message| {
+                    route_bound_runtime_issue("observe_operator_access", message, None)
+                })
         })
     }
 }

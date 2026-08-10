@@ -30,6 +30,7 @@ struct ScriptedRuntime {
     events: Arc<Mutex<Vec<&'static str>>>,
     observation: RouteBoundBrowserObservation,
     launch_issue: Option<RouteBoundRuntimeIssue>,
+    operator_access: Option<Value>,
 }
 
 impl ScriptedRuntime {
@@ -48,6 +49,7 @@ impl ScriptedRuntime {
                 pages: Vec::new(),
             },
             launch_issue: None,
+            operator_access: Some(json!({ "state": "ready" })),
         }
     }
 
@@ -75,7 +77,9 @@ impl RouteBoundOpenRuntime for ScriptedRuntime {
             self.events.lock().unwrap().push("launch_browser");
             match self.launch_issue.clone() {
                 Some(issue) => Err(issue),
-                None => Ok(json!({ "launched": true }).into()),
+                None => Ok(
+                    LaunchBrowserResult::from_compatibility(json!({ "launched": true })).unwrap(),
+                ),
             }
         })
     }
@@ -94,7 +98,7 @@ impl RouteBoundOpenRuntime for ScriptedRuntime {
         Box::pin(async move {
             self.effect("switch_target", json!({ "targetId": "target-1" }))
                 .await
-                .map(SwitchTargetResult::from)
+                .map(|value| SwitchTargetResult::from_compatibility(value).unwrap())
         })
     }
 
@@ -105,7 +109,7 @@ impl RouteBoundOpenRuntime for ScriptedRuntime {
         Box::pin(async move {
             self.effect("navigate_target", json!({ "url": "https://example.test" }))
                 .await
-                .map(NavigateTargetResult::from)
+                .map(|value| NavigateTargetResult::from_compatibility(value).unwrap())
         })
     }
 
@@ -116,7 +120,7 @@ impl RouteBoundOpenRuntime for ScriptedRuntime {
         Box::pin(async move {
             self.effect("open_target", json!({ "targetId": "target-1" }))
                 .await
-                .map(OpenTargetResult::from)
+                .map(|value| OpenTargetResult::from_compatibility(value).unwrap())
         })
     }
 
@@ -127,7 +131,7 @@ impl RouteBoundOpenRuntime for ScriptedRuntime {
         Box::pin(async move {
             self.effect("focus_target", json!({ "focused": true }))
                 .await
-                .map(FocusTargetResult::from)
+                .map(|value| FocusTargetResult::from_compatibility(value).unwrap())
         })
     }
 
@@ -138,7 +142,7 @@ impl RouteBoundOpenRuntime for ScriptedRuntime {
         Box::pin(async move {
             self.effect("close_created_target", json!({ "closed": true }))
                 .await
-                .map(CloseCreatedTargetResult::from)
+                .map(|value| CloseCreatedTargetResult::from_compatibility(value).unwrap())
         })
     }
 
@@ -149,7 +153,7 @@ impl RouteBoundOpenRuntime for ScriptedRuntime {
         Box::pin(async move {
             self.effect("close_created_browser", json!({ "closed": true }))
                 .await
-                .map(CloseCreatedBrowserResult::from)
+                .map(|value| CloseCreatedBrowserResult::from_compatibility(value).unwrap())
         })
     }
 
@@ -160,7 +164,7 @@ impl RouteBoundOpenRuntime for ScriptedRuntime {
         Box::pin(async move {
             self.effect("checkout_route", json!({ "status": "ready" }))
                 .await
-                .map(CheckoutRouteResult::from)
+                .map(|value| CheckoutRouteResult::from_compatibility(value).unwrap())
         })
     }
 
@@ -171,7 +175,7 @@ impl RouteBoundOpenRuntime for ScriptedRuntime {
         Box::pin(async move {
             self.effect("ensure_display_access", json!({ "state": "ready" }))
                 .await
-                .map(DisplayAccessResult::from)
+                .map(|value| DisplayAccessResult::from_compatibility(value).unwrap())
         })
     }
 
@@ -182,7 +186,7 @@ impl RouteBoundOpenRuntime for ScriptedRuntime {
         Box::pin(async move {
             self.effect("observe_visible_window", json!({ "state": "ready" }))
                 .await
-                .map(VisibleWindowResult::from)
+                .map(|value| VisibleWindowResult::from_compatibility(value).unwrap())
         })
     }
 
@@ -192,7 +196,10 @@ impl RouteBoundOpenRuntime for ScriptedRuntime {
     ) -> RouteBoundOpenFuture<'_, Option<OperatorAccessResult>> {
         Box::pin(async move {
             self.events.lock().unwrap().push("observe_operator_access");
-            Ok(Some(json!({ "state": "ready" }).into()))
+            Ok(self
+                .operator_access
+                .clone()
+                .map(|value| OperatorAccessResult::from_compatibility(value).unwrap()))
         })
     }
 }
@@ -258,7 +265,7 @@ async fn scripted_runtime_stops_before_every_mutating_effect_after_cancellation(
                 .forward(
                     "launch_browser",
                     runtime.launch_browser(LaunchBrowserRequest {
-                        command: json!({}).into(),
+                        command: LaunchBrowserCommand::from_compatibility(json!({})).unwrap(),
                     }),
                 )
                 .await
@@ -285,7 +292,7 @@ async fn scripted_runtime_stops_before_every_mutating_effect_after_cancellation(
                 .forward(
                     "open_target",
                     runtime.open_target(OpenTargetRequest {
-                        command: json!({}).into(),
+                        command: OpenTargetCommand::from_compatibility(json!({})).unwrap(),
                     }),
                 )
                 .await
@@ -294,7 +301,7 @@ async fn scripted_runtime_stops_before_every_mutating_effect_after_cancellation(
                 .forward(
                     "focus_target",
                     runtime.focus_target(FocusTargetRequest {
-                        command: json!({}).into(),
+                        command: FocusTargetCommand::from_compatibility(json!({})).unwrap(),
                     }),
                 )
                 .await
@@ -312,7 +319,8 @@ async fn scripted_runtime_stops_before_every_mutating_effect_after_cancellation(
                 .forward(
                     "close_created_browser",
                     runtime.close_created_browser(CloseCreatedBrowserRequest {
-                        browser_identity: json!({}),
+                        browser_identity: RouteBoundBrowserIdentity::from_compatibility(json!({}))
+                            .unwrap(),
                     }),
                 )
                 .await
@@ -321,7 +329,7 @@ async fn scripted_runtime_stops_before_every_mutating_effect_after_cancellation(
                 .forward(
                     "checkout_route",
                     runtime.checkout_route(CheckoutRouteRequest {
-                        command: json!({}).into(),
+                        command: CheckoutRouteCommand::from_compatibility(json!({})).unwrap(),
                     }),
                 )
                 .await
@@ -354,7 +362,7 @@ async fn forward_timeout_preserves_reserve_and_compensation_stops_at_total_deadl
         .forward(
             "open_target",
             runtime.open_target(OpenTargetRequest {
-                command: json!({}).into(),
+                command: OpenTargetCommand::from_compatibility(json!({})).unwrap(),
             }),
         )
         .await;
@@ -405,7 +413,7 @@ async fn scripted_runtime_success_records_only_completed_effects() {
         .forward(
             "launch_browser",
             runtime.launch_browser(LaunchBrowserRequest {
-                command: json!({}).into(),
+                command: LaunchBrowserCommand::from_compatibility(json!({})).unwrap(),
             }),
         )
         .await
@@ -414,7 +422,7 @@ async fn scripted_runtime_success_records_only_completed_effects() {
         .forward(
             "open_target",
             runtime.open_target(OpenTargetRequest {
-                command: json!({}).into(),
+                command: OpenTargetCommand::from_compatibility(json!({})).unwrap(),
             }),
         )
         .await
@@ -433,12 +441,14 @@ fn fallback_snapshot() -> RouteBoundResolutionSnapshot {
         tab_id: Some("target:tab-a".to_string()),
         target_id: Some("tab-a".to_string()),
         profile_id: Some("im-receipts-main".to_string()),
+        handoff_url: Some("/remote-view/handoff-a".to_string()),
         view_stream_provider: Some(ViewStreamProvider::RdpGateway),
         last_route_id: Some("guacamole:2".to_string()),
         ..RemoteViewHandoff::default()
     };
     RouteBoundResolutionSnapshot {
         state: ServiceState {
+            remote_view_handoffs: BTreeMap::from([(handoff.id.clone(), handoff.clone())]),
             remote_view_routes: BTreeMap::from([(
                 "guacamole:2".to_string(),
                 RemoteViewRoute {
@@ -473,26 +483,26 @@ fn profile_conflict_issue() -> RouteBoundRuntimeIssue {
 fn fallback_eligibility_requires_each_of_the_nine_closed_predicates() {
     for predicate in 0..9 {
         let mut eligibility = RouteBoundFallbackEligibility {
-            prior_provider: true,
-            snapshot_identity: true,
-            snapshot_timing: true,
-            exact_ownership_cause: true,
-            retained_route: true,
-            authorized_ingress: true,
-            operator_evidence: true,
-            browser_preserved: true,
-            duplicate_lane_prohibited: true,
+            immutable_snapshot_exists: true,
+            explicit_close_allows_resolution: true,
+            exact_opaque_rdp_identity: true,
+            typed_retained_owner_conflict: true,
+            current_bounded_route: true,
+            operator_access_succeeded: true,
+            best_effort_result: true,
+            no_new_ownership: true,
+            retained_browser_and_unrelated_tabs_unchanged: true,
         };
         match predicate {
-            0 => eligibility.prior_provider = false,
-            1 => eligibility.snapshot_identity = false,
-            2 => eligibility.snapshot_timing = false,
-            3 => eligibility.exact_ownership_cause = false,
-            4 => eligibility.retained_route = false,
-            5 => eligibility.authorized_ingress = false,
-            6 => eligibility.operator_evidence = false,
-            7 => eligibility.browser_preserved = false,
-            _ => eligibility.duplicate_lane_prohibited = false,
+            0 => eligibility.immutable_snapshot_exists = false,
+            1 => eligibility.explicit_close_allows_resolution = false,
+            2 => eligibility.exact_opaque_rdp_identity = false,
+            3 => eligibility.typed_retained_owner_conflict = false,
+            4 => eligibility.current_bounded_route = false,
+            5 => eligibility.operator_access_succeeded = false,
+            6 => eligibility.best_effort_result = false,
+            7 => eligibility.no_new_ownership = false,
+            _ => eligibility.retained_browser_and_unrelated_tabs_unchanged = false,
         }
         assert!(
             !eligibility.is_eligible(),
@@ -511,6 +521,8 @@ async fn provider_fallback_uses_one_immutable_snapshot_and_preserves_the_browser
 
     let fallback = remote_view_handoff_provider_fallback_if_eligible(
         &snapshot,
+        &snapshot.state,
+        false,
         Some(&issue),
         RouteBoundOpenAuthorization::AuthenticatedDaemonCommand,
         &mut runtime,
@@ -521,6 +533,7 @@ async fn provider_fallback_uses_one_immutable_snapshot_and_preserves_the_browser
     .into_value();
 
     assert_eq!(fallback["providerFallback"], true);
+    assert_eq!(fallback["fallbackMode"], "best_effort");
     assert_eq!(fallback["resolutionSnapshotLoadedAt"], snapshot.loaded_at);
     assert!(fallback["fallbackEligibility"]
         .as_object()
@@ -546,6 +559,8 @@ async fn provider_fallback_rejects_unauthorized_ingress_before_any_runtime_effec
 
     let fallback = remote_view_handoff_provider_fallback_if_eligible(
         &snapshot,
+        &snapshot.state,
+        false,
         Some(&issue),
         RouteBoundOpenAuthorization::Rejected,
         &mut runtime,
@@ -555,6 +570,168 @@ async fn provider_fallback_rejects_unauthorized_ingress_before_any_runtime_effec
 
     assert!(fallback.is_none());
     assert!(runtime.events.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn provider_fallback_derives_snapshot_ownership_and_operator_predicates() {
+    let supervisor = RouteBoundOpenSupervisor::system(Some(1_000), None);
+    let issue = profile_conflict_issue();
+
+    let mut missing_snapshot = fallback_snapshot();
+    missing_snapshot.state.remote_view_handoffs.clear();
+    let mut runtime = ScriptedRuntime::new();
+    assert!(remote_view_handoff_provider_fallback_if_eligible(
+        &missing_snapshot,
+        &missing_snapshot.state,
+        false,
+        Some(&issue),
+        RouteBoundOpenAuthorization::AuthenticatedDaemonCommand,
+        &mut runtime,
+        &supervisor,
+    )
+    .await
+    .is_none());
+
+    let mut explicitly_closed = fallback_snapshot();
+    explicitly_closed.state.tabs.insert(
+        "target:tab-a".to_string(),
+        BrowserTab {
+            id: "target:tab-a".to_string(),
+            target_id: Some("tab-a".to_string()),
+            lifecycle: TabLifecycle::Closed,
+            ..BrowserTab::default()
+        },
+    );
+    explicitly_closed.state.remote_view_handoffs.insert(
+        explicitly_closed.handoff.id.clone(),
+        explicitly_closed.handoff.clone(),
+    );
+    let mut runtime = ScriptedRuntime::new();
+    assert!(remote_view_handoff_provider_fallback_if_eligible(
+        &explicitly_closed,
+        &explicitly_closed.state,
+        false,
+        Some(&issue),
+        RouteBoundOpenAuthorization::AuthenticatedDaemonCommand,
+        &mut runtime,
+        &supervisor,
+    )
+    .await
+    .is_none());
+
+    let wrong_identity = {
+        let mut snapshot = fallback_snapshot();
+        snapshot.handoff.handoff_url = None;
+        snapshot
+            .state
+            .remote_view_handoffs
+            .insert(snapshot.handoff.id.clone(), snapshot.handoff.clone());
+        snapshot
+    };
+    let mut runtime = ScriptedRuntime::new();
+    assert!(remote_view_handoff_provider_fallback_if_eligible(
+        &wrong_identity,
+        &wrong_identity.state,
+        false,
+        Some(&issue),
+        RouteBoundOpenAuthorization::AuthenticatedDaemonCommand,
+        &mut runtime,
+        &supervisor,
+    )
+    .await
+    .is_none());
+
+    let snapshot = fallback_snapshot();
+    let wrong_issue = RouteBoundRuntimeIssue::EffectFailed {
+        operation: "launch_browser",
+        message: "not a typed retained-owner conflict".to_string(),
+    };
+    let mut runtime = ScriptedRuntime::new();
+    assert!(remote_view_handoff_provider_fallback_if_eligible(
+        &snapshot,
+        &snapshot.state,
+        false,
+        Some(&wrong_issue),
+        RouteBoundOpenAuthorization::AuthenticatedDaemonCommand,
+        &mut runtime,
+        &supervisor,
+    )
+    .await
+    .is_none());
+
+    let snapshot = fallback_snapshot();
+    let mut stale_route_state = snapshot.state.clone();
+    stale_route_state.remote_view_routes.clear();
+    let mut runtime = ScriptedRuntime::new();
+    assert!(remote_view_handoff_provider_fallback_if_eligible(
+        &snapshot,
+        &stale_route_state,
+        false,
+        Some(&issue),
+        RouteBoundOpenAuthorization::AuthenticatedDaemonCommand,
+        &mut runtime,
+        &supervisor,
+    )
+    .await
+    .is_none());
+
+    let snapshot = fallback_snapshot();
+    let mut runtime = ScriptedRuntime::new();
+    runtime.operator_access = Some(json!({ "state": "not_ready" }));
+    assert!(remote_view_handoff_provider_fallback_if_eligible(
+        &snapshot,
+        &snapshot.state,
+        false,
+        Some(&issue),
+        RouteBoundOpenAuthorization::AuthenticatedDaemonCommand,
+        &mut runtime,
+        &supervisor,
+    )
+    .await
+    .is_none());
+
+    let snapshot = fallback_snapshot();
+    let mut new_ownership = snapshot.state.clone();
+    new_ownership.profiles.insert(
+        "unexpected-profile".to_string(),
+        BrowserProfile {
+            id: "unexpected-profile".to_string(),
+            ..BrowserProfile::default()
+        },
+    );
+    let mut runtime = ScriptedRuntime::new();
+    assert!(remote_view_handoff_provider_fallback_if_eligible(
+        &snapshot,
+        &new_ownership,
+        false,
+        Some(&issue),
+        RouteBoundOpenAuthorization::AuthenticatedDaemonCommand,
+        &mut runtime,
+        &supervisor,
+    )
+    .await
+    .is_none());
+
+    let mut changed_tabs = snapshot.state.clone();
+    changed_tabs.tabs.insert(
+        "unrelated".to_string(),
+        BrowserTab {
+            id: "unrelated".to_string(),
+            ..BrowserTab::default()
+        },
+    );
+    let mut runtime = ScriptedRuntime::new();
+    assert!(remote_view_handoff_provider_fallback_if_eligible(
+        &snapshot,
+        &changed_tabs,
+        false,
+        Some(&issue),
+        RouteBoundOpenAuthorization::AuthenticatedDaemonCommand,
+        &mut runtime,
+        &supervisor,
+    )
+    .await
+    .is_none());
 }
 
 struct StaticRepository {
@@ -639,11 +816,12 @@ async fn coordinator_returns_typed_not_found_without_starting_a_runtime_effect()
     let supervisor = RouteBoundOpenSupervisor::system(Some(1_000), None);
     let mut runtime = ScriptedRuntime::new();
     let outcome = RouteBoundOpenCoordinator::open(
-        RouteBoundOpenInvocation::DurableResolution {
-            handoff_id: "missing".to_string(),
-            allow_reopen_closed: false,
-            attribution: authorized_attribution(),
-        },
+        RouteBoundOpenInvocation::durable_resolution(
+            "missing".to_string(),
+            false,
+            authorized_attribution(),
+        )
+        .unwrap(),
         &mut runtime,
         &repository,
         &supervisor,
@@ -681,11 +859,12 @@ async fn coordinator_returns_typed_explicit_close_without_starting_a_runtime_eff
     let supervisor = RouteBoundOpenSupervisor::system(Some(1_000), None);
     let mut runtime = ScriptedRuntime::new();
     let outcome = RouteBoundOpenCoordinator::open(
-        RouteBoundOpenInvocation::DurableResolution {
-            handoff_id: "handoff-closed".to_string(),
-            allow_reopen_closed: false,
-            attribution: authorized_attribution(),
-        },
+        RouteBoundOpenInvocation::durable_resolution(
+            "handoff-closed".to_string(),
+            false,
+            authorized_attribution(),
+        )
+        .unwrap(),
         &mut runtime,
         &repository,
         &supervisor,
@@ -757,7 +936,7 @@ async fn coordinator_returns_typed_planned_outcome_without_launching_a_browser()
     let mut runtime = ScriptedRuntime::new();
 
     let outcome = RouteBoundOpenCoordinator::open(
-        RouteBoundOpenInvocation::DirectOpen(Box::new(request)),
+        RouteBoundOpenInvocation::direct(request),
         &mut runtime,
         &repository,
         &supervisor,
@@ -783,6 +962,7 @@ async fn coordinator_returns_provider_fallback_without_creating_a_duplicate_lane
     let state_path = root.join("state.json");
     let handoff = RemoteViewHandoff {
         id: "handoff-a".to_string(),
+        handoff_url: Some("/remote-view/handoff-a".to_string()),
         intent: json!({
             "url": "https://example.test/",
             "viewStreamProvider": "rdp_gateway",
@@ -859,11 +1039,12 @@ async fn coordinator_returns_provider_fallback_without_creating_a_duplicate_lane
     runtime.launch_issue = Some(profile_conflict_issue());
 
     let outcome = RouteBoundOpenCoordinator::open(
-        RouteBoundOpenInvocation::DurableResolution {
-            handoff_id: "handoff-a".to_string(),
-            allow_reopen_closed: false,
-            attribution: authorized_attribution(),
-        },
+        RouteBoundOpenInvocation::durable_resolution(
+            "handoff-a".to_string(),
+            false,
+            authorized_attribution(),
+        )
+        .unwrap(),
         &mut runtime,
         &repository,
         &supervisor,
@@ -907,11 +1088,12 @@ async fn coordinator_returns_provider_fallback_without_creating_a_duplicate_lane
         target_type: "page".to_string(),
     }];
     let reopened = RouteBoundOpenCoordinator::open(
-        RouteBoundOpenInvocation::DurableResolution {
-            handoff_id: "handoff-a".to_string(),
-            allow_reopen_closed: true,
-            attribution: authorized_attribution(),
-        },
+        RouteBoundOpenInvocation::durable_resolution(
+            "handoff-a".to_string(),
+            true,
+            authorized_attribution(),
+        )
+        .unwrap(),
         &mut runtime,
         &repository,
         &supervisor,
@@ -990,7 +1172,7 @@ async fn coordinator_returns_typed_opened_outcome_from_scripted_effects() {
     }];
 
     let outcome = RouteBoundOpenCoordinator::open(
-        RouteBoundOpenInvocation::DirectOpen(Box::new(request)),
+        RouteBoundOpenInvocation::direct(request),
         &mut runtime,
         &repository,
         &supervisor,
@@ -1039,7 +1221,7 @@ async fn coordinator_returns_typed_opened_outcome_from_scripted_effects() {
         message: "scripted launch failure".to_string(),
     });
     let rolled_back = RouteBoundOpenCoordinator::open(
-        RouteBoundOpenInvocation::DirectOpen(Box::new(rollback_request)),
+        RouteBoundOpenInvocation::direct(rollback_request),
         &mut runtime,
         &repository,
         &supervisor,
@@ -1055,26 +1237,64 @@ async fn coordinator_returns_typed_opened_outcome_from_scripted_effects() {
 
 #[test]
 fn every_ingress_uses_the_same_transport_neutral_authorization_fact() {
-    for ingress in ["daemon", "cli", "http", "mcp", "dashboard"] {
-        let attribution = authorized_attribution();
+    let ingress_commands = [
+        json!({"action": "remote_view_open", "callerId": "daemon"}),
+        json!({"action": "remote_view_open", "callerId": "cli"}),
+        json!({"action": "remote_view_open", "callerId": "http"}),
+        json!({"action": "remote_view_open", "callerId": "mcp"}),
+        json!({"action": "remote_view_open", "callerId": "dashboard"}),
+    ];
+    for command in ingress_commands {
+        let attribution = route_bound_open_attribution_from_authenticated_dispatch(&command);
         assert!(
             attribution.authorization.is_authorized(),
-            "{ingress} must reach invocation construction only after daemon authentication"
+            "authenticated dispatch must produce the sealed authorization fact"
         );
+        assert_eq!(
+            attribution.caller_id,
+            command
+                .get("callerId")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        );
+        assert!(RouteBoundDirectOpenRequest::from_compatibility_command(
+            command,
+            None,
+            attribution,
+        )
+        .is_ok());
     }
-    let rejected = RouteBoundDirectOpenRequest::from_compatibility_command(
+    let rejected_attribution = RouteBoundOpenAttribution {
+        caller_id: None,
+        service_job_id: None,
+        authorization: RouteBoundOpenAuthorization::Rejected,
+    };
+    let rejected_direct = RouteBoundDirectOpenRequest::from_compatibility_command(
         json!({"action": "remote_view_open"}),
         None,
-        RouteBoundOpenAttribution {
-            caller_id: None,
-            service_job_id: None,
-            authorization: RouteBoundOpenAuthorization::Rejected,
-        },
+        rejected_attribution.clone(),
     );
     assert_eq!(
-        rejected.unwrap_err(),
+        rejected_direct.unwrap_err(),
         "Unauthorized route-bound open invocation"
     );
+    let rejected_durable = RouteBoundOpenInvocation::durable_resolution(
+        "handoff-a".to_string(),
+        false,
+        rejected_attribution,
+    );
+    assert_eq!(
+        rejected_durable.unwrap_err(),
+        "Unauthorized route-bound open invocation"
+    );
+}
+
+#[test]
+fn concrete_route_records_reject_untyped_payloads() {
+    assert!(LaunchBrowserCommand::from_compatibility(json!("launch")).is_err());
+    assert!(LaunchBrowserCommand::from_compatibility(json!({"dryRun": "yes"})).is_err());
+    assert!(LaunchBrowserResult::from_compatibility(json!({"pid": "forty-two"})).is_err());
+    assert!(RouteBoundOpenDocument::from_compatibility(json!({"resolved": "yes"})).is_err());
 }
 
 #[test]

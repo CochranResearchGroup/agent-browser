@@ -3,7 +3,7 @@ use super::deadline::RouteBoundOpenSupervisor;
 use super::route_lifecycle::service_remote_view_timestamp;
 use super::runtime::{
     route_bound_runtime_issue, CloseCreatedBrowserRequest, CloseCreatedTargetRequest,
-    RouteBoundOpenRepository, RouteBoundOpenRuntime,
+    RouteBoundBrowserIdentity, RouteBoundOpenRepository, RouteBoundOpenRuntime,
 };
 use super::shared::*;
 pub(crate) async fn remote_view_open_cleanup_after_failure<R: RouteBoundOpenRuntime>(
@@ -29,15 +29,23 @@ pub(crate) async fn remote_view_open_cleanup_after_failure<R: RouteBoundOpenRunt
                 None,
             )),
         },
-        RouteBoundHandoffFailureCleanupTask::CloseNewBrowser { command } => supervisor
-            .compensate(
-                "close_created_browser",
-                runtime.close_created_browser(CloseCreatedBrowserRequest {
-                    browser_identity: command.clone(),
-                }),
-            )
-            .await
-            .map(|result| result.into_value()),
+        RouteBoundHandoffFailureCleanupTask::CloseNewBrowser { command } => {
+            let identity = match RouteBoundBrowserIdentity::from_compatibility(command.clone()) {
+                Ok(identity) => identity,
+                Err(message) => {
+                    return route_bound_handoff_failure_cleanup_task_result(task, Err(message));
+                }
+            };
+            supervisor
+                .compensate(
+                    "close_created_browser",
+                    runtime.close_created_browser(CloseCreatedBrowserRequest {
+                        browser_identity: identity,
+                    }),
+                )
+                .await
+                .map(|result| result.into_value())
+        }
         RouteBoundHandoffFailureCleanupTask::Skipped { cleanup } => {
             return cleanup.clone();
         }
