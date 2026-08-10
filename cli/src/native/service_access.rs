@@ -1011,6 +1011,29 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
 ///
 /// HTTP and MCP adapters both call this before relay so the access planner stays
 /// authoritative for selecting the compatible retained browser.
+pub(crate) const SERVICE_REQUEST_ACCESS_PLAN_ROUTING_FIELDS: &[&str] = &[
+    "serviceName",
+    "agentName",
+    "taskName",
+    "targetServiceId",
+    "targetService",
+    "targetServiceIds",
+    "targetServices",
+    "siteId",
+    "siteIds",
+    "loginId",
+    "loginIds",
+    "accountId",
+    "accountIds",
+    "runtimeProfile",
+    "profileId",
+    "browserBuild",
+    "browserHost",
+    "viewStreamProvider",
+    "controlInputProvider",
+    "displayIsolation",
+];
+
 pub(crate) fn apply_shared_profile_route_hints_for_service_request(
     service_state: &ServiceState,
     command: &mut Value,
@@ -1071,28 +1094,7 @@ fn service_access_plan_request_from_service_command(
     command: &Value,
 ) -> Result<ServiceAccessPlanRequest, String> {
     let mut params = Vec::new();
-    for key in [
-        "serviceName",
-        "agentName",
-        "taskName",
-        "targetServiceId",
-        "targetService",
-        "targetServiceIds",
-        "targetServices",
-        "siteId",
-        "siteIds",
-        "loginId",
-        "loginIds",
-        "accountId",
-        "accountIds",
-        "runtimeProfile",
-        "profileId",
-        "browserBuild",
-        "browserHost",
-        "viewStreamProvider",
-        "controlInputProvider",
-        "displayIsolation",
-    ] {
+    for key in SERVICE_REQUEST_ACCESS_PLAN_ROUTING_FIELDS {
         append_service_command_access_param(&mut params, key, command.get(key));
     }
     let target_url = command.get("url").or_else(|| command.get("desiredUrl"));

@@ -3044,9 +3044,10 @@ the requested targets. It also includes
 request can be queued immediately. When manual seeding or challenge work must
 finish first, `recommendedAfterManualAction` tells clients to reuse the same
 identity request after the operator completes that step. The service request
-schema accepts `displayIsolation` for remote-headed display allocation policy,
-and access-plan copied requests place the selected policy in `params` next to
-`browserHost`, `viewStreamProvider`, and `controlInputProvider`. The service
+schema accepts top-level `browserHost`, `viewStreamProvider`,
+`controlInputProvider`, and `displayIsolation` routing hints. Access-plan
+copied requests may also place the selected posture in `params` for
+action-specific compatibility. The service
 request client refuses to post an access-plan-backed tab request while manual profile
 seeding is still required unless `allowManualAction: true` is supplied. Raw
 HTTP and MCP callers get the same protection when they submit the copied

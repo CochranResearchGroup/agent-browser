@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.dev/contracts/service-request-field-roles.v1.json",
+  "description": "Machine-readable role ledger for canonical service-request fields and transport-only compatibility fields.",
+  "canonicalPropertyCount": 62,
+  "roles": {
+    "structural": ["action", "params"],
+    "command": [
+      "action", "jobTimeoutMs", "profileLeasePolicy", "profileLeaseWaitTimeoutMs",
+      "requiresCdpFree", "cdpAttachmentAllowed", "serviceTabHandle", "targetId",
+      "script", "expression", "returnByValue", "timeoutMs", "maxReturnBytes",
+      "maxTextBytes", "maxBodyBytes", "includeScreenshot", "screenshotDir",
+      "maxConsoleEntries", "maxErrorEntries", "maxRequestEntries",
+      "captureEvidenceOnFailure", "probe", "uiAction", "networkCapture", "fileTransfer",
+      "repairPolicy", "browserBuild", "browserHost", "viewStreamProvider",
+      "controlInputProvider", "displayIsolation", "serviceName", "agentName", "taskName",
+      "targetServiceId", "targetService", "targetServiceIds", "targetServices", "siteId",
+      "siteIds", "loginId", "loginIds", "accountId", "accountIds", "url", "desiredUrl",
+      "profile", "profileId", "runtimeProfile", "profileClass", "cdpUrl", "cdpPort",
+      "browserId", "sessionName", "allowDuplicateProfileLane", "manualLoginLaunch"
+    ],
+    "trace": [
+      "jobTimeoutMs", "profileLeasePolicy", "profileLeaseWaitTimeoutMs", "requiresCdpFree",
+      "cdpAttachmentAllowed", "serviceTabHandle", "targetId", "script", "expression",
+      "returnByValue", "timeoutMs", "maxReturnBytes", "maxTextBytes", "maxBodyBytes",
+      "includeScreenshot", "screenshotDir", "maxConsoleEntries", "maxErrorEntries",
+      "maxRequestEntries", "captureEvidenceOnFailure", "probe", "uiAction", "networkCapture",
+      "fileTransfer", "repairPolicy", "browserBuild", "browserHost", "viewStreamProvider",
+      "controlInputProvider", "displayIsolation", "serviceName", "agentName", "taskName",
+      "targetServiceId", "targetService", "targetServiceIds", "targetServices", "siteId",
+      "siteIds", "loginId", "loginIds", "accountId", "accountIds", "url", "desiredUrl",
+      "profile", "profileId", "runtimeProfile", "profileClass", "browserId", "sessionName",
+      "allowDuplicateProfileLane"
+    ],
+    "routing": [
+      "serviceTabHandle", "targetId", "browserBuild", "browserHost", "viewStreamProvider", "controlInputProvider",
+      "displayIsolation", "serviceName", "agentName", "taskName", "targetServiceId",
+      "targetService", "targetServiceIds", "targetServices", "siteId", "siteIds", "loginId",
+      "loginIds", "accountId", "accountIds", "url", "desiredUrl", "profile", "profileId",
+      "runtimeProfile", "profileClass", "browserId", "sessionName", "allowDuplicateProfileLane"
+    ],
+    "validationOnly": [
+      "blockedByManualAction", "manualSeedingRequired", "allowManualAction",
+      "monitorRunDueSummary", "allowMonitorFreshnessRisk"
+    ]
+  },
+  "transportLegacy": ["args"]
+}

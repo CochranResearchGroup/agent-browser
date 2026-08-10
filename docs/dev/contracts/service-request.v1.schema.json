@@ -259,6 +259,21 @@
       "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"],
       "description": "Optional browser-build preference for profile selection and launch routing."
     },
+    "browserHost": {
+      "type": "string",
+      "enum": ["local_headless", "local_headed", "docker_headed", "remote_headed", "cloud_provider", "attached_existing"],
+      "description": "Optional browser-host constraint used by shared-profile routing and daemon execution."
+    },
+    "viewStreamProvider": {
+      "type": "string",
+      "enum": ["cdp_screencast", "chrome_tab_webrtc", "virtual_display_webrtc", "novnc", "rdp_gateway", "external_url"],
+      "description": "Optional view-stream provider constraint used by shared-profile routing and daemon execution."
+    },
+    "controlInputProvider": {
+      "type": "string",
+      "enum": ["cdp_input", "webrtc_input", "vnc_input", "manual_attached_desktop"],
+      "description": "Optional control-input provider constraint used by shared-profile routing and daemon execution."
+    },
     "displayIsolation": {
       "type": "string",
       "enum": ["private_virtual_display", "shared_display", "ambient_display"],

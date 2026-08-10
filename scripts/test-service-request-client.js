@@ -68,6 +68,7 @@ import {
   summarizeServiceRemoteViewOpenProof,
   transferServiceFiles,
   SERVICE_REQUEST_ACTIONS,
+  SERVICE_REQUEST_STRING_FIELDS,
   summarizeServiceCdpFreeLaunchAvailability,
   takeoverServiceControllerLease,
 } from '../packages/client/src/service-request.js';
@@ -91,6 +92,12 @@ function assertServiceRequestActionDataCoverage() {
   const mappedActions = [...mapBody.matchAll(/^\s*([a-z0-9_]+):/gm)].map((match) => match[1]);
   assert.deepEqual(actions.filter((action) => !mappedActions.includes(action)), []);
   assert.deepEqual(mappedActions.filter((action) => !actions.includes(action)), []);
+  for (const field of ['browserHost', 'viewStreamProvider', 'controlInputProvider']) {
+    assert.ok(schema.properties[field], `canonical schema must include ${field}`);
+    assert.ok(SERVICE_REQUEST_STRING_FIELDS.includes(field), `generated fields must include ${field}`);
+  }
+  assert.equal(schema.properties.args, undefined);
+  assert.equal(SERVICE_REQUEST_STRING_FIELDS.includes('args'), false);
 }
 
 function createFetchRecorder(payload = { success: true, data: { jobId: 'job-1' } }) {

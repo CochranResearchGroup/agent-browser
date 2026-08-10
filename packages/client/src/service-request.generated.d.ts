@@ -109,6 +109,9 @@ export interface ServiceRequest {
   screenshotDir?: string;
   repairPolicy?: string;
   browserBuild?: string;
+  browserHost?: string;
+  viewStreamProvider?: string;
+  controlInputProvider?: string;
   displayIsolation?: string;
   serviceName?: string;
   agentName?: string;

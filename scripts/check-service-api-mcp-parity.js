@@ -2,6 +2,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import {
+  SERVICE_REQUEST_BOOLEAN_FIELDS,
+  SERVICE_REQUEST_INTEGER_FIELDS,
+  SERVICE_REQUEST_OBJECT_FIELDS,
+  SERVICE_REQUEST_REQUIRED_FIELDS,
+  SERVICE_REQUEST_STRING_ARRAY_FIELDS,
+  SERVICE_REQUEST_STRING_FIELDS,
+} from '../packages/client/src/service-request.generated.js';
+
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '..');
 
@@ -78,6 +87,9 @@ const files = {
   actions: read('cli/src/native/actions.rs'),
   serviceContracts: read('cli/src/native/service_contracts.rs'),
   serviceRequestSchema: read('docs/dev/contracts/service-request.v1.schema.json'),
+  serviceRequestRoles: read('docs/dev/contracts/service-request-field-roles.v1.json'),
+  generatedServiceRequest: read('packages/client/src/service-request.generated.js'),
+  generatedServiceRequestTypes: read('packages/client/src/service-request.generated.d.ts'),
   mcp: `${read('cli/src/mcp.rs')}\n${read('cli/src/native/service_contracts.rs')}`,
   http: `${read('cli/src/native/stream/http.rs')}\n${read('cli/src/native/service_contracts.rs')}`,
   readme: read('README.md'),
@@ -94,6 +106,12 @@ const rustServiceRequestActions = extractRustStringArray(
   'pub const SERVICE_REQUEST_ACTIONS',
 );
 const schemaServiceRequestActions = extractServiceRequestSchemaActions(files.serviceRequestSchema);
+const schemaServiceRequestProperties = extractServiceRequestSchemaProperties(
+  files.serviceRequestSchema,
+);
+const mcpServiceRequestProperties = extractMcpServiceRequestProperties(files.mcp);
+const serviceRequestSchema = JSON.parse(files.serviceRequestSchema);
+const serviceRequestRoles = JSON.parse(files.serviceRequestRoles);
 const serviceSurface = [
   {
     tool: 'service_access_plan',
@@ -367,6 +385,82 @@ expectSameItems(
   schemaServiceRequestActions,
   'Rust SERVICE_REQUEST_ACTIONS',
   'service-request schema action enum',
+);
+
+expectSameItems(
+  schemaServiceRequestProperties,
+  mcpServiceRequestProperties,
+  'service-request schema properties',
+  'MCP service_request top-level properties',
+);
+expectSameItems(
+  schemaServiceRequestProperties,
+  serviceRequestRolePropertyNames(serviceRequestRoles),
+  'service-request schema properties',
+  'machine-readable service-request role ledger properties',
+);
+expectSameItems(serviceRequestRoles.roles.structural, ['action', 'params'], 'structural role', 'expected structural role');
+expectSameItems(
+  serviceRequestRoles.roles.validationOnly,
+  [
+    'blockedByManualAction',
+    'manualSeedingRequired',
+    'allowManualAction',
+    'monitorRunDueSummary',
+    'allowMonitorFreshnessRisk',
+  ],
+  'validation-only role',
+  'expected validation-only role',
+);
+expectSameItems(serviceRequestRoles.transportLegacy, ['args'], 'transport-legacy role', 'expected transport-legacy role');
+for (const role of ['command', 'trace', 'routing', 'validationOnly', 'structural']) {
+  expectSameItems(
+    serviceRequestRoles.roles[role],
+    sortedUnique(serviceRequestRoles.roles[role]),
+    `${role} role entries`,
+    `unique ${role} role entries`,
+  );
+}
+for (const field of ['serviceName', 'agentName', 'taskName']) {
+  expectIncludes(serviceRequestRoles.roles.routing, field, `routing role includes ${field}`);
+}
+expectSameItems(
+  serviceRequestRoles.roles.trace.filter(
+    (field) => !serviceRequestRoles.roles.command.includes(field),
+  ),
+  [],
+  'trace-only fields',
+  'empty trace-only set',
+);
+expectSameItems(
+  serviceRequestRoles.roles.routing.filter(
+    (field) => !serviceRequestRoles.roles.command.includes(field),
+  ),
+  [],
+  'routing-only fields',
+  'empty routing-only set',
+);
+assertGeneratedServiceRequestParity(serviceRequestSchema, files.generatedServiceRequestTypes);
+for (const source of [
+  files.serviceRequestSchema,
+  extractMcpServiceRequestSource(files.mcp),
+  files.generatedServiceRequest,
+  extractTypeScriptInterface(files.generatedServiceRequestTypes, 'ServiceRequest'),
+]) {
+  if (/\bargs\??\s*[":]/.test(source)) {
+    failures.push('canonical, MCP, normalizer, and generated service-request surfaces exclude top-level args');
+    break;
+  }
+}
+expectIncludes(
+  files.http,
+  'request.remove("args")',
+  'HTTP adapter names the top-level args compatibility extraction',
+);
+expectIncludes(
+  files.http,
+  'command["args"] = args',
+  'HTTP adapter reapplies the top-level args compatibility overlay',
 );
 
 const serviceResourceSurface = [
@@ -719,6 +813,119 @@ function extractServiceRequestSchemaActions(source) {
     return [];
   }
   return sortedUnique(actions);
+}
+
+function extractServiceRequestSchemaProperties(source) {
+  const schema = JSON.parse(source);
+  return sortedUnique(Object.keys(schema?.properties ?? {}));
+}
+
+function extractMcpServiceRequestSource(source) {
+  const start = source.indexOf('"name": "service_request"');
+  const end = source.indexOf('"name": "service_job_cancel"', start);
+  if (start < 0 || end < 0) {
+    failures.push('MCP source missing bounded service_request tool definition');
+    return '';
+  }
+  return source.slice(start, end);
+}
+
+function extractMcpServiceRequestProperties(source) {
+  const tool = extractMcpServiceRequestSource(source);
+  return sortedUnique(
+    [...tool.matchAll(/^ {20}"(?<property>[A-Za-z][A-Za-z0-9]*)": \{$/gm)].map(
+      (match) => match.groups.property,
+    ),
+  );
+}
+
+function serviceRequestRolePropertyNames(contract) {
+  return sortedUnique(Object.values(contract.roles ?? {}).flat());
+}
+
+function assertGeneratedServiceRequestParity(schema, generatedTypesSource) {
+  const generatedGroups = new Map([
+    ['string', SERVICE_REQUEST_STRING_FIELDS],
+    ['string[]', SERVICE_REQUEST_STRING_ARRAY_FIELDS],
+    ['number', SERVICE_REQUEST_INTEGER_FIELDS],
+    ['boolean', SERVICE_REQUEST_BOOLEAN_FIELDS],
+    ['object', SERVICE_REQUEST_OBJECT_FIELDS],
+  ]);
+  const generatedNames = sortedUnique([
+    ...SERVICE_REQUEST_REQUIRED_FIELDS,
+    ...SERVICE_REQUEST_STRING_FIELDS,
+    ...SERVICE_REQUEST_STRING_ARRAY_FIELDS,
+    ...SERVICE_REQUEST_INTEGER_FIELDS,
+    ...SERVICE_REQUEST_BOOLEAN_FIELDS,
+    ...SERVICE_REQUEST_OBJECT_FIELDS,
+    'params',
+  ]);
+  expectSameItems(
+    Object.keys(schema.properties),
+    generatedNames,
+    'service-request schema properties',
+    'all generated service-request fields',
+  );
+
+  const interfaceSource = extractTypeScriptInterface(generatedTypesSource, 'ServiceRequest');
+  const generatedInterface = new Map(
+    [...interfaceSource.matchAll(/^\s+(?<name>[A-Za-z][A-Za-z0-9]*)(?<optional>\?)?: (?<type>[^;]+);$/gm)].map(
+      (match) => [match.groups.name, { optional: match.groups.optional === '?', type: match.groups.type }],
+    ),
+  );
+  expectSameItems(
+    Object.keys(schema.properties),
+    [...generatedInterface.keys()],
+    'service-request schema properties',
+    'generated ServiceRequest interface fields',
+  );
+
+  for (const [name, property] of Object.entries(schema.properties)) {
+    let expectedGroup;
+    let expectedType;
+    if (name === 'action') {
+      expectedGroup = 'string';
+      expectedType = 'ServiceRequestAction';
+    } else if (name === 'params') {
+      expectedType = 'Record<string, unknown>';
+    } else if (property.$ref) {
+      expectedGroup = 'object';
+      expectedType = name === 'serviceTabHandle' ? 'ServiceTabHandle' : 'Record<string, unknown>';
+    } else if (property.type === 'array') {
+      expectedGroup = 'string[]';
+      expectedType = 'string[]';
+    } else if (property.type === 'integer') {
+      expectedGroup = 'number';
+      expectedType = 'number';
+    } else if (property.type === 'object') {
+      expectedGroup = 'object';
+      expectedType = 'Record<string, unknown>';
+    } else {
+      expectedGroup = property.type;
+      expectedType = property.type;
+    }
+    if (expectedGroup && !generatedGroups.get(expectedGroup)?.includes(name)) {
+      failures.push(`generated ${expectedGroup} fields missing ${name}`);
+    }
+    const generated = generatedInterface.get(name);
+    if (!generated || generated.type !== expectedType) {
+      failures.push(`generated ServiceRequest.${name} type must be ${expectedType}`);
+    }
+    const required = (schema.required ?? []).includes(name);
+    if (generated && generated.optional === required) {
+      failures.push(`generated ServiceRequest.${name} optionality does not match schema`);
+    }
+  }
+}
+
+function extractTypeScriptInterface(source, name) {
+  const start = source.indexOf(`export interface ${name} {`);
+  const end = source.indexOf('\n}', start);
+  if (start < 0 || end < 0) {
+    failures.push(`generated types missing ${name} interface`);
+    return '';
+  }
+  return source.slice(start, end + 2);
 }
 
 function extractRustFunctionBody(source, signature) {

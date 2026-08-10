@@ -71,6 +71,8 @@ pub mod service_model;
 #[allow(dead_code)]
 pub mod service_monitors;
 #[allow(dead_code)]
+pub mod service_request;
+#[allow(dead_code)]
 pub mod service_resources;
 #[allow(dead_code)]
 pub mod service_status_projection;

@@ -3,10 +3,8 @@ use std::io::{self, BufRead, Write};
 use serde_json::{json, Map, Value};
 
 use crate::connection::{send_command, Response};
-use crate::native::remote_view_handoff::apply_remote_view_handoff_route_hints;
 use crate::native::service_access::{
-    apply_shared_profile_route_hints_for_service_request, parse_service_access_plan_query,
-    service_access_plan_for_state,
+    parse_service_access_plan_query, service_access_plan_for_state,
 };
 use crate::native::service_activity::service_incident_activity_response;
 use crate::native::service_contracts::{
@@ -24,6 +22,7 @@ use crate::native::service_model::{
     service_profile_allocations, service_profile_seeding_handoff, service_profile_sources,
     service_site_policy_sources, ServiceState,
 };
+use crate::native::service_request::{normalize_service_request, ServiceRequestNormalization};
 use crate::native::service_store::load_default_service_state_snapshot;
 use crate::native::service_trace::{service_trace_response, ServiceTraceFilters};
 use crate::native::stream::service_profile_lookup_response_for_state;
@@ -984,7 +983,8 @@ fn service_mcp_tools() -> Vec<Value> {
                     },
                     "displayIsolation": {
                         "type": "string",
-                        "description": "Optional display-isolation constraint, for example private_virtual_display."
+                        "enum": ["private_virtual_display", "shared_display", "ambient_display"],
+                        "description": "Optional display-isolation constraint used by access-plan shared-profile routing."
                     },
                     "profile": {
                         "type": "string",
@@ -997,6 +997,15 @@ fn service_mcp_tools() -> Vec<Value> {
                     "runtimeProfile": {
                         "type": "string",
                         "description": "Explicit managed runtime profile id."
+                    },
+                    "cdpUrl": {
+                        "type": "string",
+                        "description": "Caller-supplied Chrome DevTools endpoint for action=external_byop_adopt. Use exactly one of cdpUrl or cdpPort."
+                    },
+                    "cdpPort": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Caller-supplied local Chrome DevTools port for action=external_byop_adopt. Use exactly one of cdpUrl or cdpPort."
                     },
                     "profileClass": {
                         "type": "string",
@@ -1059,6 +1068,10 @@ fn service_mcp_tools() -> Vec<Value> {
                         "type": "array",
                         "items": { "type": "string" },
                         "description": "Account identities for profile selection."
+                    },
+                    "manualLoginLaunch": {
+                        "type": "boolean",
+                        "description": "For action=remote_view_open, use the minimal headed Chrome flag posture after the exact profile has been manually seeded and closed."
                     },
                     "url": {
                         "type": "string",
@@ -5427,702 +5440,36 @@ fn service_request_command_with_state(
     arguments: &Value,
     service_state: Option<&ServiceState>,
 ) -> Result<(Value, Value), JsonRpcError> {
-    let action = required_string_argument(arguments, "action")?;
-    if !BROWSER_COMMAND_ALLOWED_ACTIONS.contains(&action) {
-        return Err(JsonRpcError::invalid_params(&format!(
-            "service_request action '{}' is not supported",
-            action
-        )));
-    }
-    reject_blocked_manual_service_request(arguments)?;
-    reject_cdp_free_service_request(action, arguments)?;
-    reject_cdp_attach_service_request(action, arguments)?;
-    reject_bounded_evaluate_service_request(action, arguments)?;
-    reject_service_diagnostics_request(action, arguments)?;
-    reject_service_probe_request(action, arguments)?;
-    reject_tab_handle_refresh_request(action, arguments)?;
-    reject_service_ui_action_request(action, arguments)?;
-    reject_service_network_capture_request(action, arguments)?;
-    reject_service_file_transfer_request(action, arguments)?;
-    reject_stale_monitor_service_request(arguments)?;
-    let params = optional_object_argument(arguments, "params")?;
-    let context = ServiceToolContext::from_arguments(arguments)?;
-    let trace = context.trace();
-    let mut command = browser_command_command(BrowserCommandArgs {
+    // MCP owns only its JSON-RPC envelope and request identity. Canonical
+    // request semantics and trace projection live in the shared normalizer.
+    let normalized = normalize_service_request(ServiceRequestNormalization {
+        request: arguments,
+        service_state,
+    })
+    .map_err(|issue| JsonRpcError::invalid_params(issue.message()))?;
+    let action = normalized.command["action"]
+        .as_str()
+        .expect("normalizer always returns a string action")
+        .to_string();
+    let mut command = normalized.command;
+    command["id"] = json!(format!(
+        "mcp-service-request-{}-{}",
         action,
-        params,
-        job_timeout_ms: context.job_timeout_ms,
-        service_name: context.service_name,
-        agent_name: context.agent_name,
-        task_name: context.task_name,
-    });
-    if let Some(id) = command.get("id").and_then(Value::as_str) {
-        let new_id = id.replacen("mcp-browser-command-", "mcp-service-request-", 1);
-        command["id"] = json!(new_id);
-    }
-    context.apply_target_profile_hints(&mut command);
-    if let Some(value) = arguments.get("manualLoginLaunch") {
-        command["manualLoginLaunch"] = value.clone();
-    }
-    if let Some(service_state) = service_state {
-        apply_remote_view_handoff_route_hints(service_state, &mut command);
-        apply_shared_profile_route_hints_for_service_request(service_state, &mut command)
-            .map_err(|err| JsonRpcError::invalid_params(&err))?;
-    }
-    Ok((trace, command))
+        uuid::Uuid::new_v4()
+    ));
+    Ok((normalized.trace, command))
 }
 
-fn reject_blocked_manual_service_request(arguments: &Value) -> Result<(), JsonRpcError> {
-    if arguments
-        .get("blockedByManualAction")
-        .and_then(Value::as_bool)
-        == Some(true)
-        && arguments
-            .get("manualSeedingRequired")
-            .and_then(Value::as_bool)
-            == Some(true)
-        && arguments.get("allowManualAction").and_then(Value::as_bool) != Some(true)
-    {
-        return Err(JsonRpcError::invalid_params(
-            "service_request is blocked by manual profile seeding; complete seeding or set allowManualAction=true to override",
-        ));
-    }
-    Ok(())
-}
-
-fn reject_stale_monitor_service_request(arguments: &Value) -> Result<(), JsonRpcError> {
-    let Some(summary) = arguments.get("monitorRunDueSummary") else {
-        return Ok(());
-    };
-    if summary.is_null()
-        || arguments
-            .get("allowMonitorFreshnessRisk")
-            .and_then(Value::as_bool)
-            == Some(true)
-    {
-        return Ok(());
-    }
-    let Some(summary) = summary.as_object() else {
-        return Err(JsonRpcError::invalid_params(
-            "service_request monitorRunDueSummary must be a JSON object",
-        ));
-    };
-
-    let expired_target_service_ids =
-        service_request_summary_string_array(summary.get("expiredTargetServiceIds"));
-    if !expired_target_service_ids.is_empty() {
-        return Err(JsonRpcError::invalid_params(&format!(
-            "service monitor run-due found expired profile freshness before service_request: {}",
-            expired_target_service_ids.join(",")
-        )));
-    }
-
-    let unverified_target_service_ids =
-        service_request_summary_string_array(summary.get("unverifiedTargetServiceIds"));
-    if !unverified_target_service_ids.is_empty() {
-        return Err(JsonRpcError::invalid_params(&format!(
-            "service monitor run-due could not verify profile freshness before service_request: {}",
-            unverified_target_service_ids.join(",")
-        )));
-    }
-
-    let matched = summary.get("matched").and_then(Value::as_u64).unwrap_or(0);
-    let failed = summary.get("failed").and_then(Value::as_bool) == Some(true);
-    let recommended_action = summary
-        .get("recommendedAction")
-        .and_then(Value::as_str)
-        .unwrap_or("inspect_monitor_results");
-    if matched == 0 || (failed && recommended_action != "use_selected_profile") {
-        return Err(JsonRpcError::invalid_params(&format!(
-            "service monitor run-due requires inspection before service_request: {recommended_action}"
-        )));
-    }
-
-    Ok(())
-}
-
-fn service_request_summary_string_array(value: Option<&Value>) -> Vec<String> {
-    value
-        .and_then(Value::as_array)
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(Value::as_str)
-                .map(ToString::to_string)
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-fn reject_cdp_free_service_request(action: &str, arguments: &Value) -> Result<(), JsonRpcError> {
-    if action == "cdp_free_launch" {
-        return Ok(());
-    }
-    if arguments.get("requiresCdpFree").and_then(Value::as_bool) == Some(true)
-        && arguments
-            .get("cdpAttachmentAllowed")
-            .and_then(Value::as_bool)
-            != Some(true)
-    {
-        return Err(JsonRpcError::invalid_params(
-            "service_request requires CDP-free browser operation; non-CDP service request execution is not implemented yet",
-        ));
-    }
-    Ok(())
-}
-
-fn reject_cdp_attach_service_request(action: &str, arguments: &Value) -> Result<(), JsonRpcError> {
-    if action != "cdp_attach" {
-        return Ok(());
-    }
-    if arguments
-        .get("cdpAttachmentAllowed")
-        .and_then(Value::as_bool)
-        != Some(true)
-    {
-        return Err(JsonRpcError::invalid_params(
-            "cdp_attach requires cdpAttachmentAllowed=true from the access-plan decision",
-        ));
-    }
-    let Some(handle) = arguments.get("serviceTabHandle").and_then(Value::as_object) else {
-        return Err(JsonRpcError::invalid_params(
-            "cdp_attach requires serviceTabHandle",
-        ));
-    };
-    if handle.get("valid").and_then(Value::as_bool) != Some(true) {
-        let stale_reason = handle
-            .get("staleReason")
-            .and_then(Value::as_str)
-            .unwrap_or("unknown");
-        return Err(JsonRpcError::invalid_params(&format!(
-            "service tab handle is stale: {stale_reason}"
-        )));
-    }
-    if handle.get("tabId").and_then(Value::as_str).is_none() {
-        return Err(JsonRpcError::invalid_params(
-            "serviceTabHandle.tabId is required",
-        ));
-    }
-    if handle.get("targetId").and_then(Value::as_str).is_none() {
-        return Err(JsonRpcError::invalid_params(
-            "cdp_attach requires serviceTabHandle.targetId",
-        ));
-    }
-    Ok(())
-}
-
-fn reject_bounded_evaluate_service_request(
-    action: &str,
-    arguments: &Value,
-) -> Result<(), JsonRpcError> {
-    if action != "evaluate" {
-        return Ok(());
-    }
-    let Some(handle) = arguments.get("serviceTabHandle").and_then(Value::as_object) else {
-        return Err(JsonRpcError::invalid_params(
-            "evaluate requires serviceTabHandle",
-        ));
-    };
-    if handle.get("valid").and_then(Value::as_bool) != Some(true) {
-        let stale_reason = handle
-            .get("staleReason")
-            .and_then(Value::as_str)
-            .unwrap_or("unknown");
-        return Err(JsonRpcError::invalid_params(&format!(
-            "service tab handle is stale: {stale_reason}"
-        )));
-    }
-    if handle.get("tabId").and_then(Value::as_str).is_none() {
-        return Err(JsonRpcError::invalid_params(
-            "serviceTabHandle.tabId is required",
-        ));
-    }
-    if handle.get("targetId").and_then(Value::as_str).is_none() {
-        return Err(JsonRpcError::invalid_params(
-            "evaluate requires serviceTabHandle.targetId",
-        ));
-    }
-    if arguments
-        .get("script")
-        .or_else(|| arguments.get("expression"))
-        .and_then(Value::as_str)
-        .filter(|value| !value.is_empty())
-        .is_none()
-    {
-        return Err(JsonRpcError::invalid_params(
-            "evaluate requires script or expression",
-        ));
-    }
-    if arguments.get("returnByValue").and_then(Value::as_bool) == Some(false) {
-        return Err(JsonRpcError::invalid_params(
-            "evaluate requires returnByValue=true so results can be capped",
-        ));
-    }
-    if arguments.get("timeoutMs").and_then(Value::as_u64).is_none() {
-        return Err(JsonRpcError::invalid_params(
-            "evaluate requires positive timeoutMs",
-        ));
-    }
-    if arguments
-        .get("maxReturnBytes")
-        .and_then(Value::as_u64)
-        .is_none()
-    {
-        return Err(JsonRpcError::invalid_params(
-            "evaluate requires positive maxReturnBytes",
-        ));
-    }
-    Ok(())
-}
-
-fn reject_service_diagnostics_request(action: &str, arguments: &Value) -> Result<(), JsonRpcError> {
-    if action != "diagnostics" {
-        return Ok(());
-    }
-    let Some(handle) = arguments.get("serviceTabHandle").and_then(Value::as_object) else {
-        return Err(JsonRpcError::invalid_params(
-            "diagnostics requires serviceTabHandle",
-        ));
-    };
-    if handle.get("valid").and_then(Value::as_bool) != Some(true) {
-        let stale_reason = handle
-            .get("staleReason")
-            .and_then(Value::as_str)
-            .unwrap_or("unknown");
-        return Err(JsonRpcError::invalid_params(&format!(
-            "service tab handle is stale: {stale_reason}"
-        )));
-    }
-    if handle.get("tabId").and_then(Value::as_str).is_none() {
-        return Err(JsonRpcError::invalid_params(
-            "serviceTabHandle.tabId is required",
-        ));
-    }
-    Ok(())
-}
-
-fn reject_service_probe_request(action: &str, arguments: &Value) -> Result<(), JsonRpcError> {
-    if action != "probe" {
-        return Ok(());
-    }
-    let Some(handle) = arguments.get("serviceTabHandle").and_then(Value::as_object) else {
-        return Err(JsonRpcError::invalid_params(
-            "probe requires serviceTabHandle",
-        ));
-    };
-    if handle.get("valid").and_then(Value::as_bool) != Some(true) {
-        let stale_reason = handle
-            .get("staleReason")
-            .and_then(Value::as_str)
-            .unwrap_or("unknown");
-        return Err(JsonRpcError::invalid_params(&format!(
-            "service tab handle is stale: {stale_reason}"
-        )));
-    }
-    if handle.get("tabId").and_then(Value::as_str).is_none() {
-        return Err(JsonRpcError::invalid_params(
-            "serviceTabHandle.tabId is required",
-        ));
-    }
-    if handle.get("targetId").and_then(Value::as_str).is_none() {
-        return Err(JsonRpcError::invalid_params(
-            "probe requires serviceTabHandle.targetId",
-        ));
-    }
-    let Some(probe) = arguments.get("probe").and_then(Value::as_object) else {
-        return Err(JsonRpcError::invalid_params(
-            "probe requires probe recipe object",
-        ));
-    };
-    let Some(detectors) = probe.get("detectors").and_then(Value::as_array) else {
-        return Err(JsonRpcError::invalid_params(
-            "probe requires probe.detectors array",
-        ));
-    };
-    if detectors.is_empty() {
-        return Err(JsonRpcError::invalid_params(
-            "probe requires at least one detector",
-        ));
-    }
-    if arguments
-        .get("timeoutMs")
-        .or_else(|| probe.get("timeoutMs"))
-        .and_then(Value::as_u64)
-        .is_none()
-    {
-        return Err(JsonRpcError::invalid_params(
-            "probe requires positive timeoutMs",
-        ));
-    }
-    if arguments
-        .get("maxReturnBytes")
-        .or_else(|| probe.get("maxReturnBytes"))
-        .and_then(Value::as_u64)
-        .is_none()
-    {
-        return Err(JsonRpcError::invalid_params(
-            "probe requires positive maxReturnBytes",
-        ));
-    }
-    if let Some(record_freshness) = probe.get("recordFreshness") {
-        let Some(record_freshness) = record_freshness.as_object() else {
-            return Err(JsonRpcError::invalid_params(
-                "probe.recordFreshness must be an object",
-            ));
-        };
-        if record_freshness
-            .get("targetServiceId")
-            .and_then(Value::as_str)
-            .filter(|value| !value.is_empty())
-            .is_none()
-        {
-            return Err(JsonRpcError::invalid_params(
-                "probe.recordFreshness requires targetServiceId",
-            ));
-        }
-        if record_freshness
-            .get("accountId")
-            .and_then(Value::as_str)
-            .filter(|value| !value.is_empty())
-            .is_none()
-        {
-            return Err(JsonRpcError::invalid_params(
-                "probe.recordFreshness requires accountId",
-            ));
-        }
-    }
-    Ok(())
-}
-
-fn reject_tab_handle_refresh_request(action: &str, arguments: &Value) -> Result<(), JsonRpcError> {
-    if action != "tab_handle_refresh" {
-        return Ok(());
-    }
-    let Some(handle) = arguments.get("serviceTabHandle").and_then(Value::as_object) else {
-        return Err(JsonRpcError::invalid_params(
-            "tab_handle_refresh requires serviceTabHandle",
-        ));
-    };
-    if handle.get("tabId").and_then(Value::as_str).is_none() {
-        return Err(JsonRpcError::invalid_params(
-            "serviceTabHandle.tabId is required",
-        ));
-    }
-    if let Some(policy) = arguments.get("repairPolicy").and_then(Value::as_str) {
-        if !matches!(
-            policy,
-            "reject_only" | "reuse_compatible" | "open_if_missing" | "replace_duplicates"
-        ) {
-            return Err(JsonRpcError::invalid_params(
-                "tab_handle_refresh repairPolicy must be reject_only, reuse_compatible, open_if_missing, or replace_duplicates",
-            ));
-        }
-    }
-    Ok(())
-}
-
-fn reject_service_ui_action_request(action: &str, arguments: &Value) -> Result<(), JsonRpcError> {
-    if action != "ui_action" {
-        return Ok(());
-    }
-    let Some(handle) = arguments.get("serviceTabHandle").and_then(Value::as_object) else {
-        return Err(JsonRpcError::invalid_params(
-            "ui_action requires serviceTabHandle",
-        ));
-    };
-    if handle.get("valid").and_then(Value::as_bool) != Some(true) {
-        let stale_reason = handle
-            .get("staleReason")
-            .and_then(Value::as_str)
-            .unwrap_or("unknown");
-        return Err(JsonRpcError::invalid_params(&format!(
-            "service tab handle is stale: {stale_reason}"
-        )));
-    }
-    if handle.get("tabId").and_then(Value::as_str).is_none() {
-        return Err(JsonRpcError::invalid_params(
-            "serviceTabHandle.tabId is required",
-        ));
-    }
-    if handle.get("targetId").and_then(Value::as_str).is_none() {
-        return Err(JsonRpcError::invalid_params(
-            "ui_action requires serviceTabHandle.targetId",
-        ));
-    }
-    let Some(recipe) = arguments.get("uiAction").and_then(Value::as_object) else {
-        return Err(JsonRpcError::invalid_params(
-            "ui_action requires uiAction object",
-        ));
-    };
-    let Some(steps) = recipe.get("steps").and_then(Value::as_array) else {
-        return Err(JsonRpcError::invalid_params(
-            "ui_action requires uiAction.steps array",
-        ));
-    };
-    if steps.is_empty() {
-        return Err(JsonRpcError::invalid_params(
-            "ui_action requires at least one step",
-        ));
-    }
-    if arguments
-        .get("timeoutMs")
-        .or_else(|| recipe.get("timeoutMs"))
-        .and_then(Value::as_u64)
-        .filter(|value| *value > 0)
-        .is_none()
-    {
-        return Err(JsonRpcError::invalid_params(
-            "ui_action requires positive timeoutMs",
-        ));
-    }
-    Ok(())
-}
-
-fn reject_service_network_capture_request(
-    action: &str,
-    arguments: &Value,
-) -> Result<(), JsonRpcError> {
-    if action != "network_capture" {
-        return Ok(());
-    }
-    let Some(handle) = arguments.get("serviceTabHandle").and_then(Value::as_object) else {
-        return Err(JsonRpcError::invalid_params(
-            "network_capture requires serviceTabHandle",
-        ));
-    };
-    if handle.get("valid").and_then(Value::as_bool) != Some(true) {
-        let stale_reason = handle
-            .get("staleReason")
-            .and_then(Value::as_str)
-            .unwrap_or("unknown");
-        return Err(JsonRpcError::invalid_params(&format!(
-            "service tab handle is stale: {stale_reason}"
-        )));
-    }
-    if handle.get("tabId").and_then(Value::as_str).is_none() {
-        return Err(JsonRpcError::invalid_params(
-            "serviceTabHandle.tabId is required",
-        ));
-    }
-    if handle.get("targetId").and_then(Value::as_str).is_none() {
-        return Err(JsonRpcError::invalid_params(
-            "network_capture requires serviceTabHandle.targetId",
-        ));
-    }
-    let Some(recipe) = arguments.get("networkCapture").and_then(Value::as_object) else {
-        return Err(JsonRpcError::invalid_params(
-            "network_capture requires networkCapture object",
-        ));
-    };
-    let timeout_ms = arguments
-        .get("timeoutMs")
-        .or_else(|| recipe.get("timeoutMs"))
-        .or_else(|| recipe.get("maxDurationMs"))
-        .and_then(Value::as_u64)
-        .unwrap_or(0);
-    if timeout_ms == 0 {
-        return Err(JsonRpcError::invalid_params(
-            "network_capture requires positive timeoutMs",
-        ));
-    }
-    if recipe
-        .get("maxEvents")
-        .and_then(Value::as_u64)
-        .filter(|value| *value > 0)
-        .is_none()
-    {
-        return Err(JsonRpcError::invalid_params(
-            "network_capture requires positive networkCapture.maxEvents",
-        ));
-    }
-    if recipe
-        .get("captureBodies")
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
-    {
-        let max_body_bytes = recipe
-            .get("maxBodyBytes")
-            .or_else(|| arguments.get("maxBodyBytes"))
-            .and_then(Value::as_u64)
-            .unwrap_or(0);
-        if max_body_bytes == 0 {
-            return Err(JsonRpcError::invalid_params(
-                "network_capture captureBodies requires positive maxBodyBytes",
-            ));
-        }
-    }
-    Ok(())
-}
-
-fn reject_service_file_transfer_request(
-    action: &str,
-    arguments: &Value,
-) -> Result<(), JsonRpcError> {
-    if action != "file_transfer" {
-        return Ok(());
-    }
-    let Some(handle) = arguments.get("serviceTabHandle").and_then(Value::as_object) else {
-        return Err(JsonRpcError::invalid_params(
-            "file_transfer requires serviceTabHandle",
-        ));
-    };
-    if handle.get("valid").and_then(Value::as_bool) != Some(true) {
-        let stale_reason = handle
-            .get("staleReason")
-            .and_then(Value::as_str)
-            .unwrap_or("unknown");
-        return Err(JsonRpcError::invalid_params(&format!(
-            "service tab handle is stale: {stale_reason}"
-        )));
-    }
-    if handle.get("tabId").and_then(Value::as_str).is_none() {
-        return Err(JsonRpcError::invalid_params(
-            "serviceTabHandle.tabId is required",
-        ));
-    }
-    if handle.get("targetId").and_then(Value::as_str).is_none() {
-        return Err(JsonRpcError::invalid_params(
-            "file_transfer requires serviceTabHandle.targetId",
-        ));
-    }
-    let Some(recipe) = arguments.get("fileTransfer").and_then(Value::as_object) else {
-        return Err(JsonRpcError::invalid_params(
-            "file_transfer requires fileTransfer object",
-        ));
-    };
-    let timeout_ms = arguments
-        .get("timeoutMs")
-        .or_else(|| recipe.get("timeoutMs"))
-        .and_then(Value::as_u64)
-        .unwrap_or(0);
-    if timeout_ms == 0 {
-        return Err(JsonRpcError::invalid_params(
-            "file_transfer requires positive timeoutMs",
-        ));
-    }
-    if recipe.get("upload").is_none() && recipe.get("download").is_none() {
-        return Err(JsonRpcError::invalid_params(
-            "file_transfer requires upload or download recipe",
-        ));
-    }
-    if let Some(upload) = recipe.get("upload") {
-        let Some(upload) = upload.as_object() else {
-            return Err(JsonRpcError::invalid_params(
-                "file_transfer upload must be an object",
-            ));
-        };
-        reject_file_transfer_upload_recipe(upload)?;
-    }
-    if let Some(download) = recipe.get("download") {
-        let Some(download) = download.as_object() else {
-            return Err(JsonRpcError::invalid_params(
-                "file_transfer download must be an object",
-            ));
-        };
-        reject_file_transfer_download_recipe(download)?;
-    }
-    Ok(())
-}
-
-fn reject_file_transfer_upload_recipe(upload: &Map<String, Value>) -> Result<(), JsonRpcError> {
-    if upload
-        .get("selector")
-        .and_then(Value::as_str)
-        .filter(|value| !value.trim().is_empty())
-        .is_none()
-        && upload
-            .get("labelText")
-            .or_else(|| upload.get("label"))
-            .and_then(Value::as_str)
-            .filter(|value| !value.trim().is_empty())
-            .is_none()
-    {
-        return Err(JsonRpcError::invalid_params(
-            "file_transfer upload requires selector or labelText",
-        ));
-    }
-    let Some(files) = upload.get("files").and_then(Value::as_array) else {
-        return Err(JsonRpcError::invalid_params(
-            "file_transfer upload requires files array",
-        ));
-    };
-    if files.is_empty()
-        || !files
-            .iter()
-            .all(|file| file.as_str().is_some_and(|value| !value.trim().is_empty()))
-    {
-        return Err(JsonRpcError::invalid_params(
-            "file_transfer upload files must be nonempty strings",
-        ));
-    }
-    let max_files = upload.get("maxFiles").and_then(Value::as_u64).unwrap_or(0);
-    if max_files == 0 {
-        return Err(JsonRpcError::invalid_params(
-            "file_transfer upload requires positive maxFiles",
-        ));
-    }
-    if files.len() as u64 > max_files {
-        return Err(JsonRpcError::invalid_params(&format!(
-            "file_transfer upload file count {} exceeds maxFiles {}",
-            files.len(),
-            max_files
-        )));
-    }
-    reject_nonempty_string_array(
-        upload.get("allowedPaths"),
-        "file_transfer upload allowedPaths",
-    )
-}
-
-fn reject_file_transfer_download_recipe(download: &Map<String, Value>) -> Result<(), JsonRpcError> {
-    if download
-        .get("selector")
-        .and_then(Value::as_str)
-        .filter(|value| !value.trim().is_empty())
-        .is_none()
-    {
-        return Err(JsonRpcError::invalid_params(
-            "file_transfer download requires selector",
-        ));
-    }
-    if download
-        .get("directory")
-        .and_then(Value::as_str)
-        .filter(|value| !value.trim().is_empty())
-        .is_none()
-    {
-        return Err(JsonRpcError::invalid_params(
-            "file_transfer download requires directory",
-        ));
-    }
-    reject_nonempty_string_array(
-        download.get("allowedDirectories"),
-        "file_transfer download allowedDirectories",
-    )?;
-    if download.get("maxBytes").and_then(Value::as_u64) == Some(0) {
-        return Err(JsonRpcError::invalid_params(
-            "file_transfer download maxBytes must be positive",
-        ));
-    }
-    Ok(())
-}
-
-fn reject_nonempty_string_array(value: Option<&Value>, label: &str) -> Result<(), JsonRpcError> {
-    let valid = value
-        .and_then(Value::as_array)
-        .filter(|items| {
-            !items.is_empty()
-                && items
-                    .iter()
-                    .all(|item| item.as_str().is_some_and(|text| !text.trim().is_empty()))
-        })
-        .is_some();
-    if valid {
-        Ok(())
-    } else {
-        Err(JsonRpcError::invalid_params(&format!(
-            "{label} must be a nonempty string array"
-        )))
+#[cfg(test)]
+pub(crate) fn service_request_adapter_fixture(arguments: &Value) -> Result<Value, Value> {
+    match service_request_command_with_state(arguments, None) {
+        Ok((_trace, command)) => Ok(command),
+        Err(error) => Err(jsonrpc_error(
+            json!("fixture"),
+            error.code,
+            error.message,
+            error.data,
+        )),
     }
 }
 
@@ -12702,140 +12049,48 @@ mod tests {
     }
 
     #[test]
-    fn service_request_schema_and_command_accept_contract_actions() {
+    fn service_request_mcp_schema_matches_all_canonical_types_and_constraints() {
+        let canonical: Value = serde_json::from_str(include_str!(
+            "../../docs/dev/contracts/service-request.v1.schema.json"
+        ))
+        .unwrap();
         let tools = service_mcp_tools();
-        let service_request = tools
+        let input = &tools
             .iter()
             .find(|tool| tool["name"] == "service_request")
-            .expect("service_request schema should be listed");
-        let route_preflight = tools
-            .iter()
-            .find(|tool| tool["name"] == SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME)
-            .expect("service_remote_view_route_preflight schema should be listed");
+            .expect("service_request schema should be listed")["inputSchema"];
+        let canonical_properties = canonical["properties"].as_object().unwrap();
+        let mcp_properties = input["properties"].as_object().unwrap();
 
-        assert_eq!(
-            service_request["inputSchema"]["properties"]["action"]["enum"],
-            json!(SERVICE_REQUEST_ACTIONS)
-        );
-        assert!(route_preflight["inputSchema"]["properties"]["routeId"].is_object());
-        assert!(route_preflight["inputSchema"]["properties"]["frameUrl"].is_object());
-        assert!(route_preflight["inputSchema"]["properties"]["jobTimeoutMs"].is_object());
-        assert!(service_request["inputSchema"]["properties"]["blockedByManualAction"].is_object());
-        assert!(service_request["inputSchema"]["properties"]["manualSeedingRequired"].is_object());
-        assert!(service_request["inputSchema"]["properties"]["allowManualAction"].is_object());
-        assert!(service_request["inputSchema"]["properties"]["monitorRunDueSummary"].is_object());
-        assert!(
-            service_request["inputSchema"]["properties"]["allowMonitorFreshnessRisk"].is_object()
-        );
-        assert!(
-            service_request["inputSchema"]["properties"]["allowDuplicateProfileLane"].is_object()
-        );
-        assert!(service_request["inputSchema"]["properties"]["requiresCdpFree"].is_object());
-        assert!(service_request["inputSchema"]["properties"]["cdpAttachmentAllowed"].is_object());
-        assert!(service_request["inputSchema"]["properties"]["serviceTabHandle"].is_object());
-        assert!(service_request["inputSchema"]["properties"]["targetId"].is_object());
-        assert!(service_request["inputSchema"]["properties"]["browserId"].is_object());
-        assert!(service_request["inputSchema"]["properties"]["sessionName"].is_object());
-        assert!(service_request["inputSchema"]["properties"]["profileClass"].is_object());
-        assert!(service_request["inputSchema"]["properties"]["includeScreenshot"].is_object());
-        assert!(service_request["inputSchema"]["properties"]["screenshotDir"].is_object());
-        assert!(service_request["inputSchema"]["properties"]["maxConsoleEntries"].is_object());
-        assert!(service_request["inputSchema"]["properties"]["maxErrorEntries"].is_object());
-        assert!(service_request["inputSchema"]["properties"]["maxRequestEntries"].is_object());
-        assert!(service_request["inputSchema"]["properties"]["probe"].is_object());
-        assert!(service_request["inputSchema"]["properties"]["uiAction"].is_object());
-        assert!(service_request["inputSchema"]["properties"]["networkCapture"].is_object());
-        assert!(service_request["inputSchema"]["properties"]["fileTransfer"].is_object());
-        assert!(service_request["inputSchema"]["properties"]["maxTextBytes"].is_object());
-        assert!(service_request["inputSchema"]["properties"]["maxBodyBytes"].is_object());
-        assert!(service_request["inputSchema"]["properties"]["repairPolicy"].is_object());
+        let mut canonical_names = canonical_properties.keys().collect::<Vec<_>>();
+        let mut mcp_names = mcp_properties.keys().collect::<Vec<_>>();
+        canonical_names.sort();
+        mcp_names.sort();
+        assert_eq!(canonical_names.len(), 62);
+        assert_eq!(canonical_names, mcp_names);
+        assert_eq!(input["additionalProperties"], false);
+        assert_eq!(input["required"], canonical["required"]);
 
-        for action in SERVICE_REQUEST_ACTIONS {
-            let mut arguments = json!({
-                "action": action,
-                "serviceName": "JournalDownloader",
-                "agentName": "agent-a",
-                "taskName": "probeACSwebsite"
+        for (name, canonical_property) in canonical_properties {
+            let mcp_property = &mcp_properties[name];
+            let canonical_type = canonical_property["type"].as_str().unwrap_or_else(|| {
+                assert!(canonical_property["$ref"].is_string(), "{name}");
+                "object"
             });
-            if matches!(
-                *action,
-                "cdp_attach"
-                    | "cdp_detach"
-                    | "evaluate"
-                    | "diagnostics"
-                    | "probe"
-                    | "tab_handle_refresh"
-                    | "ui_action"
-                    | "network_capture"
-                    | "file_transfer"
-            ) {
-                arguments["cdpAttachmentAllowed"] = json!(true);
-                arguments["serviceTabHandle"] = json!({
-                    "browserId": "session:default",
-                    "sessionName": "default",
-                    "tabId": "target:target-1",
-                    "targetId": "target-1",
-                    "profileOrigin": "agent_browser_owned",
-                    "leaseHeartbeatExpected": true,
-                    "traceFilter": {
-                        "browserId": "session:default",
-                        "profileId": null,
-                        "sessionId": "default"
-                    },
-                    "valid": true
-                });
+            assert_eq!(mcp_property["type"], canonical_type, "{name}");
+            for constraint in ["minimum", "enum", "additionalProperties"] {
+                if !canonical_property[constraint].is_null() {
+                    assert_eq!(
+                        mcp_property[constraint], canonical_property[constraint],
+                        "{name}.{constraint}"
+                    );
+                }
             }
-            if *action == "evaluate" {
-                arguments["script"] = json!("document.title");
-                arguments["timeoutMs"] = json!(1000);
-                arguments["maxReturnBytes"] = json!(128);
+            if canonical_type == "array" {
+                assert_eq!(mcp_property["items"], canonical_property["items"], "{name}");
             }
-            if *action == "probe" {
-                arguments["probe"] = json!({
-                    "detectors": [
-                        {"id": "title", "type": "url_title"}
-                    ]
-                });
-                arguments["timeoutMs"] = json!(1000);
-                arguments["maxReturnBytes"] = json!(128);
-            }
-            if *action == "tab_handle_refresh" {
-                arguments["repairPolicy"] = json!("reject_only");
-            }
-            if *action == "ui_action" {
-                arguments["uiAction"] = json!({
-                    "steps": [
-                        {"id": "find-main", "type": "find", "selector": "main"}
-                    ]
-                });
-                arguments["timeoutMs"] = json!(1000);
-                arguments["maxTextBytes"] = json!(128);
-            }
-            if *action == "network_capture" {
-                arguments["networkCapture"] = json!({
-                    "maxEvents": 1
-                });
-                arguments["timeoutMs"] = json!(1000);
-            }
-            if *action == "file_transfer" {
-                arguments["fileTransfer"] = json!({
-                    "upload": {
-                        "selector": "#file",
-                        "files": ["/tmp/report.txt"],
-                        "allowedPaths": ["/tmp"],
-                        "maxFiles": 1
-                    }
-                });
-                arguments["timeoutMs"] = json!(1000);
-            }
-            let (_, command) = service_request_command(&arguments)
-                .unwrap_or_else(|err| panic!("service_request should accept {action}: {err:?}"));
-
-            assert_eq!(command["action"], *action);
-            assert!(command["id"]
-                .as_str()
-                .is_some_and(|id| id.starts_with("mcp-service-request-")));
         }
+        assert!(mcp_properties.get("args").is_none());
     }
 
     #[test]
@@ -12868,710 +12123,48 @@ mod tests {
     }
 
     #[test]
-    fn service_request_command_rejects_blocked_manual_seeding_without_override() {
-        let err = service_request_command(&json!({
-            "action": "tab_new",
-            "serviceName": "JournalDownloader",
-            "agentName": "agent-a",
-            "taskName": "seedThenProbeGoogle",
-            "blockedByManualAction": true,
-            "manualSeedingRequired": true
-        }))
-        .expect_err("blocked manual seeding requests should require an override");
-
-        assert!(format!("{err:?}").contains("manual profile seeding"));
-    }
-
-    #[test]
-    fn service_request_command_accepts_blocked_manual_seeding_with_override() {
-        let (_, command) = service_request_command(&json!({
-            "action": "tab_new",
-            "serviceName": "JournalDownloader",
-            "agentName": "agent-a",
-            "taskName": "seedThenProbeGoogle",
-            "blockedByManualAction": true,
-            "manualSeedingRequired": true,
-            "allowManualAction": true
-        }))
-        .unwrap();
-
-        assert_eq!(command["action"], "tab_new");
-        assert_eq!(command["serviceName"], "JournalDownloader");
-        assert!(command["blockedByManualAction"].is_null());
-        assert!(command["manualSeedingRequired"].is_null());
-        assert!(command["allowManualAction"].is_null());
-    }
-
-    #[test]
-    fn service_request_command_rejects_expired_monitor_summary_without_override() {
-        let err = service_request_command(&json!({
-            "action": "tab_new",
-            "serviceName": "JournalDownloader",
-            "agentName": "agent-a",
-            "taskName": "probeACSwebsite",
-            "targetServiceId": "acs",
-            "monitorRunDueSummary": {
-                "targetServiceIds": ["acs"],
-                "matched": 1,
-                "expiredTargetServiceIds": ["acs"],
-                "unverifiedTargetServiceIds": [],
-                "failed": true,
-                "recommendedAction": "probe_target_auth_or_reseed_if_needed"
-            }
-        }))
-        .expect_err("expired monitor freshness should block copied raw requests");
-
-        assert!(format!("{err:?}").contains("expired profile freshness"));
-    }
-
-    #[test]
-    fn service_request_command_rejects_unverified_monitor_summary_without_override() {
-        let err = service_request_command(&json!({
-            "action": "tab_new",
-            "serviceName": "JournalDownloader",
-            "agentName": "agent-a",
-            "taskName": "probeACSwebsite",
-            "targetServiceId": "acs",
-            "monitorRunDueSummary": {
-                "targetServiceIds": ["acs"],
-                "matched": 1,
-                "expiredTargetServiceIds": [],
-                "unverifiedTargetServiceIds": ["acs"],
-                "failed": true,
-                "recommendedAction": "verify_or_seed_profile_before_authenticated_work"
-            }
-        }))
-        .expect_err("unverified monitor freshness should block copied raw requests");
-
-        assert!(format!("{err:?}").contains("could not verify profile freshness"));
-    }
-
-    #[test]
-    fn service_request_command_rejects_missing_monitor_evidence_without_override() {
-        let err = service_request_command(&json!({
-            "action": "tab_new",
-            "serviceName": "JournalDownloader",
-            "agentName": "agent-a",
-            "taskName": "probeACSwebsite",
-            "targetServiceId": "acs",
-            "monitorRunDueSummary": {
-                "targetServiceIds": ["acs"],
-                "matched": 0,
-                "expiredTargetServiceIds": [],
-                "unverifiedTargetServiceIds": [],
-                "failed": false,
-                "recommendedAction": "inspect_monitor_results"
-            }
-        }))
-        .expect_err("missing monitor evidence should block copied raw requests");
-
-        assert!(format!("{err:?}").contains("requires inspection"));
-    }
-
-    #[test]
-    fn service_request_command_accepts_monitor_summary_with_override() {
-        let (_, command) = service_request_command(&json!({
-            "action": "tab_new",
-            "serviceName": "JournalDownloader",
-            "agentName": "agent-a",
-            "taskName": "probeACSwebsite",
-            "targetServiceId": "acs",
-            "monitorRunDueSummary": {
-                "targetServiceIds": ["acs"],
-                "matched": 1,
-                "expiredTargetServiceIds": ["acs"],
-                "unverifiedTargetServiceIds": [],
-                "failed": true,
-                "recommendedAction": "probe_target_auth_or_reseed_if_needed"
-            },
-            "allowMonitorFreshnessRisk": true
-        }))
-        .unwrap();
-
-        assert_eq!(command["action"], "tab_new");
-        assert_eq!(
-            command["monitorRunDueSummary"]["expiredTargetServiceIds"][0],
-            "acs"
-        );
-        assert_eq!(command["allowMonitorFreshnessRisk"], true);
-    }
-
-    #[test]
-    fn service_request_command_rejects_cdp_free_without_non_cdp_execution() {
-        let err = service_request_command(&json!({
-            "action": "tab_new",
-            "serviceName": "CanvaCLI",
-            "agentName": "agent-a",
-            "taskName": "openCanva",
-            "targetServiceId": "canva",
-            "requiresCdpFree": true,
-            "cdpAttachmentAllowed": false
-        }))
-        .expect_err("CDP-free requests should not queue CDP-backed execution");
-
-        assert!(format!("{err:?}").contains("CDP-free browser operation"));
-    }
-
-    #[test]
-    fn service_request_command_accepts_cdp_free_launch() {
-        let (_, command) = service_request_command(&json!({
-            "action": "cdp_free_launch",
-            "serviceName": "CanvaCLI",
-            "agentName": "agent-a",
-            "taskName": "openCanva",
-            "targetServiceId": "canva",
-            "requiresCdpFree": true,
-            "cdpAttachmentAllowed": false,
-            "params": {
-                "url": "https://www.canva.com/"
-            }
-        }))
-        .unwrap();
-
-        assert_eq!(command["action"], "cdp_free_launch");
-        assert_eq!(command["serviceName"], "CanvaCLI");
-        assert_eq!(command["targetServiceId"], "canva");
-        assert_eq!(command["url"], "https://www.canva.com/");
-    }
-
-    fn service_request_test_tab_handle(valid: bool) -> Value {
-        json!({
-            "browserId": "session:default",
-            "sessionName": "default",
-            "tabId": "target:target-1",
-            "targetId": "target-1",
-            "profileOrigin": "agent_browser_owned",
-            "leaseHeartbeatExpected": true,
-            "traceFilter": {
-                "browserId": "session:default",
-                "profileId": null,
-                "sessionId": "default"
-            },
-            "valid": valid,
-            "staleReason": if valid { Value::Null } else { json!("tab_closed") }
-        })
-    }
-
-    #[test]
-    fn service_request_command_rejects_cdp_attach_without_policy_allowance() {
-        let err = service_request_command(&json!({
-            "action": "cdp_attach",
-            "serviceName": "JournalDownloader",
-            "agentName": "agent-a",
-            "taskName": "probeACSwebsite",
-            "cdpAttachmentAllowed": false,
-            "serviceTabHandle": service_request_test_tab_handle(true),
-        }))
-        .expect_err("cdp_attach without policy allowance should fail");
-
-        assert!(format!("{err:?}").contains("cdpAttachmentAllowed=true"));
-    }
-
-    #[test]
-    fn service_request_command_rejects_stale_cdp_attach_handle() {
-        let err = service_request_command(&json!({
-            "action": "cdp_attach",
-            "serviceName": "JournalDownloader",
-            "agentName": "agent-a",
-            "taskName": "probeACSwebsite",
-            "cdpAttachmentAllowed": true,
-            "serviceTabHandle": service_request_test_tab_handle(false),
-        }))
-        .expect_err("stale cdp_attach handle should fail");
-
-        assert!(format!("{err:?}").contains("service tab handle is stale"));
-    }
-
-    #[test]
-    fn service_request_command_rejects_unbound_evaluate() {
-        let err = service_request_command(&json!({
-            "action": "evaluate",
-            "serviceName": "JournalDownloader",
-            "agentName": "agent-a",
-            "taskName": "probeACSwebsite",
-            "script": "document.title",
-            "timeoutMs": 1000,
-            "maxReturnBytes": 128
-        }))
-        .expect_err("evaluate without service tab handle should fail");
-
-        assert!(format!("{err:?}").contains("evaluate requires serviceTabHandle"));
-    }
-
-    #[test]
-    fn service_request_command_rejects_unbounded_evaluate() {
-        let err = service_request_command(&json!({
-            "action": "evaluate",
-            "serviceName": "JournalDownloader",
-            "agentName": "agent-a",
-            "taskName": "probeACSwebsite",
-            "script": "document.title",
-            "serviceTabHandle": service_request_test_tab_handle(true),
-            "timeoutMs": 1000
-        }))
-        .expect_err("evaluate without maxReturnBytes should fail");
-
-        assert!(format!("{err:?}").contains("maxReturnBytes"));
-    }
-
-    #[test]
-    fn service_request_command_rejects_unbound_probe() {
-        let err = service_request_command(&json!({
-            "action": "probe",
-            "serviceName": "JournalDownloader",
-            "agentName": "agent-a",
-            "taskName": "probeACSwebsite",
-            "probe": {"detectors": [{"id": "title", "type": "url_title"}]},
-            "timeoutMs": 1000,
-            "maxReturnBytes": 128
-        }))
-        .expect_err("probe without service tab handle should fail");
-
-        assert!(format!("{err:?}").contains("probe requires serviceTabHandle"));
-    }
-
-    #[test]
-    fn service_request_command_rejects_unbounded_probe() {
-        let err = service_request_command(&json!({
-            "action": "probe",
-            "serviceName": "JournalDownloader",
-            "agentName": "agent-a",
-            "taskName": "probeACSwebsite",
-            "serviceTabHandle": service_request_test_tab_handle(true),
-            "probe": {"detectors": [{"id": "title", "type": "url_title"}]},
-            "timeoutMs": 1000
-        }))
-        .expect_err("probe without maxReturnBytes should fail");
-
-        assert!(format!("{err:?}").contains("maxReturnBytes"));
-    }
-
-    #[test]
-    fn service_request_command_rejects_unbound_tab_handle_refresh() {
-        let err = service_request_command(&json!({
-            "action": "tab_handle_refresh",
-            "serviceName": "JournalDownloader",
-            "agentName": "agent-a",
-            "taskName": "probeACSwebsite",
-            "repairPolicy": "reject_only"
-        }))
-        .expect_err("tab_handle_refresh without service tab handle should fail");
-
-        assert!(format!("{err:?}").contains("tab_handle_refresh requires serviceTabHandle"));
-    }
-
-    #[test]
-    fn service_request_command_rejects_unknown_tab_handle_refresh_policy() {
-        let err = service_request_command(&json!({
-            "action": "tab_handle_refresh",
-            "serviceName": "JournalDownloader",
-            "agentName": "agent-a",
-            "taskName": "probeACSwebsite",
-            "serviceTabHandle": service_request_test_tab_handle(true),
-            "repairPolicy": "surprise_me"
-        }))
-        .expect_err("unknown tab_handle_refresh repair policy should fail");
-
-        assert!(format!("{err:?}").contains("repairPolicy"));
-    }
-
-    #[test]
-    fn service_request_command_rejects_unbound_ui_action() {
-        let err = service_request_command(&json!({
-            "action": "ui_action",
-            "serviceName": "JournalDownloader",
-            "agentName": "agent-a",
-            "taskName": "probeACSwebsite",
-            "uiAction": {
-                "steps": [
-                    {"id": "find-main", "type": "find", "selector": "main"}
-                ]
-            },
-            "timeoutMs": 1000
-        }))
-        .expect_err("ui_action without service tab handle should fail");
-
-        assert!(format!("{err:?}").contains("ui_action requires serviceTabHandle"));
-    }
-
-    #[test]
-    fn service_request_command_rejects_unbounded_ui_action() {
-        let err = service_request_command(&json!({
-            "action": "ui_action",
-            "serviceName": "JournalDownloader",
-            "agentName": "agent-a",
-            "taskName": "probeACSwebsite",
-            "serviceTabHandle": service_request_test_tab_handle(true),
-            "uiAction": {
-                "steps": [
-                    {"id": "find-main", "type": "find", "selector": "main"}
-                ]
-            }
-        }))
-        .expect_err("ui_action without timeout should fail");
-
-        assert!(format!("{err:?}").contains("positive timeoutMs"));
-    }
-
-    #[test]
-    fn service_request_command_forwards_ui_action_recipe() {
-        let (_, command) = service_request_command(&json!({
-            "action": "ui_action",
-            "serviceName": "JournalDownloader",
-            "agentName": "agent-a",
-            "taskName": "probeACSwebsite",
-            "serviceTabHandle": service_request_test_tab_handle(true),
-            "uiAction": {
-                "recipeId": "generic-ui",
-                "steps": [
-                    {"id": "find-main", "type": "find", "selector": "main"}
-                ]
-            },
-            "timeoutMs": 1000,
-            "maxTextBytes": 256
-        }))
-        .unwrap();
-
-        assert_eq!(command["action"], "ui_action");
-        assert_eq!(command["uiAction"]["recipeId"], "generic-ui");
-        assert_eq!(command["timeoutMs"], 1000);
-        assert_eq!(command["maxTextBytes"], 256);
-        assert_eq!(command["serviceTabHandle"]["tabId"], "target:target-1");
-    }
-
-    #[test]
-    fn service_request_command_rejects_unbound_network_capture() {
-        let err = service_request_command(&json!({
-            "action": "network_capture",
-            "serviceName": "JournalDownloader",
-            "agentName": "agent-a",
-            "taskName": "probeACSwebsite",
-            "networkCapture": {"maxEvents": 2},
-            "timeoutMs": 1000
-        }))
-        .expect_err("network_capture without service tab handle should fail");
-
-        assert!(format!("{err:?}").contains("network_capture requires serviceTabHandle"));
-    }
-
-    #[test]
-    fn service_request_command_rejects_unbounded_network_capture_body() {
-        let err = service_request_command(&json!({
-            "action": "network_capture",
-            "serviceName": "JournalDownloader",
-            "agentName": "agent-a",
-            "taskName": "probeACSwebsite",
-            "serviceTabHandle": service_request_test_tab_handle(true),
-            "networkCapture": {
-                "maxEvents": 2,
-                "captureBodies": true
-            },
-            "timeoutMs": 1000
-        }))
-        .expect_err("network_capture body capture without maxBodyBytes should fail");
-
-        assert!(format!("{err:?}").contains("maxBodyBytes"));
-    }
-
-    #[test]
-    fn service_request_command_forwards_network_capture_recipe() {
-        let (_, command) = service_request_command(&json!({
-            "action": "network_capture",
-            "serviceName": "JournalDownloader",
-            "agentName": "agent-a",
-            "taskName": "probeACSwebsite",
-            "serviceTabHandle": service_request_test_tab_handle(true),
-            "networkCapture": {
-                "recipeId": "generic-network",
-                "urlPatterns": ["/api/data"],
-                "methods": ["GET"],
-                "status": "2xx",
-                "maxEvents": 2,
-                "captureBodies": true,
-                "maxBodyBytes": 128
-            },
-            "timeoutMs": 1000,
-            "maxBodyBytes": 128
-        }))
-        .unwrap();
-
-        assert_eq!(command["action"], "network_capture");
-        assert_eq!(command["networkCapture"]["recipeId"], "generic-network");
-        assert_eq!(command["networkCapture"]["maxEvents"], 2);
-        assert_eq!(command["maxBodyBytes"], 128);
-        assert_eq!(command["serviceTabHandle"]["tabId"], "target:target-1");
-    }
-
-    #[test]
-    fn service_request_command_rejects_unbound_file_transfer() {
-        let err = service_request_command(&json!({
-            "action": "file_transfer",
-            "serviceName": "JournalDownloader",
-            "agentName": "agent-a",
-            "taskName": "probeACSwebsite",
-            "fileTransfer": {
-                "upload": {
-                    "selector": "#file",
-                    "files": ["/tmp/report.txt"],
-                    "allowedPaths": ["/tmp"],
-                    "maxFiles": 1
-                }
-            },
-            "timeoutMs": 1000
-        }))
-        .expect_err("file_transfer without service tab handle should fail");
-
-        assert!(format!("{err:?}").contains("file_transfer requires serviceTabHandle"));
-    }
-
-    #[test]
-    fn service_request_command_rejects_unbounded_file_transfer_upload() {
-        let err = service_request_command(&json!({
-            "action": "file_transfer",
-            "serviceName": "JournalDownloader",
-            "agentName": "agent-a",
-            "taskName": "probeACSwebsite",
-            "serviceTabHandle": service_request_test_tab_handle(true),
-            "fileTransfer": {
-                "upload": {
-                    "selector": "#file",
-                    "files": ["/tmp/report.txt"],
-                    "maxFiles": 1
-                }
-            },
-            "timeoutMs": 1000
-        }))
-        .expect_err("file_transfer upload without allowedPaths should fail");
-
-        assert!(format!("{err:?}").contains("allowedPaths"));
-    }
-
-    #[test]
-    fn service_request_command_forwards_file_transfer_recipe() {
-        let (_, command) = service_request_command(&json!({
-            "action": "file_transfer",
-            "serviceName": "JournalDownloader",
-            "agentName": "agent-a",
-            "taskName": "probeACSwebsite",
-            "serviceTabHandle": service_request_test_tab_handle(true),
-            "fileTransfer": {
-                "recipeId": "generic-file-transfer",
-                "upload": {
-                    "labelText": "Upload report",
-                    "files": ["/tmp/report.txt"],
-                    "allowedPaths": ["/tmp"],
-                    "maxFiles": 1
-                },
-                "download": {
-                    "selector": "#download",
-                    "directory": "/tmp/downloads",
-                    "allowedDirectories": ["/tmp"],
-                    "expectedFileName": "report.txt",
-                    "maxBytes": 1024
-                }
-            },
-            "timeoutMs": 1000,
-            "captureEvidenceOnFailure": true
-        }))
-        .unwrap();
-
-        assert_eq!(command["action"], "file_transfer");
-        assert_eq!(command["fileTransfer"]["recipeId"], "generic-file-transfer");
-        assert_eq!(command["fileTransfer"]["upload"]["maxFiles"], 1);
-        assert_eq!(command["fileTransfer"]["download"]["maxBytes"], 1024);
-        assert_eq!(command["captureEvidenceOnFailure"], true);
-        assert_eq!(command["serviceTabHandle"]["tabId"], "target:target-1");
-    }
-
-    #[test]
-    fn service_request_command_forwards_tab_handle_refresh_options() {
-        let (_, command) = service_request_command(&json!({
-            "action": "tab_handle_refresh",
-            "serviceName": "JournalDownloader",
-            "agentName": "agent-a",
-            "taskName": "probeACSwebsite",
-            "serviceTabHandle": service_request_test_tab_handle(true),
-            "repairPolicy": "open_if_missing",
-            "url": "https://example.com/recover",
-            "desiredUrl": "https://example.com/desired"
-        }))
-        .unwrap();
-
-        assert_eq!(command["action"], "tab_handle_refresh");
-        assert_eq!(command["repairPolicy"], "open_if_missing");
-        assert_eq!(command["url"], "https://example.com/recover");
-        assert_eq!(command["desiredUrl"], "https://example.com/desired");
-        assert_eq!(command["serviceTabHandle"]["tabId"], "target:target-1");
-    }
-
-    #[test]
-    fn service_request_command_forwards_probe_recipe() {
-        let (_, command) = service_request_command(&json!({
-            "action": "probe",
-            "serviceName": "JournalDownloader",
-            "agentName": "agent-a",
-            "taskName": "probeACSwebsite",
-            "targetServiceId": "acs",
-            "serviceTabHandle": service_request_test_tab_handle(true),
-            "probe": {
-                "expectedIdentity": "acct@example.test",
-                "detectors": [
-                    {"id": "title", "type": "url_title"},
-                    {"id": "account", "type": "selector_text", "selector": "[data-account]"}
-                ],
-                "recordFreshness": {
-                    "targetServiceId": "acs",
-                    "accountId": "acct@example.test",
-                    "profileId": "journal-acs"
-                }
-            },
-            "timeoutMs": 1000,
-            "maxReturnBytes": 256
-        }))
-        .unwrap();
-
-        assert_eq!(command["action"], "probe");
-        assert_eq!(command["targetServiceId"], "acs");
-        assert_eq!(command["timeoutMs"], 1000);
-        assert_eq!(command["maxReturnBytes"], 256);
-        assert_eq!(command["probe"]["detectors"][0]["type"], "url_title");
-        assert_eq!(
-            command["probe"]["recordFreshness"]["accountId"],
-            "acct@example.test"
-        );
-    }
-
-    #[test]
-    fn service_request_command_forwards_diagnostics_options() {
-        let (_, command) = service_request_command(&json!({
-            "action": "diagnostics",
-            "serviceName": "JournalDownloader",
-            "agentName": "agent-a",
-            "taskName": "probeACSwebsite",
-            "serviceTabHandle": service_request_test_tab_handle(true),
-            "includeScreenshot": true,
-            "screenshotDir": "/tmp/agent-browser-diagnostics",
-            "maxConsoleEntries": 5,
-            "maxErrorEntries": 3,
-            "maxRequestEntries": 4
-        }))
-        .unwrap();
-
-        assert_eq!(command["action"], "diagnostics");
-        assert_eq!(command["includeScreenshot"], true);
-        assert_eq!(command["screenshotDir"], "/tmp/agent-browser-diagnostics");
-        assert_eq!(command["maxConsoleEntries"], 5);
-        assert_eq!(command["maxErrorEntries"], 3);
-        assert_eq!(command["maxRequestEntries"], 4);
-    }
-
-    #[test]
-    fn service_request_command_builds_intent_command() {
+    fn service_request_command_adds_mcp_request_id_and_hands_off_trace() {
         let (trace, command) = service_request_command(&json!({
             "action": "navigate",
-            "params": {
-                "url": "https://example.com",
-                "id": "ignored",
-                "action": "ignored"
-            },
             "serviceName": "JournalDownloader",
             "agentName": "agent-a",
-            "taskName": "probeACSwebsite",
-            "siteId": "acs",
-            "loginIds": ["orcid"],
-            "profileClass": "durable_named",
-            "browserId": "session:acs-browser",
-            "sessionName": "acs-browser",
-            "allowDuplicateProfileLane": true,
-            "jobTimeoutMs": 1000,
-            "profileLeasePolicy": "wait",
-            "profileLeaseWaitTimeoutMs": 2500,
-            "manualLoginLaunch": true
+            "taskName": "probeACSwebsite"
         }))
         .unwrap();
 
         assert_eq!(trace["serviceName"], "JournalDownloader");
-        assert_eq!(trace["siteId"], "acs");
-        assert_eq!(command["action"], "navigate");
+        assert_eq!(trace["agentName"], "agent-a");
+        assert_eq!(trace["taskName"], "probeACSwebsite");
         assert!(command["id"]
             .as_str()
             .is_some_and(|id| id.starts_with("mcp-service-request-navigate-")));
-        assert_eq!(command["url"], "https://example.com");
-        assert_eq!(command["serviceName"], "JournalDownloader");
-        assert_eq!(command["agentName"], "agent-a");
-        assert_eq!(command["taskName"], "probeACSwebsite");
-        assert_eq!(command["siteId"], "acs");
-        assert_eq!(command["loginIds"][0], "orcid");
-        assert_eq!(command["profileClass"], "durable_named");
-        assert_eq!(command["browserId"], "session:acs-browser");
-        assert_eq!(command["sessionName"], "acs-browser");
-        assert_eq!(command["allowDuplicateProfileLane"], true);
-        assert_eq!(command["jobTimeoutMs"], 1000);
-        assert_eq!(command["profileLeasePolicy"], "wait");
-        assert_eq!(command["profileLeaseWaitTimeoutMs"], 2500);
-        assert_eq!(command["manualLoginLaunch"], true);
     }
 
     #[test]
-    fn service_request_command_applies_shared_profile_route_hints() {
-        use std::collections::BTreeMap;
-
-        use crate::native::service_model::{
-            BrowserHealth, BrowserHost, BrowserProcess, BrowserProfile, ControlInputProvider,
-            ViewStream, ViewStreamProvider,
-        };
-
-        let state = ServiceState {
-            profiles: BTreeMap::from([(
-                "shared-social".to_string(),
-                BrowserProfile {
-                    id: "shared-social".to_string(),
-                    name: "Shared social".to_string(),
-                    target_service_ids: vec!["x".to_string()],
-                    ..BrowserProfile::default()
-                },
-            )]),
-            browsers: BTreeMap::from([(
-                "browser-social".to_string(),
-                BrowserProcess {
-                    id: "browser-social".to_string(),
-                    profile_id: Some("shared-social".to_string()),
-                    host: BrowserHost::RemoteHeaded,
-                    health: BrowserHealth::Ready,
-                    display_isolation: Some("private_virtual_display".to_string()),
-                    view_streams: vec![ViewStream {
-                        provider: ViewStreamProvider::RdpGateway,
-                        control_input: Some(ControlInputProvider::ManualAttachedDesktop),
-                        ..ViewStream::default()
-                    }],
-                    active_session_ids: vec!["operator-social".to_string()],
-                    ..BrowserProcess::default()
-                },
-            )]),
-            ..ServiceState::default()
-        };
-
-        let (_, command) = service_request_command_with_state(
-            &json!({
-                "action": "tab_new",
-                "runtimeProfile": "shared-social",
-                "siteId": "x",
-                "browserHost": "remote_headed",
-                "viewStreamProvider": "rdp_gateway",
-                "controlInputProvider": "manual_attached_desktop",
-                "displayIsolation": "private_virtual_display",
-            }),
-            Some(&state),
-        )
-        .unwrap();
-
-        assert_eq!(command["runtimeProfile"], "shared-social");
-        assert_eq!(command["browserId"], "browser-social");
-        assert_eq!(command["sessionName"], "operator-social");
+    fn service_request_command_rejects_top_level_args_but_preserves_params_args() {
+        let request = json!({
+            "action": "navigate",
+            "args": ["--top-level"]
+        });
         assert_eq!(
-            queued_tool_command_session("service_request", "AgentBrowserDashboard", &command),
-            "operator-social"
+            service_request_adapter_fixture(&request).unwrap_err(),
+            json!({
+                "jsonrpc": "2.0",
+                "id": "fixture",
+                "error": {
+                    "code": -32602,
+                    "message": "Invalid params",
+                    "data": {"message": "unknown service request field: args"}
+                }
+            })
         );
+
+        let (_, command) = service_request_command(&json!({
+            "action": "navigate",
+            "params": {"args": ["--from-params"]}
+        }))
+        .unwrap();
+        assert_eq!(command["args"], json!(["--from-params"]));
     }
 
     #[test]
