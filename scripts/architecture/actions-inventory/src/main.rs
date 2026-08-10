@@ -285,7 +285,7 @@ fn packet_for(line: usize, name: &str) -> (&'static str, &'static str, &'static 
             6_853,
             "P0101-E01-04",
             "browser evaluation",
-            "native::browser_evaluation",
+            "native::browser_inspection",
         ),
         (
             6_854,
@@ -474,7 +474,7 @@ fn packet_for(line: usize, name: &str) -> (&'static str, &'static str, &'static 
             16_782,
             "P0101-E10-03",
             "PDF capture",
-            "native::page_pdf",
+            "native::page_capture",
         ),
         (
             16_783,
@@ -586,7 +586,7 @@ fn packet_for(line: usize, name: &str) -> (&'static str, &'static str, &'static 
             18_436,
             "P0101-F08",
             "service configuration inventory",
-            "native::service_configuration_inventory",
+            "native::service_inventory",
         ),
         (
             18_437,
@@ -719,7 +719,7 @@ fn packet_for(line: usize, name: &str) -> (&'static str, &'static str, &'static 
             20_796,
             "P0101-E13",
             "screencast",
-            "native::stream_screencast",
+            "native::stream_runtime",
         ),
         (
             20_797,

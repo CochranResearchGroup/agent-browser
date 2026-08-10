@@ -137,5 +137,72 @@ pub(crate) mod action_commands {
     pub(crate) async fn handle_stream_status(state: &DaemonState) -> Result<Value, String> {
         Ok(current_stream_status(state).await)
     }
+
+    pub(crate) async fn handle_screencast_start(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let manager = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = manager.active_session_id()?.to_string();
+        if state.screencasting {
+            return Err("Screencast already active".to_string());
+        }
+        let (default_width, default_height) = if let Some(ref server) = state.stream_server {
+            server.viewport().await
+        } else {
+            (1280, 720)
+        };
+        let format = cmd.get("format").and_then(Value::as_str).unwrap_or("jpeg");
+        let quality = cmd.get("quality").and_then(Value::as_i64).unwrap_or(80) as i32;
+        let max_width = cmd
+            .get("maxWidth")
+            .and_then(Value::as_i64)
+            .unwrap_or(i64::from(default_width)) as i32;
+        let max_height = cmd
+            .get("maxHeight")
+            .and_then(Value::as_i64)
+            .unwrap_or(i64::from(default_height)) as i32;
+        stream::start_screencast(
+            &manager.client,
+            &session_id,
+            format,
+            quality,
+            max_width,
+            max_height,
+        )
+        .await?;
+        state.screencasting = true;
+        if let Some(ref server) = state.stream_server {
+            server.set_screencasting(true).await;
+            server
+                .broadcast_status(
+                    true,
+                    true,
+                    max_width as u32,
+                    max_height as u32,
+                    &state.engine,
+                )
+                .await;
+        }
+        Ok(json!({ "started": true }))
+    }
+
+    pub(crate) async fn handle_screencast_stop(state: &mut DaemonState) -> Result<Value, String> {
+        let manager = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = manager.active_session_id()?;
+        if !state.screencasting {
+            return Err("No screencast active".to_string());
+        }
+        stream::stop_screencast(&manager.client, session_id).await?;
+        state.screencasting = false;
+        if let Some(ref server) = state.stream_server {
+            server.set_screencasting(false).await;
+            let (viewport_width, viewport_height) = server.viewport().await;
+            server
+                .broadcast_status(true, false, viewport_width, viewport_height, &state.engine)
+                .await;
+        }
+        Ok(json!({ "stopped": true }))
+    }
 }
 pub(crate) use action_commands::*;

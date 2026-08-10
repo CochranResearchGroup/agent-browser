@@ -3191,7 +3191,7 @@
       "associatedTestIds": [],
       "packet": "P0101-E01-04",
       "responsibility": "browser evaluation",
-      "targetModule": "native::browser_evaluation",
+      "targetModule": "native::browser_inspection",
       "movementStatus": "moved",
       "wrapperOwner": null,
       "deletionPacket": "P0101-E01-04",
@@ -3209,7 +3209,7 @@
       "associatedTestIds": [],
       "packet": "P0101-E01-04",
       "responsibility": "browser evaluation",
-      "targetModule": "native::browser_evaluation",
+      "targetModule": "native::browser_inspection",
       "movementStatus": "moved",
       "wrapperOwner": null,
       "deletionPacket": "P0101-E01-04",
@@ -7129,7 +7129,7 @@
       "associatedTestIds": [],
       "packet": "P0101-E10-03",
       "responsibility": "PDF capture",
-      "targetModule": "native::page_pdf",
+      "targetModule": "native::page_capture",
       "movementStatus": "moved",
       "wrapperOwner": null,
       "deletionPacket": "P0101-E10-03",
@@ -8391,7 +8391,7 @@
       "associatedTestIds": [],
       "packet": "P0101-F08",
       "responsibility": "service configuration inventory",
-      "targetModule": "native::service_configuration_inventory",
+      "targetModule": "native::service_inventory",
       "movementStatus": "moved",
       "wrapperOwner": null,
       "deletionPacket": "P0101-F08",
@@ -8409,7 +8409,7 @@
       "associatedTestIds": [],
       "packet": "P0101-F08",
       "responsibility": "service configuration inventory",
-      "targetModule": "native::service_configuration_inventory",
+      "targetModule": "native::service_inventory",
       "movementStatus": "moved",
       "wrapperOwner": null,
       "deletionPacket": "P0101-F08",
@@ -8427,7 +8427,7 @@
       "associatedTestIds": [],
       "packet": "P0101-F08",
       "responsibility": "service configuration inventory",
-      "targetModule": "native::service_configuration_inventory",
+      "targetModule": "native::service_inventory",
       "movementStatus": "moved",
       "wrapperOwner": null,
       "deletionPacket": "P0101-F08",
@@ -9889,7 +9889,7 @@
       "associatedTestIds": [],
       "packet": "P0101-E13",
       "responsibility": "screencast",
-      "targetModule": "native::stream_screencast",
+      "targetModule": "native::stream_runtime",
       "movementStatus": "moved",
       "wrapperOwner": null,
       "deletionPacket": "P0101-E13",
@@ -9907,7 +9907,7 @@
       "associatedTestIds": [],
       "packet": "P0101-E13",
       "responsibility": "screencast",
-      "targetModule": "native::stream_screencast",
+      "targetModule": "native::stream_runtime",
       "movementStatus": "moved",
       "wrapperOwner": null,
       "deletionPacket": "P0101-E13",
@@ -11402,7 +11402,7 @@
       "deletionTest": "Deleting native::browser_emulation would force dispatch or its callers to reproduce the ordered browser emulation; device emulation decisions and safety checks"
     },
     {
-      "targetModule": "native::browser_evaluation",
+      "targetModule": "native::browser_inspection",
       "ownedInvariant": "browser evaluation",
       "interfaceOperations": [
         "command_evaluation_timeout_ms",
@@ -11411,7 +11411,7 @@
       "productionCallers": [
         "native::action_dispatch"
       ],
-      "deletionTest": "Deleting native::browser_evaluation would force dispatch or its callers to reproduce the ordered browser evaluation decisions and safety checks"
+      "deletionTest": "Deleting native::browser_inspection would force dispatch or its callers to reproduce the ordered browser inspection and evaluation decisions and safety checks"
     },
     {
       "targetModule": "native::browser_frame",
@@ -11740,7 +11740,7 @@
       "deletionTest": "Deleting native::page_injection would force dispatch or its callers to reproduce the ordered page injection decisions and safety checks"
     },
     {
-      "targetModule": "native::page_pdf",
+      "targetModule": "native::page_capture",
       "ownedInvariant": "PDF capture",
       "interfaceOperations": [
         "handle_pdf"
@@ -11748,7 +11748,7 @@
       "productionCallers": [
         "native::action_dispatch"
       ],
-      "deletionTest": "Deleting native::page_pdf would force dispatch or its callers to reproduce the ordered PDF capture decisions and safety checks"
+      "deletionTest": "Deleting native::page_capture would force dispatch or its callers to reproduce the ordered screenshot and PDF capture decisions and safety checks"
     },
     {
       "targetModule": "native::providers",
@@ -11897,7 +11897,7 @@
       "deletionTest": "Deleting native::service_config would force dispatch or its callers to reproduce the ordered service profile configuration; service site policy configuration decisions and safety checks"
     },
     {
-      "targetModule": "native::service_configuration_inventory",
+      "targetModule": "native::service_inventory",
       "ownedInvariant": "service configuration inventory",
       "interfaceOperations": [
         "handle_service_site_policies",
@@ -11907,7 +11907,7 @@
       "productionCallers": [
         "native::action_dispatch"
       ],
-      "deletionTest": "Deleting native::service_configuration_inventory would force dispatch or its callers to reproduce the ordered service configuration inventory decisions and safety checks"
+      "deletionTest": "Deleting native::service_inventory would force dispatch or its callers to reproduce the ordered service entity inventory decisions and safety checks"
     },
     {
       "targetModule": "native::service_diagnostics",
@@ -12211,7 +12211,7 @@
       "deletionTest": "Deleting native::stream_runtime would force dispatch or its callers to reproduce the ordered stream runtime decisions and safety checks"
     },
     {
-      "targetModule": "native::stream_screencast",
+      "targetModule": "native::stream_runtime",
       "ownedInvariant": "screencast",
       "interfaceOperations": [
         "handle_screencast_start",
@@ -12220,7 +12220,7 @@
       "productionCallers": [
         "native::action_dispatch"
       ],
-      "deletionTest": "Deleting native::stream_screencast would force dispatch or its callers to reproduce the ordered screencast decisions and safety checks"
+      "deletionTest": "Deleting native::stream_runtime would force dispatch or its callers to reproduce the ordered stream and screencast lifecycle decisions and safety checks"
     },
     {
       "targetModule": "native::tracing",

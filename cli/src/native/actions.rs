@@ -20,7 +20,6 @@ use super::browser_context::{
 use super::browser_download::{handle_download, handle_waitfordownload};
 use super::browser_emulation::{handle_device, handle_set_media};
 use super::browser_emulation::{handle_user_agent, handle_viewport};
-use super::browser_evaluation::handle_evaluate;
 use super::browser_frame::{
     handle_frame, handle_mainframe, handle_waitforfunction, handle_waitforloadstate,
     handle_waitforurl,
@@ -31,7 +30,7 @@ use super::browser_input::{
     handle_mousemove, handle_mouseup, handle_wheel,
 };
 use super::browser_inspection::{
-    handle_cdp_url, handle_console, handle_content, handle_errors, handle_inspect,
+    handle_cdp_url, handle_console, handle_content, handle_errors, handle_evaluate, handle_inspect,
     handle_setcontent, handle_styles, handle_title, handle_url,
 };
 use super::browser_lifecycle::{
@@ -66,9 +65,8 @@ use super::network::{
 };
 use super::network_archive::handle_har_stop;
 use super::network_requests::{handle_request_detail, handle_requests};
-use super::page_capture::handle_screenshot;
+use super::page_capture::{handle_pdf, handle_screenshot};
 use super::page_injection::{handle_addinitscript, handle_addscript, handle_addstyle};
-use super::page_pdf::handle_pdf;
 use super::providers::{handle_service_provider_delete, handle_service_provider_upsert};
 use super::recording::{
     handle_har_start, handle_recording_restart, handle_recording_start, handle_recording_stop,
@@ -94,9 +92,6 @@ use super::service_config::{
     handle_service_profile_seeding_handoff_update, handle_service_profile_upsert,
     handle_service_site_policy_delete, handle_service_site_policy_upsert,
 };
-use super::service_configuration_inventory::{
-    handle_service_challenges, handle_service_providers, handle_service_site_policies,
-};
 use super::service_diagnostics::handle_service_diagnostics;
 use super::service_file_transfer::handle_service_file_transfer;
 use super::service_health::{
@@ -108,8 +103,10 @@ use super::service_incidents::{
     handle_service_remedies_apply,
 };
 use super::service_inventory::{
-    handle_service_browsers, handle_service_monitors, handle_service_profile_lookup,
-    handle_service_profile_seeding_handoff, handle_service_sessions, handle_service_tabs,
+    handle_service_browsers, handle_service_challenges, handle_service_monitors,
+    handle_service_profile_lookup, handle_service_profile_seeding_handoff,
+    handle_service_providers, handle_service_sessions, handle_service_site_policies,
+    handle_service_tabs,
 };
 use super::service_jobs::{handle_service_job_cancel, handle_service_jobs};
 use super::service_lifecycle::{handle_service_session_delete, handle_service_session_upsert};
@@ -132,8 +129,10 @@ use super::service_trace::handle_service_trace;
 use super::service_ui_action::handle_service_ui_action;
 use super::state::{handle_state_load, handle_state_save};
 use super::storage::{handle_storage_clear, handle_storage_get, handle_storage_set};
-use super::stream_runtime::{handle_stream_disable, handle_stream_enable, handle_stream_status};
-use super::stream_screencast::{handle_screencast_start, handle_screencast_stop};
+use super::stream_runtime::{
+    handle_screencast_start, handle_screencast_stop, handle_stream_disable, handle_stream_enable,
+    handle_stream_status,
+};
 use super::tracing::{
     handle_profiler_start, handle_profiler_stop, handle_trace_start, handle_trace_stop,
 };

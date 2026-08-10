@@ -154,5 +154,55 @@ pub(crate) mod action_commands {
         }
         Ok(response)
     }
+
+    pub(crate) async fn handle_pdf(cmd: &Value, state: &DaemonState) -> Result<Value, String> {
+        let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
+        let session_id = mgr.active_session_id()?.to_string();
+        let params = json!({
+            "printBackground": cmd
+                .get("printBackground")
+                .and_then(Value::as_bool)
+                .unwrap_or(true),
+            "landscape": cmd
+                .get("landscape")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            "preferCSSPageSize": cmd
+                .get("preferCSSPageSize")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+        });
+        let result = mgr
+            .client
+            .send_command("Page.printToPDF", Some(params), Some(&session_id))
+            .await?;
+        let data = result
+            .get("data")
+            .and_then(Value::as_str)
+            .ok_or("No PDF data returned")?;
+        let save_path = match cmd.get("path").and_then(Value::as_str) {
+            Some(path) => path.to_string(),
+            None => {
+                let dir = dirs::home_dir()
+                    .unwrap_or_else(std::env::temp_dir)
+                    .join(".agent-browser")
+                    .join("tmp")
+                    .join("pdfs");
+                let _ = std::fs::create_dir_all(&dir);
+                let timestamp = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis();
+                dir.join(format!("page-{timestamp}.pdf"))
+                    .to_string_lossy()
+                    .to_string()
+            }
+        };
+        let bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, data)
+            .map_err(|error| format!("Failed to decode PDF: {error}"))?;
+        std::fs::write(&save_path, &bytes)
+            .map_err(|error| format!("Failed to save PDF: {error}"))?;
+        Ok(json!({ "path": save_path }))
+    }
 }
 pub(crate) use action_commands::*;
