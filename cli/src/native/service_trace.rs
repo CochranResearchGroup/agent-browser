@@ -1028,3 +1028,315 @@ fn session_id_for_browser<'a>(
                 .then_some(session_id.as_str())
         })
 }
+#[allow(dead_code, unused_imports)]
+pub(crate) mod service_commands {
+    use crate::native::action_runtime::common::*;
+    use crate::native::action_runtime::runtime::{
+        is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
+        relaunch_and_restore_page, service_browser_id,
+        validate_service_tab_handle_for_current_session,
+        validate_service_tab_handle_route_for_current_session, DaemonState, FetchPausedRequest,
+        HarEntry, MouseState, RouteEntry, RouteResponse, TrackedRequest,
+        AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
+        AUTH_LOGIN_WAIT_UNTIL,
+    };
+    use crate::native::service_diagnostics::truncate_utf8;
+    pub(crate) async fn handle_service_trace(cmd: &Value) -> Result<Value, String> {
+        let service_state = cmd
+            .get("serviceState")
+            .cloned()
+            .map(serde_json::from_value::<ServiceState>)
+            .transpose()
+            .map_err(|err| format!("Invalid serviceState: {}", err))?
+            .unwrap_or_default();
+        let limit = cmd
+            .get("limit")
+            .and_then(|value| value.as_u64())
+            .map(|value| value as usize)
+            .unwrap_or(20);
+        let browser_id = cmd.get("browserId").and_then(|value| value.as_str());
+        let profile_id = cmd.get("profileId").and_then(|value| value.as_str());
+        let session_id = cmd.get("sessionId").and_then(|value| value.as_str());
+        let service_name = cmd.get("serviceName").and_then(|value| value.as_str());
+        let agent_name = cmd.get("agentName").and_then(|value| value.as_str());
+        let task_name = cmd.get("taskName").and_then(|value| value.as_str());
+        let since = cmd.get("since").and_then(|value| value.as_str());
+        service_trace_response(
+            &service_state,
+            ServiceTraceFilters {
+                limit,
+                browser_id,
+                profile_id,
+                session_id,
+                service_name,
+                agent_name,
+                task_name,
+                since,
+            },
+        )
+    }
+    pub(crate) fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
+        match kind {
+            ServiceEventKind::Reconciliation => "reconciliation",
+            ServiceEventKind::BrowserLaunchRecorded => "browser_launch_recorded",
+            ServiceEventKind::BrowserHealthChanged => "browser_health_changed",
+            ServiceEventKind::BrowserRecoveryStarted => "browser_recovery_started",
+            ServiceEventKind::BrowserRecoveryOverride => "browser_recovery_override",
+            ServiceEventKind::TabLifecycleChanged => "tab_lifecycle_changed",
+            ServiceEventKind::ProfileLeaseWaitStarted => "profile_lease_wait_started",
+            ServiceEventKind::ProfileLeaseWaitEnded => "profile_lease_wait_ended",
+            ServiceEventKind::ViewerTakeoverRequested => "viewer_takeover_requested",
+            ServiceEventKind::ViewerConnected => "viewer_connected",
+            ServiceEventKind::ViewerDisconnected => "viewer_disconnected",
+            ServiceEventKind::ControllerRequested => "controller_requested",
+            ServiceEventKind::ControllerGranted => "controller_granted",
+            ServiceEventKind::ControllerDenied => "controller_denied",
+            ServiceEventKind::RouteReleased => "route_released",
+            ServiceEventKind::ReconciliationError => "reconciliation_error",
+            ServiceEventKind::IncidentAcknowledged => "incident_acknowledged",
+            ServiceEventKind::IncidentResolved => "incident_resolved",
+        }
+    }
+    pub(crate) fn service_job_state_name(state: ServiceJobState) -> &'static str {
+        match state {
+            ServiceJobState::Queued => "queued",
+            ServiceJobState::WaitingProfileLease => "waiting_profile_lease",
+            ServiceJobState::Running => "running",
+            ServiceJobState::Succeeded => "succeeded",
+            ServiceJobState::Failed => "failed",
+            ServiceJobState::Cancelled => "cancelled",
+            ServiceJobState::TimedOut => "timed_out",
+        }
+    }
+    pub(crate) fn service_incident_state_name(
+        state: super::super::service_model::ServiceIncidentState,
+    ) -> &'static str {
+        match state {
+            super::super::service_model::ServiceIncidentState::Active => "active",
+            super::super::service_model::ServiceIncidentState::Recovered => "recovered",
+            super::super::service_model::ServiceIncidentState::Service => "service",
+        }
+    }
+    pub(crate) fn service_incident_severity_name(
+        severity: super::super::service_model::ServiceIncidentSeverity,
+    ) -> &'static str {
+        match severity {
+            super::super::service_model::ServiceIncidentSeverity::Info => "info",
+            super::super::service_model::ServiceIncidentSeverity::Warning => "warning",
+            super::super::service_model::ServiceIncidentSeverity::Error => "error",
+            super::super::service_model::ServiceIncidentSeverity::Critical => "critical",
+        }
+    }
+    pub(crate) fn service_incident_escalation_name(
+        escalation: super::super::service_model::ServiceIncidentEscalation,
+    ) -> &'static str {
+        match escalation {
+            super::super::service_model::ServiceIncidentEscalation::None => "none",
+            super::super::service_model::ServiceIncidentEscalation::BrowserDegraded => {
+                "browser_degraded"
+            }
+            super::super::service_model::ServiceIncidentEscalation::BrowserRecovery => {
+                "browser_recovery"
+            }
+            super::super::service_model::ServiceIncidentEscalation::JobAttention => "job_attention",
+            super::super::service_model::ServiceIncidentEscalation::MonitorAttention => {
+                "monitor_attention"
+            }
+            super::super::service_model::ServiceIncidentEscalation::ServiceTriage => {
+                "service_triage"
+            }
+            super::super::service_model::ServiceIncidentEscalation::OsDegradedPossible => {
+                "os_degraded_possible"
+            }
+        }
+    }
+    pub(crate) fn service_incident_handling_state_name(
+        incident: &super::super::service_model::ServiceIncident,
+    ) -> &'static str {
+        if incident.resolved_at.is_some() {
+            "resolved"
+        } else if incident.acknowledged_at.is_some() {
+            "acknowledged"
+        } else {
+            "unacknowledged"
+        }
+    }
+    pub(crate) fn parse_service_event_timestamp(
+        raw: &str,
+    ) -> Result<DateTime<FixedOffset>, String> {
+        DateTime::parse_from_rfc3339(raw)
+            .map_err(|err| format!("Invalid --since timestamp '{}': {}", raw, err))
+    }
+    pub(crate) fn service_job_at_or_after(
+        job: &super::super::service_model::ServiceJob,
+        minimum: DateTime<FixedOffset>,
+    ) -> bool {
+        job.submitted_at
+            .as_deref()
+            .and_then(|timestamp| DateTime::parse_from_rfc3339(timestamp).ok())
+            .is_some_and(|timestamp| timestamp >= minimum)
+    }
+    pub(crate) fn service_event_at_or_after(
+        event: &ServiceEvent,
+        minimum: DateTime<FixedOffset>,
+    ) -> bool {
+        DateTime::parse_from_rfc3339(&event.timestamp)
+            .map(|timestamp| timestamp >= minimum)
+            .unwrap_or(false)
+    }
+    pub(crate) fn service_incident_matches_trace_filters(
+        incident: &super::super::service_model::ServiceIncident,
+        service_state: &ServiceState,
+        profile_id: Option<&str>,
+        session_id: Option<&str>,
+        service_name: Option<&str>,
+        agent_name: Option<&str>,
+        task_name: Option<&str>,
+    ) -> bool {
+        if profile_id.is_none()
+            && session_id.is_none()
+            && service_name.is_none()
+            && agent_name.is_none()
+            && task_name.is_none()
+        {
+            return true;
+        }
+        incident.event_ids.iter().any(|event_id| {
+            service_state
+                .events
+                .iter()
+                .find(|event| &event.id == event_id)
+                .is_some_and(|event| {
+                    service_event_matches_trace_filters(
+                        event,
+                        profile_id,
+                        session_id,
+                        service_name,
+                        agent_name,
+                        task_name,
+                    )
+                })
+        }) || incident.job_ids.iter().any(|job_id| {
+            service_state.jobs.get(job_id).is_some_and(|job| {
+                service_job_matches_trace_filters(
+                    job,
+                    service_state,
+                    profile_id,
+                    session_id,
+                    service_name,
+                    agent_name,
+                    task_name,
+                )
+            })
+        })
+    }
+    pub(crate) fn service_event_matches_trace_filters(
+        event: &ServiceEvent,
+        profile_id: Option<&str>,
+        session_id: Option<&str>,
+        service_name: Option<&str>,
+        agent_name: Option<&str>,
+        task_name: Option<&str>,
+    ) -> bool {
+        profile_id.is_none_or(|expected| event.profile_id.as_deref() == Some(expected))
+            && session_id.is_none_or(|expected| event.session_id.as_deref() == Some(expected))
+            && service_name.is_none_or(|expected| event.service_name.as_deref() == Some(expected))
+            && agent_name.is_none_or(|expected| event.agent_name.as_deref() == Some(expected))
+            && task_name.is_none_or(|expected| event.task_name.as_deref() == Some(expected))
+    }
+    pub(crate) fn service_job_matches_trace_filters(
+        job: &super::super::service_model::ServiceJob,
+        service_state: &ServiceState,
+        profile_id: Option<&str>,
+        session_id: Option<&str>,
+        service_name: Option<&str>,
+        agent_name: Option<&str>,
+        task_name: Option<&str>,
+    ) -> bool {
+        profile_id
+            .is_none_or(|expected| service_job_profile_id(job, service_state) == Some(expected))
+            && session_id
+                .is_none_or(|expected| service_job_session_id(job, service_state) == Some(expected))
+            && service_name.is_none_or(|expected| job.service_name.as_deref() == Some(expected))
+            && agent_name.is_none_or(|expected| job.agent_name.as_deref() == Some(expected))
+            && task_name.is_none_or(|expected| job.task_name.as_deref() == Some(expected))
+    }
+    pub(crate) fn service_job_profile_id<'a>(
+        job: &'a super::super::service_model::ServiceJob,
+        service_state: &'a ServiceState,
+    ) -> Option<&'a str> {
+        match &job.target {
+            super::super::service_model::JobTarget::Profile(profile_id) => {
+                Some(profile_id.as_str())
+            }
+            super::super::service_model::JobTarget::Browser(browser_id) => service_state
+                .browsers
+                .get(browser_id)
+                .and_then(|browser| browser.profile_id.as_deref()),
+            super::super::service_model::JobTarget::Tab(tab_id) => {
+                service_state.tabs.get(tab_id).and_then(|tab| {
+                    tab.owner_session_id
+                        .as_deref()
+                        .and_then(|session_id| service_state.sessions.get(session_id))
+                        .and_then(|session| session.profile_id.as_deref())
+                        .or_else(|| {
+                            service_state
+                                .browsers
+                                .get(&tab.browser_id)
+                                .and_then(|browser| browser.profile_id.as_deref())
+                        })
+                })
+            }
+            super::super::service_model::JobTarget::Service
+            | super::super::service_model::JobTarget::Monitor(_)
+            | super::super::service_model::JobTarget::Challenge(_) => None,
+        }
+    }
+    pub(crate) fn service_job_session_id<'a>(
+        job: &'a super::super::service_model::ServiceJob,
+        service_state: &'a ServiceState,
+    ) -> Option<&'a str> {
+        match &job.target {
+            super::super::service_model::JobTarget::Browser(browser_id) => service_state
+                .browsers
+                .get(browser_id)
+                .and_then(|browser| browser.active_session_ids.first().map(String::as_str))
+                .or_else(|| session_id_for_browser(service_state, browser_id)),
+            super::super::service_model::JobTarget::Tab(tab_id) => service_state
+                .tabs
+                .get(tab_id)
+                .and_then(|tab| tab.owner_session_id.as_deref()),
+            super::super::service_model::JobTarget::Service
+            | super::super::service_model::JobTarget::Profile(_)
+            | super::super::service_model::JobTarget::Monitor(_)
+            | super::super::service_model::JobTarget::Challenge(_) => None,
+        }
+    }
+    pub(crate) fn session_id_for_browser<'a>(
+        service_state: &'a ServiceState,
+        browser_id: &str,
+    ) -> Option<&'a str> {
+        service_state
+            .sessions
+            .iter()
+            .find_map(|(session_id, session)| {
+                session
+                    .browser_ids
+                    .iter()
+                    .any(|id| id == browser_id)
+                    .then_some(session_id.as_str())
+            })
+    }
+    pub(crate) fn service_incident_at_or_after(
+        incident: &super::super::service_model::ServiceIncident,
+        minimum: DateTime<FixedOffset>,
+    ) -> bool {
+        DateTime::parse_from_rfc3339(&incident.latest_timestamp)
+            .map(|timestamp| timestamp >= minimum)
+            .unwrap_or(false)
+    }
+    pub(crate) fn service_now_timestamp() -> String {
+        chrono::Utc::now().to_rfc3339()
+    }
+}
+pub(crate) use service_commands::*;

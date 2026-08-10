@@ -18,6 +18,7 @@ use super::service_model::{
 };
 
 pub(crate) mod open;
+pub(crate) mod route_pool_repair;
 
 const ROUTE_DISPLAY_CONTENT_TTL: Duration = Duration::from_secs(5);
 const ROUTE_DISPLAY_NAME_TTL: Duration = Duration::from_secs(10);

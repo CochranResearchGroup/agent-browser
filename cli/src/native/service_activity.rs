@@ -398,3 +398,88 @@ mod tests {
         assert_eq!(response["activity"][2]["source"], "metadata");
     }
 }
+#[allow(dead_code, unused_imports)]
+pub(crate) mod service_commands {
+    use crate::native::action_runtime::common::*;
+    use crate::native::action_runtime::runtime::{
+        is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
+        relaunch_and_restore_page, service_browser_id,
+        validate_service_tab_handle_for_current_session,
+        validate_service_tab_handle_route_for_current_session, DaemonState, FetchPausedRequest,
+        HarEntry, MouseState, RouteEntry, RouteResponse, TrackedRequest,
+        AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
+        AUTH_LOGIN_WAIT_UNTIL,
+    };
+    use crate::native::service_diagnostics::truncate_utf8;
+    use crate::native::service_trace::service_commands::{
+        parse_service_event_timestamp, service_event_at_or_after, service_event_kind_name,
+    };
+    pub(crate) async fn handle_service_events(cmd: &Value) -> Result<Value, String> {
+        let service_state = cmd
+            .get("serviceState")
+            .cloned()
+            .map(serde_json::from_value::<ServiceState>)
+            .transpose()
+            .map_err(|err| format!("Invalid serviceState: {}", err))?
+            .unwrap_or_default();
+        let limit = cmd
+            .get("limit")
+            .and_then(|value| value.as_u64())
+            .map(|value| value as usize)
+            .unwrap_or(20);
+        let kind = cmd.get("kind").and_then(|value| value.as_str());
+        let browser_id = cmd.get("browserId").and_then(|value| value.as_str());
+        let profile_id = cmd.get("profileId").and_then(|value| value.as_str());
+        let session_id = cmd.get("sessionId").and_then(|value| value.as_str());
+        let service_name = cmd.get("serviceName").and_then(|value| value.as_str());
+        let agent_name = cmd.get("agentName").and_then(|value| value.as_str());
+        let task_name = cmd.get("taskName").and_then(|value| value.as_str());
+        let since = cmd
+            .get("since")
+            .and_then(|value| value.as_str())
+            .map(parse_service_event_timestamp)
+            .transpose()?;
+        let total = service_state.events.len();
+        let mut events = service_state
+            .events
+            .into_iter()
+            .filter(|event| {
+                kind.is_none_or(|expected| service_event_kind_name(event.kind) == expected)
+                    && browser_id
+                        .is_none_or(|expected| event.browser_id.as_deref() == Some(expected))
+                    && profile_id
+                        .is_none_or(|expected| event.profile_id.as_deref() == Some(expected))
+                    && session_id
+                        .is_none_or(|expected| event.session_id.as_deref() == Some(expected))
+                    && service_name
+                        .is_none_or(|expected| event.service_name.as_deref() == Some(expected))
+                    && agent_name
+                        .is_none_or(|expected| event.agent_name.as_deref() == Some(expected))
+                    && task_name.is_none_or(|expected| event.task_name.as_deref() == Some(expected))
+                    && since.is_none_or(|minimum| service_event_at_or_after(event, minimum))
+            })
+            .collect::<Vec<_>>();
+        let matched = events.len();
+        let start = matched.saturating_sub(limit);
+        events = events[start..].to_vec();
+        Ok(json!(
+            { "events" : events, "count" : events.len(), "matched" : matched, "total"
+            : total, }
+        ))
+    }
+    pub(crate) async fn handle_service_incident_activity(cmd: &Value) -> Result<Value, String> {
+        let service_state = cmd
+            .get("serviceState")
+            .cloned()
+            .map(serde_json::from_value::<ServiceState>)
+            .transpose()
+            .map_err(|err| format!("Invalid serviceState: {}", err))?
+            .unwrap_or_default();
+        let incident_id = cmd
+            .get("incidentId")
+            .and_then(|value| value.as_str())
+            .ok_or("Missing incidentId")?;
+        service_incident_activity_response(&service_state, incident_id)
+    }
+}
+pub(crate) use service_commands::*;

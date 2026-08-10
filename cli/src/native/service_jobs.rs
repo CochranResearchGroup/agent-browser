@@ -119,3 +119,101 @@ fn current_timestamp() -> String {
         .format(&time::format_description::well_known::Rfc3339)
         .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string())
 }
+#[allow(dead_code, unused_imports)]
+pub(crate) mod service_commands {
+    use crate::native::action_runtime::common::*;
+    use crate::native::action_runtime::runtime::{
+        is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
+        relaunch_and_restore_page, service_browser_id,
+        validate_service_tab_handle_for_current_session,
+        validate_service_tab_handle_route_for_current_session, DaemonState, FetchPausedRequest,
+        HarEntry, MouseState, RouteEntry, RouteResponse, TrackedRequest,
+        AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
+        AUTH_LOGIN_WAIT_UNTIL,
+    };
+    use crate::native::service_diagnostics::truncate_utf8;
+    use crate::native::service_trace::service_commands::{
+        parse_service_event_timestamp, service_job_at_or_after, service_job_matches_trace_filters,
+        service_job_state_name,
+    };
+    pub(crate) async fn handle_service_job_cancel(cmd: &Value) -> Result<Value, String> {
+        let job_id = cmd
+            .get("jobId")
+            .and_then(|value| value.as_str())
+            .ok_or("Missing jobId")?;
+        let reason = cmd.get("reason").and_then(|value| value.as_str());
+        let job = cancel_persisted_service_job(job_id, reason)?;
+        Ok(json!({ "cancelled" : true, "job" : job, }))
+    }
+    pub(crate) async fn handle_service_jobs(cmd: &Value) -> Result<Value, String> {
+        let service_state = cmd
+            .get("serviceState")
+            .cloned()
+            .map(serde_json::from_value::<ServiceState>)
+            .transpose()
+            .map_err(|err| format!("Invalid serviceState: {}", err))?
+            .unwrap_or_default();
+        let limit = cmd
+            .get("limit")
+            .and_then(|value| value.as_u64())
+            .map(|value| value as usize)
+            .unwrap_or(20);
+        let state = cmd.get("state").and_then(|value| value.as_str());
+        let action = cmd.get("jobAction").and_then(|value| value.as_str());
+        let profile_id = cmd.get("profileId").and_then(|value| value.as_str());
+        let session_id = cmd.get("sessionId").and_then(|value| value.as_str());
+        let service_name = cmd.get("serviceName").and_then(|value| value.as_str());
+        let agent_name = cmd.get("agentName").and_then(|value| value.as_str());
+        let task_name = cmd.get("taskName").and_then(|value| value.as_str());
+        let since = cmd
+            .get("since")
+            .and_then(|value| value.as_str())
+            .map(parse_service_event_timestamp)
+            .transpose()?;
+        let total = service_state.jobs.len();
+        if let Some(job_id) = cmd.get("jobId").and_then(|value| value.as_str()) {
+            let job = service_state
+                .jobs
+                .get(job_id)
+                .cloned()
+                .ok_or_else(|| format!("Service job not found: {}", job_id))?;
+            return Ok(json!(
+                { "job" : job, "jobs" : [job], "count" : 1, "matched" : 1, "total" :
+                total, }
+            ));
+        }
+        let mut jobs = service_state.jobs.values().cloned().collect::<Vec<_>>();
+        jobs.sort_by(|left, right| {
+            let left_time = left.submitted_at.as_deref().unwrap_or_default();
+            let right_time = right.submitted_at.as_deref().unwrap_or_default();
+            left_time
+                .cmp(right_time)
+                .then_with(|| left.id.cmp(&right.id))
+        });
+        let mut jobs = jobs
+            .into_iter()
+            .filter(|job| {
+                state.is_none_or(|expected| service_job_state_name(job.state) == expected)
+                    && action.is_none_or(|expected| job.action == expected)
+                    && service_job_matches_trace_filters(
+                        job,
+                        &service_state,
+                        profile_id,
+                        session_id,
+                        service_name,
+                        agent_name,
+                        task_name,
+                    )
+                    && since.is_none_or(|minimum| service_job_at_or_after(job, minimum))
+            })
+            .collect::<Vec<_>>();
+        let matched = jobs.len();
+        let start = matched.saturating_sub(limit);
+        jobs = jobs[start..].to_vec();
+        Ok(json!(
+            { "jobs" : jobs, "count" : jobs.len(), "matched" : matched, "total" :
+            total, }
+        ))
+    }
+}
+pub(crate) use service_commands::*;

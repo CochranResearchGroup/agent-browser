@@ -1065,3 +1065,144 @@ mod tests {
         );
     }
 }
+#[allow(dead_code, unused_imports)]
+pub(crate) mod service_commands {
+    use crate::native::action_runtime::common::*;
+    use crate::native::action_runtime::runtime::{
+        is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
+        relaunch_and_restore_page, service_browser_id,
+        validate_service_tab_handle_for_current_session,
+        validate_service_tab_handle_route_for_current_session, DaemonState, FetchPausedRequest,
+        HarEntry, MouseState, RouteEntry, RouteResponse, TrackedRequest,
+        AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
+        AUTH_LOGIN_WAIT_UNTIL,
+    };
+    use crate::native::service_diagnostics::truncate_utf8;
+    use crate::native::service_trace::service_now_timestamp;
+    pub(crate) async fn handle_service_remedies_apply(cmd: &Value) -> Result<Value, String> {
+        let escalation = cmd
+            .get("escalation")
+            .and_then(|value| value.as_str())
+            .unwrap_or("monitor_attention");
+        let by = cmd.get("by").and_then(|value| value.as_str());
+        let note = cmd.get("note").and_then(|value| value.as_str());
+        let service_name = optional_command_string(cmd, "serviceName");
+        let agent_name = optional_command_string(cmd, "agentName");
+        let task_name = optional_command_string(cmd, "taskName");
+        let actor = normalized_operator(by);
+        let note = normalized_note(note);
+        let timestamp = service_now_timestamp();
+        apply_persisted_service_remedies(
+            escalation,
+            &timestamp,
+            &actor,
+            note.as_deref(),
+            service_name.as_deref(),
+            agent_name.as_deref(),
+            task_name.as_deref(),
+        )
+    }
+    pub(crate) async fn handle_service_incident_acknowledge(cmd: &Value) -> Result<Value, String> {
+        let incident_id = cmd
+            .get("incidentId")
+            .and_then(|value| value.as_str())
+            .ok_or("Missing incidentId")?;
+        let by = cmd.get("by").and_then(|value| value.as_str());
+        let note = cmd.get("note").and_then(|value| value.as_str());
+        let actor = normalized_operator(by);
+        let note = normalized_note(note);
+        let timestamp = service_now_timestamp();
+        let incident = acknowledge_persisted_service_incident(
+            incident_id,
+            &timestamp,
+            &actor,
+            note.as_deref(),
+        )?;
+        Ok(json!({ "acknowledged" : true, "incident" : incident, }))
+    }
+    pub(crate) async fn handle_service_incident_resolve(cmd: &Value) -> Result<Value, String> {
+        let incident_id = cmd
+            .get("incidentId")
+            .and_then(|value| value.as_str())
+            .ok_or("Missing incidentId")?;
+        let by = cmd.get("by").and_then(|value| value.as_str());
+        let note = cmd.get("note").and_then(|value| value.as_str());
+        let actor = normalized_operator(by);
+        let note = normalized_note(note);
+        let timestamp = service_now_timestamp();
+        let incident =
+            resolve_persisted_service_incident(incident_id, &timestamp, &actor, note.as_deref())?;
+        Ok(json!({ "resolved" : true, "incident" : incident, }))
+    }
+    pub(crate) fn normalized_operator(value: Option<&str>) -> String {
+        value
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("operator")
+            .to_string()
+    }
+    pub(crate) fn normalized_note(value: Option<&str>) -> Option<String> {
+        value
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    }
+    pub(crate) async fn handle_service_incidents(cmd: &Value) -> Result<Value, String> {
+        let service_state = cmd
+            .get("serviceState")
+            .cloned()
+            .map(serde_json::from_value::<ServiceState>)
+            .transpose()
+            .map_err(|err| format!("Invalid serviceState: {}", err))?
+            .unwrap_or_default();
+        let limit = cmd
+            .get("limit")
+            .and_then(|value| value.as_u64())
+            .map(|value| value as usize)
+            .unwrap_or(20);
+        let remedies_only = cmd
+            .get("remediesOnly")
+            .or_else(|| cmd.get("remedies"))
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false);
+        let summarize = cmd
+            .get("summary")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false)
+            || remedies_only;
+        let incident_state = cmd
+            .get("state")
+            .and_then(|value| value.as_str())
+            .or(if remedies_only { Some("active") } else { None });
+        let mut response = service_incidents_response(
+            &service_state,
+            ServiceIncidentFilters {
+                limit,
+                incident_id: cmd.get("incidentId").and_then(|value| value.as_str()),
+                state: incident_state,
+                severity: cmd.get("severity").and_then(|value| value.as_str()),
+                escalation: cmd.get("escalation").and_then(|value| value.as_str()),
+                handling_state: cmd.get("handlingState").and_then(|value| value.as_str()),
+                kind: cmd.get("kind").and_then(|value| value.as_str()),
+                browser_id: cmd.get("browserId").and_then(|value| value.as_str()),
+                profile_id: cmd.get("profileId").and_then(|value| value.as_str()),
+                session_id: cmd.get("sessionId").and_then(|value| value.as_str()),
+                service_name: cmd.get("serviceName").and_then(|value| value.as_str()),
+                agent_name: cmd.get("agentName").and_then(|value| value.as_str()),
+                task_name: cmd.get("taskName").and_then(|value| value.as_str()),
+                since: cmd.get("since").and_then(|value| value.as_str()),
+                remedies_only,
+            },
+        )?;
+        if summarize {
+            let incidents = response
+                .get("incidents")
+                .and_then(|value| value.as_array())
+                .cloned()
+                .unwrap_or_default();
+            response["summary"] = service_incident_summary(&incidents);
+        }
+        Ok(response)
+    }
+}
+pub(crate) use service_commands::*;

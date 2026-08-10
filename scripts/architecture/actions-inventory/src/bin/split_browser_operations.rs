@@ -9,12 +9,34 @@ use std::process::Command;
 use syn::visit::Visit;
 use syn::{parse_quote, ImplItem, Item, ItemMod, ItemUse, Visibility};
 
-const SOURCE_COMMIT: &str = "ef15a932";
-const SOURCE_PATH: &str = "cli/src/native/action_runtime/browser_operations.rs";
+struct SplitSpec {
+    source_commit: &'static str,
+    source_path: &'static str,
+    nested_module: &'static str,
+    label: &'static str,
+}
 
-fn source_at_commit(repo: &Path, path: &str) -> Result<String, String> {
+fn split_spec(mode: &str) -> Result<SplitSpec, String> {
+    match mode {
+        "browser" => Ok(SplitSpec {
+            source_commit: "ef15a932",
+            source_path: "cli/src/native/action_runtime/browser_operations.rs",
+            nested_module: "action_commands",
+            label: "browser_operation",
+        }),
+        "service" => Ok(SplitSpec {
+            source_commit: "de5ec433",
+            source_path: "cli/src/native/action_runtime/service_commands.rs",
+            nested_module: "service_commands",
+            label: "service_command",
+        }),
+        _ => Err(format!("unsupported_split_mode:{mode}")),
+    }
+}
+
+fn source_at_commit(repo: &Path, commit: &str, path: &str) -> Result<String, String> {
     let output = Command::new("git")
-        .args(["show", &format!("{SOURCE_COMMIT}:{path}")])
+        .args(["show", &format!("{commit}:{path}")])
         .current_dir(repo)
         .output()
         .map_err(|error| format!("git_show_start_failed:{path}:{error}"))?;
@@ -122,6 +144,24 @@ fn target_map(repo: &Path) -> Result<BTreeMap<String, String>, String> {
         "begin_confirmation".to_string(),
         "native::auth_workflow".to_string(),
     );
+    for (name, target) in [
+        ("BrowserPreferenceCommandInput", "native::service_access"),
+        (
+            "ServiceRetentionPruneOptions",
+            "native::service_retained_state",
+        ),
+        (
+            "ServiceRetentionRepairOptions",
+            "native::service_retained_state",
+        ),
+        (
+            "ServiceRoutePoolRepairOptions",
+            "native::remote_view::route_pool_repair",
+        ),
+        ("SessionAgeStatus", "native::service_retained_state"),
+    ] {
+        targets.insert(name.to_string(), target.to_string());
+    }
     Ok(targets)
 }
 
@@ -160,13 +200,18 @@ fn target_file(repo: &Path, target: &str) -> Result<PathBuf, String> {
     Ok(repo.join("cli/src/native").join(format!("{relative}.rs")))
 }
 
-fn import_for(target: &str, names: &[String]) -> Result<ItemUse, String> {
+fn import_for(
+    target: &str,
+    nested_module: &str,
+    names: &[String],
+) -> Result<ItemUse, String> {
     let path = target
         .strip_prefix("native::")
         .ok_or_else(|| format!("unsupported_import_target:{target}"))?;
     syn::parse_str(&format!(
-        "use crate::native::{}::{{{}}};",
+        "use crate::native::{}::{}::{{{}}};",
         path,
+        nested_module,
         names.join(", ")
     ))
     .map_err(|error| format!("cross_import_parse_failed:{target}:{error}"))
@@ -176,6 +221,7 @@ fn module_source(
     items: Vec<Item>,
     target: &str,
     declarations: &BTreeMap<String, String>,
+    nested_module: &str,
 ) -> Result<String, String> {
     let mut referenced = ReferencedNames::default();
     let mut token_names = BTreeSet::new();
@@ -200,9 +246,14 @@ fn module_source(
         ),
         parse_quote!(
             use crate::native::action_runtime::runtime::{
-                is_stale_page_session_error, optional_command_string,
-                recover_browser_command_channel, relaunch_and_restore_page, service_browser_id,
-                validate_service_tab_handle_for_current_session,
+                account_ids_from_command, apply_service_browser_capability_selection,
+                browser_build_from_command, browser_build_label, browser_host_from_command,
+                handle_close, is_stale_page_session_error, launch_profile_from_sources,
+                optional_command_string, parse_control_input_provider, parse_view_stream_provider,
+                recover_browser_command_channel, registry_string_field,
+                relaunch_and_restore_page, remote_headed_display_isolation_from_command,
+                runtime_profile_from_sources, service_browser_id, target_service_ids_from_command,
+                target_url_from_command, validate_service_tab_handle_for_current_session,
                 validate_service_tab_handle_route_for_current_session, DaemonState,
                 FetchPausedRequest, HarEntry, MouseState, RouteEntry, RouteResponse,
                 TrackedRequest, AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS,
@@ -216,7 +267,7 @@ fn module_source(
     for (owner, mut names) in cross {
         names.sort();
         names.dedup();
-        module_items.push(Item::Use(import_for(&owner, &names)?));
+        module_items.push(Item::Use(import_for(&owner, nested_module, &names)?));
     }
     module_items.extend(items);
     let module: ItemMod = ItemMod {
@@ -224,17 +275,18 @@ fn module_source(
         vis: parse_quote!(pub(crate)),
         unsafety: None,
         mod_token: Default::default(),
-        ident: syn::Ident::new("action_commands", Span::call_site()),
+        ident: syn::Ident::new(nested_module, Span::call_site()),
         content: Some((Default::default(), module_items)),
         semi: None,
     };
+    let nested_ident = syn::Ident::new(nested_module, Span::call_site());
     let file = syn::File {
         shebang: None,
         attrs: Vec::new(),
         items: vec![
             Item::Mod(module),
             parse_quote!(
-                pub(crate) use action_commands::*;
+                pub(crate) use #nested_ident::*;
             ),
         ],
     };
@@ -243,7 +295,8 @@ fn module_source(
 
 fn ensure_native_modules(repo: &Path, targets: &BTreeSet<String>) -> Result<(), String> {
     let mod_path = repo.join("cli/src/native/mod.rs");
-    let mut source = source_at_commit(repo, "cli/src/native/mod.rs")?;
+    let mut source =
+        fs::read_to_string(&mod_path).map_err(|error| format!("native_mod_read_failed:{error}"))?;
     let existing: BTreeSet<_> = syn::parse_file(&source)
         .map_err(|error| format!("native_mod_parse_failed:{error}"))?
         .items
@@ -266,7 +319,8 @@ fn ensure_native_modules(repo: &Path, targets: &BTreeSet<String>) -> Result<(), 
     fs::write(&mod_path, source).map_err(|error| format!("native_mod_write_failed:{error}"))?;
     if targets.contains("native::webdriver::mobile_gestures") {
         let webdriver_mod_path = repo.join("cli/src/native/webdriver/mod.rs");
-        let mut webdriver_mod = source_at_commit(repo, "cli/src/native/webdriver/mod.rs")?;
+        let mut webdriver_mod = fs::read_to_string(&webdriver_mod_path)
+            .map_err(|error| format!("webdriver_mod_read_failed:{error}"))?;
         if !webdriver_mod.contains("pub mod mobile_gestures;") {
             webdriver_mod =
                 webdriver_mod.replace("pub mod ios;\n", "pub mod ios;\npub mod mobile_gestures;\n");
@@ -274,12 +328,27 @@ fn ensure_native_modules(repo: &Path, targets: &BTreeSet<String>) -> Result<(), 
         fs::write(&webdriver_mod_path, webdriver_mod)
             .map_err(|error| format!("webdriver_mod_write_failed:{error}"))?;
     }
+    if targets.contains("native::remote_view::route_pool_repair") {
+        let remote_view_path = repo.join("cli/src/native/remote_view.rs");
+        let mut remote_view = fs::read_to_string(&remote_view_path)
+            .map_err(|error| format!("remote_view_read_failed:{error}"))?;
+        if !remote_view.contains("pub(crate) mod route_pool_repair;") {
+            remote_view = remote_view.replace(
+                "pub(crate) mod open;\n",
+                "pub(crate) mod open;\npub(crate) mod route_pool_repair;\n",
+            );
+        }
+        fs::write(&remote_view_path, remote_view)
+            .map_err(|error| format!("remote_view_write_failed:{error}"))?;
+    }
     Ok(())
 }
 
 fn run() -> Result<(), String> {
     let repo = PathBuf::from(env::args().nth(1).ok_or("missing_repo_path")?);
-    let source = source_at_commit(&repo, SOURCE_PATH)?;
+    let mode = env::args().nth(2).unwrap_or_else(|| "browser".to_string());
+    let spec = split_spec(&mode)?;
+    let source = source_at_commit(&repo, spec.source_commit, spec.source_path)?;
     let parsed = syn::parse_file(&source).map_err(|error| format!("parse_failed:{error}"))?;
     let targets = target_map(&repo)?;
     let mut declarations = BTreeMap::new();
@@ -333,10 +402,10 @@ fn run() -> Result<(), String> {
         } else {
             String::new()
         };
-        if existing.contains("mod action_commands") {
+        if existing.contains(&format!("mod {}", spec.nested_module)) {
             return Err(format!("target_already_split:{}", file_path.display()));
         }
-        let addition = module_source(items, &target, &declarations)?;
+        let addition = module_source(items, &target, &declarations, spec.nested_module)?;
         fs::write(&file_path, format!("{}\n{}", existing.trim_end(), addition))
             .map_err(|error| format!("target_write_failed:{}:{error}", file_path.display()))?;
     }
@@ -348,10 +417,17 @@ fn run() -> Result<(), String> {
         })
         .collect::<Vec<_>>()
         .join("\n");
-    fs::write(repo.join(SOURCE_PATH), format!("//! Transitional browser command ownership facade.\n\n#![allow(unused_imports)]\n{facade}\n"))
-        .map_err(|error| format!("facade_write_failed:{error}"))?;
+    fs::write(
+        repo.join(spec.source_path),
+        format!(
+            "//! Transitional {} ownership facade.\n\n#![allow(unused_imports)]\n{facade}\n",
+            spec.label
+        ),
+    )
+    .map_err(|error| format!("facade_write_failed:{error}"))?;
     println!(
-        "browser_operation_modules={} declarations={}",
+        "{}_modules={} declarations={}",
+        spec.label,
         target_names.len(),
         declarations.len()
     );

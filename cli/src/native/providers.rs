@@ -814,3 +814,33 @@ mod tests {
         assert!(taken_again.is_none());
     }
 }
+#[allow(dead_code, unused_imports)]
+pub(crate) mod service_commands {
+    use crate::native::action_runtime::common::*;
+    use crate::native::action_runtime::runtime::{
+        is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
+        relaunch_and_restore_page, service_browser_id,
+        validate_service_tab_handle_for_current_session,
+        validate_service_tab_handle_route_for_current_session, DaemonState, FetchPausedRequest,
+        HarEntry, MouseState, RouteEntry, RouteResponse, TrackedRequest,
+        AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
+        AUTH_LOGIN_WAIT_UNTIL,
+    };
+    use crate::native::service_access::required_service_config_id;
+    use crate::native::service_diagnostics::truncate_utf8;
+    pub(crate) async fn handle_service_provider_upsert(cmd: &Value) -> Result<Value, String> {
+        let provider_id = required_service_config_id(cmd, "providerId")?;
+        let body = cmd.get("provider").cloned().ok_or("Missing provider")?;
+        let provider = upsert_persisted_provider(provider_id, body)?;
+        Ok(json!({ "id" : provider_id, "provider" : provider, "upserted" : true, }))
+    }
+    pub(crate) async fn handle_service_provider_delete(cmd: &Value) -> Result<Value, String> {
+        let provider_id = required_service_config_id(cmd, "providerId")?;
+        let removed = delete_persisted_provider(provider_id)?;
+        Ok(json!(
+            { "id" : provider_id, "deleted" : removed.is_some(), "provider" :
+            removed, }
+        ))
+    }
+}
+pub(crate) use service_commands::*;

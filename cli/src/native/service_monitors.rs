@@ -873,3 +873,83 @@ mod tests {
         assert_eq!(state.events[0].kind, ServiceEventKind::Reconciliation);
     }
 }
+#[allow(dead_code, unused_imports)]
+pub(crate) mod service_commands {
+    use crate::native::action_runtime::common::*;
+    use crate::native::action_runtime::runtime::{
+        is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
+        relaunch_and_restore_page, service_browser_id,
+        validate_service_tab_handle_for_current_session,
+        validate_service_tab_handle_route_for_current_session, DaemonState, FetchPausedRequest,
+        HarEntry, MouseState, RouteEntry, RouteResponse, TrackedRequest,
+        AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
+        AUTH_LOGIN_WAIT_UNTIL,
+    };
+    use crate::native::service_access::required_service_config_id;
+    use crate::native::service_diagnostics::truncate_utf8;
+    use crate::native::service_incidents::service_commands::{
+        normalized_note, normalized_operator,
+    };
+    use crate::native::service_trace::service_now_timestamp;
+    pub(crate) async fn handle_service_monitor_upsert(cmd: &Value) -> Result<Value, String> {
+        let monitor_id = required_service_config_id(cmd, "monitorId")?;
+        let body = cmd.get("monitor").cloned().ok_or("Missing monitor")?;
+        let monitor = upsert_persisted_monitor(monitor_id, body)?;
+        Ok(json!({ "id" : monitor_id, "monitor" : monitor, "upserted" : true, }))
+    }
+    pub(crate) async fn handle_service_monitor_delete(cmd: &Value) -> Result<Value, String> {
+        let monitor_id = required_service_config_id(cmd, "monitorId")?;
+        let removed = delete_persisted_monitor(monitor_id)?;
+        Ok(json!(
+            { "id" : monitor_id, "deleted" : removed.is_some(), "monitor" : removed,
+            }
+        ))
+    }
+    pub(crate) async fn handle_service_monitor_state_update(
+        cmd: &Value,
+        monitor_state: MonitorState,
+    ) -> Result<Value, String> {
+        let monitor_id = required_service_config_id(cmd, "monitorId")?;
+        let monitor = update_persisted_monitor_state(monitor_id, monitor_state)?;
+        Ok(json!(
+            { "id" : monitor_id, "monitor" : monitor, "state" : monitor_state,
+            "updated" : true, }
+        ))
+    }
+    pub(crate) async fn handle_service_monitor_reset_failures(
+        cmd: &Value,
+    ) -> Result<Value, String> {
+        let monitor_id = required_service_config_id(cmd, "monitorId")?;
+        let monitor = reset_persisted_monitor_failures(monitor_id)?;
+        let state = monitor.state;
+        Ok(json!(
+            { "id" : monitor_id, "monitor" : monitor, "state" : state, "updated" :
+            true, "resetFailures" : true, }
+        ))
+    }
+    pub(crate) async fn handle_service_monitor_triage(cmd: &Value) -> Result<Value, String> {
+        let monitor_id = required_service_config_id(cmd, "monitorId")?;
+        let by = cmd.get("by").and_then(|value| value.as_str());
+        let note = cmd.get("note").and_then(|value| value.as_str());
+        let actor = normalized_operator(by);
+        let note = normalized_note(note);
+        let timestamp = service_now_timestamp();
+        let (monitor, incident) =
+            triage_persisted_service_monitor(monitor_id, &timestamp, &actor, note.as_deref())?;
+        let state = monitor.state;
+        Ok(json!(
+            { "id" : monitor_id, "monitor" : monitor, "state" : state, "updated" :
+            true, "resetFailures" : true, "acknowledged" : incident.is_some(),
+            "incident" : incident, }
+        ))
+    }
+    pub(crate) async fn handle_service_monitors_run_due(_cmd: &Value) -> Result<Value, String> {
+        let summary = run_due_persisted_monitors().await?;
+        Ok(json!(
+            { "checked" : summary.checked, "succeeded" : summary.succeeded, "failed"
+            : summary.failed, "monitorIds" : summary.monitor_ids, "results" : summary
+            .results, }
+        ))
+    }
+}
+pub(crate) use service_commands::*;

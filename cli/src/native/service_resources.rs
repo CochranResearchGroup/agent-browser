@@ -1702,3 +1702,116 @@ mod tests {
         assert!(state.events.is_empty());
     }
 }
+#[allow(dead_code, unused_imports)]
+pub(crate) mod service_commands {
+    use crate::native::action_runtime::common::*;
+    use crate::native::action_runtime::runtime::{
+        account_ids_from_command, browser_build_from_command, browser_host_from_command,
+        is_stale_page_session_error, optional_command_string, parse_control_input_provider,
+        parse_view_stream_provider, recover_browser_command_channel, relaunch_and_restore_page,
+        remote_headed_display_isolation_from_command, runtime_profile_from_sources,
+        service_browser_id, target_service_ids_from_command, target_url_from_command,
+        validate_service_tab_handle_for_current_session,
+        validate_service_tab_handle_route_for_current_session, DaemonState, FetchPausedRequest,
+        HarEntry, MouseState, RouteEntry, RouteResponse, TrackedRequest,
+        AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
+        AUTH_LOGIN_WAIT_UNTIL,
+    };
+    use crate::native::service_access::access_plan_browser_build_selection_summary;
+    use crate::native::service_diagnostics::truncate_utf8;
+    pub(crate) async fn handle_service_resources(cmd: &Value) -> Result<Value, String> {
+        let service_state = load_service_state_for_maintenance(cmd)?;
+        Ok(service_resources_response(&service_state))
+    }
+    pub(crate) async fn handle_service_resources_monitor_summary() -> Result<Value, String> {
+        service_resources_monitor_summary_response()
+    }
+    pub(crate) async fn handle_service_resources_write_monitor_summary(
+        cmd: &Value,
+    ) -> Result<Value, String> {
+        let service_state = load_service_state_for_maintenance(cmd)?;
+        service_resources_write_monitor_summary_response(&service_state)
+    }
+    pub(crate) async fn handle_service_gc(cmd: &Value) -> Result<Value, String> {
+        let apply = cmd.get("apply").and_then(Value::as_bool).unwrap_or(false);
+        if apply {
+            let review_token = cmd.get("reviewToken").and_then(Value::as_str);
+            let force_without_review = cmd
+                .get("forceWithoutReview")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let repository = LockedServiceStateRepository::default_json()?;
+            repository.mutate(|state| {
+                let response = service_gc_apply_response(state, review_token, force_without_review);
+                if let Some(error) = response.get("error").and_then(Value::as_str) {
+                    Err(error.to_string())
+                } else {
+                    Ok(response)
+                }
+            })
+        } else {
+            let service_state = load_service_state_for_maintenance(cmd)?;
+            Ok(service_gc_dry_run_response(&service_state))
+        }
+    }
+    pub(crate) fn load_service_state_for_maintenance(cmd: &Value) -> Result<ServiceState, String> {
+        if let Some(service_state) = cmd.get("serviceState") {
+            serde_json::from_value::<ServiceState>(service_state.clone())
+                .map_err(|err| format!("Invalid serviceState: {}", err))
+        } else {
+            LockedServiceStateRepository::default_json()?.load_snapshot()
+        }
+    }
+    /// Return the no-launch service access plan from the current service state.
+    pub(crate) async fn handle_service_access_plan(cmd: &Value) -> Result<Value, String> {
+        let mut service_state = cmd
+            .get("serviceState")
+            .cloned()
+            .map(serde_json::from_value::<ServiceState>)
+            .transpose()
+            .map_err(|err| format!("Invalid serviceState: {}", err))?
+            .unwrap_or_default();
+        service_state.refresh_profile_readiness();
+        let request = ServiceAccessPlanRequest {
+            service_name: optional_command_string(cmd, "serviceName"),
+            agent_name: optional_command_string(cmd, "agentName"),
+            task_name: optional_command_string(cmd, "taskName"),
+            target_service_ids: target_service_ids_from_command(cmd),
+            account_ids: account_ids_from_command(cmd),
+            target_url: target_url_from_command(cmd),
+            site_policy_id: optional_command_string(cmd, "sitePolicyId"),
+            challenge_id: optional_command_string(cmd, "challengeId"),
+            readiness_profile_id: optional_command_string(cmd, "readinessProfileId"),
+            runtime_profile: runtime_profile_from_sources(cmd, false),
+            browser_build: browser_build_from_command(cmd),
+            browser_build_explicit: cmd.get("browserBuild").and_then(Value::as_str).is_some(),
+            browser_host: browser_host_from_command(cmd),
+            view_stream_provider: optional_command_string(cmd, "viewStreamProvider")
+                .or_else(|| optional_command_string(cmd, "viewStream"))
+                .or_else(|| {
+                    cmd.get("params").and_then(|params| {
+                        optional_command_string(params, "viewStreamProvider")
+                            .or_else(|| optional_command_string(params, "viewStream"))
+                    })
+                })
+                .and_then(|value| parse_view_stream_provider(&value)),
+            control_input_provider: optional_command_string(cmd, "controlInputProvider")
+                .or_else(|| optional_command_string(cmd, "controlInput"))
+                .or_else(|| {
+                    cmd.get("params").and_then(|params| {
+                        optional_command_string(params, "controlInputProvider")
+                            .or_else(|| optional_command_string(params, "controlInput"))
+                    })
+                })
+                .and_then(|value| parse_control_input_provider(&value)),
+            display_isolation: remote_headed_display_isolation_from_command(cmd),
+        };
+        let mut plan = service_access_plan_for_state(&service_state, request);
+        let summary = access_plan_browser_build_selection_summary(&plan);
+        if let Some(object) = plan.as_object_mut() {
+            object.insert("browserBuildSelectionSummary".to_string(), summary);
+        }
+        Ok(plan)
+    }
+}
+pub(crate) use service_commands::*;

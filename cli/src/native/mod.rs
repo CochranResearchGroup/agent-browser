@@ -94,6 +94,8 @@ pub mod service_activity;
 #[allow(dead_code)]
 pub mod service_config;
 #[allow(dead_code)]
+pub mod service_configuration_inventory;
+#[allow(dead_code)]
 pub mod service_contracts;
 #[allow(dead_code)]
 pub mod service_diagnostics;
@@ -103,6 +105,8 @@ pub mod service_file_transfer;
 pub mod service_health;
 #[allow(dead_code)]
 pub mod service_incidents;
+#[allow(dead_code)]
+pub mod service_inventory;
 #[allow(dead_code)]
 pub mod service_jobs;
 #[allow(dead_code)]
@@ -119,6 +123,8 @@ pub mod service_probe;
 pub mod service_request;
 #[allow(dead_code)]
 pub mod service_resources;
+#[allow(dead_code)]
+pub mod service_retained_state;
 #[allow(dead_code)]
 pub mod service_status_projection;
 #[allow(dead_code)]
@@ -137,6 +143,8 @@ pub mod storage;
 pub mod stream;
 #[allow(dead_code)]
 pub mod stream_runtime;
+#[allow(dead_code)]
+pub mod stream_screencast;
 #[allow(dead_code)]
 pub mod tracing;
 #[allow(dead_code)]

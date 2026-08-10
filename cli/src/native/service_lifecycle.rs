@@ -1338,3 +1338,33 @@ mod tests {
         );
     }
 }
+#[allow(dead_code, unused_imports)]
+pub(crate) mod service_commands {
+    use crate::native::action_runtime::common::*;
+    use crate::native::action_runtime::runtime::{
+        is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
+        relaunch_and_restore_page, service_browser_id,
+        validate_service_tab_handle_for_current_session,
+        validate_service_tab_handle_route_for_current_session, DaemonState, FetchPausedRequest,
+        HarEntry, MouseState, RouteEntry, RouteResponse, TrackedRequest,
+        AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
+        AUTH_LOGIN_WAIT_UNTIL,
+    };
+    use crate::native::service_access::required_service_config_id;
+    use crate::native::service_diagnostics::truncate_utf8;
+    pub(crate) async fn handle_service_session_upsert(cmd: &Value) -> Result<Value, String> {
+        let session_id = required_service_config_id(cmd, "sessionId")?;
+        let body = cmd.get("session").cloned().ok_or("Missing session")?;
+        let session = upsert_persisted_session(session_id, body)?;
+        Ok(json!({ "id" : session_id, "session" : session, "upserted" : true, }))
+    }
+    pub(crate) async fn handle_service_session_delete(cmd: &Value) -> Result<Value, String> {
+        let session_id = required_service_config_id(cmd, "sessionId")?;
+        let removed = delete_persisted_session(session_id)?;
+        Ok(json!(
+            { "id" : session_id, "deleted" : removed.is_some(), "session" : removed,
+            }
+        ))
+    }
+}
+pub(crate) use service_commands::*;

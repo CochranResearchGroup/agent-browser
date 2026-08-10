@@ -5510,3 +5510,264 @@ mod tests {
             .contains("no longer running"));
     }
 }
+#[allow(dead_code, unused_imports)]
+pub(crate) mod service_commands {
+    use crate::native::action_runtime::common::*;
+    use crate::native::action_runtime::runtime::{
+        handle_close, is_stale_page_session_error, optional_command_string,
+        recover_browser_command_channel, relaunch_and_restore_page, service_browser_id,
+        validate_service_tab_handle_for_current_session,
+        validate_service_tab_handle_route_for_current_session, DaemonState, FetchPausedRequest,
+        HarEntry, MouseState, RouteEntry, RouteResponse, TrackedRequest,
+        AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
+        AUTH_LOGIN_WAIT_UNTIL,
+    };
+    use crate::native::service_diagnostics::truncate_utf8;
+    use crate::native::service_incidents::service_commands::{
+        normalized_note, normalized_operator,
+    };
+    use crate::native::service_trace::service_now_timestamp;
+    pub(crate) async fn handle_service_reconcile(cmd: &Value) -> Result<Value, String> {
+        let mut service_state = cmd
+            .get("serviceState")
+            .cloned()
+            .map(serde_json::from_value::<ServiceState>)
+            .transpose()
+            .map_err(|err| format!("Invalid serviceState: {}", err))?
+            .unwrap_or_default();
+        let before = service_state.clone();
+        let summary = reconcile_service_state(&mut service_state).await;
+        let route_pool_refresh = refresh_authoritative_route_pool(
+            &mut service_state,
+            cmd.get("authoritativeRoutePool"),
+        )?;
+        let reconciled_state = service_state.clone();
+        let repository = LockedServiceStateRepository::default_json()?;
+        persist_reconciled_service_state_in_repository(&repository, &before, &reconciled_state)?;
+        Ok(json!(
+            { "reconciled" : true, "browserCount" : summary.browser_count,
+            "changedBrowsers" : summary.changed_browsers, "expiredSessionLeases" :
+            summary.expired_session_leases.clone(), "expiredSessionLeaseCount" :
+            summary.expired_session_leases.len(), "remoteViewRepair" : summary
+            .remote_view_repair.to_json(), "routePoolRefresh" : route_pool_refresh,
+            "service_state" : service_state, }
+        ))
+    }
+    /// Refresh retained route definitions from a readiness-verified authoritative pool.
+    ///
+    /// Active allocations keep their lease state. A conflicting active route is left
+    /// unchanged so reconciliation cannot redirect an in-use desktop.
+    pub(crate) fn refresh_authoritative_route_pool(
+        state: &mut ServiceState,
+        authoritative_route_pool: Option<&Value>,
+    ) -> Result<Value, String> {
+        let Some(authoritative_route_pool) = authoritative_route_pool else {
+            return Ok(json!(
+                { "requested" : false, "authoritativeEntryCount" : 0,
+                "insertedEntryIds" : [], "updatedEntryIds" : [], "unchangedEntryIds"
+                : [], "skippedActiveConflictEntryIds" : [], }
+            ));
+        };
+        let values = authoritative_route_pool
+            .as_array()
+            .ok_or("Invalid authoritativeRoutePool: expected a JSON array of route-pool entries")?;
+        let mut seen_ids = BTreeSet::new();
+        let mut entries = Vec::with_capacity(values.len());
+        for value in values {
+            let mut entry = serde_json::from_value::<RoutePoolEntry>(value.clone())
+                .map_err(|err| format!("Invalid authoritativeRoutePool entry: {}", err))?;
+            if entry.id.trim().is_empty() {
+                return Err("Invalid authoritativeRoutePool entry: id is required".to_string());
+            }
+            if entry.route_id.trim().is_empty() {
+                return Err(format!(
+                    "Invalid authoritativeRoutePool entry '{}': routeId is required",
+                    entry.id
+                ));
+            }
+            if !seen_ids.insert(entry.id.clone()) {
+                return Err(format!(
+                    "Invalid authoritativeRoutePool: duplicate entry id '{}'",
+                    entry.id
+                ));
+            }
+            entry.current_route_allocation_id = None;
+            entry.state = "available".to_string();
+            entries.push(entry);
+        }
+        let mut inserted_entry_ids = Vec::new();
+        let mut updated_entry_ids = Vec::new();
+        let mut unchanged_entry_ids = Vec::new();
+        let mut skipped_active_conflict_entry_ids = Vec::new();
+        for authoritative in entries {
+            let existing = state.route_pool.get(&authoritative.id).cloned();
+            let active_conflict = existing.as_ref().is_some_and(|entry| {
+                matches!(entry.state.as_str(), "checked_out" | "pending")
+                    && entry.route_id != authoritative.route_id
+            });
+            if active_conflict {
+                skipped_active_conflict_entry_ids.push(authoritative.id);
+                continue;
+            }
+            let replacement = if let Some(existing) = existing.as_ref().filter(|entry| {
+                matches!(entry.state.as_str(), "checked_out" | "pending")
+                    && entry.route_id == authoritative.route_id
+            }) {
+                RoutePoolEntry {
+                    state: existing.state.clone(),
+                    current_route_allocation_id: existing.current_route_allocation_id.clone(),
+                    ..authoritative
+                }
+            } else {
+                authoritative
+            };
+            match existing {
+                None => {
+                    inserted_entry_ids.push(replacement.id.clone());
+                    state.route_pool.insert(replacement.id.clone(), replacement);
+                }
+                Some(existing) if existing == replacement => {
+                    unchanged_entry_ids.push(replacement.id);
+                }
+                Some(_) => {
+                    updated_entry_ids.push(replacement.id.clone());
+                    state.route_pool.insert(replacement.id.clone(), replacement);
+                }
+            }
+        }
+        state.refresh_derived_views();
+        Ok(json!(
+            { "requested" : true, "authoritativeEntryCount" : values.len(),
+            "insertedEntryIds" : inserted_entry_ids, "updatedEntryIds" :
+            updated_entry_ids, "unchangedEntryIds" : unchanged_entry_ids,
+            "skippedActiveConflictEntryIds" : skipped_active_conflict_entry_ids, }
+        ))
+    }
+    pub(crate) async fn handle_service_browser_close(
+        cmd: &Value,
+        state: &mut DaemonState,
+    ) -> Result<Value, String> {
+        let browser_id = cmd
+            .get("browserId")
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .ok_or("Missing browserId")?;
+        let active_browser_id = service_browser_id(&state.session_id);
+        if browser_id != active_browser_id {
+            return Err(format!(
+                "service_browser_close can only close the active service browser {}; requested {}",
+                active_browser_id, browser_id
+            ));
+        }
+        if state.browser.is_none() {
+            return Err(format!(
+                "Service browser {} is not attached to this control plane",
+                browser_id
+            ));
+        }
+        let mut result = handle_close(state).await?;
+        result["browserId"] = json!(browser_id);
+        result["requestedBrowserId"] = json!(browser_id);
+        result["serviceOwned"] = json!(true);
+        Ok(result)
+    }
+    pub(crate) async fn handle_service_browser_repair(cmd: &Value) -> Result<Value, String> {
+        let browser_id = cmd
+            .get("browserId")
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .ok_or("Missing browserId")?;
+        let by = cmd.get("by").and_then(Value::as_str);
+        let note = cmd.get("note").and_then(Value::as_str);
+        let service_name = optional_command_string(cmd, "serviceName");
+        let agent_name = optional_command_string(cmd, "agentName");
+        let task_name = optional_command_string(cmd, "taskName");
+        let actor = normalized_operator(by);
+        let note = normalized_note(note);
+        let timestamp = service_now_timestamp();
+        let repository = LockedServiceStateRepository::default_json().map_err(|err| {
+            if err.starts_with("Failed to") || err.starts_with("Invalid service state") {
+                format!("Unable to load service state: {}", err)
+            } else {
+                err
+            }
+        })?;
+        let (browser, incident) = repository.mutate(|state| {
+            let health = state
+                .browsers
+                .get(browser_id)
+                .map(|browser| browser.health)
+                .ok_or_else(|| format!("Service browser not found: {}", browser_id))?;
+            match health {
+                ServiceBrowserHealth::Faulted => retry_service_browser_in_state(
+                    state,
+                    browser_id,
+                    timestamp.as_str(),
+                    actor.as_str(),
+                    note.as_deref(),
+                    service_name.as_deref(),
+                    agent_name.as_deref(),
+                    task_name.as_deref(),
+                ),
+                ServiceBrowserHealth::Degraded => retry_degraded_service_browser_in_state(
+                    state,
+                    browser_id,
+                    timestamp.as_str(),
+                    actor.as_str(),
+                    note.as_deref(),
+                    service_name.as_deref(),
+                    agent_name.as_deref(),
+                    task_name.as_deref(),
+                ),
+                _ => Err(format!(
+                    "Service browser {} is not degraded or faulted; current health is {}",
+                    browser_id,
+                    service_browser_health_label(health)
+                )),
+            }
+        })?;
+        Ok(json!({ "repaired" : true, "browser" : browser, "incident" : incident, }))
+    }
+    pub(crate) fn service_browser_health_label(health: ServiceBrowserHealth) -> String {
+        serde_json::to_value(health)
+            .ok()
+            .and_then(|value| value.as_str().map(str::to_string))
+            .unwrap_or_else(|| "unknown".to_string())
+    }
+    pub(crate) async fn handle_service_browser_retry(cmd: &Value) -> Result<Value, String> {
+        let browser_id = cmd
+            .get("browserId")
+            .and_then(|value| value.as_str())
+            .filter(|value| !value.trim().is_empty())
+            .ok_or("Missing browserId")?;
+        let by = cmd.get("by").and_then(|value| value.as_str());
+        let note = cmd.get("note").and_then(|value| value.as_str());
+        let service_name = optional_command_string(cmd, "serviceName");
+        let agent_name = optional_command_string(cmd, "agentName");
+        let task_name = optional_command_string(cmd, "taskName");
+        let actor = normalized_operator(by);
+        let note = normalized_note(note);
+        let timestamp = service_now_timestamp();
+        let repository = LockedServiceStateRepository::default_json().map_err(|err| {
+            if err.starts_with("Failed to") || err.starts_with("Invalid service state") {
+                format!("Unable to load service state: {}", err)
+            } else {
+                err
+            }
+        })?;
+        let (retryable, incident) = retry_persisted_service_browser_in_repository(
+            &repository,
+            browser_id,
+            &timestamp,
+            &actor,
+            note.as_deref(),
+            service_name.as_deref(),
+            agent_name.as_deref(),
+            task_name.as_deref(),
+        )?;
+        Ok(json!(
+            { "retryEnabled" : true, "browser" : retryable, "incident" : incident, }
+        ))
+    }
+}
+pub(crate) use service_commands::*;

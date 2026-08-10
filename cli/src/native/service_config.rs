@@ -1669,3 +1669,80 @@ mod tests {
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 }
+#[allow(dead_code, unused_imports)]
+pub(crate) mod service_commands {
+    use crate::native::action_runtime::common::*;
+    use crate::native::action_runtime::runtime::{
+        is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
+        relaunch_and_restore_page, service_browser_id,
+        validate_service_tab_handle_for_current_session,
+        validate_service_tab_handle_route_for_current_session, DaemonState, FetchPausedRequest,
+        HarEntry, MouseState, RouteEntry, RouteResponse, TrackedRequest,
+        AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
+        AUTH_LOGIN_WAIT_UNTIL,
+    };
+    use crate::native::service_access::required_service_config_id;
+    use crate::native::service_diagnostics::truncate_utf8;
+    pub(crate) async fn handle_service_profile_upsert(cmd: &Value) -> Result<Value, String> {
+        let profile_id = required_service_config_id(cmd, "profileId")?;
+        let body = cmd.get("profile").cloned().ok_or("Missing profile")?;
+        let profile = upsert_persisted_profile(profile_id, body)?;
+        Ok(json!({ "id" : profile_id, "profile" : profile, "upserted" : true, }))
+    }
+    pub(crate) async fn handle_service_profile_freshness_update(
+        cmd: &Value,
+    ) -> Result<Value, String> {
+        let profile_id = required_service_config_id(cmd, "profileId")?;
+        let body = cmd.get("freshness").cloned().ok_or("Missing freshness")?;
+        let profile = update_persisted_profile_freshness(profile_id, body)?;
+        Ok(json!({ "id" : profile_id, "profile" : profile, "upserted" : true, }))
+    }
+    pub(crate) async fn handle_service_profile_seeding_handoff_update(
+        cmd: &Value,
+    ) -> Result<Value, String> {
+        let profile_id = required_service_config_id(cmd, "profileId")?;
+        let body = cmd
+            .get("handoff")
+            .cloned()
+            .ok_or("Missing profile seeding handoff")?;
+        let handoff = update_persisted_profile_seeding_handoff(profile_id, body)?;
+        let repository = LockedServiceStateRepository::default_json()?;
+        let mut service_state = repository.load_snapshot()?;
+        service_state.refresh_profile_readiness();
+        let response = service_profile_seeding_handoff(
+            &service_state,
+            profile_id,
+            Some(handoff.target_service_id.as_str()),
+        )?;
+        Ok(json!(
+            { "id" : handoff.id, "profileId" : profile_id, "targetServiceId" :
+            handoff.target_service_id, "handoff" : handoff, "seedingHandoff" :
+            response, "updated" : true, }
+        ))
+    }
+    pub(crate) async fn handle_service_profile_delete(cmd: &Value) -> Result<Value, String> {
+        let profile_id = required_service_config_id(cmd, "profileId")?;
+        let removed = delete_persisted_profile(profile_id)?;
+        Ok(json!(
+            { "id" : profile_id, "deleted" : removed.is_some(), "profile" : removed,
+            }
+        ))
+    }
+    pub(crate) async fn handle_service_site_policy_upsert(cmd: &Value) -> Result<Value, String> {
+        let site_policy_id = required_service_config_id(cmd, "sitePolicyId")?;
+        let body = cmd.get("sitePolicy").cloned().ok_or("Missing sitePolicy")?;
+        let site_policy = upsert_persisted_site_policy(site_policy_id, body)?;
+        Ok(json!(
+            { "id" : site_policy_id, "sitePolicy" : site_policy, "upserted" : true, }
+        ))
+    }
+    pub(crate) async fn handle_service_site_policy_delete(cmd: &Value) -> Result<Value, String> {
+        let site_policy_id = required_service_config_id(cmd, "sitePolicyId")?;
+        let removed = delete_persisted_site_policy(site_policy_id)?;
+        Ok(json!(
+            { "id" : site_policy_id, "deleted" : removed.is_some(), "sitePolicy" :
+            removed, }
+        ))
+    }
+}
+pub(crate) use service_commands::*;

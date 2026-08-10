@@ -5642,3 +5642,421 @@ mod tests {
             .any(|reason| reason == "selected_profile_has_readiness_evidence"));
     }
 }
+#[allow(dead_code, unused_imports)]
+pub(crate) mod service_commands {
+    use crate::native::action_runtime::common::*;
+    use crate::native::action_runtime::runtime::{
+        account_ids_from_command, apply_service_browser_capability_selection,
+        browser_build_from_command, browser_build_label, is_stale_page_session_error,
+        launch_profile_from_sources, optional_command_string, recover_browser_command_channel,
+        registry_string_field, relaunch_and_restore_page, runtime_profile_from_sources,
+        service_browser_id, target_service_ids_from_command, target_url_from_command,
+        validate_service_tab_handle_for_current_session,
+        validate_service_tab_handle_route_for_current_session, DaemonState, FetchPausedRequest,
+        HarEntry, MouseState, RouteEntry, RouteResponse, TrackedRequest,
+        AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
+        AUTH_LOGIN_WAIT_UNTIL,
+    };
+    use crate::native::service_diagnostics::truncate_utf8;
+    pub(crate) fn access_plan_browser_build_selection_summary(plan: &Value) -> Value {
+        let selection = plan
+            .pointer("/decision/launchPosture/browserBuildSelection")
+            .unwrap_or(&Value::Null);
+        let profile_compatibility = selection
+            .get("profileCompatibility")
+            .unwrap_or(&Value::Null);
+        let validation_evidence = selection.get("validationEvidence").unwrap_or(&Value::Null);
+        let browser_build = optional_command_string(selection, "browserBuild");
+        let source = optional_command_string(selection, "source");
+        let evidence_source = optional_command_string(selection, "evidenceSource");
+        let profile_compatibility_status = optional_command_string(profile_compatibility, "status");
+        let validation_evidence_status = optional_command_string(validation_evidence, "status");
+        let selected_preference_binding_id =
+            optional_command_string(selection, "selectedPreferenceBindingId");
+        let mut compact_parts = vec![
+            format!("build={}", browser_build.as_deref().unwrap_or("unknown")),
+            format!("source={}", source.as_deref().unwrap_or("unknown")),
+            format!(
+                "evidence={}",
+                evidence_source.as_deref().unwrap_or("unknown")
+            ),
+            format!(
+                "override={}",
+                if selection
+                    .get("operatorOverride")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+                {
+                    "yes"
+                } else {
+                    "no"
+                }
+            ),
+            format!(
+                "profileCompatibility={}",
+                profile_compatibility_status.as_deref().unwrap_or("unknown")
+            ),
+            format!(
+                "validation={}",
+                validation_evidence_status.as_deref().unwrap_or("unknown")
+            ),
+        ];
+        if let Some(binding_id) = selected_preference_binding_id.as_deref() {
+            compact_parts.push(format!("preferenceBinding={binding_id}"));
+        }
+        let mut audit_flags = Vec::new();
+        if source.as_deref() == Some("browser_preference_binding") {
+            audit_flags.push("preference_binding_selected");
+        }
+        if selection
+            .get("operatorOverride")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        {
+            audit_flags.push("operator_override");
+        }
+        if selection
+            .get("requiresCdpFree")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        {
+            audit_flags.push("requires_cdp_free");
+        }
+        if profile_compatibility_status.as_deref() == Some("incompatible_or_mixed") {
+            audit_flags.push("profile_compatibility_attention");
+        }
+        if matches!(
+            validation_evidence_status.as_deref(),
+            Some("failed_or_mixed" | "missing")
+        ) {
+            audit_flags.push("validation_evidence_attention");
+        }
+        let attention_required = audit_flags.iter().any(|flag| flag.ends_with("_attention"));
+        json!(
+            { "browserBuild" : browser_build, "source" : source, "evidenceSource" :
+            evidence_source, "summary" : optional_command_string(selection, "summary"),
+            "operatorOverride" : selection.get("operatorOverride")
+            .and_then(Value::as_bool).unwrap_or(false), "requiresCdpFree" : selection
+            .get("requiresCdpFree").and_then(Value::as_bool).unwrap_or(false),
+            "selectedProfileId" : optional_command_string(selection,
+            "selectedProfileId"), "selectedProfileBrowserBuild" :
+            optional_command_string(selection, "selectedProfileBrowserBuild"),
+            "selectedPreferenceBindingId" : selected_preference_binding_id,
+            "selectedPreferenceBindingReason" : optional_command_string(selection,
+            "selectedPreferenceBindingReason"), "profileCompatibilityStatus" :
+            profile_compatibility_status, "profileCompatibilityReason" :
+            optional_command_string(profile_compatibility, "reason"),
+            "profileCompatibilityIds" : string_array_field(profile_compatibility,
+            "matchingIds"), "validationEvidenceStatus" : validation_evidence_status,
+            "validationEvidenceReason" : optional_command_string(validation_evidence,
+            "reason"), "validationEvidenceIds" : string_array_field(validation_evidence,
+            "matchingIds"), "auditFlags" : audit_flags, "attentionRequired" :
+            attention_required, "compact" : compact_parts.join(" "), }
+        )
+    }
+    pub(crate) fn string_array_field(value: &Value, key: &str) -> Vec<String> {
+        value
+            .get(key)
+            .and_then(Value::as_array)
+            .map(|values| {
+                values
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+    }
+    /// Evaluate browser capability launch gates without starting Chrome.
+    pub(crate) async fn handle_service_browser_capability_preflight(
+        cmd: &Value,
+    ) -> Result<Value, String> {
+        let requested_build = browser_build_from_command(cmd);
+        let cdp_free = cmd
+            .get("requiresCdpFree")
+            .or_else(|| cmd.get("cdpFree"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+            || requested_build == Some(BrowserBuild::CdpFreeHeaded)
+            || cmd
+                .get("cdpAttachmentAllowed")
+                .and_then(Value::as_bool)
+                .is_some_and(|allowed| !allowed);
+        let headless = if cdp_free {
+            false
+        } else {
+            cmd.get("headless").and_then(Value::as_bool).unwrap_or(true)
+        };
+        let mut launch_options = LaunchOptions {
+            headless,
+            executable_path: cmd
+                .get("executablePath")
+                .and_then(|value| value.as_str())
+                .map(str::to_string)
+                .or_else(|| env::var("AGENT_BROWSER_EXECUTABLE_PATH").ok()),
+            profile: launch_profile_from_sources(cmd, true),
+            runtime_profile: runtime_profile_from_sources(cmd, true),
+            manual_login: cdp_free,
+            attachable: !cdp_free,
+            ..LaunchOptions::default()
+        };
+        let browser_capability_launch =
+            apply_service_browser_capability_selection(&mut launch_options, cmd);
+        Ok(json!(
+            { "preflight" : true, "wouldLaunch" : false, "wouldApplyExecutable" :
+            browser_capability_launch.applied, "browserCapabilityLaunch" :
+            browser_capability_launch.to_value(), "request" : { "browserBuild" :
+            requested_build.map(browser_build_label), "profileId" :
+            service_profile_id(launch_options.profile.as_deref(), launch_options
+            .runtime_profile.as_deref()), "headless" : launch_options.headless,
+            "cdpFree" : cdp_free, "serviceName" : optional_command_string(cmd,
+            "serviceName"), "agentName" : optional_command_string(cmd, "agentName"),
+            "taskName" : optional_command_string(cmd, "taskName"), "targetServiceIds"
+            : target_service_ids_from_command(cmd), "accountIds" :
+            account_ids_from_command(cmd), "url" : target_url_from_command(cmd), },
+            "selectedExecutablePath" : launch_options.executable_path, }
+        ))
+    }
+    /// Generate operator-facing commands for binding a site/account to a known browser executable.
+    pub(crate) async fn handle_service_browser_capability_preference_guide(
+        cmd: &Value,
+    ) -> Result<Value, String> {
+        let service_state = cmd
+            .get("serviceState")
+            .cloned()
+            .map(serde_json::from_value::<ServiceState>)
+            .transpose()
+            .map_err(|err| format!("Invalid serviceState: {}", err))?
+            .unwrap_or_default();
+        Ok(browser_capability_preference_guide(&service_state, cmd))
+    }
+    pub(crate) fn browser_capability_preference_guide(
+        service_state: &ServiceState,
+        cmd: &Value,
+    ) -> Value {
+        let registry = &service_state.browser_capability_registry;
+        let requested_build = optional_command_string(cmd, "browserBuild");
+        let target_service_ids = target_service_ids_from_command(cmd);
+        let account_ids = account_ids_from_command(cmd);
+        let service_name = optional_command_string(cmd, "serviceName");
+        let task_name = optional_command_string(cmd, "taskName");
+        let reason = optional_command_string(cmd, "reason")
+            .unwrap_or_else(|| "operator_primary_browser_preference".to_string());
+        let has_filter = !target_service_ids.is_empty()
+            || !account_ids.is_empty()
+            || service_name.is_some()
+            || task_name.is_some();
+        let mut suggestions = registry
+            .browser_executables
+            .iter()
+            .filter(|executable| {
+                requested_build.as_deref().is_none_or(|build| {
+                    registry_string_field(executable, "buildLabel").as_deref() == Some(build)
+                })
+            })
+            .filter_map(|executable| {
+                let executable_id = registry_string_field(executable, "id")?;
+                let browser_build = registry_string_field(executable, "buildLabel")
+                    .or_else(|| requested_build.clone())
+                    .unwrap_or_else(|| "stock_chrome".to_string());
+                let host_id = registry_string_field(executable, "hostId");
+                let capability_id =
+                    matching_capability_id(registry, host_id.as_deref(), &executable_id);
+                let command = browser_preference_command(BrowserPreferenceCommandInput {
+                    browser_build: &browser_build,
+                    executable_id: &executable_id,
+                    host_id: host_id.as_deref(),
+                    capability_id: capability_id.as_deref(),
+                    target_service_ids: &target_service_ids,
+                    account_ids: &account_ids,
+                    service_name: service_name.as_deref(),
+                    task_name: task_name.as_deref(),
+                    reason: &reason,
+                });
+                let existing_binding_ids = registry
+                    .browser_preference_bindings
+                    .iter()
+                    .filter(|binding| {
+                        registry_string_field(binding, "preferredExecutableId").as_deref()
+                            == Some(executable_id.as_str())
+                    })
+                    .filter_map(|binding| registry_string_field(binding, "id"))
+                    .collect::<Vec<_>>();
+                Some(json!(
+                    { "executableId" : executable_id, "browserBuild" : browser_build,
+                    "hostId" : host_id, "capabilityId" : capability_id, "source" :
+                    registry_string_field(executable, "source"), "executablePath" :
+                    registry_string_field(executable, "executablePath"), "fresh" :
+                    executable.get("fresh").cloned().unwrap_or(Value::Null), "tags" :
+                    executable.get("tags").cloned().unwrap_or_else(|| json!([])),
+                    "existingBindingIds" : existing_binding_ids, "copyable" :
+                    has_filter, "command" : command, }
+                ))
+            })
+            .collect::<Vec<_>>();
+        suggestions.sort_by(|left, right| {
+            json_string_field(left, "browserBuild")
+                .cmp(&json_string_field(right, "browserBuild"))
+                .then_with(|| {
+                    json_string_field(left, "executableId")
+                        .cmp(&json_string_field(right, "executableId"))
+                })
+        });
+        json!(
+            { "guide" : true, "advisory" : true, "copyable" : has_filter, "requested" : {
+            "browserBuild" : requested_build, "targetServiceIds" : target_service_ids,
+            "accountIds" : account_ids, "serviceName" : service_name, "taskName" :
+            task_name, "reason" : reason, }, "counts" : { "browserExecutables" : registry
+            .browser_executables.len(), "matchingExecutables" : suggestions.len(),
+            "browserPreferenceBindings" : registry.browser_preference_bindings.len(), },
+            "suggestions" : suggestions, "recommendedNextStep" : if has_filter {
+            "Copy the preferred command, run it, then run service browser-capability preflight for the same site/account before requesting browser work."
+            } else {
+            "Rerun with --target-service-id and --account-id to produce exact copyable prefer commands."
+            }, }
+        )
+    }
+    pub(crate) fn json_string_field(value: &Value, field: &str) -> String {
+        value
+            .get(field)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    }
+    pub(crate) fn matching_capability_id(
+        registry: &BrowserCapabilityRegistry,
+        host_id: Option<&str>,
+        executable_id: &str,
+    ) -> Option<String> {
+        registry.browser_capabilities.iter().find_map(|capability| {
+            let executable_matches =
+                registry_string_field(capability, "executableId").as_deref() == Some(executable_id);
+            let host_matches = host_id.is_none_or(|host_id| {
+                registry_string_field(capability, "hostId").as_deref() == Some(host_id)
+            });
+            (executable_matches && host_matches).then(|| registry_string_field(capability, "id"))?
+        })
+    }
+    pub(crate) struct BrowserPreferenceCommandInput<'a> {
+        pub(crate) browser_build: &'a str,
+        pub(crate) executable_id: &'a str,
+        pub(crate) host_id: Option<&'a str>,
+        pub(crate) capability_id: Option<&'a str>,
+        pub(crate) target_service_ids: &'a [String],
+        pub(crate) account_ids: &'a [String],
+        pub(crate) service_name: Option<&'a str>,
+        pub(crate) task_name: Option<&'a str>,
+        pub(crate) reason: &'a str,
+    }
+    pub(crate) fn browser_preference_command(input: BrowserPreferenceCommandInput<'_>) -> String {
+        let mut args = vec![
+            "agent-browser".to_string(),
+            "service".to_string(),
+            "browser-capability".to_string(),
+            "prefer".to_string(),
+            "--browser-build".to_string(),
+            input.browser_build.to_string(),
+            "--preferred-executable-id".to_string(),
+            input.executable_id.to_string(),
+        ];
+        if let Some(host_id) = input.host_id {
+            args.push("--preferred-host-id".to_string());
+            args.push(host_id.to_string());
+        }
+        if let Some(capability_id) = input.capability_id {
+            args.push("--preferred-capability-id".to_string());
+            args.push(capability_id.to_string());
+        }
+        if input.target_service_ids.is_empty()
+            && input.account_ids.is_empty()
+            && input.service_name.is_none()
+            && input.task_name.is_none()
+        {
+            args.push("--target-service-id".to_string());
+            args.push("<site>".to_string());
+            args.push("--account-id".to_string());
+            args.push("<account>".to_string());
+        } else {
+            for target in input.target_service_ids {
+                args.push("--target-service-id".to_string());
+                args.push(target.clone());
+            }
+            for account in input.account_ids {
+                args.push("--account-id".to_string());
+                args.push(account.clone());
+            }
+            if let Some(service_name) = input.service_name {
+                args.push("--service-name".to_string());
+                args.push(service_name.to_string());
+            }
+            if let Some(task_name) = input.task_name {
+                args.push("--task-name".to_string());
+                args.push(task_name.to_string());
+            }
+        }
+        args.push("--reason".to_string());
+        args.push(input.reason.to_string());
+        args.into_iter()
+            .map(|arg| shell_quote_command_arg(&arg))
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+    pub(crate) fn shell_quote_command_arg(arg: &str) -> String {
+        if arg.starts_with('<') && arg.ends_with('>') {
+            return arg.to_string();
+        }
+        if arg
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.' | '/' | ':' | '='))
+        {
+            arg.to_string()
+        } else {
+            format!("'{}'", arg.replace('\'', "'\\''"))
+        }
+    }
+    /// Return the service-owned profile collection without the full status payload.
+    pub(crate) async fn handle_service_profiles(cmd: &Value) -> Result<Value, String> {
+        let mut service_state = cmd
+            .get("serviceState")
+            .cloned()
+            .map(serde_json::from_value::<ServiceState>)
+            .transpose()
+            .map_err(|err| format!("Invalid serviceState: {}", err))?
+            .unwrap_or_default();
+        service_state.refresh_profile_readiness();
+        let profile_allocations = service_profile_allocations(&service_state);
+        let profile_sources = service_profile_sources(&service_state);
+        let mut profiles = service_state.profiles.into_values().collect::<Vec<_>>();
+        profiles.sort_by(|left, right| left.id.cmp(&right.id));
+        let count = profiles.len();
+        Ok(json!(
+            { "profiles" : profiles, "profileSources" : profile_sources,
+            "profileAllocations" : profile_allocations, "count" : count, }
+        ))
+    }
+    pub(crate) async fn handle_service_browser_capability_registry_upsert(
+        cmd: &Value,
+    ) -> Result<Value, String> {
+        let collection = required_service_config_id(cmd, "collection")?;
+        let record_id = required_service_config_id(cmd, "recordId")?;
+        let body = cmd.get("record").cloned().ok_or("Missing record")?;
+        let (record, registry, counts) =
+            upsert_persisted_browser_capability_registry_record(collection, record_id, body)?;
+        Ok(json!(
+            { "id" : record_id, "collection" : collection, "record" : record,
+            "browserCapabilityRegistry" : registry, "counts" : counts, "upserted" :
+            true, "advisory" : true, "routingApplied" : false, }
+        ))
+    }
+    pub(crate) fn required_service_config_id<'a>(
+        cmd: &'a Value,
+        field: &str,
+    ) -> Result<&'a str, String> {
+        cmd.get(field)
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| format!("Missing {field}"))
+    }
+}
+pub(crate) use service_commands::*;
