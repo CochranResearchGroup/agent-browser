@@ -213,3 +213,5 @@ pub(crate) mod action_commands {
     }
 }
 pub(crate) use action_commands::*;
+#[cfg(test)]
+mod action_tests;

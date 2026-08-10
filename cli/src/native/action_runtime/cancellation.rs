@@ -1,6 +1,9 @@
 use super::super::cancellation::CancellationToken;
 use std::future::Future;
 
+#[cfg(test)]
+mod tests;
+
 /// Stable cancellation error shared by dispatcher and domain action owners.
 pub(crate) fn cancellation_error() -> String {
     "Service job was cancelled while running".to_string()

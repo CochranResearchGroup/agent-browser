@@ -17,6 +17,9 @@ use super::service_model::{
     BrowserHost, DisplayAllocation, RoutePoolEntry, ServiceState, ViewStreamProvider,
 };
 
+#[cfg(test)]
+mod helper_action_tests;
+
 pub(crate) mod open;
 pub(crate) mod route_pool_repair;
 pub(crate) mod viewer_lease;

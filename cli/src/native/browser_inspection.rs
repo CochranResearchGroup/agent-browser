@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod evaluation_action_tests;
+
 #[allow(dead_code, unused_imports)]
 pub(crate) mod action_commands {
     use crate::native::action_runtime::runtime::{

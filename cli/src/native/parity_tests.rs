@@ -568,7 +568,7 @@ async fn test_daemon_state_new_defaults() {
 
 #[tokio::test]
 async fn test_tracked_request_struct() {
-    use super::action_runtime::TrackedRequest;
+    use super::action_runtime::runtime::TrackedRequest;
     let tr = TrackedRequest {
         url: "https://example.com/api".to_string(),
         method: "GET".to_string(),
@@ -596,7 +596,7 @@ async fn test_request_tracking_state() {
 
     state
         .tracked_requests
-        .push(super::action_runtime::TrackedRequest {
+        .push(super::action_runtime::runtime::TrackedRequest {
             url: "https://example.com".to_string(),
             method: "GET".to_string(),
             headers: json!({}),
@@ -610,7 +610,7 @@ async fn test_request_tracking_state() {
         });
     state
         .tracked_requests
-        .push(super::action_runtime::TrackedRequest {
+        .push(super::action_runtime::runtime::TrackedRequest {
             url: "https://other.com".to_string(),
             method: "POST".to_string(),
             headers: json!({}),
@@ -640,7 +640,7 @@ async fn test_request_tracking_state() {
 
 #[test]
 fn test_matches_status_filter() {
-    use super::action_runtime::matches_status_filter;
+    use super::network::matches_status_filter;
 
     // Exact match
     assert!(matches_status_filter(Some(200), "200"));

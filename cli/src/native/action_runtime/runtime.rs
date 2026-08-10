@@ -1,6 +1,8 @@
 //! Daemon runtime, browser lifecycle, and launch coordination.
 
 #![allow(unused_imports)]
+#[cfg(test)]
+mod close_launch_tests;
 mod daemon;
 pub(crate) use daemon::*;
 mod capability;

@@ -2490,7 +2490,7 @@ mod tests {
         let guard = EnvGuard::new(&["HOME"]);
         guard.set("HOME", home.to_str().unwrap());
 
-        let action_error = super::super::action_runtime::handle_service_status(&json!({
+        let action_error = super::super::service_status_projection::handle_service_status(&json!({
             "serviceState": {},
             "launchConfig": {},
         }))
@@ -2537,17 +2537,18 @@ mod tests {
             "launchConfig": fixed_launch_configuration(),
             "fullTabHistory": false,
         });
-        let action = super::super::action_runtime::handle_service_status_with_dependencies(
-            &command,
-            super::super::service_status_projection::ServiceStatusProjectionDependencies::new(
-                &repository,
-                &preparer,
-                &browser_authority,
-                &projector,
-            ),
-        )
-        .await
-        .unwrap();
+        let action =
+            super::super::service_status_projection::handle_service_status_with_dependencies(
+                &command,
+                super::super::service_status_projection::ServiceStatusProjectionDependencies::new(
+                    &repository,
+                    &preparer,
+                    &browser_authority,
+                    &projector,
+                ),
+            )
+            .await
+            .unwrap();
 
         let (tx, _rx) = mpsc::channel(DEFAULT_QUEUE_CAPACITY);
         let status = Arc::new(ControlPlaneStatus::new());

@@ -1,6 +1,37 @@
 //! Serialized command routing, shared gates, timing, and response envelopes.
 
-#![allow(unused_imports)]
+#[cfg(test)]
+mod confirmation_tests;
+#[cfg(test)]
+mod dependent_batch_tests;
+#[cfg(test)]
+mod dispatch_tests;
+#[cfg(test)]
+mod remote_view_route_tests_one;
+#[cfg(test)]
+mod remote_view_route_tests_two;
+#[cfg(test)]
+mod runtime_route_host_tests;
+#[cfg(test)]
+mod service_activity_tests;
+#[cfg(test)]
+mod service_config_tests;
+#[cfg(test)]
+mod service_health_tests;
+#[cfg(test)]
+mod service_incident_mutation_tests;
+#[cfg(test)]
+mod service_incidents_tests;
+#[cfg(test)]
+mod service_inventory_tests;
+#[cfg(test)]
+mod service_jobs_tests;
+#[cfg(test)]
+mod service_reconcile_tests;
+#[cfg(test)]
+mod service_trace_tests;
+#[cfg(test)]
+mod state_tests;
 use super::action_runtime::runtime::{
     active_browser_profile_mismatch, auto_launch, detect_browser_stale_state, handle_cdp_attach,
     handle_cdp_detach, handle_cdp_free_launch, handle_close, handle_external_byop_adopt,
@@ -109,6 +140,7 @@ use super::service_inventory::{
 };
 use super::service_jobs::{handle_service_job_cancel, handle_service_jobs};
 use super::service_lifecycle::{handle_service_session_delete, handle_service_session_upsert};
+use super::service_model::MonitorState;
 use super::service_monitors::{
     handle_service_monitor_delete, handle_service_monitor_reset_failures,
     handle_service_monitor_state_update, handle_service_monitor_triage,
@@ -137,40 +169,11 @@ use super::tracing::{
 };
 use super::webdriver::mobile_gestures::{handle_device_list, handle_swipe};
 use crate::native::action_runtime::cancellation::cancellation_error;
-use crate::native::auth;
-use crate::native::cookies;
-use crate::native::diff;
-use crate::native::interaction;
-use crate::native::policy::{ActionPolicy, ConfirmActions, PolicyResult};
-use crate::native::providers;
-use crate::native::service_health::{
-    persist_browser_recovery_started_in_repository, persist_closed_browser_health_in_repository,
-    persist_current_browser_stale_health_in_repository,
-    persist_reconciled_service_state_in_repository, persist_service_browser_record_in_repository,
-    reconcile_service_state, retry_degraded_service_browser_in_state,
-    retry_persisted_service_browser_in_repository, retry_service_browser_in_state,
-    BrowserRecoveryPersistence, BrowserRecoveryPolicyConfig, BrowserRecoveryPolicySource,
-    BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
-};
-use crate::native::service_model::{
-    retained_display_allocation_candidates, service_profile_allocations,
-    service_profile_seeding_handoff, service_profile_sources, BrowserBuild,
-    BrowserCapabilityRegistry, BrowserHealth as ServiceBrowserHealth,
-    BrowserHost as ServiceBrowserHost, BrowserProcess, BrowserProfile, BrowserSession, BrowserTab,
-    ControlInputProvider, DisplayAllocation, JobState as ServiceJobState, LeaseState, MonitorState,
-    ProfileAllocationPolicy, ProfileClass, ProfileKeyringPolicy, ProfileLeaseDisposition,
-    ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease, RemoteViewHandoff,
-    RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent, ServiceEventKind,
-    ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle, ViewStream,
-    ViewStreamProvider, ViewerLease,
-};
+use crate::native::policy::PolicyResult;
+use crate::native::service_health::BrowserRecoveryPersistence;
 use crate::native::state;
-use crate::native::storage;
-use crate::native::webdriver::backend::{
-    BrowserBackend, WebDriverBackend, WEBDRIVER_UNSUPPORTED_ACTIONS,
-};
-use serde_json::{json, Map, Value};
-use std::time::{Duration, Instant};
+use crate::native::webdriver::backend::WEBDRIVER_UNSUPPORTED_ACTIONS;
+use serde_json::{json, Value};
 
 pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
     matches!(
