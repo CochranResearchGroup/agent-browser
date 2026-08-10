@@ -71,3 +71,7 @@ _Avoid_: Action bucket, handler collection
 **Transitional facade**:
 A temporary re-export-only module used while callers migrate to concrete owners. It is not an architectural owner and must be deleted before the final architecture gate.
 _Avoid_: Compatibility owner, permanent facade
+
+**Cohesive green checkpoint**:
+A durable commit that binds one interdependent remediation invariant to its focused validation and rollback boundary. Plan 0106 uses these checkpoints instead of reconstructing retroactive one-commit-per-responsibility history; the 615-record responsibility and packet ledger remains intact.
+_Avoid_: Retroactive packet commit, grouped unvalidated change

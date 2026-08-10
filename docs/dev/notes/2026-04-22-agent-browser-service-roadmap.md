@@ -519,6 +519,30 @@ The detailed planning checkpoint for this campaign is
 The detailed RDP and Guacamole hardening and testing plan is
 `docs/dev/plans/0001-2026-05-26-rdp-guac-hardening-test-plan.md`.
 
+### Route-bound open and actions ownership checkpoint
+
+Plan 0106 is the current source-architecture closeout authority for the Plan
+0101 route-bound open and `actions.rs` campaign. The accepted remediation now
+keeps the existing job timeout as one total deadline, persists acquisition
+finalization and an optional durable handoff through one recoverable two-file
+store transaction, and routes the seven typed coordinator outcomes through the
+permanent daemon runtime adapter. Command dispatch is 897 lines with six
+reviewed production definitions, no in-file tests, and no compatibility
+wrappers. The frozen inventory still reconciles all 615 responsibilities.
+
+The test-only action facade and broad common prelude are deleted. The 261
+migrated tests live in 27 dispatcher or public-owner modules. The architecture
+gate now checks that layout together with the seven outcomes, nine fallback
+predicates, four persistence fault boundaries, deadline-drop fixtures,
+transitional adapter removal, and WSL Cargo entrypoint safety.
+
+This is source and no-launch validation only. No installed runtime, browser,
+route, display, or operator-visible proof was performed. The remaining Plan
+0101 work is the bounded closed-world verification of findings
+`P0101-W1-01` through `P0101-W1-07` and critical regressions introduced by
+their fixes. Ignored end-to-end, install doctor, and neutral live remote-view
+proof remain a separately authorized effect boundary.
+
 ## MCP Surface
 
 MCP should expose agent-native primitives and resources.

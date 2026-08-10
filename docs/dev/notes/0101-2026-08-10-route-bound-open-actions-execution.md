@@ -8,6 +8,7 @@ Plan authority:
 
 - `docs/dev/plans/0101-2026-08-09-route-bound-open-actions-deepening-plan.md`
 - `docs/dev/plans/0102-2026-08-09-route-bound-open-cycle2-residual-repair-plan.md`
+- `docs/dev/plans/0106-2026-08-10-actions-work-cycle1-remediation-plan.md`
 
 Runtime handle: `/root/resume_actions_deepening` (replacement for the
 OOM-terminated `/root/execute_actions_deepening` executor)
@@ -16,6 +17,15 @@ Effects authorized: local source, tests, documentation, deterministic generated
 architecture artifacts, and green local checkpoint commits. No push, install,
 release, browser launch, live runtime, route, display, tenant, or external
 effect is authorized.
+
+Current disposition: **PLAN 0106 SOURCE REMEDIATION COMPLETE; BOUNDED
+CLOSED-WORLD VERIFICATION PENDING**
+
+The original closeout below is retained as execution history, but its
+acceptance claims were rejected by
+`docs/dev/notes/0101-2026-08-10-route-bound-open-actions-work-audit.md`.
+The final section, “Plan 0106 superseding remediation receipt,” is the current
+authority for implementation state, validation, and rollback.
 
 ## Preflight P0 Receipt
 
@@ -140,6 +150,14 @@ format and strict Clippy gates, both pnpm architecture gates, and patch checks
 before checkpoint `24265340`.
 
 ## Packet Ledger
+
+Historical note: this is the original pre-audit packet ledger. Its grouped
+commits did not provide the promised 81 independent rollback boundaries, and
+its completion state was not accepted. Plan 0106 supersedes only that commit
+granularity with cohesive green checkpoints; it does not waive packet
+classification, the 615 responsibility records, source rollback clarity, or
+truthful receipt requirements. The current reconciliation follows at the end
+of this receipt.
 
 | Packet | State | Commit | Evidence |
 | --- | --- | --- | --- |
@@ -294,10 +312,10 @@ source-range verification. The generic runtime target coordinator remains at
 366 lines, strict Clippy is green, and all four scripted runtime tests still
 pass.
 
-## Campaign source closeout
+## Historical pre-audit campaign source closeout
 
-Execution disposition: **SOURCE ARCHITECTURE COMPLETE; READY FOR INDEPENDENT
-WORK AUDIT**
+Historical executor disposition: **REJECTED BY THE PLAN 0101 WORK AUDIT AND
+SUPERSEDED BY PLAN 0106**
 
 Installed and operator-visible acceptance remains outside this executor's
 effect boundary. No browser, installed runtime, route, display, tenant, push,
@@ -405,3 +423,121 @@ operator-visible acceptance additionally requires a separately authorized
 Slice H with the ignored E2E suite, release-candidate installation, doctors,
 and neutral live remote-view proof. Those gates cannot be inferred from the
 green source and no-launch evidence above.
+
+## Plan 0106 superseding remediation receipt
+
+Disposition: **SOURCE REMEDIATION GREEN; CLOSED-WORLD AUDIT AND EFFECT-BOUNDARY
+ACCEPTANCE REMAIN OPEN**
+
+Plan 0106 accepted findings `P0101-W1-01` through `P0101-W1-04`,
+`P0101-W1-06`, and `P0101-W1-07` in full. It accepted the receipt, roadmap,
+and rollback-evidence portions of `P0101-W1-05`. This was one bounded
+remediation pass. It did not run a browser, ignored end-to-end test, install,
+doctor, route, display, tenant, release, push, or other external effect.
+
+### Commit-granularity adjudication
+
+The original executor did not create the promised 81 independently green
+packet commits. The grouped commits in the historical ledger cannot isolate
+each packet with one revert, and this receipt does not claim otherwise.
+Rewriting already-green history into retroactive commits would destroy rather
+than improve execution evidence. Plan 0106 therefore supersedes only the
+81-commit granularity requirement with the cohesive green checkpoints below.
+The 84 packet labels, all 615 stable responsibility records, six-definition
+dispatcher allowlist, movement dispositions, and source rollback mapping
+remain authoritative.
+
+### Cohesive checkpoint and rollback manifest
+
+| Commit | Finding or authority | Durable rollback unit |
+| --- | --- | --- |
+| `1bd92f51` | Plan 0106 | Records the bounded remediation authority and the explicit commit-granularity adjudication |
+| `1a53332a` | W1-01 through W1-07 fixtures | Freezes the accepted red source and WSL-safety regressions before remediation |
+| `1c3346f9` | W1-07 | Routes WSL-capable Cargo entrypoints through the fail-closed wrapper and adds the static gate |
+| `581130c6` | WSL build guard | Preserves the repository lock and 24 GiB memory plus 4 GiB swap cap while allowing four bounded jobs |
+| `338978dd` | W1-02 | Makes Service State and durable handoff persistence one recoverable two-file store transaction with four injected failure boundaries |
+| `4f0dda8c` | W1-01 | Puts repository phases and control-plane terminalization inside the total deadline and drops unfinished work at return |
+| `240e6a94` | W1-03 | Installs typed invocation, result, blocker, compensation, and outcome seams plus the permanent daemon adapter |
+| `5cb66f4b` | W1-04 | Recombines the four rejected shallow action owners into cohesive browser, capture, service inventory, and stream owners |
+| `4f6c25cb` | W1-04 | Deletes the common god prelude and replaces it with direct owner imports and the narrow cancellation owner |
+| `31dfb3ee` | W1-04 and W1-05 evidence | Deletes the central test facade and colocates all 261 tests in 27 owner or dispatcher modules |
+| `fb50e5e6` | W1-06 | Binds the primary architecture gate to the repaired structures and their exact test layout |
+
+These commits are cohesive rollback units, not retroactive packet substitutes.
+Rollback proceeds in reverse dependency order with `git revert`, starting at
+the newest affected checkpoint. Reverting a lower checkpoint also requires
+reverting later checkpoints that import its types or assert its architecture.
+The responsibility inventory supplies the packet, stable ID, target owner, and
+deletion packet for source selection; the table above supplies the actual
+reviewable commit boundary. No history rewrite is required or authorized.
+
+### Finding reconciliation
+
+| Finding | Current source result | Evidence |
+| --- | --- | --- |
+| `P0101-W1-01` | Repository snapshot, finalization, compensation, and terminalization share the existing total `jobTimeoutMs`; no coordinator task remains after return | Deadline supervisor fixtures include repository-future drop and control-plane unfinished-execution drop |
+| `P0101-W1-02` | Acquisition finalization and an optional durable handoff mutate one state snapshot and commit through one recoverable store operation | Fault injection covers handoff write, state write, handoff rename, and state rename; neither durable file can remain ahead after recovery |
+| `P0101-W1-03` | The coordinator accepts typed direct or durable invocations and returns the seven exhaustive typed outcomes through `DaemonRouteBoundOpenRuntime` | All seven outcomes and all nine fallback predicates are checked by the architecture gate and exercised through coordinator tests; the transitional adapter and string fallback are deleted |
+| `P0101-W1-04` | The broad common prelude, central test facade, and four rejected shallow owners are deleted | 261 tests are distributed across 27 owner or dispatcher modules; exact reverse imports remain limited to the four reviewed ingress and parity consumers |
+| `P0101-W1-05` | The original granularity deviation is explicit; current rollback units and roadmap state are recorded truthfully | This manifest and the service-roadmap checkpoint replace the rejected completion narrative without rewriting history |
+| `P0101-W1-06` | The primary checker inspects repaired production and test structures instead of accepting generated prose alone | It checks typed outcomes, fallback fields, store boundaries, deadline fixtures, test locality, old adapters, raw seams, split mutations, facades, reverse imports, dispatcher budgets, and responsibility counts |
+| `P0101-W1-07` | Aggregate, selector, format, Clippy, test, and architecture Cargo paths use the serialized cgroup wrapper on WSL | Static fail-closed entrypoint gate is green; all executor Cargo boundaries used the wrapper |
+
+### Current responsibility and architecture state
+
+The deterministic inventory retains exactly 615 baseline responsibility
+records. Its current disposition is 609 moved and six retained, with zero
+compatibility wrappers and the exact reviewed six-definition dispatcher
+allowlist. The final checker reports:
+
+```text
+actions architecture check passed definitions=6 tests=0 lines=897 wrappers=0 final=true
+```
+
+`actions.rs` contains no domain struct, enum, or union and no repository,
+process, raw CDP, route-pool, acquisition-lease, durable-handoff, or Service
+State mutation authority. The only native production consumers importing the
+dispatcher are the reviewed control-plane and stream HTTP ingress modules;
+the other two allowed imports are parity and end-to-end test consumers.
+
+The migrated test distribution is exact:
+
+```text
+27 physical owner or dispatcher test modules
+261 migrated tests
+193 dispatcher and execute-command integration tests
+68 public-owner domain tests
+0 tests in the deleted central facade
+```
+
+### Remediation validation
+
+| Gate | Current result |
+| --- | --- |
+| Primary actions architecture gate | Green: 6 definitions, 0 in-file tests, 897 lines, 0 wrappers, `final=true` |
+| Structural remediation gate | Green: seven outcomes, nine predicates, four store boundaries, deadline-drop fixtures, exact 261-test layout |
+| WSL Cargo entrypoint gate | Green |
+| Guarded Rust check with tests | Green |
+| Guarded strict CLI Clippy | Green with `-D warnings`; final W1-04 run completed in 30.55 seconds |
+| Migrated dispatcher partition | 193 passed, 0 failed |
+| Migrated public-owner partitions | 68 passed, 0 failed |
+| Canonical partitioned suite before final path-only ownership reconciliation | 1,810 executed, 0 failed, 57 ignored; every serial partition green |
+| Formatting and patch checks | Green |
+
+The final ownership move changed module paths and imports, not test bodies or
+production behavior. After that move, all 261 migrated tests were executed
+again and passed, guarded check with tests and strict Clippy passed, and the
+structural checker rejected any reverse import outside the unchanged four-site
+allowlist. Host memory remained between 38 and 39 GiB available at the final
+compile boundaries, swap remained 2.0 GiB of 32 GiB used, and no cgroup or OOM
+failure occurred.
+
+### Remaining acceptance boundary
+
+Source execution is green for the single authorized Plan 0106 remediation
+pass. The next permissible review is closed-world over findings
+`P0101-W1-01` through `P0101-W1-07` and critical regressions introduced by
+their fixes; no third broad work-audit cycle is authorized. Installed and
+operator-visible acceptance remains separate and requires explicit authority
+for ignored end-to-end tests, release-candidate installation, doctors, and a
+neutral live remote-view proof. None of those effects is claimed here.
