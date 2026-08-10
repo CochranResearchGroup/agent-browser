@@ -5823,3 +5823,9 @@ pub(crate) mod service_commands {
     }
 }
 pub(crate) use service_commands::*;
+#[cfg(test)]
+#[path = "service_health/action_helper_tests.rs"]
+mod action_helper_tests;
+#[cfg(test)]
+#[path = "service_health/reconcile_action_helper_tests.rs"]
+mod reconcile_action_helper_tests;

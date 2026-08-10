@@ -1258,7 +1258,7 @@ fn check(source_path: &Path, inventory_path: &Path) -> Result<(), String> {
         }
     }
     println!(
-        "actions architecture check passed definitions={} tests={} lines={} wrappers={} final={}",
+        "actions structural regression check passed definitions={} tests={} lines={} wrappers={} final={}",
         current.len(),
         current_tests,
         source.lines().count(),

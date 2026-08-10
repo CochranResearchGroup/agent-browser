@@ -1072,3 +1072,6 @@ pub(crate) mod service_commands {
     }
 }
 pub(crate) use service_commands::*;
+#[cfg(test)]
+#[path = "service_retained_state/inventory_action_helper_tests.rs"]
+mod inventory_action_helper_tests;

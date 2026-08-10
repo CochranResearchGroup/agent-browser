@@ -43,6 +43,7 @@ use crate::native::remote_view_handoff::{
 };
 use crate::native::service_diagnostics::*;
 use crate::native::service_file_transfer::*;
+use crate::native::service_health::refresh_authoritative_route_pool;
 use crate::native::service_health::{
     close_health_from_outcome, recovery_policy_for_next_attempt, stale_browser_process_record,
 };
@@ -55,7 +56,6 @@ use crate::native::service_health::{
     BrowserRecoveryPersistence, BrowserRecoveryPolicyConfig, BrowserRecoveryPolicySource,
     BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
 };
-use crate::native::service_incidents::*;
 use crate::native::service_lifecycle::{
     profile_lease_telemetry, select_service_profile_for_request, service_profile_id,
     ProfileSelectionRequest, ServiceLaunchMetadata,
@@ -122,155 +122,135 @@ fn unique_socket_dir(label: &str) -> PathBuf {
     ))
 }
 
-#[tokio::test]
-async fn test_service_incident_acknowledge_persists_metadata() {
-    let guard = EnvGuard::new(&["HOME"]);
-    let home = unique_socket_dir("service-incident-ack-home");
+#[cfg(unix)]
+#[test]
+fn test_authoritative_route_pool_skips_conflicting_pending_entry_without_allocation_proof() {
+    let mut state = ServiceState {
+        route_pool: BTreeMap::from([(
+            "guacamole-rdp-a".to_string(),
+            RoutePoolEntry {
+                id: "guacamole-rdp-a".to_string(),
+                provider: ViewStreamProvider::RdpGateway,
+                route_id: "guacamole:4".to_string(),
+                state: "pending".to_string(),
+                current_route_allocation_id: None,
+                ..RoutePoolEntry::default()
+            },
+        )]),
+        ..ServiceState::default()
+    };
+    let authoritative = json!(
+        [{ "id" : "guacamole-rdp-a", "provider" : "rdp_gateway", "routeId" :
+        "guacamole:1", "target" : { "displayName" : ":11" } }]
+    );
+    let result = refresh_authoritative_route_pool(&mut state, Some(&authoritative)).unwrap();
+    assert_eq!(
+        result["skippedActiveConflictEntryIds"][0],
+        "guacamole-rdp-a"
+    );
+    assert_eq!(state.route_pool["guacamole-rdp-a"].route_id, "guacamole:4");
+    assert_eq!(state.route_pool["guacamole-rdp-a"].state, "pending");
+}
+#[test]
+fn test_reconciled_service_state_in_repository_preserves_current_fields() {
+    let home = unique_socket_dir("service-reconcile-repository-home");
     fs::create_dir_all(&home).unwrap();
-    guard.set("HOME", home.to_str().unwrap());
-    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
-    store
-        .save(&ServiceState {
-            events: vec![crate::native::service_model::ServiceEvent {
-                id: "event-1".to_string(),
-                timestamp: "2026-04-22T00:00:00Z".to_string(),
-                kind: crate::native::service_model::ServiceEventKind::BrowserHealthChanged,
-                message: "Browser browser-1 health changed from Ready to ProcessExited".to_string(),
-                browser_id: Some("browser-1".to_string()),
-                previous_health: Some(crate::native::service_model::BrowserHealth::Ready),
-                current_health: Some(crate::native::service_model::BrowserHealth::ProcessExited),
-                ..crate::native::service_model::ServiceEvent::default()
-            }],
-            browsers: std::collections::BTreeMap::from([(
-                "browser-1".to_string(),
-                crate::native::service_model::BrowserProcess {
-                    id: "browser-1".to_string(),
-                    health: crate::native::service_model::BrowserHealth::ProcessExited,
-                    ..crate::native::service_model::BrowserProcess::default()
-                },
-            )]),
-            ..ServiceState::default()
-        })
-        .unwrap();
-    let mut state = DaemonState::new();
-    let result = execute_command(
-        &json!(
-            { "action" : "service_incident_acknowledge", "id" :
-            "svc-incidents-ack-1", "incidentId" : "browser-1", "by" : "operator",
-            "note" : "triaged" }
-        ),
-        &mut state,
-    )
-    .await;
-    assert_eq!(result["success"], true);
-    assert_service_incident_acknowledge_response_contract(&result["data"]);
-    assert_eq!(result["data"]["incident"]["acknowledgedBy"], "operator");
-    assert_eq!(result["data"]["incident"]["acknowledgementNote"], "triaged");
-    assert_eq!(
-        result["data"]["incident"]["eventIds"]
-            .as_array()
-            .unwrap()
-            .len(),
-        2
+    let store = JsonServiceStateStore::new(home.join("state.json"));
+    let repository = LockedServiceStateRepository::new(store.clone());
+    let before = ServiceState {
+        browsers: BTreeMap::from([(
+            "browser-1".to_string(),
+            BrowserProcess {
+                id: "browser-1".to_string(),
+                profile_id: Some("work-before".to_string()),
+                health: ServiceBrowserHealth::Ready,
+                active_session_ids: vec!["session-1".to_string()],
+                ..BrowserProcess::default()
+            },
+        )]),
+        ..ServiceState::default()
+    };
+    let mut persisted_current = before.clone();
+    persisted_current
+        .browsers
+        .get_mut("browser-1")
+        .unwrap()
+        .profile_id = Some("work-current".to_string());
+    store.save(&persisted_current).unwrap();
+    let mut reconciled = before.clone();
+    reconciled.browsers.insert(
+        "browser-1".to_string(),
+        BrowserProcess {
+            id: "browser-1".to_string(),
+            profile_id: Some("work-before".to_string()),
+            health: ServiceBrowserHealth::Unreachable,
+            last_error: Some("CDP endpoint is unreachable".to_string()),
+            active_session_ids: vec!["session-1".to_string()],
+            ..BrowserProcess::default()
+        },
     );
+    persist_reconciled_service_state_in_repository(&repository, &before, &reconciled).unwrap();
     let persisted = store.load().unwrap();
+    let browser = &persisted.browsers["browser-1"];
+    assert_eq!(browser.profile_id.as_deref(), Some("work-current"));
+    assert_eq!(browser.health, ServiceBrowserHealth::Unreachable);
     assert_eq!(
-        persisted.incidents[0].acknowledged_by.as_deref(),
-        Some("operator")
+        browser.last_error.as_deref(),
+        Some("CDP endpoint is unreachable")
     );
-    assert_eq!(
-        persisted.incidents[0].acknowledgement_note.as_deref(),
-        Some("triaged")
-    );
-    let event = persisted.events.last().unwrap();
-    assert_eq!(
-        event.kind,
-        crate::native::service_model::ServiceEventKind::IncidentAcknowledged
-    );
-    assert_eq!(event.browser_id.as_deref(), Some("browser-1"));
-    assert_eq!(event.details.as_ref().unwrap()["incidentId"], "browser-1");
-    assert_eq!(event.details.as_ref().unwrap()["actor"], "operator");
-    assert_eq!(event.details.as_ref().unwrap()["note"], "triaged");
     let _ = fs::remove_dir_all(&home);
 }
-
-#[tokio::test]
-async fn test_service_incident_resolve_persists_metadata() {
-    let guard = EnvGuard::new(&["HOME"]);
-    let home = unique_socket_dir("service-incident-resolve-home");
-    fs::create_dir_all(&home).unwrap();
-    guard.set("HOME", home.to_str().unwrap());
-    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
-    store
-        .save(&ServiceState {
-            events: vec![crate::native::service_model::ServiceEvent {
-                id: "event-1".to_string(),
-                timestamp: "2026-04-22T00:00:00Z".to_string(),
-                kind: crate::native::service_model::ServiceEventKind::BrowserHealthChanged,
-                message: "Browser browser-1 health changed from Ready to ProcessExited".to_string(),
-                browser_id: Some("browser-1".to_string()),
-                previous_health: Some(crate::native::service_model::BrowserHealth::Ready),
-                current_health: Some(crate::native::service_model::BrowserHealth::ProcessExited),
-                ..crate::native::service_model::ServiceEvent::default()
-            }],
-            incidents: vec![crate::native::service_model::ServiceIncident {
-                id: "browser-1".to_string(),
-                acknowledged_at: Some("2026-04-22T00:00:00Z".to_string()),
-                acknowledged_by: Some("operator".to_string()),
-                ..crate::native::service_model::ServiceIncident::default()
-            }],
-            browsers: std::collections::BTreeMap::from([(
-                "browser-1".to_string(),
-                crate::native::service_model::BrowserProcess {
-                    id: "browser-1".to_string(),
-                    health: crate::native::service_model::BrowserHealth::ProcessExited,
-                    ..crate::native::service_model::BrowserProcess::default()
-                },
-            )]),
-            ..ServiceState::default()
-        })
-        .unwrap();
-    let mut state = DaemonState::new();
-    let result = execute_command(
-        &json!(
-            { "action" : "service_incident_resolve", "id" :
-            "svc-incidents-resolve-1", "incidentId" : "browser-1", "by" : "operator",
-            "note" : "recovered" }
-        ),
-        &mut state,
-    )
-    .await;
-    assert_eq!(result["success"], true);
-    assert_service_incident_resolve_response_contract(&result["data"]);
-    assert_eq!(result["data"]["incident"]["resolvedBy"], "operator");
-    assert_eq!(result["data"]["incident"]["resolutionNote"], "recovered");
-    assert_eq!(result["data"]["incident"]["state"], "recovered");
-    assert_eq!(
-        result["data"]["incident"]["currentHealth"],
-        serde_json::Value::Null
+#[test]
+fn test_stale_browser_process_record_preserves_identity_and_marks_error() {
+    let previous = BrowserProcess {
+        id: "browser-mcp-live".to_string(),
+        profile_id: Some("profile-work".to_string()),
+        host: ServiceBrowserHost::LocalHeaded,
+        health: ServiceBrowserHealth::Ready,
+        pid: Some(1234),
+        cdp_endpoint: Some("ws://127.0.0.1:9222/devtools/browser/old".to_string()),
+        view_streams: vec![ViewStream {
+            id: "cdp-screencast".to_string(),
+            provider: ViewStreamProvider::CdpScreencast,
+            control_input: Some(ControlInputProvider::CdpInput),
+            url: Some("http://127.0.0.1:44841/".to_string()),
+            frame_url: Some("http://127.0.0.1:44841/".to_string()),
+            external_url: Some("http://127.0.0.1:44841/".to_string()),
+            read_only: false,
+            ..ViewStream::default()
+        }],
+        active_session_ids: vec!["mcp-live".to_string()],
+        ..BrowserProcess::default()
+    };
+    let stale = stale_browser_process_record(
+        "browser-mcp-live",
+        "mcp-live",
+        Some(&previous),
+        Some(1234),
+        Some("ws://127.0.0.1:9222/devtools/browser/old".to_string()),
+        ServiceBrowserHealth::ProcessExited,
+        "Active browser PID 1234 exited before command dispatch".to_string(),
     );
-    let persisted = store.load().unwrap();
+    assert_eq!(stale.id, "browser-mcp-live");
+    assert_eq!(stale.profile_id.as_deref(), Some("profile-work"));
+    assert_eq!(stale.host, ServiceBrowserHost::LocalHeaded);
+    assert_eq!(stale.health, ServiceBrowserHealth::ProcessExited);
+    assert_eq!(stale.pid, Some(1234));
     assert_eq!(
-        persisted.incidents[0].resolved_by.as_deref(),
-        Some("operator")
+        stale.cdp_endpoint.as_deref(),
+        Some("ws://127.0.0.1:9222/devtools/browser/old")
     );
+    assert_eq!(stale.active_session_ids, vec!["mcp-live".to_string()]);
     assert_eq!(
-        persisted.incidents[0].resolution_note.as_deref(),
-        Some("recovered")
+        stale.last_error.as_deref(),
+        Some("Active browser PID 1234 exited before command dispatch")
     );
+    assert_eq!(stale.view_streams.len(), 1);
+    assert_eq!(stale.view_streams[0].control_input, None);
+    assert_eq!(stale.view_streams[0].url, None);
+    assert!(stale.view_streams[0].read_only);
     assert_eq!(
-        persisted.incidents[0].state,
-        crate::native::service_model::ServiceIncidentState::Recovered
+        stale.view_streams[0].readiness.as_ref().unwrap()["reason"],
+        "browser_not_ready"
     );
-    assert_eq!(persisted.incidents[0].current_health, None);
-    let event = persisted.events.last().unwrap();
-    assert_eq!(
-        event.kind,
-        crate::native::service_model::ServiceEventKind::IncidentResolved
-    );
-    assert_eq!(event.browser_id.as_deref(), Some("browser-1"));
-    assert_eq!(event.details.as_ref().unwrap()["incidentId"], "browser-1");
-    assert_eq!(event.details.as_ref().unwrap()["actor"], "operator");
-    assert_eq!(event.details.as_ref().unwrap()["note"], "recovered");
-    let _ = fs::remove_dir_all(&home);
 }

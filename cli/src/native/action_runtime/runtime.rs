@@ -4,6 +4,10 @@
 #[cfg(test)]
 mod close_launch_tests;
 mod daemon;
+#[cfg(test)]
+mod dispatch_runtime_tests;
+#[cfg(test)]
+mod route_host_tests;
 pub(crate) use daemon::*;
 mod capability;
 pub(crate) use capability::*;

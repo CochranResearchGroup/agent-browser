@@ -122,57 +122,46 @@ fn unique_socket_dir(label: &str) -> PathBuf {
     ))
 }
 
-#[tokio::test]
-async fn test_service_incident_acknowledge_persists_metadata() {
-    let guard = EnvGuard::new(&["HOME"]);
-    let home = unique_socket_dir("service-incident-ack-home");
+#[test]
+fn test_acknowledge_service_incident_in_repository_persists_metadata() {
+    let home = unique_socket_dir("service-incident-repository-home");
     fs::create_dir_all(&home).unwrap();
-    guard.set("HOME", home.to_str().unwrap());
-    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+    let store = JsonServiceStateStore::new(home.join("state.json"));
+    let repository = LockedServiceStateRepository::new(store.clone());
     store
         .save(&ServiceState {
-            events: vec![crate::native::service_model::ServiceEvent {
+            events: vec![ServiceEvent {
                 id: "event-1".to_string(),
                 timestamp: "2026-04-22T00:00:00Z".to_string(),
-                kind: crate::native::service_model::ServiceEventKind::BrowserHealthChanged,
+                kind: ServiceEventKind::BrowserHealthChanged,
                 message: "Browser browser-1 health changed from Ready to ProcessExited".to_string(),
                 browser_id: Some("browser-1".to_string()),
-                previous_health: Some(crate::native::service_model::BrowserHealth::Ready),
-                current_health: Some(crate::native::service_model::BrowserHealth::ProcessExited),
-                ..crate::native::service_model::ServiceEvent::default()
+                previous_health: Some(ServiceBrowserHealth::Ready),
+                current_health: Some(ServiceBrowserHealth::ProcessExited),
+                ..ServiceEvent::default()
             }],
-            browsers: std::collections::BTreeMap::from([(
+            browsers: BTreeMap::from([(
                 "browser-1".to_string(),
-                crate::native::service_model::BrowserProcess {
+                BrowserProcess {
                     id: "browser-1".to_string(),
-                    health: crate::native::service_model::BrowserHealth::ProcessExited,
-                    ..crate::native::service_model::BrowserProcess::default()
+                    health: ServiceBrowserHealth::ProcessExited,
+                    ..BrowserProcess::default()
                 },
             )]),
             ..ServiceState::default()
         })
         .unwrap();
-    let mut state = DaemonState::new();
-    let result = execute_command(
-        &json!(
-            { "action" : "service_incident_acknowledge", "id" :
-            "svc-incidents-ack-1", "incidentId" : "browser-1", "by" : "operator",
-            "note" : "triaged" }
-        ),
-        &mut state,
+    let incident = crate::native::service_incidents::acknowledge_service_incident_in_repository(
+        &repository,
+        "browser-1",
+        "2026-04-22T01:00:00Z",
+        "operator",
+        Some("triaged"),
     )
-    .await;
-    assert_eq!(result["success"], true);
-    assert_service_incident_acknowledge_response_contract(&result["data"]);
-    assert_eq!(result["data"]["incident"]["acknowledgedBy"], "operator");
-    assert_eq!(result["data"]["incident"]["acknowledgementNote"], "triaged");
-    assert_eq!(
-        result["data"]["incident"]["eventIds"]
-            .as_array()
-            .unwrap()
-            .len(),
-        2
-    );
+    .unwrap();
+    assert_eq!(incident.id, "browser-1");
+    assert_eq!(incident.acknowledged_by.as_deref(), Some("operator"));
+    assert_eq!(incident.acknowledgement_note.as_deref(), Some("triaged"));
     let persisted = store.load().unwrap();
     assert_eq!(
         persisted.incidents[0].acknowledged_by.as_deref(),
@@ -182,95 +171,5 @@ async fn test_service_incident_acknowledge_persists_metadata() {
         persisted.incidents[0].acknowledgement_note.as_deref(),
         Some("triaged")
     );
-    let event = persisted.events.last().unwrap();
-    assert_eq!(
-        event.kind,
-        crate::native::service_model::ServiceEventKind::IncidentAcknowledged
-    );
-    assert_eq!(event.browser_id.as_deref(), Some("browser-1"));
-    assert_eq!(event.details.as_ref().unwrap()["incidentId"], "browser-1");
-    assert_eq!(event.details.as_ref().unwrap()["actor"], "operator");
-    assert_eq!(event.details.as_ref().unwrap()["note"], "triaged");
-    let _ = fs::remove_dir_all(&home);
-}
-
-#[tokio::test]
-async fn test_service_incident_resolve_persists_metadata() {
-    let guard = EnvGuard::new(&["HOME"]);
-    let home = unique_socket_dir("service-incident-resolve-home");
-    fs::create_dir_all(&home).unwrap();
-    guard.set("HOME", home.to_str().unwrap());
-    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
-    store
-        .save(&ServiceState {
-            events: vec![crate::native::service_model::ServiceEvent {
-                id: "event-1".to_string(),
-                timestamp: "2026-04-22T00:00:00Z".to_string(),
-                kind: crate::native::service_model::ServiceEventKind::BrowserHealthChanged,
-                message: "Browser browser-1 health changed from Ready to ProcessExited".to_string(),
-                browser_id: Some("browser-1".to_string()),
-                previous_health: Some(crate::native::service_model::BrowserHealth::Ready),
-                current_health: Some(crate::native::service_model::BrowserHealth::ProcessExited),
-                ..crate::native::service_model::ServiceEvent::default()
-            }],
-            incidents: vec![crate::native::service_model::ServiceIncident {
-                id: "browser-1".to_string(),
-                acknowledged_at: Some("2026-04-22T00:00:00Z".to_string()),
-                acknowledged_by: Some("operator".to_string()),
-                ..crate::native::service_model::ServiceIncident::default()
-            }],
-            browsers: std::collections::BTreeMap::from([(
-                "browser-1".to_string(),
-                crate::native::service_model::BrowserProcess {
-                    id: "browser-1".to_string(),
-                    health: crate::native::service_model::BrowserHealth::ProcessExited,
-                    ..crate::native::service_model::BrowserProcess::default()
-                },
-            )]),
-            ..ServiceState::default()
-        })
-        .unwrap();
-    let mut state = DaemonState::new();
-    let result = execute_command(
-        &json!(
-            { "action" : "service_incident_resolve", "id" :
-            "svc-incidents-resolve-1", "incidentId" : "browser-1", "by" : "operator",
-            "note" : "recovered" }
-        ),
-        &mut state,
-    )
-    .await;
-    assert_eq!(result["success"], true);
-    assert_service_incident_resolve_response_contract(&result["data"]);
-    assert_eq!(result["data"]["incident"]["resolvedBy"], "operator");
-    assert_eq!(result["data"]["incident"]["resolutionNote"], "recovered");
-    assert_eq!(result["data"]["incident"]["state"], "recovered");
-    assert_eq!(
-        result["data"]["incident"]["currentHealth"],
-        serde_json::Value::Null
-    );
-    let persisted = store.load().unwrap();
-    assert_eq!(
-        persisted.incidents[0].resolved_by.as_deref(),
-        Some("operator")
-    );
-    assert_eq!(
-        persisted.incidents[0].resolution_note.as_deref(),
-        Some("recovered")
-    );
-    assert_eq!(
-        persisted.incidents[0].state,
-        crate::native::service_model::ServiceIncidentState::Recovered
-    );
-    assert_eq!(persisted.incidents[0].current_health, None);
-    let event = persisted.events.last().unwrap();
-    assert_eq!(
-        event.kind,
-        crate::native::service_model::ServiceEventKind::IncidentResolved
-    );
-    assert_eq!(event.browser_id.as_deref(), Some("browser-1"));
-    assert_eq!(event.details.as_ref().unwrap()["incidentId"], "browser-1");
-    assert_eq!(event.details.as_ref().unwrap()["actor"], "operator");
-    assert_eq!(event.details.as_ref().unwrap()["note"], "recovered");
     let _ = fs::remove_dir_all(&home);
 }

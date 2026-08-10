@@ -86,20 +86,22 @@ requireExactTestLayout(
   [
     ['cli/src/native/action_runtime/cancellation/tests.rs', 1],
     ['cli/src/native/action_runtime/runtime/close_launch_tests.rs', 6],
+    ['cli/src/native/action_runtime/runtime/dispatch_runtime_tests.rs', 19],
+    ['cli/src/native/action_runtime/runtime/route_host_tests.rs', 58],
     ['cli/src/native/actions/confirmation_tests.rs', 1],
     ['cli/src/native/actions/dependent_batch_tests.rs', 2],
-    ['cli/src/native/actions/dispatch_tests.rs', 28],
+    ['cli/src/native/actions/dispatch_tests.rs', 9],
     ['cli/src/native/actions/remote_view_route_tests_one.rs', 9],
-    ['cli/src/native/actions/remote_view_route_tests_two.rs', 14],
-    ['cli/src/native/actions/runtime_route_host_tests.rs', 59],
+    ['cli/src/native/actions/remote_view_route_tests_two.rs', 8],
+    ['cli/src/native/actions/runtime_route_host_tests.rs', 1],
     ['cli/src/native/actions/service_activity_tests.rs', 4],
     ['cli/src/native/actions/service_config_tests.rs', 3],
-    ['cli/src/native/actions/service_health_tests.rs', 21],
-    ['cli/src/native/actions/service_incident_mutation_tests.rs', 3],
+    ['cli/src/native/actions/service_health_tests.rs', 7],
+    ['cli/src/native/actions/service_incident_mutation_tests.rs', 2],
     ['cli/src/native/actions/service_incidents_tests.rs', 8],
-    ['cli/src/native/actions/service_inventory_tests.rs', 27],
+    ['cli/src/native/actions/service_inventory_tests.rs', 17],
     ['cli/src/native/actions/service_jobs_tests.rs', 3],
-    ['cli/src/native/actions/service_reconcile_tests.rs', 7],
+    ['cli/src/native/actions/service_reconcile_tests.rs', 4],
     ['cli/src/native/actions/service_trace_tests.rs', 3],
     ['cli/src/native/actions/state_tests.rs', 1],
     ['cli/src/native/auth/action_tests.rs', 1],
@@ -109,7 +111,12 @@ requireExactTestLayout(
     ['cli/src/native/interaction/action_tests.rs', 6],
     ['cli/src/native/network/action_tests.rs', 5],
     ['cli/src/native/remote_view/helper_action_tests.rs', 3],
+    ['cli/src/native/remote_view/open/route_action_helper_tests.rs', 6],
     ['cli/src/native/remote_view/open/visibility_action_tests.rs', 15],
+    ['cli/src/native/service_health/action_helper_tests.rs', 14],
+    ['cli/src/native/service_health/reconcile_action_helper_tests.rs', 3],
+    ['cli/src/native/service_incidents/action_mutation_helper_tests.rs', 1],
+    ['cli/src/native/service_retained_state/inventory_action_helper_tests.rs', 10],
     ['cli/src/native/stream_runtime/action_tests.rs', 4],
   ],
   261,
@@ -145,15 +152,15 @@ for (const outcome of [
   );
 }
 for (const predicate of [
-  'prior_provider',
-  'snapshot_identity',
-  'snapshot_timing',
-  'exact_ownership_cause',
-  'retained_route',
-  'authorized_ingress',
-  'operator_evidence',
-  'browser_preserved',
-  'duplicate_lane_prohibited',
+  'immutable_snapshot_exists',
+  'explicit_close_allows_resolution',
+  'exact_opaque_rdp_identity',
+  'typed_retained_owner_conflict',
+  'current_bounded_route',
+  'operator_access_succeeded',
+  'best_effort_result',
+  'no_new_ownership',
+  'retained_browser_and_unrelated_tabs_unchanged',
 ]) {
   requirePattern(
     coordinatorPath,
@@ -173,6 +180,24 @@ rejectPattern(
   /command:\s*Value|RouteBoundOpenFuture<'_,\s*(?:Option<)?Value/,
   'P0101-W1-03',
   'raw_value_in_route_runtime_seam',
+);
+rejectPattern(
+  'cli/src/native/remote_view/open/runtime_model.rs',
+  /struct\s+\w+\s*\(\s*Value\s*\)|impl\s+From<Value>/,
+  'P0101-W1-03',
+  'opaque_value_wrapper_in_route_model',
+);
+requirePattern(
+  routeTestsPath,
+  /concrete_route_records_reject_untyped_payloads/,
+  'P0101-W1-03',
+  'concrete_route_record_fixture_missing',
+);
+requirePattern(
+  routeTestsPath,
+  /provider_fallback_derives_snapshot_ownership_and_operator_predicates/,
+  'P0101-W1-03',
+  'semantic_fallback_fixture_missing',
 );
 requirePattern(
   serviceStorePath,
@@ -251,4 +276,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log('actions remediation architecture gate passed');
+console.log('actions remediation structural regression gate passed');
