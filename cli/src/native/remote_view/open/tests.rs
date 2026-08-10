@@ -1,5 +1,6 @@
 use super::shared::*;
 use super::*;
+use crate::native::service_store::JsonServiceStateStore;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 
@@ -363,4 +364,48 @@ async fn scripted_runtime_success_records_only_completed_effects() {
         *runtime.events.lock().unwrap(),
         vec!["observe_browser", "launch_browser", "open_target"]
     );
+}
+
+struct PendingRepository;
+
+impl RouteBoundOpenRepository for PendingRepository {
+    fn snapshot(&self) -> RouteBoundOpenFuture<'_, ServiceState> {
+        Box::pin(async {
+            tokio::time::sleep(Duration::from_secs(60)).await;
+            Ok(ServiceState::default())
+        })
+    }
+
+    fn execute<'a, T, F>(&'a self, operation: &'static str, _work: F) -> RouteBoundOpenFuture<'a, T>
+    where
+        T: Send + 'a,
+        F: FnOnce(&LockedServiceStateRepository<JsonServiceStateStore>) -> Result<T, String>
+            + Send
+            + 'a,
+    {
+        Box::pin(async move {
+            Err(RouteBoundRuntimeIssue::EffectFailed {
+                operation,
+                message: "unexpected repository mutation".to_string(),
+            })
+        })
+    }
+}
+
+#[tokio::test]
+async fn repository_snapshot_is_dropped_at_the_forward_deadline() {
+    let supervisor = RouteBoundOpenSupervisor::system(Some(2), None);
+    let repository = PendingRepository;
+
+    let result = supervisor
+        .forward("repository_load_snapshot", repository.snapshot())
+        .await;
+
+    assert!(matches!(
+        result,
+        Err(RouteBoundRuntimeIssue::ForwardDeadlineElapsed {
+            operation: "repository_load_snapshot",
+            total_ms: 2,
+        })
+    ));
 }

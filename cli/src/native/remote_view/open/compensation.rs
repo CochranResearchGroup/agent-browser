@@ -3,7 +3,7 @@ use super::deadline::RouteBoundOpenSupervisor;
 use super::route_lifecycle::service_remote_view_timestamp;
 use super::runtime::{
     route_bound_runtime_issue, CloseCreatedBrowserRequest, CloseCreatedTargetRequest,
-    RouteBoundOpenRuntime,
+    RouteBoundOpenRepository, RouteBoundOpenRuntime,
 };
 use super::shared::*;
 pub(crate) async fn remote_view_open_cleanup_after_failure<R: RouteBoundOpenRuntime>(
@@ -49,9 +49,8 @@ pub(crate) async fn remote_view_open_cleanup_after_failure<R: RouteBoundOpenRunt
         result.map_err(|issue| issue.compatibility_message().to_string()),
     )
 }
-pub(crate) struct RemoteViewOpenFailureCleanupInput<'a> {
-    pub(crate) repository:
-        &'a LockedServiceStateRepository<super::super::super::service_store::JsonServiceStateStore>,
+pub(crate) struct RemoteViewOpenFailureCleanupInput<'a, P> {
+    pub(crate) repository: &'a P,
     pub(crate) lease: &'a RemoteViewAcquisitionLease,
     pub(crate) phase: &'a str,
     pub(crate) error: &'a str,
@@ -59,24 +58,37 @@ pub(crate) struct RemoteViewOpenFailureCleanupInput<'a> {
     pub(crate) launch: &'a Value,
     pub(crate) tab: Option<&'a Value>,
 }
-pub(crate) async fn remote_view_open_rollback_failure_after_cleanup<R: RouteBoundOpenRuntime>(
+pub(crate) async fn remote_view_open_rollback_failure_after_cleanup<
+    R: RouteBoundOpenRuntime,
+    P: RouteBoundOpenRepository,
+>(
     runtime: &mut R,
     supervisor: &RouteBoundOpenSupervisor,
-    input: RemoteViewOpenFailureCleanupInput<'_>,
+    input: RemoteViewOpenFailureCleanupInput<'_, P>,
 ) -> Result<RouteBoundHandoffFailureCleanupSummary, String> {
     let now = service_remote_view_timestamp();
-    let recovery = begin_route_bound_handoff_failure_recovery(
-        input.repository,
-        RouteBoundHandoffFailureRecoveryInput {
-            lease: input.lease,
-            phase: input.phase,
-            error: input.error,
-            rollback_cleanup: input.rollback_cleanup,
-            launch: input.launch,
-            tab: input.tab,
-            observed_at: &now,
-        },
-    )?;
+    let recovery = supervisor
+        .compensate(
+            "repository_begin_failure_recovery",
+            input
+                .repository
+                .execute("repository_begin_failure_recovery", |repository| {
+                    begin_route_bound_handoff_failure_recovery(
+                        repository,
+                        RouteBoundHandoffFailureRecoveryInput {
+                            lease: input.lease,
+                            phase: input.phase,
+                            error: input.error,
+                            rollback_cleanup: input.rollback_cleanup,
+                            launch: input.launch,
+                            tab: input.tab,
+                            observed_at: &now,
+                        },
+                    )
+                }),
+        )
+        .await
+        .map_err(|issue| issue.compatibility_message().to_string())?;
     let created_target_id = input
         .tab
         .and_then(|tab| tab.get("targetId"))
@@ -88,29 +100,24 @@ pub(crate) async fn remote_view_open_rollback_failure_after_cleanup<R: RouteBoun
         created_target_id,
     )
     .await;
-    remote_view_open_complete_handoff_failure_cleanup(
-        input.repository,
-        &input.lease.id,
-        &recovery.rollback,
-        &cleanup,
-    )
-}
-pub(crate) fn remote_view_open_complete_handoff_failure_cleanup(
-    repository: &LockedServiceStateRepository<
-        super::super::super::service_store::JsonServiceStateStore,
-    >,
-    lease_id: &str,
-    rollback: &Value,
-    cleanup: &Value,
-) -> Result<RouteBoundHandoffFailureCleanupSummary, String> {
     let now = service_remote_view_timestamp();
-    complete_route_bound_handoff_failure_cleanup(
-        repository,
-        RouteBoundHandoffFailureCleanupInput {
-            lease_id,
-            rollback,
-            cleanup,
-            observed_at: &now,
-        },
-    )
+    supervisor
+        .compensate(
+            "repository_complete_failure_recovery",
+            input
+                .repository
+                .execute("repository_complete_failure_recovery", |repository| {
+                    complete_route_bound_handoff_failure_cleanup(
+                        repository,
+                        RouteBoundHandoffFailureCleanupInput {
+                            lease_id: &input.lease.id,
+                            rollback: &recovery.rollback,
+                            cleanup: &cleanup,
+                            observed_at: &now,
+                        },
+                    )
+                }),
+        )
+        .await
+        .map_err(|issue| issue.compatibility_message().to_string())
 }

@@ -7995,7 +7995,7 @@ async fn test_remote_view_open_dry_run_prefers_inline_route_pool_identity_over_s
 async fn test_remote_view_open_cleanup_reports_new_browser_close_on_failure() {
     let mut state = DaemonState::new();
     let supervisor = RouteBoundOpenSupervisor::system(None, None);
-    let mut runtime = ActionsRouteBoundOpenRuntime::new(&mut state);
+    let mut runtime = DaemonRouteBoundOpenRuntime::new(&mut state);
     let cleanup = remote_view_open_cleanup_after_failure(
         &mut runtime,
         &supervisor,

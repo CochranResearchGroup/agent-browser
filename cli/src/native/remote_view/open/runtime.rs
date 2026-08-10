@@ -6,6 +6,7 @@ use super::operator_route::{
 use super::proof::remote_view_open_visible_window_proof;
 use super::route_lifecycle::handle_service_remote_view_route_checkout;
 use super::shared::*;
+use crate::native::service_store::JsonServiceStateStore;
 /// Raw browser facts observed by the coordinator. The runtime adapter does
 /// not decide whether a browser or target is reusable.
 #[derive(Debug, Clone)]
@@ -99,13 +100,65 @@ pub(crate) trait RouteBoundOpenRuntime {
         request: OperatorAccessRequest,
     ) -> RouteBoundOpenFuture<'_, Option<Value>>;
 }
-/// Transitional daemon adapter. It performs effects only; route selection,
-/// reuse, proof classification, and compensation ownership stay in the
-/// coordinator.
-pub(crate) struct ActionsRouteBoundOpenRuntime<'a> {
+
+/// Deadline-supervised repository work used by route-bound coordination.
+/// The future is owned by the coordinator and is never detached, so dropping
+/// the coordinator at the total deadline leaves no repository task behind.
+pub(crate) trait RouteBoundOpenRepository {
+    fn snapshot(&self) -> RouteBoundOpenFuture<'_, ServiceState>;
+
+    fn execute<'a, T, F>(&'a self, operation: &'static str, work: F) -> RouteBoundOpenFuture<'a, T>
+    where
+        T: Send + 'a,
+        F: FnOnce(&LockedServiceStateRepository<JsonServiceStateStore>) -> Result<T, String>
+            + Send
+            + 'a;
+}
+
+pub(crate) struct DaemonRouteBoundOpenRepository {
+    repository: LockedServiceStateRepository<JsonServiceStateStore>,
+}
+
+impl DaemonRouteBoundOpenRepository {
+    pub(crate) fn new() -> Result<Self, String> {
+        Ok(Self {
+            repository: LockedServiceStateRepository::default_json()?,
+        })
+    }
+}
+
+impl RouteBoundOpenRepository for DaemonRouteBoundOpenRepository {
+    fn snapshot(&self) -> RouteBoundOpenFuture<'_, ServiceState> {
+        Box::pin(async move {
+            self.repository.load_snapshot().map_err(|message| {
+                RouteBoundRuntimeIssue::EffectFailed {
+                    operation: "repository_load_snapshot",
+                    message,
+                }
+            })
+        })
+    }
+
+    fn execute<'a, T, F>(&'a self, operation: &'static str, work: F) -> RouteBoundOpenFuture<'a, T>
+    where
+        T: Send + 'a,
+        F: FnOnce(&LockedServiceStateRepository<JsonServiceStateStore>) -> Result<T, String>
+            + Send
+            + 'a,
+    {
+        Box::pin(async move {
+            work(&self.repository)
+                .map_err(|message| RouteBoundRuntimeIssue::EffectFailed { operation, message })
+        })
+    }
+}
+
+/// Permanent daemon and browser effect adapter. Route selection, reuse,
+/// proof classification, and compensation ownership stay in the coordinator.
+pub(crate) struct DaemonRouteBoundOpenRuntime<'a> {
     pub(crate) state: &'a mut DaemonState,
 }
-impl<'a> ActionsRouteBoundOpenRuntime<'a> {
+impl<'a> DaemonRouteBoundOpenRuntime<'a> {
     pub(crate) fn new(state: &'a mut DaemonState) -> Self {
         Self { state }
     }
@@ -175,7 +228,7 @@ pub(crate) fn route_bound_runtime_issue(
     }
     RouteBoundRuntimeIssue::EffectFailed { operation, message }
 }
-impl RouteBoundOpenRuntime for ActionsRouteBoundOpenRuntime<'_> {
+impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
     fn observe_browser(&mut self) -> RouteBoundOpenFuture<'_, RouteBoundBrowserObservation> {
         Box::pin(observe_daemon_browser(self.state))
     }

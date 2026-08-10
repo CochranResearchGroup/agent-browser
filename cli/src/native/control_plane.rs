@@ -521,7 +521,8 @@ fn route_bound_action_owns_completion(action: &str) -> bool {
 enum CoordinatedExecution {
     Completed(Value),
     CancelledAfterCompensation(Value),
-    TimedOutAfterCompensation { response: Value, timeout_ms: u64 },
+    CancelledAtBoundary,
+    TimedOutAtDeadline { timeout_ms: u64 },
 }
 
 async fn await_coordinated_execution<F>(
@@ -535,20 +536,23 @@ where
     let mut execution = Box::pin(execution);
     match timeout_ms {
         Some(timeout_ms) if timeout_ms > 0 => {
+            let total_deadline = tokio::time::Instant::now() + Duration::from_millis(timeout_ms);
             tokio::select! {
                 biased;
                 response = &mut execution => CoordinatedExecution::Completed(response),
                 _ = cancellation.cancelled() => {
-                    let response = execution.await;
-                    CoordinatedExecution::CancelledAfterCompensation(response)
-                }
-                _ = tokio::time::sleep(Duration::from_millis(timeout_ms)) => {
-                    // Signal the same token observed by the route supervisor,
-                    // then retain ownership of the future until its bounded
-                    // compensation has produced a terminal outcome.
                     cancellation.cancel();
-                    let response = execution.await;
-                    CoordinatedExecution::TimedOutAfterCompensation { response, timeout_ms }
+                    match tokio::time::timeout_at(total_deadline, &mut execution).await {
+                        Ok(response) => CoordinatedExecution::CancelledAfterCompensation(response),
+                        Err(_) => CoordinatedExecution::TimedOutAtDeadline { timeout_ms },
+                    }
+                }
+                _ = tokio::time::sleep_until(total_deadline) => {
+                    // The coordinator owns its internal compensation reserve.
+                    // Reaching the public total deadline cancels and drops the
+                    // unfinished future. It is never detached or awaited past T.
+                    cancellation.cancel();
+                    CoordinatedExecution::TimedOutAtDeadline { timeout_ms }
                 }
             }
         }
@@ -557,8 +561,8 @@ where
                 biased;
                 response = &mut execution => CoordinatedExecution::Completed(response),
                 _ = cancellation.cancelled() => {
-                    let response = execution.await;
-                    CoordinatedExecution::CancelledAfterCompensation(response)
+                    cancellation.cancel();
+                    CoordinatedExecution::CancelledAtBoundary
                 }
             }
         }
@@ -596,11 +600,8 @@ fn coordinated_execution_response(
             let _ = terminal_response;
             service_job_cancelled_response(request)
         }
-        CoordinatedExecution::TimedOutAfterCompensation {
-            response: terminal_response,
-            timeout_ms,
-        } => {
-            let _ = terminal_response;
+        CoordinatedExecution::CancelledAtBoundary => service_job_cancelled_response(request),
+        CoordinatedExecution::TimedOutAtDeadline { timeout_ms } => {
             service_job_timed_out_response(request, timeout_ms)
         }
         CoordinatedExecution::Completed(response) => {
@@ -3620,25 +3621,25 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn coordinated_timeout_signals_then_awaits_compensation() {
+    async fn coordinated_timeout_drops_unfinished_execution_at_total_deadline() {
         let cancellation = RunningJobCancel::new();
         let observed = cancellation.clone();
+        let completed = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let execution_completed = completed.clone();
         let execution = async move {
             observed.cancelled().await;
-            tokio::task::yield_now().await;
+            tokio::time::sleep(Duration::from_secs(60)).await;
+            execution_completed.store(true, Ordering::SeqCst);
             json!({"terminalState": "rolled_back"})
         };
 
         let outcome = await_coordinated_execution(execution, cancellation, Some(1)).await;
         match outcome {
-            CoordinatedExecution::TimedOutAfterCompensation {
-                response,
-                timeout_ms,
-            } => {
+            CoordinatedExecution::TimedOutAtDeadline { timeout_ms } => {
                 assert_eq!(timeout_ms, 1);
-                assert_eq!(response["terminalState"], "rolled_back");
+                assert!(!completed.load(Ordering::SeqCst));
             }
-            _ => panic!("timeout must retain the coordinator future through compensation"),
+            _ => panic!("timeout must release the coordinator future at the total deadline"),
         }
     }
 
