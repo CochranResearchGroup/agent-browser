@@ -2204,8 +2204,20 @@ pub fn rollback_route_bound_handoff_acquisition(
                 lease_snapshot.previous_browser_display_allocation_id.clone();
         }
 
+        let quarantine = json!({
+            "state": "active",
+            "reason": "rollback_incomplete",
+            "leaseId": lease_id,
+            "browserId": lease_snapshot.browser_id,
+            "sessionId": lease_snapshot.session_id,
+            "routeId": lease_snapshot.route_id,
+            "displayAllocationId": lease_snapshot.display_allocation_id,
+            "routePoolEntryId": lease_snapshot.route_pool_entry_id,
+            "unconfirmedExternalEffects": cleanup,
+            "updatedAt": observed_at,
+        });
         let rollback = json!({
-            "state": "rolled_back",
+            "state": "rollback_incomplete",
             "leaseId": lease_id,
             "phase": phase,
             "routeId": lease_snapshot.route_id,
@@ -2216,21 +2228,36 @@ pub fn rollback_route_bound_handoff_acquisition(
             "restoredRemoteViewRoute": lease_snapshot.previous_remote_view_route.is_some(),
             "restoredBrowserDisplayAllocation": lease_snapshot.previous_browser_display_allocation_id,
             "cleanup": cleanup,
+            "quarantine": quarantine,
             "updatedAt": observed_at,
         });
+        if let Some(route_pool_entry_id) = lease_snapshot.route_pool_entry_id.as_ref() {
+            if let Some(entry) = state.route_pool.get_mut(route_pool_entry_id) {
+                entry.state = "quarantined".to_string();
+                entry.current_route_allocation_id = None;
+                entry.readiness = Some(json!({
+                    "state": "blocked",
+                    "reason": "rollback_incomplete",
+                    "leaseId": lease_id,
+                    "updatedAt": observed_at,
+                }));
+            }
+        }
         if let Some(lease) = state.remote_view_acquisition_leases.get_mut(lease_id) {
             let mut lifecycle =
                 RouteBoundLeaseLifecycle::from_state_phase(&lease.state, &lease.phase)
                     .unwrap_or_default();
             lifecycle
-                .transition_to(RouteBoundLeaseState::RolledBack)
+                .transition_to(RouteBoundLeaseState::RollbackIncomplete)
                 .map_err(|error| error.to_string())?;
             let (lease_state, lease_phase) = lifecycle.state_phase();
             lease.state = lease_state.to_string();
             lease.phase = lease_phase.to_string();
             lease.updated_at = Some(observed_at.to_string());
             lease.failed_at = Some(observed_at.to_string());
-            lease.failure_reason = Some(format!("{phase}: {error}"));
+            lease.failure_reason = Some(format!(
+                "rollback_incomplete: cleanup not yet confirmed after {phase}: {error}"
+            ));
             lease.cleanup = Some(rollback.clone());
         }
         Ok(rollback)
@@ -2323,9 +2350,31 @@ pub fn update_route_bound_handoff_acquisition_cleanup(
                 lease.failed_at = Some(observed_at.to_string());
                 lease.cleanup = Some(updated_rollback.clone());
             }
-        } else if let Some(lease) = state.remote_view_acquisition_leases.get_mut(lease_id) {
-            lease.updated_at = Some(observed_at.to_string());
-            lease.cleanup = Some(updated_rollback.clone());
+        } else {
+            if let Some(previous) = lease_snapshot.previous_route_pool_entry.as_ref() {
+                state
+                    .route_pool
+                    .insert(previous.id.clone(), previous.clone());
+            } else if let Some(route_pool_entry_id) = lease_snapshot.route_pool_entry_id.as_ref() {
+                state.route_pool.remove(route_pool_entry_id);
+            }
+            if let Some(object) = updated_rollback.as_object_mut() {
+                object.remove("quarantine");
+            }
+            if let Some(lease) = state.remote_view_acquisition_leases.get_mut(lease_id) {
+                let mut lifecycle =
+                    RouteBoundLeaseLifecycle::from_state_phase(&lease.state, &lease.phase)
+                        .unwrap_or_default();
+                lifecycle
+                    .transition_to(RouteBoundLeaseState::RolledBack)
+                    .map_err(|error| error.to_string())?;
+                let (lease_state, lease_phase) = lifecycle.state_phase();
+                lease.state = lease_state.to_string();
+                lease.phase = lease_phase.to_string();
+                lease.failure_reason = lease_snapshot.failure_reason.clone();
+                lease.updated_at = Some(observed_at.to_string());
+                lease.cleanup = Some(updated_rollback.clone());
+            }
         }
         Ok(updated_rollback)
     })
@@ -2384,6 +2433,13 @@ pub fn route_bound_handoff_immediate_failure(
             cleanup: input.cleanup,
             observed_at: input.observed_at,
         },
+    )?;
+    let rollback = update_route_bound_handoff_acquisition_cleanup(
+        repository,
+        &input.lease.id,
+        &rollback,
+        input.cleanup,
+        input.observed_at,
     )?;
     let summary = route_bound_handoff_cleanup_summary(input.cleanup, Some(&rollback));
     Ok(RouteBoundHandoffImmediateFailure { rollback, summary })
@@ -3516,6 +3572,12 @@ mod tests {
             },
         )
         .unwrap();
+        let pre_cleanup = store.load().unwrap();
+        let pending_lease = &pre_cleanup.remote_view_acquisition_leases["lease-a"];
+        assert_eq!(pending_lease.phase, "rollback_incomplete");
+        assert_eq!(pre_cleanup.route_pool["pool-a"].state, "quarantined");
+        assert_eq!(rollback["state"], "rollback_incomplete");
+        assert_eq!(rollback["quarantine"]["state"], "active");
         let browser_cleanup = json!({
             "state": "closed_opened_tab",
             "index": 2,
@@ -3548,6 +3610,7 @@ mod tests {
             "closed_opened_tab"
         );
         assert_eq!(failure.rollback["cleanup"]["index"], 2);
+        assert!(failure.rollback.get("quarantine").is_none());
         let summary: Value = serde_json::from_str(&failure.summary).unwrap();
         assert_eq!(summary["cleanup"]["state"], "closed_opened_tab");
         assert_eq!(summary["leaseRollback"]["leaseId"], "lease-a");

@@ -67,6 +67,7 @@ pub(crate) struct RouteBoundOpenSupervisor {
     pub(crate) clock: Arc<dyn RouteBoundOpenClock>,
 }
 impl RouteBoundOpenSupervisor {
+    const MAX_REPOSITORY_LOCK_MS: u64 = 1_000;
     pub(crate) fn system(total_ms: Option<u64>, cancellation: Option<CancellationToken>) -> Self {
         Self {
             deadline: total_ms
@@ -123,6 +124,20 @@ impl RouteBoundOpenSupervisor {
     pub(crate) fn remaining_total_ms(&self) -> Option<u64> {
         self.deadline
             .map(|deadline| deadline.total_ms.saturating_sub(self.clock.now_ms()))
+    }
+    pub(crate) fn forward_repository_lock_timeout(&self) -> Duration {
+        Duration::from_millis(
+            self.remaining_forward_ms()
+                .unwrap_or(Self::MAX_REPOSITORY_LOCK_MS)
+                .clamp(1, Self::MAX_REPOSITORY_LOCK_MS),
+        )
+    }
+    pub(crate) fn compensation_repository_lock_timeout(&self) -> Duration {
+        Duration::from_millis(
+            self.remaining_total_ms()
+                .unwrap_or(Self::MAX_REPOSITORY_LOCK_MS)
+                .clamp(1, Self::MAX_REPOSITORY_LOCK_MS),
+        )
     }
     pub(crate) async fn forward<T>(
         &self,

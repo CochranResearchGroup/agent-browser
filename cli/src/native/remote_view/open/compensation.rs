@@ -68,9 +68,10 @@ pub(crate) async fn remote_view_open_rollback_failure_after_cleanup<
     let recovery = supervisor
         .compensate(
             "repository_begin_failure_recovery",
-            input
-                .repository
-                .execute("repository_begin_failure_recovery", |repository| {
+            input.repository.execute(
+                "repository_begin_failure_recovery",
+                supervisor.compensation_repository_lock_timeout(),
+                |repository| {
                     begin_route_bound_handoff_failure_recovery(
                         repository,
                         RouteBoundHandoffFailureRecoveryInput {
@@ -83,7 +84,8 @@ pub(crate) async fn remote_view_open_rollback_failure_after_cleanup<
                             observed_at: &now,
                         },
                     )
-                }),
+                },
+            ),
         )
         .await
         .map_err(|issue| issue.compatibility_message().to_string())?;
@@ -102,9 +104,10 @@ pub(crate) async fn remote_view_open_rollback_failure_after_cleanup<
     supervisor
         .compensate(
             "repository_complete_failure_recovery",
-            input
-                .repository
-                .execute("repository_complete_failure_recovery", |repository| {
+            input.repository.execute(
+                "repository_complete_failure_recovery",
+                supervisor.compensation_repository_lock_timeout(),
+                |repository| {
                     complete_route_bound_handoff_failure_cleanup(
                         repository,
                         RouteBoundHandoffFailureCleanupInput {
@@ -114,7 +117,8 @@ pub(crate) async fn remote_view_open_rollback_failure_after_cleanup<
                             observed_at: &now,
                         },
                     )
-                }),
+                },
+            ),
         )
         .await
         .map_err(|issue| issue.compatibility_message().to_string())

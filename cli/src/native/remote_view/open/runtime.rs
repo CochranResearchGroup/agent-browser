@@ -163,9 +163,14 @@ pub(crate) trait RouteBoundOpenRuntime {
 /// The future is owned by the coordinator and is never detached, so dropping
 /// the coordinator at the total deadline leaves no repository task behind.
 pub(crate) trait RouteBoundOpenRepository {
-    fn snapshot(&self) -> RouteBoundOpenFuture<'_, ServiceState>;
+    fn snapshot(&self, lock_timeout: Duration) -> RouteBoundOpenFuture<'_, ServiceState>;
 
-    fn execute<'a, T, F>(&'a self, operation: &'static str, work: F) -> RouteBoundOpenFuture<'a, T>
+    fn execute<'a, T, F>(
+        &'a self,
+        operation: &'static str,
+        lock_timeout: Duration,
+        work: F,
+    ) -> RouteBoundOpenFuture<'a, T>
     where
         T: Send + 'a,
         F: FnOnce(&LockedServiceStateRepository<JsonServiceStateStore>) -> Result<T, String>
@@ -186,18 +191,23 @@ impl DaemonRouteBoundOpenRepository {
 }
 
 impl RouteBoundOpenRepository for DaemonRouteBoundOpenRepository {
-    fn snapshot(&self) -> RouteBoundOpenFuture<'_, ServiceState> {
+    fn snapshot(&self, lock_timeout: Duration) -> RouteBoundOpenFuture<'_, ServiceState> {
         Box::pin(async move {
-            self.repository.load_snapshot().map_err(|message| {
-                RouteBoundRuntimeIssue::EffectFailed {
+            self.repository
+                .load_snapshot_with_lock_timeout(lock_timeout)
+                .map_err(|message| RouteBoundRuntimeIssue::EffectFailed {
                     operation: "repository_load_snapshot",
                     message,
-                }
-            })
+                })
         })
     }
 
-    fn execute<'a, T, F>(&'a self, operation: &'static str, work: F) -> RouteBoundOpenFuture<'a, T>
+    fn execute<'a, T, F>(
+        &'a self,
+        operation: &'static str,
+        lock_timeout: Duration,
+        work: F,
+    ) -> RouteBoundOpenFuture<'a, T>
     where
         T: Send + 'a,
         F: FnOnce(&LockedServiceStateRepository<JsonServiceStateStore>) -> Result<T, String>
@@ -205,7 +215,8 @@ impl RouteBoundOpenRepository for DaemonRouteBoundOpenRepository {
             + 'a,
     {
         Box::pin(async move {
-            work(&self.repository)
+            let repository = self.repository.with_lock_timeout(lock_timeout);
+            work(&repository)
                 .map_err(|message| RouteBoundRuntimeIssue::EffectFailed { operation, message })
         })
     }

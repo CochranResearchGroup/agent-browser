@@ -77,6 +77,7 @@ impl RouteBoundLeaseState {
                 | (TabAcquired, RollbackIncomplete)
                 | (ProofReady, RollbackIncomplete)
                 | (RolledBack, RollbackIncomplete)
+                | (RollbackIncomplete, RolledBack)
                 | (Requested, FailedDiagnostic)
                 | (Planned, FailedDiagnostic)
                 | (Reserved, FailedDiagnostic)
@@ -245,5 +246,19 @@ mod tests {
         assert!(lifecycle
             .transition_to(RouteBoundLeaseState::Finalized)
             .is_err());
+    }
+
+    #[test]
+    fn confirmed_compensation_promotes_quarantine_to_rolled_back() {
+        let mut lifecycle = RouteBoundLeaseLifecycle {
+            state: RouteBoundLeaseState::RollbackIncomplete,
+        };
+
+        lifecycle
+            .transition_to(RouteBoundLeaseState::RolledBack)
+            .unwrap();
+
+        assert_eq!(lifecycle.state_phase(), ("failed", "rollback_complete"));
+        assert!(!lifecycle.state.can_publish_live_control_row());
     }
 }

@@ -566,18 +566,23 @@ struct FixtureRepository {
 }
 
 impl RouteBoundOpenRepository for FixtureRepository {
-    fn snapshot(&self) -> RouteBoundOpenFuture<'_, ServiceState> {
+    fn snapshot(&self, lock_timeout: Duration) -> RouteBoundOpenFuture<'_, ServiceState> {
         Box::pin(async move {
-            self.repository.load_snapshot().map_err(|message| {
-                RouteBoundRuntimeIssue::EffectFailed {
+            self.repository
+                .load_snapshot_with_lock_timeout(lock_timeout)
+                .map_err(|message| RouteBoundRuntimeIssue::EffectFailed {
                     operation: "fixture_snapshot",
                     message,
-                }
-            })
+                })
         })
     }
 
-    fn execute<'a, T, F>(&'a self, operation: &'static str, work: F) -> RouteBoundOpenFuture<'a, T>
+    fn execute<'a, T, F>(
+        &'a self,
+        operation: &'static str,
+        lock_timeout: Duration,
+        work: F,
+    ) -> RouteBoundOpenFuture<'a, T>
     where
         T: Send + 'a,
         F: FnOnce(&LockedServiceStateRepository<JsonServiceStateStore>) -> Result<T, String>
@@ -585,18 +590,24 @@ impl RouteBoundOpenRepository for FixtureRepository {
             + 'a,
     {
         Box::pin(async move {
-            work(&self.repository)
+            let repository = self.repository.with_lock_timeout(lock_timeout);
+            work(&repository)
                 .map_err(|message| RouteBoundRuntimeIssue::EffectFailed { operation, message })
         })
     }
 }
 
 impl RouteBoundOpenRepository for StaticRepository {
-    fn snapshot(&self) -> RouteBoundOpenFuture<'_, ServiceState> {
+    fn snapshot(&self, _lock_timeout: Duration) -> RouteBoundOpenFuture<'_, ServiceState> {
         Box::pin(async { Ok(self.state.clone()) })
     }
 
-    fn execute<'a, T, F>(&'a self, operation: &'static str, _work: F) -> RouteBoundOpenFuture<'a, T>
+    fn execute<'a, T, F>(
+        &'a self,
+        operation: &'static str,
+        _lock_timeout: Duration,
+        _work: F,
+    ) -> RouteBoundOpenFuture<'a, T>
     where
         T: Send + 'a,
         F: FnOnce(&LockedServiceStateRepository<JsonServiceStateStore>) -> Result<T, String>
@@ -1095,14 +1106,19 @@ fn typed_terminal_failure_selects_rollback_state_without_parsing_compatibility_t
 struct PendingRepository;
 
 impl RouteBoundOpenRepository for PendingRepository {
-    fn snapshot(&self) -> RouteBoundOpenFuture<'_, ServiceState> {
+    fn snapshot(&self, _lock_timeout: Duration) -> RouteBoundOpenFuture<'_, ServiceState> {
         Box::pin(async {
             tokio::time::sleep(Duration::from_secs(60)).await;
             Ok(ServiceState::default())
         })
     }
 
-    fn execute<'a, T, F>(&'a self, operation: &'static str, _work: F) -> RouteBoundOpenFuture<'a, T>
+    fn execute<'a, T, F>(
+        &'a self,
+        operation: &'static str,
+        _lock_timeout: Duration,
+        _work: F,
+    ) -> RouteBoundOpenFuture<'a, T>
     where
         T: Send + 'a,
         F: FnOnce(&LockedServiceStateRepository<JsonServiceStateStore>) -> Result<T, String>
@@ -1124,7 +1140,10 @@ async fn repository_snapshot_is_dropped_at_the_forward_deadline() {
     let repository = PendingRepository;
 
     let result = supervisor
-        .forward("repository_load_snapshot", repository.snapshot())
+        .forward(
+            "repository_load_snapshot",
+            repository.snapshot(supervisor.forward_repository_lock_timeout()),
+        )
         .await;
 
     assert!(matches!(
@@ -1134,4 +1153,83 @@ async fn repository_snapshot_is_dropped_at_the_forward_deadline() {
             total_ms: 2,
         })
     ));
+}
+
+#[tokio::test]
+async fn cleanup_timeout_preserves_precleanup_quarantine() {
+    let root = std::env::temp_dir().join(format!(
+        "agent-browser-route-cleanup-timeout-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let state_path = root.join("state.json");
+    let store = JsonServiceStateStore::new(&state_path);
+    store
+        .save(&ServiceState {
+            route_pool: BTreeMap::from([(
+                "pool-a".to_string(),
+                RoutePoolEntry {
+                    id: "pool-a".to_string(),
+                    route_id: "route-a".to_string(),
+                    state: "pending".to_string(),
+                    current_route_allocation_id: Some("route-a".to_string()),
+                    ..RoutePoolEntry::default()
+                },
+            )]),
+            ..ServiceState::default()
+        })
+        .unwrap();
+    let repository = LockedServiceStateRepository::new(store.clone());
+    let lease = RemoteViewAcquisitionLease {
+        id: "lease-timeout".to_string(),
+        browser_id: "browser-a".to_string(),
+        session_id: "session-a".to_string(),
+        route_id: "route-a".to_string(),
+        display_allocation_id: "display-a".to_string(),
+        route_pool_entry_id: Some("pool-a".to_string()),
+        state: "pending".to_string(),
+        phase: "reserved".to_string(),
+        previous_route_pool_entry: Some(RoutePoolEntry {
+            id: "pool-a".to_string(),
+            route_id: "route-a".to_string(),
+            state: "available".to_string(),
+            ..RoutePoolEntry::default()
+        }),
+        ..RemoteViewAcquisitionLease::default()
+    };
+    let recovery = begin_route_bound_handoff_failure_recovery(
+        &repository,
+        RouteBoundHandoffFailureRecoveryInput {
+            lease: &lease,
+            phase: "proof_failed",
+            error: "operator proof failed",
+            rollback_cleanup: &json!({"state": "pending_after_rollback"}),
+            launch: &json!({"launched": true}),
+            tab: Some(&json!({"targetId": "target-a"})),
+            observed_at: "2026-08-10T12:00:00Z",
+        },
+    )
+    .unwrap();
+    assert_eq!(recovery.rollback["state"], "rollback_incomplete");
+
+    let supervisor = RouteBoundOpenSupervisor::system(Some(10), None);
+    let pending_cleanup: RouteBoundOpenFuture<'_, Value> = Box::pin(std::future::pending());
+    let result = supervisor
+        .compensate("close_created_target", pending_cleanup)
+        .await;
+
+    assert!(matches!(
+        result,
+        Err(RouteBoundRuntimeIssue::EffectFailed { .. })
+    ));
+    let persisted = store.load().unwrap();
+    assert_eq!(
+        persisted.remote_view_acquisition_leases["lease-timeout"].phase,
+        "rollback_incomplete"
+    );
+    assert_eq!(persisted.route_pool["pool-a"].state, "quarantined");
+    let _ = std::fs::remove_dir_all(root);
 }

@@ -6,7 +6,8 @@
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, TryLockError};
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
@@ -17,6 +18,7 @@ const SERVICE_STATE_FILENAME: &str = "state.json";
 const REMOTE_VIEW_HANDOFFS_FILENAME: &str = "remote-view-handoffs.json";
 const REMOTE_VIEW_HANDOFFS_SCHEMA_VERSION: &str = "agent-browser.remote-view-handoffs.v1";
 static SERVICE_STATE_MUTATION_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+const DEFAULT_SERVICE_STATE_LOCK_TIMEOUT: Duration = Duration::from_secs(1);
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -66,6 +68,7 @@ pub struct JsonServiceStateStore {
 #[derive(Debug, Clone)]
 pub struct LockedServiceStateRepository<S> {
     store: S,
+    lock_timeout: Duration,
 }
 
 impl JsonServiceStateStore {
@@ -110,7 +113,22 @@ impl JsonServiceStateStore {
 
 impl<S> LockedServiceStateRepository<S> {
     pub fn new(store: S) -> Self {
-        Self { store }
+        Self {
+            store,
+            lock_timeout: DEFAULT_SERVICE_STATE_LOCK_TIMEOUT,
+        }
+    }
+}
+
+impl<S> LockedServiceStateRepository<S>
+where
+    S: Clone,
+{
+    pub(crate) fn with_lock_timeout(&self, lock_timeout: Duration) -> Self {
+        Self {
+            store: self.store.clone(),
+            lock_timeout,
+        }
     }
 }
 
@@ -182,35 +200,83 @@ where
     S: ServiceStateStore,
 {
     fn load_snapshot(&self) -> Result<ServiceState, String> {
-        let lock = SERVICE_STATE_MUTATION_LOCK.get_or_init(|| Mutex::new(()));
-        let _guard = lock
-            .lock()
-            .map_err(|_| "Service state mutation lock was poisoned".to_string())?;
-        let _file_guard = self
-            .store
-            .state_path()
-            .map(|path| acquire_service_state_file_lock(path, ServiceStateFileLockMode::Exclusive))
-            .transpose()?;
-        self.store.load()
+        self.load_snapshot_with_lock_timeout(self.lock_timeout)
     }
 
     fn mutate<R>(
         &self,
         mutator: impl FnOnce(&mut ServiceState) -> Result<R, String>,
     ) -> Result<R, String> {
+        self.mutate_with_lock_timeout(self.lock_timeout, mutator)
+    }
+}
+
+impl<S> LockedServiceStateRepository<S>
+where
+    S: ServiceStateStore,
+{
+    pub(crate) fn load_snapshot_with_lock_timeout(
+        &self,
+        timeout: Duration,
+    ) -> Result<ServiceState, String> {
+        let deadline = Instant::now() + timeout.max(Duration::from_millis(1));
         let lock = SERVICE_STATE_MUTATION_LOCK.get_or_init(|| Mutex::new(()));
-        let _guard = lock
-            .lock()
-            .map_err(|_| "Service state mutation lock was poisoned".to_string())?;
+        let _guard = acquire_service_state_process_lock(lock, deadline)?;
         let _file_guard = self
             .store
             .state_path()
-            .map(|path| acquire_service_state_file_lock(path, ServiceStateFileLockMode::Exclusive))
+            .map(|path| {
+                acquire_service_state_file_lock_until(
+                    path,
+                    ServiceStateFileLockMode::Exclusive,
+                    deadline,
+                )
+            })
+            .transpose()?;
+        self.store.load()
+    }
+
+    pub(crate) fn mutate_with_lock_timeout<R>(
+        &self,
+        timeout: Duration,
+        mutator: impl FnOnce(&mut ServiceState) -> Result<R, String>,
+    ) -> Result<R, String> {
+        let deadline = Instant::now() + timeout.max(Duration::from_millis(1));
+        let lock = SERVICE_STATE_MUTATION_LOCK.get_or_init(|| Mutex::new(()));
+        let _guard = acquire_service_state_process_lock(lock, deadline)?;
+        let _file_guard = self
+            .store
+            .state_path()
+            .map(|path| {
+                acquire_service_state_file_lock_until(
+                    path,
+                    ServiceStateFileLockMode::Exclusive,
+                    deadline,
+                )
+            })
             .transpose()?;
         let mut state = self.store.load()?;
         let result = mutator(&mut state)?;
         self.store.save(&state)?;
         Ok(result)
+    }
+}
+
+fn acquire_service_state_process_lock(
+    lock: &'static Mutex<()>,
+    deadline: Instant,
+) -> Result<MutexGuard<'static, ()>, String> {
+    loop {
+        match lock.try_lock() {
+            Ok(guard) => return Ok(guard),
+            Err(TryLockError::Poisoned(_)) => {
+                return Err("Service state mutation lock was poisoned".to_string())
+            }
+            Err(TryLockError::WouldBlock) if Instant::now() >= deadline => {
+                return Err("service_state_lock_timeout: process mutation lock".to_string())
+            }
+            Err(TryLockError::WouldBlock) => std::thread::sleep(Duration::from_millis(2)),
+        }
     }
 }
 
@@ -469,6 +535,18 @@ fn acquire_service_state_file_lock(
     state_path: &Path,
     mode: ServiceStateFileLockMode,
 ) -> Result<File, String> {
+    acquire_service_state_file_lock_until(
+        state_path,
+        mode,
+        Instant::now() + DEFAULT_SERVICE_STATE_LOCK_TIMEOUT,
+    )
+}
+
+fn acquire_service_state_file_lock_until(
+    state_path: &Path,
+    mode: ServiceStateFileLockMode,
+    deadline: Instant,
+) -> Result<File, String> {
     if let Some(parent) = state_path.parent() {
         fs::create_dir_all(parent).map_err(|err| {
             format!(
@@ -492,18 +570,29 @@ fn acquire_service_state_file_lock(
                 err
             )
         })?;
-    let result = match mode {
-        ServiceStateFileLockMode::Shared => file.lock_shared(),
-        ServiceStateFileLockMode::Exclusive => file.lock(),
-    };
-    result.map_err(|err| {
-        format!(
-            "Failed to acquire service state lock {}: {}",
-            lock_path.display(),
-            err
-        )
-    })?;
-    Ok(file)
+    loop {
+        let result = match mode {
+            ServiceStateFileLockMode::Shared => file.try_lock_shared(),
+            ServiceStateFileLockMode::Exclusive => file.try_lock(),
+        };
+        match result {
+            Ok(()) => return Ok(file),
+            Err(std::fs::TryLockError::WouldBlock) if Instant::now() >= deadline => {
+                return Err(format!(
+                    "service_state_lock_timeout: {}",
+                    lock_path.display()
+                ))
+            }
+            Err(std::fs::TryLockError::WouldBlock) => std::thread::sleep(Duration::from_millis(2)),
+            Err(error) => {
+                return Err(format!(
+                    "Failed to acquire service state lock {}: {}",
+                    lock_path.display(),
+                    error
+                ))
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -629,6 +718,24 @@ mod tests {
 
         assert!(matches!(error, std::fs::TryLockError::WouldBlock));
         drop(first);
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn route_repository_lock_acquisition_is_bounded() {
+        let path = unique_state_path("bounded-service-state-lock");
+        let held = acquire_service_state_file_lock(&path, ServiceStateFileLockMode::Exclusive)
+            .expect("fixture should hold the service-state lock");
+        let repository = LockedServiceStateRepository::new(JsonServiceStateStore::new(&path));
+
+        let started = Instant::now();
+        let error = repository
+            .load_snapshot_with_lock_timeout(Duration::from_millis(10))
+            .expect_err("repository must not wait indefinitely for the file lock");
+
+        assert!(error.contains("service_state_lock_timeout"));
+        assert!(started.elapsed() < Duration::from_secs(1));
+        drop(held);
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 
