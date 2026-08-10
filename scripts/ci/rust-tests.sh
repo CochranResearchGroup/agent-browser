@@ -18,6 +18,7 @@ serial_filters=(
   "agent_env::tests"
   "connection::tests"
   "flags::tests"
+  "mcp::tests"
   "native::action_runtime::cancellation::tests"
   "native::action_runtime::runtime::close_launch_tests"
   "native::action_runtime::runtime::dispatch_runtime_tests"

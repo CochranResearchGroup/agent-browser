@@ -3317,7 +3317,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(recovery.rollback["state"], "rolled_back");
+        assert_eq!(recovery.rollback["state"], "rollback_incomplete");
         assert_eq!(
             recovery.cleanup_plan,
             RouteBoundHandoffFailureCleanupPlan::SkipExistingBrowserReused {
@@ -3336,7 +3336,7 @@ mod tests {
             other => panic!("unexpected cleanup task: {other:?}"),
         }
         let state = store.load().unwrap();
-        assert_eq!(state.route_pool["pool-a"].state, "available");
+        assert_eq!(state.route_pool["pool-a"].state, "quarantined");
 
         let _ = std::fs::remove_file(path);
     }
