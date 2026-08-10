@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use serde::{Deserialize, Serialize};
 
@@ -23,6 +23,21 @@ static SERVICE_STATE_MUTATION_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 struct RemoteViewHandoffRegistry {
     schema_version: String,
     handoffs: BTreeMap<String, RemoteViewHandoff>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ServiceStateTransaction {
+    state_payload: String,
+    handoff_payload: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ServiceStateSaveBoundary {
+    HandoffWrite,
+    StateWrite,
+    HandoffRename,
+    StateRename,
 }
 
 pub trait ServiceStateStore {
@@ -45,6 +60,7 @@ pub trait ServiceStateRepository {
 #[derive(Debug, Clone)]
 pub struct JsonServiceStateStore {
     path: PathBuf,
+    save_fault: Option<Arc<Mutex<Option<ServiceStateSaveBoundary>>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -54,7 +70,10 @@ pub struct LockedServiceStateRepository<S> {
 
 impl JsonServiceStateStore {
     pub fn new(path: impl Into<PathBuf>) -> Self {
-        Self { path: path.into() }
+        Self {
+            path: path.into(),
+            save_fault: None,
+        }
     }
 
     pub fn default_path() -> Result<PathBuf, String> {
@@ -64,6 +83,28 @@ impl JsonServiceStateStore {
     #[cfg(test)]
     fn path(&self) -> &Path {
         &self.path
+    }
+
+    #[cfg(test)]
+    fn with_save_fault(path: impl Into<PathBuf>, boundary: ServiceStateSaveBoundary) -> Self {
+        Self {
+            path: path.into(),
+            save_fault: Some(Arc::new(Mutex::new(Some(boundary)))),
+        }
+    }
+
+    fn fail_at(&self, boundary: ServiceStateSaveBoundary) -> Result<(), String> {
+        let Some(fault) = self.save_fault.as_ref() else {
+            return Ok(());
+        };
+        let mut fault = fault
+            .lock()
+            .map_err(|_| "Service state save fault lock was poisoned".to_string())?;
+        if fault.as_ref() == Some(&boundary) {
+            *fault = None;
+            return Err(format!("injected_service_state_save_failure:{boundary:?}"));
+        }
+        Ok(())
     }
 }
 
@@ -83,6 +124,7 @@ impl LockedServiceStateRepository<JsonServiceStateStore> {
 
 impl ServiceStateStore for JsonServiceStateStore {
     fn load(&self) -> Result<ServiceState, String> {
+        recover_service_state_transaction(&self.path)?;
         let mut state_file_missing = false;
         let mut state = match fs::read_to_string(&self.path) {
             Ok(raw) => serde_json::from_str(&raw).map_err(|err| {
@@ -119,49 +161,15 @@ impl ServiceStateStore for JsonServiceStateStore {
         let mut normalized = state.clone();
         normalized.refresh_derived_views();
         normalized.remove_builtin_entity_defaults_for_persistence();
-        save_remote_view_handoff_registry(&self.path, &normalized.remote_view_handoffs)?;
         let serialized = serde_json::to_string_pretty(&normalized)
             .map_err(|err| format!("Failed to serialize service state: {}", err))?;
-        let payload = format!("{}\n", serialized);
-        let temp_path = temp_state_path(&self.path);
-
-        for attempt in 0..2 {
-            if let Some(parent) = self.path.parent() {
-                fs::create_dir_all(parent).map_err(|err| {
-                    format!(
-                        "Failed to create service state directory {}: {}",
-                        parent.display(),
-                        err
-                    )
-                })?;
-            }
-
-            fs::write(&temp_path, &payload).map_err(|err| {
-                format!(
-                    "Failed to write temporary service state {}: {}",
-                    temp_path.display(),
-                    err
-                )
-            })?;
-
-            match fs::rename(&temp_path, &self.path) {
-                Ok(()) => return Ok(()),
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound && attempt == 0 => {
-                    let _ = fs::remove_file(&temp_path);
-                    continue;
-                }
-                Err(err) => {
-                    let _ = fs::remove_file(&temp_path);
-                    return Err(format!(
-                        "Failed to replace service state {}: {}",
-                        self.path.display(),
-                        err
-                    ));
-                }
-            }
-        }
-
-        Ok(())
+        let transaction = ServiceStateTransaction {
+            state_payload: format!("{}\n", serialized),
+            handoff_payload: remote_view_handoff_registry_payload(
+                &normalized.remote_view_handoffs,
+            )?,
+        };
+        commit_service_state_transaction(self, &transaction)
     }
 
     fn state_path(&self) -> Option<&Path> {
@@ -181,7 +189,7 @@ where
         let _file_guard = self
             .store
             .state_path()
-            .map(|path| acquire_service_state_file_lock(path, ServiceStateFileLockMode::Shared))
+            .map(|path| acquire_service_state_file_lock(path, ServiceStateFileLockMode::Exclusive))
             .transpose()?;
         self.store.load()
     }
@@ -276,43 +284,169 @@ fn load_remote_view_handoff_registry(
     })
 }
 
-fn save_remote_view_handoff_registry(
-    state_path: &Path,
+fn remote_view_handoff_registry_payload(
     handoffs: &BTreeMap<String, RemoteViewHandoff>,
-) -> Result<(), String> {
-    let path = remote_view_handoff_registry_path(state_path);
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|err| {
-            format!(
-                "Failed to create remote-view handoff registry directory {}: {}",
-                parent.display(),
-                err
-            )
-        })?;
-    }
+) -> Result<String, String> {
     let registry = RemoteViewHandoffRegistry {
         schema_version: REMOTE_VIEW_HANDOFFS_SCHEMA_VERSION.to_string(),
         handoffs: handoffs.clone(),
     };
-    let payload = format!(
+    Ok(format!(
         "{}\n",
         serde_json::to_string_pretty(&registry)
             .map_err(|err| format!("Failed to serialize remote-view handoff registry: {err}"))?
-    );
-    let temp_path = temp_state_path(&path);
-    fs::write(&temp_path, payload).map_err(|err| {
+    ))
+}
+
+fn service_state_transaction_path(state_path: &Path) -> PathBuf {
+    let file_name = state_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(SERVICE_STATE_FILENAME);
+    state_path.with_file_name(format!("{file_name}.transaction.json"))
+}
+
+fn write_temporary(path: &Path, payload: &str, label: &str) -> Result<PathBuf, String> {
+    let temp_path = temp_state_path(path);
+    fs::write(&temp_path, payload).map_err(|error| {
         format!(
-            "Failed to write temporary remote-view handoff registry {}: {}",
-            temp_path.display(),
-            err
+            "Failed to write temporary {label} {}: {error}",
+            temp_path.display()
         )
     })?;
-    fs::rename(&temp_path, &path).map_err(|err| {
-        let _ = fs::remove_file(&temp_path);
+    Ok(temp_path)
+}
+
+fn replace_from_temporary(temp_path: &Path, path: &Path, label: &str) -> Result<(), String> {
+    fs::rename(temp_path, path)
+        .map_err(|error| format!("Failed to replace {label} {}: {error}", path.display()))
+}
+
+fn restore_file(path: &Path, prior: Option<&[u8]>) -> Result<(), String> {
+    match prior {
+        Some(payload) => fs::write(path, payload)
+            .map_err(|error| format!("Failed to restore {}: {error}", path.display())),
+        None => match fs::remove_file(path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(format!("Failed to remove {}: {error}", path.display())),
+        },
+    }
+}
+
+fn recover_service_state_transaction(state_path: &Path) -> Result<(), String> {
+    let transaction_path = service_state_transaction_path(state_path);
+    let raw = match fs::read_to_string(&transaction_path) {
+        Ok(raw) => raw,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(format!(
+                "Failed to read service state transaction {}: {error}",
+                transaction_path.display()
+            ))
+        }
+    };
+    let transaction: ServiceStateTransaction = serde_json::from_str(&raw).map_err(|error| {
         format!(
-            "Failed to replace remote-view handoff registry {}: {}",
-            path.display(),
-            err
+            "Invalid service state transaction {}: {error}",
+            transaction_path.display()
+        )
+    })?;
+    let handoff_path = remote_view_handoff_registry_path(state_path);
+    let handoff_temp = write_temporary(
+        &handoff_path,
+        &transaction.handoff_payload,
+        "remote-view handoff registry",
+    )?;
+    let state_temp = write_temporary(state_path, &transaction.state_payload, "service state")?;
+    replace_from_temporary(&handoff_temp, &handoff_path, "remote-view handoff registry")?;
+    replace_from_temporary(&state_temp, state_path, "service state")?;
+    fs::remove_file(&transaction_path).map_err(|error| {
+        format!(
+            "Failed to clear service state transaction {}: {error}",
+            transaction_path.display()
+        )
+    })
+}
+
+fn commit_service_state_transaction(
+    store: &JsonServiceStateStore,
+    transaction: &ServiceStateTransaction,
+) -> Result<(), String> {
+    if let Some(parent) = store.path.parent() {
+        fs::create_dir_all(parent).map_err(|error| {
+            format!(
+                "Failed to create service state directory {}: {error}",
+                parent.display()
+            )
+        })?;
+    }
+    recover_service_state_transaction(&store.path)?;
+    let handoff_path = remote_view_handoff_registry_path(&store.path);
+    let transaction_path = service_state_transaction_path(&store.path);
+    let prior_handoff = fs::read(&handoff_path).ok();
+
+    store.fail_at(ServiceStateSaveBoundary::HandoffWrite)?;
+    let handoff_temp = write_temporary(
+        &handoff_path,
+        &transaction.handoff_payload,
+        "remote-view handoff registry",
+    )?;
+    if let Err(error) = store.fail_at(ServiceStateSaveBoundary::StateWrite) {
+        let _ = fs::remove_file(&handoff_temp);
+        return Err(error);
+    }
+    let state_temp = write_temporary(&store.path, &transaction.state_payload, "service state")?;
+    let transaction_payload = format!(
+        "{}\n",
+        serde_json::to_string_pretty(transaction)
+            .map_err(|error| format!("Failed to serialize service state transaction: {error}"))?
+    );
+    let transaction_temp = write_temporary(
+        &transaction_path,
+        &transaction_payload,
+        "service state transaction",
+    )?;
+    replace_from_temporary(
+        &transaction_temp,
+        &transaction_path,
+        "service state transaction",
+    )?;
+
+    if let Err(error) = store.fail_at(ServiceStateSaveBoundary::HandoffRename) {
+        let _ = fs::remove_file(&handoff_temp);
+        let _ = fs::remove_file(&state_temp);
+        let _ = fs::remove_file(&transaction_path);
+        return Err(error);
+    }
+    if let Err(error) =
+        replace_from_temporary(&handoff_temp, &handoff_path, "remote-view handoff registry")
+    {
+        let _ = fs::remove_file(&state_temp);
+        let _ = fs::remove_file(&transaction_path);
+        return Err(error);
+    }
+
+    let state_result = store
+        .fail_at(ServiceStateSaveBoundary::StateRename)
+        .and_then(|()| replace_from_temporary(&state_temp, &store.path, "service state"));
+    if let Err(error) = state_result {
+        let restore_result = restore_file(&handoff_path, prior_handoff.as_deref());
+        let _ = fs::remove_file(&state_temp);
+        if restore_result.is_ok() {
+            let _ = fs::remove_file(&transaction_path);
+        }
+        return match restore_result {
+            Ok(()) => Err(error),
+            Err(restore_error) => Err(format!(
+                "{error}; service_state_transaction_recovery_required: {restore_error}"
+            )),
+        };
+    }
+    fs::remove_file(&transaction_path).map_err(|error| {
+        format!(
+            "Failed to clear service state transaction {}: {error}",
+            transaction_path.display()
         )
     })
 }
@@ -539,6 +673,64 @@ mod tests {
 
         assert_eq!(loaded.remote_view_handoffs["handoff-a"].id, "handoff-a");
         let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn two_file_service_state_commit_is_atomic_at_every_write_and_rename_boundary() {
+        for boundary in [
+            ServiceStateSaveBoundary::HandoffWrite,
+            ServiceStateSaveBoundary::StateWrite,
+            ServiceStateSaveBoundary::HandoffRename,
+            ServiceStateSaveBoundary::StateRename,
+        ] {
+            let path = unique_state_path(&format!("atomic-service-state-{boundary:?}"));
+            let baseline_store = JsonServiceStateStore::new(&path);
+            baseline_store
+                .save(&ServiceState {
+                    remote_view_handoffs: BTreeMap::from([(
+                        "handoff-before".to_string(),
+                        RemoteViewHandoff {
+                            id: "handoff-before".to_string(),
+                            state: "ready".to_string(),
+                            ..RemoteViewHandoff::default()
+                        },
+                    )]),
+                    ..ServiceState::default()
+                })
+                .expect("baseline state should save");
+
+            let failing_store = JsonServiceStateStore::with_save_fault(&path, boundary);
+            let error = failing_store
+                .save(&ServiceState {
+                    browsers: BTreeMap::from([(
+                        "browser-after".to_string(),
+                        BrowserProcess {
+                            id: "browser-after".to_string(),
+                            ..BrowserProcess::default()
+                        },
+                    )]),
+                    remote_view_handoffs: BTreeMap::from([(
+                        "handoff-after".to_string(),
+                        RemoteViewHandoff {
+                            id: "handoff-after".to_string(),
+                            state: "ready".to_string(),
+                            ..RemoteViewHandoff::default()
+                        },
+                    )]),
+                    ..ServiceState::default()
+                })
+                .expect_err("injected boundary must fail the transaction");
+            assert!(error.contains("injected_service_state_save_failure"));
+
+            let loaded = baseline_store
+                .load()
+                .expect("failed transaction must leave a readable baseline");
+            assert!(loaded.remote_view_handoffs.contains_key("handoff-before"));
+            assert!(!loaded.remote_view_handoffs.contains_key("handoff-after"));
+            assert!(!loaded.browsers.contains_key("browser-after"));
+            assert!(!service_state_transaction_path(&path).exists());
+            let _ = fs::remove_dir_all(path.parent().unwrap());
+        }
     }
 
     #[test]

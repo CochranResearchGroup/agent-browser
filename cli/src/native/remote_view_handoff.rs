@@ -1525,21 +1525,19 @@ pub fn complete_route_bound_handoff_open(
 ) -> Result<Value, String> {
     let final_route_binding =
         final_route_bound_handoff_route_binding(input.planned_route_binding, input.checkout);
-    let acquisition_lease = complete_route_bound_handoff_plan_acquisition(
-        input.repository,
-        input.lease,
-        input.checkout,
-        input.observed_at,
-    )?;
     let browser_build_proof =
         route_bound_handoff_browser_build_proof(input.intent, input.launch_command, input.launch);
     let handoff_url = input
         .handoff_id
         .and_then(|handoff_id| durable_remote_view_handoff_url(&final_route_binding, handoff_id));
-    if let Some(handoff_id) = input.handoff_id {
-        persist_remote_view_handoff(
-            input.repository,
-            PersistRemoteViewHandoffInput {
+    let acquisition_lease = finalize_route_bound_handoff_atomic(
+        input.repository,
+        input.lease,
+        input.checkout,
+        input.observed_at,
+        input
+            .handoff_id
+            .map(|handoff_id| PersistRemoteViewHandoffInput {
                 handoff_id,
                 handoff_url: handoff_url.as_deref(),
                 intent: input.intent,
@@ -1548,9 +1546,8 @@ pub fn complete_route_bound_handoff_open(
                 session_name: input.session_name,
                 tab: input.tab,
                 observed_at: input.observed_at,
-            },
-        )?;
-    }
+            }),
+    )?;
     let acquisition_lease = serde_json::to_value(acquisition_lease)
         .map_err(|err| format!("route_bound_handoff_lease_serialize_failed: {err}"))?;
 
@@ -1592,10 +1589,38 @@ struct PersistRemoteViewHandoffInput<'a> {
     observed_at: &'a str,
 }
 
-fn persist_remote_view_handoff(
+fn finalize_route_bound_handoff_atomic(
     repository: &LockedServiceStateRepository<JsonServiceStateStore>,
+    lease: &RemoteViewAcquisitionLease,
+    checkout: &Value,
+    observed_at: &str,
+    handoff: Option<PersistRemoteViewHandoffInput<'_>>,
+) -> Result<RemoteViewAcquisitionLease, String> {
+    let handoff = handoff
+        .map(remote_view_handoff_for_persistence)
+        .transpose()?;
+    repository.mutate(|state| {
+        state
+            .remote_view_acquisition_leases
+            .entry(lease.id.clone())
+            .or_insert_with(|| lease.clone());
+        let acquisition_lease =
+            finalize_route_bound_acquisition(state, &lease.id, checkout, observed_at)?;
+        if let Some((handoff_id, mut handoff)) = handoff {
+            handoff.created_at = state
+                .remote_view_handoffs
+                .get(&handoff_id)
+                .and_then(|existing| existing.created_at.clone())
+                .or(handoff.created_at);
+            state.remote_view_handoffs.insert(handoff_id, handoff);
+        }
+        Ok(acquisition_lease)
+    })
+}
+
+fn remote_view_handoff_for_persistence(
     input: PersistRemoteViewHandoffInput<'_>,
-) -> Result<(), String> {
+) -> Result<(String, RemoteViewHandoff), String> {
     let intent = serde_json::to_value(input.intent)
         .map_err(|error| format!("remote_view_handoff_intent_serialize_failed: {error}"))?;
     let tab_id = input
@@ -1626,44 +1651,37 @@ fn persist_remote_view_handoff(
     let control_input =
         route_bound_handoff_default_control_input_provider(input.intent.view_stream_provider);
 
-    repository.mutate(|state| {
-        let existing = state.remote_view_handoffs.get(input.handoff_id);
-        let created_at = existing
-            .and_then(|handoff| handoff.created_at.clone())
-            .or_else(|| Some(input.observed_at.to_string()));
-        state.remote_view_handoffs.insert(
-            input.handoff_id.to_string(),
-            RemoteViewHandoff {
-                id: input.handoff_id.to_string(),
-                state: "ready".to_string(),
-                intent,
-                handoff_url: input.handoff_url.map(str::to_string),
-                desired_url: input.intent.url.clone(),
-                profile_id,
-                browser_id: Some(input.browser_id.to_string()),
-                session_name: Some(input.session_name.to_string()),
-                tab_id,
-                target_id,
-                view_stream_provider: Some(input.intent.view_stream_provider),
-                control_input,
-                last_route_id: Some(input.route_binding.route_id.clone()),
-                last_route_pool_entry_id: input.route_binding.route_pool_entry_id.clone(),
-                last_display_allocation_id: Some(input.route_binding.display_allocation_id.clone()),
-                created_at,
-                updated_at: Some(input.observed_at.to_string()),
-                last_resolved_at: Some(input.observed_at.to_string()),
-                last_resolution: Some(json!({
-                    "status": "ready",
-                    "browserId": input.browser_id,
-                    "sessionName": input.session_name,
-                    "tabId": input.tab.get("tabId").or_else(|| input.tab.get("id")),
-                    "targetId": input.tab.get("targetId"),
-                    "routeId": input.route_binding.route_id,
-                })),
-            },
-        );
-        Ok(())
-    })
+    Ok((
+        input.handoff_id.to_string(),
+        RemoteViewHandoff {
+            id: input.handoff_id.to_string(),
+            state: "ready".to_string(),
+            intent,
+            handoff_url: input.handoff_url.map(str::to_string),
+            desired_url: input.intent.url.clone(),
+            profile_id,
+            browser_id: Some(input.browser_id.to_string()),
+            session_name: Some(input.session_name.to_string()),
+            tab_id,
+            target_id,
+            view_stream_provider: Some(input.intent.view_stream_provider),
+            control_input,
+            last_route_id: Some(input.route_binding.route_id.clone()),
+            last_route_pool_entry_id: input.route_binding.route_pool_entry_id.clone(),
+            last_display_allocation_id: Some(input.route_binding.display_allocation_id.clone()),
+            created_at: Some(input.observed_at.to_string()),
+            updated_at: Some(input.observed_at.to_string()),
+            last_resolved_at: Some(input.observed_at.to_string()),
+            last_resolution: Some(json!({
+                "status": "ready",
+                "browserId": input.browser_id,
+                "sessionName": input.session_name,
+                "tabId": input.tab.get("tabId").or_else(|| input.tab.get("id")),
+                "targetId": input.tab.get("targetId"),
+                "routeId": input.route_binding.route_id,
+            })),
+        },
+    ))
 }
 
 pub fn final_route_bound_handoff_route_binding(
