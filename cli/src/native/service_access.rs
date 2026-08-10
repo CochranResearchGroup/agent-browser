@@ -5644,7 +5644,6 @@ mod tests {
 }
 #[allow(dead_code, unused_imports)]
 pub(crate) mod service_commands {
-    use crate::native::action_runtime::common::*;
     use crate::native::action_runtime::runtime::{
         account_ids_from_command, apply_service_browser_capability_selection,
         browser_build_from_command, browser_build_label, is_stale_page_session_error,
@@ -5657,7 +5656,42 @@ pub(crate) mod service_commands {
         AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
         AUTH_LOGIN_WAIT_UNTIL,
     };
+    use crate::native::auth;
+    use crate::native::cdp::chrome::{launch_chrome_detached, LaunchOptions, ManualChromeLaunch};
+    use crate::native::providers;
+    use crate::native::service_access::{service_access_plan_for_state, ServiceAccessPlanRequest};
+    use crate::native::service_config::{
+        delete_persisted_monitor, delete_persisted_profile, delete_persisted_provider,
+        delete_persisted_session, delete_persisted_site_policy, reset_persisted_monitor_failures,
+        update_persisted_monitor_state, update_persisted_profile_freshness,
+        update_persisted_profile_seeding_handoff,
+        upsert_persisted_browser_capability_registry_record, upsert_persisted_monitor,
+        upsert_persisted_profile, upsert_persisted_provider, upsert_persisted_session,
+        upsert_persisted_site_policy,
+    };
     use crate::native::service_diagnostics::truncate_utf8;
+    use crate::native::service_lifecycle::{
+        profile_lease_telemetry, select_service_profile_for_request, service_profile_id,
+        ProfileSelectionRequest, ServiceLaunchMetadata,
+    };
+    use crate::native::service_model::{
+        retained_display_allocation_candidates, service_profile_allocations,
+        service_profile_seeding_handoff, service_profile_sources, BrowserBuild,
+        BrowserCapabilityRegistry, BrowserHealth as ServiceBrowserHealth,
+        BrowserHost as ServiceBrowserHost, BrowserProcess, BrowserProfile, BrowserSession,
+        BrowserTab, ControlInputProvider, DisplayAllocation, JobState as ServiceJobState,
+        LeaseState, MonitorState, ProfileAllocationPolicy, ProfileClass, ProfileKeyringPolicy,
+        ProfileLeaseDisposition, ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease,
+        RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent,
+        ServiceEventKind, ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle,
+        ViewStream, ViewStreamProvider, ViewerLease,
+    };
+    use crate::native::state;
+    use chrono::{DateTime, FixedOffset};
+    use serde_json::{json, Map, Value};
+    use sha2::{Digest, Sha256};
+    use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+    use std::env;
     pub(crate) fn access_plan_browser_build_selection_summary(plan: &Value) -> Value {
         let selection = plan
             .pointer("/decision/launchPosture/browserBuildSelection")

@@ -400,7 +400,6 @@ mod tests {
 }
 #[allow(dead_code, unused_imports)]
 pub(crate) mod service_commands {
-    use crate::native::action_runtime::common::*;
     use crate::native::action_runtime::runtime::{
         is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
         relaunch_and_restore_page, service_browser_id,
@@ -410,10 +409,26 @@ pub(crate) mod service_commands {
         AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
         AUTH_LOGIN_WAIT_UNTIL,
     };
+    use crate::native::service_activity::service_incident_activity_response;
     use crate::native::service_diagnostics::truncate_utf8;
+    use crate::native::service_model::{
+        retained_display_allocation_candidates, service_profile_allocations,
+        service_profile_seeding_handoff, service_profile_sources, BrowserBuild,
+        BrowserCapabilityRegistry, BrowserHealth as ServiceBrowserHealth,
+        BrowserHost as ServiceBrowserHost, BrowserProcess, BrowserProfile, BrowserSession,
+        BrowserTab, ControlInputProvider, DisplayAllocation, JobState as ServiceJobState,
+        LeaseState, MonitorState, ProfileAllocationPolicy, ProfileClass, ProfileKeyringPolicy,
+        ProfileLeaseDisposition, ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease,
+        RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent,
+        ServiceEventKind, ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle,
+        ViewStream, ViewStreamProvider, ViewerLease,
+    };
     use crate::native::service_trace::service_commands::{
         parse_service_event_timestamp, service_event_at_or_after, service_event_kind_name,
     };
+    use crate::native::state;
+    use serde_json::{json, Map, Value};
+    use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
     pub(crate) async fn handle_service_events(cmd: &Value) -> Result<Value, String> {
         let service_state = cmd
             .get("serviceState")

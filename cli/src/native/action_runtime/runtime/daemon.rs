@@ -1,5 +1,4 @@
 #![allow(unused_imports)]
-use super::super::common::*;
 use super::capability::{
     browser_build_label, browser_capability_service_state, executable_path_is_operator_supplied,
     select_browser_capability_launch_binding,
@@ -12,14 +11,48 @@ use super::cdp_free_plan::{
 use super::launch::auto_launch;
 use super::recovery::DaemonState;
 use super::remote_headed::{parse_control_input_provider, parse_view_stream_provider};
+use crate::native::auth;
+use crate::native::browser::{
+    should_track_target, BrowserManager, BrowserShutdownOutcome, PageInfo, ProcessExitObservation,
+    WaitUntil,
+};
 use crate::native::browser_navigation::{
     add_manual_login_hint_warning, persist_service_owned_navigate_tab,
 };
+use crate::native::cdp::chrome::{launch_chrome_detached, LaunchOptions, ManualChromeLaunch};
+use crate::native::cdp::types::{
+    AttachToTargetParams, AttachToTargetResult, CdpEvent, CreateTargetResult,
+    DispatchMouseEventParams, ExceptionThrownEvent, JavascriptDialogOpeningEvent,
+    TargetCreatedEvent, TargetDestroyedEvent, TargetInfoChangedEvent,
+};
 use crate::native::network::resolve_fetch_paused;
 use crate::native::network_archive::{har_cdp_protocol_to_http_version, har_extract_headers};
+use crate::native::service_access::{service_access_plan_for_state, ServiceAccessPlanRequest};
+use crate::native::service_lifecycle::{
+    profile_lease_telemetry, select_service_profile_for_request, service_profile_id,
+    ProfileSelectionRequest, ServiceLaunchMetadata,
+};
+use crate::native::service_model::{
+    retained_display_allocation_candidates, service_profile_allocations,
+    service_profile_seeding_handoff, service_profile_sources, BrowserBuild,
+    BrowserCapabilityRegistry, BrowserHealth as ServiceBrowserHealth,
+    BrowserHost as ServiceBrowserHost, BrowserProcess, BrowserProfile, BrowserSession, BrowserTab,
+    ControlInputProvider, DisplayAllocation, JobState as ServiceJobState, LeaseState, MonitorState,
+    ProfileAllocationPolicy, ProfileClass, ProfileKeyringPolicy, ProfileLeaseDisposition,
+    ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease, RemoteViewHandoff,
+    RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent, ServiceEventKind,
+    ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle, ViewStream,
+    ViewStreamProvider, ViewerLease,
+};
+use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
+use crate::native::state;
 use crate::native::stream_runtime::{
     stream_file_path, write_engine_file, write_extensions_file, write_provider_file,
 };
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Map, Value};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::env;
 /// Wait strategy used by `auth_login` when navigating to the login page.
 ///
 /// We intentionally use `Load` (instead of `NetworkIdle`) because many modern

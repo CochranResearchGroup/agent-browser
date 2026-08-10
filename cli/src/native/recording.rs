@@ -323,7 +323,6 @@ mod tests {
 }
 #[allow(dead_code, unused_imports)]
 pub(crate) mod action_commands {
-    use crate::native::action_runtime::common::*;
     use crate::native::action_runtime::runtime::{
         is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
         relaunch_and_restore_page, service_browser_id,
@@ -333,7 +332,26 @@ pub(crate) mod action_commands {
         AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
         AUTH_LOGIN_WAIT_UNTIL,
     };
+    use crate::native::browser::{
+        should_track_target, BrowserManager, BrowserShutdownOutcome, PageInfo,
+        ProcessExitObservation, WaitUntil,
+    };
+    use crate::native::cdp::client::CdpClient;
+    use crate::native::cdp::types::{
+        AttachToTargetParams, AttachToTargetResult, CdpEvent, CreateTargetResult,
+        DispatchMouseEventParams, ExceptionThrownEvent, JavascriptDialogOpeningEvent,
+        TargetCreatedEvent, TargetDestroyedEvent, TargetInfoChangedEvent,
+    };
+    use crate::native::cookies;
+    use crate::native::recording::{self, RecordingState};
     use crate::native::service_diagnostics::truncate_utf8;
+    use crate::native::state;
+    use serde_json::{json, Map, Value};
+    use std::process::{Command, Stdio};
+    use std::sync::atomic::AtomicU64;
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
+    use tokio::sync::{broadcast, oneshot, RwLock};
     pub(crate) async fn handle_recording_start(
         cmd: &Value,
         state: &mut DaemonState,

@@ -1,5 +1,4 @@
 #![allow(unused_imports)]
-use super::super::common::*;
 use super::capability::service_browser_id;
 use super::cdp_free_plan::{
     browser_host_from_command, optional_command_string,
@@ -14,14 +13,77 @@ use super::launch::browser_recovery_policy_config_from_env;
 use super::profile_lease::{
     allow_duplicate_profile_lane_from_command, service_browser_health_counts_as_live,
 };
+use crate::native::browser::{
+    should_track_target, BrowserManager, BrowserShutdownOutcome, PageInfo, ProcessExitObservation,
+    WaitUntil,
+};
 use crate::native::browser_navigation::{
     add_manual_login_hint_warning, persist_service_owned_navigate_tab,
 };
+use crate::native::cancellation::CancellationToken;
+use crate::native::cdp::chrome::{launch_chrome_detached, LaunchOptions, ManualChromeLaunch};
+use crate::native::cdp::client::CdpClient;
+use crate::native::cdp::types::{
+    AttachToTargetParams, AttachToTargetResult, CdpEvent, CreateTargetResult,
+    DispatchMouseEventParams, ExceptionThrownEvent, JavascriptDialogOpeningEvent,
+    TargetCreatedEvent, TargetDestroyedEvent, TargetInfoChangedEvent,
+};
+use crate::native::element::RefMap;
+use crate::native::inspect_server::InspectServer;
 use crate::native::network::resolve_fetch_paused;
+use crate::native::network::{self, DomainFilter, EventTracker};
 use crate::native::network_archive::{har_cdp_protocol_to_http_version, har_extract_headers};
+use crate::native::policy::{ActionPolicy, ConfirmActions, PolicyResult};
+use crate::native::recording::{self, RecordingState};
+use crate::native::service_health::{
+    persist_browser_recovery_started_in_repository, persist_closed_browser_health_in_repository,
+    persist_current_browser_stale_health_in_repository,
+    persist_reconciled_service_state_in_repository, persist_service_browser_record_in_repository,
+    reconcile_service_state, retry_degraded_service_browser_in_state,
+    retry_persisted_service_browser_in_repository, retry_service_browser_in_state,
+    BrowserRecoveryPersistence, BrowserRecoveryPolicyConfig, BrowserRecoveryPolicySource,
+    BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
+};
+use crate::native::service_lifecycle::{
+    profile_lease_telemetry, select_service_profile_for_request, service_profile_id,
+    ProfileSelectionRequest, ServiceLaunchMetadata,
+};
+use crate::native::service_model::{
+    retained_display_allocation_candidates, service_profile_allocations,
+    service_profile_seeding_handoff, service_profile_sources, BrowserBuild,
+    BrowserCapabilityRegistry, BrowserHealth as ServiceBrowserHealth,
+    BrowserHost as ServiceBrowserHost, BrowserProcess, BrowserProfile, BrowserSession, BrowserTab,
+    ControlInputProvider, DisplayAllocation, JobState as ServiceJobState, LeaseState, MonitorState,
+    ProfileAllocationPolicy, ProfileClass, ProfileKeyringPolicy, ProfileLeaseDisposition,
+    ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease, RemoteViewHandoff,
+    RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent, ServiceEventKind,
+    ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle, ViewStream,
+    ViewStreamProvider, ViewerLease,
+};
+use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
+use crate::native::state;
+use crate::native::storage;
+use crate::native::stream::{self, StreamServer};
 use crate::native::stream_runtime::{
     stream_file_path, write_engine_file, write_extensions_file, write_provider_file,
 };
+use crate::native::tracing::{self as native_tracing, TracingState};
+use crate::native::webdriver::appium::AppiumManager;
+use crate::native::webdriver::backend::{
+    BrowserBackend, WebDriverBackend, WEBDRIVER_UNSUPPORTED_ACTIONS,
+};
+use crate::native::webdriver::safari;
+use crate::runtime_profile::{
+    clear_runtime_state, looks_like_path, pid_is_running, read_devtools_port, read_runtime_state,
+    runtime_profile_user_data_dir,
+};
+use serde_json::{json, Map, Value};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::env;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicU64;
+use std::sync::Arc;
+use tokio::sync::{broadcast, oneshot, RwLock};
 pub(crate) fn persist_browser_recovery_started_from_persisted_state(
     state: &DaemonState,
     reason: &str,

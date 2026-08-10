@@ -502,7 +502,6 @@ fn format_timestamp(value: DateTime<Utc>) -> String {
 mod tests;
 #[allow(dead_code, unused_imports)]
 pub(crate) mod action_commands {
-    use crate::native::action_runtime::common::*;
     use crate::native::action_runtime::runtime::{
         is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
         relaunch_and_restore_page, service_browser_id,
@@ -512,7 +511,36 @@ pub(crate) mod action_commands {
         AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
         AUTH_LOGIN_WAIT_UNTIL,
     };
+    use crate::native::remote_view_attachability::refresh_remote_view_attachability;
     use crate::native::service_diagnostics::truncate_utf8;
+    use crate::native::service_health::{
+        persist_browser_recovery_started_in_repository,
+        persist_closed_browser_health_in_repository,
+        persist_current_browser_stale_health_in_repository,
+        persist_reconciled_service_state_in_repository,
+        persist_service_browser_record_in_repository, reconcile_service_state,
+        retry_degraded_service_browser_in_state, retry_persisted_service_browser_in_repository,
+        retry_service_browser_in_state, BrowserRecoveryPersistence, BrowserRecoveryPolicyConfig,
+        BrowserRecoveryPolicySource, BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
+    };
+    use crate::native::service_model::{
+        retained_display_allocation_candidates, service_profile_allocations,
+        service_profile_seeding_handoff, service_profile_sources, BrowserBuild,
+        BrowserCapabilityRegistry, BrowserHealth as ServiceBrowserHealth,
+        BrowserHost as ServiceBrowserHost, BrowserProcess, BrowserProfile, BrowserSession,
+        BrowserTab, ControlInputProvider, DisplayAllocation, JobState as ServiceJobState,
+        LeaseState, MonitorState, ProfileAllocationPolicy, ProfileClass, ProfileKeyringPolicy,
+        ProfileLeaseDisposition, ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease,
+        RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent,
+        ServiceEventKind, ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle,
+        ViewStream, ViewStreamProvider, ViewerLease,
+    };
+    use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
+    use crate::native::state;
+    use chrono::{DateTime, FixedOffset};
+    use serde::{Deserialize, Serialize};
+    use serde_json::{json, Map, Value};
+    use std::sync::Arc;
     pub(crate) async fn handle_service_status(cmd: &Value) -> Result<Value, String> {
         let repository = LockedServiceStateRepository::default_json()?;
         let projector = super::super::service_status_projection::ServiceStatusProjector::local();

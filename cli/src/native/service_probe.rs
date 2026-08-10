@@ -1,5 +1,4 @@
 #![allow(unused_imports)]
-use super::action_runtime::common::*;
 use super::action_runtime::runtime::{
     service_browser_id, validate_service_tab_handle_for_current_session, DaemonState,
     RuntimeHandoffDescriptor, TrackedRequest,
@@ -11,6 +10,30 @@ use super::interaction::{
 };
 use super::network::matches_status_filter;
 use super::service_diagnostics::truncate_utf8;
+use crate::native::browser::{
+    should_track_target, BrowserManager, BrowserShutdownOutcome, PageInfo, ProcessExitObservation,
+    WaitUntil,
+};
+use crate::native::interaction;
+use crate::native::remote_view::{
+    display_allocation_id_for_route_pool_entry, normalize_remote_view_open_intent,
+    plan_remote_view_acquisition, readiness_state, route_binding_readiness,
+    route_bound_display_content, route_display_content, visible_browser_window_proof,
+    RemoteViewAcquisitionPlan, RemoteViewRouteBinding,
+};
+use crate::native::service_config::{
+    delete_persisted_monitor, delete_persisted_profile, delete_persisted_provider,
+    delete_persisted_session, delete_persisted_site_policy, reset_persisted_monitor_failures,
+    update_persisted_monitor_state, update_persisted_profile_freshness,
+    update_persisted_profile_seeding_handoff, upsert_persisted_browser_capability_registry_record,
+    upsert_persisted_monitor, upsert_persisted_profile, upsert_persisted_provider,
+    upsert_persisted_session, upsert_persisted_site_policy,
+};
+use crate::native::state;
+use serde_json::{json, Map, Value};
+use sha2::{Digest, Sha256};
+use std::time::{Duration, Instant};
+use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 pub(crate) async fn handle_service_probe(
     cmd: &Value,
     state: &mut DaemonState,
@@ -335,7 +358,6 @@ pub(crate) fn probe_recipe_fingerprint(probe: &Map<String, Value>) -> String {
 }
 #[allow(dead_code, unused_imports)]
 pub(crate) mod action_commands {
-    use crate::native::action_runtime::common::*;
     use crate::native::action_runtime::runtime::{
         is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
         relaunch_and_restore_page, service_browser_id,
@@ -345,7 +367,32 @@ pub(crate) mod action_commands {
         AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
         AUTH_LOGIN_WAIT_UNTIL,
     };
+    use crate::native::browser::{
+        should_track_target, BrowserManager, BrowserShutdownOutcome, PageInfo,
+        ProcessExitObservation, WaitUntil,
+    };
+    use crate::native::interaction;
+    use crate::native::remote_view::{
+        display_allocation_id_for_route_pool_entry, normalize_remote_view_open_intent,
+        plan_remote_view_acquisition, readiness_state, route_binding_readiness,
+        route_bound_display_content, route_display_content, visible_browser_window_proof,
+        RemoteViewAcquisitionPlan, RemoteViewRouteBinding,
+    };
+    use crate::native::service_config::{
+        delete_persisted_monitor, delete_persisted_profile, delete_persisted_provider,
+        delete_persisted_session, delete_persisted_site_policy, reset_persisted_monitor_failures,
+        update_persisted_monitor_state, update_persisted_profile_freshness,
+        update_persisted_profile_seeding_handoff,
+        upsert_persisted_browser_capability_registry_record, upsert_persisted_monitor,
+        upsert_persisted_profile, upsert_persisted_provider, upsert_persisted_session,
+        upsert_persisted_site_policy,
+    };
     use crate::native::service_diagnostics::truncate_utf8;
+    use crate::native::state;
+    use serde_json::{json, Map, Value};
+    use sha2::{Digest, Sha256};
+    use std::time::{Duration, Instant};
+    use time::{format_description::well_known::Rfc3339, OffsetDateTime};
     pub(crate) async fn handle_bounded_service_evaluate(
         cmd: &Value,
         state: &mut DaemonState,

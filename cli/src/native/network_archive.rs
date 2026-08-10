@@ -1,6 +1,5 @@
 #[allow(dead_code, unused_imports)]
 pub(crate) mod action_commands {
-    use crate::native::action_runtime::common::*;
     use crate::native::action_runtime::runtime::{
         is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
         relaunch_and_restore_page, service_browser_id,
@@ -10,7 +9,14 @@ pub(crate) mod action_commands {
         AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
         AUTH_LOGIN_WAIT_UNTIL,
     };
+    use crate::native::cookies;
     use crate::native::service_diagnostics::truncate_utf8;
+    use crate::native::state;
+    use serde_json::{json, Map, Value};
+    use std::env;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use time::{format_description::well_known::Rfc3339, OffsetDateTime};
     /// Stop HAR recording and write the captured requests to disk.
     pub(crate) async fn handle_har_stop(
         cmd: &Value,

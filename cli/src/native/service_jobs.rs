@@ -121,7 +121,6 @@ fn current_timestamp() -> String {
 }
 #[allow(dead_code, unused_imports)]
 pub(crate) mod service_commands {
-    use crate::native::action_runtime::common::*;
     use crate::native::action_runtime::runtime::{
         is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
         relaunch_and_restore_page, service_browser_id,
@@ -132,10 +131,27 @@ pub(crate) mod service_commands {
         AUTH_LOGIN_WAIT_UNTIL,
     };
     use crate::native::service_diagnostics::truncate_utf8;
+    use crate::native::service_jobs::cancel_persisted_service_job;
+    use crate::native::service_model::{
+        retained_display_allocation_candidates, service_profile_allocations,
+        service_profile_seeding_handoff, service_profile_sources, BrowserBuild,
+        BrowserCapabilityRegistry, BrowserHealth as ServiceBrowserHealth,
+        BrowserHost as ServiceBrowserHost, BrowserProcess, BrowserProfile, BrowserSession,
+        BrowserTab, ControlInputProvider, DisplayAllocation, JobState as ServiceJobState,
+        LeaseState, MonitorState, ProfileAllocationPolicy, ProfileClass, ProfileKeyringPolicy,
+        ProfileLeaseDisposition, ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease,
+        RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent,
+        ServiceEventKind, ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle,
+        ViewStream, ViewStreamProvider, ViewerLease,
+    };
+    use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
     use crate::native::service_trace::service_commands::{
         parse_service_event_timestamp, service_job_at_or_after, service_job_matches_trace_filters,
         service_job_state_name,
     };
+    use crate::native::state;
+    use serde_json::{json, Map, Value};
+    use time::{format_description::well_known::Rfc3339, OffsetDateTime};
     pub(crate) async fn handle_service_job_cancel(cmd: &Value) -> Result<Value, String> {
         let job_id = cmd
             .get("jobId")

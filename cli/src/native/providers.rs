@@ -816,7 +816,6 @@ mod tests {
 }
 #[allow(dead_code, unused_imports)]
 pub(crate) mod service_commands {
-    use crate::native::action_runtime::common::*;
     use crate::native::action_runtime::runtime::{
         is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
         relaunch_and_restore_page, service_browser_id,
@@ -826,8 +825,26 @@ pub(crate) mod service_commands {
         AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
         AUTH_LOGIN_WAIT_UNTIL,
     };
+    use crate::native::browser::{
+        should_track_target, BrowserManager, BrowserShutdownOutcome, PageInfo,
+        ProcessExitObservation, WaitUntil,
+    };
+    use crate::native::providers;
     use crate::native::service_access::required_service_config_id;
+    use crate::native::service_config::{
+        delete_persisted_monitor, delete_persisted_profile, delete_persisted_provider,
+        delete_persisted_session, delete_persisted_site_policy, reset_persisted_monitor_failures,
+        update_persisted_monitor_state, update_persisted_profile_freshness,
+        update_persisted_profile_seeding_handoff,
+        upsert_persisted_browser_capability_registry_record, upsert_persisted_monitor,
+        upsert_persisted_profile, upsert_persisted_provider, upsert_persisted_session,
+        upsert_persisted_site_policy,
+    };
     use crate::native::service_diagnostics::truncate_utf8;
+    use serde_json::{json, Map, Value};
+    use sha2::{Digest, Sha256};
+    use std::env;
+    use std::process::{Command, Stdio};
     pub(crate) async fn handle_service_provider_upsert(cmd: &Value) -> Result<Value, String> {
         let provider_id = required_service_config_id(cmd, "providerId")?;
         let body = cmd.get("provider").cloned().ok_or("Missing provider")?;

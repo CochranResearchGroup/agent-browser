@@ -1704,7 +1704,6 @@ mod tests {
 }
 #[allow(dead_code, unused_imports)]
 pub(crate) mod service_commands {
-    use crate::native::action_runtime::common::*;
     use crate::native::action_runtime::runtime::{
         account_ids_from_command, browser_build_from_command, browser_host_from_command,
         is_stale_page_session_error, optional_command_string, parse_control_input_provider,
@@ -1718,7 +1717,40 @@ pub(crate) mod service_commands {
         AUTH_LOGIN_WAIT_UNTIL,
     };
     use crate::native::service_access::access_plan_browser_build_selection_summary;
+    use crate::native::service_access::{service_access_plan_for_state, ServiceAccessPlanRequest};
     use crate::native::service_diagnostics::truncate_utf8;
+    use crate::native::service_model::{
+        retained_display_allocation_candidates, service_profile_allocations,
+        service_profile_seeding_handoff, service_profile_sources, BrowserBuild,
+        BrowserCapabilityRegistry, BrowserHealth as ServiceBrowserHealth,
+        BrowserHost as ServiceBrowserHost, BrowserProcess, BrowserProfile, BrowserSession,
+        BrowserTab, ControlInputProvider, DisplayAllocation, JobState as ServiceJobState,
+        LeaseState, MonitorState, ProfileAllocationPolicy, ProfileClass, ProfileKeyringPolicy,
+        ProfileLeaseDisposition, ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease,
+        RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent,
+        ServiceEventKind, ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle,
+        ViewStream, ViewStreamProvider, ViewerLease,
+    };
+    use crate::native::service_resources::{
+        service_gc_apply_response, service_gc_dry_run_response,
+        service_resources_monitor_summary_response, service_resources_response,
+        service_resources_write_monitor_summary_response,
+    };
+    use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
+    use crate::native::state;
+    use crate::runtime_profile::{
+        clear_runtime_state, looks_like_path, pid_is_running, read_devtools_port,
+        read_runtime_state, runtime_profile_user_data_dir,
+    };
+    use serde::{Deserialize, Serialize};
+    use serde_json::{json, Map, Value};
+    use sha2::{Digest, Sha256};
+    use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+    use std::env;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use std::process::{Command, Stdio};
+    use std::time::{Duration, Instant};
     pub(crate) async fn handle_service_resources(cmd: &Value) -> Result<Value, String> {
         let service_state = load_service_state_for_maintenance(cmd)?;
         Ok(service_resources_response(&service_state))

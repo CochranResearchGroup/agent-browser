@@ -1067,7 +1067,6 @@ mod tests {
 }
 #[allow(dead_code, unused_imports)]
 pub(crate) mod service_commands {
-    use crate::native::action_runtime::common::*;
     use crate::native::action_runtime::runtime::{
         is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
         relaunch_and_restore_page, service_browser_id,
@@ -1078,7 +1077,39 @@ pub(crate) mod service_commands {
         AUTH_LOGIN_WAIT_UNTIL,
     };
     use crate::native::service_diagnostics::truncate_utf8;
+    use crate::native::service_health::{
+        persist_browser_recovery_started_in_repository,
+        persist_closed_browser_health_in_repository,
+        persist_current_browser_stale_health_in_repository,
+        persist_reconciled_service_state_in_repository,
+        persist_service_browser_record_in_repository, reconcile_service_state,
+        retry_degraded_service_browser_in_state, retry_persisted_service_browser_in_repository,
+        retry_service_browser_in_state, BrowserRecoveryPersistence, BrowserRecoveryPolicyConfig,
+        BrowserRecoveryPolicySource, BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
+    };
+    use crate::native::service_incidents::{
+        acknowledge_persisted_service_incident, apply_persisted_service_remedies,
+        resolve_persisted_service_incident, service_incident_summary, service_incidents_response,
+        triage_persisted_service_monitor, ServiceIncidentFilters,
+    };
+    use crate::native::service_model::{
+        retained_display_allocation_candidates, service_profile_allocations,
+        service_profile_seeding_handoff, service_profile_sources, BrowserBuild,
+        BrowserCapabilityRegistry, BrowserHealth as ServiceBrowserHealth,
+        BrowserHost as ServiceBrowserHost, BrowserProcess, BrowserProfile, BrowserSession,
+        BrowserTab, ControlInputProvider, DisplayAllocation, JobState as ServiceJobState,
+        LeaseState, MonitorState, ProfileAllocationPolicy, ProfileClass, ProfileKeyringPolicy,
+        ProfileLeaseDisposition, ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease,
+        RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent,
+        ServiceEventKind, ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle,
+        ViewStream, ViewStreamProvider, ViewerLease,
+    };
+    use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
     use crate::native::service_trace::service_now_timestamp;
+    use crate::native::state;
+    use chrono::{DateTime, FixedOffset};
+    use serde_json::{json, Map, Value};
+    use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
     pub(crate) async fn handle_service_remedies_apply(cmd: &Value) -> Result<Value, String> {
         let escalation = cmd
             .get("escalation")

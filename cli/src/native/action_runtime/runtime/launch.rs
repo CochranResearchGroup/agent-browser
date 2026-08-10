@@ -1,5 +1,4 @@
 #![allow(unused_imports)]
-use super::super::common::*;
 use super::capability::{
     close_behavior_for_attached_browser, close_behavior_for_launched_browser, service_browser_id,
 };
@@ -30,14 +29,80 @@ use super::remote_headed::{
     ensure_service_profile_lease_available, persist_current_browser_health,
     persist_service_browser_record,
 };
+use crate::native::browser::{
+    should_track_target, BrowserManager, BrowserShutdownOutcome, PageInfo, ProcessExitObservation,
+    WaitUntil,
+};
 use crate::native::browser_navigation::{
     add_manual_login_hint_warning, persist_service_owned_navigate_tab,
 };
+use crate::native::cdp::chrome::{launch_chrome_detached, LaunchOptions, ManualChromeLaunch};
 use crate::native::network::resolve_fetch_paused;
+use crate::native::network::{self, DomainFilter, EventTracker};
 use crate::native::network_archive::{har_cdp_protocol_to_http_version, har_extract_headers};
+use crate::native::providers;
+use crate::native::remote_view_handoff::{
+    apply_retained_remote_view_route, begin_route_bound_handoff_failure_recovery,
+    begin_route_bound_handoff_plan_acquisition, complete_route_bound_handoff_failure_cleanup,
+    complete_route_bound_handoff_open, planned_route_bound_handoff_response,
+    remote_view_handoff_resolution_command, remote_view_handoff_was_explicitly_closed,
+    route_bound_handoff_checkout_command_with_visible_window_proof,
+    route_bound_handoff_checkout_failure, route_bound_handoff_failure_cleanup_task_result,
+    route_bound_handoff_focus_command, route_bound_handoff_focus_failure,
+    route_bound_handoff_immediate_failure, route_bound_handoff_launch_failure_cleanup,
+    route_bound_handoff_operator_visible,
+    route_bound_handoff_operator_visible_failure_if_not_ready, route_bound_handoff_plan,
+    route_bound_handoff_post_checkout_proof, route_bound_handoff_pre_launch_failure_cleanup,
+    route_bound_handoff_reused_browser_launch_result, route_bound_handoff_tab_open_failure,
+    route_bound_handoff_target_url_readiness, route_bound_handoff_visible_window_proof_failure,
+    shared_profile_acquisition_result, CompleteRouteBoundHandoffOpenInput,
+    RouteBoundHandoffFailureCleanupInput, RouteBoundHandoffFailureCleanupSummary,
+    RouteBoundHandoffFailureCleanupTask, RouteBoundHandoffFailureRecoveryInput,
+    RouteBoundHandoffImmediateFailureInput, RouteBoundHandoffPlan,
+    RouteBoundHandoffPlannedResponseInput, RouteBoundHandoffPostCheckoutProofInput,
+    SharedProfileAcquisitionResultInput,
+};
+use crate::native::service_health::{
+    persist_browser_recovery_started_in_repository, persist_closed_browser_health_in_repository,
+    persist_current_browser_stale_health_in_repository,
+    persist_reconciled_service_state_in_repository, persist_service_browser_record_in_repository,
+    reconcile_service_state, retry_degraded_service_browser_in_state,
+    retry_persisted_service_browser_in_repository, retry_service_browser_in_state,
+    BrowserRecoveryPersistence, BrowserRecoveryPolicyConfig, BrowserRecoveryPolicySource,
+    BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
+};
+use crate::native::service_lifecycle::{
+    profile_lease_telemetry, select_service_profile_for_request, service_profile_id,
+    ProfileSelectionRequest, ServiceLaunchMetadata,
+};
+use crate::native::service_model::{
+    retained_display_allocation_candidates, service_profile_allocations,
+    service_profile_seeding_handoff, service_profile_sources, BrowserBuild,
+    BrowserCapabilityRegistry, BrowserHealth as ServiceBrowserHealth,
+    BrowserHost as ServiceBrowserHost, BrowserProcess, BrowserProfile, BrowserSession, BrowserTab,
+    ControlInputProvider, DisplayAllocation, JobState as ServiceJobState, LeaseState, MonitorState,
+    ProfileAllocationPolicy, ProfileClass, ProfileKeyringPolicy, ProfileLeaseDisposition,
+    ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease, RemoteViewHandoff,
+    RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent, ServiceEventKind,
+    ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle, ViewStream,
+    ViewStreamProvider, ViewerLease,
+};
+use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
+use crate::native::state;
 use crate::native::stream_runtime::{
     stream_file_path, write_engine_file, write_extensions_file, write_provider_file,
 };
+use crate::native::webdriver::ios;
+use crate::native::webdriver::safari;
+use crate::runtime_profile::{
+    clear_runtime_state, looks_like_path, pid_is_running, read_devtools_port, read_runtime_state,
+    runtime_profile_user_data_dir,
+};
+use serde_json::{json, Map, Value};
+use std::env;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
+use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 pub(crate) fn shared_profile_auto_launch_acquisition_evidence(
     command: &Value,
     session_id: &str,

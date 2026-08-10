@@ -1,5 +1,4 @@
 #![allow(unused_imports)]
-use super::super::common::*;
 use super::capability::service_browser_id;
 use super::cdp_free_plan::{
     optional_command_string, remote_headed_display_isolation, CdpFreeLaunchPlan,
@@ -13,11 +12,26 @@ use super::recovery::DaemonState;
 use crate::native::browser_navigation::{
     add_manual_login_hint_warning, persist_service_owned_navigate_tab,
 };
+use crate::native::cdp::chrome::{launch_chrome_detached, LaunchOptions, ManualChromeLaunch};
 use crate::native::network::resolve_fetch_paused;
 use crate::native::network_archive::{har_cdp_protocol_to_http_version, har_extract_headers};
+use crate::native::service_lifecycle::{
+    profile_lease_telemetry, select_service_profile_for_request, service_profile_id,
+    ProfileSelectionRequest, ServiceLaunchMetadata,
+};
+use crate::native::state;
 use crate::native::stream_runtime::{
     stream_file_path, write_engine_file, write_extensions_file, write_provider_file,
 };
+use crate::native::webdriver::appium::AppiumManager;
+use crate::native::webdriver::backend::{
+    BrowserBackend, WebDriverBackend, WEBDRIVER_UNSUPPORTED_ACTIONS,
+};
+use crate::native::webdriver::ios;
+use crate::native::webdriver::safari;
+use serde_json::{json, Map, Value};
+use std::env;
+use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 pub(crate) fn build_cdp_free_launch_plan(cmd: &Value) -> Result<CdpFreeLaunchPlan, String> {
     let url = optional_command_string(cmd, "url");
     if url.as_deref().is_some_and(|value| value.starts_with('-')) {

@@ -5512,7 +5512,6 @@ mod tests {
 }
 #[allow(dead_code, unused_imports)]
 pub(crate) mod service_commands {
-    use crate::native::action_runtime::common::*;
     use crate::native::action_runtime::runtime::{
         handle_close, is_stale_page_session_error, optional_command_string,
         recover_browser_command_channel, relaunch_and_restore_page, service_browser_id,
@@ -5522,11 +5521,64 @@ pub(crate) mod service_commands {
         AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
         AUTH_LOGIN_WAIT_UNTIL,
     };
+    use crate::native::browser::{
+        should_track_target, BrowserManager, BrowserShutdownOutcome, PageInfo,
+        ProcessExitObservation, WaitUntil,
+    };
+    use crate::native::providers;
+    use crate::native::remote_view::{
+        display_allocation_id_for_route_pool_entry, normalize_remote_view_open_intent,
+        plan_remote_view_acquisition, readiness_state, route_binding_readiness,
+        route_bound_display_content, route_display_content, visible_browser_window_proof,
+        RemoteViewAcquisitionPlan, RemoteViewRouteBinding,
+    };
+    use crate::native::remote_view_attachability::refresh_remote_view_attachability;
     use crate::native::service_diagnostics::truncate_utf8;
+    use crate::native::service_health::{
+        persist_browser_recovery_started_in_repository,
+        persist_closed_browser_health_in_repository,
+        persist_current_browser_stale_health_in_repository,
+        persist_reconciled_service_state_in_repository,
+        persist_service_browser_record_in_repository, reconcile_service_state,
+        retry_degraded_service_browser_in_state, retry_persisted_service_browser_in_repository,
+        retry_service_browser_in_state, BrowserRecoveryPersistence, BrowserRecoveryPolicyConfig,
+        BrowserRecoveryPolicySource, BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
+    };
     use crate::native::service_incidents::service_commands::{
         normalized_note, normalized_operator,
     };
+    use crate::native::service_lifecycle::{
+        profile_lease_telemetry, select_service_profile_for_request, service_profile_id,
+        ProfileSelectionRequest, ServiceLaunchMetadata,
+    };
+    use crate::native::service_model::{
+        retained_display_allocation_candidates, service_profile_allocations,
+        service_profile_seeding_handoff, service_profile_sources, BrowserBuild,
+        BrowserCapabilityRegistry, BrowserHealth as ServiceBrowserHealth,
+        BrowserHost as ServiceBrowserHost, BrowserProcess, BrowserProfile, BrowserSession,
+        BrowserTab, ControlInputProvider, DisplayAllocation, JobState as ServiceJobState,
+        LeaseState, MonitorState, ProfileAllocationPolicy, ProfileClass, ProfileKeyringPolicy,
+        ProfileLeaseDisposition, ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease,
+        RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent,
+        ServiceEventKind, ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle,
+        ViewStream, ViewStreamProvider, ViewerLease,
+    };
+    use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
     use crate::native::service_trace::service_now_timestamp;
+    use crate::native::state;
+    use crate::runtime_profile::{
+        clear_runtime_state, looks_like_path, pid_is_running, read_devtools_port,
+        read_runtime_state, runtime_profile_user_data_dir,
+    };
+    use serde::{Deserialize, Serialize};
+    use serde_json::{json, Map, Value};
+    use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+    use std::env;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use std::time::{Duration, Instant};
+    use time::{format_description::well_known::Rfc3339, OffsetDateTime};
+    use tokio::sync::{broadcast, oneshot, RwLock};
     pub(crate) async fn handle_service_reconcile(cmd: &Value) -> Result<Value, String> {
         let mut service_state = cmd
             .get("serviceState")

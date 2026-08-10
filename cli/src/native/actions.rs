@@ -1,7 +1,6 @@
 //! Serialized command routing, shared gates, timing, and response envelopes.
 
 #![allow(unused_imports)]
-use super::action_runtime::common::*;
 use super::action_runtime::runtime::{
     active_browser_profile_mismatch, auto_launch, detect_browser_stale_state, handle_cdp_attach,
     handle_cdp_detach, handle_cdp_free_launch, handle_close, handle_external_byop_adopt,
@@ -137,6 +136,41 @@ use super::tracing::{
     handle_profiler_start, handle_profiler_stop, handle_trace_start, handle_trace_stop,
 };
 use super::webdriver::mobile_gestures::{handle_device_list, handle_swipe};
+use crate::native::action_runtime::cancellation::cancellation_error;
+use crate::native::auth;
+use crate::native::cookies;
+use crate::native::diff;
+use crate::native::interaction;
+use crate::native::policy::{ActionPolicy, ConfirmActions, PolicyResult};
+use crate::native::providers;
+use crate::native::service_health::{
+    persist_browser_recovery_started_in_repository, persist_closed_browser_health_in_repository,
+    persist_current_browser_stale_health_in_repository,
+    persist_reconciled_service_state_in_repository, persist_service_browser_record_in_repository,
+    reconcile_service_state, retry_degraded_service_browser_in_state,
+    retry_persisted_service_browser_in_repository, retry_service_browser_in_state,
+    BrowserRecoveryPersistence, BrowserRecoveryPolicyConfig, BrowserRecoveryPolicySource,
+    BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
+};
+use crate::native::service_model::{
+    retained_display_allocation_candidates, service_profile_allocations,
+    service_profile_seeding_handoff, service_profile_sources, BrowserBuild,
+    BrowserCapabilityRegistry, BrowserHealth as ServiceBrowserHealth,
+    BrowserHost as ServiceBrowserHost, BrowserProcess, BrowserProfile, BrowserSession, BrowserTab,
+    ControlInputProvider, DisplayAllocation, JobState as ServiceJobState, LeaseState, MonitorState,
+    ProfileAllocationPolicy, ProfileClass, ProfileKeyringPolicy, ProfileLeaseDisposition,
+    ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease, RemoteViewHandoff,
+    RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent, ServiceEventKind,
+    ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle, ViewStream,
+    ViewStreamProvider, ViewerLease,
+};
+use crate::native::state;
+use crate::native::storage;
+use crate::native::webdriver::backend::{
+    BrowserBackend, WebDriverBackend, WEBDRIVER_UNSUPPORTED_ACTIONS,
+};
+use serde_json::{json, Map, Value};
+use std::time::{Duration, Instant};
 
 pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
     matches!(

@@ -875,7 +875,6 @@ mod tests {
 }
 #[allow(dead_code, unused_imports)]
 pub(crate) mod service_commands {
-    use crate::native::action_runtime::common::*;
     use crate::native::action_runtime::runtime::{
         is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
         relaunch_and_restore_page, service_browser_id,
@@ -886,11 +885,50 @@ pub(crate) mod service_commands {
         AUTH_LOGIN_WAIT_UNTIL,
     };
     use crate::native::service_access::required_service_config_id;
+    use crate::native::service_config::{
+        delete_persisted_monitor, delete_persisted_profile, delete_persisted_provider,
+        delete_persisted_session, delete_persisted_site_policy, reset_persisted_monitor_failures,
+        update_persisted_monitor_state, update_persisted_profile_freshness,
+        update_persisted_profile_seeding_handoff,
+        upsert_persisted_browser_capability_registry_record, upsert_persisted_monitor,
+        upsert_persisted_profile, upsert_persisted_provider, upsert_persisted_session,
+        upsert_persisted_site_policy,
+    };
     use crate::native::service_diagnostics::truncate_utf8;
     use crate::native::service_incidents::service_commands::{
         normalized_note, normalized_operator,
     };
+    use crate::native::service_incidents::{
+        acknowledge_persisted_service_incident, apply_persisted_service_remedies,
+        resolve_persisted_service_incident, service_incident_summary, service_incidents_response,
+        triage_persisted_service_monitor, ServiceIncidentFilters,
+    };
+    use crate::native::service_model::{
+        retained_display_allocation_candidates, service_profile_allocations,
+        service_profile_seeding_handoff, service_profile_sources, BrowserBuild,
+        BrowserCapabilityRegistry, BrowserHealth as ServiceBrowserHealth,
+        BrowserHost as ServiceBrowserHost, BrowserProcess, BrowserProfile, BrowserSession,
+        BrowserTab, ControlInputProvider, DisplayAllocation, JobState as ServiceJobState,
+        LeaseState, MonitorState, ProfileAllocationPolicy, ProfileClass, ProfileKeyringPolicy,
+        ProfileLeaseDisposition, ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease,
+        RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent,
+        ServiceEventKind, ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle,
+        ViewStream, ViewStreamProvider, ViewerLease,
+    };
+    use crate::native::service_monitors::{
+        parse_monitor_state, run_due_persisted_monitors, service_monitors_response,
+        MonitorCollectionFilters,
+    };
+    use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
     use crate::native::service_trace::service_now_timestamp;
+    use crate::native::state;
+    use chrono::{DateTime, FixedOffset};
+    use serde::{Deserialize, Serialize};
+    use serde_json::{json, Map, Value};
+    use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+    use std::env;
+    use std::path::{Path, PathBuf};
+    use std::time::{Duration, Instant};
     pub(crate) async fn handle_service_monitor_upsert(cmd: &Value) -> Result<Value, String> {
         let monitor_id = required_service_config_id(cmd, "monitorId")?;
         let body = cmd.get("monitor").cloned().ok_or("Missing monitor")?;

@@ -1,6 +1,5 @@
 #[allow(dead_code, unused_imports)]
 pub(crate) mod action_commands {
-    use crate::native::action_runtime::common::*;
     use crate::native::action_runtime::runtime::{
         is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
         relaunch_and_restore_page, service_browser_id,
@@ -10,7 +9,48 @@ pub(crate) mod action_commands {
         AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
         AUTH_LOGIN_WAIT_UNTIL,
     };
+    use crate::native::browser::{
+        should_track_target, BrowserManager, BrowserShutdownOutcome, PageInfo,
+        ProcessExitObservation, WaitUntil,
+    };
+    use crate::native::remote_view_handoff::{
+        apply_retained_remote_view_route, begin_route_bound_handoff_failure_recovery,
+        begin_route_bound_handoff_plan_acquisition, complete_route_bound_handoff_failure_cleanup,
+        complete_route_bound_handoff_open, planned_route_bound_handoff_response,
+        remote_view_handoff_resolution_command, remote_view_handoff_was_explicitly_closed,
+        route_bound_handoff_checkout_command_with_visible_window_proof,
+        route_bound_handoff_checkout_failure, route_bound_handoff_failure_cleanup_task_result,
+        route_bound_handoff_focus_command, route_bound_handoff_focus_failure,
+        route_bound_handoff_immediate_failure, route_bound_handoff_launch_failure_cleanup,
+        route_bound_handoff_operator_visible,
+        route_bound_handoff_operator_visible_failure_if_not_ready, route_bound_handoff_plan,
+        route_bound_handoff_post_checkout_proof, route_bound_handoff_pre_launch_failure_cleanup,
+        route_bound_handoff_reused_browser_launch_result, route_bound_handoff_tab_open_failure,
+        route_bound_handoff_target_url_readiness, route_bound_handoff_visible_window_proof_failure,
+        shared_profile_acquisition_result, CompleteRouteBoundHandoffOpenInput,
+        RouteBoundHandoffFailureCleanupInput, RouteBoundHandoffFailureCleanupSummary,
+        RouteBoundHandoffFailureCleanupTask, RouteBoundHandoffFailureRecoveryInput,
+        RouteBoundHandoffImmediateFailureInput, RouteBoundHandoffPlan,
+        RouteBoundHandoffPlannedResponseInput, RouteBoundHandoffPostCheckoutProofInput,
+        SharedProfileAcquisitionResultInput,
+    };
     use crate::native::service_diagnostics::truncate_utf8;
+    use crate::native::service_model::{
+        retained_display_allocation_candidates, service_profile_allocations,
+        service_profile_seeding_handoff, service_profile_sources, BrowserBuild,
+        BrowserCapabilityRegistry, BrowserHealth as ServiceBrowserHealth,
+        BrowserHost as ServiceBrowserHost, BrowserProcess, BrowserProfile, BrowserSession,
+        BrowserTab, ControlInputProvider, DisplayAllocation, JobState as ServiceJobState,
+        LeaseState, MonitorState, ProfileAllocationPolicy, ProfileClass, ProfileKeyringPolicy,
+        ProfileLeaseDisposition, ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease,
+        RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent,
+        ServiceEventKind, ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle,
+        ViewStream, ViewStreamProvider, ViewerLease,
+    };
+    use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
+    use crate::native::state;
+    use serde_json::{json, Map, Value};
+    use time::{format_description::well_known::Rfc3339, OffsetDateTime};
     pub(crate) fn persist_service_owned_tab_new(
         cmd: &Value,
         session_id: &str,
