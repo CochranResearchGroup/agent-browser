@@ -144,14 +144,15 @@ before checkpoint `24265340`.
 | Packet | State | Commit | Evidence |
 | --- | --- | --- | --- |
 | `P0101-P00` | complete | `24265340` | 615 of 615 classified; current reconciliation clean; checker and self-test green |
-| `P0101-A` | implementation checkpoint | this commit | Route-bound coordinator, exact 13-operation typed runtime seam, deadline supervisor, typed outcomes, typed profile-owner collision, deterministic scripted-runtime tests, and stable-ID reconciliation are green; residual Slice A work remains listed below |
-| `P0101-B` | pending | none | Handoff surface deepening follows the coordinator |
-| `P0101-C` | pending | none | Daemon runtime and browser lifecycle extraction |
-| `P0101-D01` through `P0101-D05` | pending | none | Service workflows |
-| `P0101-E01-01` through `P0101-E21` | pending | none | Browser operations |
-| `P0101-F01` through `P0101-F26` | pending | none | Service State and remote-view commands |
-| `P0101-G` | pending | none | Dispatch closeout and final architecture gate |
+| `P0101-A` | complete | `88fba9ff`, `331d9497`, `96805dde`, `ebd5bfdc` | Route-bound coordinator, exact 13-operation typed runtime seam, total-deadline supervisor, terminal compensation and quarantine, cohesive private owners, and deletion of the superseded state-coupled target path |
+| `P0101-B` | complete | `96805dde`, `ebd5bfdc` | Handoff, proof, route-pool, route-lifecycle, target, and compensation ownership are behind the route-open interface |
+| `P0101-C` | complete | `940d2575` | Daemon runtime, launch, recovery, profile-lease, navigation, capability, and CDP-free owners replace the runtime bucket |
+| `P0101-D01` through `P0101-D05` | complete | `ef15a932` | Probe, UI action, network capture, file transfer, and diagnostics workflows have concrete owners |
+| `P0101-E01-01` through `P0101-E21` | complete | `4854b5af`, `5409dabd` | Browser operations and viewer lease behavior are distributed to cohesive browser, network, interaction, stream, and remote-view owners |
+| `P0101-F01` through `P0101-F26` | complete | `6fbceca5`, `5409dabd` | Service State, inventory, access, health, retained-state, trace, incident, lifecycle, route repair, and viewer lease operations have concrete owners |
+| `P0101-G` | complete | `3a428271` | Both transitional facades are deleted; direct owner imports, final inventory state, reverse-import enforcement, and the final architecture gate are green |
 | `P0101-H` | prohibited in this role | none | Installed and live proof requires a separate effect-boundary authorization |
+| `P0102-R01` through `P0102-R03` | complete | `88fba9ff`, `331d9497`, `96805dde`, `ebd5bfdc`, `4854b5af` | Total-deadline compensation, complete typed outcomes and transport-neutral authorization boundary, and cohesive deep-module targets are implemented |
 
 ## Delegation Receipt
 
@@ -161,7 +162,8 @@ before checkpoint `24265340`.
   test, so implementation is kept within this executor rather than delegated
   into overlapping shared source.
 - Runtime handle: `/root/resume_actions_deepening`
-- Status: active after P0
+- Status: source execution complete at `3a428271`; independent audit and test
+  roles remain separate
 
 ## Slice A implementation checkpoint evidence
 
@@ -291,3 +293,115 @@ was inside that same dead path. Both functions were removed with deterministic
 source-range verification. The generic runtime target coordinator remains at
 366 lines, strict Clippy is green, and all four scripted runtime tests still
 pass.
+
+## Campaign source closeout
+
+Execution disposition: **SOURCE ARCHITECTURE COMPLETE; READY FOR INDEPENDENT
+WORK AUDIT**
+
+Installed and operator-visible acceptance remains outside this executor's
+effect boundary. No browser, installed runtime, route, display, tenant, push,
+release, or external effect was performed.
+
+### Checkpoint manifest
+
+| Commit | Durable result |
+| --- | --- |
+| `24265340` | Freeze the stable actions responsibility inventory and architecture harness |
+| `8ec4ab43` | Record the accepted P0 preflight receipt |
+| `e92edaed` | Serialize WSL Cargo and cap compilation memory and swap |
+| `88fba9ff` | Establish the guarded action-runtime seam and route-bound coordinator |
+| `331d9497` | Retain the coordinator through bounded compensation on timeout and cancellation |
+| `96805dde` | Split route-bound open into cohesive private owners |
+| `ebd5bfdc` | Delete the superseded state-coupled route-target path |
+| `940d2575` | Split daemon and browser runtime ownership |
+| `ef15a932` | Extract the five service workflow owners |
+| `4854b5af` | Distribute browser operation ownership |
+| `de5ec433` | Format the architecture split harness |
+| `6fbceca5` | Distribute service command ownership |
+| `5409dabd` | Assign remote viewer lease ownership |
+| `3a428271` | Delete both migration facades and enable the final architecture gate |
+
+### Final responsibility and architecture evidence
+
+The frozen inventory still contains exactly 615 stable baseline responsibility
+records. Its final state is 609 moved and six retained, with the four
+predecessor-moved dispositions included in the moved population. No record is
+unclassified and no compatibility wrapper remains.
+
+```text
+actions architecture check passed definitions=6 tests=0 lines=861 wrappers=0 final=true
+self-test passed classified_fixture=accepted
+```
+
+The six retained production definitions are the reviewed dispatch and shared
+coordination allowlist. `actions.rs` defines no domain struct, enum, or union;
+contains no repository mutation, raw CDP, process-command, route-pool,
+acquisition-lease, durable-handoff, or Service State projection logic; and has
+no compatibility branch. The checker now also fails when either migration
+facade exists, when a typed domain definition returns to dispatch, or when an
+extracted production module reverse-imports `actions` outside the explicit
+test and ingress consumers.
+
+Both temporary re-export files are deleted:
+
+```text
+cli/src/native/action_runtime/browser_operations.rs
+cli/src/native/action_runtime/service_commands.rs
+```
+
+Production consumers import concrete owners directly. The largest production
+file in the private `action_runtime` ownership tree is `runtime/launch.rs` at
+1,265 lines. The intentionally test-only `action_runtime/tests.rs` is 11,737
+lines and does not count toward the `actions.rs` production budget. The final
+`actions.rs` result is below both plan budgets: 861 of 2,500 lines and six of
+35 production definitions.
+
+### Validation receipt
+
+| Gate | Result |
+| --- | --- |
+| Final actions architecture checker | 6 definitions, 0 tests, 861 lines, 0 wrappers, `final=true` |
+| Architecture checker self-test | Classified fixture accepted; unclassified fixture rejected |
+| Focused action runtime tests | 262 passed, 0 failed, 1,594 filtered |
+| Prescribed partitioned Rust suite | 1,799 passed, 0 failed, 57 ignored; all 1,856 discovered tests accounted |
+| Focused CDP partition | 74 passed, 0 failed |
+| Strict CLI Clippy | Green with `-D warnings`; final guarded run completed in 30.15 seconds |
+| Harness strict Clippy | Green with `-D warnings` |
+| Rust formatting and patch checks | Green |
+| Service client no-launch suite | Green, including generated files, type coverage, request and observability helpers, managed-profile flow, and example dry runs |
+| Dashboard workspace and inspector contracts | Green |
+| Route handoff, dashboard workspace, RDP route, and Guacamole hardening static fixtures | Four passed |
+
+An initial unpartitioned diagnostic Rust run found four environment-coupled
+failures after 1,795 passes: incident resolve metadata, ambient display,
+profile lease waiting, and service monitor interval. The repo-prescribed
+partitioned harness was missing the newly relocated
+`native::action_runtime::tests` partition, and the ambient display assertion
+still expected the preexisting fallback behavior. The harness partition and
+assertion were corrected. The complete prescribed rerun then passed all 1,799
+executed tests with zero failures and 57 intentional ignores.
+
+The aggregate `test:route-confusion-gates` script was not invoked because it
+launches Cargo directly, which is prohibited on WSL. Its four Rust fixtures ran
+inside the green guarded canonical suite, and its four no-Cargo fixtures were
+run separately and passed. The live CDP streaming gate, ignored E2E suite,
+install doctors, and neutral live remote-view smokes were not run because they
+would cross this role's explicit no-browser and no-runtime effect boundary.
+No installed-runtime proof is claimed.
+
+Every compiling command used `scripts/ci/cargo-safe.sh`, no two Cargo processes
+ran concurrently, and no cgroup or OOM failure occurred. At the final compile
+boundary the host had 37 GiB available before Clippy and 40 GiB afterward;
+swap use remained below 1 GiB of 32 GiB. The 225 MiB untracked
+`scripts/architecture/actions-inventory/target/` build cache remains preserved
+and excluded from every source checkpoint.
+
+### Remaining gates and authority
+
+The executor has no source blocker. Candidate 4 still requires the planned
+independent work audit and independent tester disposition. Installed and
+operator-visible acceptance additionally requires a separately authorized
+Slice H with the ignored E2E suite, release-candidate installation, doctors,
+and neutral live remote-view proof. Those gates cannot be inferred from the
+green source and no-launch evidence above.

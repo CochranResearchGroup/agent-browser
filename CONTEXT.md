@@ -63,3 +63,11 @@ _Avoid_: Post-timeout join, background cleanup
 **Rollback quarantine**:
 A terminal fail-closed acquisition record used when compensation cannot confirm every owned external effect before the total deadline. It removes active checkout and blocks an equivalent acquisition until explicit recovery.
 _Avoid_: Partial rollback, cleanup warning
+
+**Concrete owner module**:
+A cohesive native module that owns a domain invariant and the operations that preserve it. Command dispatch and peer workflows import this owner directly.
+_Avoid_: Action bucket, handler collection
+
+**Transitional facade**:
+A temporary re-export-only module used while callers migrate to concrete owners. It is not an architectural owner and must be deleted before the final architecture gate.
+_Avoid_: Compatibility owner, permanent facade
