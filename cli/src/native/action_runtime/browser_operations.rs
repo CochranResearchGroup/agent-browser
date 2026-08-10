@@ -9,7 +9,6 @@ use super::runtime::{
     AUTH_LOGIN_WAIT_UNTIL,
 };
 use super::service_workflows::truncate_utf8;
-use crate::native::actions::{cancellable, execute_command};
 pub(crate) fn persist_service_owned_navigate_tab(
     cmd: &Value,
     session_id: &str,
@@ -6470,17 +6469,36 @@ pub(crate) async fn handle_mouseup(cmd: &Value, state: &mut DaemonState) -> Resu
     Ok(json!({ "released" : true }))
 }
 
-pub(crate) async fn handle_confirm(_cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
+pub(crate) struct ConfirmationExecution {
+    action: String,
+    command: Value,
+    policy: Option<ActionPolicy>,
+    confirm_actions: Option<ConfirmActions>,
+}
+
+impl ConfirmationExecution {
+    pub(crate) fn command(&self) -> &Value {
+        &self.command
+    }
+
+    pub(crate) fn complete(self, state: &mut DaemonState, result: Value) -> Value {
+        state.policy = self.policy;
+        state.confirm_actions = self.confirm_actions;
+        json!({ "confirmed": true, "action": self.action, "result": result })
+    }
+}
+
+pub(crate) fn begin_confirmation(state: &mut DaemonState) -> Result<ConfirmationExecution, String> {
     let pending = state
         .pending_confirmation
         .take()
         .ok_or("No pending confirmation")?;
-    let policy = state.policy.take();
-    let confirm_actions = state.confirm_actions.take();
-    let result = Box::pin(execute_command(&pending.cmd, state)).await;
-    state.policy = policy;
-    state.confirm_actions = confirm_actions;
-    Ok(json!({ "confirmed": true, "action": pending.action, "result": result }))
+    Ok(ConfirmationExecution {
+        action: pending.action,
+        command: pending.cmd,
+        policy: state.policy.take(),
+        confirm_actions: state.confirm_actions.take(),
+    })
 }
 
 pub(crate) async fn handle_deny(_cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {

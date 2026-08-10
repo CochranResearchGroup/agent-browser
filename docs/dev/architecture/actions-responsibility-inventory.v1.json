@@ -2504,13 +2504,13 @@
       "baselineStartLine": 4271,
       "baselineEndLine": 4273,
       "associatedTestIds": [],
-      "packet": "P0101-G",
-      "responsibility": "command dispatch and shared coordination",
-      "targetModule": "native::action_dispatch",
-      "movementStatus": "baseline",
+      "packet": "P0101-C",
+      "responsibility": "shared action cancellation",
+      "targetModule": "native::daemon_runtime",
+      "movementStatus": "moved",
       "wrapperOwner": null,
-      "deletionPacket": null,
-      "finalDisposition": "retain"
+      "deletionPacket": "P0101-C",
+      "finalDisposition": "move"
     },
     {
       "id": "ari:function:native::actions:cancellable:8ddbf64c2512811b",
@@ -2524,13 +2524,13 @@
       "associatedTestIds": [
         "test:test_cancellable_returns_cancelled_error_before_future_completes"
       ],
-      "packet": "P0101-G",
-      "responsibility": "command dispatch and shared coordination",
-      "targetModule": "native::action_dispatch",
-      "movementStatus": "baseline",
+      "packet": "P0101-C",
+      "responsibility": "shared action cancellation",
+      "targetModule": "native::daemon_runtime",
+      "movementStatus": "moved",
       "wrapperOwner": null,
-      "deletionPacket": null,
-      "finalDisposition": "retain"
+      "deletionPacket": "P0101-C",
+      "finalDisposition": "move"
     },
     {
       "id": "ari:function:native::actions:active_target_binding:de3fb7fb13fb391c",
@@ -11293,20 +11293,6 @@
       "planVersion": "P0101 v2 plus P0102"
     },
     {
-      "stableId": "ari:function:native::actions:cancellation_error:129cfec798ce4b68",
-      "allowedResponsibility": "command dispatch and shared coordination",
-      "rationale": "Required at the command dispatch seam after all domain decisions move behind deep module interfaces",
-      "reviewer": "P0101 executor P0 review",
-      "planVersion": "P0101 v2 plus P0102"
-    },
-    {
-      "stableId": "ari:function:native::actions:cancellable:8ddbf64c2512811b",
-      "allowedResponsibility": "command dispatch and shared coordination",
-      "rationale": "Required at the command dispatch seam after all domain decisions move behind deep module interfaces",
-      "reviewer": "P0101 executor P0 review",
-      "planVersion": "P0101 v2 plus P0102"
-    },
-    {
       "stableId": "ari:function:native::actions:active_target_binding:de3fb7fb13fb391c",
       "allowedResponsibility": "command dispatch and shared coordination",
       "rationale": "Required at the command dispatch seam after all domain decisions move behind deep module interfaces",
@@ -11601,8 +11587,10 @@
     },
     {
       "targetModule": "native::daemon_runtime",
-      "ownedInvariant": "daemon runtime and browser lifecycle",
+      "ownedInvariant": "daemon runtime and browser lifecycle; shared action cancellation",
       "interfaceOperations": [
+        "cancellation_error",
+        "cancellable",
         "debug_session_events_enabled",
         "is_stale_page_session_error",
         "recover_browser_command_channel",
@@ -11619,7 +11607,7 @@
       "productionCallers": [
         "native::action_dispatch"
       ],
-      "deletionTest": "Deleting native::daemon_runtime would force dispatch or its callers to reproduce the ordered daemon runtime and browser lifecycle decisions and safety checks"
+      "deletionTest": "Deleting native::daemon_runtime would force dispatch or its callers to reproduce cooperative cancellation plus the ordered daemon runtime and browser lifecycle decisions and safety checks"
     },
     {
       "targetModule": "native::diff",

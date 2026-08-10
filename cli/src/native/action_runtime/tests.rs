@@ -3725,6 +3725,34 @@ async fn test_cancellable_returns_cancelled_error_before_future_completes() {
     .await;
     assert_eq!(result, Err(cancellation_error()));
 }
+
+#[tokio::test]
+async fn test_confirm_executes_once_and_restores_confirmation_gate() {
+    let mut state = DaemonState::new();
+    state.confirm_actions = Some(ConfirmActions {
+        categories: HashSet::from(["close".to_string()]),
+    });
+
+    let pending = execute_command(&json!({ "id": "close-1", "action": "close" }), &mut state).await;
+    assert_eq!(pending["data"]["confirmation_required"], true);
+    assert!(state.pending_confirmation.is_some());
+
+    let confirmed = execute_command(
+        &json!({ "id": "confirm-1", "action": "confirm" }),
+        &mut state,
+    )
+    .await;
+    assert_eq!(confirmed["success"], true);
+    assert_eq!(confirmed["data"]["confirmed"], true);
+    assert_eq!(confirmed["data"]["action"], "close");
+    assert_eq!(confirmed["data"]["result"]["success"], true);
+    assert!(state.pending_confirmation.is_none());
+    assert!(state
+        .confirm_actions
+        .as_ref()
+        .is_some_and(|actions| actions.requires_confirmation("close")));
+}
+
 #[tokio::test]
 async fn test_stream_enable_disable_and_status_without_browser() {
     let guard = EnvGuard::new(&["AGENT_BROWSER_SOCKET_DIR", "AGENT_BROWSER_SESSION"]);

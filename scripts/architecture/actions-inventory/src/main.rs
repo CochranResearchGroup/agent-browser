@@ -920,8 +920,6 @@ fn generate(
     }
     let reviewed_dispatcher_names = BTreeSet::from([
         "action_skips_browser_launch",
-        "cancellation_error",
-        "cancellable",
         "active_target_binding",
         "handle_dependent_batch",
         "execute_command",

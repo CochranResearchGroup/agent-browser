@@ -2,9 +2,9 @@
 
 #![allow(unused_imports)]
 use super::action_runtime::browser_operations::{
-    handle_addinitscript, handle_addscript, handle_addstyle, handle_auth_login, handle_auth_save,
-    handle_auth_show, handle_back, handle_boundingbox, handle_bringtofront, handle_browser_pid,
-    handle_cdp_url, handle_check, handle_clear, handle_click, handle_clipboard, handle_confirm,
+    begin_confirmation, handle_addinitscript, handle_addscript, handle_addstyle, handle_auth_login,
+    handle_auth_save, handle_auth_show, handle_back, handle_boundingbox, handle_bringtofront,
+    handle_browser_pid, handle_cdp_url, handle_check, handle_clear, handle_click, handle_clipboard,
     handle_console, handle_content, handle_cookies_clear, handle_cookies_get, handle_cookies_set,
     handle_count, handle_credentials_delete, handle_credentials_get, handle_credentials_list,
     handle_credentials_set, handle_dblclick, handle_deny, handle_device, handle_device_list,
@@ -690,7 +690,14 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
         "auth_list" => handle_credentials_list().await,
         "auth_delete" => handle_credentials_delete(cmd).await,
         "auth_show" => handle_auth_show(cmd).await,
-        "confirm" => handle_confirm(cmd, state).await,
+        "confirm" => match begin_confirmation(state) {
+            Ok(confirmation) => {
+                let command = confirmation.command().clone();
+                let result = Box::pin(execute_command(&command, state)).await;
+                Ok(confirmation.complete(state, result))
+            }
+            Err(error) => Err(error),
+        },
         "deny" => handle_deny(cmd, state).await,
         "swipe" => handle_swipe(cmd, state).await,
         "device_list" => handle_device_list().await,
@@ -790,26 +797,4 @@ pub(crate) fn success_response(id: &str, data: Value) -> Value {
 
 pub(crate) fn error_response(id: &str, error: &str) -> Value {
     json!({ "id" : id, "success" : false, "error" : error, })
-}
-
-/// Stable cancellation error used by action modules that share the daemon's
-/// cooperative cancellation token.
-pub(crate) fn cancellation_error() -> String {
-    "Service job was cancelled while running".to_string()
-}
-
-/// Await one action effect or the shared cooperative cancellation signal.
-#[rustfmt::skip]
-pub(crate) async fn cancellable<F, T>(future: F, cancellation: Option<CancellationToken>) -> Result<T, String>
-where
-    F: Future<Output = Result<T, String>>,
-{
-    let Some(cancellation) = cancellation else {
-        return future.await;
-    };
-    tokio::select! {
-        biased;
-        _ = cancellation.cancelled() => Err(cancellation_error()),
-        result = future => result,
-    }
 }

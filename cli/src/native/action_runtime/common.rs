@@ -141,3 +141,24 @@ pub(crate) use std::sync::Arc;
 pub(crate) use std::time::{Duration, Instant};
 pub(crate) use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 pub(crate) use tokio::sync::{broadcast, oneshot, RwLock};
+
+/// Stable cancellation error shared by dispatcher and domain action owners.
+pub(crate) fn cancellation_error() -> String {
+    "Service job was cancelled while running".to_string()
+}
+
+/// Await one action effect or the daemon's cooperative cancellation signal.
+#[rustfmt::skip]
+pub(crate) async fn cancellable<F, T>(future: F, cancellation: Option<CancellationToken>) -> Result<T, String>
+where
+    F: Future<Output = Result<T, String>>,
+{
+    let Some(cancellation) = cancellation else {
+        return future.await;
+    };
+    tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => Err(cancellation_error()),
+        result = future => result,
+    }
+}
