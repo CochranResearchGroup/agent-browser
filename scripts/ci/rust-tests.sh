@@ -49,6 +49,7 @@ serial_filters=(
   "native::remote_view::open::tests"
   "native::remote_view::open::route_action_helper_tests"
   "native::remote_view::open::visibility_action_tests"
+  "native::remote_view_handoff::tests"
   "native::service_health::action_helper_tests"
   "native::service_health::reconcile_action_helper_tests"
   "native::service_incidents::action_mutation_helper_tests"
