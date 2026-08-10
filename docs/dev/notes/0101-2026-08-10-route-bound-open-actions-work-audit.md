@@ -446,3 +446,359 @@ The auditor did not edit implementation, plans, tests, commits, runtime state,
 or build caches. The only new tracked-path change from this role is this audit
 note. The pre-existing untracked inventory build cache remains excluded from
 source identity.
+
+## Cycle 2 closed-world disposition
+
+Date: 2026-08-10
+
+Reviewed identity:
+
+- branch: `architecture-deepening-20260809`
+- required and observed HEAD:
+  `98438c8d16d63308b15f74a607373ec42bacf17c`
+- review range: Cycle 1 remediation commits `1bd92f51..98438c8d`
+- source identity exclusion: the pre-existing untracked generated cache at
+  `scripts/architecture/actions-inventory/target/`
+- CodeGraph status: healthy, 526 files, 18,009 nodes, and 61,626 edges; direct
+  reads were used for pending, oversized, non-code, and exact-line evidence
+
+This is the one Plan 0106-authorized closed-world Cycle 2. It rechecks only
+`P0101-W1-01` through `P0101-W1-07` and contradictions introduced by their
+repairs. It is not a new architecture discovery pass and does not authorize a
+Cycle 3.
+
+### Cycle 2 result
+
+| Finding | Result | Cycle 2 disposition |
+| --- | --- | --- |
+| `P0101-W1-01` | **FAIL** | A deadline wrapper now owns repository futures, but the production futures poll synchronous locks and filesystem work without yielding. The outer total-deadline branch can also drop compensation before the required terminal quarantine write. |
+| `P0101-W1-02` | **PASS** | Acquisition finalization and optional handoff insertion use one repository mutation, and the state plus handoff store has the four required data-file fault boundaries and recovery. |
+| `P0101-W1-03` | **FAIL** | The seam has typed enum names and the permanent adapter, but most effect and outcome payloads remain opaque `Value` wrappers; the Plan 0102 fallback predicates and actual ingress authorization parity are not implemented or exercised. |
+| `P0101-W1-04` | **FAIL** | The rejected production facades and four shallow owners are deleted, but 193 tests remain in a renamed 11,600-line `actions/` test facade with broad private imports rather than beside the owner interfaces they specify. |
+| `P0101-W1-05` | **FAIL** | Plan 0106's cohesive-checkpoint adjudication and explicit 81-commit deviation are truthful, but the receipt and roadmap overstate W1-01, W1-03, W1-04, W1-06, and W1-07 as repaired. |
+| `P0101-W1-06` | **FAIL** | The remediation checker is still regex and name based and reports green against the surviving deadline, semantic, locality, and WSL entrypoint violations. |
+| `P0101-W1-07` | **FAIL** | The guard correctly serializes one four-job build under one aggregate 24 GiB RAM plus 4 GiB swap cgroup, but two WSL-capable JavaScript entrypoints still launch raw Cargo and the static gate misses both. |
+
+Cycle 2 closes with **one PASS and six FAIL results**. Candidate 4 is **not
+ready for the independent final test**. The source and no-launch acceptance
+boundary remains open.
+
+### Verified invariants retained across Cycle 2
+
+The following accepted architecture facts independently reconcile and are not
+reopened by the failed findings:
+
+- The deterministic inventory SHA-256 is
+  `85cab84cc401d357f02be825fff2d323fd036915b348461df6b8173802b038a4`.
+  It contains exactly 615 baseline definitions, with 609 marked `moved` and
+  the exact six dispatcher rows marked `baseline`. Its separately recorded
+  predecessor reconciliation removes four P0100 predecessor definitions and
+  adds the moved `handle_service_status_with_dependencies` definition.
+- `cli/src/native/actions.rs` is 897 lines, has exactly six production
+  definitions, has no production struct, enum, or union, and remains below the
+  2,500-line and 35-definition budgets. It contains no in-file test functions
+  and no compatibility wrappers.
+- The exact six-definition dispatcher allowlist matches the six surviving
+  definitions. The only native imports of `actions::execute_command` are the
+  control plane, stream HTTP ingress, parity tests, and ignored end-to-end test
+  consumer. No reverse production import or new dispatcher domain authority
+  was found.
+- All seven outcome variant names exist, direct and durable dry runs can return
+  `Planned`, the temporary `ActionsRouteBoundOpenRuntime` is deleted, and the
+  permanent `DaemonRouteBoundOpenRuntime` owns the exact 13 effect methods.
+  Those structural improvements do not cure the semantic failures below.
+- `action_runtime/common.rs`, `action_runtime/tests.rs`, `page_pdf.rs`,
+  `browser_evaluation.rs`, `stream_screencast.rs`, and
+  `service_configuration_inventory.rs` are deleted. The failed W1-04 result is
+  specifically about the replacement test topology and interface locality,
+  not those deletions.
+
+### `P0101-W1-01` Cycle 2 | Deadline and quarantine remain non-total
+
+- **Criterion:** Every forward repository phase, compensation phase, and final
+  terminal repository write must fit inside the one Plan 0102 total deadline.
+  At return there may be no task or effect left, and an unconfirmed cleanup
+  must atomically remove active checkout and persist typed
+  `rollback_incomplete` quarantine before queue release.
+- **Evidence:** `RouteBoundOpenSupervisor::forward` and `compensate` now wrap
+  repository futures with Tokio timeouts, and
+  `await_coordinated_execution` drops a genuinely pending coordinator future at
+  the public deadline. Production `DaemonRouteBoundOpenRepository::snapshot`
+  and `execute`, however, merely place synchronous work inside `async` blocks
+  (`remote_view/open/runtime.rs:188-211`). The work calls
+  `LockedServiceStateRepository::load_snapshot` or `mutate`, whose first poll
+  takes a `std::sync::Mutex`, an exclusive filesystem lock, synchronous reads,
+  and synchronous writes (`service_store.rs:181-216`). A Tokio timeout cannot
+  preempt a future while that poll is blocked and has not yielded.
+
+  The repository deadline fixture uses `tokio::time::sleep(60s)`
+  (`remote_view/open/tests.rs:1097-1142`), so it proves only cancellation of a
+  cooperative pending future. The control-plane fixture likewise awaits the
+  cancellation token and then sleeps (`control_plane.rs:3625-3648`). It does
+  not cover the production blocking repository.
+
+  There is a second terminal-state gap. Failure recovery first persists a
+  `rolled_back` lease, then awaits external cleanup, then performs a separate
+  `complete_route_bound_handoff_failure_cleanup` mutation that changes it to
+  `rollback_incomplete` and quarantines the lane
+  (`remote_view_handoff.rs:2240-2412`). If cleanup reaches the total deadline,
+  `await_coordinated_execution` cancels and drops that future
+  (`control_plane.rs:528-573`). No independent final mutation records the
+  unconfirmed effect or quarantine. The green test explicitly confirms only
+  that the dropped future did not finish.
+- **Consequence:** A contended file lock or filesystem stall can still hold the
+  worker and serialized queue beyond `jobTimeoutMs`. A cooperative cleanup
+  that exhausts the reserve can return the timeout envelope while the persisted
+  lease says `rolled_back` and lacks the required quarantine for an
+  unconfirmed external effect, allowing later duplicate-lane decisions from a
+  false terminal state.
+- **Reproducer:** Inspect `runtime.rs:188-211` beside
+  `service_store.rs:181-216`, then run the guarded focused tests
+  `repository_snapshot_is_dropped_at_the_forward_deadline` and
+  `coordinated_timeout_drops_unfinished_execution_at_total_deadline`. Both pass
+  because their futures yield; neither fixture executes a blocking production
+  repository poll or proves the final quarantine mutation.
+- **Confidence:** high
+- **Disposition:** `blocking`; Cycle 1 remediation did not satisfy W1-01.
+
+### `P0101-W1-02` Cycle 2 | Atomic finalize and handoff verified
+
+- **Criterion:** Final acquisition ownership and the optional durable handoff
+  must be one repository mutation, with recoverable state and handoff files and
+  failure coverage at each of the two data files' write and rename boundaries.
+- **Evidence:** `complete_route_bound_handoff_open` calls
+  `finalize_route_bound_handoff_atomic`, which finalizes the lease and inserts
+  the optional handoff inside one `repository.mutate`
+  (`remote_view_handoff.rs:1533-1621`). `JsonServiceStateStore::save` constructs
+  one state-plus-handoff transaction; recovery completes a journaled commit,
+  and an unsuccessful state rename restores the previous handoff
+  (`service_store.rs:154-173, 344-454`). The fault matrix iterates
+  `HandoffWrite`, `StateWrite`, `HandoffRename`, and `StateRename`, reloads the
+  baseline, and proves neither the new handoff nor browser state survives
+  (`service_store.rs:679-729`). The guarded focused test passed 1 of 1.
+- **Consequence:** The formerly observable split between finalized acquisition
+  and optional handoff persistence is closed for the reviewed JSON store.
+- **Reproducer:** Run, through `scripts/ci/cargo-safe.sh`, the focused Rust test
+  `two_file_service_state_commit_is_atomic_at_every_write_and_rename_boundary`.
+- **Confidence:** high
+- **Disposition:** `verified`; W1-02 passes Cycle 2.
+
+### `P0101-W1-03` Cycle 2 | Typed names do not close the typed seam
+
+- **Criterion:** The coordinator seam must accept normalized typed direct or
+  durable invocations, expose the exact 13 typed effects through the permanent
+  adapter, return exhaustive typed outcomes including `Planned`, preserve the
+  Plan 0102 nine-predicate fallback conjunction, and prove actual ingress
+  authorization parity. Authorization must occur before invocation
+  construction and unauthorized calls must never reach the coordinator.
+- **Evidence:** The invocation and seven outcome variants exist and the
+  permanent 13-method adapter replaced the transitional adapter. Most effect
+  request/results and every successful outcome payload, however, are
+  `struct Name(Value)` generated by `route_bound_document_type!` with an
+  unrestricted `From<Value>` (`remote_view/open/runtime.rs:69-109`), while
+  `RouteBoundOpenDocument(Value)` wraps all plan, opened, not-found,
+  explicitly-closed, and fallback results
+  (`remote_view/open/coordinator.rs:83-203`). These types do not encode or
+  validate the normalized domain facts the frozen seam requires.
+
+  The implemented fallback booleans are `prior_provider`,
+  `snapshot_identity`, `snapshot_timing`, `exact_ownership_cause`,
+  `retained_route`, `authorized_ingress`, `operator_evidence`,
+  `browser_preserved`, and `duplicate_lane_prohibited`
+  (`coordinator.rs:57-81`). Plan 0102 instead freezes immutable snapshot,
+  explicit-close or authorized reopen, exact opaque RDP identity, typed owner
+  conflict, current bounded route, successful operator observation, typed
+  `best_effort`, no new ownership, and unchanged browser and unrelated tabs.
+  `authorized_ingress` is explicitly outside that fallback conjunction, and
+  `browser_preserved` plus `duplicate_lane_prohibited` are assigned from the
+  same pre-existing `exact_owner` comparison rather than post-attempt mutation
+  evidence (`coordinator.rs:943-983`). The nine-boolean test only flips fields
+  on a manually all-true struct; the fallback test compares one in-memory
+  snapshot to itself (`open/tests.rs:473-538`).
+
+  The purported ingress parity test loops over five ingress name strings and
+  constructs the same local authorized attribution each time
+  (`open/tests.rs:1046-1068`). It invokes no daemon, CLI, HTTP, MCP, or dashboard
+  adapter. Production direct and durable handlers unconditionally assign
+  `AuthenticatedDaemonCommand` (`coordinator.rs:275-325`), while durable
+  authorization is checked after the invocation has reached
+  `RouteBoundOpenCoordinator::open` (`coordinator.rs:232-241`).
+- **Consequence:** Arbitrary compatibility JSON can cross payloads advertised
+  as typed, fallback can become eligible without the frozen `best_effort`,
+  explicit-close, no-new-ownership, and unrelated-tab evidence, and the test
+  suite cannot detect an ingress that constructs coordinator work before
+  authorization.
+- **Reproducer:** Run the guarded `remote_view::open::tests` partition; it
+  passes 15 tests. Then inspect the wrapper macro, the two fallback tests, and
+  `every_ingress_uses_the_same_transport_neutral_authorization_fact`; their
+  sources show that no actual ingress or frozen semantic matrix is exercised.
+- **Confidence:** high
+- **Disposition:** `blocking`; Cycle 1 remediation did not satisfy W1-03.
+
+### `P0101-W1-04` Cycle 2 | The test facade was split, not localized
+
+- **Criterion:** Deleting the common prelude, test facade, and shallow owners
+  must produce cohesive deep modules. All 261 migrated tests must live beside
+  and cross the owner interfaces they specify rather than retaining private
+  implementation access through dispatcher-owned test buckets.
+- **Evidence:** The named production facades and shallow files are deleted.
+  The exact 261-test ledger also reconciles: 193 tests under
+  `cli/src/native/actions/` and 68 under public-owner paths. The 16 dispatcher
+  child test files total 11,600 lines, and every one starts with
+  `use super::*`. The largest are `runtime_route_host_tests.rs` at 2,282 lines,
+  `remote_view_route_tests_one.rs` at 1,625,
+  `service_inventory_tests.rs` at 1,586,
+  `remote_view_route_tests_two.rs` at 1,376, and
+  `service_health_tests.rs` at 1,111. For example,
+  `runtime_route_host_tests.rs:1-115` imports private internals from action
+  runtime, browser, CDP, remote view, handoff, service access, diagnostics,
+  health, lifecycle, model, network capture, probe, and UI action modules. Its
+  first owner tests call private launch-shaping helpers directly rather than
+  `execute_command` (`:127-150`).
+
+  Commit `31dfb3ee` deleted one 11,763-line
+  `action_runtime/tests.rs` file and created the dispatcher child buckets,
+  including the 2,282-line and 1,625-line files. This is file scattering under
+  one private dispatcher namespace, not interface-local migration.
+- **Consequence:** Tests remain coupled to a broad implementation surface and
+  can continue passing if owner interfaces are bypassed or deleted. The
+  deletion test for the supposed deep owners remains weak, and future changes
+  still require coordinated edits across dispatcher-owned private fixtures.
+- **Reproducer:** Run
+  `find cli/src/native/actions -type f -name '*test*.rs' -print0 | xargs -0 wc -l`
+  and inspect the leading imports plus early tests in
+  `runtime_route_host_tests.rs`. The exact count gate passes despite this
+  topology.
+- **Confidence:** high
+- **Disposition:** `blocking`; Cycle 1 remediation did not satisfy W1-04.
+
+### `P0101-W1-05` Cycle 2 | Checkpoint authority is truthful, completion is not
+
+- **Criterion:** Apply Plan 0106 exactly: do not rewrite history into 81
+  retroactive commits, explicitly record the original granularity deviation,
+  use truthful cohesive green rollback checkpoints, preserve the responsibility
+  and source rollback ledger, and make the receipt, roadmap, and acceptance
+  state match verified source.
+- **Evidence:** Plan 0106 truthfully says the original work lacked 81
+  independently green commits and supersedes only that granularity requirement.
+  The receipt repeats the deviation without pretending that the cohesive
+  commits are retroactive packet substitutes. The 13 remediation commits have
+  reviewable topic boundaries and the manifest states their reverse dependency
+  rule. Cycle 2 therefore raises no objection to the checkpoint adjudication
+  and does not request history splitting or rewriting.
+
+  The same receipt marks `SOURCE REMEDIATION GREEN` and records every W1 result
+  as repaired (`execution.md:429-484`). It says all 261 tests are in owner or
+  dispatcher modules and that the checker verifies test locality, actual nine
+  predicates, deadline drop, and WSL entrypoint closure. The roadmap repeats
+  those claims (`2026-04-22-agent-browser-service-roadmap.md:524-542`). W1-01,
+  W1-03, W1-04, W1-06, and W1-07 above directly contradict them.
+- **Consequence:** A fresh reviewer is told that source remediation is green
+  and only effect-boundary testing remains, even though six accepted source or
+  evidence blockers remain. The truthful checkpoint history is undermined by
+  an untruthful acceptance state.
+- **Reproducer:** Compare the Plan 0106 adjudication and cohesive manifest at
+  `execution.md:429-476` with its finding reconciliation at `:478-484`, then
+  reproduce W1-01, W1-03, W1-04, W1-06, and W1-07 from this Cycle 2 ledger.
+- **Confidence:** high
+- **Disposition:** `blocking` only for the accepted receipt, roadmap, and
+  rollback-evidence truthfulness portion. Plan 0106's supersession of the
+  81-commit granularity requirement passes and remains authoritative.
+
+### `P0101-W1-06` Cycle 2 | Structural gate remains false-green
+
+- **Criterion:** The primary gate must structurally reject recurrence of the
+  accepted deadline, atomicity, typed-seam, semantic fallback, authorization,
+  module-depth, interface-locality, reverse-import, dispatcher, inventory, and
+  WSL entrypoint failures.
+- **Evidence:** `scripts/test-actions-remediation-architecture.js` uses literal
+  file-existence, regular-expression, name-presence, and exact-count checks. It
+  accepts any `RouteBoundOpenRepository` boxed future without proving that its
+  poll yields or is preemptible. It requires the current nine field names rather
+  than Plan 0102 semantics. It requires seven variant names and test mentions,
+  not exhaustive behavior. It hard-codes the 193 dispatcher child tests as the
+  desired locality. It checks four persistence names and one test name, not
+  finalize behavior. Its WSL companion recognizes literal shell Cargo and
+  `command: 'cargo'`, but not ordinary `runCommand('cargo', ...)` or
+  `spawn('cargo', ...)` (`test-wsl-cargo-entrypoints.js:7-49`).
+
+  `pnpm test:actions-architecture` and both underlying JavaScript gates pass at
+  the reviewed HEAD while W1-01, W1-03, W1-04, and W1-07 remain reproducible.
+- **Consequence:** The advertised final architecture signal is unable to
+  protect the exact risks it was introduced to freeze. It can certify a
+  regression merely because names, counts, and wrapper types remain present.
+- **Reproducer:** Run `pnpm test:actions-architecture`, observe green, then
+  compare the checker's predicates with the evidence for W1-01, W1-03, W1-04,
+  and W1-07 above.
+- **Confidence:** high
+- **Disposition:** `blocking`; Cycle 1 remediation did not satisfy W1-06.
+
+### `P0101-W1-07` Cycle 2 | WSL Cargo closure misses dynamic launchers
+
+- **Criterion:** Every WSL-capable repository entrypoint that can compile Rust
+  must take the repository Cargo lock and execute within one aggregate memory
+  and swap cap. The static gate must fail closed when a raw path is added.
+- **Evidence:** `scripts/ci/cargo-safe.sh` takes one `flock`, sets
+  `CARGO_BUILD_JOBS=4`, and runs one user-systemd scope with
+  `MemoryHigh=20G`, `MemoryMax=24G`, `MemorySwapMax=4G`, and `TasksMax=512`.
+  Four compiler jobs therefore share one aggregate cgroup rather than receiving
+  independent caps. The wrapper fails closed on WSL when the user manager is
+  unavailable unless the explicit uncapped override is set. Package builds,
+  validation selection, route-confusion gates, formatting, Clippy, and the
+  canonical test driver now route through it.
+
+  Two current JavaScript entrypoints still bypass the wrapper:
+  `scripts/publish-local-dashboard-runtime.js:115-117` calls
+  `runCommand('cargo', cargoArgs)`, and `scripts/smoke-utils.js:1240-1245`
+  calls `spawn('cargo', cargoArgs(args), ...)`. The static detector scans both
+  files but its patterns do not recognize either call. It reports
+  `WSL Cargo entrypoint safety gate passed` with both raw launchers present.
+- **Consequence:** A local dashboard runtime publish or MCP stdio smoke path can
+  start an unguarded compiler on WSL and bypass both repository serialization
+  and the 24 GiB plus 4 GiB aggregate resource ceiling. This reopens the exact
+  compiler-blowout class that motivated the guard.
+- **Reproducer:** Run `node scripts/test-wsl-cargo-entrypoints.js`, then run the
+  non-executing inspection
+  `rg -n "runCommand\\('cargo'|spawn\\('cargo'" scripts/publish-local-dashboard-runtime.js scripts/smoke-utils.js`.
+- **Confidence:** high
+- **Disposition:** `blocking`; Cycle 1 remediation did not satisfy W1-07.
+
+### Proportionate Cycle 2 validation
+
+All compiling Rust commands ran one at a time through
+`scripts/ci/cargo-safe.sh`. No browser, ignored end-to-end, installation,
+doctor, live route, runtime mutation, or external effect was run.
+
+| Gate | Result |
+| --- | --- |
+| `pnpm test:actions-architecture` | PASS; nominal architecture, remediation, and WSL entrypoint gates all green |
+| guarded `two_file_service_state_commit_is_atomic_at_every_write_and_rename_boundary` | PASS; 1 passed, 0 failed |
+| guarded `remote_view::open::tests` | PASS; 15 passed, 0 failed |
+| guarded `coordinated_` | PASS; 2 passed, 0 failed |
+| `pnpm test:route-confusion-gates` | PASS; all eight no-launch static and guarded Rust gates green |
+| inventory readback | PASS; 615 baseline records, 609 moved, exact six dispatcher rows, four removed predecessor rows plus one moved predecessor replacement, 57 target-depth entries, zero wrappers |
+| dispatcher readback | PASS; 897 lines, six definitions, zero in-file tests, zero struct/enum/union definitions, four reviewed consumers |
+| `git diff --check 6449557a..HEAD` | PASS |
+
+Available host memory was approximately 37 GiB before compilation and 39 GiB
+after the final checks. Swap remained 2.0 GiB of 32 GiB used. No Cargo or Rust
+compiler process remained after validation.
+
+### Cycle 2 closeout
+
+The consolidated remaining remediation is bounded to the six failed IDs:
+make repository and final quarantine work genuinely total-deadline safe; replace
+opaque JSON wrappers with domain types and prove the exact Plan 0102 predicates
+and real ingress authorization paths; move private owner tests out of the
+dispatcher facade; make the gate structurally test those semantics; close the
+two raw WSL Cargo launchers; and correct the receipt and roadmap to the verified
+state. W1-02 and the verified inventory, dispatcher, deletion, reverse-import,
+and cgroup facts must remain unchanged.
+
+No Cycle 3 is authorized. Candidate 4 must not advance to independent final
+testing, installed proof, or live Slice H acceptance on this HEAD.
+
+Cycle 2 did not edit implementation, plans, tests, commits, runtime state, or
+build cache. Its only tracked-path edit is this appended disposition in the
+existing work-audit note. The pre-existing untracked generated inventory cache
+remains excluded from source identity.
