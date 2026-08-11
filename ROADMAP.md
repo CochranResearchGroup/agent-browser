@@ -8,20 +8,22 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 
 ## P110 | CDP Input Page Scroll Repair
 
-State: OPEN
-Current state: installed evaluation deadline propagation is working and
-preserved the retained Facebook browser, but the sole downstream tick exposed
-a distinct selectorless page-scroll stall in `Runtime.evaluate`. Later browser
-inventory succeeded. Plan 0110's selectorless path now emits CDP wheel input;
-the fake-CDP contract, interaction partition, and existing real-Chrome scroll
-e2e pass twice without changing selector-targeted element scrolling. Canonical
-Rust validation also passes with 1,043 parallel-safe tests plus every
-serialized partition; commit and installation remain.
+State: CLOSED
+Current state: exact commit `a954bc95` replaced selectorless JavaScript scroll
+with CDP wheel input, passed fake-CDP and real-Chrome e2e coverage plus the
+canonical Rust suite, and installed as SHA-256
+`76b2779ffc65d85f22817c698732e387dffe9cd4f8225f9aaf6b65bba467d3d1`
+while retaining Facebook browser PID 13177. The downstream Facebook target did
+not acknowledge wheel input and later page evaluation stalled, while tab
+inventory remained healthy. Last30Days then identified an upstream stale empty
+query-capture read that unnecessarily forces scroll; that successor now owns
+acceptance.
 
 ### Next Recommendation
 
-Commit the exact candidate and install it only through the supported
-browser-preserving handoff.
+Preserve the installed wheel behavior and do not add another browser transport
+variant. Last30Days Plan 0045 should refresh empty prepared extraction after its
+settle wait before deciding whether scroll is necessary.
 
 ### Evidence
 

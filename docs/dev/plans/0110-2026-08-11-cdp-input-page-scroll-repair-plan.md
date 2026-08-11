@@ -1,8 +1,8 @@
 # Plan 0110 | CDP Input Page Scroll Repair
 
-State: OPEN
+State: CLOSED
 Roadmap: P110
-Plan version: 1
+Plan version: 2
 Date: 2026-08-11
 Predecessor: Plan 0109 version 2/checkpoint C02
 
@@ -131,6 +131,50 @@ change, or more than one downstream Facebook tick.
 - next_action_or_stop_reason: commit this exact candidate and perform the one
   supported browser-preserving local install; stop before the downstream tick
   unless PID, endpoint, target inventory, and runtime provenance converge.
+
+## Checkpoint C04 | Installed Runtime Converged
+
+- plan_version: 1
+- state_transition: OPEN -> OPEN
+- progress_classification: blocker_reduction
+- evidence: exact commit `a954bc95023b16e2bee5c9d6dfe369915e748f0c`
+  installed as executable SHA-256
+  `76b2779ffc65d85f22817c698732e387dffe9cd4f8225f9aaf6b65bba467d3d1`.
+  The supported publisher handed Facebook daemon 95356 to daemon 99264 while
+  retaining browser PID 13177, exact endpoint
+  `ws://127.0.0.1:38770/devtools/browser/00317084-6844-44c8-b1a3-c63555867ced`,
+  and four attached targets. Source-free workstation provenance now matches the
+  same digest, runtime convergence is `converged`, and dashboard plus runtime
+  interlock timer are active.
+- residual: install doctor remains false only for the pre-existing visible
+  duplicate-profile-pressure warning; service resources report zero candidates
+  and zero readiness-impacting candidates, so this warning is nonblocking and
+  no unrelated browser is closed to silence it.
+- subagent_status: none; prohibited by current orchestration policy
+- authority_classification: inherited_goal_authority
+- next_action_or_stop_reason: hand control to Last30Days Plan 0044 for fresh
+  service/database/schedule/profile preflight and its one allowed Facebook tick.
+
+## Checkpoint C05 | Downstream Target Stall
+
+- plan_version: 2
+- state_transition: OPEN -> CLOSED
+- progress_classification: blocker_reduction_then_distinct_upstream_failure
+- evidence: the one downstream tick
+  `tick-877ca3d32b5e6c335d60b585fc631985` reached the installed wheel path. Exact
+  job `r213109` sent `Input.dispatchMouseEvent` but the Facebook target did not
+  acknowledge it for 28.37 seconds; subsequent direct page evaluation also
+  timed out while browser-level tab inventory remained responsive.
+- adjudication: the installed selectorless wheel implementation remains proven
+  by fake-CDP and real-Chrome e2e tests. Last30Days diagnosis found that its
+  replacement-target query capture extracts immediately after navigation, then
+  sleeps four seconds but reuses the stale empty capture instead of performing
+  the intended post-wait extraction. That upstream stale-read forces the
+  unnecessary scroll and now owns the remaining acceptance failure.
+- subagent_status: none; prohibited by current orchestration policy
+- authority_classification: inherited_goal_authority
+- next_action_or_stop_reason: close P110 without another browser transport
+  attempt; Last30Days successor Plan 0045 owns stale prepared-extraction refresh.
 
 ## Done Definition
 
