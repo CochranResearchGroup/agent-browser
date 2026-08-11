@@ -1588,7 +1588,7 @@ agent-browser --session agent1 close   # Close specific session
 agent-browser close --all              # Close all active sessions
 ```
 
-If a previous session was not closed properly, the daemon may still be running. Use `agent-browser close` to clean it up, or `agent-browser close --all` to shut down every session at once.
+If a previous session was not closed properly, the daemon may still be running. Use `agent-browser close` to clean it up, or `agent-browser close --all` to shut down every session at once. `close --all` is global and cannot be combined with `--session`; use `agent-browser --session <name> close` for one session. An unreachable daemon is signaled only when its recorded process identity still matches. Ambiguous metadata is preserved and reported.
 
 To auto-shutdown the daemon after a period of inactivity (useful for ephemeral/CI environments):
 

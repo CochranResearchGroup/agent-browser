@@ -33,7 +33,8 @@ use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_I
 
 use commands::{gen_id, parse_command, ParseError};
 use connection::{
-    cleanup_stale_files, daemon_ready, ensure_daemon, get_socket_dir, send_command, DaemonOptions,
+    cleanup_stale_files, daemon_ready, ensure_daemon, get_socket_dir, load_daemon_process_identity,
+    send_command, DaemonOptions,
 };
 use flags::{clean_args, parse_flags, upsert_runtime_profile_in_user_config, Flags};
 use install::{run_install, run_install_doctor, run_install_stealthcdp_chromium};
@@ -44,6 +45,7 @@ use native::service_config::{
 use output::{
     print_command_help, print_help, print_response_with_opts, print_version, OutputOptions,
 };
+use process_identity::{VerifiedProcessSignal, VerifiedProcessTermination};
 use runtime_profile::{
     list_runtime_profiles, runtime_status_with_user_data_dir, RuntimeProfileSummary, RuntimeStatus,
 };
@@ -1330,7 +1332,8 @@ fn run_dashboard_stop(json_mode: bool) {
 
 fn run_close_all(flags: &Flags) {
     let socket_dir = get_socket_dir();
-    let mut sessions: Vec<(String, u32)> = Vec::new();
+    let mut sessions: Vec<(String, VerifiedProcessTermination)> = Vec::new();
+    let mut failed: Vec<(String, String)> = Vec::new();
 
     if let Ok(entries) = fs::read_dir(&socket_dir) {
         for entry in entries.flatten() {
@@ -1340,34 +1343,40 @@ fn run_close_all(flags: &Flags) {
                     continue;
                 }
                 let pid_path = socket_dir.join(&name);
-                if let Ok(pid_str) = fs::read_to_string(&pid_path) {
-                    if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                        #[cfg(unix)]
-                        let running = unsafe {
-                            libc::kill(pid as i32, 0) == 0
-                                || std::io::Error::last_os_error().raw_os_error()
-                                    != Some(libc::ESRCH)
-                        };
-                        #[cfg(windows)]
-                        let running = unsafe {
-                            let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
-                            if handle != 0 {
-                                CloseHandle(handle);
-                                true
-                            } else {
-                                false
-                            }
-                        };
-                        if running {
-                            sessions.push((session_name.to_string(), pid));
-                        } else {
-                            // Process is gone but stale files remain; clean them up
-                            cleanup_stale_files(session_name);
-                        }
+                let pid = match fs::read_to_string(&pid_path)
+                    .ok()
+                    .and_then(|value| value.trim().parse::<u32>().ok())
+                {
+                    Some(pid) => pid,
+                    None => {
+                        failed.push((
+                            session_name.to_string(),
+                            "daemon PID metadata is unreadable; preserving evidence".to_string(),
+                        ));
+                        continue;
                     }
-                } else {
-                    // PID file exists but is unreadable; clean up stale files
-                    cleanup_stale_files(session_name);
+                };
+                let identity = match load_daemon_process_identity(session_name) {
+                    Ok(identity) if identity.pid == pid => identity,
+                    Ok(identity) => {
+                        failed.push((
+                            session_name.to_string(),
+                            format!(
+                                "daemon process identity records PID {} but PID metadata records {}; preserving evidence",
+                                identity.pid, pid
+                            ),
+                        ));
+                        continue;
+                    }
+                    Err(error) => {
+                        failed.push((session_name.to_string(), error));
+                        continue;
+                    }
+                };
+                match VerifiedProcessTermination::open(&identity) {
+                    Ok(Some(process)) => sessions.push((session_name.to_string(), process)),
+                    Ok(None) => cleanup_stale_files(session_name),
+                    Err(error) => failed.push((session_name.to_string(), error)),
                 }
             }
         }
@@ -1384,14 +1393,17 @@ fn run_close_all(flags: &Flags) {
                 }
                 let pid_path = socket_dir.join(format!("{}.pid", session_name));
                 if !pid_path.exists() {
-                    // Orphaned socket file with no PID file; remove it
-                    cleanup_stale_files(session_name);
+                    failed.push((
+                        session_name.to_string(),
+                        "daemon socket has no PID or process identity; preserving evidence"
+                            .to_string(),
+                    ));
                 }
             }
         }
     }
 
-    if sessions.is_empty() {
+    if sessions.is_empty() && failed.is_empty() {
         if flags.json {
             print_json_value(json!({
                 "success": true,
@@ -1404,9 +1416,8 @@ fn run_close_all(flags: &Flags) {
     }
 
     let mut closed: Vec<String> = Vec::new();
-    let mut failed: Vec<(String, String)> = Vec::new();
 
-    for (session, pid) in &sessions {
+    for (session, process) in &sessions {
         let cmd = json!({ "id": gen_id(), "action": "close" });
         match send_command(cmd, session) {
             Ok(resp) if resp.success => closed.push(session.clone()),
@@ -1414,24 +1425,17 @@ fn run_close_all(flags: &Flags) {
                 let err = resp.error.unwrap_or_else(|| "Unknown error".to_string());
                 failed.push((session.clone(), err));
             }
-            Err(_) => {
-                // Daemon is unreachable despite its process existing.
-                // Force-kill the process and clean up stale files so future
-                // sessions are not poisoned.
-                #[cfg(unix)]
-                unsafe {
-                    libc::kill(*pid as i32, libc::SIGKILL);
+            Err(command_error) => match process.signal(VerifiedProcessSignal::Kill) {
+                Ok(_) => {
+                    cleanup_stale_files(session);
+                    closed.push(session.clone());
                 }
-                #[cfg(windows)]
-                unsafe {
-                    let handle = OpenProcess(1, 0, *pid); // PROCESS_TERMINATE = 1
-                    if handle != 0 {
-                        windows_sys::Win32::System::Threading::TerminateProcess(handle, 1);
-                        CloseHandle(handle);
-                    }
-                }
-                cleanup_stale_files(session);
-                closed.push(session.clone());
+                Err(identity_error) => failed.push((
+                    session.clone(),
+                    format!(
+                        "daemon was unreachable ({command_error}); verified termination refused: {identity_error}"
+                    ),
+                )),
             }
         }
     }
@@ -1462,30 +1466,76 @@ fn run_close_all(flags: &Flags) {
     }
 }
 
-fn force_close_session_from_metadata(session: &str) -> bool {
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CloseScopeIssue {
+    code: &'static str,
+    message: &'static str,
+    suggestion: String,
+}
+
+fn close_all_scope_issue(flags: &Flags) -> Option<CloseScopeIssue> {
+    flags.cli_session.then(|| CloseScopeIssue {
+        code: "explicit_session_with_global_close",
+        message: "close --all is global and cannot be combined with an explicit --session",
+        suggestion: format!(
+            "Use `agent-browser --session {} close` to close only that session",
+            flags.session
+        ),
+    })
+}
+
+fn print_close_scope_issue(issue: &CloseScopeIssue, json_mode: bool) {
+    if json_mode {
+        print_json_value(json!({
+            "success": false,
+            "error": issue.message,
+            "type": "usage_error",
+            "code": issue.code,
+            "suggestion": issue.suggestion,
+        }));
+    } else {
+        eprintln!("{} {}", color::error_indicator(), issue.message);
+        eprintln!("{}", issue.suggestion);
+    }
+}
+
+fn force_close_session_from_metadata(session: &str) -> Result<bool, String> {
     let pid_path = get_socket_dir().join(format!("{}.pid", session));
     let pid = fs::read_to_string(&pid_path)
         .ok()
         .and_then(|value| value.trim().parse::<u32>().ok());
     let Some(pid) = pid else {
         cleanup_stale_files(session);
-        return true;
+        return Ok(true);
     };
 
-    #[cfg(unix)]
-    unsafe {
-        libc::kill(pid as i32, libc::SIGKILL);
+    let identity = load_daemon_process_identity(session)?;
+    if identity.pid != pid {
+        return Err(format!(
+            "daemon process identity records PID {} but PID metadata records {}; preserving evidence",
+            identity.pid, pid
+        ));
     }
-    #[cfg(windows)]
-    unsafe {
-        let handle = OpenProcess(1, 0, pid);
-        if handle != 0 {
-            windows_sys::Win32::System::Threading::TerminateProcess(handle, 1);
-            CloseHandle(handle);
-        }
-    }
+    let Some(process) = VerifiedProcessTermination::open(&identity)? else {
+        cleanup_stale_files(session);
+        return Ok(true);
+    };
+    process.signal(VerifiedProcessSignal::Kill)?;
     cleanup_stale_files(session);
-    true
+    Ok(true)
+}
+
+fn exit_close_identity_failure(error: &str, json_mode: bool) -> ! {
+    if json_mode {
+        print_json_value(json!({
+            "success": false,
+            "error": error,
+            "type": "process_identity_error",
+        }));
+    } else {
+        eprintln!("{} {}", color::error_indicator(), error);
+    }
+    exit(1)
 }
 
 fn main() {
@@ -1724,6 +1774,10 @@ fn main() {
         Some("close") | Some("quit") | Some("exit")
     ) && clean.iter().any(|a| a == "--all")
     {
+        if let Some(issue) = close_all_scope_issue(&flags) {
+            print_close_scope_issue(&issue, flags.json);
+            exit(2);
+        }
         run_close_all(&flags);
         return;
     }
@@ -1861,33 +1915,38 @@ fn main() {
         return;
     }
 
-    if command_targets_existing_daemon_before_prestart(&cmd)
-        && !daemon_ready(&flags.session)
-        && force_close_session_from_metadata(&flags.session)
-    {
-        let resp = connection::Response {
-            success: true,
-            data: Some(json!({
-                "closed": true,
-                "forced": true,
-                "reason": "existing_daemon_not_ready",
-            })),
-            error: None,
-            warning: Some("Closed stale session metadata before daemon prestart".to_string()),
-        };
-        let action = cmd.get("action").and_then(|value| value.as_str());
-        let output_opts = OutputOptions::from_flags(&flags);
-        if flags.json {
-            print_json_value(json!({
-                "success": true,
-                "data": resp.data,
-                "error": null,
-                "warning": resp.warning,
-            }));
-        } else {
-            print_response_with_opts(&resp, action, &output_opts);
+    if command_targets_existing_daemon_before_prestart(&cmd) && !daemon_ready(&flags.session) {
+        match force_close_session_from_metadata(&flags.session) {
+            Ok(true) => {
+                let resp = connection::Response {
+                    success: true,
+                    data: Some(json!({
+                        "closed": true,
+                        "forced": true,
+                        "reason": "existing_daemon_not_ready",
+                    })),
+                    error: None,
+                    warning: Some(
+                        "Closed stale session metadata before daemon prestart".to_string(),
+                    ),
+                };
+                let action = cmd.get("action").and_then(|value| value.as_str());
+                let output_opts = OutputOptions::from_flags(&flags);
+                if flags.json {
+                    print_json_value(json!({
+                        "success": true,
+                        "data": resp.data,
+                        "error": null,
+                        "warning": resp.warning,
+                    }));
+                } else {
+                    print_response_with_opts(&resp, action, &output_opts);
+                }
+                return;
+            }
+            Ok(false) => {}
+            Err(error) => exit_close_identity_failure(&error, flags.json),
         }
-        return;
     }
 
     if command_targets_existing_daemon_before_prestart(&cmd) && daemon_ready(&flags.session) {
@@ -1898,31 +1957,37 @@ fn main() {
                 if action == Some("close")
                     && !resp.success
                     && resp.error.as_deref() == Some("Unauthorized daemon command")
-                    && force_close_session_from_metadata(&flags.session)
                 {
-                    let resp = connection::Response {
-                        success: true,
-                        data: Some(json!({
-                            "closed": true,
-                            "forced": true,
-                            "reason": "unauthorized_daemon_command",
-                        })),
-                        error: None,
-                        warning: Some(
-                            "Closed stale session metadata after daemon auth failed".to_string(),
-                        ),
-                    };
-                    if flags.json {
-                        print_json_value(json!({
-                            "success": true,
-                            "data": resp.data,
-                            "error": null,
-                            "warning": resp.warning,
-                        }));
-                    } else {
-                        print_response_with_opts(&resp, action, &output_opts);
+                    match force_close_session_from_metadata(&flags.session) {
+                        Ok(true) => {
+                            let resp = connection::Response {
+                                success: true,
+                                data: Some(json!({
+                                    "closed": true,
+                                    "forced": true,
+                                    "reason": "unauthorized_daemon_command",
+                                })),
+                                error: None,
+                                warning: Some(
+                                    "Closed stale session metadata after daemon auth failed"
+                                        .to_string(),
+                                ),
+                            };
+                            if flags.json {
+                                print_json_value(json!({
+                                    "success": true,
+                                    "data": resp.data,
+                                    "error": null,
+                                    "warning": resp.warning,
+                                }));
+                            } else {
+                                print_response_with_opts(&resp, action, &output_opts);
+                            }
+                            return;
+                        }
+                        Ok(false) => {}
+                        Err(error) => exit_close_identity_failure(&error, flags.json),
                     }
-                    return;
                 }
                 if flags.json {
                     print_json_value(json!({
@@ -1939,31 +2004,37 @@ fn main() {
                 return;
             }
             Err(_) => {
-                if action == Some("close") && force_close_session_from_metadata(&flags.session) {
-                    let resp = connection::Response {
-                        success: true,
-                        data: Some(json!({
-                            "closed": true,
-                            "forced": true,
-                            "reason": "existing_daemon_unreachable",
-                        })),
-                        error: None,
-                        warning: Some(
-                            "Closed stale session metadata after daemon connection failed"
-                                .to_string(),
-                        ),
-                    };
-                    if flags.json {
-                        print_json_value(json!({
-                            "success": true,
-                            "data": resp.data,
-                            "error": null,
-                            "warning": resp.warning,
-                        }));
-                    } else {
-                        print_response_with_opts(&resp, action, &output_opts);
+                if action == Some("close") {
+                    match force_close_session_from_metadata(&flags.session) {
+                        Ok(true) => {
+                            let resp = connection::Response {
+                                success: true,
+                                data: Some(json!({
+                                    "closed": true,
+                                    "forced": true,
+                                    "reason": "existing_daemon_unreachable",
+                                })),
+                                error: None,
+                                warning: Some(
+                                    "Closed stale session metadata after daemon connection failed"
+                                        .to_string(),
+                                ),
+                            };
+                            if flags.json {
+                                print_json_value(json!({
+                                    "success": true,
+                                    "data": resp.data,
+                                    "error": null,
+                                    "warning": resp.warning,
+                                }));
+                            } else {
+                                print_response_with_opts(&resp, action, &output_opts);
+                            }
+                            return;
+                        }
+                        Ok(false) => {}
+                        Err(error) => exit_close_identity_failure(&error, flags.json),
                     }
-                    return;
                 }
                 // Fall through to the normal daemon prestart path. This keeps
                 // token-missing or mid-shutdown sessions repairable when there
@@ -3103,7 +3174,7 @@ mod tests {
         guard.set("AGENT_BROWSER_SOCKET_DIR", dir.to_str().unwrap());
         std::fs::write(dir.join("stale.version"), env!("CARGO_PKG_VERSION")).unwrap();
 
-        assert!(force_close_session_from_metadata("stale"));
+        assert!(force_close_session_from_metadata("stale").unwrap());
         assert!(!dir.join("stale.version").exists());
 
         let _ = std::fs::remove_dir_all(&dir);

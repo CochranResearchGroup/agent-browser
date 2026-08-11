@@ -294,6 +294,11 @@ agent-browser chat "<instruction>"    # AI chat: natural language browser contro
 agent-browser chat                    # AI chat: interactive REPL mode
 ```
 
+`close --all` is intentionally global and cannot be combined with an explicit
+`--session`. Use `agent-browser --session <name> close` for one session. If a
+daemon is unreachable, global close signals it only when its recorded process
+identity still matches; ambiguous metadata is preserved and reported.
+
 `handoff prepare` writes a mode-0600 retry record containing the session
 identity, browser PID, and CDP endpoint before the daemon relinquishes process
 ownership and exits. `handoff resume` reconnects a replacement daemon to that

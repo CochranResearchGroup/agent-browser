@@ -10,6 +10,8 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::process_identity::RecordedProcessIdentity;
+
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
 
@@ -136,6 +138,10 @@ fn get_auth_token_path(session: &str) -> PathBuf {
     get_socket_dir().join(format!("{}.token", session))
 }
 
+fn get_daemon_identity_path(session: &str) -> PathBuf {
+    get_socket_dir().join(format!("{}.identity.json", session))
+}
+
 fn set_private_file_permissions(path: &std::path::Path) -> std::io::Result<()> {
     #[cfg(unix)]
     {
@@ -179,6 +185,27 @@ fn write_daemon_auth_token(session: &str, token: &str) -> Result<(), String> {
         .map_err(|e| format!("Failed to secure daemon auth token: {}", e))
 }
 
+pub fn write_daemon_process_identity(
+    session: &str,
+    identity: &RecordedProcessIdentity,
+) -> Result<(), String> {
+    let path = get_daemon_identity_path(session);
+    let bytes = serde_json::to_vec(identity)
+        .map_err(|error| format!("Failed to encode daemon process identity: {error}"))?;
+    fs::write(&path, bytes)
+        .map_err(|error| format!("Failed to write daemon process identity: {error}"))?;
+    set_private_file_permissions(&path)
+        .map_err(|error| format!("Failed to secure daemon process identity: {error}"))
+}
+
+pub fn load_daemon_process_identity(session: &str) -> Result<RecordedProcessIdentity, String> {
+    let path = get_daemon_identity_path(session);
+    let bytes = fs::read(&path)
+        .map_err(|error| format!("daemon process identity is unavailable: {error}"))?;
+    serde_json::from_slice(&bytes)
+        .map_err(|error| format!("daemon process identity is invalid: {error}"))
+}
+
 fn load_daemon_auth_token(session: &str) -> Result<String, String> {
     let path = get_auth_token_path(session);
     fs::read_to_string(&path)
@@ -206,6 +233,8 @@ pub fn cleanup_stale_files(session: &str) {
     let _ = fs::remove_file(&executable_sha_path);
     let token_path = get_auth_token_path(session);
     let _ = fs::remove_file(&token_path);
+    let identity_path = get_daemon_identity_path(session);
+    let _ = fs::remove_file(&identity_path);
     let stream_path = get_socket_dir().join(format!("{}.stream", session));
     let _ = fs::remove_file(&stream_path);
 
@@ -1337,7 +1366,7 @@ mod tests {
     }
 
     #[test]
-    fn test_cleanup_stale_files_removes_version_and_executable_sha() {
+    fn test_cleanup_stale_files_removes_version_executable_sha_and_process_identity() {
         let dir = std::env::temp_dir().join("ab-test-cleanup-version");
         let _ = fs::create_dir_all(&dir);
         let _guard = EnvGuard::new(&["AGENT_BROWSER_SOCKET_DIR", "XDG_RUNTIME_DIR"]);
@@ -1347,12 +1376,16 @@ mod tests {
         let _ = fs::write(&version_path, "0.1.0");
         let sha_path = dir.join("test-session.sha256");
         let _ = fs::write(&sha_path, "old-sha");
+        let identity_path = dir.join("test-session.identity.json");
+        let _ = fs::write(&identity_path, "{}");
         assert!(version_path.exists());
         assert!(sha_path.exists());
+        assert!(identity_path.exists());
 
         cleanup_stale_files("test-session");
         assert!(!version_path.exists());
         assert!(!sha_path.exists());
+        assert!(!identity_path.exists());
 
         let _ = fs::remove_dir(&dir);
     }

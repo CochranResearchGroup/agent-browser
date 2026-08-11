@@ -1231,6 +1231,8 @@ pub struct Flags {
     pub leave_open: bool,
     pub debug: bool,
     pub session: String,
+    /// True only when the caller supplied `--session` on this invocation.
+    pub cli_session: bool,
     pub default_runtime_profile: Option<String>,
     pub configured_runtime_profiles: HashMap<String, Option<String>>,
     pub configured_runtime_profile_browser_families: HashMap<String, String>,
@@ -1577,6 +1579,7 @@ pub fn parse_flags(args: &[String]) -> Flags {
             .ok()
             .or(config.session)
             .unwrap_or_else(|| "default".to_string()),
+        cli_session: false,
         default_runtime_profile,
         configured_runtime_profiles,
         configured_runtime_profile_browser_families,
@@ -1753,6 +1756,7 @@ pub fn parse_flags(args: &[String]) -> Flags {
             "--session" => {
                 if let Some(s) = args.get(i + 1) {
                     flags.session = s.clone();
+                    flags.cli_session = true;
                     i += 1;
                 }
             }
@@ -2345,6 +2349,16 @@ mod tests {
 
         assert_eq!(flags.command_job_timeout_ms, Some(20_000));
         assert_eq!(clean_args(&input), args("eval --stdin"));
+    }
+
+    #[test]
+    fn explicit_session_selection_is_distinct_from_the_default_session() {
+        let implicit = parse_flags(&args("close --all"));
+        let explicit = parse_flags(&args("--session social close --all"));
+
+        assert!(!implicit.cli_session);
+        assert!(explicit.cli_session);
+        assert_eq!(explicit.session, "social");
     }
 
     #[test]

@@ -17,6 +17,8 @@ use super::cdp::client::CdpClient;
 use super::control_plane::{ControlPlaneHandle, ControlPlaneWorker};
 use super::state;
 use super::stream::StreamServer;
+use crate::connection::write_daemon_process_identity;
+use crate::process_identity::capture_process_identity;
 
 const DAEMON_AUTH_TOKEN_ENV: &str = "AGENT_BROWSER_DAEMON_AUTH_TOKEN";
 const DAEMON_AUTH_FIELD: &str = "_agentBrowserAuthToken";
@@ -129,6 +131,23 @@ pub async fn run_daemon(session: &str) {
     let _ = fs::write(&pid_path, process::id().to_string());
     secure_daemon_file(&pid_path);
     log_startup_milestone(startup_started, "pid-written");
+
+    let daemon_executable = env::current_exe().ok();
+    let daemon_identity = daemon_executable
+        .as_deref()
+        .and_then(|path| capture_process_identity(process::id(), Some(path), None));
+    let Some(daemon_identity) = daemon_identity else {
+        let _ = writeln!(
+            std::io::stderr(),
+            "Failed to capture daemon process identity"
+        );
+        process::exit(1);
+    };
+    if let Err(error) = write_daemon_process_identity(session, &daemon_identity) {
+        let _ = writeln!(std::io::stderr(), "{error}");
+        process::exit(1);
+    }
+    log_startup_milestone(startup_started, "process-identity-written");
 
     let version_path = socket_dir.join(format!("{}.version", session));
     let _ = fs::write(&version_path, env!("CARGO_PKG_VERSION"));
@@ -259,6 +278,7 @@ pub async fn run_daemon(session: &str) {
     }
     if owns_session_artifacts {
         let _ = fs::remove_file(&pid_path);
+        let _ = fs::remove_file(socket_dir.join(format!("{}.identity.json", session)));
         let _ = fs::remove_file(&version_path);
         let _ = fs::remove_file(&executable_sha_path);
         let _ = fs::remove_file(&stream_path);

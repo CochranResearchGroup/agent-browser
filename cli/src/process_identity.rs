@@ -90,10 +90,10 @@ pub fn capture_process_identity(
     let observed = observed?;
     let start_token = observed.start_token?;
     let executable_path = observed.executable_path?;
-    let browser_family = observed.browser_family?;
     if expected_executable
         .is_some_and(|expected| !executable_paths_match(expected, Path::new(&executable_path)))
-        || expected_browser_family.is_some_and(|expected| expected != browser_family)
+        || expected_browser_family
+            .is_some_and(|expected| observed.browser_family.as_deref() != Some(expected))
     {
         return None;
     }
@@ -101,7 +101,7 @@ pub fn capture_process_identity(
         pid,
         start_token,
         executable_path: Some(executable_path),
-        browser_family: Some(browser_family),
+        browser_family: observed.browser_family,
     })
 }
 
@@ -243,11 +243,11 @@ fn verify_recorded_process_observation(
         RuntimeProcessOwnership::MatchingBrowser => Ok(true),
         RuntimeProcessOwnership::Missing => Ok(false),
         RuntimeProcessOwnership::ReusedUnrelated => Err(format!(
-            "Refusing to signal PID {} because it no longer matches the recorded runtime browser identity ({})",
+            "Refusing to signal PID {} because it no longer matches the recorded process identity ({})",
             recorded.pid, assessment.reason
         )),
         RuntimeProcessOwnership::AmbiguousLegacyBrowser => Err(format!(
-            "Refusing to signal PID {} because runtime browser identity is ambiguous ({})",
+            "Refusing to signal PID {} because recorded process identity is ambiguous ({})",
             recorded.pid, assessment.reason
         )),
     }
@@ -496,13 +496,11 @@ fn recorded_executable_matches(
     ) else {
         return false;
     };
-    let (Some(recorded_family), Some(observed_family)) = (
-        recorded.browser_family.as_deref(),
-        observed.browser_family.as_deref(),
-    ) else {
-        return false;
+    let family_matches = match recorded.browser_family.as_deref() {
+        Some(recorded_family) => observed.browser_family.as_deref() == Some(recorded_family),
+        None => true,
     };
-    recorded_family == observed_family
+    family_matches
         && executable_paths_match(
             Path::new(recorded_executable),
             Path::new(observed_executable),
@@ -949,6 +947,28 @@ mod tests {
                 observed(Some("linux:boot:11"), Some("/opt/chrome")),
                 LegacyProfileProof::Unproven,
             ),
+            RuntimeProcessOwnership::MatchingBrowser
+        );
+    }
+
+    #[test]
+    fn exact_non_browser_process_identity_matches_without_a_browser_family() {
+        let recorded = RecordedProcessIdentity {
+            pid: 7,
+            start_token: "linux:boot:11".to_string(),
+            executable_path: Some("/opt/agent-browser".to_string()),
+            browser_family: None,
+        };
+        let observed = ObservedProcessIdentity {
+            pid: 7,
+            start_token: Some("linux:boot:11".to_string()),
+            executable_path: Some("/opt/agent-browser".to_string()),
+            browser_family: None,
+            command_line: None,
+        };
+
+        assert_eq!(
+            ownership(Some(&recorded), observed, LegacyProfileProof::Unproven,),
             RuntimeProcessOwnership::MatchingBrowser
         );
     }

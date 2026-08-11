@@ -90,6 +90,11 @@ agent-browser close                   # Close browser (aliases: quit, exit)
 agent-browser close --all             # Close all active sessions
 ```
 
+`close --all` is a global operation and rejects an explicit `--session` before
+runtime inspection. Use `agent-browser --session <name> close` for one session.
+An unreachable daemon is signaled only when its recorded process identity still
+matches; ambiguous metadata remains available for diagnosis.
+
 Service requests should be identity-first. Pass `serviceName`, `agentName`,
 `taskName`, and the target `siteId`, `loginId`, or `targetServiceId`, then let
 agent-browser pick or reuse the managed profile and queue CDP control. Use a

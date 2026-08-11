@@ -5376,6 +5376,7 @@ mod tests {
     fn default_flags() -> Flags {
         Flags {
             session: "test".to_string(),
+            cli_session: false,
             default_runtime_profile: None,
             configured_runtime_profiles: std::collections::HashMap::new(),
             configured_runtime_profile_browser_families: std::collections::HashMap::new(),
