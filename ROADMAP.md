@@ -6,6 +6,27 @@ This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
 
+## P109 | Evaluation Deadline Propagation Repair
+
+State: OPEN
+Current state: the confirmed request contract now carries a 45-second caller
+budget as a 44.75-second Chromium renderer deadline and a 45-second CDP
+transport deadline. Focused browser tests pass twice; broader validation,
+exact candidate installation, and the one bounded downstream Facebook tick
+remain.
+
+### Next Recommendation
+
+Run repository-selected validation and Rust quality gates, then install one
+exact local candidate through the browser-preserving handoff. Do not restart
+or close the retained browser and do not consume more than one downstream
+Facebook tick.
+
+### Evidence
+
+- `docs/dev/plans/0109-2026-08-11-evaluation-deadline-propagation-repair-plan.md`
+- `docs/dev/notes/0109-2026-08-11-evaluation-deadline-propagation-test-receipt.md`
+
 ## P97 | CLI Command Timeout Layering Repair
 
 State: CLOSED

@@ -4,6 +4,37 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 146 | 2026-08-11
+
+Scope: repair the evaluation deadline propagation defect exposed by the
+installed Last30Days Facebook attempt, without changing the retained browser
+or consuming another provider attempt during source validation.
+
+Actions:
+
+- created an isolated branch from exact architecture checkpoint `baaed508`;
+- confirmed that a positive 45-second evaluation budget was reduced by both a
+  legacy renderer cap and the CDP client's fixed transport deadline;
+- captured a red delayed-response failure at the 30-second transport cutoff;
+- moved renderer parameters and the caller-sized transport deadline into one
+  request contract consumed by the production evaluation path;
+- replaced the nondeterministic paused-time socket fixture with a pure contract
+  regression plus the existing immediate fake-CDP integration.
+
+Validation:
+
+- renderer deadline regressions passed;
+- request transport-deadline regression passed;
+- fake-CDP evaluation integration passed;
+- all 35 browser tests passed twice with one test thread.
+
+Result:
+
+- source repair is focused green;
+- broader validation, exact local candidate installation, and the single
+  downstream Facebook acceptance tick remain pending;
+- retained browser and profile state were not mutated.
+
 ## Turn 145 | 2026-08-09
 
 Scope: repair the upstream renderer and command-delivery boundaries exposed by
