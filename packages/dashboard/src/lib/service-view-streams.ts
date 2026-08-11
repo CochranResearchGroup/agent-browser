@@ -195,14 +195,22 @@ export function viewStreamReadinessEvidence(stream?: ServiceViewStream | null): 
   const readinessState = normalizeReadinessState(viewStreamReadinessState(readiness));
   const displayContent = displayContentValue(stream);
   const displayState = normalizeReadinessState(viewStreamReadinessState(displayContent));
+  const attachabilityState = normalizeReadinessState(viewStreamReadinessState(stream.attachability));
+  const attachabilityBlocked = Boolean(attachabilityState && attachabilityState !== "attached_ready");
   const blockingState = [readinessState, displayState]
     .find((state): state is string => Boolean(state && BLOCKING_VIEW_STREAM_READINESS_STATES.has(state)))
-    ?? null;
-  const reason = readinessReason(blockingState === displayState ? displayContent : readiness)
+    ?? (attachabilityBlocked ? attachabilityState : null);
+  const blockingEvidence = blockingState === displayState
+    ? displayContent
+    : blockingState === attachabilityState
+      ? stream.attachability
+      : readiness;
+  const reason = readinessReason(blockingEvidence)
     ?? readinessReason(readiness)
-    ?? readinessReason(displayContent);
+    ?? readinessReason(displayContent)
+    ?? readinessReason(stream.attachability);
   return {
-    state: blockingState ?? readinessState ?? displayState,
+    state: blockingState ?? readinessState ?? displayState ?? (attachabilityState === "attached_ready" ? "ready" : attachabilityState),
     reason,
     blocked: Boolean(blockingState),
   };

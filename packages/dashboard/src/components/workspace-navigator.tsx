@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import {
   deriveLiveWorkspaceNodes,
+  workspaceInventoryGroupForNode,
   type WorkspaceNode,
   type WorkspaceNodeActionId,
   type WorkspaceProfileActionabilityAction,
@@ -520,7 +521,7 @@ function groupNodes(nodes: WorkspaceNode[]): Record<WorkspaceNodeGroup, Workspac
     retained: [],
   };
   for (const node of nodes) {
-    grouped[node.group].push(node);
+    grouped[workspaceInventoryGroupForNode(node)].push(node);
   }
   return grouped;
 }
@@ -589,7 +590,7 @@ function primaryAction(node: WorkspaceNode) {
   if (node.takeover?.active) {
     return node.actions.find((action) => action.id === "resume") ?? node.actions[0];
   }
-  const preferredIds: WorkspaceNodeActionId[] = ["focus", "launch", "seed"];
+  const preferredIds: WorkspaceNodeActionId[] = ["repair", "focus", "launch", "seed"];
   for (const id of preferredIds) {
     const action = node.actions.find((candidate) => candidate.id === id && candidate.enabled);
     if (action) return action;
@@ -1512,7 +1513,7 @@ export function WorkspaceNavigator() {
   const filteredNodes = useMemo(() => {
     const text = deferredQuery.trim().toLowerCase();
     return liveRailNodes.filter((node) => {
-      if (scope !== "all" && node.group !== scope) return false;
+      if (scope !== "all" && workspaceInventoryGroupForNode(node) !== scope) return false;
       return text ? nodeSearchText(node).includes(text) : true;
     });
   }, [deferredQuery, liveRailNodes, scope]);
@@ -1829,6 +1830,12 @@ export function WorkspaceNavigator() {
       } finally {
         setWorkspaceActionLoadingId(null);
       }
+      return;
+    }
+    if (action.id === "repair" && node.viewStream) {
+      const selection = pushWorkspaceViewportUrl(node, "view");
+      if (selection) setUrlSelection(selection);
+      else selectNode(node);
       return;
     }
     if (action.id === "control" && node.viewStream?.controllable) {

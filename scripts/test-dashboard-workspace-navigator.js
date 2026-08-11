@@ -300,8 +300,8 @@ assert.match(
 
 assert.match(
   navigator,
-  /const operatorControlIds: WorkspaceNodeActionId\[\] = \["control", "view"\][\s\S]*for \(const id of operatorControlIds\)[\s\S]*candidate\.id === id && candidate\.enabled[\s\S]*const preferredIds: WorkspaceNodeActionId\[\] = \["focus", "launch", "seed"\]/,
-  'Workspace navigator primary actions must prefer service-owned Control and View before daemon Focus, Launch, or Seed',
+  /const operatorControlIds: WorkspaceNodeActionId\[\] = \["control", "view"\][\s\S]*for \(const id of operatorControlIds\)[\s\S]*candidate\.id === id && candidate\.enabled[\s\S]*const preferredIds: WorkspaceNodeActionId\[\] = \["repair", "focus", "launch", "seed"\]/,
+  'Workspace navigator primary actions must prefer service-owned Control and View, then recovery, before daemon Focus, Launch, or Seed',
 );
 
 assert.match(

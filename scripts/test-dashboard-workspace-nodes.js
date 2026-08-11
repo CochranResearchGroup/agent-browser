@@ -6,6 +6,7 @@ import {
   deriveLiveWorkspaceNodes,
   deriveWorkspaceNodes,
   deriveWorkspaceOwnershipDiagnostics,
+  workspaceInventoryGroupForNode,
   workspaceInventoryPlacementForNode,
   workspaceNodeLiveControlEligibility,
 } from '../packages/dashboard/src/lib/service-workspaces.ts';
@@ -23,6 +24,27 @@ assert.doesNotMatch(
   workspaceSource,
   /serviceTabs\.filter\(\(tab\) => tab\.sessionId === session\.id \|\| tab\.ownerSessionId === session\.id\)/,
   'Workspace derivation must not rescan all service tabs for each service session',
+);
+
+assert.match(
+  workspaceNavigatorSource,
+  /grouped\[workspaceInventoryGroupForNode\(node\)\]\.push\(node\)/,
+  'Workspace navigator groups rows by inventory placement instead of raw lifecycle group',
+);
+assert.match(
+  workspaceNavigatorSource,
+  /workspaceInventoryGroupForNode\(node\) !== scope/,
+  'Workspace scope filters must use the same inventory placement grouping as rendered sections',
+);
+assert.match(
+  workspaceNavigatorSource,
+  /preferredIds: WorkspaceNodeActionId\[\] = \["repair", "focus", "launch", "seed"\]/,
+  'A stream recovery row must expose Wake stream before generic Focus',
+);
+assert.match(
+  workspaceNavigatorSource,
+  /action\.id === "repair"[\s\S]*pushWorkspaceViewportUrl\(node, "view"\)/,
+  'Wake stream must open the recovery viewport instead of acting like a dead selection',
 );
 
 function byId(nodes, id) {
@@ -146,6 +168,11 @@ const diagnosticFixture = {
         {
           provider: 'rdp_gateway',
           url: 'https://agent-browser.example.test/guacamole/',
+          attachability: {
+            state: 'reattachable_no_route',
+            recommendedAction: 'service_remote_view_browser_reattach',
+            reason: 'browser is live but no remote-view route is selected',
+          },
           controlInput: 'manual_attached_desktop',
           readOnly: false,
         },
@@ -397,14 +424,17 @@ assert.ok(
 );
 assert.equal(unboundDisplayNode.inventoryClass, 'service-owned-controllable-browser');
 assert.equal(unboundDisplayNode.state, 'controllable');
-assert.equal(unboundDisplayNode.attentionReason, null);
-assert.equal(unboundDisplayNode.viewStream?.operatorVisibleState, 'ready');
-assert.equal(unboundDisplayNode.viewStream?.operatorVisibleReason, null);
-assert.equal(unboundDisplayNode.viewStream?.embeddable, true);
-assert.equal(unboundDisplayNode.viewStream?.controllable, true);
-assert.equal(action(unboundDisplayNode, 'view').enabled, true);
-assert.equal(action(unboundDisplayNode, 'control').enabled, true);
-assert.equal(action(unboundDisplayNode, 'repair').enabled, false);
+assert.match(unboundDisplayNode.attentionReason ?? '', /no remote-view route/i);
+assert.equal(unboundDisplayNode.viewStream?.operatorVisibleState, 'reattachable_no_route');
+assert.match(unboundDisplayNode.viewStream?.operatorVisibleReason ?? '', /no remote-view route/i);
+assert.equal(unboundDisplayNode.viewStream?.embeddable, false);
+assert.equal(unboundDisplayNode.viewStream?.controllable, false);
+assert.equal(action(unboundDisplayNode, 'view').enabled, false);
+assert.equal(action(unboundDisplayNode, 'control').enabled, false);
+assert.equal(action(unboundDisplayNode, 'repair').enabled, true);
+assert.equal(action(unboundDisplayNode, 'repair').label, 'Wake stream');
+assert.equal(unboundDisplayNode.inventoryPlacement?.lane, 'attention');
+assert.equal(workspaceInventoryGroupForNode(unboundDisplayNode), 'needs-attention');
 
 const proofMissingNode = byId(diagnosticNodes, 'browser:rdp-proof-missing');
 assert.equal(proofMissingNode.diagnostics.some((diagnostic) => diagnostic.kind === 'idle-route-display'), false);
@@ -1755,5 +1785,60 @@ assert.equal(manualNode.inventoryPlacement?.lane, 'detected');
 assert.equal(action(manualNode, 'view').enabled, true);
 assert.equal(action(manualNode, 'control').enabled, true);
 assert.equal(manualNode.actions.some((item) => item.id === 'add-tab'), false);
+
+const staleSessionNodes = deriveWorkspaceNodes({
+  includeRetained: true,
+  includeHidden: true,
+  serviceSessions: [
+    {
+      id: 'expired-browser-reference',
+      profileId: 'default',
+      browserIds: ['browser-that-no-longer-exists'],
+      tabIds: [],
+      lease: 'expired',
+    },
+    {
+      id: 'released-closed-tab',
+      profileId: 'default',
+      browserIds: [],
+      tabIds: ['closed-tab'],
+      lease: 'released',
+    },
+  ],
+  serviceTabs: [
+    {
+      id: 'closed-tab',
+      sessionId: 'released-closed-tab',
+      lifecycle: 'closed',
+      title: 'Historical page',
+      url: 'https://example.test/history',
+    },
+  ],
+  profileAllocations: [{ profileId: 'default', profileName: 'default' }],
+});
+for (const sessionId of ['expired-browser-reference', 'released-closed-tab']) {
+  const node = byId(staleSessionNodes, `service-session:${sessionId}`);
+  assert.equal(node.live, false, `${sessionId} must not be live from retained IDs alone`);
+  assert.equal(node.retained, true);
+  assert.notEqual(node.group, 'active');
+  assert.equal(action(node, 'focus').enabled, false);
+  missingId(deriveLiveWorkspaceNodes({
+    serviceSessions: [{
+      id: sessionId,
+      profileId: 'default',
+      browserIds: sessionId === 'expired-browser-reference' ? ['browser-that-no-longer-exists'] : [],
+      tabIds: sessionId === 'released-closed-tab' ? ['closed-tab'] : [],
+      lease: sessionId === 'expired-browser-reference' ? 'expired' : 'released',
+    }],
+    serviceTabs: sessionId === 'released-closed-tab' ? [{
+      id: 'closed-tab',
+      sessionId,
+      lifecycle: 'closed',
+      title: 'Historical page',
+      url: 'https://example.test/history',
+    }] : [],
+    profileAllocations: [{ profileId: 'default', profileName: 'default' }],
+  }), `service-session:${sessionId}`);
+}
 
 console.log('Dashboard workspace node contract smoke passed');

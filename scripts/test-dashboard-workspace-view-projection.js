@@ -90,6 +90,31 @@ assert.equal(canonical.selected.tabSelection.tab.id, 'live');
 assert.equal(canonical.selected.tabSelection.recoveredFromStaleSelection, true);
 assert.equal(canonical.selected.authority.inventoryClass, 'service-owned-controllable-browser');
 
+const unrouted = projectWorkspaceViews({
+  ...canonicalInput,
+  sources: {
+    ...canonicalInput.sources,
+    serviceBrowsers: [{
+      id: 'browser-a',
+      activeSessionIds: ['session-a'],
+      viewStreams: [{
+        ...rdp,
+        routeId: null,
+        attachability: {
+          state: 'reattachable_no_route',
+          recommendedAction: 'service_remote_view_browser_reattach',
+          reason: 'browser is live but no remote-view route is selected',
+        },
+      }],
+    }],
+  },
+});
+assert.equal(unrouted.selected.canView, false);
+assert.equal(unrouted.selected.canControl, false);
+assert.equal(unrouted.selected.readiness.state, 'reattachable_no_route');
+assert.equal(unrouted.selected.readiness.recoveryAction, 'service_remote_view_browser_reattach');
+assert.match(unrouted.selected.readiness.reason ?? '', /no remote-view route/i);
+
 const observedSources = applyStatusObservationsToWorkspaceSources({
   serviceBrowsers: [{ id: 'browser-observed', viewStreams: [{ id: 'stream-observed', provider: 'rdp_gateway' }] }],
 }, {

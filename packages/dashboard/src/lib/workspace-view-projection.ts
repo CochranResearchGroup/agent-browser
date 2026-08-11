@@ -519,7 +519,7 @@ function recoveryAction(attachability: unknown): ProjectedWorkspaceView["readine
   const action = record(attachability)?.recommendedAction;
   return action === "service_remote_view_route_switch"
     ? "service_remote_view_route_switch"
-    : attachability
+    : action === "service_remote_view_browser_reattach"
       ? "service_remote_view_browser_reattach"
       : null;
 }

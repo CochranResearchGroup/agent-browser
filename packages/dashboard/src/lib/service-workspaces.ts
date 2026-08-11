@@ -912,11 +912,11 @@ export function workspaceInventoryPlacementForNode(node: WorkspaceNode): Workspa
   if (hasDetectedViableTarget) {
     return { lane: "detected", reason: "Detected non-owned browser has viable read-only evidence.", rank: 100 };
   }
-  if (hasLiveBrowserAuthority && node.group !== "needs-attention") {
-    return { lane: "primary", reason: "Live browser authority is viable.", rank: 0 };
-  }
   if (hasLiveBrowserAuthority && hasRecoveryAction) {
     return { lane: "attention", reason: node.attentionReason ?? recoveryAction?.reason ?? "Live browser row needs operator attention.", rank: 500 };
+  }
+  if (hasLiveBrowserAuthority && node.group !== "needs-attention") {
+    return { lane: "primary", reason: "Live browser authority is viable.", rank: 0 };
   }
   if (node.source === "profile" && (profileAction || hasRecoveryAction)) {
     return { lane: "launcher", reason: node.profileActionability?.reason ?? node.attentionReason ?? "Profile row has an operator action.", rank: 200 };
@@ -934,6 +934,15 @@ export function workspaceInventoryPlacementForNode(node: WorkspaceNode): Workspa
     return { lane: "attention", reason: node.attentionReason ?? recoveryAction?.reason ?? "Workspace row has an operator recovery action.", rank: 500 };
   }
   return { lane: "hidden", reason: "Workspace row has no live, retained, detected, or actionable inventory authority.", rank: 900 };
+}
+
+export function workspaceInventoryGroupForNode(node: WorkspaceNode): WorkspaceNodeGroup {
+  const placement = node.inventoryPlacement ?? workspaceInventoryPlacementForNode(node);
+  if (placement.lane === "attention") return "needs-attention";
+  if (placement.lane === "detected") return "detected";
+  if (placement.lane === "retained") return "retained";
+  if (placement.lane === "primary") return "active";
+  return node.group;
 }
 
 function applyWorkspaceInventoryPlacement(node: WorkspaceNode): WorkspaceNodeWithPlacement {
@@ -1419,7 +1428,17 @@ function browserProjectionActions({
   takeover?: WorkspaceNodeTakeover | null;
   viewerClientReason?: string | null;
 }): WorkspaceNodeAction[] {
-  const lifecycleActions = (authority?.lifecycleActions ?? []).filter(isWorkspaceNodeAction);
+  const streamRecoveryAction = projectedView?.readiness.recoveryAction;
+  const lifecycleActions = (authority?.lifecycleActions ?? [])
+    .filter(isWorkspaceNodeAction)
+    .map((action) => action.id === "repair" && streamRecoveryAction
+      ? {
+          ...action,
+          label: "Wake stream",
+          enabled: true,
+          reason: projectedView?.readiness.reason ?? "The browser needs a service-owned view route before it can be opened.",
+        }
+      : action);
   const lifecycleIds = new Set(lifecycleActions.map((action) => action.id));
   const actions = [...lifecycleActions];
   if (takeover && !lifecycleIds.has("resume")) {
@@ -1515,7 +1534,7 @@ function createServiceSessionWorkspaceNode({
   const attentionReason = profileAttentionReason(allocation) ?? unresolvedIncidentReason(incidents);
   const blockedReason = takeover?.queueImpact ?? profileBlockedReason(allocation);
   const busy = jobs.some(isActiveJob);
-  const live = (session.browserIds?.length ?? 0) > 0 || (session.tabIds?.length ?? 0) > 0;
+  const live = tabs.some(isLiveServiceWorkspaceTab);
   const state = workspaceState({ busy, blockedReason, attentionReason, live });
   const label = workspaceLabel({
     ownership,
