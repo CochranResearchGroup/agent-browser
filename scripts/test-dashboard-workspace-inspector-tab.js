@@ -118,6 +118,22 @@ assert.match(
   'Runtime smoke must support Workspace-only hosted validation without requiring Chat.',
 );
 
+assert.match(
+  runtimeSmoke,
+  /ok: response\.ok && payload\.authenticated === true/,
+  'Runtime smoke must verify that the dashboard login response was accepted.',
+);
+assert.match(
+  runtimeSmoke,
+  /for \(let attempt = 0; attempt < 60; attempt \+= 1\)[\s\S]*fetch\('\/api\/dashboard-auth\/status'/,
+  'Runtime smoke must poll authenticated status after dashboard reload.',
+);
+assert.match(
+  runtimeSmoke,
+  /authenticatedState\.authenticated && !authenticatedState\.needsLogin/,
+  'Runtime smoke must wait for authenticated state and the login form to disappear.',
+);
+
 const emptySelection = {
   workspaceId: null,
   browserId: null,

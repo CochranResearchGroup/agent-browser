@@ -172,30 +172,59 @@ JSON.stringify({
     if (firstState.needsLogin) {
       currentPhase = 'dashboard login';
       const credentials = dashboardCredentials();
-      await evalAgent(`
+      const loginState = parseEvalJson(await evalAgent(`
 (async () => {
-  await fetch('/api/dashboard-auth/login', {
+  const response = await fetch('/api/dashboard-auth/login', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     credentials: 'same-origin',
     body: JSON.stringify(${JSON.stringify(credentials)})
   });
-  location.reload();
-  return JSON.stringify({ loginSubmitted: true });
+  const payload = await response.json().catch(() => ({}));
+  return JSON.stringify({
+    ok: response.ok && payload.authenticated === true,
+    status: response.status,
+    authenticated: payload.authenticated === true
+  });
 })()
-`);
-      await runAgent(['--json', '--session', options.session, 'wait', '1500'], { timeoutMs: 30000 });
-      currentPhase = 'verify dashboard login';
-      firstState = parseEvalJson(await evalAgent(`
-JSON.stringify({
-  needsLogin: Boolean(document.querySelector('input[type="password"]')),
-  url: location.href,
-  title: document.title
-})
-`), 'post-login dashboard browser state');
-      if (firstState.needsLogin) {
-        throw new Error('Dashboard browser smoke could not authenticate with the user-scoped dashboard auth file.');
+`), 'dashboard login response');
+      if (!loginState.ok) {
+        throw new Error(`Dashboard browser smoke login was rejected: ${JSON.stringify(loginState)}`);
       }
+      currentPhase = 'reload dashboard after login';
+      await evalAgent(`
+setTimeout(() => location.reload(), 0);
+JSON.stringify({ reloadScheduled: true })
+`);
+      currentPhase = 'wait for authenticated dashboard';
+      let authenticatedState = null;
+      for (let attempt = 0; attempt < 60; attempt += 1) {
+        try {
+          authenticatedState = parseEvalJson(await evalAgent(`
+(async () => {
+  const status = await fetch('/api/dashboard-auth/status', {
+    credentials: 'same-origin'
+  }).then((response) => response.json()).catch((error) => ({ error: String(error) }));
+  return JSON.stringify({
+    authenticated: status.authenticated === true,
+    needsLogin: Boolean(document.querySelector('input[type="password"]')),
+    hasWorkspacePane: document.body.innerText.includes('Workspaces'),
+    readyState: document.readyState,
+    url: location.href,
+    title: document.title
+  });
+})()
+`), 'post-login dashboard browser state');
+          if (authenticatedState.authenticated && !authenticatedState.needsLogin) break;
+        } catch (error) {
+          authenticatedState = { error: error instanceof Error ? error.message : String(error) };
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      if (!authenticatedState?.authenticated || authenticatedState.needsLogin) {
+        throw new Error(`Dashboard browser smoke could not authenticate with the user-scoped dashboard auth file: ${JSON.stringify(authenticatedState)}`);
+      }
+      firstState = authenticatedState;
     }
 
     let finalState = null;
