@@ -33,6 +33,9 @@ const INSTALL_DOCTOR_COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 const INSTALL_DOCTOR_SHORT_COMMAND_TIMEOUT: Duration = Duration::from_secs(3);
 const INSTALL_DOCTOR_SERVICE_STATUS_TIMEOUT: Duration = Duration::from_secs(15);
 const INSTALL_DOCTOR_COMMAND_POLL_INTERVAL: Duration = Duration::from_millis(25);
+const LIVE_DASHBOARD_PROBE_TIMEOUT: Duration = Duration::from_secs(3);
+const LIVE_DASHBOARD_READ_TIMEOUT: Duration = Duration::from_millis(250);
+const LIVE_DASHBOARD_READ_RETRY_DELAY: Duration = Duration::from_millis(25);
 static INSTALL_DOCTOR_COMMAND_OUTPUT_COUNTER: AtomicU64 = AtomicU64::new(0);
 const WORKSTATION_UNIT_NAMES: [&str; 5] = [
     "agent-browser-dashboard.service",
@@ -2137,7 +2140,7 @@ fn live_dashboard_runtime_probe(expected_executable_sha256: Option<&str>) -> ser
         }
     };
     let address = format!("127.0.0.1:{port}");
-    let timeout = Duration::from_millis(3_000);
+    let timeout = LIVE_DASHBOARD_PROBE_TIMEOUT;
     let mut stream = match TcpStream::connect_timeout(
         &address
             .parse()
@@ -2155,7 +2158,7 @@ fn live_dashboard_runtime_probe(expected_executable_sha256: Option<&str>) -> ser
             });
         }
     };
-    let _ = stream.set_read_timeout(Some(timeout));
+    let _ = stream.set_read_timeout(Some(LIVE_DASHBOARD_READ_TIMEOUT));
     let _ = stream.set_write_timeout(Some(timeout));
     let request = format!(
         "GET /api/runtime/manifest HTTP/1.1\r\nHost: {host_header}\r\nConnection: close\r\n\r\n"
@@ -2169,31 +2172,22 @@ fn live_dashboard_runtime_probe(expected_executable_sha256: Option<&str>) -> ser
             "reason": redact_doctor_text(error.to_string()),
         });
     }
-    let mut response_bytes = Vec::new();
-    let mut buffer = [0u8; 4096];
-    loop {
-        match stream.read(&mut buffer) {
-            Ok(0) => break,
-            Ok(n) => response_bytes.extend_from_slice(&buffer[..n]),
-            Err(error)
-                if matches!(
-                    error.kind(),
-                    io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
-                ) && !response_bytes.is_empty() =>
-            {
-                break;
-            }
-            Err(error) => {
-                return json!({
-                    "available": true,
-                    "ready": false,
-                    "state": "unreadable_manifest",
-                    "url": url,
-                    "reason": redact_doctor_text(error.to_string()),
-                });
-            }
+    let response_bytes = match read_dashboard_manifest_response(
+        &mut stream,
+        LIVE_DASHBOARD_PROBE_TIMEOUT,
+        LIVE_DASHBOARD_READ_RETRY_DELAY,
+    ) {
+        Ok(response) => response,
+        Err(error) => {
+            return json!({
+                "available": true,
+                "ready": false,
+                "state": "unreadable_manifest",
+                "url": url,
+                "reason": redact_doctor_text(error.to_string()),
+            });
         }
-    }
+    };
     let response = String::from_utf8_lossy(&response_bytes);
     let status_ok = response.starts_with("HTTP/1.1 200") || response.starts_with("HTTP/1.0 200");
     let body = response
@@ -2241,6 +2235,53 @@ fn live_dashboard_runtime_probe(expected_executable_sha256: Option<&str>) -> ser
             .cloned()
             .unwrap_or(serde_json::Value::Null),
     })
+}
+
+fn read_dashboard_manifest_response<R: Read>(
+    reader: &mut R,
+    timeout: Duration,
+    retry_delay: Duration,
+) -> io::Result<Vec<u8>> {
+    let deadline = Instant::now() + timeout;
+    let mut response = Vec::new();
+    let mut buffer = [0u8; 4096];
+    loop {
+        match reader.read(&mut buffer) {
+            Ok(0) => return Ok(response),
+            Ok(count) => {
+                response.extend_from_slice(&buffer[..count]);
+                if http_response_body_complete(&response) {
+                    return Ok(response);
+                }
+            }
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+                ) && Instant::now() < deadline =>
+            {
+                if !retry_delay.is_zero() {
+                    thread::sleep(retry_delay);
+                }
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+
+fn http_response_body_complete(response: &[u8]) -> bool {
+    let Some(header_end) = response.windows(4).position(|window| window == b"\r\n\r\n") else {
+        return false;
+    };
+    let body_start = header_end + 4;
+    let headers = String::from_utf8_lossy(&response[..header_end]);
+    let content_length = headers.lines().find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        name.eq_ignore_ascii_case("content-length")
+            .then(|| value.trim().parse::<usize>().ok())
+            .flatten()
+    });
+    content_length.is_some_and(|length| response.len().saturating_sub(body_start) >= length)
 }
 
 fn local_dashboard_probe_target() -> Result<(String, String, u16), String> {
@@ -3535,6 +3576,7 @@ fn package_exists_apt(pkg: &str) -> bool {
 mod tests {
     use super::*;
     use crate::test_utils::EnvGuard;
+    use std::collections::VecDeque;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
     use zip::write::SimpleFileOptions;
@@ -3565,6 +3607,45 @@ mod tests {
         let request = String::from_utf8_lossy(&buf[..n]).to_string();
         s.write_all(response).await.unwrap();
         request
+    }
+
+    struct ScriptedDashboardResponse {
+        reads: VecDeque<io::Result<Vec<u8>>>,
+    }
+
+    impl Read for ScriptedDashboardResponse {
+        fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+            match self.reads.pop_front().expect("scripted dashboard read") {
+                Ok(bytes) => {
+                    let count = bytes.len().min(buffer.len());
+                    buffer[..count].copy_from_slice(&bytes[..count]);
+                    Ok(count)
+                }
+                Err(error) => Err(error),
+            }
+        }
+    }
+
+    #[test]
+    fn dashboard_manifest_probe_retries_transient_would_block() {
+        let body = br#"{"schemaVersion":"agent-browser.runtime-manifest.v1"}"#;
+        let response = http_response(200, "OK", body);
+        let mut reader = ScriptedDashboardResponse {
+            reads: VecDeque::from([
+                Err(io::Error::from(io::ErrorKind::WouldBlock)),
+                Ok(response.clone()),
+                Ok(Vec::new()),
+            ]),
+        };
+
+        let observed = read_dashboard_manifest_response(
+            &mut reader,
+            Duration::from_millis(100),
+            Duration::ZERO,
+        )
+        .expect("transient dashboard startup backpressure should be retried");
+
+        assert_eq!(observed, response);
     }
 
     fn fingerprint(path: Option<&str>, sha256: Option<&str>) -> serde_json::Value {
