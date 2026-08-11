@@ -6,21 +6,41 @@ This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
 
-## P109 | Evaluation Deadline Propagation Repair
+## P110 | CDP Input Page Scroll Repair
 
 State: OPEN
-Current state: the confirmed request contract now carries a 45-second caller
-budget as a 44.75-second Chromium renderer deadline and a 45-second CDP
-transport deadline. Focused browser tests pass twice; broader validation,
-exact candidate installation, and the one bounded downstream Facebook tick
-remain.
+Current state: installed evaluation deadline propagation is working and
+preserved the retained Facebook browser, but the sole downstream tick exposed
+a distinct selectorless page-scroll stall in `Runtime.evaluate`. Later browser
+inventory succeeded. Plan 0110's selectorless path now emits CDP wheel input;
+the fake-CDP contract, interaction partition, and existing real-Chrome scroll
+e2e pass twice without changing selector-targeted element scrolling. Canonical
+Rust validation also passes with 1,043 parallel-safe tests plus every
+serialized partition; commit and installation remain.
 
 ### Next Recommendation
 
-Run repository-selected validation and Rust quality gates, then install one
-exact local candidate through the browser-preserving handoff. Do not restart
-or close the retained browser and do not consume more than one downstream
-Facebook tick.
+Commit the exact candidate and install it only through the supported
+browser-preserving handoff.
+
+### Evidence
+
+- `docs/dev/plans/0110-2026-08-11-cdp-input-page-scroll-repair-plan.md`
+
+## P109 | Evaluation Deadline Propagation Repair
+
+State: CLOSED
+Current state: exact commit `1c1331ef` propagated the caller deadline through
+Chromium and CDP, passed the canonical Rust gates, and installed as executable
+SHA-256 `071b7a6e3e58c87f3fd1decaaeb40d691f666a7d8f311894e4f30558c233bbf2`
+without replacing Facebook browser PID 13177. The one downstream tick passed
+evaluation and exposed the distinct selectorless scroll defect now owned by
+P110.
+
+### Next Recommendation
+
+Preserve the installed deadline contract while P110 changes only selectorless
+page scrolling. Do not retry the P109 downstream tick.
 
 ### Evidence
 

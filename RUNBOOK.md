@@ -4,6 +4,56 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 147 | 2026-08-11
+
+Scope: reconcile the installed evaluation repair and open one bounded
+successor for the distinct selectorless page-scroll failure.
+
+Actions:
+
+- committed exact dependency repair `1c1331ef` and installed executable SHA-256
+  `071b7a6e3e58c87f3fd1decaaeb40d691f666a7d8f311894e4f30558c233bbf2`
+  through the supported browser-preserving publisher;
+- retained Facebook browser PID 13177, its exact CDP endpoint, and all six
+  targets across handoff;
+- consumed Plan 0109's one downstream tick and preserved it terminal without
+  retry when the later selectorless scroll failed;
+- bound operation `r958354` to `interaction::scroll` using JavaScript
+  `window.scrollBy` through `Runtime.evaluate`, while a later tab inventory
+  operation proved the browser-level CDP channel remained responsive;
+- closed Plan 0109/P109 and opened Plan 0110/P110 for a minimal CDP input-wheel
+  successor.
+
+Validation:
+
+- focused browser partition passed twice, formatting and strict production
+  Clippy passed, and the canonical Rust runner passed 1,042 parallel-safe tests
+  plus every serialized partition;
+- install/runtime provenance converged; the only install-doctor issue remains
+  the visible pre-existing duplicate-profile-pressure warning with zero
+  readiness-impacting candidates;
+- downstream operation `r958354` ran from
+  `2026-08-11T05:07:48.245718588Z` to
+  `2026-08-11T05:08:16.739741811Z` and failed exactly with
+  `CDP command timed out: Runtime.evaluate`.
+
+Result:
+
+- the evaluation deadline blocker is removed and Plan 0109 is closed;
+- the overall Last30Days acceptance remains unmet because selectorless scroll
+  is a distinct downstream blocker;
+- Plan 0110's focused repair is green: fake-CDP and real-Chrome tests prove the
+  selectorless command now produces browser-level wheel movement while
+  selector-targeted scrolling remains unchanged;
+- the canonical Rust runner passed 1,043 parallel-safe tests with 57 ignored
+  plus every serialized partition; candidate commit/install and at most one
+  later Facebook tick remain under inherited goal authority.
+
+Graphiti Write Status:
+
+- deferred until a terminal validated downstream outcome; repo and installed
+  receipts remain authoritative.
+
 ## Turn 146 | 2026-08-11
 
 Scope: repair the evaluation deadline propagation defect exposed by the

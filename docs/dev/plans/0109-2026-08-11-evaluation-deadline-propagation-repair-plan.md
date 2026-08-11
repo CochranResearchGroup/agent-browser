@@ -1,8 +1,8 @@
 # Plan 0109 | Evaluation Deadline Propagation Repair
 
-State: OPEN
+State: CLOSED
 Roadmap: P109
-Plan version: 1
+Plan version: 2
 Date: 2026-08-11
 
 ## Objective
@@ -91,10 +91,36 @@ contract consumed by the production call.
 - next_action_or_stop_reason: run repository validation, build the exact local
   candidate, and use the supported browser-preserving executable handoff.
 
+## Checkpoint C02 | Installed Candidate And Downstream Stop
+
+- plan_version: 2
+- state_transition: OPEN -> CLOSED
+- progress_classification: blocker_reduction_then_distinct_downstream_failure
+- evidence: exact commit `1c1331efefbb41d7c5ba2384089eb2bfbd358f81`
+  passed the repository-selected gates, strict production Clippy, formatting,
+  35 focused browser tests twice, and the canonical Rust runner with 1,042
+  parallel-safe tests plus every serialized partition. The supported local
+  publisher installed executable SHA-256
+  `071b7a6e3e58c87f3fd1decaaeb40d691f666a7d8f311894e4f30558c233bbf2`
+  while retaining Facebook browser PID 13177, its exact CDP endpoint, and all
+  six target IDs.
+- downstream_evidence: the one authorized Facebook tick
+  `tick-c29795374e8948dfacd36e1fd2cd6b1e` reached the repaired evaluation path
+  successfully, then stopped on distinct agent-browser operation `r958354`:
+  selectorless `scroll` failed after 28.49 seconds with
+  `CDP command timed out: Runtime.evaluate`. A later tab inventory operation
+  succeeded, so browser/CDP health remained intact.
+- subagent_status: none; prohibited by current orchestration policy
+- authority_classification: inherited_goal_authority
+- next_action_or_stop_reason: close this bounded deadline packet without retry;
+  successor Plan 0110 owns a CDP input-wheel repair for selectorless page
+  scrolling and may consume at most one new downstream tick after its gates.
+
 ## Done Definition
 
-- all acceptance criteria have source, artifact, installed-runtime, and
-  downstream evidence;
+- criteria 1-4, 6, and 7 have source, artifact, installed-runtime, and
+  downstream evidence; criterion 5 installed successfully but downstream
+  acceptance exposed the distinct scroll defect recorded above;
 - the exact candidate commit and installed executable digest are recorded;
 - P109, this plan, the runbook, and the execution receipt agree;
 - no retained browser, profile, route, or schedule authority drift occurred.
