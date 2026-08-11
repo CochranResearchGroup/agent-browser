@@ -1397,7 +1397,12 @@ manifest does not match the installed binary it just wrote. Use
 only need to verify what the currently installed service is serving. If the
 dashboard detects a stale or missing runtime manifest, it renders a `Runtime
 contract drift` warning above the control surface with the local publish command
-needed to repair the live service. `agent-browser install doctor --json` and
+needed to repair the live service. After login, the dashboard also polls the
+authenticated `/api/runtime/health` endpoint every ten seconds. Its
+`agent-browser.runtime-health.v1` response compares active daemon executable,
+package, and stream metadata with the running binary and renders `Runtime status
+out of sync` immediately when drift appears. Detection is read-only and never
+restarts an active session automatically. `agent-browser install doctor --json` and
 `agent-browser doctor remote-view --json` also include the same
 `dashboardRuntime` manifest so CLI and dashboard readbacks describe the same
 installed binary and embedded UI bundle.

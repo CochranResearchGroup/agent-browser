@@ -5196,6 +5196,10 @@ start it creates ~/.agent-browser/dashboard-auth.json plus the mode-0600
 bootstrap credential file ~/.agent-browser/dashboard-auth.env. The default
 admin user and the codex observer user are superusers. Rotate or remove the
 bootstrap credential file after recording the intended operator password.
+After login, the dashboard polls authenticated /api/runtime/health every ten
+seconds. Its agent-browser.runtime-health.v1 response warns when active daemon
+executables, package versions, or stream metadata drift. Detection is read-only
+and never restarts an active session automatically.
 
 Options:
   --port <n>           Port for the dashboard server (default: 4848)

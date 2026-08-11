@@ -1878,6 +1878,91 @@ fn active_runtime_inventory(expected_sha256: Option<&str>) -> serde_json::Value 
     })
 }
 
+/// Projects a public-safe, read-only summary of active daemon drift for the
+/// authenticated dashboard runtime-health endpoint.
+pub(crate) fn runtime_health_json() -> serde_json::Value {
+    let current_executable = binary_fingerprint(std::env::current_exe().ok());
+    let expected_sha256 = current_executable.get("sha256").and_then(Value::as_str);
+    runtime_health_from_inventory(active_runtime_inventory(expected_sha256))
+}
+
+fn runtime_health_from_inventory(inventory: serde_json::Value) -> serde_json::Value {
+    let stale_runtimes = inventory
+        .get("runtimes")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|runtime| runtime.get("state").and_then(Value::as_str) == Some("stale"))
+        .collect::<Vec<_>>();
+    let stale_sessions = stale_runtimes
+        .iter()
+        .filter_map(|runtime| runtime.get("session").and_then(Value::as_str))
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    let issue_sessions = |reason: &str| {
+        stale_runtimes
+            .iter()
+            .filter(|runtime| {
+                runtime
+                    .get("driftReasons")
+                    .and_then(Value::as_array)
+                    .is_some_and(|reasons| reasons.iter().any(|value| value == reason))
+            })
+            .filter_map(|runtime| runtime.get("session").and_then(Value::as_str))
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+    };
+    let mut issues = Vec::new();
+    for (reason, code, message) in [
+        (
+            "executable_sha256_mismatch",
+            "runtime_executable_out_of_sync",
+            "Active daemon sessions are running a different agent-browser executable.",
+        ),
+        (
+            "package_version_mismatch",
+            "runtime_version_out_of_sync",
+            "Active daemon sessions report a different agent-browser package version.",
+        ),
+        (
+            "stream_metadata_invalid",
+            "runtime_stream_metadata_invalid",
+            "Active daemon sessions published invalid stream metadata.",
+        ),
+        (
+            "stream_unreachable",
+            "runtime_stream_unreachable",
+            "Active daemon session streams are no longer reachable.",
+        ),
+    ] {
+        let sessions = issue_sessions(reason);
+        if !sessions.is_empty() {
+            issues.push(json!({
+                "code": code,
+                "severity": "warning",
+                "message": message,
+                "sessions": sessions,
+                "recommendedAction": "restart_stale_daemon_sessions",
+            }));
+        }
+    }
+    let ready = stale_sessions.is_empty();
+    json!({
+        "schemaVersion": "agent-browser.runtime-health.v1",
+        "state": if ready { "ready" } else { "degraded" },
+        "ready": ready,
+        "observedAtEpochMs": std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64,
+        "runtimeCount": inventory.get("runtimeCount").cloned().unwrap_or(json!(0)),
+        "convergedRuntimeCount": inventory.get("convergedCount").cloned().unwrap_or(json!(0)),
+        "staleRuntimeCount": stale_sessions.len(),
+        "staleSessions": stale_sessions,
+        "issues": issues,
+    })
+}
+
 fn daemon_listener_inventory(current_executable_realpath: Option<&str>) -> serde_json::Value {
     #[cfg(unix)]
     {
@@ -4375,6 +4460,44 @@ mod tests {
             .any(|reason| reason == "stream_unreachable"));
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn runtime_health_projects_active_executable_drift_for_operator_visibility() {
+        let inventory = json!({
+            "schemaVersion": "agent-browser.runtime-inventory.v1",
+            "status": "stale",
+            "runtimeCount": 2,
+            "convergedCount": 1,
+            "staleCount": 1,
+            "runtimes": [
+                {
+                    "session": "default",
+                    "state": "converged",
+                    "driftReasons": []
+                },
+                {
+                    "session": "worker-old",
+                    "state": "stale",
+                    "driftReasons": ["executable_sha256_mismatch"]
+                }
+            ]
+        });
+
+        let health = runtime_health_from_inventory(inventory);
+
+        assert_eq!(health["schemaVersion"], "agent-browser.runtime-health.v1");
+        assert_eq!(health["state"], "degraded");
+        assert_eq!(health["staleRuntimeCount"], 1);
+        assert_eq!(
+            health["issues"][0]["code"],
+            "runtime_executable_out_of_sync"
+        );
+        assert_eq!(health["issues"][0]["sessions"], json!(["worker-old"]));
+        assert_eq!(
+            health["issues"][0]["recommendedAction"],
+            "restart_stale_daemon_sessions"
+        );
     }
 
     #[test]

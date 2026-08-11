@@ -338,9 +338,20 @@ pub(super) fn require_superuser(
     headers: &[(String, String)],
     secure_cookie: bool,
 ) -> Result<DashboardAuthIdentity, DashboardAuthResponse> {
+    let identity = require_authenticated(headers, secure_cookie)?;
+    if identity.role == DASHBOARD_ROLE_SUPERUSER {
+        Ok(identity)
+    } else {
+        Err(forbidden_api_response("Superuser role required"))
+    }
+}
+
+pub(super) fn require_authenticated(
+    headers: &[(String, String)],
+    secure_cookie: bool,
+) -> Result<DashboardAuthIdentity, DashboardAuthResponse> {
     match authenticate_headers(headers) {
-        Ok(Some(identity)) if identity.role == DASHBOARD_ROLE_SUPERUSER => Ok(identity),
-        Ok(Some(_)) => Err(forbidden_api_response("Superuser role required")),
+        Ok(Some(identity)) => Ok(identity),
         Ok(None) => Err(unauthorized_api_response(secure_cookie)),
         Err(err) => Err(json_response(
             "500 Internal Server Error",

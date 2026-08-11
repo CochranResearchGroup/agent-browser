@@ -80,7 +80,13 @@ installed binary it just wrote. Use <code>pnpm smoke:local-dashboard-runtime
 -- --expect-marker "Stream port"</code> to verify the already installed service
 without replacing the binary. If the dashboard detects a stale or missing
 manifest, it renders a <code>Runtime contract drift</code> warning above the
-control surface. <code>agent-browser install doctor --json</code> and
+control surface. After login, the dashboard polls the authenticated
+<code>/api/runtime/health</code> endpoint every ten seconds. Its
+<code>agent-browser.runtime-health.v1</code> response compares active daemon
+executable, package, and stream metadata with the running binary, then renders
+<code>Runtime status out of sync</code> as soon as drift appears. Detection is
+read-only and never restarts an active session automatically.
+<code>agent-browser install doctor --json</code> and
 <code>agent-browser doctor remote-view --json</code> include the same
 <code>dashboardRuntime</code> manifest, so CLI and dashboard readbacks describe
 the same installed binary and embedded UI bundle.

@@ -20,6 +20,7 @@ const serviceModeDocs = readFileSync('docs/src/app/service-mode/page.mdx', 'utf8
 const commandsDocs = readFileSync('docs/src/app/commands/page.mdx', 'utf8');
 const skill = readFileSync('skills/agent-browser/SKILL.md', 'utf8');
 const cliOutput = readFileSync('cli/src/output.rs', 'utf8');
+const dashboardHttp = readFileSync('cli/src/native/stream/http.rs', 'utf8');
 
 assert.match(
   page,
@@ -50,6 +51,31 @@ assert.match(
   /fetch\("\/api\/runtime\/manifest", \{ cache: "no-store" \}\)[\s\S]*runtimeManifestIssue\(manifest\)[\s\S]*<RuntimeManifestNotice state=\{runtimeManifest\} \/>/,
   'Dashboard shell must read the live runtime manifest and render a drift warning when the binary/UI contract is stale',
 );
+
+assert.match(
+  page,
+  /fetch\("\/api\/runtime\/health", \{[\s\S]*cache: "no-store"[\s\S]*credentials: "same-origin"[\s\S]*setInterval\([\s\S]*10_000[\s\S]*<RuntimeHealthNotice state=\{runtimeHealth\} \/>/,
+  'Dashboard shell must poll live runtime health and render executable drift before operator UX degrades',
+);
+
+assert.match(
+  dashboardHttp,
+  /path == "\/api\/runtime\/health"[\s\S]*require_authenticated\(&headers, secure_cookie\)[\s\S]*runtime_health_json\(\)/,
+  'Runtime health must be exposed only through the authenticated dashboard endpoint',
+);
+
+for (const [label, source] of [
+  ['README', readme],
+  ['dashboard docs', dashboardDocs],
+  ['agent-browser skill', skill],
+  ['CLI help', cliOutput],
+]) {
+  assert.match(
+    source,
+    /agent-browser\.runtime-health\.v1/,
+    `${label} must document proactive runtime drift detection`,
+  );
+}
 
 assert.match(
   css,

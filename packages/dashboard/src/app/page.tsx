@@ -116,6 +116,30 @@ type RuntimeManifestState = {
   issue: string | null;
 };
 
+type RuntimeHealthIssue = {
+  code?: string;
+  severity?: string;
+  message?: string;
+  sessions?: string[];
+  recommendedAction?: string;
+};
+
+type RuntimeHealth = {
+  schemaVersion?: string;
+  state?: "ready" | "degraded" | string;
+  ready?: boolean;
+  observedAtEpochMs?: number;
+  staleRuntimeCount?: number;
+  staleSessions?: string[];
+  issues?: RuntimeHealthIssue[];
+};
+
+type RuntimeHealthState = {
+  loading: boolean;
+  health: RuntimeHealth | null;
+  issue: string | null;
+};
+
 const REQUIRED_RUNTIME_FEATURES = [
   "workspace.detectedBrowsers",
   "workspace.foreignCdpBorrow",
@@ -528,6 +552,28 @@ function RuntimeManifestNotice({ state }: { state: RuntimeManifestState }) {
   );
 }
 
+function RuntimeHealthNotice({ state }: { state: RuntimeHealthState }) {
+  if (!state.issue) return null;
+  const sessions = state.health?.staleSessions ?? [];
+  return (
+    <div
+      className="dashboard-runtime-notice"
+      role="status"
+      data-runtime-health-warning="true"
+    >
+      <AlertTriangle className="size-4 shrink-0" />
+      <div className="min-w-0">
+        <p>Runtime status out of sync</p>
+        <span>
+          {state.issue}
+          {sessions.length > 0 ? ` Affected sessions: ${sessions.join(", ")}.` : ""}
+          {" "}Active sessions are never restarted automatically.
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function DashboardExperience({
   initialSection = "overview",
   user,
@@ -559,6 +605,11 @@ function DashboardExperience({
   const [runtimeManifest, setRuntimeManifest] = useState<RuntimeManifestState>({
     loading: true,
     manifest: null,
+    issue: null,
+  });
+  const [runtimeHealth, setRuntimeHealth] = useState<RuntimeHealthState>({
+    loading: true,
+    health: null,
     issue: null,
   });
   const activePort = useAtomValue(activePortAtom);
@@ -603,6 +654,42 @@ function DashboardExperience({
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    const checkRuntimeHealth = async () => {
+      try {
+        const response = await fetch("/api/runtime/health", {
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const health = await response.json() as RuntimeHealth;
+        const issue = health.ready === false
+          ? health.issues?.[0]?.message || "Active daemon sessions are out of sync with the installed runtime."
+          : null;
+        if (!cancelled) {
+          setRuntimeHealth({ loading: false, health, issue });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : String(error);
+          setRuntimeHealth({
+            loading: false,
+            health: null,
+            issue: `Live runtime health is unavailable (${message}).`,
+          });
+        }
+      }
+    };
+    void checkRuntimeHealth();
+    const interval = window.setInterval(checkRuntimeHealth, 10_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
   }, []);
   useEffect(() => {
     const onWorkspaceSelection = () => setHasWorkspaceViewportRoute(readWorkspaceViewportRoute());
@@ -786,8 +873,11 @@ function DashboardExperience({
       </TabsContent>
     </Tabs>
   );
-  const runtimeNotice = runtimeManifest.issue ? (
-    <RuntimeManifestNotice state={runtimeManifest} />
+  const runtimeNotice = runtimeManifest.issue || runtimeHealth.issue ? (
+    <>
+      <RuntimeManifestNotice state={runtimeManifest} />
+      <RuntimeHealthNotice state={runtimeHealth} />
+    </>
   ) : null;
   const appShellProps = {
     activeSection,

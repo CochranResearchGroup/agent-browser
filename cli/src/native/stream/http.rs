@@ -1019,6 +1019,15 @@ pub(super) async fn handle_http_request(
         return;
     }
 
+    if method == "GET" && path == "/api/runtime/health" {
+        if let Err(response) = dashboard_auth::require_authenticated(&headers, secure_cookie) {
+            let _ = stream.write_all(&response.into_http_bytes()).await;
+            return;
+        }
+        write_json_value(&mut stream, "200 OK", crate::install::runtime_health_json()).await;
+        return;
+    }
+
     let (status, content_type, body): (&str, &str, Vec<u8>) = if path == "/api/sessions" {
         (
             "200 OK",
