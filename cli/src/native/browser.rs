@@ -126,12 +126,10 @@ fn navigation_metadata(target: &TargetInfo, requested_url: &str) -> (String, Str
     (url, target.title.clone())
 }
 
-const MAX_RUNTIME_EVALUATION_TIMEOUT_MS: u64 = 25_000;
 const RUNTIME_EVALUATION_RESPONSE_GRACE_MS: u64 = 250;
 
 fn runtime_evaluation_timeout_ms(caller_timeout_ms: u64) -> u64 {
     caller_timeout_ms
-        .min(MAX_RUNTIME_EVALUATION_TIMEOUT_MS)
         .saturating_sub(RUNTIME_EVALUATION_RESPONSE_GRACE_MS)
         .max(1)
 }
@@ -141,11 +139,22 @@ fn bounded_evaluate_params(script: &str, caller_timeout_ms: u64) -> Value {
         "expression": script,
         "returnByValue": true,
         "awaitPromise": true,
-        // This is Chromium's renderer-side deadline. The CDP client's separate
-        // 30-second transport deadline cannot stop a script that is still
-        // executing after its caller gives up.
+        // Finish inside the caller deadline so Chromium has time to return the
+        // renderer result over CDP.
         "timeout": runtime_evaluation_timeout_ms(caller_timeout_ms),
     })
+}
+
+struct BoundedEvaluationRequest {
+    params: Value,
+    transport_timeout: Duration,
+}
+
+fn bounded_evaluation_request(script: &str, caller_timeout_ms: u64) -> BoundedEvaluationRequest {
+    BoundedEvaluationRequest {
+        params: bounded_evaluate_params(script, caller_timeout_ms),
+        transport_timeout: Duration::from_millis(caller_timeout_ms),
+    }
 }
 
 fn page_index_for_target_id(pages: &[PageInfo], target_id: &str) -> Option<usize> {
@@ -1075,15 +1084,18 @@ impl BrowserManager {
         timeout_ms: u64,
     ) -> Result<Value, String> {
         let session_id = self.active_session_id()?.to_string();
+        let request = bounded_evaluation_request(script, timeout_ms);
 
         let result = self
             .client
-            .send_command(
+            .send_command_with_timeout(
                 "Runtime.evaluate",
-                Some(bounded_evaluate_params(script, timeout_ms)),
+                Some(request.params),
                 Some(&session_id),
+                request.transport_timeout,
             )
-            .await?;
+            .await
+            .map_err(|error| error.to_string())?;
         let result: EvaluateResult = serde_json::from_value(result).map_err(|error| {
             format!("Failed to deserialize CDP response for Runtime.evaluate: {error}")
         })?;
@@ -2723,7 +2735,7 @@ mod tests {
         assert_eq!(params["expression"], "1 + 1");
         assert_eq!(params["returnByValue"], true);
         assert_eq!(params["awaitPromise"], true);
-        assert_eq!(params["timeout"], 24_750);
+        assert_eq!(params["timeout"], 44_750);
     }
 
     #[test]
@@ -2731,6 +2743,14 @@ mod tests {
         let params = bounded_evaluate_params("document.body.textContent", 6_000);
 
         assert_eq!(params["timeout"], 5_750);
+    }
+
+    #[test]
+    fn test_bounded_evaluation_request_carries_caller_deadlines() {
+        let request = bounded_evaluation_request("Promise.resolve(42)", 45_000);
+
+        assert_eq!(request.params["timeout"], 44_750);
+        assert_eq!(request.transport_timeout, Duration::from_millis(45_000));
     }
 
     #[tokio::test]
