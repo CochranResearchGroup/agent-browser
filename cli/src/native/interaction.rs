@@ -427,18 +427,27 @@ pub async fn scroll(
             )
             .await?;
     } else {
-        let js = format!("window.scrollBy({}, {})", delta_x, delta_y);
         client
             .send_command_typed::<_, Value>(
-                "Runtime.evaluate",
-                &EvaluateParams {
-                    expression: js,
-                    return_by_value: Some(true),
-                    await_promise: Some(false),
+                "Input.dispatchMouseEvent",
+                &DispatchMouseEventParams {
+                    event_type: "mouseWheel".to_string(),
+                    x: 100.0,
+                    y: 100.0,
+                    button: None,
+                    buttons: None,
+                    click_count: None,
+                    delta_x: Some(delta_x),
+                    delta_y: Some(delta_y),
+                    modifiers: None,
                 },
                 Some(session_id),
             )
             .await?;
+        // Chromium acknowledges wheel input before the compositor necessarily
+        // applies it. Preserve the command's historical post-scroll response
+        // semantics without re-entering the page's JavaScript runtime.
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
     Ok(())
 }
@@ -1121,6 +1130,53 @@ fn named_key_info(key: &str) -> (String, String, i32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures_util::{SinkExt, StreamExt};
+    use tokio::net::TcpListener;
+    use tokio_tungstenite::tungstenite::Message;
+
+    #[tokio::test]
+    async fn selectorless_scroll_uses_cdp_wheel_input() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut websocket = tokio_tungstenite::accept_async(stream).await.unwrap();
+            let command = websocket.next().await.unwrap().unwrap();
+            let command: Value = serde_json::from_str(command.to_text().unwrap()).unwrap();
+
+            assert_eq!(command["method"], "Input.dispatchMouseEvent");
+            assert_eq!(command["sessionId"], "session-1");
+            assert_eq!(command["params"]["type"], "mouseWheel");
+            assert_eq!(command["params"]["x"], 100.0);
+            assert_eq!(command["params"]["y"], 100.0);
+            assert_eq!(command["params"]["deltaX"], -25.5);
+            assert_eq!(command["params"]["deltaY"], 640.0);
+
+            websocket
+                .send(Message::Text(
+                    serde_json::json!({"id": command["id"], "result": {}}).to_string(),
+                ))
+                .await
+                .unwrap();
+        });
+
+        let client = CdpClient::connect(&format!("ws://{address}"))
+            .await
+            .unwrap();
+        scroll(
+            &client,
+            "session-1",
+            &RefMap::new(),
+            None,
+            -25.5,
+            640.0,
+            &HashMap::new(),
+        )
+        .await
+        .unwrap();
+
+        server.await.unwrap();
+    }
 
     /// Verify that `char_to_key_info` returns the correct (key, code,
     /// windowsVirtualKeyCode) triple for every character in Playwright's
