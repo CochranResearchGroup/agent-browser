@@ -4252,6 +4252,9 @@ Aliases: quit, exit
 Options:
   --all                Close all active sessions
 
+`close --all` is global and cannot be combined with an explicit `--session`.
+Unreachable daemons are signaled only when recorded process identity matches.
+
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
