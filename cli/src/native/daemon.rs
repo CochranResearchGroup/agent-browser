@@ -209,7 +209,16 @@ pub async fn run_daemon(session: &str) {
         .ok()
         .and_then(|s| s.parse::<u16>().ok())
         .unwrap_or(0);
-    match StreamServer::start_without_client(preferred_port, session.to_string(), true).await {
+    let strict_stream_port = env::var("AGENT_BROWSER_STREAM_PORT_STRICT")
+        .ok()
+        .is_some_and(|value| matches!(value.as_str(), "1" | "true" | "yes" | "on"));
+    match StreamServer::start_without_client(
+        preferred_port,
+        session.to_string(),
+        !strict_stream_port,
+    )
+    .await
+    {
         Ok((stream_server, client_slot)) => {
             stream_client = Some(client_slot.clone());
             if let Err(e) = fs::write(&stream_path, stream_server.port().to_string()) {
@@ -223,6 +232,9 @@ pub async fn run_daemon(session: &str) {
         Err(e) => {
             let _ = writeln!(std::io::stderr(), "Stream server failed to start: {}", e);
             log_startup_milestone(startup_started, "stream-server-failed");
+            if strict_stream_port {
+                process::exit(1);
+            }
         }
     }
 

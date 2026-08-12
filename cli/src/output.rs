@@ -5038,6 +5038,12 @@ instance with separate cookies, storage, and state.
 Operations:
   (none)               Show current session name
   list                 List all active sessions
+  supervisor install <session> --stream-port <port>
+                       Install and start a Linux user service for one named daemon
+  supervisor status <session>
+                       Report unit, executable, restart, and fixed-port readiness
+  supervisor remove <session>
+                       Stop and remove only the named daemon supervisor
 
 Environment:
   AGENT_BROWSER_SESSION    Default session name
@@ -5049,6 +5055,9 @@ Global Options:
 Examples:
   agent-browser session
   agent-browser session list
+  agent-browser session supervisor install messages-v4 --stream-port 39716
+  agent-browser session supervisor status messages-v4 --json
+  agent-browser session supervisor remove messages-v4
   agent-browser --session test open example.com
 "##
         }
@@ -6270,6 +6279,9 @@ Confirmation:
 Sessions:
   session                    Show current session name
   session list               List active sessions
+  session supervisor install Install and start one named Linux daemon service
+  session supervisor status  Report named daemon and fixed-port readiness
+  session supervisor remove  Stop and remove only one named daemon service
 
 Chat (AI):
   chat <message>             Send a natural language instruction (single-shot)

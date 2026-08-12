@@ -13,6 +13,7 @@ mod output;
 mod process_identity;
 mod remote_view_doctor;
 mod runtime_profile;
+mod session_supervisor;
 #[cfg(test)]
 mod test_utils;
 mod upgrade;
@@ -1764,6 +1765,11 @@ fn main() {
 
     // Handle session separately (doesn't need daemon)
     if clean.first().map(|s| s.as_str()) == Some("session") {
+        if clean.get(1).map(String::as_str) == Some("supervisor") {
+            exit(session_supervisor::run_session_supervisor(
+                &args, flags.json,
+            ));
+        }
         run_session(&clean, &flags.session, flags.json);
         return;
     }

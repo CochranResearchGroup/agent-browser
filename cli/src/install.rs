@@ -1104,6 +1104,8 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
     install_doctor_trace("runtime_convergence");
     let runtime_convergence =
         runtime_convergence_summary(&live_dashboard_runtime, &runtime_inventory);
+    install_doctor_trace("session_supervisors");
+    let session_supervisors = crate::session_supervisor::session_supervisor_health_json();
     install_doctor_trace("workstation_payload");
     let workstation_payload = workstation_payload_status();
     install_doctor_trace("issues");
@@ -1121,6 +1123,13 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
         daemon_listener_inventory: &daemon_listener_inventory,
     });
     issues.extend(workstation_payload_issues(&workstation_payload));
+    issues.extend(
+        session_supervisors
+            .get("issues")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default(),
+    );
 
     json!({
         "success": issues.is_empty(),
@@ -1139,6 +1148,7 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
             "runtimeInventory": runtime_inventory,
             "daemonListenerInventory": daemon_listener_inventory,
             "runtimeConvergence": runtime_convergence,
+            "sessionSupervisors": session_supervisors,
             "workstationPayload": workstation_payload,
             "issues": issues,
         }
@@ -1883,10 +1893,31 @@ fn active_runtime_inventory(expected_sha256: Option<&str>) -> serde_json::Value 
 pub(crate) fn runtime_health_json() -> serde_json::Value {
     let current_executable = binary_fingerprint(std::env::current_exe().ok());
     let expected_sha256 = current_executable.get("sha256").and_then(Value::as_str);
-    runtime_health_from_inventory(active_runtime_inventory(expected_sha256))
+    runtime_health_from_inventory_and_supervisors(
+        active_runtime_inventory(expected_sha256),
+        crate::session_supervisor::session_supervisor_health_json(),
+    )
 }
 
+#[cfg(test)]
 fn runtime_health_from_inventory(inventory: serde_json::Value) -> serde_json::Value {
+    runtime_health_from_inventory_and_supervisors(
+        inventory,
+        json!({
+            "schemaVersion": "agent-browser.session-supervisor-health.v1",
+            "ready": true,
+            "count": 0,
+            "degradedCount": 0,
+            "sessions": [],
+            "issues": [],
+        }),
+    )
+}
+
+fn runtime_health_from_inventory_and_supervisors(
+    inventory: serde_json::Value,
+    session_supervisors: serde_json::Value,
+) -> serde_json::Value {
     let stale_runtimes = inventory
         .get("runtimes")
         .and_then(Value::as_array)
@@ -1946,7 +1977,18 @@ fn runtime_health_from_inventory(inventory: serde_json::Value) -> serde_json::Va
             }));
         }
     }
-    let ready = stale_sessions.is_empty();
+    issues.extend(
+        session_supervisors
+            .get("issues")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default(),
+    );
+    let supervisors_ready = session_supervisors
+        .get("ready")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let ready = stale_sessions.is_empty() && supervisors_ready;
     json!({
         "schemaVersion": "agent-browser.runtime-health.v1",
         "state": if ready { "ready" } else { "degraded" },
@@ -1959,6 +2001,7 @@ fn runtime_health_from_inventory(inventory: serde_json::Value) -> serde_json::Va
         "convergedRuntimeCount": inventory.get("convergedCount").cloned().unwrap_or(json!(0)),
         "staleRuntimeCount": stale_sessions.len(),
         "staleSessions": stale_sessions,
+        "sessionSupervisors": session_supervisors,
         "issues": issues,
     })
 }
@@ -4498,6 +4541,38 @@ mod tests {
             health["issues"][0]["recommendedAction"],
             "restart_stale_daemon_sessions"
         );
+    }
+
+    #[test]
+    fn runtime_health_projects_named_supervisor_degradation() {
+        let health = runtime_health_from_inventory_and_supervisors(
+            json!({
+                "runtimeCount": 0,
+                "convergedCount": 0,
+                "runtimes": [],
+            }),
+            json!({
+                "schemaVersion": "agent-browser.session-supervisor-health.v1",
+                "ready": false,
+                "count": 1,
+                "degradedCount": 1,
+                "sessions": [{
+                    "session": "messages-v4",
+                    "state": "restart_exhausted",
+                    "ready": false,
+                }],
+                "issues": [{
+                    "code": "restart_exhausted",
+                    "severity": "warning",
+                    "message": "restart limit reached",
+                    "recommendedAction": "agent-browser session supervisor status messages-v4",
+                }],
+            }),
+        );
+        assert_eq!(health["state"], "degraded");
+        assert_eq!(health["ready"], false);
+        assert_eq!(health["sessionSupervisors"]["degradedCount"], 1);
+        assert_eq!(health["issues"][0]["code"], "restart_exhausted");
     }
 
     #[test]

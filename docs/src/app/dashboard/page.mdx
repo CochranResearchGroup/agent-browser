@@ -85,7 +85,12 @@ control surface. After login, the dashboard polls the authenticated
 <code>agent-browser.runtime-health.v1</code> response compares active daemon
 executable, package, and stream metadata with the running binary, then renders
 <code>Runtime status out of sync</code> as soon as drift appears. Detection is
-read-only and never restarts an active session automatically.
+read-only and never restarts an active session automatically. The same health
+response includes every installed named daemon supervisor, its restart state,
+fixed stream port, published port, stream reachability, and executable match.
+Port conflicts, executable drift, stopped units, and exhausted restart limits
+therefore degrade the dashboard immediately instead of waiting for browser UX
+to fail.
 <code>agent-browser install doctor --json</code> and
 <code>agent-browser doctor remote-view --json</code> include the same
 <code>dashboardRuntime</code> manifest, so CLI and dashboard readbacks describe

@@ -124,6 +124,21 @@ type RuntimeHealthIssue = {
   recommendedAction?: string;
 };
 
+type SessionSupervisorHealth = {
+  ready?: boolean;
+  count?: number;
+  degradedCount?: number;
+  sessions?: Array<{
+    session?: string;
+    state?: string;
+    ready?: boolean;
+    streamPort?: number;
+    publishedStreamPort?: number;
+    executableMatches?: boolean;
+  }>;
+  issues?: RuntimeHealthIssue[];
+};
+
 type RuntimeHealth = {
   schemaVersion?: string;
   state?: "ready" | "degraded" | string;
@@ -131,6 +146,7 @@ type RuntimeHealth = {
   observedAtEpochMs?: number;
   staleRuntimeCount?: number;
   staleSessions?: string[];
+  sessionSupervisors?: SessionSupervisorHealth;
   issues?: RuntimeHealthIssue[];
 };
 

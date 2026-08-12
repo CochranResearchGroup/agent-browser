@@ -171,14 +171,14 @@ fn ensure_socket_dir_exists() -> Result<PathBuf, String> {
     Ok(socket_dir)
 }
 
-fn generate_daemon_auth_token() -> Result<String, String> {
+pub(crate) fn generate_daemon_auth_token() -> Result<String, String> {
     let mut bytes = [0u8; 32];
     getrandom::getrandom(&mut bytes)
         .map_err(|e| format!("Failed to generate auth token: {}", e))?;
     Ok(hex::encode(bytes))
 }
 
-fn write_daemon_auth_token(session: &str, token: &str) -> Result<(), String> {
+pub(crate) fn write_daemon_auth_token(session: &str, token: &str) -> Result<(), String> {
     let path = get_auth_token_path(session);
     fs::write(&path, token).map_err(|e| format!("Failed to write daemon auth token: {}", e))?;
     set_private_file_permissions(&path)

@@ -656,6 +656,26 @@ agent-browser session list
 agent-browser session
 ```
 
+On Linux, a named daemon can run under a bounded user-service supervisor
+without launching a browser. The install command records the exact executable
+and fixed loopback stream port. Status reports executable drift, port
+conflicts, restart exhaustion, and whether the published stream is reachable.
+
+```bash
+# Install and start one named daemon supervisor
+agent-browser session supervisor install messages-v4 --stream-port 39716
+
+# Inspect the exact unit, executable, restart, and port state
+agent-browser session supervisor status messages-v4 --json
+
+# Stop and remove only this supervisor
+agent-browser session supervisor remove messages-v4
+```
+
+The remove operation preserves browser profiles, browser storage, service
+state, and unrelated user services. The supervised daemon does not open a
+browser until an authenticated effectful request explicitly asks it to.
+
 Each session has its own:
 
 - Browser instance
