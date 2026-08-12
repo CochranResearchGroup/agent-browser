@@ -1798,7 +1798,7 @@ mod tests {
         let canonical_names = sorted_names(properties.keys().cloned());
         let spec_names = spec_role_names(|_| true);
 
-        assert_eq!(canonical_names.len(), 64);
+        assert_eq!(canonical_names.len(), 70);
         assert_eq!(canonical_names, spec_names);
         assert_eq!(
             role_contract["canonicalPropertyCount"].as_u64(),
@@ -2291,6 +2291,22 @@ mod tests {
                 request["browserId"] = json!("browser:desktop-fixture");
                 request["format"] = json!("png");
                 request["maxBytes"] = json!(4 * 1024 * 1024);
+            }
+            "desktop_locate" => {
+                request["browserId"] = json!("browser:desktop-fixture");
+                request["locator"] = json!({
+                    "locatorId": "p110-control-v1",
+                    "maxCandidates": 8
+                });
+            }
+            "desktop_interact" => {
+                request["browserId"] = json!("browser:desktop-fixture");
+                request["controllerLeaseId"] = json!("controller-lease-fixture");
+                request["operationId"] = json!("operation-fixture");
+                request["recipe"] = json!({"recipeId": "p110-pointer-keyboard-v1"});
+                request["serviceName"] = json!("DesktopInteractor");
+                request["agentName"] = json!("fixture-agent");
+                request["taskName"] = json!("verify-synthetic-control");
             }
             "desktop_prompt_observe" => {
                 request["browserId"] = json!("browser:desktop-fixture");
