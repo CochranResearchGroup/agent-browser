@@ -1,10 +1,258 @@
 # Roadmap
 
 Date: 2026-05-26
+Updated: 2026-08-12
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
+
+## P110 | Desktop Perception And Interaction Foundation
+
+State: OPEN | POC 1 PLANNED
+Current state: Plan 0110 freezes the five sequential proof boundaries and Plan
+0110-1 details the first display-bound frame-capture proof before
+implementation. No desktop-perception contract, capture backend, locator, or
+machine-controlled desktop input path has been implemented or authorized for
+live use. The existing service already owns browser, session, profile, tab,
+display-allocation, view-stream, controller-lease, job, challenge, and operator
+handoff state. Page screenshots and ordinary browser interaction remain
+CDP-backed, while RDP and Guacamole provide the first practical desktop surface
+on which browser-external UI can be observed and controlled.
+
+### Vision
+
+Make agent-browser capable of perceiving and interacting with the complete
+browser workspace, including browser chrome, extension UI, credential-manager
+prompts, operating-system dialogs, and CDP-free browser windows. The layer
+should feel like a natural extension of the existing browser toolset rather
+than a separate remote-desktop automation product.
+
+The foundation is a display-bound transaction:
+
+1. resolve one service-owned browser workspace and its current display,
+   view-stream, geometry, and control authority;
+2. observe a fresh frame and any available semantic desktop evidence;
+3. locate candidate UI targets with explicit detector evidence;
+4. perform a bounded pointer or keyboard action through the selected input
+   backend;
+5. verify the resulting desktop state and retain a typed receipt.
+
+Detection and actuation may be deterministic and replayable. An external
+site's acceptance decision, authentication result, or challenge outcome is not
+represented as deterministic unless separately observed and verified.
+
+The broader product direction and human-authorization boundaries are defined
+in `VISION.md`.
+
+### Foundation Vocabulary
+
+The first implementation should refine, rather than prematurely freeze, this
+working vocabulary:
+
+- `DesktopContext`: the browser, session, profile, display allocation,
+  view stream, input provider, coordinate spaces, geometry epoch, and current
+  control authority against which work is valid;
+- `FrameReceipt`: one captured desktop frame with source identity, sequence,
+  dimensions, scaling, capture time, content hash, retention posture, and
+  geometry epoch;
+- `Observation`: one or more located candidates with detector identity,
+  detector version, target class, bounds, coordinate space, supporting
+  evidence, and source frame;
+- `InteractionRecipe`: ordered observe, locate, move, click, key, text, wait,
+  and verify steps with preconditions, timeout, retry budget, motion profile,
+  and stop conditions;
+- `InteractionReceipt`: caller attribution, authority decision, selected
+  target, before and after frames, emitted input, verification result, errors,
+  and cleanup or handoff state.
+
+These records should use opaque IDs and typed relationships. Callers should not
+pass raw Guacamole URLs, guess display names, or translate coordinates without
+service-owned geometry evidence.
+
+### Reusable Architecture
+
+The foundation should keep mechanisms separate from use-case policy:
+
+- frame sources capture a named desktop surface from Guacamole/RDP, X11,
+  Windows, Wayland, macOS, or another provider;
+- semantic sources contribute accessibility-tree, window, process, focus, and
+  control metadata when the platform exposes it;
+- locators implement exact templates, OCR, geometry, pinned local models, or
+  approved probabilistic vision providers behind one observation contract;
+- coordinate mappers translate frame, stream, logical-desktop, physical-pixel,
+  and input-backend coordinates while retaining scale and crop evidence;
+- input sinks emit pointer and keyboard events through Guacamole, X11,
+  Windows, Wayland, macOS, or another provider;
+- verifiers classify the post-action state without assuming that emitted input
+  produced the requested external outcome;
+- policy selects providers, required evidence, motion posture, approval gates,
+  retry budgets, redaction, artifact retention, and human handoff.
+
+The core should not contain site-specific CAPTCHA coordinates or
+credential-manager screenshots. Use cases should contribute fixtures,
+detectors, policies, and verification rules through the shared contracts.
+
+### Service Authority And Safety
+
+Desktop work must remain inside the existing service control plane:
+
+- every request carries service, agent, and task attribution when known;
+- the service resolves the browser and exact display allocation before work;
+- observation may be shared, but machine input requires a controller lease or
+  another explicit control authority;
+- human takeover and machine input are serialized rather than allowed to race;
+- an action fails closed when its frame is stale, geometry changed, focus is
+  wrong, the display or route was replaced, or target evidence is ambiguous;
+- retries are bounded and each attempt re-observes current state;
+- sensitive frames are ephemeral by default and must not leak passwords,
+  passkey account details, one-time codes, or private browser content into
+  logs or retained service state;
+- secure-desktop, biometric, PIN, master-password, and user-consent prompts can
+  become typed operator-intervention states instead of automation failures;
+- durable operator continuation uses the existing opaque remote-view handoff,
+  never a raw provider route.
+
+Smooth pointer motion is a reusable interaction profile, not a promise to
+evade bot detection. Replayable variation must carry its seed and generated
+trajectory in the receipt.
+
+### Coherent Product Surface
+
+The exact names remain subject to the first contract proof, but the intended
+shape is one discoverable `desktop` family backed by one service-owned model:
+
+- CLI: a natural `agent-browser desktop` command group for capabilities,
+  observation, location, bounded actions, and recipes, with human-readable
+  output and stable JSON receipts;
+- HTTP API: service-owned capability reads and queued desktop interaction
+  requests using the same context, recipe, and receipt schemas as every other
+  ingress;
+- MCP: small task-shaped tools for observing, locating, and acting, plus
+  resources for capabilities and retained non-sensitive state; MCP handlers
+  remain thin adapters over the service contract;
+- generated client: typed request builders, helpers, summaries, and receipt
+  types generated or checked from the same schemas;
+- dashboard: selected-workspace capability, live observation overlays,
+  controller ownership, verification state, and one-click operator takeover;
+- access plan and contract metadata: advertise whether a requested workspace
+  has desktop capture, semantic inspection, locator, pointer, keyboard, and
+  verification capabilities before a caller attempts an action.
+
+Simple commands should lower into the same recipe engine used by advanced
+callers. The foundation should not grow separate CLI-only, MCP-only, or
+dashboard-only execution paths.
+
+### Proof Of Concept 1 | Display-Bound Frame Capture
+
+Capture one fresh frame from a service-owned RDP/Guacamole browser workspace
+and return a `DesktopContext` plus `FrameReceipt` through the native service,
+CLI, HTTP, MCP, and generated client surfaces.
+
+This proof should establish exact browser-to-display binding, frame identity,
+dimensions, scaling, coordinate-space metadata, freshness, redaction and
+retention defaults, and typed failure when the route or display is not ready.
+It should not inject input or run a vision model.
+
+### Proof Of Concept 2 | Deterministic Fixture Location
+
+Locate known controls in a controlled desktop fixture using deterministic
+template, geometry, and OCR evidence. The fixture should exercise multiple
+scales, themes, window positions, and one visually similar decoy.
+
+This proof should establish the locator interface, detector versioning,
+candidate ranking, ambiguity handling, source-frame binding, and visualization
+of proposed targets. It should not click a live challenge or credential prompt.
+
+### Proof Of Concept 3 | Guarded Pointer And Keyboard Transaction
+
+Use the same display and coordinate model to move the pointer along a smooth,
+replayable path, click a controlled target, enter non-sensitive test text, and
+verify the resulting fixture state.
+
+This proof should establish controller leasing, focus checks, coordinate
+mapping, press and release semantics, motion profiles, stale-frame abort,
+bounded retries, before and after evidence, and cooperative human takeover.
+
+### Proof Of Concept 4 | Browser-External Prompt Perception
+
+Detect and classify a controlled browser-chrome, extension, or native dialog
+that is absent from the page screenshot and DOM. Fuse pixels with available
+desktop accessibility and window metadata, then return either an actionable
+candidate or a typed `operator_intervention_required` result.
+
+This proof should validate the reason the new layer exists without depending
+on a real account, secret, biometric, third-party site, or production LastPass
+state.
+
+### Proof Of Concept 5 | Foundation Stress And Use-Case Entry
+
+Exercise one complete provider-neutral recipe through every advertised ingress
+and confirm that capability discovery, request validation, queueing, leases,
+receipts, errors, generated client types, dashboard projection, help, README,
+repo skill, and docs site remain coherent.
+
+Only after this gate should discrete challenge and authentication use cases
+start adding their own detectors and policy:
+
+1. controlled Turnstile test fixtures and provider-supplied test keys;
+2. read-only LastPass or passkey-prompt detection with operator continuation;
+3. authorized visual challenge classification with explicit provider and
+   human-approval policy;
+4. broader local-desktop backends after the RDP contract proves reusable.
+
+Each use case is both a product increment and an architecture probe. When a
+use case exposes awkward context binding, duplicated ingress logic, weak
+receipts, unsafe defaults, or detector-specific coupling, adjust the
+foundation before normalizing the workaround.
+
+### Foundation Acceptance
+
+The foundational lane is not accepted until:
+
+- one display-bound recipe passes on a controlled RDP/Guacamole fixture;
+- every action proves fresh frame, current geometry, correct display, and
+  current controller authority before input;
+- deterministic detectors and replayable motion reproduce their receipts
+  against pinned fixtures;
+- ambiguous or changed targets stop without input;
+- CLI, HTTP, MCP, generated client, contract metadata, dashboard, help, README,
+  repo skill, and docs site expose one coherent capability family;
+- capture and input providers are replaceable without changing use-case
+  recipes;
+- sensitive observations remain ephemeral and redacted by default;
+- operator takeover uses the durable handoff and resumes only through explicit
+  authority;
+- controlled fixtures cover success, ambiguity, stale geometry, focus loss,
+  route replacement, lease conflict, input failure, and failed verification.
+
+### Non-Goals
+
+- Do not promise deterministic completion of external anti-bot challenges.
+- Do not automate biometrics, secure-desktop prompts, or user-consent gestures.
+- Do not build site-specific coordinates or image assets into the core engine.
+- Do not require every operating system backend before the RDP contract is
+  proven.
+- Do not weaken existing profile, browser, route, display, controller, or
+  operator-handoff authority to make a fixture pass.
+- Do not treat source readiness as installed, live, or release acceptance.
+
+### Next Recommendation
+
+Execute Plan 0110-1 only. Freeze red provider-free fixtures, then implement the
+no-input `desktop_capture` vertical slice through the native service, CLI,
+HTTP, MCP, generated client, capability metadata, and documentation. Do not
+write the PoC 2 detail plan until PoC 1 source acceptance closes.
+
+### Evidence
+
+- `VISION.md`
+- `docs/dev/plans/0110-2026-08-12-desktop-perception-interaction-foundation-plan.md`
+- `docs/dev/plans/0110-1-2026-08-12-p110-poc1-display-bound-frame-capture-plan.md`
+- `docs/dev/notes/2026-04-22-agent-browser-service-roadmap.md`
+- `docs/dev/notes/2026-04-24-service-model-roadmap-review.md`
+- `docs/dev/notes/2026-05-20-remote-view-control-posture-checkpoint.md`
+- `docs/dev/notes/2026-06-22-rdp-browser-determinism-audit.md`
 
 ## P109 | Runtime Dependability Handoff Remediation
 

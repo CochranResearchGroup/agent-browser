@@ -4,6 +4,44 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 149 | 2026-08-12
+
+Scope: open P110 and freeze the sequential desktop perception and interaction
+foundation plus the detailed no-input PoC 1 contract before implementation.
+
+Actions:
+
+- reconciled the product vision with current browser, display-allocation,
+  view-stream, route, attachability, and durable handoff authority;
+- wrote umbrella Plan 0110 with five sequential proofs and required a new
+  detail plan before each proof begins;
+- wrote Plan 0110-1 for one canonical `desktop_capture` action returning a
+  typed `DesktopContext`, `FrameReceipt`, and bounded ephemeral PNG payload;
+- froze exact service-state selection, X11 provider boundaries, post-capture
+  drift checks, typed failures, no-live authority, privacy posture, ingress
+  parity, validation, and hard stops;
+- used three shallow read-only reconnaissance agents for capture architecture,
+  ingress parity, and provider-free fixture strategy; no agent edited files,
+  touched live state, or spawned nested agents.
+
+Validation:
+
+- CodeGraph was healthy at 544 files, 18,687 nodes, and 64,526 edges;
+- Graphiti discovery returned no P110-specific current contract, so current
+  repo source and plans remained authority;
+- the three reconnaissance packets were reconciled, validation selection was
+  reviewed against the dirty worktree, and P110 planning patch checks passed;
+- unrelated concurrent dashboard source and smoke changes remained outside
+  the planning slice and were not modified or staged.
+
+Result:
+
+- P110 is open and PoC 1 is detailed before implementation;
+- implementation remains source-only and blocked from live capture, display
+  access grants, browser effects, image recognition, and desktop input;
+- the next bounded packet is Slice A red provider-free fixtures and the
+  internal capture provider boundary.
+
 ## Turn 148 | 2026-08-11
 
 Scope: make the RDP remote-view handoff workflow explicit for agents and
