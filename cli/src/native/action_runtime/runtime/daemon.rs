@@ -254,6 +254,10 @@ pub(crate) struct DrainedEvents {
     pub(crate) detached_page_sessions: Vec<String>,
     /// Session IDs from Target.detachedFromTarget.
     pub(crate) detached_iframe_sessions: Vec<String>,
+    /// Renderer crashes are kept distinct from ordinary target destruction and
+    /// session replacement so lifecycle projection cannot infer crashes from
+    /// detach heuristics.
+    pub(crate) renderer_crashes: Vec<crate::native::service_renderer_crash::RendererCrashSignal>,
 }
 /// Compute a hash of the [`LaunchOptions`] fields that require a browser
 /// relaunch when changed (baked into the Chrome process at startup).

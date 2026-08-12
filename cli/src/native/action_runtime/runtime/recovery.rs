@@ -60,6 +60,11 @@ use crate::native::service_model::{
     ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle, ViewStream,
     ViewStreamProvider, ViewerLease,
 };
+use crate::native::service_renderer_crash::{
+    correlate_renderer_crash, persist_renderer_crash_in_repository, renderer_crash_targets_context,
+    RendererCrashCommandContext, RendererCrashObservation, RendererCrashPersistence,
+    RendererCrashSignal,
+};
 use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use crate::native::state;
 use crate::native::storage;
@@ -493,7 +498,125 @@ impl DaemonState {
     }
     pub async fn drain_cdp_events_background(&mut self) {
         let drained = self.drain_cdp_events();
+        self.project_renderer_crashes(&drained.renderer_crashes, None);
         self.apply_drained_events(drained).await;
+    }
+    pub(crate) async fn drain_cdp_events_for_command(
+        &mut self,
+        context: &RendererCrashCommandContext,
+    ) -> Option<(
+        RendererCrashObservation,
+        Result<RendererCrashPersistence, String>,
+    )> {
+        tokio::task::yield_now().await;
+        let drained = self.drain_cdp_events();
+        let matched = self.project_renderer_crashes(&drained.renderer_crashes, Some(context));
+        self.apply_drained_events(drained).await;
+        matched
+    }
+    pub(crate) fn renderer_crash_command_context(
+        &self,
+        cmd: &Value,
+    ) -> RendererCrashCommandContext {
+        let (target_id, page_session_id, detected_profile, pid, endpoint, stderr_path) = self
+            .browser
+            .as_ref()
+            .map(|browser| {
+                (
+                    browser.active_target_id().ok().map(str::to_string),
+                    browser.active_session_id().ok().map(str::to_string),
+                    browser.runtime_profile_name().map(str::to_string),
+                    browser.browser_pid(),
+                    Some(browser.get_cdp_url().to_string()),
+                    browser
+                        .browser_stderr_log_path()
+                        .map(|path| path.display().to_string()),
+                )
+            })
+            .unwrap_or_default();
+        RendererCrashCommandContext {
+            action: optional_command_string(cmd, "action").unwrap_or_default(),
+            request_id: optional_command_string(cmd, "id").unwrap_or_default(),
+            local_principal: optional_command_string(cmd, "principal").or_else(|| {
+                env::var("USER")
+                    .ok()
+                    .filter(|value| !value.trim().is_empty())
+                    .map(|value| format!("local:{value}"))
+            }),
+            service_name: optional_command_string(cmd, "serviceName"),
+            agent_name: optional_command_string(cmd, "agentName"),
+            task_name: optional_command_string(cmd, "taskName"),
+            daemon_session: self.session_id.clone(),
+            requested_profile: optional_command_string(cmd, "runtimeProfile")
+                .or_else(|| optional_command_string(cmd, "profile"))
+                .or_else(|| optional_command_string(cmd, "profileId")),
+            detected_profile,
+            browser_id: Some(service_browser_id(&self.session_id)),
+            pid,
+            endpoint,
+            browser_build: optional_command_string(cmd, "browserBuild")
+                .or_else(|| (!self.engine.trim().is_empty()).then(|| self.engine.clone())),
+            stderr_path,
+            target_id: target_id.or_else(|| optional_command_string(cmd, "targetId")),
+            page_session_id: page_session_id
+                .or_else(|| optional_command_string(cmd, "pageSessionId")),
+        }
+    }
+    fn renderer_crash_background_context(
+        &self,
+        signal: &RendererCrashSignal,
+    ) -> RendererCrashCommandContext {
+        let mut context = self.renderer_crash_command_context(&json!({
+            "action": "background_event",
+            "id": ""
+        }));
+        context.target_id = signal.target_id.clone();
+        context.page_session_id = signal.page_session_id.clone().or_else(|| {
+            signal.target_id.as_deref().and_then(|target_id| {
+                self.browser
+                    .as_ref()
+                    .and_then(|browser| browser.page_session_for_target(target_id))
+                    .map(str::to_string)
+            })
+        });
+        context
+    }
+    fn project_renderer_crashes(
+        &self,
+        signals: &[RendererCrashSignal],
+        command_context: Option<&RendererCrashCommandContext>,
+    ) -> Option<(
+        RendererCrashObservation,
+        Result<RendererCrashPersistence, String>,
+    )> {
+        let repository = LockedServiceStateRepository::default_json();
+        let mut matched = None;
+        for signal in signals {
+            let command_target_matches = command_context
+                .is_some_and(|context| renderer_crash_targets_context(signal, context));
+            let observation = command_context
+                .and_then(|context| correlate_renderer_crash(signal.clone(), context))
+                .or_else(|| {
+                    if command_target_matches {
+                        return None;
+                    }
+                    let background = self.renderer_crash_background_context(signal);
+                    correlate_renderer_crash(signal.clone(), &background)
+                });
+            let Some(observation) = observation else {
+                continue;
+            };
+            let persistence = repository
+                .as_ref()
+                .map_err(Clone::clone)
+                .and_then(|repository| {
+                    persist_renderer_crash_in_repository(repository, &observation)
+                });
+            if command_target_matches && matched.is_none() {
+                matched = Some((observation, persistence));
+            }
+        }
+        matched
     }
     pub(crate) async fn apply_drained_events(&mut self, drained: DrainedEvents) {
         if debug_session_events_enabled() {
@@ -639,9 +762,14 @@ impl DaemonState {
         let mut attached_iframe_sessions: Vec<(String, String)> = Vec::new();
         let mut detached_page_sessions: Vec<String> = Vec::new();
         let mut detached_iframe_sessions: Vec<String> = Vec::new();
+        let mut renderer_crashes: Vec<RendererCrashSignal> = Vec::new();
         loop {
             match rx.try_recv() {
                 Ok(event) => {
+                    if let Some(signal) = RendererCrashSignal::from_cdp_event(&event) {
+                        renderer_crashes.push(signal);
+                        continue;
+                    }
                     match event.method.as_str() {
                         "Target.targetCreated" => {
                             if let Ok(te) =
@@ -1066,6 +1194,7 @@ impl DaemonState {
             attached_iframe_sessions,
             detached_page_sessions,
             detached_iframe_sessions,
+            renderer_crashes,
         }
     }
 }

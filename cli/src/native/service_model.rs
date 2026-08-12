@@ -4104,10 +4104,17 @@ fn service_event_is_incident(event: &ServiceEvent) -> bool {
             browser_health_is_bad(event.current_health)
                 || browser_health_is_recovery(event.previous_health, event.current_health)
         }
+        ServiceEventKind::TabLifecycleChanged => {
+            event
+                .details
+                .as_ref()
+                .and_then(|details| details.get("result"))
+                .and_then(serde_json::Value::as_str)
+                == Some("target_crashed")
+        }
         ServiceEventKind::Reconciliation
         | ServiceEventKind::BrowserLaunchRecorded
         | ServiceEventKind::BrowserRecoveryStarted
-        | ServiceEventKind::TabLifecycleChanged
         | ServiceEventKind::ProfileLeaseWaitStarted
         | ServiceEventKind::ProfileLeaseWaitEnded
         | ServiceEventKind::ViewerTakeoverRequested

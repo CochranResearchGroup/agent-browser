@@ -149,6 +149,7 @@ use super::service_monitors::{
 };
 use super::service_network_capture::handle_service_network_capture;
 use super::service_probe::handle_service_probe;
+use super::service_renderer_crash::{RendererCrashObservation, RendererCrashPersistence};
 use super::service_resources::{
     handle_service_access_plan, handle_service_gc, handle_service_resources,
     handle_service_resources_monitor_summary, handle_service_resources_write_monitor_summary,
@@ -537,6 +538,7 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
             ),
         );
     }
+    let renderer_crash_context = state.renderer_crash_command_context(cmd);
     let command_preparation_ms = u64::try_from(cmd_start.elapsed().as_millis()).unwrap_or(u64::MAX);
     let action_started = std::time::Instant::now();
     let result = match action {
@@ -814,24 +816,31 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
         "mouseup" => handle_mouseup(cmd, state).await,
         _ => Err(format!("Not yet implemented: {}", action)),
     };
-    let mut resp = match result {
-        Ok(mut data) => {
-            let warning = take_response_warning(&mut data);
-            let mut resp = success_response(&id, data);
-            if let Some(warning) = warning {
-                if let Some(obj) = resp.as_object_mut() {
-                    obj.insert("warning".to_string(), json!(warning));
+    let renderer_crash = state
+        .drain_cdp_events_for_command(&renderer_crash_context)
+        .await;
+    let mut resp = if let Some((observation, persistence)) = renderer_crash {
+        renderer_crash_error_response(&id, observation, persistence)
+    } else {
+        match result {
+            Ok(mut data) => {
+                let warning = take_response_warning(&mut data);
+                let mut resp = success_response(&id, data);
+                if let Some(warning) = warning {
+                    if let Some(obj) = resp.as_object_mut() {
+                        obj.insert("warning".to_string(), json!(warning));
+                    }
                 }
+                resp
             }
-            resp
+            Err(e) if e == cancellation_error() => {
+                json!(
+                    { "id" : id, "success" : false, "error" : e, "data" : { "cancelled" :
+                    true, }, }
+                )
+            }
+            Err(e) => error_response(&id, &super::browser::to_ai_friendly_error(&e)),
         }
-        Err(e) if e == cancellation_error() => {
-            json!(
-                { "id" : id, "success" : false, "error" : e, "data" : { "cancelled" :
-                true, }, }
-            )
-        }
-        Err(e) => error_response(&id, &super::browser::to_ai_friendly_error(&e)),
     };
     let action_execution_ms =
         u64::try_from(action_started.elapsed().as_millis()).unwrap_or(u64::MAX);
@@ -899,4 +908,26 @@ pub(crate) fn success_response(id: &str, data: Value) -> Value {
 
 pub(crate) fn error_response(id: &str, error: &str) -> Value {
     json!({ "id" : id, "success" : false, "error" : error, })
+}
+
+pub(crate) fn renderer_crash_error_response(
+    id: &str,
+    observation: RendererCrashObservation,
+    persistence: Result<RendererCrashPersistence, String>,
+) -> Value {
+    let (persistence, persistence_error) = match persistence {
+        Ok(persistence) => (json!(persistence), Value::Null),
+        Err(error) => (Value::Null, json!(error)),
+    };
+    json!({
+        "id": id,
+        "success": false,
+        "code": "target_crashed",
+        "error": "The active renderer target crashed while the command was running",
+        "data": {
+            "crash": observation,
+            "persistence": persistence,
+            "persistenceError": persistence_error,
+        },
+    })
 }
