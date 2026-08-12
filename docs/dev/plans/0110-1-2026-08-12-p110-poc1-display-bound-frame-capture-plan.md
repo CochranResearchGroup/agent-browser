@@ -2,7 +2,7 @@
 
 Date: 2026-08-12
 
-State: PLANNED
+State: SOURCE ACCEPTED | NO LIVE PROOF
 
 Authority: SOURCE-ONLY | NO LIVE CAPTURE
 
@@ -279,3 +279,62 @@ without claiming installed or live proof.
 
 The sole next recommendation is to write the detailed PoC 2 plan. No PoC 2
 implementation begins in the PoC 1 closeout slice.
+
+## Source Acceptance | 2026-08-12
+
+PoC 1 is source accepted at `853c2d90`. The implementation is distributed
+across the following bounded commits:
+
+- `86780b17` exposes the schemas, generated client, service contracts, and MCP
+  surfaces;
+- `e15a694b` aligns the response fixture with `frameReceipt`;
+- `9205828a` implements the service-bound provider-neutral capture core and
+  bounded X11 provider;
+- `36dfe2c6` exposes the CLI and complete user-facing documentation;
+- `8efc6584` integrates queueing, no-launch dispatch, metadata, and response
+  redaction;
+- `853c2d90` resolves the accepted audit findings and completes the frozen test
+  evidence.
+
+The independent audit produced five candidates. The primary agent accepted the
+four identity, proof, relay-routing, and bounded-subprocess defects as blocking
+and accepted the attribution-documentation defect for repair in the same
+packet. The single remediation packet now:
+
+- treats `browserId` only as service browser identity for desktop capture and
+  uses `sessionName` alone to narrow HTTP or MCP daemon routing;
+- rejects route and display map-key disagreement;
+- requires current `browser_window_visible` proof in addition to
+  `attached_ready`;
+- drains bounded provider pipes to completion while retaining capped output;
+- documents and tests accountable request attribution.
+
+The independent testing pass identified missing evidence for pre-provider
+failure, deterministic identifiers, subprocess failures, and privacy. The same
+remediation adds direct tests for provider non-invocation, terminal and
+replaced identities, missing visible proof, deterministic context and geometry
+IDs, missing binaries, timeouts, oversized output, stderr redaction, stream
+redaction, and persisted-result projection. No blocking audit candidate or
+required source-evidence gap remains.
+
+Primary-agent closed-world validation after remediation:
+
+- guarded formatting and Clippy with warnings denied passed;
+- focused `desktop_capture` tests passed, 26 of 26;
+- persisted desktop-pixel exclusion test passed, 1 of 1;
+- service client and API/MCP parity gates passed;
+- action structural inventory passed with six definitions;
+- no-launch service-contract smoke passed and exited cleanly;
+- docs production build, WSL Cargo safety, and patch checks passed.
+
+Delegated validation, accepted after primary reconciliation, also passed the
+focused service-contract, remote-view handoff, and page-screenshot suites. The
+full actions architecture wrapper still reports an exact-count baseline drift
+already present at planning commit `f693f82a`: one remote-view test file has
+nine tests while the frozen checker expects eight. The structural inventory
+affected by this PoC is green, and the baseline file was not changed.
+
+No browser, RDP route, Guacamole connection, real X display, ImageMagick frame
+capture, installed runtime, or credential-bearing surface was opened or
+modified. This status is source acceptance only. The next action is to write
+Plan 0110-2 before any deterministic-locator implementation.

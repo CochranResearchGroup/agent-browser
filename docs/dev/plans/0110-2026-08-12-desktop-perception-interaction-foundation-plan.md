@@ -2,7 +2,7 @@
 
 Date: 2026-08-12
 
-State: OPEN | POC 1 DETAILED
+State: OPEN | POC 1 SOURCE ACCEPTED | POC 2 DETAIL PLAN NEXT
 
 Authority: SOURCE-ONLY
 
@@ -25,10 +25,16 @@ provider-neutral desktop frame source, desktop observation contract, locator,
 or machine-controlled desktop input path. CDP page screenshots remain a
 separate browser-page capability.
 
-Only Proof of Concept 1 has a detailed implementation plan. Later proofs must
-receive their own detail plan after the immediately preceding proof closes.
-This prevents locator, input, prompt, and challenge assumptions from entering
-the frame-capture contract prematurely.
+Proof of Concept 1 is source accepted at `853c2d90` with no live or installed
+proof. The canonical `desktop_capture` action now resolves an exact
+service-owned RDP workspace, returns bounded ephemeral PNG bytes plus typed
+context and receipt evidence, and is coherent across CLI, HTTP, MCP, generated
+client, schemas, help, skill, and docs. No locator or machine input exists.
+
+Proof of Concept 2 must receive its own detailed plan before implementation.
+Later proofs remain undetailed until the immediately preceding proof closes.
+This keeps locator, input, prompt, and challenge assumptions out of earlier
+contracts.
 
 ## Objective
 
@@ -192,3 +198,10 @@ P110 remains open until all five proofs meet the Foundation Acceptance section
 in `ROADMAP.md`. Each accepted proof advances the same lane and records the
 next single detail-plan recommendation. No formal release follows from P110
 source acceptance without separate maintainer direction.
+
+## Current Recommendation
+
+Write Plan 0110-2 for deterministic fixture location. Freeze pinned fixtures,
+source-frame binding, detector evidence, ambiguity behavior, visualization,
+and provider-free validation before changing locator source. Do not emit input
+or use a live challenge, credential prompt, browser, RDP route, or display.

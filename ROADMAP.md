@@ -9,16 +9,15 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 
 ## P110 | Desktop Perception And Interaction Foundation
 
-State: OPEN | POC 1 PLANNED
-Current state: Plan 0110 freezes the five sequential proof boundaries and Plan
-0110-1 details the first display-bound frame-capture proof before
-implementation. No desktop-perception contract, capture backend, locator, or
-machine-controlled desktop input path has been implemented or authorized for
-live use. The existing service already owns browser, session, profile, tab,
-display-allocation, view-stream, controller-lease, job, challenge, and operator
-handoff state. Page screenshots and ordinary browser interaction remain
-CDP-backed, while RDP and Guacamole provide the first practical desktop surface
-on which browser-external UI can be observed and controlled.
+State: OPEN | POC 1 SOURCE ACCEPTED | POC 2 DETAIL PLAN NEXT
+Current state: Plan 0110-1 is source accepted at `853c2d90`. The canonical
+`desktop_capture` service action resolves an exact service-owned RDP workspace,
+requires operator-visible display proof, captures a bounded ephemeral PNG, and
+returns typed context and frame receipts across CLI, HTTP, MCP, generated
+client, schema, help, skill, and docs surfaces. The source gates are green
+after one independent audit and one bounded remediation packet. No live
+browser, display, RDP, Guacamole, installed-runtime, locator, or machine-input
+proof was performed.
 
 ### Vision
 
@@ -239,16 +238,18 @@ The foundational lane is not accepted until:
 
 ### Next Recommendation
 
-Execute Plan 0110-1 only. Freeze red provider-free fixtures, then implement the
-no-input `desktop_capture` vertical slice through the native service, CLI,
-HTTP, MCP, generated client, capability metadata, and documentation. Do not
-write the PoC 2 detail plan until PoC 1 source acceptance closes.
+Write Plan 0110-2 for deterministic fixture location. Freeze pinned fixtures,
+frame-bound observations, detector versioning, ambiguity and decoy behavior,
+visualization, and provider-free gates before implementation. Do not emit
+input or use a live challenge, credential prompt, browser, RDP route, or
+display.
 
 ### Evidence
 
 - `VISION.md`
 - `docs/dev/plans/0110-2026-08-12-desktop-perception-interaction-foundation-plan.md`
 - `docs/dev/plans/0110-1-2026-08-12-p110-poc1-display-bound-frame-capture-plan.md`
+- `docs/dev/notes/0110-1-2026-08-12-display-bound-frame-capture-source-acceptance.md`
 - `docs/dev/notes/2026-04-22-agent-browser-service-roadmap.md`
 - `docs/dev/notes/2026-04-24-service-model-roadmap-review.md`
 - `docs/dev/notes/2026-05-20-remote-view-control-posture-checkpoint.md`
