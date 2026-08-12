@@ -1851,6 +1851,312 @@ mod tests {
         assert!(error.starts_with("desktop_input_provider_unavailable:"));
     }
 
+    #[test]
+    fn unavailable_or_stale_before_observations_emit_no_events() {
+        for (status, captured_at_ms, expected) in [
+            ("ambiguous", 900, "desktop_interaction_target_unavailable"),
+            ("not_found", 900, "desktop_interaction_target_unavailable"),
+            ("matched", 0, "desktop_interaction_stale_observation"),
+        ] {
+            let inner = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+            let mut fixture = AdversarialFixture::new(inner);
+            fixture.before_status = status.to_string();
+            fixture.captured_at_ms = captured_at_ms;
+            let mut authority = ScriptedAuthority::stable(fixture.inner.authority());
+            let mut coordinator = SyntheticCoordinator::default();
+            let mut idempotency = MemoryIdempotency::default();
+            let mut clock = FixedClock::new(1_000);
+            let error = run_desktop_interaction(
+                request(),
+                InteractionDependencies {
+                    provider: &mut fixture,
+                    authority: &mut authority,
+                    coordinator: &mut coordinator,
+                    idempotency: &mut idempotency,
+                    clock: &mut clock,
+                },
+            )
+            .unwrap_err();
+            assert_eq!(error.code(), expected);
+            assert!(fixture.inner.events.is_empty());
+        }
+    }
+
+    #[test]
+    fn focus_and_geometry_drift_stop_before_button_down() {
+        for drift in [ProbeDrift::Focus, ProbeDrift::Geometry] {
+            let inner = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+            let mut fixture = AdversarialFixture::new(inner);
+            fixture.probe_drift = Some((2, drift));
+            let mut authority = ScriptedAuthority::stable(fixture.inner.authority());
+            let mut coordinator = SyntheticCoordinator::default();
+            let mut idempotency = MemoryIdempotency::default();
+            let mut clock = FixedClock::new(1_000);
+            let error = run_desktop_interaction(
+                request(),
+                InteractionDependencies {
+                    provider: &mut fixture,
+                    authority: &mut authority,
+                    coordinator: &mut coordinator,
+                    idempotency: &mut idempotency,
+                    clock: &mut clock,
+                },
+            )
+            .unwrap_err();
+            assert!(matches!(
+                error.code(),
+                "desktop_interaction_focus_not_ready" | "desktop_interaction_coordinate_mismatch"
+            ));
+            assert!(!fixture
+                .inner
+                .events
+                .iter()
+                .any(|event| matches!(event, InputEvent::LeftDown { .. })));
+        }
+    }
+
+    #[test]
+    fn controller_epoch_drift_and_cancellation_stop_the_transaction() {
+        let mut fixture = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+        let initial = fixture.authority();
+        let mut changed = initial.clone();
+        changed.controller_epoch += 1;
+        changed.route_controller_epoch += 1;
+        changed.stream_controller_epoch += 1;
+        let mut authority = ScriptedAuthority::scripted(vec![initial, changed]);
+        let mut coordinator = SyntheticCoordinator::default();
+        let mut idempotency = MemoryIdempotency::default();
+        let mut clock = FixedClock::new(1_000);
+        let error = run_desktop_interaction(
+            request(),
+            InteractionDependencies {
+                provider: &mut fixture,
+                authority: &mut authority,
+                coordinator: &mut coordinator,
+                idempotency: &mut idempotency,
+                clock: &mut clock,
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.code(), "desktop_interaction_authority_changed");
+        assert!(fixture.events.is_empty());
+
+        let mut fixture = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+        let mut authority = ScriptedAuthority::stable(fixture.authority());
+        let mut coordinator = SyntheticCoordinator {
+            cancel_on_check: Some(2),
+            ..SyntheticCoordinator::default()
+        };
+        let mut idempotency = MemoryIdempotency::default();
+        let mut clock = FixedClock::new(1_000);
+        let error = run_desktop_interaction(
+            request(),
+            InteractionDependencies {
+                provider: &mut fixture,
+                authority: &mut authority,
+                coordinator: &mut coordinator,
+                idempotency: &mut idempotency,
+                clock: &mut clock,
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.code(), "desktop_interaction_authority_changed");
+    }
+
+    #[test]
+    fn event_failures_attempt_release_once_and_never_retry() {
+        for failure in [
+            EventFailure::Move,
+            EventFailure::LeftDown,
+            EventFailure::LeftUp,
+            EventFailure::KeyDown,
+            EventFailure::KeyUp,
+        ] {
+            let inner = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+            let mut fixture = AdversarialFixture::new(inner);
+            fixture.event_failure = Some(failure);
+            let mut authority = ScriptedAuthority::stable(fixture.inner.authority());
+            let mut coordinator = SyntheticCoordinator::default();
+            let mut idempotency = MemoryIdempotency::default();
+            let mut clock = FixedClock::new(1_000);
+            let error = run_desktop_interaction(
+                request(),
+                InteractionDependencies {
+                    provider: &mut fixture,
+                    authority: &mut authority,
+                    coordinator: &mut coordinator,
+                    idempotency: &mut idempotency,
+                    clock: &mut clock,
+                },
+            )
+            .unwrap_err();
+            assert_eq!(error.code(), "desktop_input_failed");
+            if matches!(failure, EventFailure::LeftUp | EventFailure::KeyUp) {
+                assert_eq!(
+                    fixture
+                        .inner
+                        .events
+                        .iter()
+                        .filter(|event| matches!(
+                            event,
+                            InputEvent::LeftUp {
+                                emergency: true,
+                                ..
+                            } | InputEvent::KeyUp {
+                                emergency: true,
+                                ..
+                            }
+                        ))
+                        .count(),
+                    1
+                );
+            }
+        }
+
+        let inner = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+        let mut fixture = AdversarialFixture::new(inner);
+        fixture.event_failure = Some(EventFailure::LeftUp);
+        fixture.fail_emergency = true;
+        let mut authority = ScriptedAuthority::stable(fixture.inner.authority());
+        let mut coordinator = SyntheticCoordinator::default();
+        let mut idempotency = MemoryIdempotency::default();
+        let mut clock = FixedClock::new(1_000);
+        let error = run_desktop_interaction(
+            request(),
+            InteractionDependencies {
+                provider: &mut fixture,
+                authority: &mut authority,
+                coordinator: &mut coordinator,
+                idempotency: &mut idempotency,
+                clock: &mut clock,
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.code(), "desktop_input_cleanup_failed");
+        assert_eq!(error.receipt().unwrap().effect_state, "effect_uncertain");
+    }
+
+    #[test]
+    fn verification_failures_return_uncertain_receipts() {
+        for mode in [
+            AfterMode::Unchanged,
+            AfterMode::Unavailable,
+            AfterMode::BindingDrift,
+        ] {
+            let inner = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+            let mut fixture = AdversarialFixture::new(inner);
+            fixture.after_mode = mode;
+            let mut authority = ScriptedAuthority::stable(fixture.inner.authority());
+            let mut coordinator = SyntheticCoordinator::default();
+            let mut idempotency = MemoryIdempotency::default();
+            let mut clock = FixedClock::new(1_000);
+            let error = run_desktop_interaction(
+                request(),
+                InteractionDependencies {
+                    provider: &mut fixture,
+                    authority: &mut authority,
+                    coordinator: &mut coordinator,
+                    idempotency: &mut idempotency,
+                    clock: &mut clock,
+                },
+            )
+            .unwrap_err();
+            assert!(matches!(
+                error.code(),
+                "desktop_interaction_verification_failed"
+                    | "desktop_interaction_verification_unavailable"
+            ));
+            assert_eq!(error.receipt().unwrap().effect_state, "effect_uncertain");
+        }
+    }
+
+    #[test]
+    fn duplicate_in_progress_emits_no_events() {
+        let mut fixture = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+        let mut authority = ScriptedAuthority::stable(fixture.authority());
+        let mut coordinator = SyntheticCoordinator::default();
+        let mut idempotency = MemoryIdempotency::default();
+        idempotency.begin("caller-1", "request-1", "transaction-existing");
+        let mut clock = FixedClock::new(1_000);
+        let error = run_desktop_interaction(
+            request(),
+            InteractionDependencies {
+                provider: &mut fixture,
+                authority: &mut authority,
+                coordinator: &mut coordinator,
+                idempotency: &mut idempotency,
+                clock: &mut clock,
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.code(), "desktop_interaction_duplicate");
+        assert!(fixture.events.is_empty());
+    }
+
+    #[test]
+    fn fixture_manifests_parse_with_pinned_ids() {
+        for (source, id) in [
+            (
+                include_str!("../../../docs/dev/fixtures/desktop-interaction/ready.json"),
+                "ready",
+            ),
+            (
+                include_str!("../../../docs/dev/fixtures/desktop-interaction/ambiguous.json"),
+                "ambiguous",
+            ),
+            (
+                include_str!("../../../docs/dev/fixtures/desktop-interaction/not-found.json"),
+                "not-found",
+            ),
+            (
+                include_str!("../../../docs/dev/fixtures/desktop-interaction/stale.json"),
+                "stale",
+            ),
+            (
+                include_str!("../../../docs/dev/fixtures/desktop-interaction/focus-drift.json"),
+                "focus-drift",
+            ),
+            (
+                include_str!("../../../docs/dev/fixtures/desktop-interaction/authority-drift.json"),
+                "authority-drift",
+            ),
+            (
+                include_str!("../../../docs/dev/fixtures/desktop-interaction/input-failure.json"),
+                "input-failure",
+            ),
+            (
+                include_str!("../../../docs/dev/fixtures/desktop-interaction/cleanup-failure.json"),
+                "cleanup-failure",
+            ),
+            (
+                include_str!(
+                    "../../../docs/dev/fixtures/desktop-interaction/verification-failure.json"
+                ),
+                "verification-failure",
+            ),
+            (
+                include_str!(
+                    "../../../docs/dev/fixtures/desktop-interaction/after-binding-drift.json"
+                ),
+                "after-binding-drift",
+            ),
+            (
+                include_str!(
+                    "../../../docs/dev/fixtures/desktop-interaction/duplicate-in-progress.json"
+                ),
+                "duplicate-in-progress",
+            ),
+        ] {
+            let manifest: Value = serde_json::from_str(source).unwrap();
+            assert_eq!(manifest["fixtureId"], id);
+            assert_eq!(
+                manifest["schemaVersion"],
+                "p110-desktop-interaction-fixture.v1"
+            );
+            assert_eq!(manifest["recipeId"], RECIPE_ID);
+        }
+    }
+
     impl InputEvent {
         fn at_ms(&self) -> u64 {
             match self {
@@ -1878,6 +2184,8 @@ mod tests {
     #[derive(Default)]
     struct SyntheticCoordinator {
         claim: Option<(String, String)>,
+        cancellation_checks: usize,
+        cancel_on_check: Option<usize>,
     }
 
     impl DesktopControlCoordinator for SyntheticCoordinator {
@@ -1890,7 +2198,8 @@ mod tests {
         }
 
         fn cancelled(&mut self, _route_id: &str, _transaction_id: &str) -> bool {
-            false
+            self.cancellation_checks += 1;
+            self.cancel_on_check == Some(self.cancellation_checks)
         }
 
         fn release(&mut self, route_id: &str, transaction_id: &str) {
@@ -1964,6 +2273,13 @@ mod tests {
                 index: 0,
             }
         }
+
+        fn scripted(snapshots: Vec<ControllerAuthority>) -> Self {
+            Self {
+                snapshots,
+                index: 0,
+            }
+        }
     }
 
     impl ControllerAuthorityRepository for ScriptedAuthority {
@@ -1979,6 +2295,58 @@ mod tests {
         events: Vec<InputEvent>,
         activated: bool,
         typed: String,
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    enum ProbeDrift {
+        Focus,
+        Geometry,
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum EventFailure {
+        Move,
+        LeftDown,
+        LeftUp,
+        KeyDown,
+        KeyUp,
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+    enum AfterMode {
+        #[default]
+        Passed,
+        Unchanged,
+        Unavailable,
+        BindingDrift,
+    }
+
+    struct AdversarialFixture {
+        inner: SyntheticFixture,
+        before_status: String,
+        captured_at_ms: u64,
+        probe_count: usize,
+        probe_drift: Option<(usize, ProbeDrift)>,
+        event_failure: Option<EventFailure>,
+        failure_emitted: bool,
+        fail_emergency: bool,
+        after_mode: AfterMode,
+    }
+
+    impl AdversarialFixture {
+        fn new(inner: SyntheticFixture) -> Self {
+            Self {
+                inner,
+                before_status: "matched".to_string(),
+                captured_at_ms: 900,
+                probe_count: 0,
+                probe_drift: None,
+                event_failure: None,
+                failure_emitted: false,
+                fail_emergency: false,
+                after_mode: AfterMode::Passed,
+            }
+        }
     }
 
     impl SyntheticFixture {
@@ -2138,6 +2506,106 @@ mod tests {
                 .to_string(),
                 text_sha256: Some(digest_text(&self.typed)),
             })
+        }
+    }
+
+    impl DesktopInteractionProvider for AdversarialFixture {
+        fn observe_before(
+            &mut self,
+            request: &DesktopInteractionRequest,
+        ) -> Result<BeforeObservation, DesktopInteractionError> {
+            let mut observation = self.inner.observe_before(request)?;
+            observation.observation_status = self.before_status.clone();
+            observation.captured_at_ms = self.captured_at_ms;
+            if observation.observation_status != "matched" {
+                observation.selected_candidate_id = None;
+                observation.selected_target_class = None;
+                observation.selected_bounds = None;
+                observation.selected_center = None;
+            }
+            Ok(observation)
+        }
+
+        fn probe(
+            &mut self,
+            binding: &DesktopBinding,
+        ) -> Result<SurfaceSnapshot, DesktopInteractionError> {
+            self.probe_count += 1;
+            let mut surface = self.inner.probe(binding)?;
+            if let Some((at, drift)) = self.probe_drift {
+                if at == self.probe_count {
+                    match drift {
+                        ProbeDrift::Focus => surface.focused = false,
+                        ProbeDrift::Geometry => {
+                            surface.geometry_epoch = "geometry-drift".to_string()
+                        }
+                    }
+                }
+            }
+            Ok(surface)
+        }
+
+        fn execute_event(
+            &mut self,
+            binding: &DesktopBinding,
+            expected_surface: &SurfaceSnapshot,
+            event: &InputEvent,
+        ) -> Result<EventAcknowledgement, DesktopInteractionError> {
+            let kind = match event {
+                InputEvent::PointerMove { .. } => EventFailure::Move,
+                InputEvent::LeftDown { .. } => EventFailure::LeftDown,
+                InputEvent::LeftUp {
+                    emergency: false, ..
+                } => EventFailure::LeftUp,
+                InputEvent::KeyDown { .. } => EventFailure::KeyDown,
+                InputEvent::KeyUp {
+                    emergency: false, ..
+                } => EventFailure::KeyUp,
+                InputEvent::LeftUp {
+                    emergency: true, ..
+                }
+                | InputEvent::KeyUp {
+                    emergency: true, ..
+                } => {
+                    if self.fail_emergency {
+                        return Err(DesktopInteractionError::new(
+                            "desktop_input_failed",
+                            "synthetic emergency release failed",
+                        ));
+                    }
+                    return self.inner.execute_event(binding, expected_surface, event);
+                }
+            };
+            if !self.failure_emitted && self.event_failure == Some(kind) {
+                self.failure_emitted = true;
+                return Err(DesktopInteractionError::new(
+                    "desktop_input_failed",
+                    "synthetic input event failed",
+                ));
+            }
+            self.inner.execute_event(binding, expected_surface, event)
+        }
+
+        fn observe_after(
+            &mut self,
+            binding: &DesktopBinding,
+        ) -> Result<AfterObservation, DesktopInteractionError> {
+            if self.after_mode == AfterMode::Unavailable {
+                return Err(DesktopInteractionError::new(
+                    "desktop_interaction_verification_unavailable",
+                    "synthetic after observation unavailable",
+                ));
+            }
+            let mut after = self.inner.observe_after(binding)?;
+            match self.after_mode {
+                AfterMode::Passed => {}
+                AfterMode::Unchanged => after.verification_state = "unchanged".to_string(),
+                AfterMode::BindingDrift => {
+                    after.binding.geometry_epoch = "geometry-drift".to_string()
+                }
+                AfterMode::Unavailable => unreachable!(),
+            }
+            Ok(after)
         }
     }
 }
