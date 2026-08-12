@@ -2,7 +2,7 @@
 
 Date: 2026-08-12
 
-State: OPEN | POC 1 AND 2 SOURCE ACCEPTED | POC 3 DETAIL PLAN NEXT
+State: OPEN | POC 1 AND 2 SOURCE ACCEPTED | POC 3 DETAILED
 
 Authority: SOURCE-ONLY
 
@@ -31,10 +31,16 @@ service-owned RDP workspace, returns bounded ephemeral PNG bytes plus typed
 context and receipt evidence, and is coherent across CLI, HTTP, MCP, generated
 client, schemas, help, skill, and docs. No locator or machine input exists.
 
-Proof of Concept 2 is detailed in Plan 0110-2 before implementation.
-Later proofs remain undetailed until the immediately preceding proof closes.
-This keeps locator, input, prompt, and challenge assumptions out of earlier
-contracts.
+Proof of Concept 2 is source accepted at `4281196a`, with its durable
+acceptance recorded at `eefcb9bd`. The canonical `desktop_locate` action now
+binds a deterministic synthetic locator observation to one fresh PoC 1 frame
+and emits no input.
+
+Proof of Concept 3 is detailed in Plan 0110-3 before implementation. It freezes
+one named synthetic observe, locate, act, and verify transaction, exact
+controller fencing, deterministic motion, release cleanup, and after-state
+verification. It adds no production input provider. Later proofs remain
+undetailed until the immediately preceding proof closes.
 
 ## Objective
 
@@ -121,10 +127,11 @@ and a similar decoy. No input is emitted.
 
 ### Proof Of Concept 3 | Guarded Pointer And Keyboard Transaction
 
-After PoC 2 closes, write Plan 0110-3. Add replayable pointer motion, bounded
-click and non-sensitive keyboard input, stale-frame abort, focus and geometry
-checks, controller authority, before and after evidence, and verification on a
-controlled fixture.
+Plan 0110-3 freezes replayable pointer motion, bounded click and fixed
+non-sensitive keyboard input, stale-frame abort, focus and geometry checks,
+controller authority, human takeover serialization, before and after evidence,
+and verification on a controlled synthetic fixture. Configured production
+dispatch remains fail-closed without a real input provider.
 
 ### Proof Of Concept 4 | Browser-External Prompt Perception
 
@@ -201,7 +208,8 @@ source acceptance without separate maintainer direction.
 
 ## Current Recommendation
 
-Write Plan 0110-3 for a guarded pointer and keyboard transaction over the
-synthetic fixture. Freeze controller authority, stale-frame abort, coordinate
-mapping, focus, deterministic motion, input receipts, verification, and human
-takeover serialization before changing input source.
+Implement Plan 0110-3 over the synthetic fixture. Preserve the named-recipe
+boundary, current-controller epoch, stale-frame and focus aborts,
+server-derived deterministic motion, release cleanup, after-state
+verification, and public provider-unavailable posture. Do not add a live input
+provider.

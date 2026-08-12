@@ -9,7 +9,7 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 
 ## P110 | Desktop Perception And Interaction Foundation
 
-State: OPEN | POC 1 AND 2 SOURCE ACCEPTED | POC 3 DETAIL PLAN NEXT
+State: OPEN | POC 1 AND 2 SOURCE ACCEPTED | POC 3 DETAILED
 Current state: Plan 0110-1 is source accepted at `853c2d90`. The canonical
 `desktop_capture` service action resolves an exact service-owned RDP workspace,
 requires operator-visible display proof, captures a bounded ephemeral PNG, and
@@ -21,7 +21,12 @@ proof was performed. Plan 0110-2 is source accepted at `4281196a`: the atomic
 `desktop_locate` action binds deterministic geometry, integer template, and
 pinned OCR-token evidence to one fresh frame, returns explicit matched,
 not-found, or ambiguous observations, and emits no input. Its sole registered
-profile targets a repository-owned synthetic verification control.
+profile targets a repository-owned synthetic verification control. Plan
+0110-3 now freezes one source-only `desktop_interact` transaction over that
+fixture with current-controller fencing, deterministic fixed-point pointer
+motion, a single left click, fixed benign text, cleanup, and after-state
+verification. PoC 3 adds no production input provider and authorizes no live
+desktop effects.
 
 ### Vision
 
