@@ -314,6 +314,14 @@ const SERVICE_REQUEST_FIELDS: &[ServiceRequestFieldSpec] = &[
     ServiceRequestFieldSpec::field("sessionName", FieldKind::String, true, true, true),
     ServiceRequestFieldSpec::field("format", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field("maxBytes", FieldKind::PositiveInteger, true, true, false),
+    ServiceRequestFieldSpec::field("locator", FieldKind::Object, true, true, false),
+    ServiceRequestFieldSpec::field(
+        "includeVisualization",
+        FieldKind::Boolean,
+        true,
+        true,
+        false,
+    ),
     ServiceRequestFieldSpec::field(
         "allowDuplicateProfileLane",
         FieldKind::Boolean,
@@ -624,6 +632,7 @@ fn validate_safety_gates(
     reject_bounded_evaluate_service_request(action, request)?;
     reject_service_diagnostics_request(action, request)?;
     reject_desktop_capture_request(action, request)?;
+    reject_desktop_locate_request(action, request)?;
     reject_service_probe_request(action, request)?;
     reject_tab_handle_refresh_request(action, request)?;
     reject_service_ui_action_request(action, request)?;
@@ -918,6 +927,119 @@ fn reject_desktop_capture_request(
                 ),
             ));
         }
+    }
+    Ok(())
+}
+
+fn reject_desktop_locate_request(
+    action: &str,
+    request: &Map<String, Value>,
+) -> Result<(), ServiceRequestIssue> {
+    if action != "desktop_locate" {
+        return Ok(());
+    }
+    let params = request.get("params").and_then(Value::as_object);
+    const DESKTOP_LOCATE_FIELDS: &[&str] = &[
+        "browserId",
+        "sessionName",
+        "locator",
+        "includeVisualization",
+    ];
+    if let Some(params) = params {
+        if let Some(field) = params
+            .keys()
+            .find(|field| !DESKTOP_LOCATE_FIELDS.contains(&field.as_str()))
+        {
+            return Err(issue(
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                format!("desktop_locate does not accept params.{field}"),
+            ));
+        }
+        for field in DESKTOP_LOCATE_FIELDS {
+            if let (Some(top_level), Some(nested)) = (request.get(*field), params.get(*field)) {
+                if top_level != nested {
+                    return Err(issue(
+                        ServiceRequestIssueKind::InvalidBoundedRecipe,
+                        format!("desktop_locate has conflicting {field} values"),
+                    ));
+                }
+            }
+        }
+    }
+    let locate_field = |field: &str| {
+        request
+            .get(field)
+            .or_else(|| params.and_then(|values| values.get(field)))
+    };
+    if locate_field("browserId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .is_none()
+    {
+        return Err(issue(
+            ServiceRequestIssueKind::InvalidBoundedRecipe,
+            "desktop_locate requires browserId",
+        ));
+    }
+    if locate_field("sessionName").is_some_and(|value| {
+        value
+            .as_str()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_none()
+    }) {
+        return Err(issue(
+            ServiceRequestIssueKind::InvalidBoundedRecipe,
+            "desktop_locate sessionName must be a nonempty string",
+        ));
+    }
+    let locator = locate_field("locator")
+        .and_then(Value::as_object)
+        .ok_or_else(|| {
+            issue(
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                "desktop_locate requires locator",
+            )
+        })?;
+    const LOCATOR_FIELDS: &[&str] = &["locatorId", "maxCandidates"];
+    if let Some(field) = locator
+        .keys()
+        .find(|field| !LOCATOR_FIELDS.contains(&field.as_str()))
+    {
+        return Err(issue(
+            ServiceRequestIssueKind::InvalidBoundedRecipe,
+            format!("desktop_locate locator does not accept {field}"),
+        ));
+    }
+    if locator
+        .get("locatorId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .is_none()
+    {
+        return Err(issue(
+            ServiceRequestIssueKind::InvalidBoundedRecipe,
+            "desktop_locate locator requires locatorId",
+        ));
+    }
+    if let Some(max_candidates) = locator.get("maxCandidates") {
+        if !max_candidates
+            .as_u64()
+            .is_some_and(|value| (1..=32).contains(&value))
+        {
+            return Err(issue(
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                "desktop_locate locator.maxCandidates must be an integer between 1 and 32",
+            ));
+        }
+    }
+    if locate_field("includeVisualization").is_some_and(|value| !value.is_boolean()) {
+        return Err(issue(
+            ServiceRequestIssueKind::InvalidBoundedRecipe,
+            "desktop_locate includeVisualization must be a boolean",
+        ));
     }
     Ok(())
 }
@@ -1719,6 +1841,57 @@ mod tests {
             }
         }))
         .is_ok());
+    }
+
+    #[test]
+    fn desktop_locate_accepts_only_named_bounded_locator_requests() {
+        let normalized = normalize(json!({
+            "action": "desktop_locate",
+            "browserId": "browser-1",
+            "sessionName": "rdp-1",
+            "locator": {
+                "locatorId": "p110-control-v1",
+                "maxCandidates": 8
+            },
+            "includeVisualization": true
+        }))
+        .unwrap();
+        assert_eq!(normalized.command["action"], "desktop_locate");
+        assert_eq!(
+            normalized.command["locator"]["locatorId"],
+            "p110-control-v1"
+        );
+
+        let fixtures = [
+            (
+                json!({"action": "desktop_locate", "locator": {"locatorId": "p110-control-v1"}}),
+                "desktop_locate requires browserId",
+            ),
+            (
+                json!({"action": "desktop_locate", "browserId": "browser-1"}),
+                "desktop_locate requires locator",
+            ),
+            (
+                json!({"action": "desktop_locate", "browserId": "browser-1", "locator": {"locatorId": ""}}),
+                "desktop_locate locator requires locatorId",
+            ),
+            (
+                json!({"action": "desktop_locate", "browserId": "browser-1", "locator": {"locatorId": "p110-control-v1", "maxCandidates": 33}}),
+                "desktop_locate locator.maxCandidates must be an integer between 1 and 32",
+            ),
+            (
+                json!({"action": "desktop_locate", "browserId": "browser-1", "locator": {"locatorId": "p110-control-v1", "threshold": 900}}),
+                "desktop_locate locator does not accept threshold",
+            ),
+            (
+                json!({"action": "desktop_locate", "browserId": "browser-1", "locator": {"locatorId": "p110-control-v1"}, "params": {"imageBase64": "pixels"}}),
+                "desktop_locate does not accept params.imageBase64",
+            ),
+        ];
+        for (request, expected_message) in fixtures {
+            let error = normalize(request).unwrap_err();
+            assert_eq!(error.message(), expected_message);
+        }
     }
 
     fn test_tab_handle(valid: bool) -> Value {

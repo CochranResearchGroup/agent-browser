@@ -11,6 +11,7 @@ import {
   createServiceCdpFreeLaunchRequest,
   createServiceDiagnosticsRequest,
   createServiceDesktopCaptureRequest,
+  createServiceDesktopLocateRequest,
   createServiceEvaluateRequest,
   createServiceFileTransferRequest,
   createServiceNetworkCaptureRequest,
@@ -42,6 +43,7 @@ import {
   requestServiceFileTransfer,
   captureServiceNetwork,
   captureServiceDesktopFrame,
+  locateServiceDesktopControl,
   requestServiceUiAction,
   refreshServiceTabHandle,
   runServiceUiAction,
@@ -53,6 +55,7 @@ import {
   requestServiceCdpFreeLaunch,
   requestServiceDiagnostics,
   requestServiceDesktopCapture,
+  requestServiceDesktopLocate,
   requestServiceEvaluate,
   requestServiceNetworkCapture,
   requestServiceProbe,
@@ -119,6 +122,20 @@ function assertServiceRequestActionDataCoverage() {
   );
   assert.equal(desktopResponseSchema.properties.context.$ref, 'desktop-context.v1.schema.json');
   assert.equal(desktopResponseSchema.properties.frameReceipt.$ref, 'frame-receipt.v1.schema.json');
+  const desktopLocateResponseSchema = JSON.parse(
+    readFileSync(
+      new URL('../docs/dev/contracts/service-desktop-locate-response.v1.schema.json', import.meta.url),
+      'utf8',
+    ),
+  );
+  assert.deepEqual(
+    desktopLocateResponseSchema.required,
+    ['ok', 'action', 'context', 'frameReceipt', 'observation'],
+  );
+  assert.equal(desktopLocateResponseSchema.properties.context.$ref, 'desktop-context.v1.schema.json');
+  assert.equal(desktopLocateResponseSchema.properties.frameReceipt.$ref, 'frame-receipt.v1.schema.json');
+  assert.equal(desktopLocateResponseSchema.properties.observation.$ref, 'observation.v1.schema.json');
+  assert.equal(desktopLocateResponseSchema.required.includes('visualizationBase64'), false);
   assert.equal(schema.properties.args, undefined);
   assert.equal(SERVICE_REQUEST_STRING_FIELDS.includes('args'), false);
 }
@@ -399,6 +416,72 @@ async function main() {
     /desktop_capture maxBytes must not exceed 16777216/,
   );
 
+  assert.deepEqual(
+    createServiceDesktopLocateRequest({
+      browserId: 'browser-rdp-1',
+      locatorId: 'p110-control-v1',
+    }),
+    {
+      action: 'desktop_locate',
+      browserId: 'browser-rdp-1',
+      locator: {
+        locatorId: 'p110-control-v1',
+        maxCandidates: 8,
+      },
+      includeVisualization: false,
+    },
+  );
+  assert.deepEqual(
+    createServiceDesktopLocateRequest({
+      browserId: 'browser-rdp-1',
+      sessionName: 'rdp-1',
+      locatorId: 'p110-control-v1',
+      maxCandidates: 3,
+      includeVisualization: true,
+      serviceName: 'DesktopObserver',
+    }),
+    {
+      action: 'desktop_locate',
+      browserId: 'browser-rdp-1',
+      sessionName: 'rdp-1',
+      locator: {
+        locatorId: 'p110-control-v1',
+        maxCandidates: 3,
+      },
+      includeVisualization: true,
+      serviceName: 'DesktopObserver',
+    },
+  );
+  for (const input of [
+    { locatorId: 'p110-control-v1' },
+    { browserId: 'browser-rdp-1', locatorId: '' },
+    { browserId: 'browser-rdp-1', locatorId: 'p110-control-v1', maxCandidates: 0 },
+    { browserId: 'browser-rdp-1', locatorId: 'p110-control-v1', maxCandidates: 33 },
+    { browserId: 'browser-rdp-1', locatorId: 'p110-control-v1', includeVisualization: 'yes' },
+  ]) {
+    assert.throws(
+      () => createServiceDesktopLocateRequest(input),
+      /desktop locate request/,
+    );
+  }
+  for (const forbidden of [
+    'imageBase64',
+    'frameId',
+    'contextId',
+    'x',
+    'threshold',
+    'templatePath',
+  ]) {
+    assert.throws(
+      () => createServiceDesktopLocateRequest({
+        browserId: 'browser-rdp-1',
+        locatorId: 'p110-control-v1',
+        [forbidden]: forbidden,
+      }),
+      /does not accept/,
+    );
+  }
+
   for (const invoke of [requestServiceDesktopCapture, captureServiceDesktopFrame]) {
     const recorder = createFetchRecorder({
       success: true,
@@ -423,6 +506,39 @@ async function main() {
       sessionName: 'rdp-1',
       format: 'png',
       maxBytes: 2048,
+    });
+  }
+
+  for (const invoke of [requestServiceDesktopLocate, locateServiceDesktopControl]) {
+    const recorder = createFetchRecorder({
+      success: true,
+      data: {
+        ok: true,
+        action: 'desktop_locate',
+        context: { contextId: 'context-1' },
+        frameReceipt: { frameId: 'frame-1' },
+        observation: { observationId: 'observation-1', status: 'matched' },
+      },
+    });
+    await invoke({
+      baseUrl: 'http://127.0.0.1:9222',
+      fetch: recorder.fetch,
+      browserId: 'browser-rdp-1',
+      sessionName: 'rdp-1',
+      locatorId: 'p110-control-v1',
+      maxCandidates: 3,
+      includeVisualization: true,
+    });
+    assert.equal(recorder.calls.length, 1);
+    assert.deepEqual(recorder.calls[0].body, {
+      action: 'desktop_locate',
+      browserId: 'browser-rdp-1',
+      sessionName: 'rdp-1',
+      locator: {
+        locatorId: 'p110-control-v1',
+        maxCandidates: 3,
+      },
+      includeVisualization: true,
     });
   }
 

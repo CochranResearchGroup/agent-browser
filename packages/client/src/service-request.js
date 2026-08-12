@@ -36,6 +36,8 @@ const displayIsolationSet = new Set([
  * @typedef {import('./service-request.generated.js').ServiceDiagnosticsRequestOptions} ServiceDiagnosticsRequestOptions
  * @typedef {import('./service-request.generated.js').ServiceDesktopCaptureRequestHttpOptions} ServiceDesktopCaptureRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceDesktopCaptureRequestOptions} ServiceDesktopCaptureRequestOptions
+ * @typedef {import('./service-request.generated.js').ServiceDesktopLocateRequestHttpOptions} ServiceDesktopLocateRequestHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceDesktopLocateRequestOptions} ServiceDesktopLocateRequestOptions
  * @typedef {import('./service-request.generated.js').ServiceProbeRequestHttpOptions} ServiceProbeRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceProbeRequestOptions} ServiceProbeRequestOptions
  * @typedef {import('./service-request.generated.js').ServiceUiActionRequestHttpOptions} ServiceUiActionRequestHttpOptions
@@ -155,6 +157,9 @@ export function createServiceRequest(input) {
     if (record.maxBytes !== undefined && Number(record.maxBytes) > 16 * 1024 * 1024) {
       throw new TypeError('service request desktop_capture maxBytes must not exceed 16777216');
     }
+  }
+  if (input.action === 'desktop_locate') {
+    validateDesktopLocateRequest(record);
   }
 
   return { ...input };
@@ -572,6 +577,53 @@ export function createServiceDesktopCaptureRequest(input) {
     ...(sessionName !== undefined ? { sessionName } : {}),
     format,
     maxBytes,
+  });
+}
+
+/**
+ * Builds a deterministic named-profile locator request against one fresh
+ * service-owned desktop frame.
+ *
+ * @param {ServiceDesktopLocateRequestOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceDesktopLocateRequest(input) {
+  assertPlainObject(input, 'service desktop locate request');
+  const {
+    browserId,
+    sessionName,
+    locatorId,
+    maxCandidates = 8,
+    includeVisualization = false,
+    ...request
+  } = input;
+  const allowedRequestFields = new Set(['jobTimeoutMs', 'serviceName', 'agentName', 'taskName']);
+  const forbiddenField = Object.keys(request).find((field) => !allowedRequestFields.has(field));
+  if (forbiddenField !== undefined) {
+    throw new TypeError(`service desktop locate request does not accept ${forbiddenField}`);
+  }
+  if (typeof browserId !== 'string' || browserId.trim().length === 0) {
+    throw new TypeError('service desktop locate request requires browserId');
+  }
+  if (sessionName !== undefined && (typeof sessionName !== 'string' || sessionName.trim().length === 0)) {
+    throw new TypeError('service desktop locate request sessionName must be a non-empty string');
+  }
+  if (typeof locatorId !== 'string' || locatorId.trim().length === 0) {
+    throw new TypeError('service desktop locate request requires locatorId');
+  }
+  if (!Number.isInteger(maxCandidates) || maxCandidates < 1 || maxCandidates > 32) {
+    throw new TypeError('service desktop locate request maxCandidates must be an integer between 1 and 32');
+  }
+  if (typeof includeVisualization !== 'boolean') {
+    throw new TypeError('service desktop locate request includeVisualization must be a boolean');
+  }
+  return createServiceRequest({
+    ...request,
+    action: 'desktop_locate',
+    browserId,
+    ...(sessionName !== undefined ? { sessionName } : {}),
+    locator: { locatorId, maxCandidates },
+    includeVisualization,
   });
 }
 
@@ -1300,6 +1352,31 @@ export async function requestServiceDesktopCapture({ baseUrl, fetch = globalThis
  */
 export async function captureServiceDesktopFrame(options) {
   return requestServiceDesktopCapture(options);
+}
+
+/**
+ * Locate a deterministic named control against one fresh service desktop frame.
+ *
+ * @param {ServiceDesktopLocateRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function requestServiceDesktopLocate({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceDesktopLocateRequest(request),
+  });
+}
+
+/**
+ * Convenience alias for requestServiceDesktopLocate.
+ *
+ * @param {ServiceDesktopLocateRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function locateServiceDesktopControl(options) {
+  return requestServiceDesktopLocate(options);
 }
 
 /**
@@ -2138,6 +2215,66 @@ function assertMonitorRunDueSummarySafe(summary, options) {
  */
 function stringArray(value) {
   return Array.isArray(value) ? value.filter((item) => typeof item === 'string') : [];
+}
+
+/**
+ * @param {Record<string, unknown>} request
+ */
+function validateDesktopLocateRequest(request) {
+  const allowedFields = new Set([
+    'action',
+    'browserId',
+    'sessionName',
+    'locator',
+    'includeVisualization',
+    'jobTimeoutMs',
+    'serviceName',
+    'agentName',
+    'taskName',
+    'params',
+  ]);
+  const forbiddenField = Object.keys(request).find((field) => !allowedFields.has(field));
+  if (forbiddenField !== undefined) {
+    throw new TypeError(`service desktop locate request does not accept ${forbiddenField}`);
+  }
+  const params = recordFromUnknown(request.params);
+  if (request.params !== undefined && params === null) {
+    throw new TypeError('service desktop locate request params must be an object');
+  }
+  const allowedParams = new Set(['browserId', 'sessionName', 'locator', 'includeVisualization']);
+  const forbiddenParam = params && Object.keys(params).find((field) => !allowedParams.has(field));
+  if (forbiddenParam) {
+    throw new TypeError(`service desktop locate request does not accept params.${forbiddenParam}`);
+  }
+  const field = (name) => request[name] ?? params?.[name];
+  if (typeof field('browserId') !== 'string' || String(field('browserId')).trim().length === 0) {
+    throw new TypeError('service desktop locate request requires browserId');
+  }
+  const sessionName = field('sessionName');
+  if (sessionName !== undefined && (typeof sessionName !== 'string' || sessionName.trim().length === 0)) {
+    throw new TypeError('service desktop locate request sessionName must be a non-empty string');
+  }
+  const locator = recordFromUnknown(field('locator'));
+  if (locator === null) {
+    throw new TypeError('service desktop locate request requires locator');
+  }
+  const locatorField = Object.keys(locator).find((name) => !['locatorId', 'maxCandidates'].includes(name));
+  if (locatorField !== undefined) {
+    throw new TypeError(`service desktop locate request locator does not accept ${locatorField}`);
+  }
+  if (typeof locator.locatorId !== 'string' || locator.locatorId.trim().length === 0) {
+    throw new TypeError('service desktop locate request locator requires locatorId');
+  }
+  if (
+    locator.maxCandidates !== undefined &&
+    (!Number.isInteger(locator.maxCandidates) || Number(locator.maxCandidates) < 1 || Number(locator.maxCandidates) > 32)
+  ) {
+    throw new TypeError('service desktop locate request locator.maxCandidates must be an integer between 1 and 32');
+  }
+  const includeVisualization = field('includeVisualization');
+  if (includeVisualization !== undefined && typeof includeVisualization !== 'boolean') {
+    throw new TypeError('service desktop locate request includeVisualization must be a boolean');
+  }
 }
 
 /**

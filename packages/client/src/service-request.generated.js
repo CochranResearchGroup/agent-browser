@@ -10,6 +10,7 @@ export const SERVICE_REQUEST_ACTIONS = [
   "evaluate",
   "diagnostics",
   "desktop_capture",
+  "desktop_locate",
   "probe",
   "tab_handle_refresh",
   "tab_handle_release",
@@ -170,6 +171,7 @@ export const SERVICE_REQUEST_BOOLEAN_FIELDS = [
   "returnByValue",
   "includeScreenshot",
   "captureEvidenceOnFailure",
+  "includeVisualization",
   "allowDuplicateProfileLane",
   "manualLoginLaunch"
 ];
@@ -180,7 +182,8 @@ export const SERVICE_REQUEST_OBJECT_FIELDS = [
   "probe",
   "uiAction",
   "networkCapture",
-  "fileTransfer"
+  "fileTransfer",
+  "locator"
 ];
 
 export const SERVICE_REQUEST_MCP_TOOL_NAME = "service_request";

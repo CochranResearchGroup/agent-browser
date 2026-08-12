@@ -9,7 +9,7 @@ use crate::native::service_access::{
 use crate::native::service_activity::service_incident_activity_response;
 use crate::native::service_contracts::{
     service_contracts_metadata, DESKTOP_CAPTURE_DEFAULT_MAX_BYTES, DESKTOP_CAPTURE_HARD_MAX_BYTES,
-    DESKTOP_CAPTURE_MCP_TOOL_NAME, SERVICE_ACCESS_PLAN_MCP_RESOURCE,
+    DESKTOP_CAPTURE_MCP_TOOL_NAME, DESKTOP_LOCATE_MCP_TOOL_NAME, SERVICE_ACCESS_PLAN_MCP_RESOURCE,
     SERVICE_ACCESS_PLAN_MCP_TOOL_NAME, SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME,
     SERVICE_BROWSER_CAPABILITY_REGISTRY_RESOURCE, SERVICE_CONTRACTS_RESOURCE,
     SERVICE_DISPLAY_ALLOCATIONS_MCP_RESOURCE, SERVICE_PROFILE_SEEDING_HANDOFF_UPDATE_MCP_TOOL_NAME,
@@ -842,6 +842,21 @@ fn service_mcp_tools() -> Vec<Value> {
                         "maximum": DESKTOP_CAPTURE_HARD_MAX_BYTES,
                         "description": "Maximum decoded PNG bytes returned by action=desktop_capture. Defaults to 4194304. Base64 transport increases wire size."
                     },
+                    "locator": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["locatorId"],
+                        "properties": {
+                            "locatorId": { "type": "string", "minLength": 1 },
+                            "maxCandidates": { "type": "integer", "minimum": 1, "maximum": 32, "default": 8 }
+                        },
+                        "description": "Named repository-owned locator profile for action=desktop_locate."
+                    },
+                    "includeVisualization": {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "Return a bounded response-only visualization for action=desktop_locate."
+                    },
                     "sessionName": {
                         "type": "string",
                         "description": "Optional daemon session route hint copied from access-plan profileReuse reuse recommendations. Top-level hints route ordinary commands to an existing daemon lane."
@@ -1097,6 +1112,7 @@ fn service_mcp_tools() -> Vec<Value> {
             }
         }),
         desktop_capture_tool_schema(),
+        desktop_locate_tool_schema(),
         json!({
             "name": "service_job_cancel",
             "title": "Cancel service job",
@@ -4631,6 +4647,53 @@ fn desktop_capture_tool_schema() -> Value {
     })
 }
 
+fn desktop_locate_tool_schema() -> Value {
+    json!({
+        "name": DESKTOP_LOCATE_MCP_TOOL_NAME,
+        "title": "Locate service desktop control",
+        "description": "Capture one fresh service-owned desktop frame and locate a control through a named deterministic repository-owned profile. This observation does not accept caller pixels, assets, coordinates, thresholds, or input options.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "browserId": {
+                    "type": "string",
+                    "description": "Required service-owned browser id used to resolve one exact desktop route."
+                },
+                "sessionName": {
+                    "type": "string",
+                    "description": "Optional session name used only to narrow exact service-owned route resolution."
+                },
+                "locatorId": {
+                    "type": "string",
+                    "description": "Required repository-owned, versioned locator profile id."
+                },
+                "maxCandidates": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 32,
+                    "default": 8,
+                    "description": "Maximum ordered candidates returned."
+                },
+                "includeVisualization": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Return a bounded response-only PNG visualization."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for the queued observation."
+                },
+                "serviceName": { "type": "string", "description": "Calling service name." },
+                "agentName": { "type": "string", "description": "Calling agent name." },
+                "taskName": { "type": "string", "description": "Calling task name." }
+            },
+            "required": ["browserId", "locatorId"]
+        }
+    })
+}
+
 fn browser_read_tool_schema(spec: BrowserReadToolSpec) -> Value {
     json!({
         "name": spec.tool_name,
@@ -4834,6 +4897,9 @@ fn call_service_mcp_tool(
         "service_request" => call_service_request(arguments, session, configured_service_state),
         DESKTOP_CAPTURE_MCP_TOOL_NAME => {
             call_desktop_capture(arguments, session, configured_service_state)
+        }
+        DESKTOP_LOCATE_MCP_TOOL_NAME => {
+            call_desktop_locate(arguments, session, configured_service_state)
         }
         "browser_command" => call_browser_command(arguments, session),
         "browser_navigate" => call_browser_navigate(arguments, session),
@@ -5631,6 +5697,78 @@ fn call_desktop_capture(
     configured_service_state: &ServiceState,
 ) -> Result<Value, JsonRpcError> {
     let request = desktop_capture_service_request(arguments)?;
+    call_service_request(&request, session, configured_service_state)
+}
+
+fn desktop_locate_service_request(arguments: &Value) -> Result<Value, JsonRpcError> {
+    let argument_map = arguments.as_object().ok_or_else(|| {
+        JsonRpcError::invalid_params("desktop_locate arguments must be an object")
+    })?;
+    const ALLOWED_FIELDS: &[&str] = &[
+        "browserId",
+        "sessionName",
+        "locatorId",
+        "maxCandidates",
+        "includeVisualization",
+        "jobTimeoutMs",
+        "serviceName",
+        "agentName",
+        "taskName",
+    ];
+    if let Some(field) = argument_map
+        .keys()
+        .find(|field| !ALLOWED_FIELDS.contains(&field.as_str()))
+    {
+        return Err(JsonRpcError::invalid_params(&format!(
+            "unknown desktop_locate field: {field}"
+        )));
+    }
+    let browser_id = required_string_argument(arguments, "browserId")?;
+    let locator_id = required_string_argument(arguments, "locatorId")?;
+    let max_candidates = optional_positive_u64_argument(arguments, "maxCandidates")?.unwrap_or(8);
+    if max_candidates > 32 {
+        return Err(JsonRpcError::invalid_params(
+            "desktop_locate maxCandidates must not exceed 32",
+        ));
+    }
+    let include_visualization = arguments
+        .get("includeVisualization")
+        .map(|value| {
+            value.as_bool().ok_or_else(|| {
+                JsonRpcError::invalid_params("includeVisualization must be a boolean")
+            })
+        })
+        .transpose()?
+        .unwrap_or(false);
+    let mut request = json!({
+        "action": "desktop_locate",
+        "browserId": browser_id,
+        "locator": {
+            "locatorId": locator_id,
+            "maxCandidates": max_candidates,
+        },
+        "includeVisualization": include_visualization,
+    });
+    if let Some(value) = optional_string_argument(arguments, "sessionName")? {
+        request["sessionName"] = json!(value);
+    }
+    for name in ["serviceName", "agentName", "taskName"] {
+        if let Some(value) = optional_string_argument(arguments, name)? {
+            request[name] = json!(value);
+        }
+    }
+    if let Some(value) = optional_positive_u64_argument(arguments, "jobTimeoutMs")? {
+        request["jobTimeoutMs"] = json!(value);
+    }
+    Ok(request)
+}
+
+fn call_desktop_locate(
+    arguments: &Value,
+    session: &str,
+    configured_service_state: &ServiceState,
+) -> Result<Value, JsonRpcError> {
+    let request = desktop_locate_service_request(arguments)?;
     call_service_request(&request, session, configured_service_state)
 }
 
@@ -9842,7 +9980,10 @@ fn queued_tool_command_session(tool_name: &str, default_session: &str, command: 
     if tool_name != "service_request" {
         return default_session.to_string();
     }
-    if command.get("action").and_then(Value::as_str) == Some("desktop_capture") {
+    if matches!(
+        command.get("action").and_then(Value::as_str),
+        Some("desktop_capture" | "desktop_locate")
+    ) {
         return service_request_session_candidate(command.get("sessionName"))
             .unwrap_or_else(|| default_session.to_string());
     }
@@ -12271,6 +12412,63 @@ mod tests {
     }
 
     #[test]
+    fn desktop_locate_tool_is_a_bounded_named_profile_adapter() {
+        let tools = service_mcp_tools();
+        let desktop_locate = tools
+            .iter()
+            .find(|tool| tool["name"] == "desktop_locate")
+            .expect("desktop_locate schema should be listed");
+        let input = &desktop_locate["inputSchema"];
+        assert_eq!(input["additionalProperties"], false);
+        assert_eq!(input["required"], json!(["browserId", "locatorId"]));
+        assert_eq!(input["properties"]["maxCandidates"]["default"], 8);
+        assert_eq!(input["properties"]["maxCandidates"]["maximum"], 32);
+        for forbidden in ["imageBase64", "frameId", "x", "threshold", "templatePath"] {
+            assert!(input["properties"].get(forbidden).is_none());
+        }
+    }
+
+    #[test]
+    fn desktop_locate_tool_lowers_to_the_canonical_service_request() {
+        let request = desktop_locate_service_request(&json!({
+            "browserId": "browser-rdp-1",
+            "sessionName": "rdp-1",
+            "locatorId": "p110-control-v1",
+            "maxCandidates": 3,
+            "includeVisualization": true,
+            "jobTimeoutMs": 5000,
+            "serviceName": "DesktopObserver",
+            "agentName": "fixture-locator",
+            "taskName": "locate-control"
+        }))
+        .unwrap();
+        assert_eq!(request["action"], "desktop_locate");
+        assert_eq!(request["browserId"], "browser-rdp-1");
+        assert_eq!(request["sessionName"], "rdp-1");
+        assert_eq!(request["locator"]["locatorId"], "p110-control-v1");
+        assert_eq!(request["locator"]["maxCandidates"], 3);
+        assert_eq!(request["includeVisualization"], true);
+        assert_eq!(request["jobTimeoutMs"], 5000);
+        assert!(request.get("params").is_none());
+
+        let defaults = desktop_locate_service_request(&json!({
+            "browserId": "browser-rdp-1",
+            "locatorId": "p110-control-v1"
+        }))
+        .unwrap();
+        assert_eq!(defaults["locator"]["maxCandidates"], 8);
+        assert_eq!(defaults["includeVisualization"], false);
+
+        for invalid in [
+            json!({"browserId": "browser-rdp-1", "locatorId": "p110-control-v1", "maxCandidates": 33}),
+            json!({"browserId": "browser-rdp-1", "locatorId": "p110-control-v1", "threshold": 900}),
+            json!({"browserId": "browser-rdp-1", "locatorId": "p110-control-v1", "imageBase64": "pixels"}),
+        ] {
+            assert!(desktop_locate_service_request(&invalid).is_err());
+        }
+    }
+
+    #[test]
     fn service_request_mcp_schema_matches_all_canonical_types_and_constraints() {
         let canonical: Value = serde_json::from_str(include_str!(
             "../../docs/dev/contracts/service-request.v1.schema.json"
@@ -12443,6 +12641,28 @@ mod tests {
         assert_eq!(
             queued_tool_command_session("service_request", "AgentBrowserDashboard", &narrowed),
             "rdp-session"
+        );
+
+        let locate = json!({
+            "action": "desktop_locate",
+            "browserId": "session:must-not-route",
+        });
+        assert_eq!(
+            queued_tool_command_session("service_request", "AgentBrowserDashboard", &locate),
+            "AgentBrowserDashboard"
+        );
+        let narrowed_locate = json!({
+            "action": "desktop_locate",
+            "browserId": "browser-rdp-1",
+            "sessionName": "rdp-locate-session",
+        });
+        assert_eq!(
+            queued_tool_command_session(
+                "service_request",
+                "AgentBrowserDashboard",
+                &narrowed_locate,
+            ),
+            "rdp-locate-session"
         );
     }
 

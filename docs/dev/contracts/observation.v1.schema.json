@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/observation.v1.schema.json",
+  "title": "agent-browser desktop locator observation",
+  "description": "Deterministic locator evidence bound to one freshly captured service desktop frame.",
+  "type": "object",
+  "required": [
+    "observationId", "schemaVersion", "contextId", "frameId", "frameSha256",
+    "geometryEpoch", "coordinateSpace", "locatorId", "profileVersion",
+    "profileSha256", "targetClass", "detectorReceipts", "status",
+    "selectedCandidateId", "candidates"
+  ],
+  "properties": {
+    "observationId": { "type": "string", "minLength": 1 },
+    "schemaVersion": { "const": "v1" },
+    "contextId": { "type": "string", "minLength": 1 },
+    "frameId": { "type": "string", "minLength": 1 },
+    "frameSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "geometryEpoch": { "type": "string", "minLength": 1 },
+    "coordinateSpace": { "const": "desktop_physical_pixels" },
+    "locatorId": { "type": "string", "minLength": 1 },
+    "profileVersion": { "type": "string", "minLength": 1 },
+    "profileSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "targetClass": { "type": "string", "minLength": 1 },
+    "detectorReceipts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["detectorId", "version", "evidenceSha256", "normalizationVersion", "integerParameters"],
+        "properties": {
+          "detectorId": { "type": "string", "minLength": 1 },
+          "version": { "type": "string", "minLength": 1 },
+          "evidenceSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "normalizationVersion": { "type": "string", "minLength": 1 },
+          "integerParameters": { "type": "object", "additionalProperties": { "type": "integer" } }
+        },
+        "additionalProperties": false
+      }
+    },
+    "status": { "enum": ["matched", "not_found", "ambiguous"] },
+    "selectedCandidateId": { "type": ["string", "null"] },
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["candidateId", "targetClass", "rank", "bounds", "center", "score", "supportingEvidence", "decoyEvidence", "ambiguityEvidence"],
+        "properties": {
+          "candidateId": { "type": "string", "minLength": 1 },
+          "targetClass": { "type": "string", "minLength": 1 },
+          "rank": { "type": "integer", "minimum": 1 },
+          "bounds": { "$ref": "#/$defs/rectangle" },
+          "center": { "$ref": "#/$defs/point" },
+          "score": { "type": "integer" },
+          "supportingEvidence": { "type": "array", "items": { "type": "object" } },
+          "decoyEvidence": { "type": "array", "items": { "type": "string" } },
+          "ambiguityEvidence": { "type": "array", "items": { "type": "string" } }
+        },
+        "additionalProperties": false
+      }
+    },
+    "visualizationReceipt": {
+      "type": "object",
+      "required": ["schemaVersion", "mimeType", "byteLength", "sha256", "retention", "persisted"],
+      "properties": {
+        "schemaVersion": { "const": "v1" },
+        "mimeType": { "const": "image/png" },
+        "byteLength": { "type": "integer", "minimum": 1 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "retention": { "const": "ephemeral" },
+        "persisted": { "const": false }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "rectangle": {
+      "type": "object",
+      "required": ["x", "y", "width", "height"],
+      "properties": {
+        "x": { "type": "integer", "minimum": 0 },
+        "y": { "type": "integer", "minimum": 0 },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "point": {
+      "type": "object",
+      "required": ["x", "y"],
+      "properties": {
+        "x": { "type": "integer", "minimum": 0 },
+        "y": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

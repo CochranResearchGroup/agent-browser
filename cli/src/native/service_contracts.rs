@@ -36,6 +36,7 @@ pub const SERVICE_VIEWER_LEASES_MCP_RESOURCE: &str = "agent-browser://viewer-lea
 pub const SERVICE_ACCESS_PLAN_MCP_TOOL_NAME: &str = "service_access_plan";
 pub const SERVICE_REQUEST_MCP_TOOL_NAME: &str = "service_request";
 pub const DESKTOP_CAPTURE_MCP_TOOL_NAME: &str = "desktop_capture";
+pub const DESKTOP_LOCATE_MCP_TOOL_NAME: &str = "desktop_locate";
 pub const SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME: &str =
     "service_browser_capability_preflight";
 pub const SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME: &str =
@@ -66,6 +67,10 @@ pub const FRAME_RECEIPT_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/frame-receipt.v1.schema.json";
 pub const SERVICE_DESKTOP_CAPTURE_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-desktop-capture-response.v1.schema.json";
+pub const OBSERVATION_SCHEMA_ID: &str =
+    "https://agent-browser.local/contracts/observation.v1.schema.json";
+pub const SERVICE_DESKTOP_LOCATE_RESPONSE_SCHEMA_ID: &str =
+    "https://agent-browser.local/contracts/service-desktop-locate-response.v1.schema.json";
 pub const SERVICE_PROFILE_ALLOCATION_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-profile-allocation-response.v1.schema.json";
 pub const SERVICE_PROFILE_READINESS_RESPONSE_SCHEMA_ID: &str =
@@ -116,6 +121,7 @@ pub const SERVICE_REQUEST_ACTIONS: &[&str] = &[
     "evaluate",
     "diagnostics",
     "desktop_capture",
+    "desktop_locate",
     "probe",
     "tab_handle_refresh",
     "tab_handle_release",
@@ -271,6 +277,45 @@ pub fn service_contracts_metadata() -> Value {
                     "persisted": false,
                 },
                 "noLaunch": true,
+            },
+            "observation": {
+                "version": SERVICE_REQUEST_CONTRACT_VERSION,
+                "schemaId": OBSERVATION_SCHEMA_ID,
+                "schemaPath": "docs/dev/contracts/observation.v1.schema.json",
+            },
+            "serviceDesktopLocateResponse": {
+                "version": SERVICE_REQUEST_CONTRACT_VERSION,
+                "schemaId": SERVICE_DESKTOP_LOCATE_RESPONSE_SCHEMA_ID,
+                "schemaPath": "docs/dev/contracts/service-desktop-locate-response.v1.schema.json",
+                "http": {
+                    "method": "POST",
+                    "route": SERVICE_REQUEST_HTTP_ROUTE,
+                    "action": "desktop_locate",
+                },
+                "mcp": {
+                    "tools": [SERVICE_REQUEST_MCP_TOOL_NAME, DESKTOP_LOCATE_MCP_TOOL_NAME],
+                },
+                "client": {
+                    "package": "@agent-browser/client/service-request",
+                    "helpers": [
+                        "createServiceDesktopLocateRequest",
+                        "requestServiceDesktopLocate",
+                        "locateServiceDesktopControl"
+                    ],
+                },
+                "request": {
+                    "defaultMaxCandidates": 8,
+                    "hardMaxCandidates": 32,
+                    "namedProfilesOnly": true,
+                    "includeVisualizationDefault": false,
+                },
+                "payload": {
+                    "sourceFrameRetention": "ephemeral",
+                    "visualizationRetention": "ephemeral",
+                    "persisted": false,
+                },
+                "noLaunch": true,
+                "input": false,
             },
             "serviceBrowserCapabilityRegistryResponse": {
                 "version": SERVICE_REQUEST_CONTRACT_VERSION,
@@ -618,6 +663,7 @@ pub fn service_contracts_metadata() -> Value {
             "serviceBrowserCapabilityRegistryResource": SERVICE_BROWSER_CAPABILITY_REGISTRY_RESOURCE,
             "serviceRequestTool": SERVICE_REQUEST_MCP_TOOL_NAME,
             "desktopCaptureTool": DESKTOP_CAPTURE_MCP_TOOL_NAME,
+            "desktopLocateTool": DESKTOP_LOCATE_MCP_TOOL_NAME,
             "serviceAccessPlanTool": SERVICE_ACCESS_PLAN_MCP_TOOL_NAME,
             "serviceBrowserCapabilityPreflightTool": SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME,
             "serviceRemoteViewRoutePreflightTool": SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME,
@@ -676,6 +722,23 @@ mod tests {
         assert_eq!(
             metadata["contracts"]["serviceDesktopCaptureResponse"]["payload"]["hardMaxBytes"],
             DESKTOP_CAPTURE_HARD_MAX_BYTES
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceDesktopLocateResponse"]["schemaId"],
+            SERVICE_DESKTOP_LOCATE_RESPONSE_SCHEMA_ID
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceDesktopLocateResponse"]["mcp"]["tools"][1],
+            DESKTOP_LOCATE_MCP_TOOL_NAME
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceDesktopLocateResponse"]["request"]
+                ["defaultMaxCandidates"],
+            8
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceDesktopLocateResponse"]["request"]["hardMaxCandidates"],
+            32
         );
         assert_eq!(
             metadata["contracts"]["serviceBrowserCapabilityRegistryResponse"]["schemaId"],

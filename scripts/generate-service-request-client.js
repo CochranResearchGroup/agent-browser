@@ -507,6 +507,37 @@ export interface ServiceDesktopCaptureData {
   [key: string]: unknown;
 }
 
+export interface DesktopLocatorObservation {
+  observationId: string;
+  schemaVersion: "v1";
+  contextId: string;
+  frameId: string;
+  frameSha256: string;
+  geometryEpoch: string;
+  coordinateSpace: "desktop_physical_pixels";
+  locatorId: string;
+  profileVersion: string;
+  profileSha256: string;
+  targetClass: string;
+  detectorReceipts: Record<string, unknown>[];
+  status: "matched" | "not_found" | "ambiguous";
+  selectedCandidateId: string | null;
+  candidates: Record<string, unknown>[];
+  visualizationReceipt?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface ServiceDesktopLocateData {
+  ok: true;
+  action: "desktop_locate";
+  context: DesktopContext;
+  frameReceipt: FrameReceipt;
+  observation: DesktopLocatorObservation;
+  /** Optional response-only base64 PNG visualization. */
+  visualizationBase64?: string;
+  [key: string]: unknown;
+}
+
 export interface ServiceTabHandleTraceFilter {
   browserId?: string | null;
   profileId?: string | null;
@@ -1044,6 +1075,7 @@ export interface ServiceRequestActionDataMap {
   file_transfer: ServiceFileTransferData;
   diagnostics: ServiceDiagnosticsData;
   desktop_capture: ServiceDesktopCaptureData;
+  desktop_locate: ServiceDesktopLocateData;
   back: ServiceUrlData;
   forward: ServiceUrlData;
   reload: ServiceUrlData;
@@ -1292,6 +1324,20 @@ export interface ServiceDesktopCaptureRequestOptions extends Omit<ServiceRequest
 }
 
 export interface ServiceDesktopCaptureRequestHttpOptions extends ServiceDesktopCaptureRequestOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
+export interface ServiceDesktopLocateRequestOptions extends Omit<ServiceRequest, "action" | "params" | "locator" | "includeVisualization"> {
+  browserId: string;
+  sessionName?: string;
+  locatorId: string;
+  maxCandidates?: number;
+  includeVisualization?: boolean;
+}
+
+export interface ServiceDesktopLocateRequestHttpOptions extends ServiceDesktopLocateRequestOptions {
   baseUrl: string;
   fetch?: typeof globalThis.fetch;
   signal?: AbortSignal;
@@ -1564,6 +1610,9 @@ export declare function createServiceDiagnosticsRequest(
 export declare function createServiceDesktopCaptureRequest(
   input: ServiceDesktopCaptureRequestOptions,
 ): ServiceRequestForAction<"desktop_capture">;
+export declare function createServiceDesktopLocateRequest(
+  input: ServiceDesktopLocateRequestOptions,
+): ServiceRequestForAction<"desktop_locate">;
 export declare function createServiceProbeRequest(
   input: ServiceProbeRequestOptions,
 ): ServiceRequestForAction<"probe">;
@@ -1653,6 +1702,12 @@ export declare function requestServiceDesktopCapture(
 export declare function captureServiceDesktopFrame(
   options: ServiceDesktopCaptureRequestHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceDesktopCaptureData>>;
+export declare function requestServiceDesktopLocate(
+  options: ServiceDesktopLocateRequestHttpOptions,
+): Promise<ServiceRequestResponse<ServiceDesktopLocateData>>;
+export declare function locateServiceDesktopControl(
+  options: ServiceDesktopLocateRequestHttpOptions,
+): Promise<ServiceRequestResponse<ServiceDesktopLocateData>>;
 export declare function requestServiceProbe(
   options: ServiceProbeRequestHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceProbeData>>;

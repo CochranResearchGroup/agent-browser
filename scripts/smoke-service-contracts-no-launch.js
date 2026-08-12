@@ -139,6 +139,14 @@ try {
     `desktop_capture MCP adapter missing: ${JSON.stringify(contracts.data.mcp)}`,
   );
   assert(
+    contracts.data.contracts.serviceRequest.actions.includes('desktop_locate'),
+    `desktop_locate action missing: ${JSON.stringify(contracts.data.contracts.serviceRequest)}`,
+  );
+  assert(
+    contracts.data.mcp?.desktopLocateTool === 'desktop_locate',
+    `desktop_locate MCP adapter missing: ${JSON.stringify(contracts.data.mcp)}`,
+  );
+  assert(
     contracts.data?.contracts?.desktopContext?.schemaId ===
       'https://agent-browser.local/contracts/desktop-context.v1.schema.json',
     `desktopContext schema id mismatch: ${JSON.stringify(contracts.data?.contracts?.desktopContext)}`,
@@ -174,6 +182,22 @@ try {
     contracts.data?.contracts?.serviceDesktopCaptureResponse?.payload?.retention === 'ephemeral' &&
       contracts.data?.contracts?.serviceDesktopCaptureResponse?.noLaunch === true,
     `serviceDesktopCaptureResponse posture mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceDesktopCaptureResponse)}`,
+  );
+  assert(
+    contracts.data?.contracts?.observation?.schemaId ===
+      'https://agent-browser.local/contracts/observation.v1.schema.json',
+    `observation schema id mismatch: ${JSON.stringify(contracts.data?.contracts?.observation)}`,
+  );
+  assert(
+    contracts.data?.contracts?.serviceDesktopLocateResponse?.schemaId ===
+      'https://agent-browser.local/contracts/service-desktop-locate-response.v1.schema.json' &&
+      contracts.data?.contracts?.serviceDesktopLocateResponse?.mcp?.tools?.includes('desktop_locate') &&
+      contracts.data?.contracts?.serviceDesktopLocateResponse?.request?.defaultMaxCandidates === 8 &&
+      contracts.data?.contracts?.serviceDesktopLocateResponse?.request?.hardMaxCandidates === 32 &&
+      contracts.data?.contracts?.serviceDesktopLocateResponse?.payload?.persisted === false &&
+      contracts.data?.contracts?.serviceDesktopLocateResponse?.noLaunch === true &&
+      contracts.data?.contracts?.serviceDesktopLocateResponse?.input === false,
+    `serviceDesktopLocateResponse posture mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceDesktopLocateResponse)}`,
   );
   assert(
     contracts.data?.contracts?.serviceProfileAllocationResponse?.schemaId ===

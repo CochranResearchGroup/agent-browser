@@ -19,6 +19,7 @@
         "evaluate",
         "diagnostics",
         "desktop_capture",
+        "desktop_locate",
         "probe",
         "tab_handle_refresh",
         "tab_handle_release",
@@ -395,6 +396,31 @@
       "minimum": 1,
       "maximum": 16777216,
       "description": "Maximum decoded PNG bytes returned by action=desktop_capture. Defaults to 4194304. Base64 transport increases wire size."
+    },
+    "locator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["locatorId"],
+      "properties": {
+        "locatorId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Repository-owned, versioned locator profile identifier for action=desktop_locate."
+        },
+        "maxCandidates": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32,
+          "default": 8,
+          "description": "Maximum ordered candidates returned by action=desktop_locate."
+        }
+      },
+      "description": "Bounded named locator request. Caller pixels, assets, coordinates, detector parameters, and thresholds are not accepted."
+    },
+    "includeVisualization": {
+      "type": "boolean",
+      "default": false,
+      "description": "Return a bounded response-only visualization for action=desktop_locate."
     },
     "sessionName": {
       "type": "string",
