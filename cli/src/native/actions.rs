@@ -189,7 +189,7 @@ use serde_json::{json, Value};
 
 macro_rules! race_renderer_crash {
     ($action:expr, $receiver:expr, $context:expr $(,)?) => {
-        race_action_with_renderer_crash(async { $action }, $receiver, $context)
+        race_action_with_renderer_crash(Box::pin(async { $action }), $receiver, $context)
     };
 }
 
