@@ -2,7 +2,7 @@
 
 Date: 2026-08-12
 
-State: OPEN | POC 1 AND 2 SOURCE ACCEPTED | POC 3 DETAILED
+State: OPEN | POC 1, 2, AND 3 SOURCE ACCEPTED | POC 4 DETAIL PLAN NEXT
 
 Authority: SOURCE-ONLY
 
@@ -13,6 +13,8 @@ Sources:
 - `VISION.md`
 - `ROADMAP.md` P110
 - `docs/dev/plans/0110-1-2026-08-12-p110-poc1-display-bound-frame-capture-plan.md`
+- `docs/dev/plans/0110-2-2026-08-12-p110-poc2-deterministic-fixture-location-plan.md`
+- `docs/dev/plans/0110-3-2026-08-12-p110-poc3-guarded-desktop-interaction-plan.md`
 - existing service-owned browser, display-allocation, view-stream, route,
   lease, challenge, and durable remote-view handoff contracts
 
@@ -36,11 +38,12 @@ acceptance recorded at `eefcb9bd`. The canonical `desktop_locate` action now
 binds a deterministic synthetic locator observation to one fresh PoC 1 frame
 and emits no input.
 
-Proof of Concept 3 is detailed in Plan 0110-3 before implementation. It freezes
-one named synthetic observe, locate, act, and verify transaction, exact
-controller fencing, deterministic motion, release cleanup, and after-state
-verification. It adds no production input provider. Later proofs remain
-undetailed until the immediately preceding proof closes.
+Proof of Concept 3 is source accepted at `fd9c6a41`. Its one named synthetic
+observe, locate, act, and verify transaction now uses the real process-owned
+route claim and per-event fencing, deterministic motion, bounded release
+cleanup, receipt-bearing partial effects, replay suppression, and after-state
+verification. It adds no production input provider. PoC 4 remains undetailed
+until its detail plan is written and committed.
 
 ## Objective
 
@@ -208,8 +211,8 @@ source acceptance without separate maintainer direction.
 
 ## Current Recommendation
 
-Implement Plan 0110-3 over the synthetic fixture. Preserve the named-recipe
-boundary, current-controller epoch, stale-frame and focus aborts,
-server-derived deterministic motion, release cleanup, after-state
-verification, and public provider-unavailable posture. Do not add a live input
-provider.
+Write Plan 0110-4 for controlled browser-external prompt perception. Freeze a
+repository-owned prompt fixture, evidence and ambiguity contract, CDP-blind
+proof, privacy posture, and typed operator intervention before implementation.
+Do not add a live input provider or interact with a real credential manager,
+authentication prompt, or external challenge.

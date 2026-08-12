@@ -2,7 +2,7 @@
 
 Date: 2026-08-12
 
-State: DETAILED | IMPLEMENTATION READY
+State: SOURCE ACCEPTED
 
 Authority: SOURCE-ONLY | PROVIDER-FREE SYNTHETIC INPUT | NO LIVE INPUT
 
@@ -540,3 +540,43 @@ is recorded without claiming installed or live machine input.
 The sole next recommendation after acceptance is to write Plan 0110-4 for a
 controlled browser-external prompt perception fixture. No PoC 4 implementation
 begins during PoC 3 closeout.
+
+## Source Acceptance | 2026-08-12
+
+PoC 3 is source accepted at remediation commit `fd9c6a41`. The canonical
+`desktop_interact` action remains a named, source-only synthetic transaction.
+Public production dispatch still fails with
+`desktop_input_provider_unavailable` before capture, controller mutation, or
+input resolution.
+
+The first audit worker returned no usable report and supplied no acceptance
+evidence. A replacement fresh audit found four blocking defects: the pure
+engine did not use the real per-event coordinator fence, some post-effect
+failures discarded receipts and aborted idempotency, surface evidence was not
+rechecked at every event boundary, and Rust receipt retention disagreed with
+the frozen schema. All four findings were accepted as one remediation packet.
+
+The remediation now:
+
+- owns one real route-scoped interaction claim and holds a short event guard
+  across current authority, focus, surface, geometry, and provider emission;
+- records every post-acknowledgement failure as an uncertain or cancelled
+  receipt and completes idempotency so replay cannot emit another plan;
+- validates the synthetic provider's binding and expected surface for every
+  move, button, key, and bounded cleanup event;
+- rejects an empty controller lease update timestamp and serializes the
+  schema-frozen `ephemeral` retention posture.
+
+Primary-agent closed-world verification passed: format, strict Clippy,
+`desktop_interaction` 17/17, `desktop_control_coordinator` 3/3,
+`desktop_locator` 10/10, `desktop_capture` 26/26, and `viewer_lease` 2/2.
+Earlier complete-candidate gates for service client, API/MCP parity,
+no-launch contracts, action architecture, WSL Cargo safety, and docs also
+passed and were unaffected by the two-module remediation. The durable evidence
+summary is
+`docs/dev/notes/0110-3-2026-08-12-guarded-desktop-interaction-source-acceptance.md`.
+
+No browser, display, RDP, Guacamole, external process, OS input provider,
+credential, authentication prompt, or challenge was exercised. This status is
+not installed-runtime, live-fixture, challenge, authentication, or release
+acceptance.
