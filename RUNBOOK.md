@@ -121,46 +121,6 @@ Result:
   Chromium work, and downstream Google Messages, Facebook, or Last30Days retry
   remain separately authorized effects.
 
-## Turn 148 | 2026-08-11
-
-Scope: reconcile Plan 0110's downstream failure and hand the remaining blocker
-to the owning Last30Days stale-capture seam.
-
-Actions:
-
-- consumed the one authorized downstream tick and issued no retry;
-- recorded exact wheel job `r213109`, which failed after 28.37 seconds because
-  the Facebook target did not acknowledge `Input.dispatchMouseEvent`;
-- confirmed browser-level tab inventory remained responsive while subsequent
-  direct page evaluation timed out;
-- retained the installed selectorless wheel implementation because fake-CDP
-  and real-Chrome e2e evidence remains green;
-- accepted the Last30Days source diagnosis that a combined query capture reads
-  extraction immediately after navigation, sleeps four seconds, then reuses
-  that stale empty result and unnecessarily forces scroll;
-- closed Plan 0110/P110 without another browser transport attempt.
-
-Validation:
-
-- downstream tick `tick-877ca3d32b5e6c335d60b585fc631985`, execution
-  `tick-attempt-c993973488088fbd9741f4d9a0728535`, provider attempt
-  `provider-attempt-f707213d4b51646f759db74f02f38799`, and snapshot
-  `tick-snapshot-d5cb7ff1f0e49cbce2a1b4de889287e2` are terminal;
-- installed SHA, workstation provenance, browser PID/endpoint, database, and
-  recurring schedule remained converged.
-
-Result:
-
-- agent-browser P110 is closed with a valid installed generic scroll repair but
-  failed Facebook downstream acceptance;
-- remaining acceptance is owned by Last30Days Plan 0045's stale prepared
-  extraction refresh, not another agent-browser transport variant.
-
-Graphiti Write Status:
-
-- deferred until terminal Last30Days acceptance; current receipts remain
-  authoritative.
-
 ## Turn 146 | 2026-08-11
 
 Scope: review the new Google Messages RDP handoff and the tracked Facebook
