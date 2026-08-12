@@ -228,6 +228,11 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
         }
     }
 
+    if method == "GET" && path == "/api/runtime/health" {
+        write_json_value(&mut stream, "200 OK", crate::install::runtime_health_json()).await;
+        return;
+    }
+
     if path.starts_with("/api/stream/") {
         let body_str = if matches!(method, "POST" | "PUT" | "PATCH" | "DELETE") {
             read_post_body(&mut stream, &buf, n).await

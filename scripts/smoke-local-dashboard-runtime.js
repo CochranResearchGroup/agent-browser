@@ -251,6 +251,34 @@ JSON.stringify({
     if (!finalState.hasAgentBrowserChrome || !finalState.hasWorkspacePane) {
       throw new Error(`Dashboard browser smoke did not see the expected app chrome: ${JSON.stringify(finalState)}`);
     }
+    currentPhase = 'fetch authenticated runtime health';
+    const runtimeHealth = parseEvalJson(await evalAgent(`
+(async () => {
+  const response = await fetch('/api/runtime/health', {
+    cache: 'no-store',
+    credentials: 'same-origin'
+  });
+  const contentType = response.headers.get('content-type') || '';
+  const body = await response.text();
+  let health = null;
+  try {
+    health = JSON.parse(body);
+  } catch {
+    return JSON.stringify({ ok: false, status: response.status, contentType, bodyPrefix: body.slice(0, 80) });
+  }
+  return JSON.stringify({
+    ok: response.ok,
+    status: response.status,
+    contentType,
+    schemaVersion: health?.schemaVersion || null,
+    ready: health?.ready ?? null
+  });
+})()
+`), 'authenticated runtime health');
+    if (!runtimeHealth.ok || !runtimeHealth.contentType.includes('application/json') || !runtimeHealth.schemaVersion) {
+      throw new Error(`Dashboard runtime health endpoint did not return authenticated JSON: ${JSON.stringify(runtimeHealth)}`);
+    }
+    finalState.runtimeHealth = runtimeHealth;
     if (options.workspaceSession && (!finalState.viewport || (!finalState.frameSrc && !finalState.hasCdpCanvas))) {
       throw new Error(`Workspace route did not render an embedded viewport: ${JSON.stringify(finalState)}`);
     }
