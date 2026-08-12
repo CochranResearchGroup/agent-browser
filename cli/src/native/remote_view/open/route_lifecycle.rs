@@ -410,6 +410,7 @@ pub(crate) async fn handle_service_remote_view_route_checkout(
                 })
             })
             .or_else(|| Some(route_binding_readiness(&route_binding)));
+        let browser_snapshot = state.browsers.get(&browser_id).cloned();
         let display_allocation = state
             .display_allocations
             .entry(display_allocation_id.clone())
@@ -426,6 +427,16 @@ pub(crate) async fn handle_service_remote_view_route_checkout(
         display_allocation.owner_session_id = Some(session_id.clone());
         display_allocation.display_name = route_binding.launch_display_name.clone();
         display_allocation.display_isolation = route_binding.display_isolation.clone();
+        if let Some(browser) = browser_snapshot.as_ref() {
+            display_allocation.profile_id = browser.profile_id.clone();
+            display_allocation.host = Some(browser.host);
+            display_allocation.pid_hints = browser
+                .pid
+                .map(|browser_pid| json!({ "browserPid": browser_pid }));
+        }
+        if intent.browser_build.is_some() {
+            display_allocation.browser_build = intent.browser_build.clone();
+        }
         display_allocation.state = "ready".to_string();
         display_allocation.updated_at = Some(now.clone());
         if !display_allocation.route_ids.contains(&route_id) {

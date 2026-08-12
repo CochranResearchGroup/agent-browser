@@ -463,6 +463,90 @@ async fn test_remote_view_route_checkout_selects_distinct_matching_pool_entries(
 }
 
 #[tokio::test]
+async fn test_remote_view_route_checkout_refreshes_stale_display_allocation_identity() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("remote-view-route-refresh-display-identity-home");
+    fs::create_dir_all(&home).unwrap();
+    guard.set("HOME", home.to_str().unwrap());
+    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+    store
+        .save(&ServiceState {
+            display_allocations: BTreeMap::from([(
+                "display-a".to_string(),
+                DisplayAllocation {
+                    id: "display-a".to_string(),
+                    display_name: Some(":91".to_string()),
+                    display_isolation: "shared_display".to_string(),
+                    owner_browser_id: Some("session:current".to_string()),
+                    owner_session_id: Some("current".to_string()),
+                    profile_id: Some("stale-profile".to_string()),
+                    browser_build: Some("stock_chrome".to_string()),
+                    host: Some(ServiceBrowserHost::RemoteHeaded),
+                    state: "orphaned".to_string(),
+                    pid_hints: Some(json!({ "browserPid": 41 })),
+                    readiness: Some(json!({
+                        "state": "orphaned",
+                        "reason": "owner_browser_not_ready"
+                    })),
+                    ..DisplayAllocation::default()
+                },
+            )]),
+            route_pool: BTreeMap::from([(
+                "pool-a".to_string(),
+                RoutePoolEntry {
+                    id: "pool-a".to_string(),
+                    route_id: "route-a".to_string(),
+                    connection_id: Some("conn-a".to_string()),
+                    frame_url: Some(
+                        "https://dashboard.example/guacamole/#/client/conn-a".to_string(),
+                    ),
+                    target: json!({ "displayName": ":91" }),
+                    state: "available".to_string(),
+                    ..RoutePoolEntry::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                "session:current".to_string(),
+                BrowserProcess {
+                    id: "session:current".to_string(),
+                    profile_id: Some("current-profile".to_string()),
+                    host: ServiceBrowserHost::RemoteHeaded,
+                    health: ServiceBrowserHealth::Ready,
+                    display_allocation_id: Some("display-a".to_string()),
+                    pid: Some(4242),
+                    ..BrowserProcess::default()
+                },
+            )]),
+            ..ServiceState::default()
+        })
+        .unwrap();
+    let mut state = DaemonState::new();
+    let checkout = execute_command(
+        &json!({
+            "action": "service_remote_view_route_checkout",
+            "browserId": "session:current",
+            "sessionName": "current",
+            "browserBuild": "stealthcdp_chromium",
+            "displayAllocationId": "display-a",
+            "routePoolEntryId": "pool-a"
+        }),
+        &mut state,
+    )
+    .await;
+    assert_eq!(checkout["success"], true, "checkout failed: {checkout}");
+    let persisted = store.load().unwrap();
+    let allocation = &persisted.display_allocations["display-a"];
+    assert_eq!(allocation.profile_id.as_deref(), Some("current-profile"));
+    assert_eq!(
+        allocation.browser_build.as_deref(),
+        Some("stealthcdp_chromium")
+    );
+    assert_eq!(allocation.host, Some(ServiceBrowserHost::RemoteHeaded));
+    assert_eq!(allocation.pid_hints, Some(json!({ "browserPid": 4242 })));
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[tokio::test]
 async fn test_viewer_lease_policy_rejects_single_viewer_and_controller_conflicts() {
     let guard = EnvGuard::new(&["HOME"]);
     let home = unique_socket_dir("remote-view-viewer-lease-policy-home");
