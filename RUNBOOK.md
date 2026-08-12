@@ -4,6 +4,86 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 147 | 2026-08-11
+
+Scope: execute the source-authorized Plan 0109 remediation derived from the
+Google Messages and Facebook handoffs, without installing or touching live
+sessions, browsers, profiles, routes, or downstream workflows.
+
+Actions:
+
+- made explicit-session global close a typed zero-effect rejection and bound
+  ordinary daemon termination to recorded process identity;
+- added validated Linux named-session supervision with a fixed stream port,
+  no-browser startup, bounded restart policy, and typed health projection;
+- separated requested-subject remote-view doctor readiness from preserved
+  global host advisories;
+- projected `Inspector.targetCrashed` into typed command failure, crashed tab
+  lifecycle, event, and deduplicated incident evidence;
+- required accountable attribution before effect-capable service requests and
+  added cross-ingress no-launch collection coverage;
+- completed a fresh-context structure review, corrected dispatcher ownership
+  and process-consumer inventory, and isolated one ambient-HOME test fixture.
+
+Validation:
+
+- canonical guarded Rust exited zero: 1,071 parallel-safe tests passed, 57
+  ignored, all three integration suites passed, and every serial partition
+  passed;
+- strict Rust formatting and Clippy, actions architecture and remediation,
+  WSL Cargo safety, service client, API/MCP parity, no-launch collection smoke,
+  route-confusion fixtures, dashboard tests and build, docs build, validation
+  selection, and patch checks passed;
+- every compiling Cargo command used the capped wrapper with four build jobs,
+  20 GiB high memory, 24 GiB maximum memory, and 4 GiB swap maximum.
+
+Result:
+
+- Plan 0109 is source accepted at `c00c9655`;
+- the recurring runtime interlock remains disabled;
+- installed canary, unit activation, browser operation, protected-profile use,
+  Chromium work, and downstream Google Messages, Facebook, or Last30Days retry
+  remain separately authorized effects.
+
+## Turn 146 | 2026-08-11
+
+Scope: review the new Google Messages RDP handoff and the tracked Facebook
+Blink-crash handoff, reconcile both with current source and completed plans,
+and draft a source-only dependability successor.
+
+Actions:
+
+- classified the helper compatibility and opaque handoff recommendations as
+  already implemented contracts requiring regressions, not redesign;
+- confirmed current profile mismatch rejection, process-identity ownership,
+  and read-only service collection handlers;
+- confirmed four remaining gaps: ambiguous global close, missing named
+  fixed-port daemon supervision, global doctor coupling, and absent
+  `Inspector.targetCrashed` lifecycle propagation;
+- identified a related close-path safety defect: an unreachable daemon can be
+  force-killed from PID-file liveness without bound process-start identity;
+- wrote Review 0109 and Plan 0109 with exact non-goals, public contracts,
+  vertical slices, rollback, validation, and a separate installed canary gate;
+- bound implementation authority to
+  `docs/dev/plans/0109-2026-08-11-runtime-dependability-handoff-remediation-plan.md`;
+- kept the recurring runtime interlock disabled and left Chromium repair in
+  the separately governed Chromium repository.
+
+Validation:
+
+- CodeGraph was healthy with 535 files, 18,425 nodes, and 63,691 edges;
+- Graphiti `agent_browser_main` discovery returned no current source-backed
+  answer for the two handoffs, so current plans and source remained authority;
+- no Cargo, browser, daemon, doctor, install, route, profile, or downstream
+  retry command ran.
+
+Result:
+
+- Plan 0109 is planned with source-only authority;
+- the first recommended implementation packet is the red zero-effect close
+  scope regression and minimal parser rejection;
+- installed and live acceptance remain unauthorized.
+
 ## Turn 145 | 2026-08-09
 
 Scope: repair the upstream renderer and command-delivery boundaries exposed by

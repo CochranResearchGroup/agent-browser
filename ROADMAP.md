@@ -6,6 +6,30 @@ This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
 
+## P109 | Runtime Dependability Handoff Remediation
+
+State: SOURCE ACCEPTED | INSTALLED CANARY NOT AUTHORIZED
+Current state: ambiguous global close rejects before effects, named Linux
+daemon sessions have a fixed-port no-browser supervisor, remote-view doctor
+reports requested-subject readiness separately from global advisories,
+renderer crashes produce typed command and service lifecycle evidence, and
+effectful service requests require accountable attribution. Canonical guarded
+Rust and the selected no-launch, client, dashboard, docs, architecture, and
+fixture gates are green at source commit `c00c9655`.
+
+### Next Recommendation
+
+Keep the runtime interlock disabled. If separately authorized, run Slice H with
+one disposable session and profile to prove installed fixed-port restart,
+requested-scope doctor status, advisory visibility, exact rollback, and zero
+unrelated effects. Do not use Google Messages or Facebook as the first canary.
+
+### Evidence
+
+- `docs/dev/notes/0109-2026-08-11-dependability-handoff-review.md`
+- `docs/dev/notes/0109-2026-08-11-runtime-dependability-execution-receipt.md`
+- `docs/dev/plans/0109-2026-08-11-runtime-dependability-handoff-remediation-plan.md`
+
 ## P97 | CLI Command Timeout Layering Repair
 
 State: CLOSED
