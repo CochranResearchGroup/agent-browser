@@ -42,6 +42,7 @@ pnpm test:wsl-windows-chromium-profile-live # Validate WSL Windows Chromium prof
 agent-browser stream enable [--port <port>]  # Start runtime WebSocket streaming
 agent-browser stream status           # Show runtime streaming state and bound port
 agent-browser stream disable          # Stop runtime WebSocket streaming
+agent-browser desktop capture --browser-id <id> # Capture one service-bound desktop PNG receipt
 agent-browser service status          # Show service control-plane and configured service state
 agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health and route definitions
@@ -398,6 +399,38 @@ agent-browser stream disable          # Stop runtime streaming and remove the .s
 ```
 
 Streaming is enabled automatically for all sessions. Use these commands to check status, re-enable on a specific port, or disable streaming.
+
+## Capture a service-owned desktop
+
+Use `desktop capture` to observe the full operating-system desktop that
+contains one retained service-owned browser:
+
+```bash
+agent-browser desktop capture --browser-id browser-123 --json
+agent-browser desktop capture --browser-id browser-123 --max-bytes 8388608 --json
+```
+
+> **Experimental:** P110 PoC 1 is source-only. It has no live RDP or Guacamole
+> acceptance and does not prove that an installed runtime contains the feature.
+
+The service resolves the browser to one exact ready stream, route, and display
+allocation. The command does not accept a display name, provider URL,
+Guacamole URL, output path, crop, or input option. The default response cap is
+4 MiB, and the hard maximum is 16 MiB.
+
+Text output prints `context` and `frameReceipt` metadata without printing the
+PNG bytes. Add `--json` to receive the bounded `imageBase64` value in the
+immediate response. Treat that value as sensitive workspace data. The receipt
+reports `retention: "ephemeral"` and
+`persisted: false`; agent-browser does not write the frame to service state,
+jobs, events, incidents, logs, or disk.
+
+`agent-browser screenshot` captures page pixels through the Chrome DevTools
+Protocol (CDP). `agent-browser desktop capture` observes the full bound
+desktop, including browser-external prompts that CDP cannot see. PoC 1 adds no
+image recognition, locator, pointer, keyboard, or challenge-handling behavior.
+
+For the HTTP, MCP, and generated client forms, see [Service Mode](/service-mode#capture-a-service-owned-desktop-frame).
 
 ## Service status
 

@@ -5,6 +5,9 @@ use std::io::{self, BufRead};
 
 use crate::color;
 use crate::flags::{launch_config_status, Flags};
+use crate::native::service_contracts::{
+    DESKTOP_CAPTURE_DEFAULT_MAX_BYTES, DESKTOP_CAPTURE_HARD_MAX_BYTES,
+};
 use crate::validation::{is_valid_session_name, session_name_error};
 
 /// Error type for command parsing with contextual information
@@ -82,6 +85,7 @@ const SERVICE_BROWSER_CAPABILITY_GUIDE_USAGE: &str = "service browser-capability
 const SERVICE_BROWSER_CAPABILITY_PREFER_USAGE: &str = "service browser-capability prefer --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> --preferred-executable-id <id> [--id <binding-id>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--service-name <name>] [--task-name <name>] [--preferred-host-id <id>] [--preferred-capability-id <id>] [--priority <n>] [--reason <text>]";
 
 const SERVICE_ACCESS_PLAN_USAGE: &str = "service access-plan [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--site-policy-id <id>] [--challenge-id <id>] [--readiness-profile-id <id>] [--runtime-profile <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--browser-host <local_headless|local_headed|docker_headed|remote_headed|cloud_provider|attached_existing>] [--view-stream-provider <cdp_screencast|chrome_tab_webrtc|virtual_display_webrtc|novnc|rdp_gateway|external_url>] [--control-input-provider <cdp_input|webrtc_input|vnc_input|manual_attached_desktop>] [--display-isolation <private_virtual_display|shared_display|ambient_display>]";
+const DESKTOP_CAPTURE_USAGE: &str = "desktop capture --browser-id <id> [--max-bytes <bytes>]";
 
 fn parse_service_profile_lookup(
     id: String,
@@ -995,6 +999,81 @@ fn required_next(
             message: format!("Missing value for {}", flag),
             usage,
         })
+}
+
+/// Parse a display-bound desktop frame request without accepting provider or
+/// display routing details from the caller. The service resolves those values
+/// from the retained browser, stream, route, and display-allocation identity.
+fn parse_desktop_capture(id: String, rest: &[&str]) -> Result<Value, ParseError> {
+    let Some("capture") = rest.first().copied() else {
+        return match rest.first().copied() {
+            Some(subcommand) => Err(ParseError::UnknownSubcommand {
+                subcommand: subcommand.to_string(),
+                valid_options: &["capture"],
+            }),
+            None => Err(ParseError::MissingArguments {
+                context: "desktop".to_string(),
+                usage: "desktop <capture>",
+            }),
+        };
+    };
+
+    let mut browser_id = None;
+    let mut max_bytes = DESKTOP_CAPTURE_DEFAULT_MAX_BYTES;
+    let mut i = 1;
+    while i < rest.len() {
+        match rest[i] {
+            "--browser-id" => {
+                let value = required_next(rest, i, "--browser-id", DESKTOP_CAPTURE_USAGE)?;
+                if value.starts_with("--") {
+                    return Err(ParseError::InvalidValue {
+                        message: "Missing value for --browser-id".to_string(),
+                        usage: DESKTOP_CAPTURE_USAGE,
+                    });
+                }
+                browser_id = Some(value);
+                i += 1;
+            }
+            "--max-bytes" => {
+                let raw = required_next(rest, i, "--max-bytes", DESKTOP_CAPTURE_USAGE)?;
+                max_bytes = raw.parse::<u64>().map_err(|_| ParseError::InvalidValue {
+                    message: format!("Invalid --max-bytes value: {raw}"),
+                    usage: DESKTOP_CAPTURE_USAGE,
+                })?;
+                if max_bytes == 0 || max_bytes > DESKTOP_CAPTURE_HARD_MAX_BYTES {
+                    return Err(ParseError::InvalidValue {
+                        message: format!(
+                            "--max-bytes must be between 1 and {DESKTOP_CAPTURE_HARD_MAX_BYTES}"
+                        ),
+                        usage: DESKTOP_CAPTURE_USAGE,
+                    });
+                }
+                i += 1;
+            }
+            flag => {
+                return Err(ParseError::InvalidValue {
+                    message: format!("Unknown flag for desktop capture: {flag}"),
+                    usage: DESKTOP_CAPTURE_USAGE,
+                });
+            }
+        }
+        i += 1;
+    }
+
+    let Some(browser_id) = browser_id else {
+        return Err(ParseError::MissingArguments {
+            context: "desktop capture".to_string(),
+            usage: DESKTOP_CAPTURE_USAGE,
+        });
+    };
+
+    Ok(json!({
+        "id": id,
+        "action": "desktop_capture",
+        "browserId": browser_id,
+        "format": "png",
+        "maxBytes": max_bytes,
+    }))
 }
 
 /// Parse one route-bound open, including an optional command-level timeout
@@ -2302,6 +2381,9 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 usage: "remote-view <open>",
             }),
         },
+
+        // === Service-owned desktop observation ===
+        "desktop" => parse_desktop_capture(id, &rest),
 
         // === Service status ===
         "service" => match rest.first().copied() {
@@ -7018,6 +7100,78 @@ mod tests {
     fn test_stream_status() {
         let cmd = parse_command(&args("stream status"), &default_flags()).unwrap();
         assert_eq!(cmd["action"], "stream_status");
+    }
+
+    // === Service-owned desktop observation tests ===
+
+    #[test]
+    fn test_desktop_capture_builds_canonical_service_action() {
+        let cmd = parse_command(
+            &args("desktop capture --browser-id browser-123"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "desktop_capture");
+        assert_eq!(cmd["browserId"], "browser-123");
+        assert_eq!(cmd["format"], "png");
+        assert_eq!(cmd["maxBytes"], 4 * 1024 * 1024);
+        assert!(cmd.get("displayName").is_none());
+        assert!(cmd.get("providerUrl").is_none());
+        assert!(cmd.get("path").is_none());
+    }
+
+    #[test]
+    fn test_desktop_capture_accepts_bounded_max_bytes() {
+        let cmd = parse_command(
+            &args("desktop capture --browser-id browser-123 --max-bytes 8388608"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["maxBytes"], 8 * 1024 * 1024);
+    }
+
+    #[test]
+    fn test_desktop_capture_requires_browser_id() {
+        let err = parse_command(&args("desktop capture"), &default_flags()).unwrap_err();
+
+        assert!(matches!(err, ParseError::MissingArguments { .. }));
+        assert!(err.format().contains("--browser-id"));
+    }
+
+    #[test]
+    fn test_desktop_capture_rejects_missing_browser_id_value() {
+        let err = parse_command(
+            &args("desktop capture --browser-id --max-bytes 1024"),
+            &default_flags(),
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, ParseError::InvalidValue { .. }));
+        assert!(err.format().contains("Missing value for --browser-id"));
+    }
+
+    #[test]
+    fn test_desktop_capture_rejects_zero_or_oversized_payload_caps() {
+        for raw in ["0", "16777217"] {
+            let command = format!("desktop capture --browser-id browser-123 --max-bytes {raw}");
+            let err = parse_command(&args(&command), &default_flags()).unwrap_err();
+
+            assert!(matches!(err, ParseError::InvalidValue { .. }));
+            assert!(err.format().contains("between 1 and 16777216"));
+        }
+    }
+
+    #[test]
+    fn test_desktop_capture_rejects_provider_and_display_routing_flags() {
+        for flag in ["--display-name", "--provider-url", "--output"] {
+            let command = format!("desktop capture --browser-id browser-123 {flag} value");
+            let err = parse_command(&args(&command), &default_flags()).unwrap_err();
+
+            assert!(matches!(err, ParseError::InvalidValue { .. }));
+            assert!(err.format().contains("Unknown flag for desktop capture"));
+        }
     }
 
     #[test]

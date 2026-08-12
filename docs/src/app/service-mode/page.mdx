@@ -16,13 +16,177 @@ The normal request model is identity-first. A caller asks for a tab or browser a
 - API and MCP parity for service records and typed browser-control actions.
 
 Current automation control is CDP-first, but some services are sensitive to the
-existence of a remote debugging port. Canva-class workflows need a future
-CDP-free operating mode where agent-browser still owns the headed browser
-process, profile lease, task labels, process health, lifecycle, and operator
-handoff while exposing only the non-CDP controls that are safe and available.
-The initial CDP-free contract should be explicit about unsupported commands;
-later slices can add OS-level screenshots, remote viewing, real mouse input,
-real keyboard input, OCR, and vision-backed control.
+existence of a remote debugging port. The CDP-free operating mode keeps
+agent-browser ownership of the headed browser process, profile lease, task
+labels, process health, lifecycle, and operator handoff. P110 PoC 1 adds one
+service-bound desktop observation without adding CDP or an input effect. Later
+slices can add guarded real mouse input, real keyboard input, optical character
+recognition (OCR), and vision-backed control.
+
+## Capture a service-owned desktop frame
+
+Capture one fresh PNG from the full operating-system desktop that contains an
+existing service-owned browser. This observation path can see
+browser-external prompts that the Chrome DevTools Protocol (CDP) page
+`screenshot` command cannot see.
+
+> **Experimental:** P110 PoC 1 is source-only. It has no live RDP or Guacamole
+> acceptance and does not prove that an installed runtime contains the feature.
+
+The service resolves `browserId` to one exact nonterminal browser, ready view
+stream, ready route, and display allocation. The request cannot supply a
+display name, route URL, Guacamole URL, provider URL, Xauthority path, output
+path, crop, or input option. This keeps display authority in retained service
+state instead of caller-controlled routing data.
+
+Use the CLI for a direct queued capture:
+
+```bash
+agent-browser desktop capture --browser-id browser-123 --json
+agent-browser desktop capture --browser-id browser-123 --max-bytes 8388608 --json
+```
+
+Use the canonical service request from HTTP:
+
+```bash
+curl -X POST "http://127.0.0.1:9223/api/service/request" \
+  -H "content-type: application/json" \
+  -d '{"action":"desktop_capture","browserId":"browser-123","format":"png","maxBytes":4194304}'
+```
+
+MCP clients can send the same fields through `service_request` or call the
+dedicated `desktop_capture` tool. Software clients can call
+`requestServiceDesktopCapture()` for the queued response or
+`captureServiceDesktopFrame()` for the convenience form. Use
+`createServiceDesktopCaptureRequest()` when you need to build the canonical
+request without sending it:
+
+```javascript
+import { captureServiceDesktopFrame } from "@agent-browser/client/service-request";
+
+const desktopFrame = await captureServiceDesktopFrame({
+  baseUrl: "http://127.0.0.1:9223",
+  browserId: "browser-123",
+  maxBytes: 4 * 1024 * 1024,
+});
+// => { success: true, data: { context, frameReceipt, imageBase64 } }
+```
+
+The request and response fields use the same contract through every ingress:
+
+<table>
+  <thead>
+    <tr>
+      <th>Field</th>
+      <th>Requirement</th>
+      <th>Meaning</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>browserId</code></td>
+      <td>Required</td>
+      <td>Retained service-owned browser identity.</td>
+    </tr>
+    <tr>
+      <td><code>format</code></td>
+      <td>Optional</td>
+      <td>Fixed to <code>png</code> in PoC 1.</td>
+    </tr>
+    <tr>
+      <td><code>maxBytes</code></td>
+      <td>Optional</td>
+      <td>Positive response cap. The default is 4 MiB, and the hard maximum is 16 MiB.</td>
+    </tr>
+    <tr>
+      <td><code>context</code></td>
+      <td>Response</td>
+      <td>Resolved browser, stream, route, display-allocation, provider, coordinate-space, geometry, and readiness identity.</td>
+    </tr>
+    <tr>
+      <td><code>frameReceipt</code></td>
+      <td>Response</td>
+      <td>Frame identity, capture time, geometry, byte length, SHA-256 hash, freshness, and retention metadata.</td>
+    </tr>
+    <tr>
+      <td><code>imageBase64</code></td>
+      <td>Response</td>
+      <td>Bounded PNG bytes for this immediate response only.</td>
+    </tr>
+  </tbody>
+</table>
+
+`frameReceipt.retention` is `ephemeral`, and `frameReceipt.persisted` is
+`false`. Treat `imageBase64` as sensitive workspace data. The service does not
+write it to service state, jobs, events, incidents, logs, or disk. Text-mode
+CLI output prints receipt metadata and omits the image value.
+
+PoC 1 performs observation only. It adds no image recognition, locator,
+pointer, keyboard, recipe, or challenge-handling behavior. A later PoC must
+define those effects and their own authorization before they enter this
+surface.
+
+Contract discovery reports global support for `desktop_capture`. It does not
+prove that a specific retained browser has a ready route or capture provider.
+Only a successful response for the requested `browserId` proves current
+workspace readiness.
+
+### Resolve desktop capture failures
+
+Desktop capture returns stable failure codes without frame bytes, provider
+URLs, display names, or credential-bearing provider output. Use the matching
+action below before retrying.
+
+<table>
+  <thead>
+    <tr>
+      <th>Code</th>
+      <th>Meaning and action</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>desktop_workspace_not_found</code></td>
+      <td>No retained browser matched. Refresh service browser state and use an active service-owned browser ID.</td>
+    </tr>
+    <tr>
+      <td><code>desktop_workspace_ambiguous</code></td>
+      <td>More than one retained workspace matched. Repair duplicate identity state before capturing.</td>
+    </tr>
+    <tr>
+      <td><code>desktop_display_not_ready</code></td>
+      <td>The bound display lacks current ready evidence. Restore the existing display without changing the request route.</td>
+    </tr>
+    <tr>
+      <td><code>desktop_route_not_ready</code></td>
+      <td>The bound stream or route is not attached-ready. Reconcile remote-view state and wait for current readiness.</td>
+    </tr>
+    <tr>
+      <td><code>desktop_identity_mismatch</code></td>
+      <td>Browser, stream, route, session, or allocation identity disagrees. Reconcile retained state before capturing.</td>
+    </tr>
+    <tr>
+      <td><code>desktop_geometry_unavailable</code></td>
+      <td>The provider could not read physical-pixel geometry. Inspect provider readiness for the bound workspace.</td>
+    </tr>
+    <tr>
+      <td><code>desktop_geometry_changed</code></td>
+      <td>The route or geometry changed during capture. Discard the frame and retry only after the workspace stabilizes.</td>
+    </tr>
+    <tr>
+      <td><code>desktop_capture_provider_unavailable</code></td>
+      <td>The configured capture provider is unavailable. Install or repair the provider before retrying.</td>
+    </tr>
+    <tr>
+      <td><code>desktop_frame_too_large</code></td>
+      <td>The PNG exceeds <code>maxBytes</code>. Raise the cap within the 16 MiB maximum or reduce desktop geometry through separately authorized workspace configuration.</td>
+    </tr>
+    <tr>
+      <td><code>desktop_capture_failed</code></td>
+      <td>The bounded provider command failed. Inspect redacted provider diagnostics and current workspace readiness.</td>
+    </tr>
+  </tbody>
+</table>
 
 ## Service clients
 
@@ -713,7 +877,7 @@ shared display, or ambient daemon display.
   </tbody>
 </table>
 
-Service tools include `service_request`, `service_job_cancel`, `service_browser_retry`, `service_incidents`, `service_remedies_apply`, `service_trace`, `service_profile_upsert`, `service_profile_freshness_update`, `service_profile_delete`, `service_session_upsert`, `service_session_delete`, `service_site_policy_upsert`, `service_site_policy_delete`, `service_monitor_upsert`, `service_monitor_delete`, `service_monitors_run_due`, `service_monitor_pause`, `service_monitor_resume`, `service_monitor_reset_failures`, `service_monitor_triage`, `service_provider_upsert`, `service_provider_delete`, `service_browser_capability_registry_upsert`, and `service_browser_capability_preflight`. Use `service_browser_capability_preflight` to evaluate a requested browser build without launching Chrome. Use `service_request` to queue one intent-based browser action with caller context and site/login hints. Pass `summary: true` to `service_incidents` for the same escalation, severity, and state remedy groups as HTTP `summary=true`; add `remediesOnly: true` for the compact active `browser_degraded`, `monitor_attention`, and `os_degraded_possible` operator ladder. Use `service_remedies_apply` with `escalation: "monitor_attention"` to apply active monitor remedies, `escalation: "browser_degraded"` after operator review to batch degraded-browser retry enablement, or `escalation: "os_degraded_possible"` after host inspection to batch faulted-browser retry remedies through the service worker.
+Service tools include `service_request`, `desktop_capture`, `service_job_cancel`, `service_browser_retry`, `service_incidents`, `service_remedies_apply`, `service_trace`, `service_profile_upsert`, `service_profile_freshness_update`, `service_profile_delete`, `service_session_upsert`, `service_session_delete`, `service_site_policy_upsert`, `service_site_policy_delete`, `service_monitor_upsert`, `service_monitor_delete`, `service_monitors_run_due`, `service_monitor_pause`, `service_monitor_resume`, `service_monitor_reset_failures`, `service_monitor_triage`, `service_provider_upsert`, `service_provider_delete`, `service_browser_capability_registry_upsert`, and `service_browser_capability_preflight`. Use `service_browser_capability_preflight` to evaluate a requested browser build without launching Chrome. Use `service_request` to queue one intent-based browser action with caller context and site/login hints. Use `desktop_capture` for the dedicated route-bound desktop observation form. Pass `summary: true` to `service_incidents` for the same escalation, severity, and state remedy groups as HTTP `summary=true`; add `remediesOnly: true` for the compact active `browser_degraded`, `monitor_attention`, and `os_degraded_possible` operator ladder. Use `service_remedies_apply` with `escalation: "monitor_attention"` to apply active monitor remedies, `escalation: "browser_degraded"` after operator review to batch degraded-browser retry enablement, or `escalation: "os_degraded_possible"` after host inspection to batch faulted-browser retry remedies through the service worker.
 
 Typed browser tools cover navigation, tabs, snapshots, screenshots, clicks, fills, waits, keyboard actions, element reads, cookies, storage, headers, offline mode, viewport, geolocation, permissions, timezone, locale, media, dialogs, uploads, downloads, HAR capture, request routing, console, errors, PDFs, response bodies, and clipboard operations. Use `browser_command` only for browser actions that do not yet have a typed tool.
 

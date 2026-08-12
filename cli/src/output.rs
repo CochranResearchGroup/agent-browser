@@ -130,6 +130,46 @@ fn format_stream_status_text(action: Option<&str>, data: &serde_json::Value) -> 
     }
 }
 
+fn format_desktop_capture_text(data: &serde_json::Value) -> Option<String> {
+    let context = data.get("context")?.as_object()?;
+    let receipt = data.get("frameReceipt")?.as_object()?;
+    let browser_id = context.get("browserId")?.as_str()?;
+    let context_id = context.get("contextId")?.as_str()?;
+    let frame_id = receipt.get("frameId")?.as_str()?;
+    let width = receipt.get("width")?.as_u64()?;
+    let height = receipt.get("height")?.as_u64()?;
+    let byte_length = receipt.get("byteLength")?.as_u64()?;
+    let sha256 = receipt.get("sha256").and_then(|value| value.as_str());
+    let freshness = receipt
+        .get("freshness")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    let retention = receipt
+        .get("retention")
+        .and_then(|value| value.as_str())
+        .unwrap_or("ephemeral");
+    let persisted = receipt
+        .get("persisted")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+
+    let mut lines = vec![
+        "Desktop frame captured".to_string(),
+        format!("Browser: {browser_id}"),
+        format!("Context: {context_id}"),
+        format!("Frame: {frame_id}"),
+        format!("Dimensions: {width}x{height} desktop physical pixels"),
+        format!("Bytes: {byte_length}"),
+    ];
+    if let Some(sha256) = sha256 {
+        lines.push(format!("SHA-256: {sha256}"));
+    }
+    lines.push(format!("Freshness: {freshness}"));
+    lines.push(format!("Retention: {retention} (persisted: {persisted})"));
+    lines.push("Use --json to receive the response-only imageBase64 payload.".to_string());
+    Some(lines.join("\n"))
+}
+
 fn format_service_events_text(data: &serde_json::Value) -> Option<String> {
     let events = data.get("events").and_then(|value| value.as_array())?;
     if events.is_empty() {
@@ -2641,6 +2681,12 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
         if let Some(output) = format_stream_status_text(action, data) {
             println!("{}", output);
             return;
+        }
+        if action == Some("desktop_capture") {
+            if let Some(output) = format_desktop_capture_text(data) {
+                println!("{}", output);
+                return;
+            }
         }
         if action == Some("service_events") {
             if let Some(output) = format_service_events_text(data) {
@@ -5230,6 +5276,40 @@ Examples:
 "##
         }
 
+        // === Desktop observation ===
+        "desktop" => {
+            r##"
+agent-browser desktop - Observe one service-owned desktop workspace
+
+Usage: agent-browser desktop capture --browser-id <id> [--max-bytes <bytes>]
+
+`desktop capture` asks the service worker to resolve one retained browser to
+its exact ready stream, route, and display allocation. It captures one PNG of
+the full desktop in physical pixels. This differs from `screenshot`, which
+captures page content through the Chrome DevTools Protocol (CDP).
+
+The caller cannot supply a display name, provider URL, output path, crop, or
+input option. The default response limit is 4194304 bytes, and the hard maximum
+is 16777216 bytes. Text output prints receipt metadata only. Add `--json` to
+receive the bounded `imageBase64` value in the immediate response.
+
+PoC 1 is source-only and has no live RDP or Guacamole acceptance. It performs
+observation only. It does not locate controls, recognize images, move the
+pointer, type, or solve challenges.
+
+Options:
+  --browser-id <id>       Select one retained service-owned browser
+  --max-bytes <bytes>     Bound the PNG response (default: 4194304; max: 16777216)
+
+Global Options:
+  --json                  Include imageBase64 in the structured response
+
+Examples:
+  agent-browser desktop capture --browser-id browser-123
+  agent-browser desktop capture --browser-id browser-123 --max-bytes 8388608 --json
+"##
+        }
+
         // === Remote View ===
         "remote-view" => {
             r##"
@@ -6229,6 +6309,10 @@ Streaming:
   stream disable             Stop runtime WebSocket streaming
   stream status              Show streaming status and active port
 
+Desktop observation:
+  desktop capture --browser-id <id>
+                             Capture one service-bound desktop PNG receipt
+
 Service:
   service status             Show service worker health, profile lease waits, and configured service state
   service watch              Poll service worker health and reconciliation state
@@ -6728,9 +6812,10 @@ pub fn print_version() {
 #[cfg(test)]
 mod tests {
     use super::{
-        format_service_access_plan_text, format_service_browser_capability_preflight_text,
-        format_service_browsers_text, format_service_challenges_text, format_service_events_text,
-        format_service_incidents_text, format_service_jobs_text, format_service_monitor_state_text,
+        format_desktop_capture_text, format_service_access_plan_text,
+        format_service_browser_capability_preflight_text, format_service_browsers_text,
+        format_service_challenges_text, format_service_events_text, format_service_incidents_text,
+        format_service_jobs_text, format_service_monitor_state_text,
         format_service_monitors_run_due_text, format_service_monitors_text,
         format_service_profile_seeding_handoff_text, format_service_profiles_text,
         format_service_providers_text, format_service_prune_retained_text,
@@ -6739,6 +6824,43 @@ mod tests {
         format_service_trace_text, format_storage_text,
     };
     use serde_json::json;
+
+    #[test]
+    fn desktop_command_help_is_registered() {
+        assert!(super::print_command_help("desktop"));
+    }
+
+    #[test]
+    fn desktop_capture_text_prints_receipt_without_image_payload() {
+        let data = json!({
+            "ok": true,
+            "action": "desktop_capture",
+            "context": {
+                "contextId": "desktop-context-1",
+                "browserId": "browser-123"
+            },
+            "frameReceipt": {
+                "frameId": "desktop-frame-1",
+                "width": 1920,
+                "height": 1080,
+                "byteLength": 256,
+                "sha256": "abc123",
+                "freshness": "fresh",
+                "retention": "ephemeral",
+                "persisted": false
+            },
+            "imageBase64": "sensitive-frame-bytes"
+        });
+
+        let rendered = format_desktop_capture_text(&data).unwrap();
+
+        assert!(rendered.contains("Desktop frame captured"));
+        assert!(rendered.contains("Browser: browser-123"));
+        assert!(rendered.contains("Dimensions: 1920x1080"));
+        assert!(rendered.contains("SHA-256: abc123"));
+        assert!(rendered.contains("Retention: ephemeral (persisted: false)"));
+        assert!(!rendered.contains("sensitive-frame-bytes"));
+    }
 
     #[test]
     fn test_format_stream_status_text_for_enabled_stream() {

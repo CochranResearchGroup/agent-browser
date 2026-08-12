@@ -330,6 +330,49 @@ The validation must prove one of these outcomes with screenshots or DOM evidence
 
 For Guacamole-backed RDP, also check the dashboard iframe and the direct popout route. If one route takes over and the other reports "You have been disconnected", treat that as a single-active-viewer behavior and surface it to the operator instead of reporting the route as generally healthy. Readiness copy should distinguish browser health, dashboard auth, provider or ingress failure, iframe embedding limits, viewer ownership, and stale focus or takeover job evidence before treating a blank iframe or popout as a generic provider failure.
 
+## Service-Owned Desktop Capture
+
+Use desktop capture when you need pixels from the full operating-system
+desktop that contains a retained service-owned browser. This can include
+browser-external prompts that the Chrome DevTools Protocol (CDP) cannot see.
+
+> **Experimental:** P110 PoC 1 is source-only. It has no live RDP or Guacamole
+> acceptance. Do not treat source presence as installed-runtime or live proof.
+
+```bash
+agent-browser desktop capture --browser-id browser-123 --json
+agent-browser desktop capture --browser-id browser-123 --max-bytes 8388608 --json
+```
+
+The command resolves `browser-123` through the service-owned browser, stream,
+route, and display-allocation records. Never pass or derive a display name,
+raw Guacamole URL, provider URL, output path, crop, or input option. The CLI
+does not accept those fields. The default response cap is 4 MiB, and the hard
+maximum is 16 MiB.
+
+The JSON response contains `context`, `frameReceipt`, and `imageBase64`.
+Treat `imageBase64` as sensitive, response-only data. The frame receipt must
+report `retention: "ephemeral"` and `persisted: false`. Do not copy the image
+into service state, jobs, events, incidents, logs, or durable artifacts unless
+a later contract and operator authority explicitly allow persistence.
+
+Use `agent-browser screenshot` for CDP page pixels. Use `agent-browser desktop
+capture` for the bound desktop. PoC 1 performs observation only. It does not
+authorize image recognition, control location, pointer movement, keyboard
+input, challenge handling, or any other desktop effect.
+
+HTTP clients send `action: "desktop_capture"` through
+`POST /api/service/request`. MCP clients use `service_request` or the dedicated
+`desktop_capture` tool. Software clients can call
+`requestServiceDesktopCapture()` or `captureServiceDesktopFrame()` from
+`@agent-browser/client/service-request`. All paths enter the canonical queued
+service action.
+
+Treat contract discovery and workspace readiness as separate evidence. A
+contract response can advertise global `desktop_capture` support. Only a
+successful capture for the requested `browserId` proves that its current
+route, display, and provider are ready.
+
 ## Core Workflow
 
 After the preferred service-owned remote-headed posture produces a browser session, browser automation follows this pattern:
@@ -775,6 +818,7 @@ agent-browser screenshot --full       # Full page screenshot
 agent-browser screenshot --annotate   # Annotated screenshot with numbered element labels
 agent-browser screenshot --screenshot-dir ./shots  # Save to custom directory
 agent-browser screenshot --screenshot-format jpeg --screenshot-quality 80
+agent-browser desktop capture --browser-id browser-123 --json # Capture the bound service-owned desktop
 agent-browser pdf output.pdf          # Save as PDF
 
 # Live preview / streaming

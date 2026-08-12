@@ -266,6 +266,7 @@ agent-browser handoff resume          # Reattach a replacement daemon to the bro
 agent-browser stream enable [--port <port>]  # Start runtime WebSocket streaming
 agent-browser stream status           # Show runtime streaming state and bound port
 agent-browser stream disable          # Stop runtime WebSocket streaming
+agent-browser desktop capture --browser-id <id> # Capture one service-bound desktop PNG receipt
 agent-browser service status          # Show service control-plane and configured service state
 agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health and route definitions
@@ -337,6 +338,55 @@ fails before replacing the executable. A normal `close` after resume retains
 the original browser shutdown behavior.
 
 Service mode is the persistent control plane for long-lived automation. It keeps profile, session, browser, tab, monitor, job, incident, event, site-policy, provider, and challenge state aligned across CLI commands, the HTTP API, MCP resources/tools, and the dashboard. Agents should include `serviceName`, `agentName`, and `taskName` when available so multi-service work remains traceable. The normal service request is identity-first: ask for a tab or browser action, target site or login identity, and the owning service, agent, and task. agent-browser selects or reuses the managed profile and browser, serializes CDP work through the queue, and records the state needed for debugging. Service profile records and profile allocation rows include `targetReadiness`, a no-launch readiness view for target services. Google targets without authenticated evidence report `needs_manual_seeding` and recommend detached `runtime login` before attachable automation. Once a managed profile lists the target in `authenticatedServiceIds`, readiness changes to `seeded_unknown_freshness` and access-plan no longer treats first-login seeding as a required manual action. Access-plan responses also include `monitorFindings` and `decision.monitorAttentionRequired` when an active `profile_readiness` monitor is faulted for the requested target identity. When a matching active `profile_readiness` monitor is due or never checked, access-plan sets `monitorFindings.profileReadinessProbeDue`, fills `decision.monitorRunDue`, and recommends `run_due_profile_readiness_monitor` before the caller trusts the profile. Use an explicit managed runtime profile when you know where the needed login state lives; use `--profile <path>` only when bringing an external profile is part of the contract.
+
+### Service-Owned Desktop Capture
+
+Capture one fresh PNG from the operating-system desktop that contains an
+existing service-owned browser:
+
+```bash
+agent-browser desktop capture --browser-id browser-123 --json
+agent-browser desktop capture --browser-id browser-123 --max-bytes 8388608 --json
+```
+
+Desktop capture accepts two command-specific options:
+
+| Option | Meaning |
+| --- | --- |
+| `--browser-id <id>` | Required retained service-owned browser identity |
+| `--max-bytes <bytes>` | Optional positive PNG byte cap; default 4 MiB, maximum 16 MiB |
+
+> **Experimental:** P110 PoC 1 is source-only. It has no live RDP or Guacamole
+> acceptance and does not prove that an installed runtime contains the feature.
+
+The service resolves the browser to one exact ready view stream, route, and
+display allocation. Callers cannot provide a display name, Guacamole URL,
+provider URL, output path, crop, or input option. The default byte cap is
+4 MiB, and the hard maximum is 16 MiB.
+
+The JSON response contains `context`, `frameReceipt`, and `imageBase64`.
+`frameReceipt.retention` is `ephemeral`, and `frameReceipt.persisted` is
+`false`. Treat `imageBase64` as sensitive workspace data. The base64 PNG
+exists only in the immediate response. It is not
+written to service state, jobs, events, incidents, logs, or disk. Text output
+shows receipt metadata and omits the image bytes.
+
+This command is distinct from `agent-browser screenshot`. `screenshot`
+captures page content through the Chrome DevTools Protocol (CDP). `desktop
+capture` observes the full bound desktop, including browser-external prompts
+that CDP cannot see. PoC 1 performs observation only. It does not locate
+controls, recognize images, move the pointer, type, or solve challenges.
+
+HTTP clients send `action: "desktop_capture"` to `POST /api/service/request`.
+MCP clients can use `service_request` or the dedicated `desktop_capture` tool.
+Software clients can call `requestServiceDesktopCapture()` from
+`@agent-browser/client/service-request`. Every ingress enters the same queued
+service action and returns the same response fields.
+
+Contract discovery can prove that the runtime supports `desktop_capture`. It
+does not prove that one retained browser has a ready route and capture
+provider. Only a successful response for that `browserId` proves current
+workspace readiness.
 
 ### Get Info
 
