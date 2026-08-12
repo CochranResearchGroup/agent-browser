@@ -1250,7 +1250,10 @@ fn service_job_control_plane_mode(request: &ControlRequest) -> JobControlPlaneMo
         JobControlPlaneMode::CdpFree
     } else if request.priority == ControlPriority::Lifecycle
         || request.action == "view_takeover"
-        || request.action == "desktop_capture"
+        || matches!(
+            request.action.as_str(),
+            "desktop_capture" | "desktop_locate"
+        )
         || request.action.starts_with("service_")
     {
         JobControlPlaneMode::Service
@@ -2117,6 +2120,15 @@ mod tests {
         );
         assert!(service_job_lifecycle_only(&desktop_capture));
 
+        let desktop_locate = control_request_for_mode_test(json!({
+            "action": "desktop_locate"
+        }));
+        assert_eq!(
+            service_job_control_plane_mode(&desktop_locate),
+            JobControlPlaneMode::Service
+        );
+        assert!(service_job_lifecycle_only(&desktop_locate));
+
         let cdp = control_request_for_mode_test(json!({
             "action": "navigate"
         }));
@@ -2228,6 +2240,31 @@ mod tests {
         assert_eq!(
             desktop_refs.remote_view_route_id.as_deref(),
             Some("route-captured")
+        );
+
+        let locate_request = control_request_for_mode_test(json!({
+            "action": "desktop_locate",
+            "browserId": "browser-1"
+        }));
+        let locate_refs = service_job_allocation_refs(
+            &locate_request,
+            Some(&json!({
+                "success": true,
+                "data": {
+                    "context": {
+                        "displayAllocationId": "display-located",
+                        "routeId": "route-located"
+                    }
+                }
+            })),
+        );
+        assert_eq!(
+            locate_refs.display_allocation_id.as_deref(),
+            Some("display-located")
+        );
+        assert_eq!(
+            locate_refs.remote_view_route_id.as_deref(),
+            Some("route-located")
         );
     }
 

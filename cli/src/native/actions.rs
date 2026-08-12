@@ -79,6 +79,7 @@ use super::browser_tabs::{handle_browser_pid, handle_tab_list, handle_tab_new, h
 use super::clipboard::handle_clipboard;
 use super::cookies::{handle_cookies_clear, handle_cookies_get, handle_cookies_set};
 use super::desktop_capture::{handle_desktop_capture, redact_desktop_capture_stream_result};
+use super::desktop_locator::{handle_desktop_locate, redact_desktop_locate_stream_result};
 use super::diff::{handle_diff_screenshot, handle_diff_snapshot, handle_diff_url};
 use super::element::{
     handle_boundingbox, handle_count, handle_innerhtml, handle_innertext, handle_inputvalue,
@@ -190,6 +191,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "cdp_detach"
             | "diagnostics"
             | "desktop_capture"
+            | "desktop_locate"
             | "probe"
             | "close"
             | "har_stop"
@@ -551,6 +553,7 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
         "cdp_detach" => handle_cdp_detach(cmd, state).await,
         "diagnostics" => handle_service_diagnostics(cmd, state).await,
         "desktop_capture" => handle_desktop_capture(cmd).await,
+        "desktop_locate" => handle_desktop_locate(cmd).await,
         "probe" => handle_service_probe(cmd, state).await,
         "ui_action" => handle_service_ui_action(cmd, state).await,
         "network_capture" => handle_service_network_capture(cmd, state).await,
@@ -867,10 +870,10 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
             .and_then(|v| v.as_str())
             .is_some_and(|s| s == "success");
         let response_data = resp.get("data").unwrap_or(&Value::Null);
-        let data = if action == "desktop_capture" {
-            redact_desktop_capture_stream_result(response_data)
-        } else {
-            response_data.clone()
+        let data = match action {
+            "desktop_capture" => redact_desktop_capture_stream_result(response_data),
+            "desktop_locate" => redact_desktop_locate_stream_result(response_data),
+            _ => response_data.clone(),
         };
         server.broadcast_result(&id, action, success, &data, duration_ms);
         if let Some(ref mgr) = state.browser {
