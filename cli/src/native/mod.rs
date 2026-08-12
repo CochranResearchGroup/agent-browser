@@ -48,6 +48,8 @@ pub mod dependent_batch;
 #[allow(dead_code)]
 pub mod desktop_capture;
 #[allow(dead_code)]
+pub mod desktop_locator;
+#[allow(dead_code)]
 pub mod diff;
 #[allow(dead_code)]
 pub mod element;

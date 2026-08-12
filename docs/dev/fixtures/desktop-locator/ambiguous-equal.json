@@ -1,0 +1,12 @@
+{
+  "fixtureId": "ambiguous-equal",
+  "width": 180,
+  "height": 100,
+  "theme": "light",
+  "scaleMillis": 1000,
+  "targets": [{ "x": 15, "y": 20 }, { "x": 105, "y": 60 }],
+  "decoys": [],
+  "expectedStatus": "ambiguous",
+  "expectedCandidateCount": 2,
+  "expectedVisualizationSha256": "44bcc2d5dc86577ae71d7f40a47d25b6ba2781aebf729673762dc9d91261b912"
+}

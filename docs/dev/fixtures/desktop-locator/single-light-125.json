@@ -1,0 +1,12 @@
+{
+  "fixtureId": "single-light-125",
+  "width": 160,
+  "height": 100,
+  "theme": "light",
+  "scaleMillis": 1250,
+  "targets": [{ "x": 58, "y": 40 }],
+  "decoys": [],
+  "expectedStatus": "matched",
+  "expectedCandidateCount": 1,
+  "expectedVisualizationSha256": "e7bbf2c559c49e6a9bcee08056c8c085bb30b87d79ad0294e861672e01339203"
+}

@@ -327,6 +327,22 @@ fn capture_desktop_frame(
     })
 }
 
+/// Capture one frame through the configured display-bound provider while
+/// preserving all pre-capture and post-capture identity checks.
+pub(crate) fn capture_configured_desktop_frame(
+    request: DesktopCaptureRequest,
+) -> Result<DesktopCaptureResult, DesktopCaptureError> {
+    capture_desktop_frame(
+        request,
+        CaptureDependencies::new(
+            &ConfiguredStateSource,
+            &X11RootFrameProvider,
+            &SystemClock,
+            &ProcessSequence,
+        ),
+    )
+}
+
 fn validate_request(request: &DesktopCaptureRequest) -> Result<(), DesktopCaptureError> {
     if request.browser_id.trim().is_empty() {
         return Err(DesktopCaptureError::new(
@@ -842,20 +858,10 @@ fn parse_xdpyinfo_geometry(output: &[u8]) -> Result<Geometry, DesktopCaptureErro
 
 pub(crate) async fn handle_desktop_capture(cmd: &Value) -> Result<Value, String> {
     let request = parse_request(cmd).map_err(|error| error.to_string())?;
-    let result = tokio::task::spawn_blocking(move || {
-        capture_desktop_frame(
-            request,
-            CaptureDependencies::new(
-                &ConfiguredStateSource,
-                &X11RootFrameProvider,
-                &SystemClock,
-                &ProcessSequence,
-            ),
-        )
-    })
-    .await
-    .map_err(|_| "desktop_capture_failed: desktop capture task failed".to_string())?
-    .map_err(|error| error.to_string())?;
+    let result = tokio::task::spawn_blocking(move || capture_configured_desktop_frame(request))
+        .await
+        .map_err(|_| "desktop_capture_failed: desktop capture task failed".to_string())?
+        .map_err(|error| error.to_string())?;
     Ok(json!({
         "ok": true,
         "action": "desktop_capture",

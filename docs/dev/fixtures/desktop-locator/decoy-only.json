@@ -1,0 +1,12 @@
+{
+  "fixtureId": "decoy-only",
+  "width": 128,
+  "height": 80,
+  "theme": "light",
+  "scaleMillis": 1000,
+  "targets": [],
+  "decoys": [{ "x": 52, "y": 32 }],
+  "expectedStatus": "not_found",
+  "expectedCandidateCount": 0,
+  "expectedVisualizationSha256": "32c73389ed1da41ecd759714519d9923273c3288d0314d3a84ec6d80cb3f8b29"
+}

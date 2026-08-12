@@ -1,0 +1,12 @@
+{
+  "fixtureId": "stale-binding",
+  "width": 128,
+  "height": 80,
+  "theme": "light",
+  "scaleMillis": 1000,
+  "targets": [{ "x": 30, "y": 25 }],
+  "decoys": [],
+  "expectedStatus": "frame_mismatch",
+  "expectedCandidateCount": 0,
+  "expectedVisualizationSha256": "not-rendered"
+}

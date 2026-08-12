@@ -1,0 +1,12 @@
+{
+  "fixtureId": "geometry-edge",
+  "width": 128,
+  "height": 96,
+  "theme": "dark",
+  "scaleMillis": 1250,
+  "targets": [{ "x": 0, "y": 40 }],
+  "decoys": [],
+  "expectedStatus": "matched",
+  "expectedCandidateCount": 1,
+  "expectedVisualizationSha256": "7e3a1392d3719cf4bfc2807515e6f0014c1253640c6108f262ac43adcbf9ced0"
+}

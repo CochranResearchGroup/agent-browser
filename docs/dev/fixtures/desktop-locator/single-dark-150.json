@@ -1,0 +1,12 @@
+{
+  "fixtureId": "single-dark-150",
+  "width": 180,
+  "height": 120,
+  "theme": "dark",
+  "scaleMillis": 1500,
+  "targets": [{ "x": 91, "y": 67 }],
+  "decoys": [],
+  "expectedStatus": "matched",
+  "expectedCandidateCount": 1,
+  "expectedVisualizationSha256": "04cc33a70fa4597dffcb2e678267b30f7ccbe8485a2e6d59c7e8ce19ee1478ab"
+}
