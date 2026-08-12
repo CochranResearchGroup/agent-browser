@@ -4,6 +4,10 @@
   "rendererVersion": "p110-fixture-renderer-v1",
   "proofClass": "repository_fixture",
   "blindnessClaim": "absent_from_fixture_page_inputs",
+  "hashProjection": {
+    "manifestSha256": "SHA-256 of canonical JSON after removing goldenHashes",
+    "corpusSha256": "SHA-256 of canonical corpus index JSON after removing corpusSha256"
+  },
   "fixtures": [
     "matched-light-100",
     "matched-dark-125",
@@ -18,5 +22,21 @@
     "unsupported-version",
     "stale-evidence",
     "stale-binding"
-  ]
+  ],
+  "manifestSha256": {
+    "matched-light-100": "91cd54eb34a86de828e48227d864bd81a7258399d61006886ef14685b64e4c05",
+    "matched-dark-125": "1745673a6f5fe1de2ca18908343e023ee0e19562d89a6c8945c05369f7f8f5b3",
+    "extension-panel-150": "4de83841472437d72970358d254eed9fcfe2a8743ac57176f9ee909a9c21dc08",
+    "native-modal-manual": "3f7c6041154ca52f5130f9c44704b33bd251c13aca10fd73138495cd08568f0b",
+    "external-page-lookalike": "0b13f9ebdc401aab32274638430b01e65cf94cf0c5c7be776dcbdc0e03be6c1b",
+    "page-decoy-only": "af65dcfc57b0aa09d71baa5a7107ef4a7858cb9ca3d9b8ea063204ccd2432524",
+    "ambiguous-external": "3acc15f14ff142cd5aa5292a258a35c8288829d760050cea0186973a9f3f8fe0",
+    "not-found": "ea714fcd6c463f2a7ab483b828d4af892a9301c5f8577e1eb4d9e996a86672b9",
+    "occlusion-within-budget": "60c09a7ae5f8974cc54071c4d8e47574edbd539b19cabee0bedd15f826148261",
+    "occlusion-beyond-budget": "ac8a86f78de24fefa2fce78aefb80f6069777c55a9cd0a88187435f2d69eb583",
+    "unsupported-version": "1f0480d89b6178113eb511f8772054368cb2a63c50e4aa9ba971dd9ef3f28ecb",
+    "stale-evidence": "975e4fe28996092f827576996f575ecef1b3557df6d426b83e105a9abae6e7c3",
+    "stale-binding": "551c26e9e82acc28459aacc5b0930b406fcf0f4fb232e1102cd758cf030b3749"
+  },
+  "corpusSha256": "3f39ea16ef64510b5c9377e141b0c8b9dd80cb9e10714ab5cfee69e1549910eb"
 }

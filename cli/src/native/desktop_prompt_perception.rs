@@ -55,6 +55,10 @@ const FIXTURE_SOURCES: &[&str] = &[
     include_str!("../../../docs/dev/fixtures/desktop-prompt-perception/stale-binding.json"),
 ];
 
+#[cfg(test)]
+const CORPUS_INDEX_SOURCE: &str =
+    include_str!("../../../docs/dev/fixtures/desktop-prompt-perception/corpus-index.json");
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct PixelBounds {
@@ -363,10 +367,28 @@ struct FixtureManifest {
     stale_by_ms: u64,
     #[serde(default)]
     binding_mismatch: bool,
+    #[serde(default)]
+    golden_hashes: Option<FixtureGoldenHashes>,
     expected_detection_status: String,
     expected_page_visibility: String,
     expected_classification: String,
     expected_handling_outcome: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FixtureGoldenHashes {
+    manifest_sha256: String,
+    profile_sha256: String,
+    renderer_sha256: String,
+    page_image_sha256: String,
+    dom_manifest_sha256: String,
+    desktop_frame_sha256: String,
+    viewport_layer_sha256: String,
+    detector_sha256: String,
+    observation_sha256: String,
+    visualization_sha256: String,
+    paired_receipt_sha256: String,
 }
 
 struct PromptProfile {
@@ -919,7 +941,6 @@ fn validate_evidence(
         || page.renderer_version != PAGE_RENDERER_VERSION
         || page.page_image_sha256 != digest_bytes(&page.page_image_bytes)
         || page.viewport_bounds != surface.viewport_bounds
-        || page.page_image_sha256 != surface.viewport_layer_sha256
         || page.dom_manifest_sha256 != dom_manifest_hash(&page.normalized_dom_token_ids)
         || !page
             .normalized_dom_token_ids
@@ -972,6 +993,17 @@ fn validate_evidence(
         surface.viewport_bounds.height,
         "desktop_prompt_page_evidence_invalid",
     )?;
+    let viewport_layer_bytes = derive_viewport_layer(&desktop, surface.viewport_bounds)?;
+    let viewport_layer_sha256 = digest_bytes(&viewport_layer_bytes);
+    if viewport_layer_bytes != page.page_image_bytes
+        || viewport_layer_sha256 != page.page_image_sha256
+        || viewport_layer_sha256 != surface.viewport_layer_sha256
+    {
+        return Err(DesktopPromptError::new(
+            "desktop_prompt_page_evidence_invalid",
+            "decoded desktop viewport does not equal the independent fixture page image",
+        ));
+    }
     let binding_sha256 = hash_parts(
         "p110.prompt.binding.v1",
         &[
@@ -983,9 +1015,48 @@ fn validate_evidence(
             &page.page_image_sha256,
             &page.dom_manifest_sha256,
             &surface.geometry_epoch,
+            &bounds_projection(surface.browser_bounds),
+            &bounds_projection(surface.viewport_bounds),
+            &viewport_layer_sha256,
         ],
     );
     Ok((desktop, page_image, age_ms, binding_sha256))
+}
+
+fn derive_viewport_layer(
+    desktop: &RgbaImage,
+    viewport: PixelBounds,
+) -> Result<Vec<u8>, DesktopPromptError> {
+    let desktop_bounds = PixelBounds {
+        x: 0,
+        y: 0,
+        width: desktop.width(),
+        height: desktop.height(),
+    };
+    if !desktop_bounds.contains(viewport) {
+        return Err(DesktopPromptError::new(
+            "desktop_prompt_page_evidence_invalid",
+            "declared viewport exceeds the decoded desktop frame",
+        ));
+    }
+    let mut layer = RgbaImage::new(viewport.width, viewport.height);
+    for y in 0..viewport.height {
+        for x in 0..viewport.width {
+            layer.put_pixel(x, y, *desktop.get_pixel(viewport.x + x, viewport.y + y));
+        }
+    }
+    encode_png_with_error(
+        &layer,
+        "desktop_prompt_page_evidence_invalid",
+        "derived desktop viewport encoding failed",
+    )
+}
+
+fn bounds_projection(bounds: PixelBounds) -> String {
+    format!(
+        "{}:{}:{}:{}",
+        bounds.x, bounds.y, bounds.width, bounds.height
+    )
 }
 
 fn decode_png(
@@ -1188,6 +1259,31 @@ fn hash_parts(domain: &str, parts: &[&str]) -> String {
     format!("{:x}", digest.finalize())
 }
 
+#[cfg(test)]
+fn renderer_sha256() -> String {
+    hash_parts(
+        "p110.prompt.renderer.v1",
+        &[
+            FIXTURE_PROVIDER_VERSION,
+            PAGE_RENDERER_VERSION,
+            NORMALIZATION_VERSION,
+            &TEMPLATE_THRESHOLD.to_string(),
+            "integer-rgba-primitives",
+            "png-best-adaptive",
+        ],
+    )
+}
+
+#[cfg(test)]
+fn manifest_projection_sha256(source: &str) -> String {
+    let mut value: Value = serde_json::from_str(source).expect("valid fixture manifest");
+    value
+        .as_object_mut()
+        .expect("fixture manifest object")
+        .remove("goldenHashes");
+    digest_bytes(&serde_json::to_vec(&value).expect("canonical manifest projection"))
+}
+
 fn digest_bytes(bytes: &[u8]) -> String {
     let mut digest = Sha256::new();
     digest.update(bytes);
@@ -1229,6 +1325,18 @@ fn draw_outline(
 }
 
 fn encode_png(image: &RgbaImage) -> Result<Vec<u8>, DesktopPromptError> {
+    encode_png_with_error(
+        image,
+        "desktop_prompt_visualization_failed",
+        "fixture PNG encoding failed",
+    )
+}
+
+fn encode_png_with_error(
+    image: &RgbaImage,
+    code: &'static str,
+    message: &'static str,
+) -> Result<Vec<u8>, DesktopPromptError> {
     use image::codecs::png::{CompressionType, FilterType, PngEncoder};
     use image::{ColorType, ImageEncoder};
 
@@ -1240,12 +1348,7 @@ fn encode_png(image: &RgbaImage) -> Result<Vec<u8>, DesktopPromptError> {
             image.height(),
             ColorType::Rgba8.into(),
         )
-        .map_err(|_| {
-            DesktopPromptError::new(
-                "desktop_prompt_visualization_failed",
-                "fixture PNG encoding failed",
-            )
-        })?;
+        .map_err(|_| DesktopPromptError::new(code, message))?;
     Ok(bytes)
 }
 
@@ -1685,12 +1788,175 @@ mod tests {
     }
 
     #[test]
+    fn corpus_manifest_and_evidence_hashes_match_literal_goldens() {
+        let corpus: Value = serde_json::from_str(CORPUS_INDEX_SOURCE).expect("valid corpus index");
+        let expected_manifest_hashes = corpus["manifestSha256"]
+            .as_object()
+            .expect("corpus manifest hash ledger");
+        let mut mismatches = Vec::new();
+        for source in FIXTURE_SOURCES {
+            let fixture: FixtureManifest = serde_json::from_str(source).expect("valid manifest");
+            let manifest_sha256 = manifest_projection_sha256(source);
+            let expected_manifest = expected_manifest_hashes
+                .get(&fixture.fixture_id)
+                .and_then(Value::as_str)
+                .unwrap_or("missing");
+            if manifest_sha256 != expected_manifest {
+                mismatches.push(format!(
+                    "{} manifestSha256={manifest_sha256}",
+                    fixture.fixture_id
+                ));
+            }
+            let Some(expected) = fixture.golden_hashes.as_ref() else {
+                continue;
+            };
+            if expected.manifest_sha256 != manifest_sha256 {
+                mismatches.push(format!(
+                    "{} golden.manifestSha256={manifest_sha256}",
+                    fixture.fixture_id
+                ));
+            }
+            let bundle = render_fixture(&fixture, 10_000).expect("golden fixture renders");
+            let desktop = decode_png(
+                &bundle.frame.image_bytes,
+                bundle.frame.context.width,
+                bundle.frame.context.height,
+                "desktop_prompt_invalid_image",
+            )
+            .unwrap();
+            let viewport_layer = derive_viewport_layer(&desktop, bundle.surface.viewport_bounds)
+                .expect("golden viewport derives");
+            let page_sha256 = bundle.page.page_image_sha256.clone();
+            let dom_sha256 = bundle.page.dom_manifest_sha256.clone();
+            let desktop_sha256 = bundle.frame.frame_receipt.content_sha256.clone();
+            let result =
+                observe_desktop_prompt(bundle, PROMPT_PROFILE_ID, true, &FixedClock(10_000))
+                    .expect("golden fixture observes");
+            let actual = FixtureGoldenHashes {
+                manifest_sha256,
+                profile_sha256: result.prompt_observation.profile_sha256.clone(),
+                renderer_sha256: renderer_sha256(),
+                page_image_sha256: page_sha256,
+                dom_manifest_sha256: dom_sha256,
+                desktop_frame_sha256: desktop_sha256,
+                viewport_layer_sha256: digest_bytes(&viewport_layer),
+                detector_sha256: digest_bytes(
+                    &serde_json::to_vec(&result.prompt_observation.detector_receipts).unwrap(),
+                ),
+                observation_sha256: digest_bytes(
+                    &serde_json::to_vec(&result.prompt_observation).unwrap(),
+                ),
+                visualization_sha256: digest_bytes(
+                    result
+                        .visualization_bytes
+                        .as_deref()
+                        .expect("golden visualization"),
+                ),
+                paired_receipt_sha256: digest_bytes(
+                    &serde_json::to_vec(&result.prompt_observation.blindness_receipt).unwrap(),
+                ),
+            };
+            if expected != &actual {
+                mismatches.push(format!(
+                    "{} goldenHashes={}",
+                    fixture.fixture_id,
+                    serde_json::to_string(&actual).unwrap()
+                ));
+            }
+        }
+        let mut corpus_projection = corpus.clone();
+        corpus_projection
+            .as_object_mut()
+            .expect("corpus object")
+            .remove("corpusSha256");
+        let actual_corpus_sha256 = digest_bytes(&serde_json::to_vec(&corpus_projection).unwrap());
+        if corpus["corpusSha256"].as_str() != Some(actual_corpus_sha256.as_str()) {
+            mismatches.push(format!("corpusSha256={actual_corpus_sha256}"));
+        }
+        assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
+    }
+
+    #[test]
     fn binding_and_freshness_fail_before_prompt_detection() {
         let mismatch = observe_repository_fixture("stale-binding", false).unwrap_err();
         assert_eq!(mismatch.code(), "desktop_prompt_binding_mismatch");
 
         let stale = observe_repository_fixture("stale-evidence", false).unwrap_err();
         assert_eq!(stale.code(), "desktop_prompt_stale_evidence");
+    }
+
+    #[test]
+    fn replaced_desktop_viewport_fails_even_with_an_updated_frame_hash() {
+        let fixture = fixture_manifest("matched-light-100").unwrap();
+        let mut bundle = render_fixture(&fixture, 10_000).unwrap();
+        let mut desktop = decode_png(
+            &bundle.frame.image_bytes,
+            bundle.frame.context.width,
+            bundle.frame.context.height,
+            "desktop_prompt_invalid_image",
+        )
+        .unwrap();
+        let viewport = bundle.surface.viewport_bounds;
+        desktop.put_pixel(viewport.x, viewport.y, Rgba([1, 2, 3, 255]));
+        bundle.frame.image_bytes = encode_png(&desktop).unwrap();
+        bundle.frame.frame_receipt.byte_length = bundle.frame.image_bytes.len();
+        bundle.frame.frame_receipt.content_sha256 = digest_bytes(&bundle.frame.image_bytes);
+        bundle.frame.frame_receipt.frame_id = format!(
+            "desktop-frame-{}",
+            &bundle.frame.frame_receipt.content_sha256[..24]
+        );
+
+        let error = observe_desktop_prompt(bundle, PROMPT_PROFILE_ID, false, &FixedClock(10_000))
+            .unwrap_err();
+
+        assert_eq!(error.code(), "desktop_prompt_page_evidence_invalid");
+    }
+
+    #[test]
+    fn malformed_oversized_overflowed_and_versioned_evidence_fail_typed() {
+        let fixture = fixture_manifest("matched-light-100").unwrap();
+
+        assert_eq!(
+            scaled(u32::MAX, u32::MAX).unwrap_err().code(),
+            "desktop_prompt_detector_failed"
+        );
+
+        let mut malformed = render_fixture(&fixture, 10_000).unwrap();
+        malformed.frame.image_bytes = b"not-a-png".to_vec();
+        malformed.frame.frame_receipt.byte_length = malformed.frame.image_bytes.len();
+        malformed.frame.frame_receipt.content_sha256 = digest_bytes(&malformed.frame.image_bytes);
+        let error =
+            observe_desktop_prompt(malformed, PROMPT_PROFILE_ID, false, &FixedClock(10_000))
+                .unwrap_err();
+        assert_eq!(error.code(), "desktop_prompt_invalid_image");
+
+        let mut oversized = render_fixture(&fixture, 10_000).unwrap();
+        oversized.frame.context.width = 5_000;
+        oversized.frame.context.height = 5_000;
+        oversized.frame.frame_receipt.width = 5_000;
+        oversized.frame.frame_receipt.height = 5_000;
+        oversized.surface.width = 5_000;
+        oversized.surface.height = 5_000;
+        let error =
+            observe_desktop_prompt(oversized, PROMPT_PROFILE_ID, false, &FixedClock(10_000))
+                .unwrap_err();
+        assert_eq!(error.code(), "desktop_prompt_invalid_image");
+
+        let mut overflowed = render_fixture(&fixture, 10_000).unwrap();
+        overflowed.frame.context.scale_factor = u32::MAX as f64 / 1000.0;
+        overflowed.frame.frame_receipt.scale_factor = u32::MAX as f64 / 1000.0;
+        overflowed.surface.scale_millis = u32::MAX;
+        let error =
+            observe_desktop_prompt(overflowed, PROMPT_PROFILE_ID, false, &FixedClock(10_000))
+                .unwrap_err();
+        assert_eq!(error.code(), "desktop_prompt_page_evidence_invalid");
+
+        let mut versioned = render_fixture(&fixture, 10_000).unwrap();
+        versioned.page.renderer_version = "unsupported-page-renderer-v9".to_string();
+        let error =
+            observe_desktop_prompt(versioned, PROMPT_PROFILE_ID, false, &FixedClock(10_000))
+                .unwrap_err();
+        assert_eq!(error.code(), "desktop_prompt_page_evidence_invalid");
     }
 
     #[test]

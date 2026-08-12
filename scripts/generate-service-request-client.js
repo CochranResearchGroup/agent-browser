@@ -602,7 +602,7 @@ export interface DesktopPromptObservation {
   detectorReceipts: DesktopPromptDetectorReceipt[];
   candidates: DesktopPromptCandidate[];
   detectionStatus: "matched" | "not_found" | "ambiguous";
-  pageVisibility: "absent" | "present" | "indeterminate";
+  pageVisibility: "absent" | "present";
   classification: "browser_external" | "page_surface" | "unclassified";
   handlingOutcome: "actionable_observation" | "operator_intervention_required" | "none";
   selectedCandidateId: string | null;

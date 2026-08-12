@@ -212,7 +212,10 @@ fn format_desktop_locate_text(data: &serde_json::Value) -> Option<String> {
 fn format_desktop_prompt_observe_text(data: &serde_json::Value) -> Option<String> {
     let observation = data.get("promptObservation")?.as_object()?;
     let status = observation.get("detectionStatus")?.as_str()?;
-    let page_visibility = observation.get("pageVisibility")?.as_str()?;
+    let page_visibility = match observation.get("pageVisibility")?.as_str()? {
+        value @ ("absent" | "present") => value,
+        _ => return None,
+    };
     let classification = observation.get("classification")?.as_str()?;
     let handling_outcome = observation.get("handlingOutcome")?.as_str()?;
     let selected_candidate_id = observation
@@ -5470,11 +5473,15 @@ desktop, fixture page screenshot, and normalized fixture DOM evidence through
 the fixed `p110-external-prompt-v1` profile. Text output exposes typed status,
 classification, handling, intervention, and blindness-receipt counts only. It
 omits pixels, DOM content, prompt text, hashes, and visualization bytes.
+Successful text receipts allow only `pageVisibility=absent` or `present`.
 
-PoC 4 configures no production provider. Ordinary runtime dispatch fails with
-`desktop_prompt_provider_unavailable` before capture or launch. Fixture results
-do not prove detection of a real browser, extension popup, native dialog,
-credential manager, passkey prompt, CAPTCHA, or challenge.
+PoC 4 configures no production provider. The public-ingress guarantee applies
+only after the corresponding ingress source is present in the build. That
+ingress resolves provider unavailability before dispatching this action and
+returns `desktop_prompt_provider_unavailable` before action-dispatch side
+effects. Fixture results and source presence do not prove installed behavior or
+detection of a real browser, extension popup, native dialog, credential
+manager, passkey prompt, CAPTCHA, or challenge.
 
 `desktop interact` is the PoC 3 atomic observe, locate, act, and verify
 contract. It accepts only a pre-existing controller lease and the registered
@@ -7231,7 +7238,7 @@ mod tests {
         let data = json!({
             "promptObservation": {
                 "detectionStatus": "ambiguous",
-                "pageVisibility": "indeterminate",
+                "pageVisibility": "absent",
                 "classification": "unclassified",
                 "handlingOutcome": "operator_intervention_required",
                 "selectedCandidateId": null,
@@ -7264,6 +7271,54 @@ mod tests {
         assert!(rendered.contains("Reason: synthetic_prompt_requires_operator_review"));
         assert!(!rendered.contains("private prompt text"));
         assert!(!rendered.contains("private action"));
+    }
+
+    #[test]
+    fn desktop_prompt_observe_text_fails_closed_for_non_public_page_visibility() {
+        let data = json!({
+            "promptObservation": {
+                "detectionStatus": "ambiguous",
+                "pageVisibility": "unsupported",
+                "classification": "unclassified",
+                "handlingOutcome": "operator_intervention_required",
+                "selectedCandidateId": null,
+                "blindnessReceipt": {
+                    "proofClass": "repository_fixture",
+                    "claim": "absent_from_fixture_page_inputs",
+                    "correspondenceState": "verified",
+                    "desktopPromptMatchCount": 2,
+                    "pageScreenshotPromptMatchCount": 0,
+                    "domPromptMatchCount": 0
+                }
+            }
+        });
+
+        assert!(format_desktop_prompt_observe_text(&data).is_none());
+    }
+
+    #[test]
+    fn desktop_prompt_observe_text_accepts_page_present_receipts() {
+        let data = json!({
+            "promptObservation": {
+                "detectionStatus": "matched",
+                "pageVisibility": "present",
+                "classification": "page_surface",
+                "handlingOutcome": "none",
+                "selectedCandidateId": null,
+                "blindnessReceipt": {
+                    "proofClass": "repository_fixture",
+                    "claim": "absent_from_fixture_page_inputs",
+                    "correspondenceState": "verified",
+                    "desktopPromptMatchCount": 1,
+                    "pageScreenshotPromptMatchCount": 1,
+                    "domPromptMatchCount": 1
+                }
+            }
+        });
+
+        let rendered = format_desktop_prompt_observe_text(&data).unwrap();
+        assert!(rendered.contains("Page visibility: present"));
+        assert!(rendered.contains("Classification: page_surface"));
     }
 
     #[test]

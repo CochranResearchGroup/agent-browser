@@ -441,7 +441,7 @@ response-only synthetic visualization is necessary.
 Interpret `promptObservation` using its typed axes:
 
 - `detectionStatus`: `matched`, `not_found`, or `ambiguous`.
-- `pageVisibility`: `absent`, `present`, or `indeterminate`.
+- `pageVisibility`: `absent` or `present`.
 - `classification`: `browser_external`, `page_surface`, or `unclassified`.
 - `handlingOutcome`: `actionable_observation`,
   `operator_intervention_required`, or `none`.
@@ -453,11 +453,13 @@ Only one matched, page-absent external candidate has a
 produced repository fixture page screenshot and DOM evidence. Text output
 omits pixels, raw DOM, prompt text, hashes, and visualization bytes.
 
-PoC 4 configures no production provider. Ordinary dispatch must fail with
-`desktop_prompt_provider_unavailable` before capture or launch. Never describe
-this fixture result as proof of live CDP blindness or recognition of a real
-browser prompt, extension popup, native dialog, credential manager, passkey
-prompt, CAPTCHA, or challenge.
+PoC 4 configures no production provider. The public-ingress guarantee applies
+only after the corresponding ingress source is present in the build. That
+ingress resolves provider unavailability before dispatching this action and
+returns `desktop_prompt_provider_unavailable` before action-dispatch side
+effects. Never describe source presence or a fixture result as installed proof,
+live CDP blindness, or recognition of a real browser prompt, extension popup,
+native dialog, credential manager, passkey prompt, CAPTCHA, or challenge.
 
 HTTP uses top-level `action: "desktop_prompt_observe"`, `browserId`,
 `promptProfileId`, `includeVisualization`, optional `sessionName`, and

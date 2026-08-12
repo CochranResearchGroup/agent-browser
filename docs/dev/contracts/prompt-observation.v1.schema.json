@@ -68,7 +68,7 @@
       }
     },
     "detectionStatus": { "enum": ["matched", "not_found", "ambiguous"] },
-    "pageVisibility": { "enum": ["absent", "present", "indeterminate"] },
+    "pageVisibility": { "enum": ["absent", "present"] },
     "classification": { "enum": ["browser_external", "page_surface", "unclassified"] },
     "handlingOutcome": {
       "enum": ["actionable_observation", "operator_intervention_required", "none"]

@@ -250,9 +250,10 @@ applies the sole `p110-external-prompt-v1` profile to independently produced
 repository fixture desktop, page screenshot, and normalized DOM evidence.
 
 > **Experimental:** This is a synthetic source proof. No production prompt
-> provider is configured. Configured dispatch returns
-> `desktop_prompt_provider_unavailable` before capture, CDP, browser launch,
-> route mutation, process, network, filesystem, or input effects.
+> provider is configured. The public-ingress guarantee applies only after the
+> corresponding ingress source is present in the build. That ingress resolves
+> provider unavailability before dispatching this action and returns
+> `desktop_prompt_provider_unavailable` before action-dispatch side effects.
 
 Use the CLI:
 
@@ -295,12 +296,14 @@ The observation reports `detectionStatus`, `pageVisibility`, `classification`,
 `absent_from_fixture_page_inputs` claim means only that the synthetic prompt
 signature was absent from the corresponding independently produced fixture
 page screenshot and DOM evidence. Text output omits pixels, raw DOM, prompt
-text, hashes, and visualization bytes.
+text, hashes, and visualization bytes. Successful public observations allow
+only `pageVisibility: "absent"` or `pageVisibility: "present"`.
 
 Do not interpret this source proof as live CDP blindness or detection of a
 real browser prompt, extension popup, native dialog, credential manager,
-passkey prompt, CAPTCHA, or challenge. Contract discovery and source presence
-are not installed-runtime or live-provider readiness evidence.
+passkey prompt, CAPTCHA, or challenge. Contract discovery, source presence, and
+the documented ingress guarantee are not installed-runtime or live-provider
+readiness evidence.
 
 ## Run a guarded synthetic desktop interaction
 

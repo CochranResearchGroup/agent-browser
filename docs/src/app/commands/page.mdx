@@ -547,14 +547,18 @@ Text output prints `detectionStatus`, `pageVisibility`, `classification`,
 `handlingOutcome`, the optional selected candidate and operator intervention,
 and the fixture blindness receipt's proof class, claim, correspondence state,
 and exact match counts. It omits pixels, raw DOM, prompt text, hashes, and
-visualization bytes. JSON includes `visualizationBase64` only when requested.
+visualization bytes. Successful public observations allow only
+`pageVisibility: "absent"` or `pageVisibility: "present"`. JSON includes
+`visualizationBase64` only when requested.
 
 > **Experimental:** PoC 4 is synthetic and source-only. No production prompt
-> provider is configured, so ordinary dispatch fails with
-> `desktop_prompt_provider_unavailable` before capture or launch. This fixture
-> proof does not establish live CDP blindness or detection of a real browser
-> prompt, extension popup, native dialog, credential manager, passkey prompt,
-> CAPTCHA, or challenge.
+> provider is configured. The public-ingress guarantee applies only after the
+> corresponding ingress source is present in the build. That ingress resolves
+> provider unavailability before dispatching this action and returns
+> `desktop_prompt_provider_unavailable` before action-dispatch side effects.
+> Source presence and fixture proof do not establish installed behavior, live
+> CDP blindness, or detection of a real browser prompt, extension popup, native
+> dialog, credential manager, passkey prompt, CAPTCHA, or challenge.
 
 For HTTP, MCP, and generated client forms, see [Service Mode](/service-mode#observe-the-synthetic-browser-external-prompt-fixture).
 

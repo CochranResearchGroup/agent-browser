@@ -405,6 +405,15 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
         .unwrap_or("")
         .to_string();
     let cmd_start = std::time::Instant::now();
+    // PoC 4 has no configured production provider. Resolve that static
+    // availability posture before stream broadcast, CDP event drain, policy
+    // reload, confirmation mutation, browser recovery, or any other effect.
+    if action == "desktop_prompt_observe" {
+        return match handle_desktop_prompt_observe(cmd).await {
+            Ok(data) => success_response(&id, data),
+            Err(error) => error_response(&id, &error),
+        };
+    }
     #[cfg(test)]
     if action == "__test_sleep" {
         let ms = cmd.get("ms").and_then(|value| value.as_u64()).unwrap_or(1);
@@ -562,7 +571,6 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
         "diagnostics" => handle_service_diagnostics(cmd, state).await,
         "desktop_capture" => handle_desktop_capture(cmd).await,
         "desktop_locate" => handle_desktop_locate(cmd).await,
-        "desktop_prompt_observe" => handle_desktop_prompt_observe(cmd).await,
         "desktop_interact" => handle_desktop_interact(cmd).await,
         "probe" => handle_service_probe(cmd, state).await,
         "ui_action" => handle_service_ui_action(cmd, state).await,

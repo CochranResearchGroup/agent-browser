@@ -8,7 +8,7 @@
   "scaleMillis": 1500,
   "browserBounds": { "x": 60, "y": 45, "width": 840, "height": 630 },
   "viewportBounds": { "x": 72, "y": 144, "width": 816, "height": 516 },
-  "externalPrompts": [{ "x": 690, "y": 75 }],
+  "externalPrompts": [{ "x": 690, "y": 72 }],
   "expectedDetectionStatus": "matched",
   "expectedPageVisibility": "absent",
   "expectedClassification": "browser_external",

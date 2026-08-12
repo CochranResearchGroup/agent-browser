@@ -10183,7 +10183,7 @@ fn queued_tool_command_session(tool_name: &str, default_session: &str, command: 
     }
     if matches!(
         command.get("action").and_then(Value::as_str),
-        Some("desktop_capture" | "desktop_locate" | "desktop_interact")
+        Some("desktop_capture" | "desktop_locate" | "desktop_prompt_observe" | "desktop_interact")
     ) {
         return service_request_session_candidate(command.get("sessionName"))
             .unwrap_or_else(|| default_session.to_string());
@@ -12806,7 +12806,14 @@ mod tests {
         let mut mcp_names = mcp_properties.keys().collect::<Vec<_>>();
         canonical_names.sort();
         mcp_names.sort();
-        assert_eq!(canonical_names.len(), 68);
+        let field_roles: Value = serde_json::from_str(include_str!(
+            "../../docs/dev/contracts/service-request-field-roles.v1.json"
+        ))
+        .unwrap();
+        assert_eq!(
+            canonical_names.len(),
+            field_roles["canonicalPropertyCount"].as_u64().unwrap() as usize
+        );
         assert_eq!(canonical_names, mcp_names);
         assert_eq!(input["additionalProperties"], false);
         assert_eq!(input["required"], canonical["required"]);
@@ -13005,6 +13012,66 @@ mod tests {
                 &narrowed_interact,
             ),
             "rdp-interact-session"
+        );
+    }
+
+    #[test]
+    fn desktop_prompt_observe_generic_and_dedicated_use_only_session_name_for_routing() {
+        let (_, generic) = service_request_command(&json!({
+            "action": "desktop_prompt_observe",
+            "browserId": "session:must-not-route",
+            "promptProfileId": "p110-external-prompt-v1",
+            "serviceName": "DesktopPromptObserver",
+            "agentName": "fixture-agent",
+            "taskName": "observe"
+        }))
+        .unwrap();
+        assert_eq!(
+            queued_tool_command_session("service_request", "default", &generic),
+            "default"
+        );
+
+        let generic_with_session = service_request_command(&json!({
+            "action": "desktop_prompt_observe",
+            "browserId": "session:must-not-route",
+            "sessionName": "generic-prompt-lane",
+            "promptProfileId": "p110-external-prompt-v1",
+            "serviceName": "DesktopPromptObserver",
+            "agentName": "fixture-agent",
+            "taskName": "observe"
+        }))
+        .unwrap()
+        .1;
+        assert_eq!(
+            queued_tool_command_session("service_request", "default", &generic_with_session),
+            "generic-prompt-lane"
+        );
+
+        let dedicated = desktop_prompt_observe_service_request(&json!({
+            "browserId": "session:must-not-route",
+            "promptProfileId": "p110-external-prompt-v1",
+            "serviceName": "DesktopPromptObserver",
+            "agentName": "fixture-agent",
+            "taskName": "observe"
+        }))
+        .unwrap();
+        assert_eq!(
+            queued_tool_command_session("service_request", "default", &dedicated),
+            "default"
+        );
+
+        let dedicated_with_session = desktop_prompt_observe_service_request(&json!({
+            "browserId": "session:must-not-route",
+            "sessionName": "dedicated-prompt-lane",
+            "promptProfileId": "p110-external-prompt-v1",
+            "serviceName": "DesktopPromptObserver",
+            "agentName": "fixture-agent",
+            "taskName": "observe"
+        }))
+        .unwrap();
+        assert_eq!(
+            queued_tool_command_session("service_request", "default", &dedicated_with_session),
+            "dedicated-prompt-lane"
         );
     }
 

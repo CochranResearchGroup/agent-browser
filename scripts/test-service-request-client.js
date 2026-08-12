@@ -152,6 +152,7 @@ function assertServiceRequestActionDataCoverage() {
     promptObservationSchema.properties.detectionStatus.enum,
     ['matched', 'not_found', 'ambiguous'],
   );
+  assert.deepEqual(promptObservationSchema.properties.pageVisibility.enum, ['absent', 'present']);
   assert.equal(
     promptObservationSchema.$defs.blindnessReceipt.properties.proofClass.const,
     'repository_fixture',

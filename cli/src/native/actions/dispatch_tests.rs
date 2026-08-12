@@ -117,6 +117,34 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
+
+#[tokio::test]
+async fn desktop_prompt_observe_provider_gate_precedes_confirmation_and_dispatch_effects() {
+    let mut state = DaemonState::new();
+    state.confirm_actions = Some(ConfirmActions {
+        categories: HashSet::from(["desktop_prompt_observe".to_string()]),
+    });
+
+    let response = execute_command(
+        &json!({
+            "id": "prompt-observe-1",
+            "action": "desktop_prompt_observe",
+            "browserId": "browser-rdp-1",
+            "promptProfileId": "p110-external-prompt-v1",
+            "serviceName": "DesktopPromptObserver",
+            "agentName": "fixture-agent",
+            "taskName": "observe"
+        }),
+        &mut state,
+    )
+    .await;
+
+    assert_eq!(response["success"], false);
+    assert!(response["error"]
+        .as_str()
+        .is_some_and(|error| error.starts_with("desktop_prompt_provider_unavailable:")));
+    assert!(state.pending_confirmation.is_none());
+}
 #[test]
 fn test_success_response_structure() {
     let resp = success_response("cmd-1", json!({ "url" : "https://example.com" }));

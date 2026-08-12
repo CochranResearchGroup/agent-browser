@@ -162,7 +162,7 @@ hashes with domain-separated SHA-256 and canonical integer JSON.
 detector receipts, ordered candidates, and:
 
 - `detectionStatus`: `matched | not_found | ambiguous`;
-- `pageVisibility`: `absent | present | indeterminate`;
+- `pageVisibility`: `absent | present`;
 - `classification`: `browser_external | page_surface | unclassified`;
 - `handlingOutcome`: `actionable_observation |
   operator_intervention_required | none`;
@@ -188,8 +188,9 @@ token IDs and typed absence evidence may be hashed.
 
 ## Typed Outcomes
 
-Successful observation states are matched, not found, ambiguous, page-visible,
-and indeterminate. Typed failures are:
+Successful observation states are matched, not found, ambiguous, and
+page-visible. Invalid or unbound page evidence is a typed failure. Typed
+failures are:
 
 - `desktop_prompt_profile_not_found`;
 - `desktop_prompt_provider_unavailable`;

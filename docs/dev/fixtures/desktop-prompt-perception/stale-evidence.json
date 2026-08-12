@@ -8,10 +8,10 @@
   "scaleMillis": 1000,
   "browserBounds": { "x": 40, "y": 30, "width": 560, "height": 420 },
   "viewportBounds": { "x": 48, "y": 96, "width": 544, "height": 344 },
-  "externalPrompts": [{ "x": 376, "y": 70 }],
+  "externalPrompts": [{ "x": 376, "y": 48 }],
   "staleByMs": 751,
   "expectedDetectionStatus": "not_found",
-  "expectedPageVisibility": "indeterminate",
+  "expectedPageVisibility": "absent",
   "expectedClassification": "unclassified",
   "expectedHandlingOutcome": "none"
 }

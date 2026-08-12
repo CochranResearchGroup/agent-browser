@@ -475,14 +475,17 @@ optional typed `operatorIntervention`, and a `blindnessReceipt`. The receipt's
 `absent_from_fixture_page_inputs` claim is limited to independently produced
 repository fixture page screenshot and DOM evidence. Text output allowlists
 these typed axes and exact match counts; it omits pixels, raw DOM, prompt text,
-hashes, and visualization bytes.
+hashes, and visualization bytes. A successful public observation allows only
+`pageVisibility: "absent"` or `pageVisibility: "present"`.
 
 > **Experimental:** PoC 4 is synthetic and source-only. It configures no
-> production prompt provider, so ordinary dispatch fails with
-> `desktop_prompt_provider_unavailable` before capture or launch. It does not
-> prove live CDP blindness or detection of a real browser prompt, extension
-> popup, native dialog, credential manager, passkey prompt, CAPTCHA, or
-> challenge.
+> production prompt provider. The public-ingress guarantee applies only after
+> the corresponding ingress source is present in the build. That ingress
+> resolves provider unavailability before dispatching this action and returns
+> `desktop_prompt_provider_unavailable` before action-dispatch side effects.
+> Fixture results and source presence do not prove installed behavior, live CDP
+> blindness, or detection of a real browser prompt, extension popup, native
+> dialog, credential manager, passkey prompt, CAPTCHA, or challenge.
 
 HTTP requests use `action: "desktop_prompt_observe"` with top-level
 `browserId`, `promptProfileId`, `includeVisualization`, optional `sessionName`,
