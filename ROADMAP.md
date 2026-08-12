@@ -9,7 +9,7 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 
 ## P110 | Desktop Perception And Interaction Foundation
 
-State: OPEN | POC 1 SOURCE ACCEPTED | POC 2 DETAIL PLAN NEXT
+State: OPEN | POC 1 SOURCE ACCEPTED | POC 2 PLANNED
 Current state: Plan 0110-1 is source accepted at `853c2d90`. The canonical
 `desktop_capture` service action resolves an exact service-owned RDP workspace,
 requires operator-visible display proof, captures a bounded ephemeral PNG, and
@@ -238,17 +238,18 @@ The foundational lane is not accepted until:
 
 ### Next Recommendation
 
-Write Plan 0110-2 for deterministic fixture location. Freeze pinned fixtures,
-frame-bound observations, detector versioning, ambiguity and decoy behavior,
-visualization, and provider-free gates before implementation. Do not emit
-input or use a live challenge, credential prompt, browser, RDP route, or
-display.
+Execute Plan 0110-2 only. Add atomic frame-bound deterministic fixture
+location, versioned detector evidence, explicit ambiguity and decoy behavior,
+and response-only visualization through coherent ingresses. Do not emit input
+or use ambient OCR, a live challenge, credential prompt, browser, RDP route,
+or display.
 
 ### Evidence
 
 - `VISION.md`
 - `docs/dev/plans/0110-2026-08-12-desktop-perception-interaction-foundation-plan.md`
 - `docs/dev/plans/0110-1-2026-08-12-p110-poc1-display-bound-frame-capture-plan.md`
+- `docs/dev/plans/0110-2-2026-08-12-p110-poc2-deterministic-fixture-location-plan.md`
 - `docs/dev/notes/0110-1-2026-08-12-display-bound-frame-capture-source-acceptance.md`
 - `docs/dev/notes/2026-04-22-agent-browser-service-roadmap.md`
 - `docs/dev/notes/2026-04-24-service-model-roadmap-review.md`

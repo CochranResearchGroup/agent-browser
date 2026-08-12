@@ -2,7 +2,7 @@
 
 Date: 2026-08-12
 
-State: OPEN | POC 1 SOURCE ACCEPTED | POC 2 DETAIL PLAN NEXT
+State: OPEN | POC 1 SOURCE ACCEPTED | POC 2 DETAILED
 
 Authority: SOURCE-ONLY
 
@@ -31,7 +31,7 @@ service-owned RDP workspace, returns bounded ephemeral PNG bytes plus typed
 context and receipt evidence, and is coherent across CLI, HTTP, MCP, generated
 client, schemas, help, skill, and docs. No locator or machine input exists.
 
-Proof of Concept 2 must receive its own detailed plan before implementation.
+Proof of Concept 2 is detailed in Plan 0110-2 before implementation.
 Later proofs remain undetailed until the immediately preceding proof closes.
 This keeps locator, input, prompt, and challenge assumptions out of earlier
 contracts.
@@ -201,7 +201,7 @@ source acceptance without separate maintainer direction.
 
 ## Current Recommendation
 
-Write Plan 0110-2 for deterministic fixture location. Freeze pinned fixtures,
-source-frame binding, detector evidence, ambiguity behavior, visualization,
-and provider-free validation before changing locator source. Do not emit input
-or use a live challenge, credential prompt, browser, RDP route, or display.
+Execute Plan 0110-2 only. Implement atomic source-bound deterministic fixture
+location with pinned profiles, stable evidence and ordering, explicit
+ambiguity, and response-only visualization. Do not emit input or use ambient
+OCR, a live challenge, credential prompt, browser, RDP route, or display.
