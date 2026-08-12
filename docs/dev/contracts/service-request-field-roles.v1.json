@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agent-browser.dev/contracts/service-request-field-roles.v1.json",
   "description": "Machine-readable role ledger for canonical service-request fields and transport-only compatibility fields.",
-  "canonicalPropertyCount": 68,
+  "canonicalPropertyCount": 69,
   "roles": {
     "structural": ["action", "params"],
     "command": [
@@ -17,7 +17,7 @@
       "targetServiceId", "targetService", "targetServiceIds", "targetServices", "siteId",
       "siteIds", "loginId", "loginIds", "accountId", "accountIds", "url", "desiredUrl",
       "profile", "profileId", "runtimeProfile", "profileClass", "cdpUrl", "cdpPort",
-      "browserId", "sessionName", "format", "maxBytes", "locator", "includeVisualization", "controllerLeaseId", "recipe", "allowDuplicateProfileLane", "manualLoginLaunch"
+      "browserId", "sessionName", "format", "maxBytes", "locator", "includeVisualization", "promptProfileId", "controllerLeaseId", "recipe", "allowDuplicateProfileLane", "manualLoginLaunch"
     ],
     "trace": [
       "jobTimeoutMs", "profileLeasePolicy", "profileLeaseWaitTimeoutMs", "requiresCdpFree",
@@ -30,7 +30,7 @@
       "targetServiceId", "targetService", "targetServiceIds", "targetServices", "siteId",
       "siteIds", "loginId", "loginIds", "accountId", "accountIds", "url", "desiredUrl",
       "profile", "profileId", "runtimeProfile", "profileClass", "browserId", "sessionName",
-      "format", "maxBytes", "locator", "includeVisualization", "controllerLeaseId", "recipe",
+      "format", "maxBytes", "locator", "includeVisualization", "promptProfileId", "controllerLeaseId", "recipe",
       "allowDuplicateProfileLane"
     ],
     "routing": [

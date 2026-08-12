@@ -11,6 +11,7 @@ export const SERVICE_REQUEST_ACTIONS = [
   "diagnostics",
   "desktop_capture",
   "desktop_locate",
+  "desktop_prompt_observe",
   "desktop_interact",
   "probe",
   "tab_handle_refresh",
@@ -137,6 +138,7 @@ export const SERVICE_REQUEST_STRING_FIELDS = [
   "cdpUrl",
   "browserId",
   "format",
+  "promptProfileId",
   "controllerLeaseId",
   "sessionName"
 ];

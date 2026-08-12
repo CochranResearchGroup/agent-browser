@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "p110-desktop-prompt-fixture.v1",
+  "fixtureId": "extension-panel-150",
+  "rendererVersion": "p110-fixture-renderer-v1",
+  "width": 960,
+  "height": 720,
+  "theme": "light",
+  "scaleMillis": 1500,
+  "browserBounds": { "x": 60, "y": 45, "width": 840, "height": 630 },
+  "viewportBounds": { "x": 72, "y": 144, "width": 816, "height": 516 },
+  "externalPrompts": [{ "x": 690, "y": 75 }],
+  "expectedDetectionStatus": "matched",
+  "expectedPageVisibility": "absent",
+  "expectedClassification": "browser_external",
+  "expectedHandlingOutcome": "actionable_observation"
+}

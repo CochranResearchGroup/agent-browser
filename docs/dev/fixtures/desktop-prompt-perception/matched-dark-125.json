@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "p110-desktop-prompt-fixture.v1",
+  "fixtureId": "matched-dark-125",
+  "rendererVersion": "p110-fixture-renderer-v1",
+  "width": 800,
+  "height": 600,
+  "theme": "dark",
+  "scaleMillis": 1250,
+  "browserBounds": { "x": 50, "y": 38, "width": 700, "height": 525 },
+  "viewportBounds": { "x": 60, "y": 120, "width": 680, "height": 430 },
+  "externalPrompts": [{ "x": 470, "y": 88 }],
+  "expectedDetectionStatus": "matched",
+  "expectedPageVisibility": "absent",
+  "expectedClassification": "browser_external",
+  "expectedHandlingOutcome": "actionable_observation"
+}

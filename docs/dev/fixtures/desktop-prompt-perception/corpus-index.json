@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "p110-desktop-prompt-corpus.v1",
+  "profileId": "p110-external-prompt-v1",
+  "rendererVersion": "p110-fixture-renderer-v1",
+  "proofClass": "repository_fixture",
+  "blindnessClaim": "absent_from_fixture_page_inputs",
+  "fixtures": [
+    "matched-light-100",
+    "matched-dark-125",
+    "extension-panel-150",
+    "native-modal-manual",
+    "external-page-lookalike",
+    "page-decoy-only",
+    "ambiguous-external",
+    "not-found",
+    "occlusion-within-budget",
+    "occlusion-beyond-budget",
+    "unsupported-version",
+    "stale-evidence",
+    "stale-binding"
+  ]
+}

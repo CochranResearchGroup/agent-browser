@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "p110-desktop-prompt-fixture.v1",
+  "fixtureId": "page-decoy-only",
+  "rendererVersion": "p110-fixture-renderer-v1",
+  "width": 640,
+  "height": 480,
+  "theme": "light",
+  "scaleMillis": 1000,
+  "browserBounds": { "x": 40, "y": 30, "width": 560, "height": 420 },
+  "viewportBounds": { "x": 48, "y": 96, "width": 544, "height": 344 },
+  "pagePrompts": [{ "x": 180, "y": 120 }],
+  "domTokens": ["fixture-external-confirmation"],
+  "expectedDetectionStatus": "matched",
+  "expectedPageVisibility": "present",
+  "expectedClassification": "page_surface",
+  "expectedHandlingOutcome": "none"
+}

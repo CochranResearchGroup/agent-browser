@@ -11,6 +11,7 @@ use super::action_runtime::{service_profile_lease_gate, DaemonState, ServiceProf
 use super::actions::execute_command;
 use super::cancellation::CancellationToken as RunningJobCancel;
 use super::desktop_interaction::redact_desktop_interaction_stream_result;
+use super::desktop_prompt_perception::redact_desktop_prompt_stream_result;
 use super::service_health::{
     apply_browser_health_observation, browser_health_observation_details,
     persist_reconciled_service_state_in_repository, reconcile_persisted_service_state,
@@ -1047,6 +1048,14 @@ fn service_job_persisted_result(request: &ControlRequest, response: &Value) -> V
             ),
         });
     }
+    if request.action == "desktop_prompt_observe" {
+        return json!({
+            "success": success,
+            "data": redact_desktop_prompt_stream_result(
+                response.get("data").unwrap_or(&Value::Null),
+            ),
+        });
+    }
     json!({ "success": success })
 }
 
@@ -1260,7 +1269,7 @@ fn service_job_control_plane_mode(request: &ControlRequest) -> JobControlPlaneMo
         || request.action == "view_takeover"
         || matches!(
             request.action.as_str(),
-            "desktop_capture" | "desktop_locate" | "desktop_interact"
+            "desktop_capture" | "desktop_locate" | "desktop_prompt_observe" | "desktop_interact"
         )
         || request.action.starts_with("service_")
     {
@@ -1951,6 +1960,49 @@ mod tests {
         assert!(!serialized.contains("/sensitive/full/path"));
     }
 
+    #[test]
+    fn persisted_desktop_prompt_observation_uses_safe_receipt_projection() {
+        let request = control_request_for_mode_test(json!({ "action": "desktop_prompt_observe" }));
+        let response = json!({
+            "success": true,
+            "data": {
+                "ok": true,
+                "action": "desktop_prompt_observe",
+                "context": { "contextId": "context-1", "displayName": ":99" },
+                "frameReceipt": { "frameId": "frame-1", "sha256": "frame-digest" },
+                "promptObservation": {
+                    "observationId": "observation-1",
+                    "detectionStatus": "matched",
+                    "pageVisibility": "absent",
+                    "classification": "browser_external",
+                    "handlingOutcome": "actionable_observation",
+                    "blindnessReceipt": {
+                        "proofClass": "repository_fixture",
+                        "claim": "absent_from_fixture_page_inputs"
+                    },
+                    "promptText": "sensitive prompt"
+                },
+                "visualizationBase64": "sensitive-pixels",
+                "outputPath": "/sensitive/full/path"
+            }
+        });
+
+        let persisted = service_job_persisted_result(&request, &response);
+
+        assert_eq!(persisted["success"], json!(true));
+        assert_eq!(persisted["data"]["action"], "desktop_prompt_observe");
+        assert_eq!(
+            persisted["data"]["promptObservation"]["classification"],
+            "browser_external"
+        );
+        assert_eq!(persisted["data"]["visualizationPayload"], "response_only");
+        let serialized = persisted.to_string();
+        assert!(!serialized.contains("sensitive-pixels"));
+        assert!(!serialized.contains("sensitive prompt"));
+        assert!(!serialized.contains("displayName"));
+        assert!(!serialized.contains("/sensitive/full/path"));
+    }
+
     fn temp_home(label: &str) -> std::path::PathBuf {
         let path = std::env::temp_dir().join(format!(
             "agent-browser-{label}-{}-{}",
@@ -2192,6 +2244,15 @@ mod tests {
             JobControlPlaneMode::Service
         );
         assert!(service_job_lifecycle_only(&desktop_interact));
+
+        let desktop_prompt_observe = control_request_for_mode_test(json!({
+            "action": "desktop_prompt_observe"
+        }));
+        assert_eq!(
+            service_job_control_plane_mode(&desktop_prompt_observe),
+            JobControlPlaneMode::Service
+        );
+        assert!(service_job_lifecycle_only(&desktop_prompt_observe));
 
         let cdp = control_request_for_mode_test(json!({
             "action": "navigate"

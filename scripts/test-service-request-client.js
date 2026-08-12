@@ -13,6 +13,7 @@ import {
   createServiceDesktopCaptureRequest,
   createServiceDesktopInteractRequest,
   createServiceDesktopLocateRequest,
+  createServiceDesktopPromptObserveRequest,
   createServiceEvaluateRequest,
   createServiceFileTransferRequest,
   createServiceNetworkCaptureRequest,
@@ -45,6 +46,7 @@ import {
   captureServiceNetwork,
   captureServiceDesktopFrame,
   locateServiceDesktopControl,
+  observeServiceDesktopPrompt,
   requestServiceUiAction,
   refreshServiceTabHandle,
   runServiceDesktopInteraction,
@@ -59,6 +61,7 @@ import {
   requestServiceDesktopCapture,
   requestServiceDesktopInteract,
   requestServiceDesktopLocate,
+  requestServiceDesktopPromptObserve,
   requestServiceEvaluate,
   requestServiceNetworkCapture,
   requestServiceProbe,
@@ -139,6 +142,60 @@ function assertServiceRequestActionDataCoverage() {
   assert.equal(desktopLocateResponseSchema.properties.frameReceipt.$ref, 'frame-receipt.v1.schema.json');
   assert.equal(desktopLocateResponseSchema.properties.observation.$ref, 'observation.v1.schema.json');
   assert.equal(desktopLocateResponseSchema.required.includes('visualizationBase64'), false);
+  const promptObservationSchema = JSON.parse(
+    readFileSync(
+      new URL('../docs/dev/contracts/prompt-observation.v1.schema.json', import.meta.url),
+      'utf8',
+    ),
+  );
+  assert.deepEqual(
+    promptObservationSchema.properties.detectionStatus.enum,
+    ['matched', 'not_found', 'ambiguous'],
+  );
+  assert.equal(
+    promptObservationSchema.$defs.blindnessReceipt.properties.proofClass.const,
+    'repository_fixture',
+  );
+  assert.equal(
+    promptObservationSchema.$defs.blindnessReceipt.properties.claim.const,
+    'absent_from_fixture_page_inputs',
+  );
+  for (const field of [
+    'desktopFrameSha256',
+    'pageFrameSha256',
+    'domManifestSha256',
+    'promptSignatureSha256',
+    'bindingSha256',
+    'desktopPromptMatchCount',
+    'pageScreenshotPromptMatchCount',
+    'domPromptMatchCount',
+    'correspondenceState',
+  ]) {
+    assert.ok(
+      promptObservationSchema.$defs.blindnessReceipt.required.includes(field),
+      `BlindnessReceipt must require ${field}`,
+    );
+  }
+  const desktopPromptResponseSchema = JSON.parse(
+    readFileSync(
+      new URL(
+        '../docs/dev/contracts/service-desktop-prompt-observe-response.v1.schema.json',
+        import.meta.url,
+      ),
+      'utf8',
+    ),
+  );
+  assert.deepEqual(
+    desktopPromptResponseSchema.required,
+    ['ok', 'action', 'context', 'frameReceipt', 'promptObservation'],
+  );
+  assert.equal(desktopPromptResponseSchema.properties.context.$ref, 'desktop-context.v1.schema.json');
+  assert.equal(desktopPromptResponseSchema.properties.frameReceipt.$ref, 'frame-receipt.v1.schema.json');
+  assert.equal(
+    desktopPromptResponseSchema.properties.promptObservation.$ref,
+    'prompt-observation.v1.schema.json',
+  );
+  assert.equal(desktopPromptResponseSchema.required.includes('visualizationBase64'), false);
   assert.equal(schema.properties.args, undefined);
   assert.equal(SERVICE_REQUEST_STRING_FIELDS.includes('args'), false);
 }
@@ -621,6 +678,78 @@ async function main() {
       serviceName: 'DesktopInteractor',
       agentName: 'fixture-agent',
       taskName: 'verify-synthetic-control',
+    });
+  }
+
+  const desktopPromptObserveRequest = createServiceDesktopPromptObserveRequest({
+    browserId: 'browser-rdp-1',
+    sessionName: 'rdp-1',
+    promptProfileId: 'p110-external-prompt-v1',
+    includeVisualization: true,
+    serviceName: 'DesktopPromptObserver',
+    agentName: 'fixture-agent',
+    taskName: 'observe-synthetic-prompt',
+    jobTimeoutMs: 30_000,
+  });
+  assert.deepEqual(desktopPromptObserveRequest, {
+    action: 'desktop_prompt_observe',
+    browserId: 'browser-rdp-1',
+    sessionName: 'rdp-1',
+    promptProfileId: 'p110-external-prompt-v1',
+    includeVisualization: true,
+    serviceName: 'DesktopPromptObserver',
+    agentName: 'fixture-agent',
+    taskName: 'observe-synthetic-prompt',
+    jobTimeoutMs: 30_000,
+  });
+  for (const forbidden of ['params', 'locator', 'promptText', 'imageBase64', 'routeId']) {
+    assert.throws(
+      () => createServiceDesktopPromptObserveRequest({
+        browserId: 'browser-rdp-1',
+        promptProfileId: 'p110-external-prompt-v1',
+        serviceName: 'DesktopPromptObserver',
+        agentName: 'fixture-agent',
+        taskName: 'observe-synthetic-prompt',
+        [forbidden]: forbidden === 'params' || forbidden === 'locator' ? {} : forbidden,
+      }),
+      /does not accept/,
+    );
+  }
+
+  for (const invoke of [requestServiceDesktopPromptObserve, observeServiceDesktopPrompt]) {
+    const recorder = createFetchRecorder({
+      success: true,
+      data: {
+        ok: true,
+        action: 'desktop_prompt_observe',
+        context: { contextId: 'context-1' },
+        frameReceipt: { frameId: 'frame-1' },
+        promptObservation: {
+          observationId: 'prompt-observation-1',
+          detectionStatus: 'matched',
+          pageVisibility: 'absent',
+          classification: 'browser_external',
+          handlingOutcome: 'actionable_observation',
+        },
+      },
+    });
+    await invoke({
+      baseUrl: 'http://127.0.0.1:9222',
+      fetch: recorder.fetch,
+      browserId: 'browser-rdp-1',
+      promptProfileId: 'p110-external-prompt-v1',
+      serviceName: 'DesktopPromptObserver',
+      agentName: 'fixture-agent',
+      taskName: 'observe-synthetic-prompt',
+    });
+    assert.deepEqual(recorder.calls[0].body, {
+      action: 'desktop_prompt_observe',
+      browserId: 'browser-rdp-1',
+      promptProfileId: 'p110-external-prompt-v1',
+      includeVisualization: false,
+      serviceName: 'DesktopPromptObserver',
+      agentName: 'fixture-agent',
+      taskName: 'observe-synthetic-prompt',
     });
   }
 

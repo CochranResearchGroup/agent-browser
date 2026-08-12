@@ -83,6 +83,9 @@ use super::desktop_interaction::{
     handle_desktop_interact, redact_desktop_interaction_stream_result,
 };
 use super::desktop_locator::{handle_desktop_locate, redact_desktop_locate_stream_result};
+use super::desktop_prompt_perception::{
+    handle_desktop_prompt_observe, redact_desktop_prompt_stream_result,
+};
 use super::diff::{handle_diff_screenshot, handle_diff_snapshot, handle_diff_url};
 use super::element::{
     handle_boundingbox, handle_count, handle_innerhtml, handle_innertext, handle_inputvalue,
@@ -195,6 +198,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "diagnostics"
             | "desktop_capture"
             | "desktop_locate"
+            | "desktop_prompt_observe"
             | "desktop_interact"
             | "probe"
             | "close"
@@ -558,6 +562,7 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
         "diagnostics" => handle_service_diagnostics(cmd, state).await,
         "desktop_capture" => handle_desktop_capture(cmd).await,
         "desktop_locate" => handle_desktop_locate(cmd).await,
+        "desktop_prompt_observe" => handle_desktop_prompt_observe(cmd).await,
         "desktop_interact" => handle_desktop_interact(cmd).await,
         "probe" => handle_service_probe(cmd, state).await,
         "ui_action" => handle_service_ui_action(cmd, state).await,
@@ -878,6 +883,7 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
         let data = match action {
             "desktop_capture" => redact_desktop_capture_stream_result(response_data),
             "desktop_locate" => redact_desktop_locate_stream_result(response_data),
+            "desktop_prompt_observe" => redact_desktop_prompt_stream_result(response_data),
             "desktop_interact" => redact_desktop_interaction_stream_result(response_data),
             _ => response_data.clone(),
         };

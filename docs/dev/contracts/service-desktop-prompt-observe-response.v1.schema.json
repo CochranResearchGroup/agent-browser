@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-desktop-prompt-observe-response.v1.schema.json",
+  "title": "agent-browser desktop prompt observe response",
+  "description": "Immediate response data for action=desktop_prompt_observe over repository-owned synthetic evidence. Visualization pixels are optional, response-only, and never retained in durable service state.",
+  "type": "object",
+  "required": ["ok", "action", "context", "frameReceipt", "promptObservation"],
+  "properties": {
+    "ok": { "const": true },
+    "action": { "const": "desktop_prompt_observe" },
+    "context": { "$ref": "desktop-context.v1.schema.json" },
+    "frameReceipt": { "$ref": "frame-receipt.v1.schema.json" },
+    "promptObservation": { "$ref": "prompt-observation.v1.schema.json" },
+    "visualizationBase64": {
+      "type": "string",
+      "contentEncoding": "base64",
+      "description": "Optional response-only bounded PNG visualization."
+    }
+  },
+  "additionalProperties": false
+}

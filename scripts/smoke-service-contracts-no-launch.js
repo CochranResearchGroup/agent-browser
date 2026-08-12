@@ -147,6 +147,14 @@ try {
     `desktop_locate MCP adapter missing: ${JSON.stringify(contracts.data.mcp)}`,
   );
   assert(
+    contracts.data.contracts.serviceRequest.actions.includes('desktop_prompt_observe'),
+    `desktop_prompt_observe action missing: ${JSON.stringify(contracts.data.contracts.serviceRequest)}`,
+  );
+  assert(
+    contracts.data.mcp?.desktopPromptObserveTool === 'desktop_prompt_observe',
+    `desktop_prompt_observe MCP adapter missing: ${JSON.stringify(contracts.data.mcp)}`,
+  );
+  assert(
     contracts.data?.contracts?.desktopContext?.schemaId ===
       'https://agent-browser.local/contracts/desktop-context.v1.schema.json',
     `desktopContext schema id mismatch: ${JSON.stringify(contracts.data?.contracts?.desktopContext)}`,
@@ -198,6 +206,28 @@ try {
       contracts.data?.contracts?.serviceDesktopLocateResponse?.noLaunch === true &&
       contracts.data?.contracts?.serviceDesktopLocateResponse?.input === false,
     `serviceDesktopLocateResponse posture mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceDesktopLocateResponse)}`,
+  );
+  assert(
+    contracts.data?.contracts?.promptObservation?.schemaId ===
+      'https://agent-browser.local/contracts/prompt-observation.v1.schema.json' &&
+      contracts.data?.contracts?.serviceDesktopPromptObserveResponse?.schemaId ===
+        'https://agent-browser.local/contracts/service-desktop-prompt-observe-response.v1.schema.json' &&
+      contracts.data?.contracts?.serviceDesktopPromptObserveResponse?.mcp?.tools?.includes(
+        'desktop_prompt_observe',
+      ) &&
+      contracts.data?.contracts?.serviceDesktopPromptObserveResponse?.client?.helpers?.includes(
+        'observeServiceDesktopPrompt',
+      ) &&
+      contracts.data?.contracts?.serviceDesktopPromptObserveResponse?.request?.promptProfileId ===
+        'p110-external-prompt-v1' &&
+      contracts.data?.contracts?.serviceDesktopPromptObserveResponse?.request?.paramsAccepted ===
+        false &&
+      contracts.data?.contracts?.serviceDesktopPromptObserveResponse?.payload?.persisted === false &&
+      contracts.data?.contracts?.serviceDesktopPromptObserveResponse?.productionProviderConfigured ===
+        false &&
+      contracts.data?.contracts?.serviceDesktopPromptObserveResponse?.noLaunch === true &&
+      contracts.data?.contracts?.serviceDesktopPromptObserveResponse?.input === false,
+    `serviceDesktopPromptObserveResponse posture mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceDesktopPromptObserveResponse)}`,
   );
   assert(
     contracts.data?.contracts?.serviceProfileAllocationResponse?.schemaId ===

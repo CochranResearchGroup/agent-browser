@@ -417,6 +417,55 @@ an unauthenticated HTTP service request requires all three attribution labels.
 Generated client helpers are `createServiceDesktopLocateRequest()`,
 `requestServiceDesktopLocate()`, and `locateServiceDesktopControl()`.
 
+## Synthetic Browser-External Prompt Observation
+
+Use `desktop prompt observe` only for the fixed repository-owned PoC 4 fixture
+profile. It is a read-only source proof and accepts no caller pixels, page
+image, DOM, prompt text, template, threshold, coordinate, provider, route,
+display, URL, challenge kind, or input effect.
+
+```bash
+agent-browser desktop prompt observe \
+  --browser-id browser-123 \
+  --prompt-profile-id p110-external-prompt-v1 \
+  --service-name DesktopPerception \
+  --agent-name fixture-agent \
+  --task-name observe-fixture
+```
+
+Use global `--session <name>` to select the daemon lane. That value is not sent
+as request evidence. Use global `--session-name <name>` only for the optional
+retained browser session lane. Add `--include-visualization --json` when the
+response-only synthetic visualization is necessary.
+
+Interpret `promptObservation` using its typed axes:
+
+- `detectionStatus`: `matched`, `not_found`, or `ambiguous`.
+- `pageVisibility`: `absent`, `present`, or `indeterminate`.
+- `classification`: `browser_external`, `page_surface`, or `unclassified`.
+- `handlingOutcome`: `actionable_observation`,
+  `operator_intervention_required`, or `none`.
+
+Only one matched, page-absent external candidate has a
+`selectedCandidateId`. Ambiguous and manual-only cases may return a typed
+`operatorIntervention` and never authorize input. The
+`absent_from_fixture_page_inputs` receipt claim is limited to independently
+produced repository fixture page screenshot and DOM evidence. Text output
+omits pixels, raw DOM, prompt text, hashes, and visualization bytes.
+
+PoC 4 configures no production provider. Ordinary dispatch must fail with
+`desktop_prompt_provider_unavailable` before capture or launch. Never describe
+this fixture result as proof of live CDP blindness or recognition of a real
+browser prompt, extension popup, native dialog, credential manager, passkey
+prompt, CAPTCHA, or challenge.
+
+HTTP uses top-level `action: "desktop_prompt_observe"`, `browserId`,
+`promptProfileId`, `includeVisualization`, optional `sessionName`, and
+attribution. MCP clients use `service_request` or the dedicated
+`desktop_prompt_observe` tool. Generated client helpers are
+`createServiceDesktopPromptObserveRequest()`,
+`requestServiceDesktopPromptObserve()`, and `observeServiceDesktopPrompt()`.
+
 ## Guarded Synthetic Desktop Interaction
 
 Use `desktop interact` only for the registered PoC 3 synthetic recipe and only
@@ -904,6 +953,7 @@ agent-browser screenshot --screenshot-dir ./shots  # Save to custom directory
 agent-browser screenshot --screenshot-format jpeg --screenshot-quality 80
 agent-browser desktop capture --browser-id browser-123 --json # Capture the bound service-owned desktop
 agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1 --json # Locate the synthetic verification control without input
+agent-browser desktop prompt observe --browser-id browser-123 --prompt-profile-id p110-external-prompt-v1 --json # Observe the source-only synthetic external-prompt fixture
 agent-browser desktop interact --browser-id browser-123 --controller-lease-id viewer-7 --recipe-id p110-pointer-keyboard-v1 --service-name DesktopInteractor --agent-name fixture-agent --task-name verify-synthetic-control --json # Exercise the source-only guarded interaction contract
 agent-browser pdf output.pdf          # Save as PDF
 

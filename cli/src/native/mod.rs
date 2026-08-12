@@ -54,6 +54,8 @@ pub(crate) mod desktop_interaction;
 #[allow(dead_code)]
 pub mod desktop_locator;
 #[allow(dead_code)]
+pub(crate) mod desktop_prompt_perception;
+#[allow(dead_code)]
 pub mod diff;
 #[allow(dead_code)]
 pub mod element;

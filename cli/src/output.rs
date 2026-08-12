@@ -209,6 +209,63 @@ fn format_desktop_locate_text(data: &serde_json::Value) -> Option<String> {
     )
 }
 
+fn format_desktop_prompt_observe_text(data: &serde_json::Value) -> Option<String> {
+    let observation = data.get("promptObservation")?.as_object()?;
+    let status = observation.get("detectionStatus")?.as_str()?;
+    let page_visibility = observation.get("pageVisibility")?.as_str()?;
+    let classification = observation.get("classification")?.as_str()?;
+    let handling_outcome = observation.get("handlingOutcome")?.as_str()?;
+    let selected_candidate_id = observation
+        .get("selectedCandidateId")
+        .and_then(|value| value.as_str())
+        .unwrap_or("none");
+    let blindness_receipt = observation.get("blindnessReceipt")?.as_object()?;
+    let proof_class = blindness_receipt.get("proofClass")?.as_str()?;
+    let claim = blindness_receipt.get("claim")?.as_str()?;
+    let correspondence_state = blindness_receipt.get("correspondenceState")?.as_str()?;
+    let desktop_matches = blindness_receipt.get("desktopPromptMatchCount")?.as_u64()?;
+    let page_matches = blindness_receipt
+        .get("pageScreenshotPromptMatchCount")?
+        .as_u64()?;
+    let dom_matches = blindness_receipt.get("domPromptMatchCount")?.as_u64()?;
+
+    let mut lines = vec![
+        format!("Desktop prompt observation {status}"),
+        format!("Detection status: {status}"),
+        format!("Page visibility: {page_visibility}"),
+        format!("Classification: {classification}"),
+        format!("Handling outcome: {handling_outcome}"),
+        format!("Selected candidate: {selected_candidate_id}"),
+        format!("Proof class: {proof_class}"),
+        format!("Claim: {claim}"),
+        format!("Correspondence: {correspondence_state}"),
+        format!(
+            "Evidence matches: desktop={desktop_matches}, page={page_matches}, DOM={dom_matches}"
+        ),
+    ];
+
+    if let Some(intervention) = observation
+        .get("operatorIntervention")
+        .and_then(|value| value.as_object())
+    {
+        if let Some(state) = intervention.get("state").and_then(|value| value.as_str()) {
+            lines.push(format!("Operator intervention: {state}"));
+        }
+        if let Some(reason_code) = intervention
+            .get("reasonCode")
+            .and_then(|value| value.as_str())
+        {
+            lines.push(format!("Reason: {reason_code}"));
+        }
+    }
+
+    lines.push(
+        "Use --json for structured synthetic fixture receipts and any requested response-only visualization."
+            .to_string(),
+    );
+    Some(lines.join("\n"))
+}
+
 fn format_desktop_interact_text(data: &serde_json::Value) -> Option<String> {
     let receipt = data.get("interactionReceipt")?.as_object()?;
     let transaction_id = receipt.get("transactionId")?.as_str()?;
@@ -2772,6 +2829,14 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
                 println!("{}", output);
                 return;
             }
+        }
+        if action == Some("desktop_prompt_observe") {
+            let output = format_desktop_prompt_observe_text(data).unwrap_or_else(|| {
+                "Desktop prompt observation returned no renderable typed receipt; use --json to inspect the structured response."
+                    .to_string()
+            });
+            println!("{}", output);
+            return;
         }
         if action == Some("desktop_interact") {
             if let Some(output) = format_desktop_interact_text(data) {
@@ -5375,6 +5440,7 @@ agent-browser desktop - Observe or run one guarded synthetic desktop transaction
 Usage:
   agent-browser desktop capture --browser-id <id> [--max-bytes <bytes>]
   agent-browser desktop locate --browser-id <id> --locator-id <id> [--max-candidates <count>] [--include-visualization]
+  agent-browser desktop prompt observe --browser-id <id> --prompt-profile-id p110-external-prompt-v1 [--include-visualization]
   agent-browser desktop interact --browser-id <id> --controller-lease-id <id> --recipe-id p110-pointer-keyboard-v1 --service-name <name> --agent-name <name> --task-name <name>
 
 `desktop capture` asks the service worker to resolve one retained browser to
@@ -5398,6 +5464,18 @@ the response-only `visualizationBase64` value.
 PoC 1 capture and PoC 2 location are source-only and have no live RDP or
 Guacamole acceptance. Source presence is not installed-runtime proof.
 
+`desktop prompt observe` is the PoC 4 source proof for the repository-owned
+synthetic browser-external prompt fixture. It compares independently produced
+desktop, fixture page screenshot, and normalized fixture DOM evidence through
+the fixed `p110-external-prompt-v1` profile. Text output exposes typed status,
+classification, handling, intervention, and blindness-receipt counts only. It
+omits pixels, DOM content, prompt text, hashes, and visualization bytes.
+
+PoC 4 configures no production provider. Ordinary runtime dispatch fails with
+`desktop_prompt_provider_unavailable` before capture or launch. Fixture results
+do not prove detection of a real browser, extension popup, native dialog,
+credential manager, passkey prompt, CAPTCHA, or challenge.
+
 `desktop interact` is the PoC 3 atomic observe, locate, act, and verify
 contract. It accepts only a pre-existing controller lease and the registered
 `p110-pointer-keyboard-v1` synthetic recipe. It cannot request or take over
@@ -5413,21 +5491,27 @@ Options:
   --locator-id <id>       Select one registered deterministic locator profile
   --max-candidates <n>    Bound candidates (default: 8; max: 32)
   --include-visualization Include an annotated response-only visualization in JSON
+  --prompt-profile-id <id>
+                          Select p110-external-prompt-v1 for synthetic fixture proof
   --controller-lease-id <id>
                           Require the exact current controller lease
   --recipe-id <id>        Select the registered synthetic interaction recipe
-  --service-name <name>   Accountable service attribution for interaction
-  --agent-name <name>     Accountable agent attribution for interaction
-  --task-name <name>      Accountable task attribution for interaction
+  --service-name <name>   Prompt-observation or interaction service attribution
+  --agent-name <name>     Prompt-observation or interaction agent attribution
+  --task-name <name>      Prompt-observation or interaction task attribution
 
 Global Options:
-  --json                  Include imageBase64 in the structured response
+  --session <name>        Select the daemon lane; never sent as request evidence
+  --session-name <name>   Select the optional retained browser session lane
+  --json                  Include response-only structured payloads
 
 Examples:
   agent-browser desktop capture --browser-id browser-123
   agent-browser desktop capture --browser-id browser-123 --max-bytes 8388608 --json
   agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1
   agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1 --include-visualization --json
+  agent-browser --session fixture-daemon desktop prompt observe --browser-id browser-123 --session-name fixture-browser --prompt-profile-id p110-external-prompt-v1 --service-name DesktopPerception --agent-name fixture-agent --task-name observe-fixture
+  agent-browser desktop prompt observe --browser-id browser-123 --prompt-profile-id p110-external-prompt-v1 --include-visualization --json
   agent-browser desktop interact --browser-id browser-123 --controller-lease-id viewer-7 --recipe-id p110-pointer-keyboard-v1 --service-name DesktopInteractor --agent-name fixture-agent --task-name verify-synthetic-control --json
 "##
         }
@@ -6436,6 +6520,8 @@ Desktop observation:
                              Capture one service-bound desktop PNG receipt
   desktop locate --browser-id <id> --locator-id <id>
                              Locate deterministic candidates without input
+  desktop prompt observe --browser-id <id> --prompt-profile-id p110-external-prompt-v1
+                             Observe the source-only synthetic external-prompt fixture
   desktop interact --browser-id <id> --controller-lease-id <id> --recipe-id <id> --service-name <name> --agent-name <name> --task-name <name>
                              Run one guarded synthetic recipe; production input is unavailable
 
@@ -6939,9 +7025,10 @@ pub fn print_version() {
 mod tests {
     use super::{
         format_desktop_capture_text, format_desktop_interact_text, format_desktop_locate_text,
-        format_service_access_plan_text, format_service_browser_capability_preflight_text,
-        format_service_browsers_text, format_service_challenges_text, format_service_events_text,
-        format_service_incidents_text, format_service_jobs_text, format_service_monitor_state_text,
+        format_desktop_prompt_observe_text, format_service_access_plan_text,
+        format_service_browser_capability_preflight_text, format_service_browsers_text,
+        format_service_challenges_text, format_service_events_text, format_service_incidents_text,
+        format_service_jobs_text, format_service_monitor_state_text,
         format_service_monitors_run_due_text, format_service_monitors_text,
         format_service_profile_seeding_handoff_text, format_service_profiles_text,
         format_service_providers_text, format_service_prune_retained_text,
@@ -7088,6 +7175,95 @@ mod tests {
         assert!(rendered.contains("Verification: passed"));
         assert!(!rendered.contains("must-not-render"));
         assert!(!rendered.contains("[1,2]"));
+    }
+
+    #[test]
+    fn desktop_prompt_observe_text_reports_typed_fixture_proof_without_raw_evidence() {
+        let data = json!({
+            "ok": true,
+            "action": "desktop_prompt_observe",
+            "context": { "contextId": "desktop-context-1" },
+            "frameReceipt": { "frameId": "desktop-frame-1" },
+            "promptObservation": {
+                "detectionStatus": "matched",
+                "pageVisibility": "absent",
+                "classification": "browser_external",
+                "handlingOutcome": "actionable_observation",
+                "selectedCandidateId": "candidate-1",
+                "operatorIntervention": null,
+                "blindnessReceipt": {
+                    "proofClass": "repository_fixture",
+                    "claim": "absent_from_fixture_page_inputs",
+                    "correspondenceState": "verified",
+                    "desktopPromptMatchCount": 1,
+                    "pageScreenshotPromptMatchCount": 0,
+                    "domPromptMatchCount": 0,
+                    "desktopFrameSha256": "desktop-hash",
+                    "pageFrameSha256": "page-hash",
+                    "domManifestSha256": "dom-hash",
+                    "promptSignatureSha256": "signature-hash",
+                    "bindingSha256": "binding-hash"
+                },
+                "rawDom": "must-not-render",
+                "normalizedPromptText": "must-not-render-either"
+            },
+            "visualizationBase64": "sensitive-visualization-bytes"
+        });
+
+        let rendered = format_desktop_prompt_observe_text(&data).unwrap();
+
+        assert!(rendered.contains("Desktop prompt observation matched"));
+        assert!(rendered.contains("Page visibility: absent"));
+        assert!(rendered.contains("Classification: browser_external"));
+        assert!(rendered.contains("Handling outcome: actionable_observation"));
+        assert!(rendered.contains("Selected candidate: candidate-1"));
+        assert!(rendered.contains("Proof class: repository_fixture"));
+        assert!(rendered.contains("Claim: absent_from_fixture_page_inputs"));
+        assert!(rendered.contains("Correspondence: verified"));
+        assert!(rendered.contains("Evidence matches: desktop=1, page=0, DOM=0"));
+        assert!(!rendered.contains("sensitive-visualization-bytes"));
+        assert!(!rendered.contains("must-not-render"));
+        assert!(!rendered.contains("desktop-hash"));
+    }
+
+    #[test]
+    fn desktop_prompt_observe_text_tolerates_optional_visualization_and_intervention() {
+        let data = json!({
+            "promptObservation": {
+                "detectionStatus": "ambiguous",
+                "pageVisibility": "indeterminate",
+                "classification": "unclassified",
+                "handlingOutcome": "operator_intervention_required",
+                "selectedCandidateId": null,
+                "operatorIntervention": {
+                    "state": "required",
+                    "reasonCode": "synthetic_prompt_requires_operator_review",
+                    "title": "private prompt title must not render",
+                    "message": "private prompt text must not render",
+                    "actions": [{
+                        "id": "review_in_remote_view",
+                        "label": "private action label must not render",
+                        "kind": "operator_instruction",
+                        "safety": "safe",
+                        "description": "private action description must not render"
+                    }]
+                },
+                "blindnessReceipt": {
+                    "proofClass": "repository_fixture",
+                    "claim": "absent_from_fixture_page_inputs",
+                    "correspondenceState": "verified",
+                    "desktopPromptMatchCount": 2,
+                    "pageScreenshotPromptMatchCount": 0,
+                    "domPromptMatchCount": 0
+                }
+            }
+        });
+
+        let rendered = format_desktop_prompt_observe_text(&data).unwrap();
+        assert!(rendered.contains("Operator intervention: required"));
+        assert!(rendered.contains("Reason: synthetic_prompt_requires_operator_review"));
+        assert!(!rendered.contains("private prompt text"));
+        assert!(!rendered.contains("private action"));
     }
 
     #[test]

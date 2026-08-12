@@ -322,6 +322,7 @@ const SERVICE_REQUEST_FIELDS: &[ServiceRequestFieldSpec] = &[
         true,
         false,
     ),
+    ServiceRequestFieldSpec::field("promptProfileId", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field("controllerLeaseId", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field("recipe", FieldKind::Object, true, true, false),
     ServiceRequestFieldSpec::field(
@@ -635,6 +636,7 @@ fn validate_safety_gates(
     reject_service_diagnostics_request(action, request)?;
     reject_desktop_capture_request(action, request)?;
     reject_desktop_locate_request(action, request)?;
+    reject_desktop_prompt_observe_request(action, request)?;
     reject_desktop_interact_request(action, request)?;
     reject_service_probe_request(action, request)?;
     reject_tab_handle_refresh_request(action, request)?;
@@ -1146,6 +1148,77 @@ fn reject_desktop_interact_request(
         return Err(issue(
             ServiceRequestIssueKind::InvalidBoundedRecipe,
             "desktop_interact requires recipeId p110-pointer-keyboard-v1",
+        ));
+    }
+    Ok(())
+}
+
+fn reject_desktop_prompt_observe_request(
+    action: &str,
+    request: &Map<String, Value>,
+) -> Result<(), ServiceRequestIssue> {
+    if action != "desktop_prompt_observe" {
+        return Ok(());
+    }
+    const TOP_LEVEL_FIELDS: &[&str] = &[
+        "action",
+        "browserId",
+        "sessionName",
+        "promptProfileId",
+        "includeVisualization",
+        "serviceName",
+        "agentName",
+        "taskName",
+        "jobTimeoutMs",
+    ];
+    if let Some(field) = request
+        .keys()
+        .find(|field| !TOP_LEVEL_FIELDS.contains(&field.as_str()))
+    {
+        return Err(issue(
+            ServiceRequestIssueKind::InvalidBoundedRecipe,
+            format!("desktop_prompt_observe does not accept {field}"),
+        ));
+    }
+    for field in ["browserId", "serviceName", "agentName", "taskName"] {
+        if request
+            .get(field)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_none()
+        {
+            return Err(issue(
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                format!("desktop_prompt_observe requires {field}"),
+            ));
+        }
+    }
+    if request.get("sessionName").is_some_and(|value| {
+        value
+            .as_str()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_none()
+    }) {
+        return Err(issue(
+            ServiceRequestIssueKind::InvalidBoundedRecipe,
+            "desktop_prompt_observe sessionName must be a nonempty string",
+        ));
+    }
+    if request.get("promptProfileId").and_then(Value::as_str) != Some("p110-external-prompt-v1") {
+        return Err(issue(
+            ServiceRequestIssueKind::InvalidBoundedRecipe,
+            "desktop_prompt_observe requires promptProfileId p110-external-prompt-v1",
+        ));
+    }
+    if request
+        .get("includeVisualization")
+        .is_some_and(|value| !value.is_boolean())
+    {
+        return Err(issue(
+            ServiceRequestIssueKind::InvalidBoundedRecipe,
+            "desktop_prompt_observe includeVisualization must be a boolean",
         ));
     }
     Ok(())
@@ -2048,6 +2121,48 @@ mod tests {
         }
     }
 
+    #[test]
+    fn desktop_prompt_observe_requires_attributed_top_level_named_profile() {
+        let normalized = normalize(json!({
+            "action": "desktop_prompt_observe",
+            "browserId": "browser-1",
+            "sessionName": "rdp-1",
+            "promptProfileId": "p110-external-prompt-v1",
+            "includeVisualization": true,
+            "serviceName": "DesktopPromptObserver",
+            "agentName": "fixture-agent",
+            "taskName": "observe-synthetic-prompt"
+        }))
+        .unwrap();
+        assert_eq!(normalized.command["action"], "desktop_prompt_observe");
+        assert_eq!(
+            normalized.command["promptProfileId"],
+            "p110-external-prompt-v1"
+        );
+
+        for (request, expected_message) in [
+            (
+                json!({"action":"desktop_prompt_observe","browserId":"browser-1","promptProfileId":"p110-external-prompt-v1","serviceName":"DesktopPromptObserver","agentName":"fixture-agent"}),
+                "desktop_prompt_observe requires taskName",
+            ),
+            (
+                json!({"action":"desktop_prompt_observe","browserId":"browser-1","promptProfileId":"wrong","serviceName":"DesktopPromptObserver","agentName":"fixture-agent","taskName":"observe"}),
+                "desktop_prompt_observe requires promptProfileId p110-external-prompt-v1",
+            ),
+            (
+                json!({"action":"desktop_prompt_observe","browserId":"browser-1","promptProfileId":"p110-external-prompt-v1","serviceName":"DesktopPromptObserver","agentName":"fixture-agent","taskName":"observe","params":{}}),
+                "desktop_prompt_observe does not accept params",
+            ),
+            (
+                json!({"action":"desktop_prompt_observe","browserId":"browser-1","promptProfileId":"p110-external-prompt-v1","serviceName":"DesktopPromptObserver","agentName":"fixture-agent","taskName":"observe","promptText":"secret"}),
+                "unknown service request field: promptText",
+            ),
+        ] {
+            let error = normalize(request).unwrap_err();
+            assert_eq!(error.message(), expected_message);
+        }
+    }
+
     fn test_tab_handle(valid: bool) -> Value {
         json!({
             "browserId": "session:default",
@@ -2083,6 +2198,13 @@ mod tests {
                 request["browserId"] = json!("browser:desktop-fixture");
                 request["format"] = json!("png");
                 request["maxBytes"] = json!(4 * 1024 * 1024);
+            }
+            "desktop_prompt_observe" => {
+                request["browserId"] = json!("browser:desktop-fixture");
+                request["promptProfileId"] = json!("p110-external-prompt-v1");
+                request["serviceName"] = json!("DesktopPromptObserver");
+                request["agentName"] = json!("fixture-agent");
+                request["taskName"] = json!("observe-synthetic-prompt");
             }
             "probe" => {
                 request["serviceTabHandle"] = test_tab_handle(true);
@@ -2480,6 +2602,16 @@ mod tests {
             valid_request_for_action("cdp_free_launch"),
             valid_request_for_action("evaluate"),
             valid_request_for_action("file_transfer"),
+            json!({
+                "action": "desktop_prompt_observe",
+                "browserId": "browser-rdp-1",
+                "sessionName": "rdp-1",
+                "promptProfileId": "p110-external-prompt-v1",
+                "includeVisualization": false,
+                "serviceName": "DesktopPromptObserver",
+                "agentName": "fixture-agent",
+                "taskName": "observe-synthetic-prompt"
+            }),
         ];
         for request in valid {
             let body = serde_json::to_string(&request).unwrap();
@@ -2494,6 +2626,8 @@ mod tests {
             json!({"action":"tab_new","blockedByManualAction":true,"manualSeedingRequired":true}),
             json!({"action":"evaluate","script":"document.title","timeoutMs":1000,"maxReturnBytes":128}),
             json!({"action":"network_capture","serviceTabHandle":test_tab_handle(true),"networkCapture":{"maxEvents":1}}),
+            json!({"action":"desktop_prompt_observe","browserId":"browser-rdp-1","promptProfileId":"p110-external-prompt-v1","serviceName":"DesktopPromptObserver","agentName":"fixture-agent","taskName":"observe","params":{}}),
+            json!({"action":"desktop_prompt_observe","browserId":"browser-rdp-1","promptProfileId":"wrong","serviceName":"DesktopPromptObserver","agentName":"fixture-agent","taskName":"observe"}),
         ];
         for request in invalid {
             let message = normalize(request.clone())

@@ -87,6 +87,7 @@ const SERVICE_BROWSER_CAPABILITY_PREFER_USAGE: &str = "service browser-capabilit
 const SERVICE_ACCESS_PLAN_USAGE: &str = "service access-plan [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--site-policy-id <id>] [--challenge-id <id>] [--readiness-profile-id <id>] [--runtime-profile <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--browser-host <local_headless|local_headed|docker_headed|remote_headed|cloud_provider|attached_existing>] [--view-stream-provider <cdp_screencast|chrome_tab_webrtc|virtual_display_webrtc|novnc|rdp_gateway|external_url>] [--control-input-provider <cdp_input|webrtc_input|vnc_input|manual_attached_desktop>] [--display-isolation <private_virtual_display|shared_display|ambient_display>]";
 const DESKTOP_CAPTURE_USAGE: &str = "desktop capture --browser-id <id> [--max-bytes <bytes>]";
 const DESKTOP_LOCATE_USAGE: &str = "desktop locate --browser-id <id> --locator-id <id> [--max-candidates <count>] [--include-visualization]";
+const DESKTOP_PROMPT_OBSERVE_USAGE: &str = "desktop prompt observe --browser-id <id> --prompt-profile-id p110-external-prompt-v1 [--include-visualization]";
 const DESKTOP_INTERACT_USAGE: &str = "desktop interact --browser-id <id> --controller-lease-id <id> --recipe-id p110-pointer-keyboard-v1 --service-name <name> --agent-name <name> --task-name <name>";
 const DESKTOP_LOCATE_DEFAULT_MAX_CANDIDATES: u64 = 8;
 const DESKTOP_LOCATE_HARD_MAX_CANDIDATES: u64 = 32;
@@ -1165,6 +1166,102 @@ fn parse_desktop_locate(id: String, rest: &[&str]) -> Result<Value, ParseError> 
     }))
 }
 
+/// Parse the repository-owned synthetic browser-external prompt observation.
+/// Callers select browser identity, the fixed profile, visualization
+/// preference, and service attribution only; pixels, DOM, prompt text,
+/// thresholds, provider routing, and input effects stay service owned.
+/// `sessionName` follows the global browser-lane convention.
+fn parse_desktop_prompt_observe(
+    id: String,
+    rest: &[&str],
+    flags: &Flags,
+) -> Result<Value, ParseError> {
+    if rest.get(1).copied() != Some("observe") {
+        return match rest.get(1).copied() {
+            Some(subcommand) => Err(ParseError::UnknownSubcommand {
+                subcommand: subcommand.to_string(),
+                valid_options: &["observe"],
+            }),
+            None => Err(ParseError::MissingArguments {
+                context: "desktop prompt".to_string(),
+                usage: DESKTOP_PROMPT_OBSERVE_USAGE,
+            }),
+        };
+    }
+
+    let mut browser_id = None;
+    let mut prompt_profile_id = None;
+    let mut include_visualization = false;
+    let mut service_name = None;
+    let mut agent_name = None;
+    let mut task_name = None;
+    let mut i = 2;
+    while i < rest.len() {
+        if rest[i] == "--include-visualization" {
+            include_visualization = true;
+            i += 1;
+            continue;
+        }
+
+        let (slot, flag) = match rest[i] {
+            "--browser-id" => (&mut browser_id, "--browser-id"),
+            "--prompt-profile-id" => (&mut prompt_profile_id, "--prompt-profile-id"),
+            "--service-name" => (&mut service_name, "--service-name"),
+            "--agent-name" => (&mut agent_name, "--agent-name"),
+            "--task-name" => (&mut task_name, "--task-name"),
+            flag => {
+                return Err(ParseError::InvalidValue {
+                    message: format!("Unknown flag for desktop prompt observe: {flag}"),
+                    usage: DESKTOP_PROMPT_OBSERVE_USAGE,
+                });
+            }
+        };
+        let value = required_next(rest, i, flag, DESKTOP_PROMPT_OBSERVE_USAGE)?;
+        if value.starts_with("--") {
+            return Err(ParseError::InvalidValue {
+                message: format!("Missing value for {flag}"),
+                usage: DESKTOP_PROMPT_OBSERVE_USAGE,
+            });
+        }
+        *slot = Some(value);
+        i += 2;
+    }
+
+    let (Some(browser_id), Some(prompt_profile_id)) = (browser_id, prompt_profile_id) else {
+        return Err(ParseError::MissingArguments {
+            context: "desktop prompt observe".to_string(),
+            usage: DESKTOP_PROMPT_OBSERVE_USAGE,
+        });
+    };
+    if prompt_profile_id != "p110-external-prompt-v1" {
+        return Err(ParseError::InvalidValue {
+            message: format!("Unsupported desktop prompt profile: {prompt_profile_id}"),
+            usage: DESKTOP_PROMPT_OBSERVE_USAGE,
+        });
+    }
+
+    let mut command = json!({
+        "id": id,
+        "action": "desktop_prompt_observe",
+        "browserId": browser_id,
+        "promptProfileId": prompt_profile_id,
+        "includeVisualization": include_visualization,
+    });
+    if let Some(session_name) = flags.session_name.as_ref() {
+        command["sessionName"] = json!(session_name);
+    }
+    if let Some(service_name) = service_name {
+        command["serviceName"] = json!(service_name);
+    }
+    if let Some(agent_name) = agent_name {
+        command["agentName"] = json!(agent_name);
+    }
+    if let Some(task_name) = task_name {
+        command["taskName"] = json!(task_name);
+    }
+    Ok(command)
+}
+
 /// Parse one named guarded desktop interaction recipe. Targets, coordinates,
 /// event plans, input text, timing, and provider selection remain service
 /// owned and cannot be supplied through the CLI.
@@ -1242,18 +1339,19 @@ fn parse_desktop_interact(id: String, rest: &[&str]) -> Result<Value, ParseError
     }))
 }
 
-fn parse_desktop(id: String, rest: &[&str]) -> Result<Value, ParseError> {
+fn parse_desktop(id: String, rest: &[&str], flags: &Flags) -> Result<Value, ParseError> {
     match rest.first().copied() {
         Some("capture") => parse_desktop_capture(id, rest),
         Some("locate") => parse_desktop_locate(id, rest),
+        Some("prompt") => parse_desktop_prompt_observe(id, rest, flags),
         Some("interact") => parse_desktop_interact(id, rest),
         Some(subcommand) => Err(ParseError::UnknownSubcommand {
             subcommand: subcommand.to_string(),
-            valid_options: &["capture", "locate", "interact"],
+            valid_options: &["capture", "locate", "prompt", "interact"],
         }),
         None => Err(ParseError::MissingArguments {
             context: "desktop".to_string(),
-            usage: "desktop <capture|locate|interact>",
+            usage: "desktop <capture|locate|prompt|interact>",
         }),
     }
 }
@@ -2565,7 +2663,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
         },
 
         // === Service-owned desktop observation ===
-        "desktop" => parse_desktop(id, &rest),
+        "desktop" => parse_desktop(id, &rest, flags),
 
         // === Service status ===
         "service" => match rest.first().copied() {
@@ -7392,6 +7490,97 @@ mod tests {
 
             assert!(matches!(err, ParseError::InvalidValue { .. }));
             assert!(err.format().contains("Unknown flag for desktop locate"));
+        }
+    }
+
+    #[test]
+    fn test_desktop_prompt_observe_builds_the_named_read_only_action() {
+        let mut flags = default_flags();
+        flags.session = "fixture-daemon".to_string();
+        flags.session_name = Some("fixture-browser".to_string());
+        let cmd = parse_command(
+            &args(
+                "desktop prompt observe --browser-id browser-123 --prompt-profile-id p110-external-prompt-v1 --include-visualization --service-name DesktopPerception --agent-name fixture-agent --task-name observe-fixture",
+            ),
+            &flags,
+        )
+        .unwrap();
+
+        assert_eq!(flags.session, "fixture-daemon");
+        assert_eq!(cmd["action"], "desktop_prompt_observe");
+        assert_eq!(cmd["browserId"], "browser-123");
+        assert_eq!(cmd["sessionName"], "fixture-browser");
+        assert_eq!(cmd["promptProfileId"], "p110-external-prompt-v1");
+        assert_eq!(cmd["includeVisualization"], true);
+        assert_eq!(cmd["serviceName"], "DesktopPerception");
+        assert_eq!(cmd["agentName"], "fixture-agent");
+        assert_eq!(cmd["taskName"], "observe-fixture");
+        assert!(cmd.get("params").is_none());
+        assert!(cmd.get("session").is_none());
+        assert!(cmd.get("imageBase64").is_none());
+        assert!(cmd.get("provider").is_none());
+    }
+
+    #[test]
+    fn test_desktop_prompt_observe_defaults_to_no_visualization() {
+        let cmd = parse_command(
+            &args(
+                "desktop prompt observe --browser-id browser-123 --prompt-profile-id p110-external-prompt-v1",
+            ),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["includeVisualization"], false);
+        assert!(cmd.get("sessionName").is_none());
+    }
+
+    #[test]
+    fn test_desktop_prompt_observe_requires_browser_and_named_profile() {
+        for command in [
+            "desktop prompt observe --prompt-profile-id p110-external-prompt-v1",
+            "desktop prompt observe --browser-id browser-123",
+        ] {
+            let error = parse_command(&args(command), &default_flags()).unwrap_err();
+            assert!(matches!(error, ParseError::MissingArguments { .. }));
+            assert!(error.format().contains(DESKTOP_PROMPT_OBSERVE_USAGE));
+        }
+
+        let error = parse_command(
+            &args("desktop prompt observe --browser-id browser-123 --prompt-profile-id arbitrary"),
+            &default_flags(),
+        )
+        .unwrap_err();
+        assert!(matches!(error, ParseError::InvalidValue { .. }));
+        assert!(error
+            .format()
+            .contains("Unsupported desktop prompt profile"));
+    }
+
+    #[test]
+    fn test_desktop_prompt_observe_rejects_caller_evidence_and_effects() {
+        for flag in [
+            "--image-base64",
+            "--dom",
+            "--page-image",
+            "--prompt-text",
+            "--params",
+            "--template-path",
+            "--threshold",
+            "--display-name",
+            "--provider",
+            "--url",
+            "--click",
+            "--challenge-id",
+        ] {
+            let command = format!(
+                "desktop prompt observe --browser-id browser-123 --prompt-profile-id p110-external-prompt-v1 {flag} value"
+            );
+            let error = parse_command(&args(&command), &default_flags()).unwrap_err();
+            assert!(matches!(error, ParseError::InvalidValue { .. }));
+            assert!(error
+                .format()
+                .contains("Unknown flag for desktop prompt observe"));
         }
     }
 

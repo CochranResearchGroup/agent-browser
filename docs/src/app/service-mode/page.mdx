@@ -20,9 +20,8 @@ existence of a remote debugging port. The CDP-free operating mode keeps
 agent-browser ownership of the headed browser process, profile lease, task
 labels, process health, lifecycle, and operator handoff. P110 PoC 1 adds
 service-bound desktop capture, and PoC 2 adds registered deterministic location
-over that capture. Neither slice adds CDP or an input effect. Later slices can
-add guarded real mouse input, real keyboard input, optical character recognition
-(OCR), and vision-backed control.
+over that capture. PoC 4 adds a repository-fixture-only prompt observation
+contract. These observation slices add neither CDP nor an input effect.
 
 ## Capture a service-owned desktop frame
 
@@ -243,6 +242,65 @@ const location = await locateServiceDesktopControl({
 });
 // => { success: true, data: { context, frameReceipt, observation } }
 ```
+
+## Observe the synthetic browser-external prompt fixture
+
+P110 PoC 4 adds the canonical read-only `desktop_prompt_observe` action. It
+applies the sole `p110-external-prompt-v1` profile to independently produced
+repository fixture desktop, page screenshot, and normalized DOM evidence.
+
+> **Experimental:** This is a synthetic source proof. No production prompt
+> provider is configured. Configured dispatch returns
+> `desktop_prompt_provider_unavailable` before capture, CDP, browser launch,
+> route mutation, process, network, filesystem, or input effects.
+
+Use the CLI:
+
+```bash
+agent-browser --session fixture-daemon desktop prompt observe \
+  --browser-id browser-123 \
+  --session-name fixture-browser \
+  --prompt-profile-id p110-external-prompt-v1 \
+  --service-name DesktopPerception \
+  --agent-name fixture-agent \
+  --task-name observe-fixture \
+  --json
+```
+
+`--session` selects the daemon lane and is not included in the service request.
+`--session-name` is the optional retained browser session lane. `browserId`
+never selects a daemon. Callers cannot supply pixels, page screenshots, DOM,
+prompt text, templates, thresholds, coordinates, providers, routes, displays,
+URLs, challenge kinds, or input.
+
+Use the canonical HTTP request:
+
+```bash
+curl -X POST "http://127.0.0.1:9223/api/service/request" \
+  -H "content-type: application/json" \
+  -d '{"action":"desktop_prompt_observe","browserId":"browser-123","sessionName":"fixture-browser","promptProfileId":"p110-external-prompt-v1","includeVisualization":false,"serviceName":"DesktopPerception","agentName":"fixture-agent","taskName":"observe-fixture"}'
+```
+
+MCP clients can send the same fields through `service_request` or use the
+dedicated `desktop_prompt_observe` tool. Generated clients expose
+`createServiceDesktopPromptObserveRequest()`,
+`requestServiceDesktopPromptObserve()`, and `observeServiceDesktopPrompt()`.
+Every ingress enters the same canonical queued, no-launch action.
+
+The response is
+`{ ok, action, context, frameReceipt, promptObservation, visualizationBase64? }`.
+The observation reports `detectionStatus`, `pageVisibility`, `classification`,
+`handlingOutcome`, optional `selectedCandidateId`, optional typed
+`operatorIntervention`, and `blindnessReceipt`. The
+`absent_from_fixture_page_inputs` claim means only that the synthetic prompt
+signature was absent from the corresponding independently produced fixture
+page screenshot and DOM evidence. Text output omits pixels, raw DOM, prompt
+text, hashes, and visualization bytes.
+
+Do not interpret this source proof as live CDP blindness or detection of a
+real browser prompt, extension popup, native dialog, credential manager,
+passkey prompt, CAPTCHA, or challenge. Contract discovery and source presence
+are not installed-runtime or live-provider readiness evidence.
 
 ## Run a guarded synthetic desktop interaction
 

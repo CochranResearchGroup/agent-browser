@@ -40,6 +40,8 @@ const displayIsolationSet = new Set([
  * @typedef {import('./service-request.generated.js').ServiceDesktopInteractRequestOptions} ServiceDesktopInteractRequestOptions
  * @typedef {import('./service-request.generated.js').ServiceDesktopLocateRequestHttpOptions} ServiceDesktopLocateRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceDesktopLocateRequestOptions} ServiceDesktopLocateRequestOptions
+ * @typedef {import('./service-request.generated.js').ServiceDesktopPromptObserveRequestHttpOptions} ServiceDesktopPromptObserveRequestHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceDesktopPromptObserveRequestOptions} ServiceDesktopPromptObserveRequestOptions
  * @typedef {import('./service-request.generated.js').ServiceProbeRequestHttpOptions} ServiceProbeRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceProbeRequestOptions} ServiceProbeRequestOptions
  * @typedef {import('./service-request.generated.js').ServiceUiActionRequestHttpOptions} ServiceUiActionRequestHttpOptions
@@ -165,6 +167,9 @@ export function createServiceRequest(input) {
   }
   if (input.action === 'desktop_interact') {
     validateDesktopInteractRequest(record);
+  }
+  if (input.action === 'desktop_prompt_observe') {
+    validateDesktopPromptObserveRequest(record);
   }
 
   return { ...input };
@@ -681,6 +686,65 @@ export function createServiceDesktopInteractRequest(input) {
     ...(sessionName !== undefined ? { sessionName } : {}),
     controllerLeaseId,
     recipe: { recipeId },
+    serviceName,
+    agentName,
+    taskName,
+  });
+}
+
+/**
+ * Builds the sole named synthetic browser-external prompt observation request.
+ * Caller prompt text, pixels, URLs, detector parameters, nested params, and
+ * provider choices are not accepted.
+ *
+ * @param {ServiceDesktopPromptObserveRequestOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceDesktopPromptObserveRequest(input) {
+  assertPlainObject(input, 'service desktop prompt observe request');
+  const {
+    browserId,
+    sessionName,
+    promptProfileId,
+    includeVisualization = false,
+    serviceName,
+    agentName,
+    taskName,
+    ...request
+  } = input;
+  const allowedRequestFields = new Set(['jobTimeoutMs']);
+  const forbiddenField = Object.keys(request).find((field) => !allowedRequestFields.has(field));
+  if (forbiddenField !== undefined) {
+    throw new TypeError(`service desktop prompt observe request does not accept ${forbiddenField}`);
+  }
+  for (const [field, value] of Object.entries({
+    browserId,
+    serviceName,
+    agentName,
+    taskName,
+  })) {
+    if (typeof value !== 'string' || value.trim().length === 0) {
+      throw new TypeError(`service desktop prompt observe request requires ${field}`);
+    }
+  }
+  if (sessionName !== undefined && (typeof sessionName !== 'string' || sessionName.trim().length === 0)) {
+    throw new TypeError('service desktop prompt observe request sessionName must be a non-empty string');
+  }
+  if (promptProfileId !== 'p110-external-prompt-v1') {
+    throw new TypeError(
+      'service desktop prompt observe request requires promptProfileId p110-external-prompt-v1',
+    );
+  }
+  if (typeof includeVisualization !== 'boolean') {
+    throw new TypeError('service desktop prompt observe request includeVisualization must be a boolean');
+  }
+  return createServiceRequest({
+    ...request,
+    action: 'desktop_prompt_observe',
+    browserId,
+    ...(sessionName !== undefined ? { sessionName } : {}),
+    promptProfileId,
+    includeVisualization,
     serviceName,
     agentName,
     taskName,
@@ -1463,6 +1527,32 @@ export async function requestServiceDesktopInteract({ baseUrl, fetch = globalThi
  */
 export async function runServiceDesktopInteraction(options) {
   return requestServiceDesktopInteract(options);
+}
+
+/**
+ * Observe one bounded synthetic browser-external prompt fixture. Configured
+ * public dispatch fails closed until a provider is available.
+ *
+ * @param {ServiceDesktopPromptObserveRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function requestServiceDesktopPromptObserve({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceDesktopPromptObserveRequest(request),
+  });
+}
+
+/**
+ * Convenience alias for requestServiceDesktopPromptObserve.
+ *
+ * @param {ServiceDesktopPromptObserveRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function observeServiceDesktopPrompt(options) {
+  return requestServiceDesktopPromptObserve(options);
 }
 
 /**
@@ -2409,6 +2499,46 @@ function validateDesktopInteractRequest(request) {
   }
   if (recipe.recipeId !== 'p110-pointer-keyboard-v1') {
     throw new TypeError('service desktop interact request requires recipeId p110-pointer-keyboard-v1');
+  }
+}
+
+/**
+ * @param {Record<string, unknown>} request
+ */
+function validateDesktopPromptObserveRequest(request) {
+  const allowedFields = new Set([
+    'action',
+    'browserId',
+    'sessionName',
+    'promptProfileId',
+    'includeVisualization',
+    'serviceName',
+    'agentName',
+    'taskName',
+    'jobTimeoutMs',
+  ]);
+  const forbiddenField = Object.keys(request).find((field) => !allowedFields.has(field));
+  if (forbiddenField !== undefined) {
+    throw new TypeError(`service desktop prompt observe request does not accept ${forbiddenField}`);
+  }
+  for (const field of ['browserId', 'serviceName', 'agentName', 'taskName']) {
+    if (typeof request[field] !== 'string' || String(request[field]).trim().length === 0) {
+      throw new TypeError(`service desktop prompt observe request requires ${field}`);
+    }
+  }
+  if (
+    request.sessionName !== undefined &&
+    (typeof request.sessionName !== 'string' || request.sessionName.trim().length === 0)
+  ) {
+    throw new TypeError('service desktop prompt observe request sessionName must be a non-empty string');
+  }
+  if (request.promptProfileId !== 'p110-external-prompt-v1') {
+    throw new TypeError(
+      'service desktop prompt observe request requires promptProfileId p110-external-prompt-v1',
+    );
+  }
+  if (request.includeVisualization !== undefined && typeof request.includeVisualization !== 'boolean') {
+    throw new TypeError('service desktop prompt observe request includeVisualization must be a boolean');
   }
 }
 

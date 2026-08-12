@@ -10,8 +10,8 @@ use crate::native::service_activity::service_incident_activity_response;
 use crate::native::service_contracts::{
     service_contracts_metadata, DESKTOP_CAPTURE_DEFAULT_MAX_BYTES, DESKTOP_CAPTURE_HARD_MAX_BYTES,
     DESKTOP_CAPTURE_MCP_TOOL_NAME, DESKTOP_INTERACT_MCP_TOOL_NAME, DESKTOP_LOCATE_MCP_TOOL_NAME,
-    SERVICE_ACCESS_PLAN_MCP_RESOURCE, SERVICE_ACCESS_PLAN_MCP_TOOL_NAME,
-    SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME,
+    DESKTOP_PROMPT_OBSERVE_MCP_TOOL_NAME, SERVICE_ACCESS_PLAN_MCP_RESOURCE,
+    SERVICE_ACCESS_PLAN_MCP_TOOL_NAME, SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME,
     SERVICE_BROWSER_CAPABILITY_REGISTRY_RESOURCE, SERVICE_CONTRACTS_RESOURCE,
     SERVICE_DISPLAY_ALLOCATIONS_MCP_RESOURCE, SERVICE_PROFILE_SEEDING_HANDOFF_UPDATE_MCP_TOOL_NAME,
     SERVICE_REMOTE_VIEW_ROUTES_MCP_RESOURCE, SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME,
@@ -856,7 +856,12 @@ fn service_mcp_tools() -> Vec<Value> {
                     "includeVisualization": {
                         "type": "boolean",
                         "default": false,
-                        "description": "Return a bounded response-only visualization for action=desktop_locate."
+                        "description": "Return a bounded response-only visualization for action=desktop_locate or action=desktop_prompt_observe."
+                    },
+                    "promptProfileId": {
+                        "type": "string",
+                        "enum": ["p110-external-prompt-v1"],
+                        "description": "Repository-owned synthetic prompt observation profile for action=desktop_prompt_observe."
                     },
                     "controllerLeaseId": {
                         "type": "string",
@@ -1127,6 +1132,7 @@ fn service_mcp_tools() -> Vec<Value> {
         }),
         desktop_capture_tool_schema(),
         desktop_locate_tool_schema(),
+        desktop_prompt_observe_tool_schema(),
         desktop_interact_tool_schema(),
         json!({
             "name": "service_job_cancel",
@@ -4732,6 +4738,29 @@ fn desktop_interact_tool_schema() -> Value {
     })
 }
 
+fn desktop_prompt_observe_tool_schema() -> Value {
+    json!({
+        "name": DESKTOP_PROMPT_OBSERVE_MCP_TOOL_NAME,
+        "title": "Observe synthetic browser-external prompt",
+        "description": "Queue one bounded prompt observation against an exact service-owned desktop through the sole repository-owned synthetic profile. No prompt text, credentials, challenge data, caller pixels, URLs, detector parameters, or input are accepted. Configured public dispatch fails before capture while no provider is available.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "browserId": { "type": "string", "description": "Required service-owned browser id used only as observation identity." },
+                "sessionName": { "type": "string", "description": "Optional daemon session and the only daemon selector." },
+                "promptProfileId": { "type": "string", "enum": ["p110-external-prompt-v1"], "description": "Sole repository-owned synthetic prompt profile." },
+                "includeVisualization": { "type": "boolean", "default": false, "description": "Return a bounded response-only PNG visualization." },
+                "jobTimeoutMs": { "type": "integer", "minimum": 1 },
+                "serviceName": { "type": "string", "description": "Required calling service name." },
+                "agentName": { "type": "string", "description": "Required calling agent name." },
+                "taskName": { "type": "string", "description": "Required calling task name." }
+            },
+            "required": ["browserId", "promptProfileId", "serviceName", "agentName", "taskName"]
+        }
+    })
+}
+
 fn browser_read_tool_schema(spec: BrowserReadToolSpec) -> Value {
     json!({
         "name": spec.tool_name,
@@ -4938,6 +4967,9 @@ fn call_service_mcp_tool(
         }
         DESKTOP_LOCATE_MCP_TOOL_NAME => {
             call_desktop_locate(arguments, session, configured_service_state)
+        }
+        DESKTOP_PROMPT_OBSERVE_MCP_TOOL_NAME => {
+            call_desktop_prompt_observe(arguments, session, configured_service_state)
         }
         DESKTOP_INTERACT_MCP_TOOL_NAME => {
             call_desktop_interact(arguments, session, configured_service_state)
@@ -5870,6 +5902,74 @@ fn call_desktop_interact(
     configured_service_state: &ServiceState,
 ) -> Result<Value, JsonRpcError> {
     let request = desktop_interact_service_request(arguments)?;
+    call_service_request(&request, session, configured_service_state)
+}
+
+fn desktop_prompt_observe_service_request(arguments: &Value) -> Result<Value, JsonRpcError> {
+    let argument_map = arguments.as_object().ok_or_else(|| {
+        JsonRpcError::invalid_params("desktop_prompt_observe arguments must be an object")
+    })?;
+    const ALLOWED_FIELDS: &[&str] = &[
+        "browserId",
+        "sessionName",
+        "promptProfileId",
+        "includeVisualization",
+        "jobTimeoutMs",
+        "serviceName",
+        "agentName",
+        "taskName",
+    ];
+    if let Some(field) = argument_map
+        .keys()
+        .find(|field| !ALLOWED_FIELDS.contains(&field.as_str()))
+    {
+        return Err(JsonRpcError::invalid_params(&format!(
+            "unknown desktop_prompt_observe field: {field}"
+        )));
+    }
+    let browser_id = required_string_argument(arguments, "browserId")?;
+    let prompt_profile_id = required_string_argument(arguments, "promptProfileId")?;
+    if prompt_profile_id != "p110-external-prompt-v1" {
+        return Err(JsonRpcError::invalid_params(
+            "desktop_prompt_observe promptProfileId must be p110-external-prompt-v1",
+        ));
+    }
+    let service_name = required_string_argument(arguments, "serviceName")?;
+    let agent_name = required_string_argument(arguments, "agentName")?;
+    let task_name = required_string_argument(arguments, "taskName")?;
+    let include_visualization = arguments
+        .get("includeVisualization")
+        .map(|value| {
+            value.as_bool().ok_or_else(|| {
+                JsonRpcError::invalid_params("includeVisualization must be a boolean")
+            })
+        })
+        .transpose()?
+        .unwrap_or(false);
+    let mut request = json!({
+        "action": "desktop_prompt_observe",
+        "browserId": browser_id,
+        "promptProfileId": prompt_profile_id,
+        "includeVisualization": include_visualization,
+        "serviceName": service_name,
+        "agentName": agent_name,
+        "taskName": task_name,
+    });
+    if let Some(value) = optional_string_argument(arguments, "sessionName")? {
+        request["sessionName"] = json!(value);
+    }
+    if let Some(value) = optional_positive_u64_argument(arguments, "jobTimeoutMs")? {
+        request["jobTimeoutMs"] = json!(value);
+    }
+    Ok(request)
+}
+
+fn call_desktop_prompt_observe(
+    arguments: &Value,
+    session: &str,
+    configured_service_state: &ServiceState,
+) -> Result<Value, JsonRpcError> {
+    let request = desktop_prompt_observe_service_request(arguments)?;
     call_service_request(&request, session, configured_service_state)
 }
 
@@ -12623,6 +12723,68 @@ mod tests {
             json!({"browserId":"browser-rdp-1","controllerLeaseId":"lease-1","recipeId":"p110-pointer-keyboard-v1","serviceName":"DesktopInteractor","agentName":"fixture-agent","taskName":"verify","text":"secret"}),
         ] {
             assert!(desktop_interact_service_request(&invalid).is_err());
+        }
+    }
+
+    #[test]
+    fn desktop_prompt_observe_tool_is_strict_and_lowers_to_canonical_request() {
+        let tools = service_mcp_tools();
+        let tool = tools
+            .iter()
+            .find(|tool| tool["name"] == "desktop_prompt_observe")
+            .expect("desktop_prompt_observe schema should be listed");
+        let input = &tool["inputSchema"];
+        assert_eq!(input["additionalProperties"], false);
+        assert_eq!(
+            input["required"],
+            json!([
+                "browserId",
+                "promptProfileId",
+                "serviceName",
+                "agentName",
+                "taskName"
+            ])
+        );
+        assert_eq!(
+            input["properties"]["promptProfileId"]["enum"],
+            json!(["p110-external-prompt-v1"])
+        );
+        for forbidden in [
+            "params",
+            "promptText",
+            "imageBase64",
+            "locator",
+            "provider",
+            "routeId",
+        ] {
+            assert!(input["properties"].get(forbidden).is_none());
+        }
+
+        let request = desktop_prompt_observe_service_request(&json!({
+            "browserId": "browser-rdp-1",
+            "sessionName": "rdp-1",
+            "promptProfileId": "p110-external-prompt-v1",
+            "includeVisualization": true,
+            "jobTimeoutMs": 5000,
+            "serviceName": "DesktopPromptObserver",
+            "agentName": "fixture-agent",
+            "taskName": "observe-synthetic-prompt"
+        }))
+        .unwrap();
+        assert_eq!(request["action"], "desktop_prompt_observe");
+        assert_eq!(request["browserId"], "browser-rdp-1");
+        assert_eq!(request["sessionName"], "rdp-1");
+        assert_eq!(request["promptProfileId"], "p110-external-prompt-v1");
+        assert_eq!(request["includeVisualization"], true);
+        assert_eq!(request["jobTimeoutMs"], 5000);
+        assert!(request.get("params").is_none());
+
+        for invalid in [
+            json!({"browserId":"browser-rdp-1","promptProfileId":"wrong","serviceName":"DesktopPromptObserver","agentName":"fixture-agent","taskName":"observe"}),
+            json!({"browserId":"browser-rdp-1","promptProfileId":"p110-external-prompt-v1","serviceName":"DesktopPromptObserver","agentName":"fixture-agent"}),
+            json!({"browserId":"browser-rdp-1","promptProfileId":"p110-external-prompt-v1","serviceName":"DesktopPromptObserver","agentName":"fixture-agent","taskName":"observe","params":{}}),
+        ] {
+            assert!(desktop_prompt_observe_service_request(&invalid).is_err());
         }
     }
 

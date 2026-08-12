@@ -538,6 +538,94 @@ export interface ServiceDesktopLocateData {
   [key: string]: unknown;
 }
 
+export interface DesktopPromptDetectorReceipt {
+  detectorId: string;
+  version: string;
+  evidenceSha256: string;
+  normalizationVersion: string;
+  matchCount: number;
+  threshold: number;
+}
+
+export interface DesktopPromptCandidate {
+  candidateId: string;
+  targetClass: "synthetic_browser_external_confirmation";
+  rank: number;
+  bounds: { x: number; y: number; width: number; height: number };
+  center: { x: number; y: number };
+  score: number;
+  disposition: "actionable" | "manual_only";
+}
+
+export interface DesktopPromptBlindnessReceipt {
+  proofClass: "repository_fixture";
+  claim: "absent_from_fixture_page_inputs";
+  desktopFrameSha256: string;
+  pageFrameSha256: string;
+  domManifestSha256: string;
+  promptSignatureSha256: string;
+  bindingSha256: string;
+  desktopPromptMatchCount: number;
+  pageScreenshotPromptMatchCount: number;
+  domPromptMatchCount: number;
+  correspondenceState: "verified";
+}
+
+export interface DesktopPromptOperatorIntervention {
+  state: "required";
+  reasonCode: "synthetic_prompt_requires_operator_review";
+  title: string;
+  message: string;
+  actions: Array<{
+    id: "review_in_remote_view";
+    label: string;
+    kind: "operator_instruction";
+    safety: "safe";
+    description: string;
+  }>;
+}
+
+export interface DesktopPromptObservation {
+  observationId: string;
+  schemaVersion: "v1";
+  contextId: string;
+  frameId: string;
+  frameSha256: string;
+  geometryEpoch: string;
+  coordinateSpace: "desktop_physical_pixels";
+  promptProfileId: "p110-external-prompt-v1";
+  profileVersion: string;
+  profileSha256: string;
+  targetClass: "synthetic_browser_external_confirmation";
+  surfaceIdentityDigest: string;
+  browserProcessIdentityDigest: string;
+  detectorReceipts: DesktopPromptDetectorReceipt[];
+  candidates: DesktopPromptCandidate[];
+  detectionStatus: "matched" | "not_found" | "ambiguous";
+  pageVisibility: "absent" | "present" | "indeterminate";
+  classification: "browser_external" | "page_surface" | "unclassified";
+  handlingOutcome: "actionable_observation" | "operator_intervention_required" | "none";
+  selectedCandidateId: string | null;
+  blindnessReceipt: DesktopPromptBlindnessReceipt;
+  operatorIntervention?: DesktopPromptOperatorIntervention;
+  observedAtMs: number;
+  evidenceAgeMs: number;
+  retention: "ephemeral";
+  persistedPixels: false;
+  [key: string]: unknown;
+}
+
+export interface ServiceDesktopPromptObserveData {
+  ok: true;
+  action: "desktop_prompt_observe";
+  context: DesktopContext;
+  frameReceipt: FrameReceipt;
+  promptObservation: DesktopPromptObservation;
+  /** Optional response-only base64 PNG visualization. */
+  visualizationBase64?: string;
+  [key: string]: unknown;
+}
+
 export interface DesktopInteractionReceipt {
   transactionId: string;
   schemaVersion: "v1";
@@ -1129,6 +1217,7 @@ export interface ServiceRequestActionDataMap {
   diagnostics: ServiceDiagnosticsData;
   desktop_capture: ServiceDesktopCaptureData;
   desktop_locate: ServiceDesktopLocateData;
+  desktop_prompt_observe: ServiceDesktopPromptObserveData;
   desktop_interact: ServiceDesktopInteractData;
   back: ServiceUrlData;
   forward: ServiceUrlData;
@@ -1413,6 +1502,22 @@ export interface ServiceDesktopInteractRequestHttpOptions extends ServiceDesktop
   signal?: AbortSignal;
 }
 
+export interface ServiceDesktopPromptObserveRequestOptions extends Pick<ServiceRequest, "jobTimeoutMs"> {
+  browserId: string;
+  sessionName?: string;
+  promptProfileId: "p110-external-prompt-v1";
+  includeVisualization?: boolean;
+  serviceName: string;
+  agentName: string;
+  taskName: string;
+}
+
+export interface ServiceDesktopPromptObserveRequestHttpOptions extends ServiceDesktopPromptObserveRequestOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
 export interface ServiceProbeRequestOptions extends Omit<ServiceRequest, "action" | "params"> {
   serviceTabHandle: ServiceTabHandle;
   probe: Record<string, unknown>;
@@ -1686,6 +1791,9 @@ export declare function createServiceDesktopLocateRequest(
 export declare function createServiceDesktopInteractRequest(
   input: ServiceDesktopInteractRequestOptions,
 ): ServiceRequestForAction<"desktop_interact">;
+export declare function createServiceDesktopPromptObserveRequest(
+  input: ServiceDesktopPromptObserveRequestOptions,
+): ServiceRequestForAction<"desktop_prompt_observe">;
 export declare function createServiceProbeRequest(
   input: ServiceProbeRequestOptions,
 ): ServiceRequestForAction<"probe">;
@@ -1787,6 +1895,12 @@ export declare function requestServiceDesktopInteract(
 export declare function runServiceDesktopInteraction(
   options: ServiceDesktopInteractRequestHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceDesktopInteractData>>;
+export declare function requestServiceDesktopPromptObserve(
+  options: ServiceDesktopPromptObserveRequestHttpOptions,
+): Promise<ServiceRequestResponse<ServiceDesktopPromptObserveData>>;
+export declare function observeServiceDesktopPrompt(
+  options: ServiceDesktopPromptObserveRequestHttpOptions,
+): Promise<ServiceRequestResponse<ServiceDesktopPromptObserveData>>;
 export declare function requestServiceProbe(
   options: ServiceProbeRequestHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceProbeData>>;

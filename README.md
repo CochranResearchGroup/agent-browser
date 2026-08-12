@@ -268,6 +268,7 @@ agent-browser stream status           # Show runtime streaming state and bound p
 agent-browser stream disable          # Stop runtime WebSocket streaming
 agent-browser desktop capture --browser-id <id> # Capture one service-bound desktop PNG receipt
 agent-browser desktop locate --browser-id <id> --locator-id <id> # Locate deterministic desktop candidates
+agent-browser desktop prompt observe --browser-id <id> --prompt-profile-id p110-external-prompt-v1 # Observe the synthetic external-prompt fixture
 agent-browser desktop interact --browser-id <id> --controller-lease-id <id> --recipe-id <id> --service-name <name> --agent-name <name> --task-name <name> # Run one guarded synthetic recipe
 agent-browser service status          # Show service control-plane and configured service state
 agent-browser service watch           # Poll service health until interrupted
@@ -437,6 +438,59 @@ operation is observation-only. It does not click, move the pointer, type,
 submit, authenticate, or solve a challenge. Generated client helpers are
 `createServiceDesktopLocateRequest()`, `requestServiceDesktopLocate()`, and
 `locateServiceDesktopControl()`.
+
+### Synthetic Browser-External Prompt Observation
+
+PoC 4 defines one read-only observation over a repository-owned fixture corpus:
+
+```bash
+agent-browser desktop prompt observe \
+  --browser-id browser-123 \
+  --prompt-profile-id p110-external-prompt-v1 \
+  --service-name DesktopPerception \
+  --agent-name fixture-agent \
+  --task-name observe-fixture
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--browser-id <id>` | Required retained service-owned browser identity |
+| `--prompt-profile-id <id>` | Required fixed profile; only `p110-external-prompt-v1` is accepted |
+| `--include-visualization` | Include a response-only synthetic visualization in JSON |
+| `--service-name <name>` | Optional accountable service attribution for CLI requests |
+| `--agent-name <name>` | Optional accountable agent attribution for CLI requests |
+| `--task-name <name>` | Optional accountable task attribution for CLI requests |
+
+The global `--session <name>` selects the daemon lane and is not included in
+the request. Global `--session-name <name>` supplies the optional retained
+browser session lane. `browserId` never selects a daemon. The CLI accepts no
+pixels, page screenshot, DOM, prompt text, templates, thresholds, coordinates,
+provider, route, display, URL, challenge kind, or input effect.
+
+The response envelope contains `context`, `frameReceipt`, and
+`promptObservation`, plus `visualizationBase64` only when requested.
+`promptObservation` reports `detectionStatus`, `pageVisibility`,
+`classification`, `handlingOutcome`, an optional `selectedCandidateId`, an
+optional typed `operatorIntervention`, and a `blindnessReceipt`. The receipt's
+`absent_from_fixture_page_inputs` claim is limited to independently produced
+repository fixture page screenshot and DOM evidence. Text output allowlists
+these typed axes and exact match counts; it omits pixels, raw DOM, prompt text,
+hashes, and visualization bytes.
+
+> **Experimental:** PoC 4 is synthetic and source-only. It configures no
+> production prompt provider, so ordinary dispatch fails with
+> `desktop_prompt_provider_unavailable` before capture or launch. It does not
+> prove live CDP blindness or detection of a real browser prompt, extension
+> popup, native dialog, credential manager, passkey prompt, CAPTCHA, or
+> challenge.
+
+HTTP requests use `action: "desktop_prompt_observe"` with top-level
+`browserId`, `promptProfileId`, `includeVisualization`, optional `sessionName`,
+and attribution. Unauthenticated HTTP requests require all three attribution
+labels. MCP clients can use `service_request` or the dedicated
+`desktop_prompt_observe` tool. Generated client helpers are
+`createServiceDesktopPromptObserveRequest()`,
+`requestServiceDesktopPromptObserve()`, and `observeServiceDesktopPrompt()`.
 
 ### Guarded Synthetic Desktop Interaction
 

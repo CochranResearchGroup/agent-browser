@@ -1746,7 +1746,7 @@ fn service_request_relay_session(default_session: &str, body: &str, command: &Va
 
     if matches!(
         command.get("action").and_then(Value::as_str),
-        Some("desktop_capture" | "desktop_locate" | "desktop_interact")
+        Some("desktop_capture" | "desktop_locate" | "desktop_prompt_observe" | "desktop_interact")
     ) {
         for value in [request.pointer("/sessionName"), command.get("sessionName")] {
             if let Some(session_name) = service_request_relay_session_candidate(value) {
@@ -4843,6 +4843,23 @@ mod tests {
 
         let narrowed = r##"{"action":"desktop_interact","browserId":"browser-rdp-1","sessionName":"rdp-session","controllerLeaseId":"lease-1","recipe":{"recipeId":"p110-pointer-keyboard-v1"},"serviceName":"DesktopInteractor","agentName":"fixture-agent","taskName":"verify"}"##;
         let command: Value = serde_json::from_str(narrowed).unwrap();
+        assert_eq!(
+            service_request_relay_session("default", narrowed, &command),
+            "rdp-session"
+        );
+    }
+
+    #[test]
+    fn desktop_prompt_observe_browser_identity_does_not_select_a_daemon_lane() {
+        let body = r##"{"action":"desktop_prompt_observe","browserId":"browser-rdp-1","promptProfileId":"p110-external-prompt-v1","serviceName":"DesktopPromptObserver","agentName":"fixture-agent","taskName":"observe"}"##;
+        let command = service_request_command(body).unwrap();
+        assert_eq!(
+            service_request_relay_session("default", body, &command),
+            "default"
+        );
+
+        let narrowed = r##"{"action":"desktop_prompt_observe","browserId":"browser-rdp-1","sessionName":"rdp-session","promptProfileId":"p110-external-prompt-v1","serviceName":"DesktopPromptObserver","agentName":"fixture-agent","taskName":"observe"}"##;
+        let command = service_request_command(narrowed).unwrap();
         assert_eq!(
             service_request_relay_session("default", narrowed, &command),
             "rdp-session"

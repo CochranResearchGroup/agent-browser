@@ -44,6 +44,7 @@ agent-browser stream status           # Show runtime streaming state and bound p
 agent-browser stream disable          # Stop runtime WebSocket streaming
 agent-browser desktop capture --browser-id <id> # Capture one service-bound desktop PNG receipt
 agent-browser desktop locate --browser-id <id> --locator-id <id> # Locate deterministic desktop candidates
+agent-browser desktop prompt observe --browser-id <id> --prompt-profile-id p110-external-prompt-v1 # Observe the synthetic external-prompt fixture
 agent-browser desktop interact --browser-id <id> --controller-lease-id <id> --recipe-id <id> --service-name <name> --agent-name <name> --task-name <name> # Run one guarded synthetic recipe
 agent-browser service status          # Show service control-plane and configured service state
 agent-browser service watch           # Poll service health until interrupted
@@ -494,6 +495,68 @@ HTTP and software clients use `action: "desktop_locate"`, top-level
 trace attribution. Unauthenticated HTTP requests require all three labels.
 
 For the complete cross-ingress contract, see [Service Mode](/service-mode#locate-deterministic-desktop-candidates).
+
+## Observe the synthetic browser-external prompt fixture
+
+PoC 4 exposes one read-only observation profile over independently produced
+repository fixture desktop, page screenshot, and normalized DOM evidence:
+
+```bash
+agent-browser desktop prompt observe \
+  --browser-id browser-123 \
+  --prompt-profile-id p110-external-prompt-v1 \
+  --service-name DesktopPerception \
+  --agent-name fixture-agent \
+  --task-name observe-fixture
+```
+
+<table>
+  <thead>
+    <tr>
+      <th>Option</th>
+      <th>Meaning</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>--browser-id &lt;id&gt;</code></td>
+      <td>Required retained service-owned browser identity.</td>
+    </tr>
+    <tr>
+      <td><code>--prompt-profile-id &lt;id&gt;</code></td>
+      <td>Required fixed profile. Only <code>p110-external-prompt-v1</code> is accepted.</td>
+    </tr>
+    <tr>
+      <td><code>--include-visualization</code></td>
+      <td>Include a response-only synthetic visualization in JSON.</td>
+    </tr>
+    <tr>
+      <td><code>--service-name</code>, <code>--agent-name</code>, <code>--task-name</code></td>
+      <td>Optional accountable CLI attribution. All three are required by unauthenticated HTTP ingress.</td>
+    </tr>
+  </tbody>
+</table>
+
+Global `--session <name>` selects the daemon lane and is not sent as request
+evidence. Global `--session-name <name>` supplies the optional retained browser
+session lane. `browserId` never selects a daemon. The command accepts no
+caller-provided pixels, page screenshot, DOM, prompt text, template, threshold,
+coordinate, provider, route, display, URL, challenge kind, or input effect.
+
+Text output prints `detectionStatus`, `pageVisibility`, `classification`,
+`handlingOutcome`, the optional selected candidate and operator intervention,
+and the fixture blindness receipt's proof class, claim, correspondence state,
+and exact match counts. It omits pixels, raw DOM, prompt text, hashes, and
+visualization bytes. JSON includes `visualizationBase64` only when requested.
+
+> **Experimental:** PoC 4 is synthetic and source-only. No production prompt
+> provider is configured, so ordinary dispatch fails with
+> `desktop_prompt_provider_unavailable` before capture or launch. This fixture
+> proof does not establish live CDP blindness or detection of a real browser
+> prompt, extension popup, native dialog, credential manager, passkey prompt,
+> CAPTCHA, or challenge.
+
+For HTTP, MCP, and generated client forms, see [Service Mode](/service-mode#observe-the-synthetic-browser-external-prompt-fixture).
 
 ## Run a guarded synthetic desktop interaction
 

@@ -37,6 +37,7 @@ pub const SERVICE_ACCESS_PLAN_MCP_TOOL_NAME: &str = "service_access_plan";
 pub const SERVICE_REQUEST_MCP_TOOL_NAME: &str = "service_request";
 pub const DESKTOP_CAPTURE_MCP_TOOL_NAME: &str = "desktop_capture";
 pub const DESKTOP_LOCATE_MCP_TOOL_NAME: &str = "desktop_locate";
+pub const DESKTOP_PROMPT_OBSERVE_MCP_TOOL_NAME: &str = "desktop_prompt_observe";
 pub const DESKTOP_INTERACT_MCP_TOOL_NAME: &str = "desktop_interact";
 pub const SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME: &str =
     "service_browser_capability_preflight";
@@ -72,6 +73,10 @@ pub const OBSERVATION_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/observation.v1.schema.json";
 pub const SERVICE_DESKTOP_LOCATE_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-desktop-locate-response.v1.schema.json";
+pub const PROMPT_OBSERVATION_SCHEMA_ID: &str =
+    "https://agent-browser.local/contracts/prompt-observation.v1.schema.json";
+pub const SERVICE_DESKTOP_PROMPT_OBSERVE_RESPONSE_SCHEMA_ID: &str =
+    "https://agent-browser.local/contracts/service-desktop-prompt-observe-response.v1.schema.json";
 pub const INTERACTION_RECEIPT_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/interaction-receipt.v1.schema.json";
 pub const SERVICE_DESKTOP_INTERACT_RESPONSE_SCHEMA_ID: &str =
@@ -127,6 +132,7 @@ pub const SERVICE_REQUEST_ACTIONS: &[&str] = &[
     "diagnostics",
     "desktop_capture",
     "desktop_locate",
+    "desktop_prompt_observe",
     "desktop_interact",
     "probe",
     "tab_handle_refresh",
@@ -320,6 +326,52 @@ pub fn service_contracts_metadata() -> Value {
                     "visualizationRetention": "ephemeral",
                     "persisted": false,
                 },
+                "noLaunch": true,
+                "input": false,
+            },
+            "promptObservation": {
+                "version": SERVICE_REQUEST_CONTRACT_VERSION,
+                "schemaId": PROMPT_OBSERVATION_SCHEMA_ID,
+                "schemaPath": "docs/dev/contracts/prompt-observation.v1.schema.json",
+            },
+            "serviceDesktopPromptObserveResponse": {
+                "version": SERVICE_REQUEST_CONTRACT_VERSION,
+                "schemaId": SERVICE_DESKTOP_PROMPT_OBSERVE_RESPONSE_SCHEMA_ID,
+                "schemaPath": "docs/dev/contracts/service-desktop-prompt-observe-response.v1.schema.json",
+                "http": {
+                    "method": "POST",
+                    "route": SERVICE_REQUEST_HTTP_ROUTE,
+                    "action": "desktop_prompt_observe",
+                },
+                "mcp": {
+                    "tools": [SERVICE_REQUEST_MCP_TOOL_NAME, DESKTOP_PROMPT_OBSERVE_MCP_TOOL_NAME],
+                },
+                "client": {
+                    "package": "@agent-browser/client/service-request",
+                    "helpers": [
+                        "createServiceDesktopPromptObserveRequest",
+                        "requestServiceDesktopPromptObserve",
+                        "observeServiceDesktopPrompt"
+                    ],
+                },
+                "request": {
+                    "promptProfileId": "p110-external-prompt-v1",
+                    "namedProfilesOnly": true,
+                    "requiresAttribution": ["serviceName", "agentName", "taskName"],
+                    "paramsAccepted": false,
+                    "includeVisualizationDefault": false,
+                    "daemonSelector": "sessionName",
+                },
+                "payload": {
+                    "sourceFrameRetention": "ephemeral",
+                    "pageEvidenceRetention": "ephemeral",
+                    "visualizationRetention": "ephemeral",
+                    "persisted": false,
+                    "persistedPixels": false,
+                    "rawPromptTextReturned": false,
+                },
+                "productionProviderConfigured": false,
+                "proofClass": "repository_fixture",
                 "noLaunch": true,
                 "input": false,
             },
@@ -711,6 +763,7 @@ pub fn service_contracts_metadata() -> Value {
             "serviceRequestTool": SERVICE_REQUEST_MCP_TOOL_NAME,
             "desktopCaptureTool": DESKTOP_CAPTURE_MCP_TOOL_NAME,
             "desktopLocateTool": DESKTOP_LOCATE_MCP_TOOL_NAME,
+            "desktopPromptObserveTool": DESKTOP_PROMPT_OBSERVE_MCP_TOOL_NAME,
             "desktopInteractTool": DESKTOP_INTERACT_MCP_TOOL_NAME,
             "serviceAccessPlanTool": SERVICE_ACCESS_PLAN_MCP_TOOL_NAME,
             "serviceBrowserCapabilityPreflightTool": SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME,
@@ -791,6 +844,19 @@ mod tests {
         assert_eq!(
             metadata["contracts"]["serviceDesktopInteractResponse"]["schemaId"],
             SERVICE_DESKTOP_INTERACT_RESPONSE_SCHEMA_ID
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceDesktopPromptObserveResponse"]["schemaId"],
+            SERVICE_DESKTOP_PROMPT_OBSERVE_RESPONSE_SCHEMA_ID
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceDesktopPromptObserveResponse"]["mcp"]["tools"][1],
+            DESKTOP_PROMPT_OBSERVE_MCP_TOOL_NAME
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceDesktopPromptObserveResponse"]
+                ["productionProviderConfigured"],
+            false
         );
         assert_eq!(
             metadata["contracts"]["serviceDesktopInteractResponse"]["mcp"]["tools"][1],
