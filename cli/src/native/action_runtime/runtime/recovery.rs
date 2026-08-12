@@ -514,6 +514,13 @@ impl DaemonState {
         self.apply_drained_events(drained).await;
         matched
     }
+    pub(crate) fn persist_renderer_crash_observation(
+        &self,
+        observation: &RendererCrashObservation,
+    ) -> Result<RendererCrashPersistence, String> {
+        let repository = LockedServiceStateRepository::default_json()?;
+        persist_renderer_crash_in_repository(&repository, observation)
+    }
     pub(crate) fn renderer_crash_command_context(
         &self,
         cmd: &Value,

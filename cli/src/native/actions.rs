@@ -158,8 +158,7 @@ use super::service_monitors::{
 use super::service_network_capture::handle_service_network_capture;
 use super::service_probe::handle_service_probe;
 use super::service_renderer_crash::{
-    persist_renderer_crash_in_repository, race_action_with_renderer_crash,
-    renderer_crash_error_response, RendererCrashRace,
+    race_action_with_renderer_crash, renderer_crash_error_response, RendererCrashRace,
 };
 use super::service_resources::{
     handle_service_access_plan, handle_service_gc, handle_service_resources,
@@ -169,7 +168,6 @@ use super::service_retained_state::{
     handle_service_prune_retained, handle_service_repair_retained, handle_service_route_pool_repair,
 };
 use super::service_status_projection::handle_service_status;
-use super::service_store::LockedServiceStateRepository;
 use super::service_trace::handle_service_trace;
 use super::service_ui_action::handle_service_ui_action;
 use super::state::{handle_state_load, handle_state_save};
@@ -879,10 +877,7 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
         .await
         .or_else(|| {
             observed_renderer_crash.map(|observation| {
-                let persistence =
-                    LockedServiceStateRepository::default_json().and_then(|repository| {
-                        persist_renderer_crash_in_repository(&repository, &observation)
-                    });
+                let persistence = state.persist_renderer_crash_observation(&observation);
                 (observation, persistence)
             })
         });
