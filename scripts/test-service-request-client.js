@@ -404,7 +404,7 @@ async function main() {
       success: true,
       data: {
         context: { contextId: 'context-1' },
-        frame: { frameId: 'frame-1' },
+        frameReceipt: { frameId: 'frame-1' },
         imageBase64: 'iVBORw0KGgo=',
       },
     });
