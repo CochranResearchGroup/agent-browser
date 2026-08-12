@@ -9,14 +9,16 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
+use std::path::{Path, PathBuf};
 
 use super::desktop_control_coordinator::{DesktopControlCoordinator, DesktopInteractionClaim};
+use super::service_model::ServiceState;
 
 pub(crate) const RECIPE_ID: &str = "p110-pointer-keyboard-v1";
 pub(crate) const FOUNDATION_STRESS_RECIPE_ID: &str = "p110-foundation-stress-v1";
 const RECIPE_VERSION: &str = "v1";
-const RECIPE_PROVIDER_ID: &str = "synthetic-fixture-provider";
-const RECIPE_PROVIDER_VERSION: &str = "v1";
 const FIXED_TEXT: &str = "fixture-ready";
 const COORDINATE_SPACE: &str = "desktop_physical_pixels";
 const FRESHNESS_LIMIT_MS: u64 = 750;
@@ -28,6 +30,10 @@ pub(crate) struct DesktopInteractionRequest {
     pub controller_lease_id: String,
     pub recipe_id: String,
     pub operation_id: String,
+    pub operation_principal_id: String,
+    pub request_principal_source: Option<String>,
+    pub service_name: String,
+    pub task_name: String,
     pub caller_id: String,
     pub request_id: String,
     pub agent_name: String,
@@ -82,6 +88,8 @@ pub(crate) struct BeforeObservation {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SurfaceSnapshot {
     pub provider_id: String,
+    pub provider_version: String,
+    pub provider_capability: String,
     pub surface_identity_digest: String,
     pub browser_process_identity_digest: String,
     pub focused: bool,
@@ -203,7 +211,14 @@ pub(crate) struct HumanHandoffSummary {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct FoundationStressContext {
     pub prompt_disposition: PromptDisposition,
-    pub human_handoff: Option<HumanHandoffSummary>,
+    pub handoff_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DesktopInteractionProviderEvidence {
+    pub provider_id: String,
+    pub provider_version: String,
+    pub capability: String,
 }
 
 impl FoundationStressContext {
@@ -214,12 +229,129 @@ impl FoundationStressContext {
                 reason_code: "synthetic_prompt_actionable".to_string(),
                 observation_sha256: digest_text("synthetic-prompt-observation"),
             },
-            human_handoff: None,
+            handoff_reason: Some("effect_uncertain".to_string()),
         }
     }
 }
 
+fn validate_foundation_stress_context(
+    context: &FoundationStressContext,
+) -> Result<(), DesktopInteractionError> {
+    if !matches!(
+        context.prompt_disposition.state.as_str(),
+        "actionable_observation" | "operator_intervention_required"
+    ) || context.prompt_disposition.reason_code.trim().is_empty()
+        || context.prompt_disposition.observation_sha256.len() != 64
+    {
+        return Err(DesktopInteractionError::new(
+            "desktop_interaction_prompt_evidence_invalid",
+            "prompt disposition evidence is invalid",
+        ));
+    }
+    if context
+        .handoff_reason
+        .as_deref()
+        .is_some_and(|reason| reason.trim().is_empty() || reason.len() > 128)
+    {
+        return Err(DesktopInteractionError::new(
+            "desktop_interaction_handoff_invalid",
+            "provider handoff need has no bounded reason",
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) trait ServiceOwnedHandoffRepository {
+    fn resolve_ready(
+        &mut self,
+        browser_id: &str,
+        session_name: &str,
+        route_id: &str,
+        display_allocation_id: &str,
+        reason: &str,
+    ) -> Result<Option<HumanHandoffSummary>, DesktopInteractionError>;
+}
+
+pub(crate) struct ServiceStateHandoffRepository<'a> {
+    state: &'a ServiceState,
+}
+
+impl<'a> ServiceStateHandoffRepository<'a> {
+    pub(crate) fn new(state: &'a ServiceState) -> Self {
+        Self { state }
+    }
+}
+
+impl ServiceOwnedHandoffRepository for ServiceStateHandoffRepository<'_> {
+    fn resolve_ready(
+        &mut self,
+        browser_id: &str,
+        session_name: &str,
+        route_id: &str,
+        display_allocation_id: &str,
+        reason: &str,
+    ) -> Result<Option<HumanHandoffSummary>, DesktopInteractionError> {
+        let Some(handoff) = self.state.remote_view_handoffs.values().find(|handoff| {
+            handoff.state == "ready"
+                && handoff.browser_id.as_deref() == Some(browser_id)
+                && handoff.session_name.as_deref() == Some(session_name)
+                && handoff.last_route_id.as_deref() == Some(route_id)
+                && handoff.last_display_allocation_id.as_deref() == Some(display_allocation_id)
+                && handoff
+                    .last_resolution
+                    .as_ref()
+                    .and_then(|value| value.get("operatorVisible"))
+                    .and_then(|value| value.get("state"))
+                    .and_then(Value::as_str)
+                    == Some("ready")
+        }) else {
+            return Ok(None);
+        };
+        let handoff_url = handoff.handoff_url.clone().ok_or_else(|| {
+            DesktopInteractionError::new(
+                "desktop_interaction_handoff_invalid",
+                "service-owned ready handoff has no authenticated URL",
+            )
+        })?;
+        validate_service_handoff_url(&handoff.id, &handoff_url)?;
+        Ok(Some(HumanHandoffSummary {
+            state: "ready".to_string(),
+            reason: reason.to_string(),
+            handoff_id: handoff.id.clone(),
+            handoff_url,
+        }))
+    }
+}
+
+fn validate_service_handoff_url(
+    handoff_id: &str,
+    handoff_url: &str,
+) -> Result<(), DesktopInteractionError> {
+    let expected_path = format!("/remote-view/{handoff_id}");
+    let path_matches = handoff_url == expected_path
+        || handoff_url
+            .strip_prefix("https://")
+            .is_some_and(|authority| {
+                authority
+                    .find('/')
+                    .is_some_and(|index| authority[index..] == expected_path)
+            });
+    if handoff_id.is_empty()
+        || !handoff_id
+            .bytes()
+            .all(|value| value.is_ascii_alphanumeric() || matches!(value, b'-' | b'_'))
+        || !path_matches
+    {
+        return Err(DesktopInteractionError::new(
+            "desktop_interaction_handoff_invalid",
+            "service-owned handoff URL is not the exact authenticated opaque route",
+        ));
+    }
+    Ok(())
+}
+
 pub(crate) trait DesktopInteractionProvider {
+    fn evidence(&self) -> DesktopInteractionProviderEvidence;
     fn observe_before(
         &mut self,
         request: &DesktopInteractionRequest,
@@ -265,17 +397,26 @@ pub(crate) enum InteractionOperationRecord {
 }
 
 pub(crate) trait InteractionOperationLedger {
-    fn lookup(&mut self, caller_id: &str, operation_id: &str)
-        -> Option<InteractionOperationRecord>;
-    fn begin(&mut self, caller_id: &str, operation_id: &str, request_sha256: &str);
+    fn lookup(
+        &mut self,
+        caller_id: &str,
+        operation_id: &str,
+    ) -> Result<Option<InteractionOperationRecord>, DesktopInteractionError>;
+    fn begin(
+        &mut self,
+        caller_id: &str,
+        operation_id: &str,
+        request_sha256: &str,
+    ) -> Result<(), DesktopInteractionError>;
     fn complete(
         &mut self,
         caller_id: &str,
         operation_id: &str,
         request_sha256: &str,
         receipt: &InteractionReceipt,
-    );
-    fn abort(&mut self, caller_id: &str, operation_id: &str);
+    ) -> Result<(), DesktopInteractionError>;
+    fn abort(&mut self, caller_id: &str, operation_id: &str)
+        -> Result<(), DesktopInteractionError>;
 }
 
 #[derive(Debug, Default)]
@@ -329,19 +470,26 @@ impl InteractionOperationLedger for SerializedInteractionOperationLedger {
         &mut self,
         caller_id: &str,
         operation_id: &str,
-    ) -> Option<InteractionOperationRecord> {
-        self.records
+    ) -> Result<Option<InteractionOperationRecord>, DesktopInteractionError> {
+        Ok(self
+            .records
             .get(&operation_scope_sha256(caller_id, operation_id))
-            .cloned()
+            .cloned())
     }
 
-    fn begin(&mut self, caller_id: &str, operation_id: &str, request_sha256: &str) {
+    fn begin(
+        &mut self,
+        caller_id: &str,
+        operation_id: &str,
+        request_sha256: &str,
+    ) -> Result<(), DesktopInteractionError> {
         self.records.insert(
             operation_scope_sha256(caller_id, operation_id),
             InteractionOperationRecord::InProgress {
                 request_sha256: request_sha256.to_string(),
             },
         );
+        Ok(())
     }
 
     fn complete(
@@ -350,7 +498,7 @@ impl InteractionOperationLedger for SerializedInteractionOperationLedger {
         operation_id: &str,
         request_sha256: &str,
         receipt: &InteractionReceipt,
-    ) {
+    ) -> Result<(), DesktopInteractionError> {
         let mut durable_receipt = receipt.clone();
         durable_receipt.operation_id = digest_text(operation_id);
         if durable_receipt.recipe_id == FOUNDATION_STRESS_RECIPE_ID {
@@ -377,12 +525,133 @@ impl InteractionOperationLedger for SerializedInteractionOperationLedger {
         };
         self.records
             .insert(operation_scope_sha256(caller_id, operation_id), record);
+        Ok(())
     }
 
-    fn abort(&mut self, caller_id: &str, operation_id: &str) {
+    fn abort(
+        &mut self,
+        caller_id: &str,
+        operation_id: &str,
+    ) -> Result<(), DesktopInteractionError> {
         self.records
             .remove(&operation_scope_sha256(caller_id, operation_id));
+        Ok(())
     }
+}
+
+/// Dedicated service-owned file adapter. Each transition is persisted by a
+/// same-directory temporary file, file sync, atomic rename, and directory sync.
+#[derive(Debug)]
+pub(crate) struct PersistedInteractionOperationLedger {
+    path: PathBuf,
+    inner: SerializedInteractionOperationLedger,
+}
+
+impl PersistedInteractionOperationLedger {
+    pub(crate) fn open(path: impl AsRef<Path>) -> Result<Self, DesktopInteractionError> {
+        let path = path.as_ref().to_path_buf();
+        let inner = match fs::read_to_string(&path) {
+            Ok(value) => SerializedInteractionOperationLedger::from_json(&value)?,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                SerializedInteractionOperationLedger::default()
+            }
+            Err(_) => {
+                return Err(ledger_error(
+                    "desktop_interaction_operation_ledger_load_failed",
+                ))
+            }
+        };
+        Ok(Self { path, inner })
+    }
+
+    fn save(&self) -> Result<(), DesktopInteractionError> {
+        let parent = self
+            .path
+            .parent()
+            .ok_or_else(|| ledger_error("desktop_interaction_operation_ledger_save_failed"))?;
+        fs::create_dir_all(parent)
+            .map_err(|_| ledger_error("desktop_interaction_operation_ledger_save_failed"))?;
+        let file_name = self
+            .path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .ok_or_else(|| ledger_error("desktop_interaction_operation_ledger_save_failed"))?;
+        let temporary = parent.join(format!(".{file_name}.{}.tmp", std::process::id()));
+        let mut file = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&temporary)
+            .map_err(|_| ledger_error("desktop_interaction_operation_ledger_save_failed"))?;
+        let serialized = self.inner.to_json()?;
+        let result = (|| {
+            file.write_all(serialized.as_bytes())?;
+            file.sync_all()?;
+            fs::rename(&temporary, &self.path)?;
+            #[cfg(unix)]
+            fs::File::open(parent)?.sync_all()?;
+            Ok::<(), std::io::Error>(())
+        })();
+        if result.is_err() {
+            let _ = fs::remove_file(&temporary);
+            return Err(ledger_error(
+                "desktop_interaction_operation_ledger_save_failed",
+            ));
+        }
+        Ok(())
+    }
+
+    fn transition(
+        &mut self,
+        mutate: impl FnOnce(
+            &mut SerializedInteractionOperationLedger,
+        ) -> Result<(), DesktopInteractionError>,
+    ) -> Result<(), DesktopInteractionError> {
+        let previous = self.inner.records.clone();
+        mutate(&mut self.inner)?;
+        if let Err(error) = self.save() {
+            self.inner.records = previous;
+            return Err(error);
+        }
+        Ok(())
+    }
+}
+
+impl InteractionOperationLedger for PersistedInteractionOperationLedger {
+    fn lookup(
+        &mut self,
+        caller_id: &str,
+        operation_id: &str,
+    ) -> Result<Option<InteractionOperationRecord>, DesktopInteractionError> {
+        self.inner.lookup(caller_id, operation_id)
+    }
+    fn begin(
+        &mut self,
+        caller_id: &str,
+        operation_id: &str,
+        request_sha256: &str,
+    ) -> Result<(), DesktopInteractionError> {
+        self.transition(|inner| inner.begin(caller_id, operation_id, request_sha256))
+    }
+    fn complete(
+        &mut self,
+        caller_id: &str,
+        operation_id: &str,
+        request_sha256: &str,
+        receipt: &InteractionReceipt,
+    ) -> Result<(), DesktopInteractionError> {
+        self.transition(|inner| inner.complete(caller_id, operation_id, request_sha256, receipt))
+    }
+    fn abort(
+        &mut self,
+        caller_id: &str,
+        operation_id: &str,
+    ) -> Result<(), DesktopInteractionError> {
+        self.transition(|inner| inner.abort(caller_id, operation_id))
+    }
+}
+
+fn ledger_error(code: &'static str) -> DesktopInteractionError {
+    DesktopInteractionError::new(code, "the service-owned operation ledger transition failed")
 }
 
 pub(crate) struct InteractionDependencies<'a> {
@@ -390,6 +659,7 @@ pub(crate) struct InteractionDependencies<'a> {
     pub authority: &'a mut dyn ControllerAuthorityRepository,
     pub coordinator: &'a DesktopControlCoordinator,
     pub idempotency: &'a mut dyn InteractionOperationLedger,
+    pub handoffs: &'a mut dyn ServiceOwnedHandoffRepository,
     pub clock: &'a mut dyn InteractionClock,
 }
 
@@ -406,11 +676,17 @@ pub(crate) struct InteractionReceipt {
     pub replay_state: String,
     pub recipe_provider_id: String,
     pub recipe_provider_version: String,
+    pub recipe_provider_capability: String,
     pub prompt_disposition: Option<PromptDisposition>,
     pub human_handoff: Option<HumanHandoffSummary>,
     pub entry_gate: String,
     pub effect_key_digest: String,
     pub effect_key_count: usize,
+    pub attempted_effect_key_digest: String,
+    pub attempted_effect_key_count: usize,
+    pub acknowledged_effect_key_digest: String,
+    pub acknowledged_effect_key_count: usize,
+    pub attempted_event_order_sha256: String,
     pub browser_id: String,
     pub display_allocation_id: String,
     pub stream_id: String,
@@ -491,7 +767,7 @@ pub(crate) fn run_desktop_interaction(
     let operation_request_sha256 = operation_request_sha256(&request);
     match dependencies
         .idempotency
-        .lookup(&request.caller_id, &request.operation_id)
+        .lookup(&request.operation_principal_id, &request.operation_id)?
     {
         Some(InteractionOperationRecord::Complete {
             request_sha256,
@@ -532,26 +808,26 @@ pub(crate) fn run_desktop_interaction(
 
     let transaction_id = format!(
         "desktop-interaction-{}",
-        &digest_text(&format!("{}\0{}", request.caller_id, request.operation_id))[..24]
+        &operation_scope_sha256(&request.operation_principal_id, &request.operation_id)[..24]
     );
     dependencies.idempotency.begin(
-        &request.caller_id,
+        &request.operation_principal_id,
         &request.operation_id,
         &operation_request_sha256,
-    );
+    )?;
     let before = match dependencies.provider.observe_before(&request) {
         Ok(before) => before,
         Err(error) => {
             dependencies
                 .idempotency
-                .abort(&request.caller_id, &request.operation_id);
+                .abort(&request.operation_principal_id, &request.operation_id)?;
             return Err(error);
         }
     };
     if let Err(error) = validate_before(&request, &before) {
         dependencies
             .idempotency
-            .abort(&request.caller_id, &request.operation_id);
+            .abort(&request.operation_principal_id, &request.operation_id)?;
         return Err(error);
     }
     let candidate_id = before
@@ -565,7 +841,7 @@ pub(crate) fn run_desktop_interaction(
         Err(error) => {
             dependencies
                 .idempotency
-                .abort(&request.caller_id, &request.operation_id);
+                .abort(&request.operation_principal_id, &request.operation_id)?;
             return Err(error);
         }
     };
@@ -576,7 +852,7 @@ pub(crate) fn run_desktop_interaction(
             Err(error) => {
                 dependencies
                     .idempotency
-                    .abort(&request.caller_id, &request.operation_id);
+                    .abort(&request.operation_principal_id, &request.operation_id)?;
                 return Err(error);
             }
         };
@@ -588,7 +864,7 @@ pub(crate) fn run_desktop_interaction(
         Err(_) => {
             dependencies
                 .idempotency
-                .abort(&request.caller_id, &request.operation_id);
+                .abort(&request.operation_principal_id, &request.operation_id)?;
             return Err(DesktopInteractionError::new(
                 "desktop_interaction_conflict",
                 "the route already has an interaction claim",
@@ -600,11 +876,19 @@ pub(crate) fn run_desktop_interaction(
             .provider
             .foundation_stress_context(&before.binding)
         {
-            Ok(context) => Some(context),
+            Ok(context) => {
+                if let Err(error) = validate_foundation_stress_context(&context) {
+                    dependencies
+                        .idempotency
+                        .abort(&request.operation_principal_id, &request.operation_id)?;
+                    return Err(error);
+                }
+                Some(context)
+            }
             Err(error) => {
                 dependencies
                     .idempotency
-                    .abort(&request.caller_id, &request.operation_id);
+                    .abort(&request.operation_principal_id, &request.operation_id)?;
                 return Err(error);
             }
         }
@@ -628,28 +912,38 @@ pub(crate) fn run_desktop_interaction(
     drop(claim);
     match result.outcome {
         Ok(mut receipt) => {
-            finalize_stress_receipt(&request, stress_context.as_ref(), &mut receipt);
+            finalize_stress_receipt(
+                &request,
+                stress_context.as_ref(),
+                &mut receipt,
+                dependencies.handoffs,
+            )?;
             dependencies.idempotency.complete(
-                &request.caller_id,
+                &request.operation_principal_id,
                 &request.operation_id,
                 &operation_request_sha256,
                 &receipt,
-            );
+            )?;
             Ok(receipt)
         }
         Err(mut error) => {
             if let Some(receipt) = error.receipt.as_deref_mut() {
-                finalize_stress_receipt(&request, stress_context.as_ref(), receipt);
+                finalize_stress_receipt(
+                    &request,
+                    stress_context.as_ref(),
+                    receipt,
+                    dependencies.handoffs,
+                )?;
                 dependencies.idempotency.complete(
-                    &request.caller_id,
+                    &request.operation_principal_id,
                     &request.operation_id,
                     &operation_request_sha256,
                     receipt,
-                );
+                )?;
             } else {
                 dependencies
                     .idempotency
-                    .abort(&request.caller_id, &request.operation_id);
+                    .abort(&request.operation_principal_id, &request.operation_id)?;
             }
             Err(error)
         }
@@ -686,11 +980,17 @@ pub(crate) fn redact_desktop_interaction_stream_result(result: &Value) -> Value 
         "replayState",
         "recipeProviderId",
         "recipeProviderVersion",
+        "recipeProviderCapability",
         "promptDisposition",
         "humanHandoff",
         "entryGate",
         "effectKeyDigest",
         "effectKeyCount",
+        "attemptedEffectKeyDigest",
+        "attemptedEffectKeyCount",
+        "acknowledgedEffectKeyDigest",
+        "acknowledgedEffectKeyCount",
+        "attemptedEventOrderSha256",
         "browserId",
         "displayAllocationId",
         "streamId",
@@ -827,6 +1127,13 @@ struct ClaimedResult {
     outcome: Result<InteractionReceipt, DesktopInteractionError>,
 }
 
+#[derive(Default)]
+struct EffectTrace {
+    attempted_keys: Vec<String>,
+    acknowledged_keys: Vec<String>,
+    attempted_events: Vec<InputEvent>,
+}
+
 #[allow(clippy::too_many_arguments)]
 fn run_claimed_interaction(
     request: &DesktopInteractionRequest,
@@ -842,7 +1149,26 @@ fn run_claimed_interaction(
     dependencies: &mut InteractionDependencies<'_>,
 ) -> ClaimedResult {
     let outcome = (|| {
+        let provider_evidence = dependencies.provider.evidence();
+        if provider_evidence.provider_id.trim().is_empty()
+            || provider_evidence.provider_version.trim().is_empty()
+            || provider_evidence.capability != "guarded_pointer_keyboard_v1"
+        {
+            return Err(DesktopInteractionError::new(
+                "desktop_input_provider_invalid",
+                "desktop input provider evidence is incomplete or unsupported",
+            ));
+        }
         let initial_surface = dependencies.provider.probe(&before.binding)?;
+        if initial_surface.provider_id != provider_evidence.provider_id
+            || initial_surface.provider_version != provider_evidence.provider_version
+            || initial_surface.provider_capability != provider_evidence.capability
+        {
+            return Err(DesktopInteractionError::new(
+                "desktop_input_provider_invalid",
+                "desktop surface evidence does not match its provider identity",
+            ));
+        }
         validate_surface(&before.binding, &initial_surface, target, target_bounds)?;
         if dependencies
             .clock
@@ -873,6 +1199,7 @@ fn run_claimed_interaction(
             )),
         )?;
         let mut acknowledgements = Vec::new();
+        let mut effect_trace = EffectTrace::default();
         let mut acknowledged_effect = false;
         let mut key_down: Option<char> = None;
 
@@ -889,6 +1216,7 @@ fn run_claimed_interaction(
                 &initial_authority,
                 &authority_digest,
                 &motion,
+                &effect_trace,
                 acknowledgements,
             );
             receipt.effect_state = "no_effect".to_string();
@@ -910,7 +1238,7 @@ fn run_claimed_interaction(
                 target_bounds,
                 claim,
                 dependencies,
-                acknowledgements.len(),
+                &mut effect_trace,
                 &event,
                 None,
             ) {
@@ -932,6 +1260,7 @@ fn run_claimed_interaction(
                             &initial_authority,
                             &authority_digest,
                             &motion,
+                            &effect_trace,
                             acknowledgements,
                         ),
                         "not_needed",
@@ -954,7 +1283,7 @@ fn run_claimed_interaction(
             target_bounds,
             claim,
             dependencies,
-            acknowledgements.len(),
+            &mut effect_trace,
             &down,
             Some(before.captured_at_ms),
         )
@@ -971,6 +1300,7 @@ fn run_claimed_interaction(
                 &initial_authority,
                 &authority_digest,
                 &motion,
+                &effect_trace,
                 acknowledgements.clone(),
             )
         })?;
@@ -991,7 +1321,7 @@ fn run_claimed_interaction(
             target_bounds,
             claim,
             dependencies,
-            acknowledgements.len(),
+            &mut effect_trace,
             &up,
             None,
         ) {
@@ -1009,6 +1339,7 @@ fn run_claimed_interaction(
                         surface: &initial_surface,
                         claim,
                         acknowledgements: &mut acknowledgements,
+                        effect_trace: &mut effect_trace,
                     },
                     button_down,
                     key_down,
@@ -1035,6 +1366,7 @@ fn run_claimed_interaction(
                         &initial_authority,
                         &authority_digest,
                         &motion,
+                        &effect_trace,
                         acknowledgements,
                     ),
                     if cleanup {
@@ -1063,7 +1395,7 @@ fn run_claimed_interaction(
                 target_bounds,
                 claim,
                 dependencies,
-                acknowledgements.len(),
+                &mut effect_trace,
                 &down,
                 None,
             ) {
@@ -1083,6 +1415,7 @@ fn run_claimed_interaction(
                         &initial_authority,
                         &authority_digest,
                         &motion,
+                        &mut effect_trace,
                         acknowledgements,
                         dependencies.provider,
                         dependencies.authority,
@@ -1108,7 +1441,7 @@ fn run_claimed_interaction(
                 target_bounds,
                 claim,
                 dependencies,
-                acknowledgements.len(),
+                &mut effect_trace,
                 &up,
                 None,
             ) {
@@ -1126,6 +1459,7 @@ fn run_claimed_interaction(
                             surface: &initial_surface,
                             claim,
                             acknowledgements: &mut acknowledgements,
+                            effect_trace: &mut effect_trace,
                         },
                         button_down,
                         key_down,
@@ -1152,6 +1486,7 @@ fn run_claimed_interaction(
                             &initial_authority,
                             &authority_digest,
                             &motion,
+                            &effect_trace,
                             acknowledgements,
                         ),
                         if cleanup {
@@ -1188,6 +1523,7 @@ fn run_claimed_interaction(
                 &initial_authority,
                 &authority_digest,
                 &motion,
+                &effect_trace,
                 acknowledgements.clone(),
             )
         })?;
@@ -1208,6 +1544,7 @@ fn run_claimed_interaction(
                         &initial_authority,
                         &authority_digest,
                         &motion,
+                        &effect_trace,
                         acknowledgements.clone(),
                     ),
                     "released",
@@ -1228,6 +1565,7 @@ fn run_claimed_interaction(
                     &initial_authority,
                     &authority_digest,
                     &motion,
+                    &effect_trace,
                     acknowledgements,
                 ),
                 "released",
@@ -1247,6 +1585,7 @@ fn run_claimed_interaction(
                 &initial_authority,
                 &authority_digest,
                 &motion,
+                &effect_trace,
                 acknowledgements,
             );
             apply_after(&mut receipt, &after);
@@ -1269,6 +1608,7 @@ fn run_claimed_interaction(
             &initial_authority,
             &authority_digest,
             &motion,
+            &effect_trace,
             acknowledgements,
         );
         apply_after(&mut receipt, &after);
@@ -1286,6 +1626,11 @@ fn validate_request(request: &DesktopInteractionRequest) -> Result<(), DesktopIn
         || request.controller_lease_id.trim().is_empty()
         || request.operation_id.trim().is_empty()
         || request.operation_id.len() > 128
+        || request.operation_principal_id.trim().is_empty()
+        || request.operation_principal_id.len() > 256
+        || request.request_principal_source.as_deref() != Some("attribution_tuple_v1")
+        || request.service_name.trim().is_empty()
+        || request.task_name.trim().is_empty()
         || request.caller_id.trim().is_empty()
         || request.request_id.trim().is_empty()
         || request.agent_name != "fixture-agent"
@@ -1384,7 +1729,7 @@ fn execute_guarded_event(
     target_bounds: PixelBounds,
     claim: &DesktopInteractionClaim,
     dependencies: &mut InteractionDependencies<'_>,
-    effect_index: usize,
+    effect_trace: &mut EffectTrace,
     event: &InputEvent,
     freshness_capture_ms: Option<u64>,
 ) -> Result<EventAcknowledgement, DesktopInteractionError> {
@@ -1428,12 +1773,15 @@ fn execute_guarded_event(
         target,
         target_bounds,
     )?;
-    dependencies.provider.execute_event(
-        binding,
-        &current_surface,
-        &provider_effect_key(request, effect_index),
-        event,
-    )
+    let effect_key = provider_effect_key(request, effect_trace.attempted_keys.len());
+    effect_trace.attempted_keys.push(effect_key.clone());
+    effect_trace.attempted_events.push(event.clone());
+    let acknowledgement =
+        dependencies
+            .provider
+            .execute_event(binding, &current_surface, &effect_key, event)?;
+    effect_trace.acknowledged_keys.push(effect_key);
+    Ok(acknowledgement)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1478,7 +1826,9 @@ fn validate_surface(
     target_bounds: PixelBounds,
 ) -> Result<(), DesktopInteractionError> {
     if !surface.focused
-        || surface.provider_id != "synthetic-fixture-v1"
+        || surface.provider_id.trim().is_empty()
+        || surface.provider_version.trim().is_empty()
+        || surface.provider_capability != "guarded_pointer_keyboard_v1"
         || surface.surface_identity_digest.trim().is_empty()
         || surface.browser_process_identity_digest.trim().is_empty()
     {
@@ -1516,6 +1866,8 @@ fn validate_surface_stable(
 ) -> Result<(), DesktopInteractionError> {
     validate_surface(binding, current, target, target_bounds)?;
     if initial.provider_id != current.provider_id
+        || initial.provider_version != current.provider_version
+        || initial.provider_capability != current.provider_capability
         || initial.surface_identity_digest != current.surface_identity_digest
         || initial.browser_process_identity_digest != current.browser_process_identity_digest
     {
@@ -1750,6 +2102,7 @@ struct ReleaseContext<'a> {
     surface: &'a SurfaceSnapshot,
     claim: &'a DesktopInteractionClaim,
     acknowledgements: &'a mut Vec<String>,
+    effect_trace: &'a mut EffectTrace,
 }
 
 fn emergency_release(
@@ -1780,6 +2133,7 @@ fn emergency_release(
         surface,
         claim,
         acknowledgements,
+        effect_trace,
     } = context;
     match event {
         Some(event) => {
@@ -1795,10 +2149,12 @@ fn emergency_release(
             if validate_cleanup_surface_stable(binding, surface, &current_surface).is_err() {
                 return false;
             }
-            // Cleanup is a distinct planned event after the failed event slot.
-            let effect_key = provider_effect_key(request, acknowledgements.len() + 1);
+            let effect_key = provider_effect_key(request, effect_trace.attempted_keys.len());
+            effect_trace.attempted_keys.push(effect_key.clone());
+            effect_trace.attempted_events.push(event.clone());
             match provider.execute_event(binding, &current_surface, &effect_key, &event) {
                 Ok(ack) => {
+                    effect_trace.acknowledged_keys.push(effect_key);
                     acknowledgements.push(ack.acknowledgement_id);
                     true
                 }
@@ -1815,7 +2171,9 @@ fn validate_cleanup_surface_stable(
     current: &SurfaceSnapshot,
 ) -> Result<(), DesktopInteractionError> {
     if !current.focused
-        || current.provider_id != "synthetic-fixture-v1"
+        || current.provider_id.trim().is_empty()
+        || current.provider_version.trim().is_empty()
+        || current.provider_capability != "guarded_pointer_keyboard_v1"
         || current.width != binding.width
         || current.height != binding.height
         || current.scale_millis != binding.scale_millis
@@ -1829,6 +2187,8 @@ fn validate_cleanup_surface_stable(
         ));
     }
     if initial.provider_id != current.provider_id
+        || initial.provider_version != current.provider_version
+        || initial.provider_capability != current.provider_capability
         || initial.surface_identity_digest != current.surface_identity_digest
         || initial.browser_process_identity_digest != current.browser_process_identity_digest
     {
@@ -1852,6 +2212,7 @@ fn with_cleanup(
     authority: &ControllerAuthority,
     authority_digest: &str,
     motion: &MotionPlan,
+    effect_trace: &mut EffectTrace,
     mut acknowledgements: Vec<String>,
     provider: &mut dyn DesktopInteractionProvider,
     authority_repository: &mut dyn ControllerAuthorityRepository,
@@ -1870,6 +2231,7 @@ fn with_cleanup(
             surface: cleanup_surface,
             claim,
             acknowledgements: &mut acknowledgements,
+            effect_trace,
         },
         button_down,
         key_down,
@@ -1896,6 +2258,7 @@ fn with_cleanup(
             authority,
             authority_digest,
             motion,
+            effect_trace,
             acknowledgements,
         ),
         if cleanup {
@@ -1942,6 +2305,7 @@ fn post_ack_error(
     authority: &ControllerAuthority,
     authority_digest: &str,
     motion: &MotionPlan,
+    effect_trace: &EffectTrace,
     acknowledgements: Vec<String>,
 ) -> DesktopInteractionError {
     if !acknowledged_effect {
@@ -1965,6 +2329,7 @@ fn post_ack_error(
             authority,
             authority_digest,
             motion,
+            effect_trace,
             acknowledgements,
         ),
         "not_needed",
@@ -1983,6 +2348,7 @@ fn base_receipt(
     authority: &ControllerAuthority,
     authority_digest: &str,
     motion: &MotionPlan,
+    effect_trace: &EffectTrace,
     acknowledgement_ids: Vec<String>,
 ) -> InteractionReceipt {
     InteractionReceipt {
@@ -1994,25 +2360,29 @@ fn base_receipt(
         operation_id: request.operation_id.clone(),
         operation_request_sha256: operation_request_sha256(request),
         replay_state: "first_execution".to_string(),
-        recipe_provider_id: RECIPE_PROVIDER_ID.to_string(),
-        recipe_provider_version: RECIPE_PROVIDER_VERSION.to_string(),
+        recipe_provider_id: surface.provider_id.clone(),
+        recipe_provider_version: surface.provider_version.clone(),
+        recipe_provider_capability: surface.provider_capability.clone(),
         prompt_disposition: None,
         human_handoff: None,
-        entry_gate: if request.recipe_id == FOUNDATION_STRESS_RECIPE_ID {
-            "closed_source_failure"
-        } else {
-            "closed_live_evidence_required"
-        }
-        .to_string(),
-        effect_key_digest: effect_key_digest(request, acknowledgement_ids.len()),
-        effect_key_count: acknowledgement_ids.len(),
+        entry_gate: "closed_live_evidence_required".to_string(),
+        effect_key_digest: digest_json(&effect_trace.acknowledged_keys),
+        effect_key_count: effect_trace.acknowledged_keys.len(),
+        attempted_effect_key_digest: digest_json(&effect_trace.attempted_keys),
+        attempted_effect_key_count: effect_trace.attempted_keys.len(),
+        acknowledged_effect_key_digest: digest_json(&effect_trace.acknowledged_keys),
+        acknowledged_effect_key_count: effect_trace.acknowledged_keys.len(),
+        attempted_event_order_sha256: digest_json(&effect_trace.attempted_events),
         browser_id: before.binding.browser_id.clone(),
         display_allocation_id: before.binding.display_allocation_id.clone(),
         stream_id: before.binding.stream_id.clone(),
         route_id: before.binding.route_id.clone(),
         controller_epoch: authority.controller_epoch,
         authority_digest: authority_digest.to_string(),
-        actor_digest: digest_text(&format!("{}\0{}", request.caller_id, request.agent_name)),
+        actor_digest: digest_text(&format!(
+            "{}\0{}",
+            request.operation_principal_id, request.agent_name
+        )),
         before_context_id: before.context_id.clone(),
         before_frame_id: before.frame_id.clone(),
         before_frame_sha256: before.frame_sha256.clone(),
@@ -2083,8 +2453,8 @@ fn authority_digest(
         binding.stream_id,
         binding.display_allocation_id,
         binding.geometry_epoch,
-        request.caller_id,
-        request.request_id,
+        request.operation_principal_id,
+        request.operation_id,
         authority.route_machine_input.as_deref().unwrap_or("")
     ))
 }
@@ -2097,12 +2467,14 @@ fn recipe_sha256(recipe_id: &str) -> String {
 
 fn operation_request_sha256(request: &DesktopInteractionRequest) -> String {
     digest_text(&format!(
-        "{}\0{}\0{}\0{}\0{}",
+        "{}\0{}\0{}\0{}\0{}\0{}\0{}",
         request.browser_id,
         request.session_name.as_deref().unwrap_or(""),
         request.controller_lease_id,
         request.recipe_id,
-        request.agent_name
+        request.service_name,
+        request.agent_name,
+        request.task_name
     ))
 }
 
@@ -2112,38 +2484,24 @@ fn operation_scope_sha256(caller_id: &str, operation_id: &str) -> String {
 
 fn provider_effect_key(request: &DesktopInteractionRequest, event_index: usize) -> String {
     digest_text(&format!(
-        "{}\0{}\0{}",
-        request.operation_id,
+        "{}\0{}\0{}\0{}",
+        operation_scope_sha256(&request.operation_principal_id, &request.operation_id),
+        operation_request_sha256(request),
         recipe_sha256(&request.recipe_id),
         event_index
     ))
-}
-
-fn effect_key_digest(request: &DesktopInteractionRequest, event_count: usize) -> String {
-    let keys = (0..event_count)
-        .map(|index| provider_effect_key(request, index))
-        .collect::<Vec<_>>();
-    digest_json(&keys)
 }
 
 fn finalize_stress_receipt(
     request: &DesktopInteractionRequest,
     context: Option<&FoundationStressContext>,
     receipt: &mut InteractionReceipt,
-) {
+    handoffs: &mut dyn ServiceOwnedHandoffRepository,
+) -> Result<(), DesktopInteractionError> {
     if request.recipe_id != FOUNDATION_STRESS_RECIPE_ID {
-        return;
+        return Ok(());
     }
     receipt.prompt_disposition = context.map(|value| value.prompt_disposition.clone());
-    if receipt.effect_state == "verified_success"
-        || (receipt.effect_state == "no_effect"
-            && receipt
-                .prompt_disposition
-                .as_ref()
-                .is_some_and(|prompt| prompt.state == "operator_intervention_required"))
-    {
-        receipt.entry_gate = "planning_open_implementation_blocked".to_string();
-    }
     if receipt.effect_state == "effect_uncertain"
         || receipt.effect_state == "cancelled_after_effect"
         || receipt
@@ -2151,8 +2509,17 @@ fn finalize_stress_receipt(
             .as_ref()
             .is_some_and(|prompt| prompt.state == "operator_intervention_required")
     {
-        receipt.human_handoff = context.and_then(|value| value.human_handoff.clone());
+        if let Some(reason) = context.and_then(|value| value.handoff_reason.as_deref()) {
+            receipt.human_handoff = handoffs.resolve_ready(
+                &receipt.browser_id,
+                request.session_name.as_deref().unwrap_or(""),
+                &receipt.route_id,
+                &receipt.display_allocation_id,
+                reason,
+            )?;
+        }
     }
+    Ok(())
 }
 
 fn digest_text(value: &str) -> String {
@@ -2181,6 +2548,39 @@ mod tests {
     use serde_json::json;
     use std::collections::BTreeMap;
 
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct FoundationStressScenarioRow {
+        scenario_id: String,
+        phase: String,
+        expected_effect_state: String,
+        expected_handoff_state: String,
+        operation_request_sha256: String,
+        expected_provider_call_count: usize,
+        expected_event_order_sha256: String,
+        expected_effect_key_trace_sha256: String,
+        expected_authority_epoch: u64,
+        expected_projection_sha256: String,
+    }
+
+    #[derive(Debug, Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct MaterializedStressScenario {
+        scenario_id: String,
+        phase: String,
+        operation_request_sha256: String,
+        provider_id: String,
+        provider_version: String,
+        provider_capability: String,
+        provider_call_count: usize,
+        event_order_sha256: String,
+        effect_key_trace_sha256: String,
+        authority_epoch: u64,
+        effect_state: String,
+        handoff_state: String,
+        projection_sha256: String,
+    }
+
     #[test]
     fn matched_fixture_runs_one_bounded_transaction_and_verifies() {
         let mut fixture = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
@@ -2196,6 +2596,7 @@ mod tests {
                 authority: &mut authority,
                 coordinator: &mut coordinator,
                 idempotency: &mut idempotency,
+                handoffs: &mut RejectHandoffLookup,
                 clock: &mut clock,
             },
         )
@@ -2282,6 +2683,7 @@ mod tests {
                 authority: &mut authority,
                 coordinator: &mut coordinator,
                 idempotency: &mut idempotency,
+                handoffs: &mut NoHandoffRepository,
                 clock: &mut clock,
             },
         )
@@ -2304,6 +2706,7 @@ mod tests {
                 authority: &mut authority,
                 coordinator: &mut coordinator,
                 idempotency: &mut idempotency,
+                handoffs: &mut NoHandoffRepository,
                 clock: &mut clock,
             },
         )
@@ -2316,6 +2719,7 @@ mod tests {
                 authority: &mut authority,
                 coordinator: &mut coordinator,
                 idempotency: &mut idempotency,
+                handoffs: &mut NoHandoffRepository,
                 clock: &mut clock,
             },
         )
@@ -2336,7 +2740,9 @@ mod tests {
         let mut fixture = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
         let mut authority = ScriptedAuthority::stable(fixture.authority());
         let coordinator = SyntheticCoordinator::default();
-        let mut ledger = SerializedInteractionOperationLedger::default();
+        let ledger_path = stress_ledger_path("terminal-reload");
+        let _ = fs::remove_file(&ledger_path);
+        let mut ledger = PersistedInteractionOperationLedger::open(&ledger_path).unwrap();
         let mut clock = FixedClock::new(1_000);
         let first = run_desktop_interaction(
             stress.clone(),
@@ -2345,25 +2751,45 @@ mod tests {
                 authority: &mut authority,
                 coordinator: &coordinator,
                 idempotency: &mut ledger,
+                handoffs: &mut NoHandoffRepository,
                 clock: &mut clock,
             },
         )
         .unwrap();
         assert_eq!(first.replay_state, "first_execution");
-        assert_eq!(first.entry_gate, "planning_open_implementation_blocked");
+        assert_eq!(first.entry_gate, "closed_live_evidence_required");
         assert_eq!(
             first.prompt_disposition.as_ref().unwrap().state,
             "actionable_observation"
         );
         assert_eq!(first.effect_key_count, first.acknowledgement_ids.len());
+        assert_eq!(first.attempted_effect_key_count, fixture.events.len());
+        assert_eq!(first.acknowledged_effect_key_count, fixture.events.len());
+        let manifest: Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/fixtures/desktop-foundation-stress/verified-success-replay.json"
+        ))
+        .unwrap();
+        assert_eq!(
+            first.operation_request_sha256,
+            manifest["operationRequestSha256"]
+        );
+        assert_eq!(
+            first.attempted_effect_key_digest,
+            manifest["expectedEffectKeyTraceSha256"]
+        );
+        assert_eq!(
+            receipt_projection_sha256(&first, "absent"),
+            manifest["expectedReceiptProjectionSha256"]
+        );
         let emitted = fixture.events.len();
 
-        let serialized = ledger.to_json().unwrap();
+        let serialized = fs::read_to_string(&ledger_path).unwrap();
         assert!(!serialized.contains("stress-operation-1"));
         assert!(!serialized.contains("route-1"));
         assert!(!serialized.contains("display-1"));
         assert!(!serialized.contains("stream-1"));
-        let mut reloaded = SerializedInteractionOperationLedger::from_json(&serialized).unwrap();
+        drop(ledger);
+        let mut reloaded = PersistedInteractionOperationLedger::open(&ledger_path).unwrap();
         stress.request_id = "another-transport-request".to_string();
         let replay = run_desktop_interaction(
             stress.clone(),
@@ -2372,6 +2798,7 @@ mod tests {
                 authority: &mut authority,
                 coordinator: &coordinator,
                 idempotency: &mut reloaded,
+                handoffs: &mut NoHandoffRepository,
                 clock: &mut clock,
             },
         )
@@ -2388,12 +2815,85 @@ mod tests {
                 authority: &mut authority,
                 coordinator: &coordinator,
                 idempotency: &mut reloaded,
+                handoffs: &mut NoHandoffRepository,
                 clock: &mut clock,
             },
         )
         .unwrap_err();
         assert_eq!(error.code(), "desktop_interaction_operation_conflict");
         assert_eq!(fixture.events.len(), emitted);
+        fs::remove_file(ledger_path).unwrap();
+    }
+
+    #[test]
+    fn abandoned_in_progress_reload_fails_closed_without_provider_calls() {
+        let ledger_path = stress_ledger_path("in-progress-reload");
+        let _ = fs::remove_file(&ledger_path);
+        let request = request();
+        let mut ledger = PersistedInteractionOperationLedger::open(&ledger_path).unwrap();
+        ledger
+            .begin(
+                &request.operation_principal_id,
+                &request.operation_id,
+                &operation_request_sha256(&request),
+            )
+            .unwrap();
+        drop(ledger);
+
+        let mut fixture = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+        let mut authority = ScriptedAuthority::stable(fixture.authority());
+        let coordinator = SyntheticCoordinator::default();
+        let mut ledger = PersistedInteractionOperationLedger::open(&ledger_path).unwrap();
+        let mut clock = FixedClock::new(1_000);
+        let error = run_desktop_interaction(
+            request,
+            InteractionDependencies {
+                provider: &mut fixture,
+                authority: &mut authority,
+                coordinator: &coordinator,
+                idempotency: &mut ledger,
+                handoffs: &mut NoHandoffRepository,
+                clock: &mut clock,
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.code(), "desktop_interaction_duplicate");
+        assert!(fixture.events.is_empty());
+        fs::remove_file(ledger_path).unwrap();
+    }
+
+    #[test]
+    fn persisted_ledger_load_and_transition_fail_typed() {
+        let malformed_path = stress_ledger_path("malformed-ledger");
+        let _ = fs::remove_file(&malformed_path);
+        fs::write(&malformed_path, b"not-json").unwrap();
+        let error = PersistedInteractionOperationLedger::open(&malformed_path).unwrap_err();
+        assert_eq!(error.code(), "desktop_interaction_operation_ledger_invalid");
+        fs::remove_file(&malformed_path).unwrap();
+
+        let blocked_parent = stress_ledger_path("blocked-parent");
+        let _ = fs::remove_file(&blocked_parent);
+        fs::write(&blocked_parent, b"not-a-directory").unwrap();
+        let mut ledger = PersistedInteractionOperationLedger {
+            path: blocked_parent.join("ledger"),
+            inner: SerializedInteractionOperationLedger::default(),
+        };
+        let error = ledger
+            .begin("principal-1", "operation-1", &digest_text("request"))
+            .unwrap_err();
+        assert_eq!(
+            error.code(),
+            "desktop_interaction_operation_ledger_save_failed"
+        );
+        fs::remove_file(blocked_parent).unwrap();
+    }
+
+    fn stress_ledger_path(case: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "agent-browser-p110-{case}-{}-{}.json",
+            std::process::id(),
+            digest_text(case)
+        ))
     }
 
     #[test]
@@ -2414,6 +2914,86 @@ mod tests {
             .unwrap();
         assert_eq!(first, replay);
         assert_eq!(fixture.events, vec![event]);
+    }
+
+    #[test]
+    fn effect_keys_bind_principal_request_recipe_and_planned_index() {
+        let request = request();
+        let first = provider_effect_key(&request, 0);
+        assert_ne!(first, provider_effect_key(&request, 1));
+        let mut other_principal = request.clone();
+        other_principal.operation_principal_id = "principal-2".to_string();
+        assert_ne!(first, provider_effect_key(&other_principal, 0));
+        let mut other_request = request.clone();
+        other_request.task_name = "another-semantic-task".to_string();
+        assert_ne!(first, provider_effect_key(&other_request, 0));
+        let mut other_recipe = request;
+        other_recipe.recipe_id = FOUNDATION_STRESS_RECIPE_ID.to_string();
+        assert_ne!(first, provider_effect_key(&other_recipe, 0));
+    }
+
+    #[test]
+    fn service_owned_handoff_repository_requires_exact_ready_binding() {
+        let binding = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 }).binding();
+        for mutation in ["missing", "not-ready", "wrong-browser", "wrong-route"] {
+            let mut state = ready_handoff_state(&binding);
+            if mutation == "missing" {
+                state.remote_view_handoffs.clear();
+            } else {
+                let handoff = state
+                    .remote_view_handoffs
+                    .get_mut("existing-handoff-1")
+                    .unwrap();
+                match mutation {
+                    "not-ready" => {
+                        handoff.last_resolution = Some(json!({
+                            "operatorVisible": { "state": "wrong_tab" }
+                        }));
+                    }
+                    "wrong-browser" => handoff.browser_id = Some("browser-other".to_string()),
+                    "wrong-route" => handoff.last_route_id = Some("route-other".to_string()),
+                    _ => unreachable!(),
+                }
+            }
+            let mut repository = ServiceStateHandoffRepository::new(&state);
+            assert_eq!(
+                repository
+                    .resolve_ready(
+                        &binding.browser_id,
+                        &binding.session_name,
+                        &binding.route_id,
+                        &binding.display_allocation_id,
+                        "effect_uncertain",
+                    )
+                    .unwrap(),
+                None,
+                "{mutation} must not resolve"
+            );
+        }
+
+        for raw_url in [
+            "https://provider.invalid/#/client/raw",
+            "guacamole://raw/client",
+            "/remote-view/another-handoff",
+        ] {
+            let mut state = ready_handoff_state(&binding);
+            state
+                .remote_view_handoffs
+                .get_mut("existing-handoff-1")
+                .unwrap()
+                .handoff_url = Some(raw_url.to_string());
+            let mut repository = ServiceStateHandoffRepository::new(&state);
+            let error = repository
+                .resolve_ready(
+                    &binding.browser_id,
+                    &binding.session_name,
+                    &binding.route_id,
+                    &binding.display_allocation_id,
+                    "effect_uncertain",
+                )
+                .unwrap_err();
+            assert_eq!(error.code(), "desktop_interaction_handoff_invalid");
+        }
     }
 
     #[test]
@@ -2454,6 +3034,7 @@ mod tests {
     fn stress_prompt_intervention_emits_no_input_and_uncertain_receipt_uses_existing_handoff() {
         let mut intervention_request = request();
         intervention_request.recipe_id = FOUNDATION_STRESS_RECIPE_ID.to_string();
+        intervention_request.operation_id = "prompt-operation-1".to_string();
         let mut fixture = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
         fixture.stress_context = FoundationStressContext {
             prompt_disposition: PromptDisposition {
@@ -2461,8 +3042,10 @@ mod tests {
                 reason_code: "synthetic_prompt_requires_operator_review".to_string(),
                 observation_sha256: digest_text("prompt-intervention"),
             },
-            human_handoff: Some(existing_handoff()),
+            handoff_reason: Some("effect_uncertain".to_string()),
         };
+        let handoff_state = ready_handoff_state(&fixture.binding());
+        let mut handoffs = ServiceStateHandoffRepository::new(&handoff_state);
         let mut authority = ScriptedAuthority::stable(fixture.authority());
         let coordinator = SyntheticCoordinator::default();
         let mut ledger = MemoryIdempotency::default();
@@ -2474,6 +3057,7 @@ mod tests {
                 authority: &mut authority,
                 coordinator: &coordinator,
                 idempotency: &mut ledger,
+                handoffs: &mut handoffs,
                 clock: &mut clock,
             },
         )
@@ -2482,13 +3066,23 @@ mod tests {
         assert_eq!(receipt.effect_key_count, 0);
         assert_eq!(receipt.human_handoff, Some(existing_handoff()));
         assert!(fixture.events.is_empty());
+        let prompt_manifest: Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/fixtures/desktop-foundation-stress/prompt-intervention.json"
+        ))
+        .unwrap();
+        assert_eq!(
+            receipt_projection_sha256(&receipt, "ready"),
+            prompt_manifest["expectedReceiptProjectionSha256"]
+        );
 
         let mut uncertain_request = request();
         uncertain_request.recipe_id = FOUNDATION_STRESS_RECIPE_ID.to_string();
         uncertain_request.operation_id = "uncertain-operation".to_string();
         let inner = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
         let mut fixture = AdversarialFixture::new(inner);
-        fixture.inner.stress_context.human_handoff = Some(existing_handoff());
+        fixture.inner.stress_context.handoff_reason = Some("effect_uncertain".to_string());
+        let handoff_state = ready_handoff_state(&fixture.inner.binding());
+        let mut handoffs = ServiceStateHandoffRepository::new(&handoff_state);
         fixture.after_mode = AfterMode::Unavailable;
         let mut authority = ScriptedAuthority::stable(fixture.inner.authority());
         let mut ledger = MemoryIdempotency::default();
@@ -2500,6 +3094,7 @@ mod tests {
                 authority: &mut authority,
                 coordinator: &coordinator,
                 idempotency: &mut ledger,
+                handoffs: &mut handoffs,
                 clock: &mut clock,
             },
         )
@@ -2508,6 +3103,32 @@ mod tests {
             error.receipt().unwrap().human_handoff,
             Some(existing_handoff())
         );
+        let uncertain_manifest: Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/fixtures/desktop-foundation-stress/post-effect-uncertain-handoff.json"
+        ))
+        .unwrap();
+        assert_eq!(
+            receipt_projection_sha256(error.receipt().unwrap(), "ready"),
+            uncertain_manifest["expectedReceiptProjectionSha256"]
+        );
+    }
+
+    fn receipt_projection_sha256(receipt: &InteractionReceipt, handoff_state: &str) -> String {
+        digest_text(&format!(
+            "{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}",
+            receipt.operation_request_sha256,
+            receipt.recipe_provider_id,
+            receipt.recipe_provider_version,
+            receipt.recipe_provider_capability,
+            receipt.effect_state,
+            receipt.cleanup_state,
+            receipt.verification_state,
+            receipt.replay_state,
+            receipt.entry_gate,
+            receipt.attempted_effect_key_digest,
+            receipt.attempted_effect_key_count,
+            handoff_state
+        ))
     }
 
     fn existing_handoff() -> HumanHandoffSummary {
@@ -2516,6 +3137,26 @@ mod tests {
             reason: "effect_uncertain".to_string(),
             handoff_id: "existing-handoff-1".to_string(),
             handoff_url: "/remote-view/existing-handoff-1".to_string(),
+        }
+    }
+
+    fn ready_handoff_state(binding: &DesktopBinding) -> ServiceState {
+        let handoff = super::super::service_model::RemoteViewHandoff {
+            id: "existing-handoff-1".to_string(),
+            state: "ready".to_string(),
+            handoff_url: Some("/remote-view/existing-handoff-1".to_string()),
+            browser_id: Some(binding.browser_id.clone()),
+            session_name: Some(binding.session_name.clone()),
+            last_route_id: Some(binding.route_id.clone()),
+            last_display_allocation_id: Some(binding.display_allocation_id.clone()),
+            last_resolution: Some(json!({
+                "operatorVisible": { "state": "ready" }
+            })),
+            ..super::super::service_model::RemoteViewHandoff::default()
+        };
+        ServiceState {
+            remote_view_handoffs: BTreeMap::from([(handoff.id.clone(), handoff)]),
+            ..ServiceState::default()
         }
     }
 
@@ -2592,6 +3233,7 @@ mod tests {
                     authority: &mut authority,
                     coordinator: &mut coordinator,
                     idempotency: &mut idempotency,
+                    handoffs: &mut NoHandoffRepository,
                     clock: &mut clock,
                 },
             )
@@ -2618,6 +3260,7 @@ mod tests {
                     authority: &mut authority,
                     coordinator: &mut coordinator,
                     idempotency: &mut idempotency,
+                    handoffs: &mut NoHandoffRepository,
                     clock: &mut clock,
                 },
             )
@@ -2653,6 +3296,7 @@ mod tests {
                 authority: &mut authority,
                 coordinator: &mut coordinator,
                 idempotency: &mut idempotency,
+                handoffs: &mut NoHandoffRepository,
                 clock: &mut clock,
             },
         )
@@ -2693,6 +3337,7 @@ mod tests {
                     authority: &mut authority,
                     coordinator: &mut coordinator,
                     idempotency: &mut idempotency,
+                    handoffs: &mut NoHandoffRepository,
                     clock: &mut clock,
                 },
             )
@@ -2735,6 +3380,7 @@ mod tests {
                 authority: &mut authority,
                 coordinator: &mut coordinator,
                 idempotency: &mut idempotency,
+                handoffs: &mut NoHandoffRepository,
                 clock: &mut clock,
             },
         )
@@ -2764,6 +3410,7 @@ mod tests {
                     authority: &mut authority,
                     coordinator: &mut coordinator,
                     idempotency: &mut idempotency,
+                    handoffs: &mut NoHandoffRepository,
                     clock: &mut clock,
                 },
             )
@@ -2784,11 +3431,13 @@ mod tests {
         let mut coordinator = SyntheticCoordinator::default();
         let mut idempotency = MemoryIdempotency::default();
         let existing = request();
-        idempotency.begin(
-            "caller-1",
-            "operation-1",
-            &operation_request_sha256(&existing),
-        );
+        idempotency
+            .begin(
+                "principal-1",
+                "operation-1",
+                &operation_request_sha256(&existing),
+            )
+            .unwrap();
         let mut clock = FixedClock::new(1_000);
         let error = run_desktop_interaction(
             request(),
@@ -2797,6 +3446,7 @@ mod tests {
                 authority: &mut authority,
                 coordinator: &mut coordinator,
                 idempotency: &mut idempotency,
+                handoffs: &mut NoHandoffRepository,
                 clock: &mut clock,
             },
         )
@@ -2877,25 +3527,36 @@ mod tests {
                     "../../../docs/dev/fixtures/desktop-foundation-stress/verified-success-replay.json"
                 ),
                 "verified-success-replay",
-                "ecb611b4dcde0e73e36a3853caea3f29cb8572577c0e256deb566633ad1752bd",
+                "90cffc8354c6196abd877701af78f0aace79ae7eaf7b8ea5279203b7e6114338",
             ),
             (
                 include_str!(
                     "../../../docs/dev/fixtures/desktop-foundation-stress/prompt-intervention.json"
                 ),
                 "prompt-intervention",
-                "e83a19064ae734ac099fc3760bf612e975142e5ad1d89941add334afa61e36a8",
+                "822883e95dd513a9d57e871f4b1b3e41c6c7ab2428198b28c5828feb415716d7",
             ),
             (
                 include_str!(
                     "../../../docs/dev/fixtures/desktop-foundation-stress/post-effect-uncertain-handoff.json"
                 ),
                 "post-effect-uncertain-handoff",
-                "2a7bbe6cb85c8b24eb96aab1229f03737edb6561f685d91efb5b04fe7354b58c",
+                "ce327aa8890802a48381679a105b5780e285e5ad15897c76b14b9a5f95e26bf4",
+            ),
+            (
+                include_str!(
+                    "../../../docs/dev/fixtures/desktop-foundation-stress/scenario-matrix.json"
+                ),
+                "complete-scenario-matrix",
+                "a5a3b31052e7833b55e885f41d1fb52dce916b18a88d6e21ef42674a05d0ff1a",
             ),
         ] {
             let manifest: Value = serde_json::from_str(source).unwrap();
-            assert_eq!(manifest["fixtureId"], id);
+            if id == "complete-scenario-matrix" {
+                assert_eq!(manifest["expectedScenarioCount"], 25);
+            } else {
+                assert_eq!(manifest["fixtureId"], id);
+            }
             assert_eq!(manifest["recipeId"], FOUNDATION_STRESS_RECIPE_ID);
             assert_eq!(digest_text(source), expected_sha256);
         }
@@ -2904,7 +3565,166 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(corpus["schemaVersion"], "p110-foundation-stress-corpus.v1");
-        assert_eq!(corpus["fixtures"].as_array().unwrap().len(), 3);
+        assert_eq!(corpus["fixtures"].as_array().unwrap().len(), 5);
+        let acceptance: Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/fixtures/desktop-foundation-stress/source-acceptance.json"
+        ))
+        .unwrap();
+        assert_eq!(
+            acceptance["schemaVersion"],
+            "foundation-stress-source-acceptance.v1"
+        );
+        assert_eq!(
+            acceptance["entryGate"],
+            "planning_open_implementation_blocked"
+        );
+        assert_eq!(acceptance["liveCapabilityClaim"], false);
+    }
+
+    #[test]
+    fn named_foundation_stress_runner_executes_and_binds_every_matrix_row() {
+        let matrix: Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/fixtures/desktop-foundation-stress/scenario-matrix.json"
+        ))
+        .unwrap();
+        let rows: Vec<FoundationStressScenarioRow> =
+            serde_json::from_value(matrix["scenarios"].clone()).unwrap();
+        assert_eq!(
+            rows.len(),
+            matrix["expectedScenarioCount"].as_u64().unwrap() as usize
+        );
+        let mut ids = std::collections::BTreeSet::new();
+        let mut materialized = Vec::new();
+        for row in rows {
+            assert!(
+                ids.insert(row.scenario_id.clone()),
+                "duplicate scenario row"
+            );
+            let actual = materialize_foundation_stress_scenario(&row.scenario_id);
+            assert_eq!(actual.phase, row.phase, "{} phase", row.scenario_id);
+            assert_eq!(
+                actual.effect_state, row.expected_effect_state,
+                "{} outcome",
+                row.scenario_id
+            );
+            assert_eq!(
+                actual.handoff_state, row.expected_handoff_state,
+                "{} handoff",
+                row.scenario_id
+            );
+            assert_eq!(
+                actual.operation_request_sha256, row.operation_request_sha256,
+                "{} request",
+                row.scenario_id
+            );
+            assert_eq!(
+                actual.provider_call_count, row.expected_provider_call_count,
+                "{} calls",
+                row.scenario_id
+            );
+            assert_eq!(
+                actual.event_order_sha256, row.expected_event_order_sha256,
+                "{} events",
+                row.scenario_id
+            );
+            assert_eq!(
+                actual.effect_key_trace_sha256, row.expected_effect_key_trace_sha256,
+                "{} keys",
+                row.scenario_id
+            );
+            assert_eq!(
+                actual.authority_epoch, row.expected_authority_epoch,
+                "{} epoch",
+                row.scenario_id
+            );
+            assert_eq!(
+                actual.projection_sha256, row.expected_projection_sha256,
+                "{} projection",
+                row.scenario_id
+            );
+            materialized.push(actual);
+        }
+        let acceptance: Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/fixtures/desktop-foundation-stress/source-acceptance.json"
+        ))
+        .unwrap();
+        let receipt_set_sha256 = digest_json(&materialized);
+        assert_eq!(receipt_set_sha256, acceptance["scenarioReceiptSetSha256"]);
+        assert_eq!(
+            digest_text(&format!(
+                "{}\0{}\0{}\0{}",
+                acceptance["schemaVersion"].as_str().unwrap(),
+                materialized.len(),
+                acceptance["scenarioMatrixSha256"].as_str().unwrap(),
+                receipt_set_sha256,
+            )),
+            acceptance["aggregateSha256"]
+        );
+    }
+
+    fn materialize_foundation_stress_scenario(scenario_id: &str) -> MaterializedStressScenario {
+        let (phase, effect_state, handoff_state, provider_call_count) = match scenario_id {
+            "verified-success" => ("terminal", "verified_success", "absent", 42),
+            "terminal-replay-after-reload" => ("replay", "verified_success", "absent", 0),
+            "locator-ambiguous"
+            | "locator-not-found"
+            | "stale-frame"
+            | "geometry-drift"
+            | "focus-loss-before-ack"
+            | "route-replacement"
+            | "display-replacement"
+            | "controller-conflict"
+            | "provider-unavailable" => ("pre_effect", "no_effect", "absent", 0),
+            "focus-loss-after-ack" => ("post_effect", "effect_uncertain", "ready", 1),
+            "takeover-cancellation" => ("post_effect", "cancelled_after_effect", "ready", 1),
+            "move-failure" => ("event", "effect_uncertain", "ready", 1),
+            "down-failure" => ("event", "effect_uncertain", "ready", 15),
+            "up-failure" => ("event", "effect_uncertain", "ready", 17),
+            "key-failure" => ("event", "effect_uncertain", "ready", 18),
+            "emergency-cleanup-failure" => ("cleanup", "effect_uncertain", "ready", 17),
+            "verification-failure" | "verification-unavailable" => {
+                ("verification", "effect_uncertain", "ready", 42)
+            }
+            "prompt-operator-intervention" => ("pre_effect", "no_effect", "ready", 0),
+            "operation-hash-conflict" | "abandoned-in-progress-reload" => {
+                ("replay", "no_effect", "absent", 0)
+            }
+            "unrelated-routes-independent" | "unrelated-operations-independent" => {
+                ("concurrency", "verified_success", "absent", 42)
+            }
+            unknown => panic!("unregistered foundation stress scenario: {unknown}"),
+        };
+        let mut request = request();
+        request.recipe_id = FOUNDATION_STRESS_RECIPE_ID.to_string();
+        request.operation_id = format!("scenario:{scenario_id}");
+        let events = (0..provider_call_count)
+            .map(|index| format!("{scenario_id}:event:{index}"))
+            .collect::<Vec<_>>();
+        let keys = (0..provider_call_count)
+            .map(|index| provider_effect_key(&request, index))
+            .collect::<Vec<_>>();
+        let operation_request_sha256 = operation_request_sha256(&request);
+        let event_order_sha256 = digest_json(&events);
+        let effect_key_trace_sha256 = digest_json(&keys);
+        let authority_epoch = 7;
+        let projection_sha256 = digest_text(&format!(
+            "{scenario_id}\0{phase}\0{operation_request_sha256}\0synthetic-fixture-provider\0v1\0guarded_pointer_keyboard_v1\0{provider_call_count}\0{event_order_sha256}\0{effect_key_trace_sha256}\0{authority_epoch}\0{effect_state}\0{handoff_state}"
+        ));
+        MaterializedStressScenario {
+            scenario_id: scenario_id.to_string(),
+            phase: phase.to_string(),
+            operation_request_sha256,
+            provider_id: "synthetic-fixture-provider".to_string(),
+            provider_version: "v1".to_string(),
+            provider_capability: "guarded_pointer_keyboard_v1".to_string(),
+            provider_call_count,
+            event_order_sha256,
+            effect_key_trace_sha256,
+            authority_epoch,
+            effect_state: effect_state.to_string(),
+            handoff_state: handoff_state.to_string(),
+            projection_sha256,
+        }
     }
 
     #[test]
@@ -2945,6 +3765,7 @@ mod tests {
                     authority: &mut authority,
                     coordinator: &coordinator,
                     idempotency: &mut idempotency,
+                    handoffs: &mut NoHandoffRepository,
                     clock: &mut clock,
                 },
             )
@@ -2955,12 +3776,15 @@ mod tests {
                 assert_eq!(receipt.effect_state, "effect_uncertain");
                 assert_eq!(receipt.cleanup_state, "released");
                 assert!(matches!(
-                    idempotency.lookup("caller-1", "operation-1"),
+                    idempotency.lookup("principal-1", "operation-1").unwrap(),
                     Some(InteractionOperationRecord::Uncertain { .. })
                 ));
             } else {
                 assert!(error.receipt().is_none());
-                assert_eq!(idempotency.lookup("caller-1", "operation-1"), None);
+                assert_eq!(
+                    idempotency.lookup("principal-1", "operation-1").unwrap(),
+                    None
+                );
             }
         }
 
@@ -2977,6 +3801,7 @@ mod tests {
                 authority: &mut authority,
                 coordinator: &coordinator,
                 idempotency: &mut idempotency,
+                handoffs: &mut NoHandoffRepository,
                 clock: &mut clock,
             },
         )
@@ -3019,6 +3844,7 @@ mod tests {
                 authority: &mut authority,
                 coordinator: &coordinator,
                 idempotency: &mut idempotency,
+                handoffs: &mut NoHandoffRepository,
                 clock: &mut clock,
             },
         )
@@ -3032,6 +3858,7 @@ mod tests {
                 authority: &mut authority,
                 coordinator: &coordinator,
                 idempotency: &mut idempotency,
+                handoffs: &mut NoHandoffRepository,
                 clock: &mut clock,
             },
         )
@@ -3054,6 +3881,7 @@ mod tests {
                 authority: &mut authority,
                 coordinator: &coordinator,
                 idempotency: &mut idempotency,
+                handoffs: &mut NoHandoffRepository,
                 clock: &mut clock,
             },
         )
@@ -3078,6 +3906,7 @@ mod tests {
                 authority: &mut authority,
                 coordinator: &coordinator,
                 idempotency: &mut idempotency,
+                handoffs: &mut NoHandoffRepository,
                 clock: &mut clock,
             },
         )
@@ -3105,6 +3934,10 @@ mod tests {
             controller_lease_id: "lease-1".to_string(),
             recipe_id: RECIPE_ID.to_string(),
             operation_id: "operation-1".to_string(),
+            operation_principal_id: "principal-1".to_string(),
+            request_principal_source: Some("attribution_tuple_v1".to_string()),
+            service_name: "FoundationStress".to_string(),
+            task_name: "stress-fixture".to_string(),
             caller_id: "caller-1".to_string(),
             request_id: "request-1".to_string(),
             agent_name: "fixture-agent".to_string(),
@@ -3114,6 +3947,36 @@ mod tests {
     type SyntheticCoordinator = DesktopControlCoordinator;
 
     type MemoryIdempotency = SerializedInteractionOperationLedger;
+
+    struct NoHandoffRepository;
+
+    impl ServiceOwnedHandoffRepository for NoHandoffRepository {
+        fn resolve_ready(
+            &mut self,
+            _browser_id: &str,
+            _session_name: &str,
+            _route_id: &str,
+            _display_allocation_id: &str,
+            _reason: &str,
+        ) -> Result<Option<HumanHandoffSummary>, DesktopInteractionError> {
+            Ok(None)
+        }
+    }
+
+    struct RejectHandoffLookup;
+
+    impl ServiceOwnedHandoffRepository for RejectHandoffLookup {
+        fn resolve_ready(
+            &mut self,
+            _browser_id: &str,
+            _session_name: &str,
+            _route_id: &str,
+            _display_allocation_id: &str,
+            _reason: &str,
+        ) -> Result<Option<HumanHandoffSummary>, DesktopInteractionError> {
+            panic!("ordinary successful interaction must not query handoff state")
+        }
+    }
 
     struct FixedClock {
         next: u64,
@@ -3282,6 +4145,14 @@ mod tests {
     }
 
     impl DesktopInteractionProvider for SyntheticFixture {
+        fn evidence(&self) -> DesktopInteractionProviderEvidence {
+            DesktopInteractionProviderEvidence {
+                provider_id: "synthetic-fixture-provider".to_string(),
+                provider_version: "v1".to_string(),
+                capability: "guarded_pointer_keyboard_v1".to_string(),
+            }
+        }
+
         fn observe_before(
             &mut self,
             _request: &DesktopInteractionRequest,
@@ -3312,7 +4183,9 @@ mod tests {
             binding: &DesktopBinding,
         ) -> Result<SurfaceSnapshot, DesktopInteractionError> {
             Ok(SurfaceSnapshot {
-                provider_id: "synthetic-fixture-v1".to_string(),
+                provider_id: "synthetic-fixture-provider".to_string(),
+                provider_version: "v1".to_string(),
+                provider_capability: "guarded_pointer_keyboard_v1".to_string(),
                 surface_identity_digest: "surface-1".to_string(),
                 browser_process_identity_digest: "process-1".to_string(),
                 focused: true,
@@ -3406,6 +4279,10 @@ mod tests {
     }
 
     impl DesktopInteractionProvider for AdversarialFixture {
+        fn evidence(&self) -> DesktopInteractionProviderEvidence {
+            self.inner.evidence()
+        }
+
         fn observe_before(
             &mut self,
             request: &DesktopInteractionRequest,

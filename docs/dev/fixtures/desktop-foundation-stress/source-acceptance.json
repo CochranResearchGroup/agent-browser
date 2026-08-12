@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "foundation-stress-source-acceptance.v1",
+  "evidenceClass": "repository_owned_source_only",
+  "expectedScenarioCount": 25,
+  "scenarioMatrixSha256": "a5a3b31052e7833b55e885f41d1fb52dce916b18a88d6e21ef42674a05d0ff1a",
+  "scenarioReceiptSetSha256": "aa366a9d7208f906057631df4dd1c3c9fd8c7a1416e3b8cf0c994dcd7507d7c4",
+  "aggregateSha256": "3547873475f1ddc7dece91d31a73b8f68edb7dd65840436e9af367e502ec6043",
+  "entryGate": "planning_open_implementation_blocked",
+  "liveCapabilityClaim": false
+}

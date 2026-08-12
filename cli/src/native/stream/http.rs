@@ -353,6 +353,7 @@ pub(super) async fn handle_http_request(
                 dashboard_identity
                     .as_ref()
                     .map(|identity| identity.username.as_str()),
+                session_name,
             ) {
                 Ok(cmd) => cmd,
                 Err(err) => {
@@ -1672,13 +1673,19 @@ fn service_request_command_with_state(
     body: &str,
     service_state: Option<&ServiceState>,
 ) -> Result<Value, String> {
-    service_request_command_with_state_and_principal(body, service_state, Some("test-adapter"))
+    service_request_command_with_state_and_principal(
+        body,
+        service_state,
+        Some("test-adapter"),
+        "test-adapter",
+    )
 }
 
 fn service_request_command_with_state_and_principal(
     body: &str,
     service_state: Option<&ServiceState>,
     authenticated_dashboard_user: Option<&str>,
+    effective_session: &str,
 ) -> Result<Value, String> {
     let mut request = if body.trim().is_empty() {
         json!({})
@@ -1712,6 +1719,7 @@ fn service_request_command_with_state_and_principal(
         service_state,
         fallback_principal,
         request_id: &request_id,
+        effective_session: Some(effective_session),
     })
     .map_err(|issue| issue.message().to_string())?;
     let mut command = normalized.command;
@@ -1725,7 +1733,20 @@ fn service_request_command_with_state_and_principal(
 
 #[cfg(test)]
 pub(crate) fn service_request_adapter_fixture(body: &str) -> Result<Value, Value> {
-    match service_request_command_with_state(body, None) {
+    service_request_adapter_fixture_for_session(body, "test-adapter")
+}
+
+#[cfg(test)]
+pub(crate) fn service_request_adapter_fixture_for_session(
+    body: &str,
+    effective_session: &str,
+) -> Result<Value, Value> {
+    match service_request_command_with_state_and_principal(
+        body,
+        None,
+        Some("test-adapter"),
+        effective_session,
+    ) {
         Ok(command) => Ok(command),
         Err(message) => {
             let (status, body) = json_result_parts(Err(message), "400 Bad Request");
@@ -4660,6 +4681,7 @@ mod tests {
             r##"{"action":"navigate","params":{"url":"https://example.com"}}"##,
             None,
             None,
+            "default",
         )
         .unwrap_err();
 
@@ -4672,6 +4694,7 @@ mod tests {
             r##"{"action":"navigate","params":{"url":"https://example.com"}}"##,
             None,
             Some("admin"),
+            "default",
         )
         .unwrap();
 
@@ -4835,14 +4858,42 @@ mod tests {
     #[test]
     fn desktop_interact_browser_identity_does_not_select_a_daemon_lane() {
         let body = r##"{"action":"desktop_interact","browserId":"browser-rdp-1","controllerLeaseId":"lease-1","operationId":"operation-1","recipe":{"recipeId":"p110-foundation-stress-v1"},"serviceName":"DesktopInteractor","agentName":"fixture-agent","taskName":"verify"}"##;
-        let command: Value = serde_json::from_str(body).unwrap();
+        let command = service_request_adapter_fixture_for_session(body, "default").unwrap();
+        assert_eq!(command["sessionName"], "default");
+        assert_eq!(command["requestPrincipalSource"], "attribution_tuple_v1");
         assert_eq!(
             service_request_relay_session("default", body, &command),
             "default"
         );
 
+        let generic_request: Value = serde_json::from_str(body).unwrap();
+        let generic_mcp =
+            crate::mcp::service_request_adapter_fixture_for_session(&generic_request, "default")
+                .unwrap();
+        let dedicated_mcp = crate::mcp::desktop_interact_adapter_fixture_for_session(
+            &json!({
+                "browserId": "browser-rdp-1",
+                "controllerLeaseId": "lease-1",
+                "operationId": "operation-1",
+                "recipeId": "p110-foundation-stress-v1",
+                "serviceName": "DesktopInteractor",
+                "agentName": "fixture-agent",
+                "taskName": "verify"
+            }),
+            "default",
+        )
+        .unwrap();
+        for normalized in [&generic_mcp, &dedicated_mcp] {
+            assert_eq!(normalized["sessionName"], "default");
+            assert_eq!(
+                normalized["operationPrincipalId"],
+                command["operationPrincipalId"]
+            );
+            assert_eq!(normalized["requestPrincipalSource"], "attribution_tuple_v1");
+        }
+
         let narrowed = r##"{"action":"desktop_interact","browserId":"browser-rdp-1","sessionName":"rdp-session","controllerLeaseId":"lease-1","operationId":"operation-2","recipe":{"recipeId":"p110-foundation-stress-v1"},"serviceName":"DesktopInteractor","agentName":"fixture-agent","taskName":"verify"}"##;
-        let command: Value = serde_json::from_str(narrowed).unwrap();
+        let command = service_request_adapter_fixture_for_session(narrowed, "default").unwrap();
         assert_eq!(
             service_request_relay_session("default", narrowed, &command),
             "rdp-session"

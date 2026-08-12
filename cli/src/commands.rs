@@ -8,6 +8,10 @@ use crate::flags::{launch_config_status, Flags};
 use crate::native::service_contracts::{
     DESKTOP_CAPTURE_DEFAULT_MAX_BYTES, DESKTOP_CAPTURE_HARD_MAX_BYTES,
 };
+use crate::native::service_request::{
+    apply_service_request_attribution, normalize_service_request, ServiceRequestFallbackPrincipal,
+    ServiceRequestNormalization, ServiceRequestPrincipalSource,
+};
 use crate::validation::{is_valid_session_name, session_name_error};
 
 /// Error type for command parsing with contextual information
@@ -1266,7 +1270,7 @@ fn parse_desktop_prompt_observe(
 /// opaque operation identity. Targets, coordinates, event plans, input text,
 /// timing, and provider selection remain service owned and cannot be supplied
 /// through the CLI.
-fn parse_desktop_interact(id: String, rest: &[&str]) -> Result<Value, ParseError> {
+fn parse_desktop_interact(id: String, rest: &[&str], flags: &Flags) -> Result<Value, ParseError> {
     let mut browser_id = None;
     let mut controller_lease_id = None;
     let mut operation_id = None;
@@ -1335,7 +1339,7 @@ fn parse_desktop_interact(id: String, rest: &[&str]) -> Result<Value, ParseError
         });
     }
 
-    Ok(json!({
+    let mut request = json!({
         "id": id,
         "action": "desktop_interact",
         "browserId": browser_id,
@@ -1345,7 +1349,11 @@ fn parse_desktop_interact(id: String, rest: &[&str]) -> Result<Value, ParseError
         "serviceName": service_name,
         "agentName": agent_name,
         "taskName": task_name,
-    }))
+    });
+    if let Some(session_name) = flags.session_name.as_ref() {
+        request["sessionName"] = json!(session_name);
+    }
+    Ok(request)
 }
 
 fn parse_desktop(id: String, rest: &[&str], flags: &Flags) -> Result<Value, ParseError> {
@@ -1353,7 +1361,7 @@ fn parse_desktop(id: String, rest: &[&str], flags: &Flags) -> Result<Value, Pars
         Some("capture") => parse_desktop_capture(id, rest),
         Some("locate") => parse_desktop_locate(id, rest),
         Some("prompt") => parse_desktop_prompt_observe(id, rest, flags),
-        Some("interact") => parse_desktop_interact(id, rest),
+        Some("interact") => parse_desktop_interact(id, rest, flags),
         Some(subcommand) => Err(ParseError::UnknownSubcommand {
             subcommand: subcommand.to_string(),
             valid_options: &["capture", "locate", "prompt", "interact"],
@@ -1824,6 +1832,36 @@ pub fn parse_command(args: &[String], flags: &Flags) -> Result<Value, ParseError
         });
     }
     let mut result = parse_command_inner(args, flags)?;
+
+    if result.get("action").and_then(Value::as_str) == Some("desktop_interact") {
+        let transport_id = result
+            .get("id")
+            .and_then(Value::as_str)
+            .expect("parsed commands carry a transport id")
+            .to_string();
+        let mut request = result.clone();
+        request
+            .as_object_mut()
+            .expect("parsed command is an object")
+            .remove("id");
+        let normalized = normalize_service_request(ServiceRequestNormalization {
+            request: &request,
+            service_state: None,
+            fallback_principal: Some(ServiceRequestFallbackPrincipal {
+                source: ServiceRequestPrincipalSource::LocalProcess,
+                principal: "local:cli",
+            }),
+            request_id: &transport_id,
+            effective_session: Some(flags.session_name.as_deref().unwrap_or(&flags.session)),
+        })
+        .map_err(|issue| ParseError::InvalidValue {
+            message: issue.message().to_string(),
+            usage: DESKTOP_INTERACT_USAGE,
+        })?;
+        result = normalized.command;
+        result["id"] = json!(transport_id);
+        apply_service_request_attribution(&mut result, &normalized.attribution);
+    }
 
     // Inject AGENT_BROWSER_DEFAULT_TIMEOUT into any wait-family command that
     // doesn't already carry an explicit timeout. Centralised here so that new
@@ -7595,11 +7633,13 @@ mod tests {
 
     #[test]
     fn test_desktop_interact_builds_named_guarded_recipe() {
+        let mut flags = default_flags();
+        flags.session_name = Some("rdp-1".to_string());
         let cmd = parse_command(
             &args(
                 "desktop interact --browser-id browser-123 --controller-lease-id viewer-7 --operation-id operation-7 --recipe-id p110-foundation-stress-v1 --service-name DesktopInteractor --agent-name fixture-agent --task-name verify-synthetic-control",
             ),
-            &default_flags(),
+            &flags,
         )
         .unwrap();
 
@@ -7607,10 +7647,16 @@ mod tests {
         assert_eq!(cmd["browserId"], "browser-123");
         assert_eq!(cmd["controllerLeaseId"], "viewer-7");
         assert_eq!(cmd["operationId"], "operation-7");
+        assert_eq!(cmd["sessionName"], "rdp-1");
         assert_eq!(cmd["recipe"]["recipeId"], "p110-foundation-stress-v1");
         assert_eq!(cmd["serviceName"], "DesktopInteractor");
         assert_eq!(cmd["agentName"], "fixture-agent");
         assert_eq!(cmd["taskName"], "verify-synthetic-control");
+        assert!(cmd["operationPrincipalId"]
+            .as_str()
+            .is_some_and(|value| value.starts_with("operation-principal-v1:")));
+        assert_eq!(cmd["requestPrincipalSource"], "attribution_tuple_v1");
+        assert_eq!(cmd["requestId"], cmd["id"]);
         assert!(cmd.get("params").is_none());
         assert!(cmd.get("x").is_none());
         assert!(cmd.get("text").is_none());

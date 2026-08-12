@@ -7,17 +7,27 @@
     {
       "fixtureId": "verified-success-replay",
       "manifest": "verified-success-replay.json",
-      "manifestSha256": "ecb611b4dcde0e73e36a3853caea3f29cb8572577c0e256deb566633ad1752bd"
+      "manifestSha256": "90cffc8354c6196abd877701af78f0aace79ae7eaf7b8ea5279203b7e6114338"
     },
     {
       "fixtureId": "prompt-intervention",
       "manifest": "prompt-intervention.json",
-      "manifestSha256": "e83a19064ae734ac099fc3760bf612e975142e5ad1d89941add334afa61e36a8"
+      "manifestSha256": "822883e95dd513a9d57e871f4b1b3e41c6c7ab2428198b28c5828feb415716d7"
     },
     {
       "fixtureId": "post-effect-uncertain-handoff",
       "manifest": "post-effect-uncertain-handoff.json",
-      "manifestSha256": "2a7bbe6cb85c8b24eb96aab1229f03737edb6561f685d91efb5b04fe7354b58c"
+      "manifestSha256": "ce327aa8890802a48381679a105b5780e285e5ad15897c76b14b9a5f95e26bf4"
+    },
+    {
+      "fixtureId": "complete-scenario-matrix",
+      "manifest": "scenario-matrix.json",
+      "manifestSha256": "a5a3b31052e7833b55e885f41d1fb52dce916b18a88d6e21ef42674a05d0ff1a"
+    },
+    {
+      "fixtureId": "source-acceptance",
+      "manifest": "source-acceptance.json",
+      "manifestSha256": "24c988d8d218ed1affa9d784bd7e5fd05c863012dc9ff16dc766518db9f6f4a7"
     }
   ]
 }

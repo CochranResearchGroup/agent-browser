@@ -7,6 +7,7 @@
 //! deliberately handled by the HTTP adapter and is not canonical here.
 
 use serde_json::{json, Map, Value};
+use sha2::{Digest, Sha256};
 use std::fmt;
 
 use crate::native::remote_view_handoff::apply_remote_view_handoff_route_hints;
@@ -383,11 +384,13 @@ pub(crate) struct ServiceRequestNormalization<'a> {
     pub service_state: Option<&'a ServiceState>,
     pub fallback_principal: Option<ServiceRequestFallbackPrincipal<'a>>,
     pub request_id: &'a str,
+    pub effective_session: Option<&'a str>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ServiceRequestPrincipalSource {
     ExplicitLabels,
+    AttributionTupleV1,
     AuthenticatedDashboard,
     LocalProcess,
 }
@@ -396,6 +399,7 @@ impl ServiceRequestPrincipalSource {
     fn as_str(self) -> &'static str {
         match self {
             Self::ExplicitLabels => "explicit_labels",
+            Self::AttributionTupleV1 => "attribution_tuple_v1",
             Self::AuthenticatedDashboard => "authenticated_dashboard",
             Self::LocalProcess => "local_process",
         }
@@ -488,6 +492,20 @@ pub(crate) fn normalize_service_request(
         }
     }
 
+    if action == "desktop_interact" && command.get("sessionName").is_none() {
+        let effective_session = input
+            .effective_session
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                ServiceRequestIssue::new(
+                    ServiceRequestIssueKind::InvalidBoundedRecipe,
+                    "desktop_interact requires an effective session route",
+                )
+            })?;
+        command["sessionName"] = json!(effective_session);
+    }
+
     if let Some(service_state) = input.service_state {
         for stage in ROUTE_HINT_ORDER {
             match stage {
@@ -505,6 +523,10 @@ pub(crate) fn normalize_service_request(
                 }
             }
         }
+    }
+
+    if action == "desktop_interact" {
+        command["operationPrincipalId"] = json!(desktop_interact_operation_principal_id(request));
     }
 
     Ok(NormalizedServiceRequest {
@@ -544,7 +566,11 @@ fn derive_service_request_attribution(
         .all(|value| value.is_some_and(|value| !value.is_empty()));
     let (source, principal) = if explicit_complete {
         (
-            ServiceRequestPrincipalSource::ExplicitLabels,
+            if request.get("action").and_then(Value::as_str) == Some("desktop_interact") {
+                ServiceRequestPrincipalSource::AttributionTupleV1
+            } else {
+                ServiceRequestPrincipalSource::ExplicitLabels
+            },
             format!(
                 "service:{}/agent:{}/task:{}",
                 explicit[0].unwrap(),
@@ -567,6 +593,21 @@ fn derive_service_request_attribution(
         principal,
         request_id: input.request_id.to_string(),
     })
+}
+
+fn desktop_interact_operation_principal_id(request: &Map<String, Value>) -> String {
+    let attribution_tuple = ["serviceName", "agentName", "taskName"].map(|field| {
+        request
+            .get(field)
+            .and_then(Value::as_str)
+            .expect("validated desktop interaction attribution")
+    });
+    let canonical = serde_json::to_string(&attribution_tuple)
+        .expect("desktop interaction attribution tuple serializes");
+    format!(
+        "operation-principal-v1:{:x}",
+        Sha256::digest(canonical.as_bytes())
+    )
 }
 
 fn validate_canonical_fields(request: &Map<String, Value>) -> Result<(), ServiceRequestIssue> {
@@ -1648,6 +1689,7 @@ mod tests {
                 principal: "local:test-normalizer",
             }),
             request_id: "test-normalizer-request",
+            effective_session: Some("test-normalizer"),
         })
     }
 
@@ -1659,6 +1701,7 @@ mod tests {
             service_state: None,
             fallback_principal: None,
             request_id: "http-service-request-navigate-test",
+            effective_session: Some("test-normalizer"),
         })
         .unwrap_err();
 
@@ -1688,6 +1731,7 @@ mod tests {
                 principal: "dashboard-admin",
             }),
             request_id: "request-42",
+            effective_session: Some("test-normalizer"),
         })
         .unwrap();
 
@@ -2108,7 +2152,45 @@ mod tests {
         assert_eq!(normalized.command["action"], "desktop_interact");
         assert_eq!(normalized.command["controllerLeaseId"], "lease-1");
         assert_eq!(normalized.command["operationId"], "operation-1");
-
+        assert!(normalized.command["operationPrincipalId"]
+            .as_str()
+            .is_some_and(|value| value.starts_with("operation-principal-v1:")));
+        assert_eq!(
+            normalized.attribution.source,
+            ServiceRequestPrincipalSource::AttributionTupleV1
+        );
+        let same_scope = normalize(json!({
+            "action": "desktop_interact",
+            "browserId": "browser-1",
+            "sessionName": "rdp-1",
+            "controllerLeaseId": "lease-1",
+            "operationId": "another-operation",
+            "recipe": { "recipeId": "p110-foundation-stress-v1" },
+            "serviceName": "DesktopInteractor",
+            "agentName": "fixture-agent",
+            "taskName": "verify-synthetic-control"
+        }))
+        .unwrap();
+        assert_eq!(
+            normalized.command["operationPrincipalId"],
+            same_scope.command["operationPrincipalId"]
+        );
+        let changed_principal = normalize(json!({
+            "action": "desktop_interact",
+            "browserId": "browser-1",
+            "sessionName": "rdp-1",
+            "controllerLeaseId": "lease-1",
+            "operationId": "operation-1",
+            "recipe": { "recipeId": "p110-pointer-keyboard-v1" },
+            "serviceName": "DesktopInteractor",
+            "agentName": "fixture-agent",
+            "taskName": "different-task"
+        }))
+        .unwrap();
+        assert_ne!(
+            normalized.command["operationPrincipalId"],
+            changed_principal.command["operationPrincipalId"]
+        );
         for (request, expected_message) in [
             (
                 json!({"action":"desktop_interact","browserId":"browser-1","controllerLeaseId":"lease-1","operationId":"operation-1","recipe":{"recipeId":"p110-pointer-keyboard-v1"},"serviceName":"DesktopInteractor","agentName":"fixture-agent"}),
@@ -2529,6 +2611,7 @@ mod tests {
                 principal: "local:test-normalizer",
             }),
             request_id: "test-normalizer-request",
+            effective_session: Some("test-normalizer"),
         })
         .unwrap()
     }
@@ -2639,6 +2722,31 @@ mod tests {
             let body = serde_json::to_string(&request).unwrap();
             let http = crate::native::stream::service_request_adapter_fixture(&body).unwrap();
             let mcp = crate::mcp::service_request_adapter_fixture(&request).unwrap();
+            if request["action"] == "desktop_interact" {
+                let dedicated = crate::mcp::desktop_interact_adapter_fixture(&json!({
+                    "browserId": request["browserId"],
+                    "sessionName": request["sessionName"],
+                    "controllerLeaseId": request["controllerLeaseId"],
+                    "operationId": request["operationId"],
+                    "recipeId": request["recipe"]["recipeId"],
+                    "serviceName": request["serviceName"],
+                    "agentName": request["agentName"],
+                    "taskName": request["taskName"]
+                }))
+                .unwrap();
+                for command in [&http, &mcp, &dedicated] {
+                    assert_eq!(command["sessionName"], "rdp-1");
+                    assert_eq!(command["requestPrincipalSource"], "attribution_tuple_v1");
+                    assert_eq!(
+                        command["operationPrincipalId"],
+                        http["operationPrincipalId"]
+                    );
+                }
+                assert_eq!(
+                    without_transport_id(http.clone()),
+                    without_transport_id(dedicated)
+                );
+            }
             assert_eq!(without_transport_id(http), without_transport_id(mcp));
         }
 

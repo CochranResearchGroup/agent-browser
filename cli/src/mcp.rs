@@ -5650,12 +5650,13 @@ fn call_browser_command(arguments: &Value, session: &str) -> Result<Value, JsonR
 
 #[cfg(test)]
 fn service_request_command(arguments: &Value) -> Result<(Value, Value), JsonRpcError> {
-    service_request_command_with_state(arguments, None)
+    service_request_command_with_state(arguments, None, "default")
 }
 
 fn service_request_command_with_state(
     arguments: &Value,
     service_state: Option<&ServiceState>,
+    effective_session: &str,
 ) -> Result<(Value, Value), JsonRpcError> {
     // MCP owns only its JSON-RPC envelope and request identity. Canonical
     // request semantics and trace projection live in the shared normalizer.
@@ -5675,6 +5676,7 @@ fn service_request_command_with_state(
             principal: "local:mcp-stdio",
         }),
         request_id: &request_id,
+        effective_session: Some(effective_session),
     })
     .map_err(|issue| JsonRpcError::invalid_params(issue.message()))?;
     let mut command = normalized.command;
@@ -5685,7 +5687,15 @@ fn service_request_command_with_state(
 
 #[cfg(test)]
 pub(crate) fn service_request_adapter_fixture(arguments: &Value) -> Result<Value, Value> {
-    match service_request_command_with_state(arguments, None) {
+    service_request_adapter_fixture_for_session(arguments, "default")
+}
+
+#[cfg(test)]
+pub(crate) fn service_request_adapter_fixture_for_session(
+    arguments: &Value,
+    effective_session: &str,
+) -> Result<Value, Value> {
+    match service_request_command_with_state(arguments, None, effective_session) {
         Ok((_trace, command)) => Ok(command),
         Err(error) => Err(jsonrpc_error(
             json!("fixture"),
@@ -5694,6 +5704,21 @@ pub(crate) fn service_request_adapter_fixture(arguments: &Value) -> Result<Value
             error.data,
         )),
     }
+}
+
+#[cfg(test)]
+pub(crate) fn desktop_interact_adapter_fixture(arguments: &Value) -> Result<Value, Value> {
+    desktop_interact_adapter_fixture_for_session(arguments, "default")
+}
+
+#[cfg(test)]
+pub(crate) fn desktop_interact_adapter_fixture_for_session(
+    arguments: &Value,
+    effective_session: &str,
+) -> Result<Value, Value> {
+    let request = desktop_interact_service_request(arguments)
+        .map_err(|error| jsonrpc_error(json!("fixture"), error.code, error.message, error.data))?;
+    service_request_adapter_fixture_for_session(&request, effective_session)
 }
 
 fn call_service_request(
@@ -5708,7 +5733,7 @@ fn call_service_request(
     })?;
     state.overlay_configured_entities(configured_service_state.clone());
     state.refresh_profile_readiness();
-    let (trace, command) = service_request_command_with_state(arguments, Some(&state))?;
+    let (trace, command) = service_request_command_with_state(arguments, Some(&state), session)?;
     send_queued_tool_command("service_request", session, trace, command)
 }
 
@@ -13007,33 +13032,41 @@ mod tests {
             "rdp-locate-session"
         );
 
-        let interact = service_request_command(&json!({
-            "action": "desktop_interact",
-            "browserId": "session:must-not-route",
-            "operationId": "operation-generic",
-            "controllerLeaseId": "lease-1",
-            "recipe": { "recipeId": "p110-foundation-stress-v1" },
-            "serviceName": "DesktopInteractor",
-            "agentName": "fixture-agent",
-            "taskName": "stress",
-        }))
+        let interact = service_request_command_with_state(
+            &json!({
+                "action": "desktop_interact",
+                "browserId": "session:must-not-route",
+                "operationId": "operation-generic",
+                "controllerLeaseId": "lease-1",
+                "recipe": { "recipeId": "p110-foundation-stress-v1" },
+                "serviceName": "DesktopInteractor",
+                "agentName": "fixture-agent",
+                "taskName": "stress",
+            }),
+            None,
+            "AgentBrowserDashboard",
+        )
         .unwrap()
         .1;
         assert_eq!(
             queued_tool_command_session("service_request", "AgentBrowserDashboard", &interact),
             "AgentBrowserDashboard"
         );
-        let narrowed_interact = service_request_command(&json!({
-            "action": "desktop_interact",
-            "browserId": "browser-rdp-1",
-            "sessionName": "rdp-interact-session",
-            "operationId": "operation-generic-session",
-            "controllerLeaseId": "lease-1",
-            "recipe": { "recipeId": "p110-foundation-stress-v1" },
-            "serviceName": "DesktopInteractor",
-            "agentName": "fixture-agent",
-            "taskName": "stress",
-        }))
+        let narrowed_interact = service_request_command_with_state(
+            &json!({
+                "action": "desktop_interact",
+                "browserId": "browser-rdp-1",
+                "sessionName": "rdp-interact-session",
+                "operationId": "operation-generic-session",
+                "controllerLeaseId": "lease-1",
+                "recipe": { "recipeId": "p110-foundation-stress-v1" },
+                "serviceName": "DesktopInteractor",
+                "agentName": "fixture-agent",
+                "taskName": "stress",
+            }),
+            None,
+            "AgentBrowserDashboard",
+        )
         .unwrap()
         .1;
         assert_eq!(
@@ -13045,38 +13078,44 @@ mod tests {
             "rdp-interact-session"
         );
 
-        let dedicated_interact = desktop_interact_service_request(&json!({
-            "browserId": "session:must-not-route",
-            "operationId": "operation-dedicated",
-            "controllerLeaseId": "lease-1",
-            "recipeId": "p110-foundation-stress-v1",
-            "serviceName": "DesktopInteractor",
-            "agentName": "fixture-agent",
-            "taskName": "stress",
-        }))
+        let dedicated_interact = desktop_interact_adapter_fixture_for_session(
+            &json!({
+                "browserId": "session:must-not-route",
+                "operationId": "operation-dedicated",
+                "controllerLeaseId": "lease-1",
+                "recipeId": "p110-foundation-stress-v1",
+                "serviceName": "DesktopInteractor",
+                "agentName": "fixture-agent",
+                "taskName": "stress",
+            }),
+            "AgentBrowserDashboard",
+        )
         .unwrap();
         assert_eq!(
             queued_tool_command_session(
-                "desktop_interact",
+                "service_request",
                 "AgentBrowserDashboard",
                 &dedicated_interact,
             ),
             "AgentBrowserDashboard"
         );
-        let dedicated_interact_with_session = desktop_interact_service_request(&json!({
-            "browserId": "session:must-not-route",
-            "sessionName": "dedicated-interact-session",
-            "operationId": "operation-dedicated-session",
-            "controllerLeaseId": "lease-1",
-            "recipeId": "p110-pointer-keyboard-v1",
-            "serviceName": "DesktopInteractor",
-            "agentName": "fixture-agent",
-            "taskName": "verify",
-        }))
+        let dedicated_interact_with_session = desktop_interact_adapter_fixture_for_session(
+            &json!({
+                "browserId": "session:must-not-route",
+                "sessionName": "dedicated-interact-session",
+                "operationId": "operation-dedicated-session",
+                "controllerLeaseId": "lease-1",
+                "recipeId": "p110-pointer-keyboard-v1",
+                "serviceName": "DesktopInteractor",
+                "agentName": "fixture-agent",
+                "taskName": "verify",
+            }),
+            "AgentBrowserDashboard",
+        )
         .unwrap();
         assert_eq!(
             queued_tool_command_session(
-                "desktop_interact",
+                "service_request",
                 "AgentBrowserDashboard",
                 &dedicated_interact_with_session,
             ),
@@ -13164,6 +13203,7 @@ mod tests {
                 "params": {"handoffId": "job-handoff-a"},
             }),
             Some(&state),
+            "default",
         )
         .unwrap();
 

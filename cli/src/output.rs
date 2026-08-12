@@ -273,6 +273,7 @@ fn format_desktop_interact_text(data: &serde_json::Value) -> Option<String> {
     let receipt = data.get("interactionReceipt")?.as_object()?;
     let transaction_id = receipt.get("transactionId")?.as_str()?;
     let recipe_id = receipt.get("recipeId")?.as_str()?;
+    let is_foundation_stress = recipe_id == "p110-foundation-stress-v1";
     let effect_state = safe_receipt_axis(
         receipt,
         "effectState",
@@ -300,14 +301,12 @@ fn format_desktop_interact_text(data: &serde_json::Value) -> Option<String> {
         .get("entryGate")
         .and_then(|value| value.as_str())
         .map(|value| {
-            safe_axis_value(
-                value,
-                &[
-                    "planning_open_implementation_blocked",
-                    "closed_source_failure",
-                    "closed_live_evidence_required",
-                ],
-            )
+            let allowed: &[&str] = if is_foundation_stress {
+                &["closed_live_evidence_required"]
+            } else {
+                &["closed_source_failure", "closed_live_evidence_required"]
+            };
+            safe_axis_value(value, allowed)
         });
     let stop_reason = receipt
         .get("stopReason")
@@ -325,6 +324,7 @@ fn format_desktop_interact_text(data: &serde_json::Value) -> Option<String> {
         .unwrap_or_else(|| "unknown".to_string());
     let operation_identity = receipt
         .get("operationId")
+        .or_else(|| receipt.get("operationIdDigest"))
         .and_then(|value| value.as_str())
         .map(|_| "recorded");
     let effect_key_count = receipt
@@ -353,8 +353,10 @@ fn format_desktop_interact_text(data: &serde_json::Value) -> Option<String> {
         format!("Acknowledged events: {event_count}"),
         format!("Effect state: {effect_state}"),
         format!("Verification: {verification_state}"),
-        format!("Stop reason: {stop_reason}"),
     ];
+    if !is_foundation_stress {
+        lines.push(format!("Stop reason: {stop_reason}"));
+    }
     if let Some(operation_identity) = operation_identity {
         lines.push(format!("Operation identity: {operation_identity}"));
     }
@@ -368,7 +370,7 @@ fn format_desktop_interact_text(data: &serde_json::Value) -> Option<String> {
         lines.push(format!("Cleanup: {cleanup_state}"));
     }
     if let Some(entry_gate) = entry_gate {
-        lines.push(format!("Entry gate: {entry_gate}"));
+        lines.push(format!("Live entry gate: {entry_gate}"));
     }
     if let Some(prompt_disposition) = prompt_disposition {
         if let Some(state) = prompt_disposition
@@ -398,7 +400,10 @@ fn format_desktop_interact_text(data: &serde_json::Value) -> Option<String> {
     if let Some(handoff) = handoff {
         lines.push(handoff);
     }
-    lines.push("Use --json for the structured redacted receipt. Frame pixels, plaintext input, full motion paths, operation identifiers, hashes, and route URLs are never printed in text mode.".to_string());
+    if is_foundation_stress {
+        lines.push("This per-operation receipt cannot open planning. Only the separate aggregate source-acceptance record can open planning-only status.".to_string());
+    }
+    lines.push("Use --json for the structured redacted receipt. Frame pixels, plaintext input, full motion paths, operation identifiers or digests, hashes, provider URLs, and route URLs are never printed in text mode.".to_string());
     Some(lines.join("\n"))
 }
 
@@ -5605,9 +5610,12 @@ capture or input. The complete transaction is source-proven only through an
 in-memory synthetic fixture provider.
 
 The stress receipt covers source-only replay, cleanup, verification,
-prompt-intervention, and opaque-handoff projections. Its successful entry gate
-is `planning_open_implementation_blocked`: planning may begin, but implementation
-and live-capability claims remain blocked pending separately authorized proof.
+prompt-intervention, and opaque-handoff projections. Every individual receipt
+keeps `closed_live_evidence_required` and cannot open planning. Only a separate
+aggregate source-acceptance record may state
+`planning_open_implementation_blocked` after the complete source corpus passes.
+That aggregate state opens planning only; implementation and live capability
+remain blocked pending separately authorized installed-provider proof.
 
 Options:
   --browser-id <id>       Select one retained service-owned browser
@@ -7283,20 +7291,20 @@ mod tests {
                 "transactionId": "interaction-request-7",
                 "operationId": "operation-secret-7",
                 "operationRequestSha256": "request-hash-secret",
-                "recipeId": "p110-pointer-keyboard-v1",
-                "effectState": "verified_success",
-                "replayState": "original",
-                "cleanupState": "complete",
-                "entryGate": "planning_open_implementation_blocked",
+                "recipeId": "p110-foundation-stress-v1",
+                "effectState": "effect_uncertain",
+                "replayState": "first_execution",
+                "cleanupState": "not_needed",
+                "entryGate": "closed_live_evidence_required",
                 "effectKeyCount": 2,
                 "promptDisposition": {
-                    "state": "not_present",
-                    "reasonCode": "fixture_clear",
+                    "state": "actionable_observation",
+                    "reasonCode": "synthetic_prompt_actionable",
                     "observationSha256": "prompt-hash-secret"
                 },
                 "humanHandoff": {
                     "state": "ready",
-                    "reason": "uncertain_effect",
+                    "reason": "effect_uncertain",
                     "handoffId": "handoff-opaque-7",
                     "handoffUrl": "https://provider.invalid/raw-route"
                 },
@@ -7305,7 +7313,7 @@ mod tests {
                 "acknowledgementIds": ["ack-1", "ack-2"],
                 "plaintext": "must-not-render",
                 "fullPath": [[1, 2], [3, 4]],
-                "verificationState": "passed"
+                "verificationState": "not_verified"
             }
         });
 
@@ -7313,12 +7321,13 @@ mod tests {
         assert!(rendered.contains("Transaction: interaction-request-7"));
         assert!(rendered.contains("Controller epoch: 4"));
         assert!(rendered.contains("Acknowledged events: 2"));
-        assert!(rendered.contains("Effect state: verified_success"));
+        assert!(rendered.contains("Effect state: effect_uncertain"));
         assert!(rendered.contains("Operation identity: recorded"));
-        assert!(rendered.contains("Replay: original"));
-        assert!(rendered.contains("Cleanup: complete"));
-        assert!(rendered.contains("Verification: passed"));
-        assert!(rendered.contains("Entry gate: planning_open_implementation_blocked"));
+        assert!(rendered.contains("Replay: first_execution"));
+        assert!(rendered.contains("Cleanup: not_needed"));
+        assert!(rendered.contains("Verification: not_verified"));
+        assert!(rendered.contains("Live entry gate: closed_live_evidence_required"));
+        assert!(rendered.contains("per-operation receipt cannot open planning"));
         assert!(rendered.contains("Handoff: ready (handoff-opaque-7)"));
         assert!(!rendered.contains("operation-secret-7"));
         assert!(!rendered.contains("request-hash-secret"));

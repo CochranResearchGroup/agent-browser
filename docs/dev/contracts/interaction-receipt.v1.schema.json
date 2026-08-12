@@ -9,8 +9,11 @@
     "transactionId",
     "recipeId", "recipeVersion", "recipeSha256", "operationId",
     "operationRequestSha256", "recipeProviderId", "recipeProviderVersion",
+    "recipeProviderCapability",
     "replayState", "promptDisposition", "humanHandoff", "entryGate", "effectKeyDigest",
-    "effectKeyCount", "browserId",
+    "effectKeyCount", "attemptedEffectKeyDigest", "attemptedEffectKeyCount",
+    "acknowledgedEffectKeyDigest", "acknowledgedEffectKeyCount",
+    "attemptedEventOrderSha256", "browserId",
     "displayAllocationId", "streamId", "routeId", "controllerEpoch",
     "authorityDigest", "actorDigest", "beforeContextId", "beforeFrameId",
     "beforeFrameSha256", "beforeObservationId", "beforeObservationSha256",
@@ -71,6 +74,7 @@
     "operationRequestSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "recipeProviderId": { "type": "string", "minLength": 1 },
     "recipeProviderVersion": { "type": "string", "minLength": 1 },
+    "recipeProviderCapability": { "type": "string", "minLength": 1 },
     "replayState": { "enum": ["first_execution", "replayed_terminal"] },
     "promptDisposition": {
       "oneOf": [
@@ -85,10 +89,16 @@
       ]
     },
     "entryGate": {
-      "enum": ["planning_open_implementation_blocked", "closed_source_failure", "closed_live_evidence_required"]
+      "const": "closed_live_evidence_required",
+      "description": "Per-operation receipts never open implementation. Planning-open source acceptance exists only on the separate aggregate corpus record."
     },
     "effectKeyDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-    "effectKeyCount": { "type": "integer", "minimum": 0 }
+    "effectKeyCount": { "type": "integer", "minimum": 0 },
+    "attemptedEffectKeyDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "attemptedEffectKeyCount": { "type": "integer", "minimum": 0 },
+    "acknowledgedEffectKeyDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "acknowledgedEffectKeyCount": { "type": "integer", "minimum": 0 },
+    "attemptedEventOrderSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
   },
   "$defs": {
     "point": {

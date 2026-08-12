@@ -411,14 +411,18 @@ success, replay, conflict, cleanup, verification, prompt-intervention, and
 handoff scenarios without adding a production provider.
 
 The persisted foundation-stress receipt projects operation presence, replay,
-cleanup, verification, prompt intervention, and the typed entry gate. Its
-optional handoff projection contains only the existing opaque handoff ID and
-state. Text and dashboard summaries never expose the operation ID, handoff
-URL, raw route, text, pixels, or path.
+cleanup, verification, prompt intervention, and the typed live-entry gate.
+Every individual receipt keeps `entryGate: "closed_live_evidence_required"`
+and cannot open planning by itself. Its optional handoff projection contains
+only the existing opaque handoff ID and state. Text and dashboard summaries
+never expose the operation ID or digest, handoff URL, raw route, provider URL,
+text, pixels, or path.
 
-`planning_open_implementation_blocked` opens discrete use-case planning only.
-Use-case implementation and live-capability claims remain blocked until a
-separately authorized installed provider passes the required controlled proof.
+Only a separate aggregate source-acceptance record may state
+`planning_open_implementation_blocked` after the complete source corpus passes.
+That state opens discrete use-case planning only. Use-case implementation and
+live-capability claims remain blocked until a separately authorized installed
+provider passes the required controlled proof.
 
 <table>
   <thead>

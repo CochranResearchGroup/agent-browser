@@ -217,17 +217,27 @@ function assertServiceRequestActionDataCoverage() {
     'first_execution',
     'replayed_terminal',
   ]);
+  assert.equal(
+    interactionReceiptSchema.properties.entryGate.const,
+    'closed_live_evidence_required',
+  );
   for (const field of [
     'operationId',
     'operationRequestSha256',
     'recipeProviderId',
     'recipeProviderVersion',
+    'recipeProviderCapability',
     'replayState',
     'promptDisposition',
     'humanHandoff',
     'entryGate',
     'effectKeyDigest',
     'effectKeyCount',
+    'attemptedEffectKeyDigest',
+    'attemptedEffectKeyCount',
+    'acknowledgedEffectKeyDigest',
+    'acknowledgedEffectKeyCount',
+    'attemptedEventOrderSha256',
   ]) {
     assert.ok(interactionReceiptSchema.required.includes(field), `interaction receipt must require ${field}`);
   }

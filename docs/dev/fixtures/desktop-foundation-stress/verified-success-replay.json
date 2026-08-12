@@ -5,6 +5,7 @@
   "recipeProviderId": "synthetic-fixture-provider",
   "recipeProviderVersion": "v1",
   "operationId": "stress-operation-1",
+  "operationRequestSha256": "48583bfe06504dcfcb6f90878f4c6d06e32eec250e20828ce5d7ce847d63e794",
   "expectedProviderCallCount": 42,
   "expectedAuthorityEpoch": 7,
   "expectedEffectState": "verified_success",
@@ -12,5 +13,7 @@
   "expectedVerificationState": "passed",
   "expectedReplayState": "replayed_terminal",
   "expectedHandoffState": "absent",
-  "expectedEntryGate": "planning_open_implementation_blocked"
+  "expectedEntryGate": "closed_live_evidence_required"
+  ,"expectedEffectKeyTraceSha256": "1d4c66fad4cc41091d9147cedc6d354016df093e9d10a1ec87fecc609ec9250d"
+  ,"expectedReceiptProjectionSha256": "21711fb9ec6ec72804751ca9d1791f52603aacf12c78faa26f77d2c8d137c74a"
 }

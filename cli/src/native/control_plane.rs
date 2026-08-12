@@ -1975,6 +1975,7 @@ mod tests {
                     "operationRequestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                     "recipeProviderId": "synthetic-fixture-provider",
                     "recipeProviderVersion": "v1",
+                    "recipeProviderCapability": "effect_key_dedup_v1",
                     "promptDisposition": {
                         "state": "operator_intervention_required",
                         "reasonCode": "synthetic_prompt_requires_operator_review",
@@ -1987,9 +1988,14 @@ mod tests {
                         "handoffId": "handoff-opaque-1",
                         "handoffUrl": "https://provider.invalid/raw-route"
                     },
-                    "entryGate": "planning_open_implementation_blocked",
+                    "entryGate": "closed_live_evidence_required",
                     "effectKeyDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                     "effectKeyCount": 3,
+                    "attemptedEffectKeyDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                    "attemptedEffectKeyCount": 4,
+                    "acknowledgedEffectKeyDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "acknowledgedEffectKeyCount": 3,
+                    "attemptedEventOrderSha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
                     "routeId": "raw-route-id",
                     "imageBase64": "sensitive-pixels",
                     "text": "sensitive-plaintext",
@@ -2008,6 +2014,9 @@ mod tests {
         assert!(receipt["humanHandoff"]["handoffUrl"].is_null());
         assert!(receipt["routeId"].is_null());
         assert_eq!(receipt["effectKeyCount"], 3);
+        assert_eq!(receipt["attemptedEffectKeyCount"], 4);
+        assert_eq!(receipt["acknowledgedEffectKeyCount"], 3);
+        assert_eq!(receipt["recipeProviderCapability"], "effect_key_dedup_v1");
         let serialized = persisted.to_string();
         for forbidden in [
             "private-operation-id",

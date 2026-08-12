@@ -557,12 +557,15 @@ path. A partial input effect returns an explicit uncertain receipt and is never
 automatically retried.
 
 The foundation-stress receipt projects operation presence, replay, cleanup,
-verification, entry-gate state, and only an existing opaque handoff ID and
-state. Text and dashboard summaries never expose operation IDs, handoff URLs,
-raw routes, text, pixels, or paths. Source acceptance opens discrete use-case
-planning only through `planning_open_implementation_blocked`; implementation
-and live-capability claims remain blocked until separately authorized installed
-provider proof exists.
+verification, and only an existing opaque handoff ID and state. Each individual
+receipt keeps `entryGate: "closed_live_evidence_required"`; it never opens
+planning by itself. Text and dashboard summaries never expose operation IDs,
+operation digests, handoff URLs, raw routes, provider URLs, text, pixels, or
+paths. Only a separate aggregate source-acceptance record may state
+`planning_open_implementation_blocked` after the complete source corpus passes.
+That aggregate state opens discrete planning only. Implementation and live
+capability remain blocked pending separately authorized installed-provider
+proof.
 
 ### Get Info
 

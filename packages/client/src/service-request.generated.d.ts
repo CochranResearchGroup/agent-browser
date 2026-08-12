@@ -744,12 +744,18 @@ export interface DesktopInteractionReceipt {
   operationRequestSha256: string;
   recipeProviderId: string;
   recipeProviderVersion: string;
+  recipeProviderCapability: string;
   replayState: "first_execution" | "replayed_terminal";
   promptDisposition: { state: string; reasonCode: string; observationSha256: string } | null;
   humanHandoff: { state: string; reason: string; handoffId: string; handoffUrl: string } | null;
-  entryGate: "planning_open_implementation_blocked" | "closed_source_failure" | "closed_live_evidence_required";
+  entryGate: "closed_live_evidence_required";
   effectKeyDigest: string;
   effectKeyCount: number;
+  attemptedEffectKeyDigest: string;
+  attemptedEffectKeyCount: number;
+  acknowledgedEffectKeyDigest: string;
+  acknowledgedEffectKeyCount: number;
+  attemptedEventOrderSha256: string;
   [key: string]: unknown;
 }
 

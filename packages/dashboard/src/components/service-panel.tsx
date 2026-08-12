@@ -4743,7 +4743,7 @@ function JobDetailContent({
         />
       </InspectorSection>
       {stressReceipt && (
-        <InspectorSection title="Foundation stress receipt" detail="Immutable persisted projection">
+        <InspectorSection title="Foundation stress receipt" detail="One operation; aggregate acceptance is separate">
           <InspectorFactRows
             rows={[
               { label: "Recipe", value: stressReceipt.recipeId, mono: true },
@@ -4752,7 +4752,7 @@ function JobDetailContent({
               { label: "Replay", value: stressReceipt.replayState },
               { label: "Cleanup", value: stressReceipt.cleanupState },
               { label: "Verification", value: stressReceipt.verificationState },
-              { label: "Entry gate", value: stressReceipt.entryGate },
+              { label: "Live entry gate", value: stressReceipt.entryGate },
               { label: "Prompt", value: stressReceipt.promptState },
               { label: "Prompt reason", value: stressReceipt.promptReasonCode },
               { label: "Handoff state", value: stressReceipt.handoffState },

@@ -632,14 +632,17 @@ effects produce an uncertain, non-retryable receipt. Receipts omit frame
 pixels, plaintext typed content, and full motion paths.
 
 The foundation-stress receipt safely summarizes operation presence, replay,
-cleanup, verification, and the typed entry gate. An optional handoff projection
-contains only the existing opaque handoff ID and state. It never exposes an
-operation ID, handoff URL, raw route, text, pixels, or path.
+cleanup, verification, and the typed live-entry gate. Every individual receipt
+keeps `entryGate: "closed_live_evidence_required"`; it cannot open planning by
+itself. An optional handoff projection contains only the existing opaque
+handoff ID and state. It never exposes an operation ID or digest, handoff URL,
+raw route, provider URL, text, pixels, or path.
 
-> **Planning gate:** A source-accepted
-> `planning_open_implementation_blocked` result opens discrete use-case
-> planning. It does not open implementation or prove an installed or live
-> provider. Those claims remain blocked pending separately authorized proof.
+> **Aggregate planning gate:** Only a separate aggregate source-acceptance
+> record may state `planning_open_implementation_blocked` after the complete
+> source corpus passes. That state opens discrete use-case planning. It does
+> not open implementation or prove an installed or live provider. Those claims
+> remain blocked pending separately authorized proof.
 
 For the cross-ingress shape and production-provider posture, see [Service
 Mode](/service-mode#run-a-guarded-synthetic-desktop-interaction).

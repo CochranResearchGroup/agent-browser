@@ -406,8 +406,19 @@ pub fn service_contracts_metadata() -> Value {
                     "requiresControllerLease": true,
                     "requiresOperationId": true,
                     "requiresAttribution": ["serviceName", "agentName", "taskName"],
+                    "operationPrincipal": {
+                        "field": "operationPrincipalId",
+                        "source": "attribution_tuple_v1",
+                        "fields": ["serviceName", "agentName", "taskName"],
+                    },
+                    "canonicalSemanticHashFields": [
+                        "browserId", "sessionName", "controllerLeaseId", "recipe",
+                        "serviceName", "agentName", "taskName"
+                    ],
+                    "transportIdentityExcludedFromReplay": ["id", "requestId", "callerId"],
                     "paramsAccepted": false,
                     "daemonSelector": "sessionName",
+                    "effectiveSessionCanonicalField": "sessionName",
                 },
                 "payload": {
                     "retention": "ephemeral",
@@ -415,6 +426,8 @@ pub fn service_contracts_metadata() -> Value {
                     "rawTextReturned": false,
                     "fullMotionPathReturned": false,
                     "handoffUrlPersisted": false,
+                    "perOperationEntryGate": "closed_live_evidence_required",
+                    "effectKeyProjection": "attempted_and_acknowledged_digests_and_counts",
                 },
                 "productionProviderConfigured": false,
                 "noLaunch": true,

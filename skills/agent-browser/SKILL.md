@@ -515,13 +515,16 @@ pixels, plaintext typed content, and the full motion path. This recipe is not a
 Turnstile, CAPTCHA, passkey, LastPass, credential, or general desktop-control
 workflow.
 
-Treat the foundation-stress entry gate literally. A
-`planning_open_implementation_blocked` result opens planning for discrete use
-cases, but implementation and live-capability claims remain blocked pending
-separately authorized installed-provider proof. Safe text and dashboard
-projections show operation presence, replay, cleanup, verification, and entry
-gate. They expose only an existing opaque handoff ID and state, never an
-operation ID, handoff URL, raw route, text, pixels, or path.
+Treat the foundation-stress entry gates literally. Every individual interaction
+receipt must retain `closed_live_evidence_required` and cannot open planning.
+Only a separate aggregate source-acceptance record may state
+`planning_open_implementation_blocked` after the complete source corpus passes.
+That record opens discrete planning only; implementation and live-capability
+claims remain blocked pending separately authorized installed-provider proof.
+Safe text and dashboard projections show operation presence, replay, cleanup,
+verification, and the individual closed gate. They expose only an existing
+opaque handoff ID and state, never an operation ID or digest, handoff URL, raw
+route, provider URL, text, pixels, or path.
 
 ## Core Workflow
 

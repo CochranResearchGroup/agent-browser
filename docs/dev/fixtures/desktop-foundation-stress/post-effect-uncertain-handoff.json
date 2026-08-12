@@ -4,7 +4,8 @@
   "recipeId": "p110-foundation-stress-v1",
   "recipeProviderId": "synthetic-fixture-provider",
   "recipeProviderVersion": "v1",
-  "operationId": "uncertain-operation-1",
+  "operationId": "uncertain-operation",
+  "operationRequestSha256": "48583bfe06504dcfcb6f90878f4c6d06e32eec250e20828ce5d7ce847d63e794",
   "expectedProviderCallCount": 42,
   "expectedAuthorityEpoch": 7,
   "expectedEffectState": "effect_uncertain",
@@ -12,5 +13,7 @@
   "expectedVerificationState": "not_verified",
   "expectedReplayState": "first_execution",
   "expectedHandoffState": "ready",
-  "expectedEntryGate": "closed_source_failure"
+  "expectedEntryGate": "closed_live_evidence_required"
+  ,"expectedEffectKeyTraceSha256": "023ce1065507f142e839318b1d1d65edee14af52e206faf3b23e1071a04a2a08"
+  ,"expectedReceiptProjectionSha256": "624137395c6393743a41afc06a78c1d1e8f581b3833520f529bf806c593d245e"
 }
