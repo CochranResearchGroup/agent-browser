@@ -42,12 +42,17 @@ desktop provider.
 7. Source proof uses process-owned event fencing plus a durable operation
    ledger. It does not claim cross-process OS input fencing. A real provider
    requires a separately designed external fence before live use.
-8. The durable handoff result contains only existing opaque `handoffId` and
+8. Every planned provider event receives an immutable effect key derived from
+   operation identity, recipe hash, and event index. The provider contract
+   returns the prior acknowledgement for a duplicate key. Source fixtures
+   prove this deduplication; a real provider must independently conform before
+   live use.
+9. The durable handoff result contains only existing opaque `handoffId` and
    authenticated `handoffUrl`, readiness, and reason. It never creates a
    handoff, runs another remote-view open, or exposes provider/Guacamole URLs.
-9. Dashboard/job/stream projections are immutable receipt summaries. They do
+10. Dashboard/job/stream projections are immutable receipt summaries. They do
    not depend on mutable selected-record state.
-10. PoC 5 source acceptance opens planning-only use-case entries. Use-case
+11. PoC 5 source acceptance opens planning-only use-case entries. Use-case
     implementation remains blocked until a separately authorized controlled
     RDP/Guacamole recipe passes with an installed binary and real provider.
 
@@ -88,6 +93,11 @@ ledger into a fresh engine instance.
 States are `in_progress | complete | uncertain`. Complete and uncertain
 receipts are replay terminal. An abandoned in-progress record fails typed; it
 never emits automatically. Store only the redacted receipt and request hash.
+
+The ledger closes run-level replay. The provider effect key closes the source
+fixture's acknowledgement-to-ledger crash gap. Neither is represented as a
+production exactly-once guarantee until a real provider implements an external
+deduplication store and fencing contract.
 
 ## Stress Scenarios
 
@@ -160,19 +170,21 @@ credentials, and raw provider or Guacamole URLs.
 3. same operation scope/hash replays after ledger reload with zero events;
 4. same operation scope with another hash fails and never emits;
 5. in-progress restart state fails closed;
-6. every pre-effect failure emits zero input and every post-effect failure
+6. duplicate provider effect keys return the original acknowledgement and do
+   not emit again;
+7. every pre-effect failure emits zero input and every post-effect failure
    stores an uncertain receipt with exactly one bounded cleanup attempt;
-7. route/display/controller/focus/geometry drift stops before the next event;
-8. prompt intervention emits zero input and yields a safe operator outcome;
-9. uncertain effects project only an opaque existing handoff identity;
-10. CLI, HTTP, generic MCP, dedicated MCP, and client normalize identical
+8. route/display/controller/focus/geometry drift stops before the next event;
+9. prompt intervention emits zero input and yields a safe operator outcome;
+10. uncertain effects project only an opaque existing handoff identity;
+11. CLI, HTTP, generic MCP, dedicated MCP, and client normalize identical
     operation identity and sessionName-only routing;
-11. stream, job, event, incident, dashboard, error, and ledger projections
+12. stream, job, event, incident, dashboard, error, and ledger projections
     exclude every forbidden sentinel;
-12. configured provider absence precedes public dispatch effects;
-13. PoC 1 through 4, controller, handoff, screenshot, service, and dashboard
+13. configured provider absence precedes public dispatch effects;
+14. PoC 1 through 4, controller, handoff, screenshot, service, and dashboard
     regressions pass;
-14. source acceptance yields only planning-open, implementation-blocked.
+15. source acceptance yields only planning-open, implementation-blocked.
 
 ## Validation
 
@@ -225,6 +237,6 @@ provider prerequisite, not a PoC 5 source claim.
 
 ## Acceptance
 
-PoC 5 is source accepted only when all fourteen requirements pass, one fresh
+PoC 5 is source accepted only when all fifteen requirements pass, one fresh
 audit has no unresolved blocker after one remediation packet, and the entry
 gate is exactly `planning_open_implementation_blocked`.
