@@ -85,6 +85,7 @@ const browserSurface = [
 
 const files = {
   actions: read('cli/src/native/actions.rs'),
+  profileLease: read('cli/src/native/action_runtime/runtime/profile_lease.rs'),
   serviceContracts: read('cli/src/native/service_contracts.rs'),
   serviceRequestSchema: read('docs/dev/contracts/service-request.v1.schema.json'),
   serviceRequestRoles: read('docs/dev/contracts/service-request-field-roles.v1.json'),
@@ -375,7 +376,7 @@ for (const action of noLaunchServiceActions) {
 }
 
 expectIncludes(
-  files.actions,
+  files.profileLease,
   'action.starts_with("service_")',
   'profile lease gate must exempt service control actions by prefix',
 );
@@ -765,7 +766,7 @@ function expectAnyIncludes(source, needles, message) {
 }
 
 function extractNativeServiceActions(source) {
-  const body = extractRustFunctionBody(source, 'pub async fn execute_command');
+  const body = extractRustFunctionBody(source, 'pub(crate) async fn execute_command');
   return sortedUnique(
     [...body.matchAll(/"(?<action>service_[a-z0-9_]+)"\s*=>/g)].map(
       (match) => match.groups.action,

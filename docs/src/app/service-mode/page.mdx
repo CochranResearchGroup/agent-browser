@@ -288,7 +288,7 @@ An MCP client sends the same intent shape through `tools/call`:
 }
 ```
 
-MCP tool callers should include `serviceName`, `agentName`, and `taskName` whenever those values are known. Anonymous callers remain compatible, but service jobs record `namingWarnings` so operators can find unlabelled automation.
+Effect-capable service requests need an accountable principal before queueing. HTTP and generated-client callers should supply nonempty `serviceName`, `agentName`, and `taskName` labels. An authenticated dashboard request may use its dashboard identity, while a local MCP stdio request receives the local MCP process identity and request ID. Unauthenticated HTTP requests without all three labels fail before relay and cannot launch a browser. Label-optional service collection reads remain no-launch operations; run `pnpm test:service-collections-no-launch` to verify CLI, HTTP, MCP, and generated-client parity.
 
 Retained service jobs also preserve target identity hints. Singular <code>targetServiceId</code>, <code>siteId</code>, and <code>loginId</code> fields keep the exact singular request values when present, and <code>targetServiceIds</code> stores the normalized target-service, site, and login identity set used by profile selection. Trace and job clients can show this profile-selection context without replaying the original command payload.
 

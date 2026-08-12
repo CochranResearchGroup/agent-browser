@@ -33,7 +33,10 @@ use crate::native::service_model::{
 use crate::native::service_monitors::{
     parse_monitor_state, service_monitors_response, MonitorCollectionFilters,
 };
-use crate::native::service_request::{normalize_service_request, ServiceRequestNormalization};
+use crate::native::service_request::{
+    apply_service_request_attribution, normalize_service_request, ServiceRequestFallbackPrincipal,
+    ServiceRequestNormalization, ServiceRequestPrincipalSource,
+};
 
 use super::app_intelligence::{
     app_intelligence_status_json, inspect_workspace_response, operator_confirm_response,
@@ -341,7 +344,16 @@ pub(super) async fn handle_http_request(
 
         if path == SERVICE_REQUEST_HTTP_ROUTE {
             let service_state = load_service_state();
-            let cmd = match service_request_command_with_state(body_str, Some(&service_state)) {
+            let dashboard_identity = dashboard_auth::authenticate_headers(&headers)
+                .ok()
+                .flatten();
+            let cmd = match service_request_command_with_state_and_principal(
+                body_str,
+                Some(&service_state),
+                dashboard_identity
+                    .as_ref()
+                    .map(|identity| identity.username.as_str()),
+            ) {
                 Ok(cmd) => cmd,
                 Err(err) => {
                     write_json_result(&mut stream, Err(err), "400 Bad Request").await;
@@ -1660,6 +1672,14 @@ fn service_request_command_with_state(
     body: &str,
     service_state: Option<&ServiceState>,
 ) -> Result<Value, String> {
+    service_request_command_with_state_and_principal(body, service_state, Some("test-adapter"))
+}
+
+fn service_request_command_with_state_and_principal(
+    body: &str,
+    service_state: Option<&ServiceState>,
+    authenticated_dashboard_user: Option<&str>,
+) -> Result<Value, String> {
     let mut request = if body.trim().is_empty() {
         json!({})
     } else {
@@ -1670,21 +1690,33 @@ fn service_request_command_with_state(
     let legacy_args = request
         .as_object_mut()
         .and_then(|request| request.remove("args"));
+    let action_hint = request
+        .get("action")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let request_id = format!(
+        "http-service-request-{action_hint}-{}",
+        uuid::Uuid::new_v4()
+    );
+    let dashboard_principal =
+        authenticated_dashboard_user.map(|username| format!("dashboard:{}", username.trim()));
+    let fallback_principal =
+        dashboard_principal
+            .as_deref()
+            .map(|principal| ServiceRequestFallbackPrincipal {
+                source: ServiceRequestPrincipalSource::AuthenticatedDashboard,
+                principal,
+            });
     let normalized = normalize_service_request(ServiceRequestNormalization {
         request: &request,
         service_state,
+        fallback_principal,
+        request_id: &request_id,
     })
     .map_err(|issue| issue.message().to_string())?;
-    let action = normalized.command["action"]
-        .as_str()
-        .expect("normalizer always returns a string action")
-        .to_string();
     let mut command = normalized.command;
-    command["id"] = json!(format!(
-        "http-service-request-{}-{}",
-        action,
-        uuid::Uuid::new_v4()
-    ));
+    command["id"] = json!(request_id);
+    apply_service_request_attribution(&mut command, &normalized.attribution);
     if let Some(args) = legacy_args {
         command["args"] = args;
     }
@@ -4608,6 +4640,34 @@ mod tests {
         assert!(command["id"]
             .as_str()
             .is_some_and(|id| id.starts_with("http-service-request-navigate-")));
+    }
+
+    #[test]
+    fn unauthenticated_unlabeled_effectful_service_request_rejects_before_relay() {
+        let error = service_request_command_with_state_and_principal(
+            r##"{"action":"navigate","params":{"url":"https://example.com"}}"##,
+            None,
+            None,
+        )
+        .unwrap_err();
+
+        assert!(error.contains("requires serviceName, agentName, and taskName"));
+    }
+
+    #[test]
+    fn authenticated_dashboard_identity_supplies_accountable_fallback() {
+        let command = service_request_command_with_state_and_principal(
+            r##"{"action":"navigate","params":{"url":"https://example.com"}}"##,
+            None,
+            Some("admin"),
+        )
+        .unwrap();
+
+        assert_eq!(command["callerId"], "dashboard:admin");
+        assert_eq!(command["requestPrincipalSource"], "authenticated_dashboard");
+        assert!(command["requestId"]
+            .as_str()
+            .is_some_and(|value| value.starts_with("http-service-request-navigate-")));
     }
 
     #[test]

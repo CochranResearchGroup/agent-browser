@@ -84,6 +84,7 @@
     "test:mcp-stdio": "node scripts/smoke-mcp-stdio.js",
     "test:mcp-live": "node scripts/smoke-mcp-live.js",
     "test:mcp-read-no-launch": "node scripts/smoke-mcp-read-no-launch.js",
+    "test:service-collections-no-launch": "scripts/ci/cargo-safe.sh build --manifest-path cli/Cargo.toml && AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD=$PWD/cli/target/debug/agent-browser node scripts/smoke-service-collections-no-launch.js",
     "test:service-collections-live": "node scripts/smoke-service-collections.js",
     "test:service-reconcile-live": "node scripts/smoke-service-reconcile-mcp.js",
     "test:service-profile-live": "node scripts/smoke-service-profile-mcp.js",

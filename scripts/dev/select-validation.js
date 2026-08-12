@@ -160,6 +160,13 @@ function selectRecommendations(files, base) {
     add('pnpm test:service-client', 'service client package, examples, or generated helpers changed');
   }
 
+  if (files.some(isServiceAttributionNoLaunchSurface)) {
+    add(
+      'pnpm test:service-collections-no-launch',
+      'service effect attribution or label-optional collection reads changed',
+    );
+  }
+
   if (files.some((file) => file.startsWith('docs/src/app/') || file.startsWith('docs/src/components/') || file === 'docs/package.json')) {
     add('pnpm --dir docs build', 'docs site changed');
   }
@@ -307,6 +314,15 @@ function isServiceClientSurface(file) {
     file.startsWith('scripts/test-service-') ||
     file === 'scripts/generate-service-request-client.js' ||
     file === 'scripts/generate-service-observability-client.js'
+  );
+}
+
+function isServiceAttributionNoLaunchSurface(file) {
+  return (
+    file === 'cli/src/native/service_request.rs' ||
+    file === 'cli/src/native/stream/http.rs' ||
+    file === 'cli/src/mcp.rs' ||
+    file === 'scripts/smoke-service-collections-no-launch.js'
   );
 }
 

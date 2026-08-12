@@ -22,7 +22,10 @@ use crate::native::service_model::{
     service_profile_allocations, service_profile_seeding_handoff, service_profile_sources,
     service_site_policy_sources, ServiceState,
 };
-use crate::native::service_request::{normalize_service_request, ServiceRequestNormalization};
+use crate::native::service_request::{
+    apply_service_request_attribution, normalize_service_request, ServiceRequestFallbackPrincipal,
+    ServiceRequestNormalization, ServiceRequestPrincipalSource,
+};
 use crate::native::service_store::load_default_service_state_snapshot;
 use crate::native::service_trace::{service_trace_response, ServiceTraceFilters};
 use crate::native::stream::service_profile_lookup_response_for_state;
@@ -5442,21 +5445,27 @@ fn service_request_command_with_state(
 ) -> Result<(Value, Value), JsonRpcError> {
     // MCP owns only its JSON-RPC envelope and request identity. Canonical
     // request semantics and trace projection live in the shared normalizer.
+    let request_id = format!(
+        "mcp-service-request-{}-{}",
+        arguments
+            .get("action")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown"),
+        uuid::Uuid::new_v4()
+    );
     let normalized = normalize_service_request(ServiceRequestNormalization {
         request: arguments,
         service_state,
+        fallback_principal: Some(ServiceRequestFallbackPrincipal {
+            source: ServiceRequestPrincipalSource::LocalProcess,
+            principal: "local:mcp-stdio",
+        }),
+        request_id: &request_id,
     })
     .map_err(|issue| JsonRpcError::invalid_params(issue.message()))?;
-    let action = normalized.command["action"]
-        .as_str()
-        .expect("normalizer always returns a string action")
-        .to_string();
     let mut command = normalized.command;
-    command["id"] = json!(format!(
-        "mcp-service-request-{}-{}",
-        action,
-        uuid::Uuid::new_v4()
-    ));
+    command["id"] = json!(request_id);
+    apply_service_request_attribution(&mut command, &normalized.attribution);
     Ok((normalized.trace, command))
 }
 
@@ -12138,6 +12147,24 @@ mod tests {
         assert!(command["id"]
             .as_str()
             .is_some_and(|id| id.starts_with("mcp-service-request-navigate-")));
+        assert_eq!(
+            command["callerId"],
+            "service:JournalDownloader/agent:agent-a/task:probeACSwebsite"
+        );
+        assert_eq!(command["requestPrincipalSource"], "explicit_labels");
+    }
+
+    #[test]
+    fn local_mcp_principal_accounts_for_an_unlabeled_effectful_request() {
+        let (_trace, command) = service_request_command(&json!({
+            "action": "navigate",
+            "params": {"url": "https://example.com"}
+        }))
+        .unwrap();
+
+        assert_eq!(command["callerId"], "local:mcp-stdio");
+        assert_eq!(command["requestPrincipalSource"], "local_process");
+        assert_eq!(command["requestId"], command["id"]);
     }
 
     #[test]

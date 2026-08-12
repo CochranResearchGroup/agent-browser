@@ -336,6 +336,7 @@ pub(crate) enum ServiceRequestIssueKind {
     InvalidServiceTabHandle,
     InvalidBoundedRecipe,
     RouteHintFailure,
+    MissingAccountablePrincipal,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -366,12 +367,45 @@ impl fmt::Display for ServiceRequestIssue {
 pub(crate) struct ServiceRequestNormalization<'a> {
     pub request: &'a Value,
     pub service_state: Option<&'a ServiceState>,
+    pub fallback_principal: Option<ServiceRequestFallbackPrincipal<'a>>,
+    pub request_id: &'a str,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ServiceRequestPrincipalSource {
+    ExplicitLabels,
+    AuthenticatedDashboard,
+    LocalProcess,
+}
+
+impl ServiceRequestPrincipalSource {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::ExplicitLabels => "explicit_labels",
+            Self::AuthenticatedDashboard => "authenticated_dashboard",
+            Self::LocalProcess => "local_process",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ServiceRequestFallbackPrincipal<'a> {
+    pub source: ServiceRequestPrincipalSource,
+    pub principal: &'a str,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ServiceRequestAttribution {
+    pub source: ServiceRequestPrincipalSource,
+    pub principal: String,
+    pub request_id: String,
 }
 
 #[derive(Debug)]
 pub(crate) struct NormalizedServiceRequest {
     pub command: Value,
     pub trace: Value,
+    pub attribution: ServiceRequestAttribution,
 }
 
 /// Normalize one schema-backed service request without transport or queue I/O.
@@ -403,6 +437,7 @@ pub(crate) fn normalize_service_request(
 
     validate_canonical_fields(request)?;
     validate_safety_gates(action, request)?;
+    let attribution = derive_service_request_attribution(&input, request)?;
 
     let mut command = json!({ "action": action });
     if let Some(params) = request.get("params") {
@@ -458,7 +493,66 @@ pub(crate) fn normalize_service_request(
         }
     }
 
-    Ok(NormalizedServiceRequest { command, trace })
+    Ok(NormalizedServiceRequest {
+        command,
+        trace,
+        attribution,
+    })
+}
+
+/// Attach transport-proven request identity after canonical request projection.
+///
+/// These fields are internal command metadata rather than public schema inputs,
+/// so callers cannot forge them through the service-request contract.
+pub(crate) fn apply_service_request_attribution(
+    command: &mut Value,
+    attribution: &ServiceRequestAttribution,
+) {
+    command["callerId"] = json!(attribution.principal);
+    command["requestId"] = json!(attribution.request_id);
+    command["requestPrincipalSource"] = json!(attribution.source.as_str());
+}
+
+fn derive_service_request_attribution(
+    input: &ServiceRequestNormalization<'_>,
+    request: &Map<String, Value>,
+) -> Result<ServiceRequestAttribution, ServiceRequestIssue> {
+    if input.request_id.trim().is_empty() {
+        return Err(ServiceRequestIssue::new(
+            ServiceRequestIssueKind::MissingAccountablePrincipal,
+            "effect-capable service request requires a nonempty request ID",
+        ));
+    }
+    let explicit = ["serviceName", "agentName", "taskName"]
+        .map(|field| request.get(field).and_then(Value::as_str).map(str::trim));
+    let explicit_complete = explicit
+        .iter()
+        .all(|value| value.is_some_and(|value| !value.is_empty()));
+    let (source, principal) = if explicit_complete {
+        (
+            ServiceRequestPrincipalSource::ExplicitLabels,
+            format!(
+                "service:{}/agent:{}/task:{}",
+                explicit[0].unwrap(),
+                explicit[1].unwrap(),
+                explicit[2].unwrap()
+            ),
+        )
+    } else if let Some(fallback) = input.fallback_principal.filter(|fallback| {
+        !fallback.principal.trim().is_empty() && !input.request_id.trim().is_empty()
+    }) {
+        (fallback.source, fallback.principal.trim().to_string())
+    } else {
+        return Err(ServiceRequestIssue::new(
+            ServiceRequestIssueKind::MissingAccountablePrincipal,
+            "effect-capable service request requires serviceName, agentName, and taskName, or an authenticated/local principal with request ID",
+        ));
+    };
+    Ok(ServiceRequestAttribution {
+        source,
+        principal,
+        request_id: input.request_id.to_string(),
+    })
 }
 
 fn validate_canonical_fields(request: &Map<String, Value>) -> Result<(), ServiceRequestIssue> {
@@ -1153,7 +1247,72 @@ mod tests {
         normalize_service_request(ServiceRequestNormalization {
             request: &request,
             service_state: None,
+            fallback_principal: Some(ServiceRequestFallbackPrincipal {
+                source: ServiceRequestPrincipalSource::LocalProcess,
+                principal: "local:test-normalizer",
+            }),
+            request_id: "test-normalizer-request",
         })
+    }
+
+    #[test]
+    fn effectful_request_without_labels_or_fallback_principal_fails_closed() {
+        let request = json!({"action": "navigate", "params": {"url": "https://example.com"}});
+        let error = normalize_service_request(ServiceRequestNormalization {
+            request: &request,
+            service_state: None,
+            fallback_principal: None,
+            request_id: "http-service-request-navigate-test",
+        })
+        .unwrap_err();
+
+        assert_eq!(
+            error.kind,
+            ServiceRequestIssueKind::MissingAccountablePrincipal
+        );
+        assert_eq!(
+            error.message(),
+            "effect-capable service request requires serviceName, agentName, and taskName, or an authenticated/local principal with request ID"
+        );
+    }
+
+    #[test]
+    fn complete_explicit_labels_are_the_preferred_accountable_principal() {
+        let request = json!({
+            "action": "navigate",
+            "serviceName": "JournalDownloader",
+            "agentName": "codex",
+            "taskName": "probeACSwebsite"
+        });
+        let mut normalized = normalize_service_request(ServiceRequestNormalization {
+            request: &request,
+            service_state: None,
+            fallback_principal: Some(ServiceRequestFallbackPrincipal {
+                source: ServiceRequestPrincipalSource::AuthenticatedDashboard,
+                principal: "dashboard-admin",
+            }),
+            request_id: "request-42",
+        })
+        .unwrap();
+
+        assert_eq!(
+            normalized.attribution,
+            ServiceRequestAttribution {
+                source: ServiceRequestPrincipalSource::ExplicitLabels,
+                principal: "service:JournalDownloader/agent:codex/task:probeACSwebsite".to_string(),
+                request_id: "request-42".to_string(),
+            }
+        );
+        apply_service_request_attribution(&mut normalized.command, &normalized.attribution);
+        assert_eq!(
+            normalized.command["callerId"],
+            normalized.attribution.principal
+        );
+        assert_eq!(normalized.command["requestId"], "request-42");
+        assert_eq!(
+            normalized.command["requestPrincipalSource"],
+            "explicit_labels"
+        );
     }
 
     fn sorted_names(values: impl IntoIterator<Item = String>) -> Vec<String> {
@@ -1770,6 +1929,11 @@ mod tests {
         normalize_service_request(ServiceRequestNormalization {
             request: &request,
             service_state: Some(state),
+            fallback_principal: Some(ServiceRequestFallbackPrincipal {
+                source: ServiceRequestPrincipalSource::LocalProcess,
+                principal: "local:test-normalizer",
+            }),
+            request_id: "test-normalizer-request",
         })
         .unwrap()
     }
@@ -1841,7 +2005,9 @@ mod tests {
     }
 
     fn without_transport_id(mut command: Value) -> Value {
-        command.as_object_mut().unwrap().remove("id");
+        for field in ["id", "callerId", "requestId", "requestPrincipalSource"] {
+            command.as_object_mut().unwrap().remove(field);
+        }
         command
     }
 
@@ -1892,6 +2058,38 @@ mod tests {
                     }
                 })
             );
+        }
+    }
+
+    #[test]
+    fn http_and_mcp_profile_selection_reach_the_shared_mismatch_guard_unchanged() {
+        let request = json!({
+            "action": "navigate",
+            "runtimeProfile": "last30days-facebook",
+            "serviceName": "Last30Days",
+            "agentName": "collector",
+            "taskName": "facebook-search"
+        });
+        let body = serde_json::to_string(&request).unwrap();
+        let commands = [
+            crate::native::stream::service_request_adapter_fixture(&body).unwrap(),
+            crate::mcp::service_request_adapter_fixture(&request).unwrap(),
+        ];
+
+        for command in commands {
+            assert_eq!(command["runtimeProfile"], "last30days-facebook");
+            let mismatch =
+                crate::native::action_runtime::runtime::active_browser_profile_mismatch_message(
+                    command.get("runtimeProfile").and_then(Value::as_str),
+                    command.get("profile").and_then(Value::as_str),
+                    Some("default"),
+                    Some(std::path::Path::new(
+                        "/tmp/agent-browser/runtime-profiles/default/user-data",
+                    )),
+                    "default",
+                )
+                .expect("named profile must not cross-attach to the default profile");
+            assert!(mismatch.contains("selected profile mismatch"));
         }
     }
 }
