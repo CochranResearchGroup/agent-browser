@@ -267,6 +267,7 @@ agent-browser stream enable [--port <port>]  # Start runtime WebSocket streaming
 agent-browser stream status           # Show runtime streaming state and bound port
 agent-browser stream disable          # Stop runtime WebSocket streaming
 agent-browser desktop capture --browser-id <id> # Capture one service-bound desktop PNG receipt
+agent-browser desktop locate --browser-id <id> --locator-id <id> # Locate deterministic desktop candidates
 agent-browser service status          # Show service control-plane and configured service state
 agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health and route definitions
@@ -390,6 +391,49 @@ Contract discovery can prove that the runtime supports `desktop_capture`. It
 does not prove that one retained browser has a ready route and capture
 provider. Only a successful response for that `browserId` proves current
 workspace readiness.
+
+### Deterministic Desktop Location
+
+Run one registered locator profile against a fresh service-bound desktop
+frame without producing any pointer or keyboard input:
+
+```bash
+agent-browser desktop locate --browser-id browser-123 --locator-id turnstile-checkbox
+agent-browser desktop locate --browser-id browser-123 --locator-id passkey-popup --max-candidates 4 --include-visualization --json
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--browser-id <id>` | Required retained service-owned browser identity |
+| `--locator-id <id>` | Required registered deterministic locator profile |
+| `--max-candidates <count>` | Optional candidate cap; default 8, maximum 32 |
+| `--include-visualization` | Include a response-only annotated visualization in JSON |
+
+> **Experimental:** P110 PoC 2 is source-only. It has no live RDP or Guacamole
+> acceptance and does not prove that an installed runtime contains the feature.
+
+The command accepts a registered `locatorId`, not raw image bytes, a template
+path, a display name, or provider routing. It captures a fresh frame through
+the same service-bound authority as `desktop capture`, then returns the
+matching `context`, `frameReceipt`, and an `observation`. `matched` means one
+candidate was selected, `not_found` means no eligible candidate was found, and
+`ambiguous` means the evidence did not support one safe selection. Only
+`matched` has a non-null `selectedCandidateId`.
+
+Text output reports `contextId`, `frameId`, `geometryEpoch`, `locatorId`, the
+profile version, result status, selected candidate, and candidate count. It
+never prints base64. JSON keeps the structured candidates and includes
+`visualizationBase64` only when `--include-visualization` was requested. Frame
+and visualization bytes remain response-only sensitive data.
+
+HTTP and software-client requests use `action: "desktop_locate"`, top-level
+`browserId`, `locator: { locatorId, maxCandidates }`, and
+`includeVisualization`. Include `serviceName`, `agentName`, and `taskName` for
+trace attribution; unauthenticated HTTP requests require all three. The
+operation is observation-only. It does not click, move the pointer, type,
+submit, authenticate, or solve a challenge. Generated client helpers are
+`createServiceDesktopLocateRequest()`, `requestServiceDesktopLocate()`, and
+`locateServiceDesktopControl()`.
 
 ### Get Info
 

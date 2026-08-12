@@ -18,10 +18,11 @@ The normal request model is identity-first. A caller asks for a tab or browser a
 Current automation control is CDP-first, but some services are sensitive to the
 existence of a remote debugging port. The CDP-free operating mode keeps
 agent-browser ownership of the headed browser process, profile lease, task
-labels, process health, lifecycle, and operator handoff. P110 PoC 1 adds one
-service-bound desktop observation without adding CDP or an input effect. Later
-slices can add guarded real mouse input, real keyboard input, optical character
-recognition (OCR), and vision-backed control.
+labels, process health, lifecycle, and operator handoff. P110 PoC 1 adds
+service-bound desktop capture, and PoC 2 adds registered deterministic location
+over that capture. Neither slice adds CDP or an input effect. Later slices can
+add guarded real mouse input, real keyboard input, optical character recognition
+(OCR), and vision-backed control.
 
 ## Capture a service-owned desktop frame
 
@@ -124,9 +125,9 @@ The request and response fields use the same contract through every ingress:
 write it to service state, jobs, events, incidents, logs, or disk. Text-mode
 CLI output prints receipt metadata and omits the image value.
 
-PoC 1 performs observation only. It adds no image recognition, locator,
-pointer, keyboard, recipe, or challenge-handling behavior. A later PoC must
-define those effects and their own authorization before they enter this
+PoC 1 performs capture only. PoC 2 below adds deterministic location while
+remaining observation-only. A later PoC must define pointer, keyboard, recipe,
+and challenge-handling effects plus their authorization before they enter this
 surface.
 
 Contract discovery reports global support for `desktop_capture`. It does not
@@ -190,6 +191,124 @@ action below before retrying.
     </tr>
   </tbody>
 </table>
+
+## Locate deterministic desktop candidates
+
+P110 PoC 2 adds one observation-only locator action over a fresh
+service-bound desktop frame. It runs a registered deterministic profile and
+returns bounded candidates without moving the pointer or sending keyboard
+input.
+
+> **Experimental:** P110 PoC 2 is source-only. It has no live RDP or Guacamole
+> acceptance and does not prove that an installed runtime contains the feature.
+
+Use the CLI:
+
+```bash
+agent-browser desktop locate --browser-id browser-123 --locator-id turnstile-checkbox
+agent-browser desktop locate --browser-id browser-123 --locator-id passkey-popup --max-candidates 4 --include-visualization --json
+```
+
+Use the canonical service request from HTTP:
+
+```bash
+curl -X POST "http://127.0.0.1:9223/api/service/request" \
+  -H "content-type: application/json" \
+  -d '{"action":"desktop_locate","browserId":"browser-123","locator":{"locatorId":"turnstile-checkbox","maxCandidates":8},"includeVisualization":false,"serviceName":"DesktopObserver","agentName":"locator-agent","taskName":"locate-control"}'
+```
+
+MCP clients can send the same fields through `service_request` or use the
+dedicated `desktop_locate` tool. Every ingress enters the same queued,
+no-launch service action. Include `serviceName`, `agentName`, and `taskName` for
+trace attribution. Unauthenticated HTTP requests require all three labels.
+Software clients can build requests with `createServiceDesktopLocateRequest()`,
+queue them with `requestServiceDesktopLocate()`, or use the
+`locateServiceDesktopControl()` convenience helper:
+
+```javascript
+import { locateServiceDesktopControl } from "@agent-browser/client/service-request";
+
+const location = await locateServiceDesktopControl({
+  baseUrl: "http://127.0.0.1:9223",
+  browserId: "browser-123",
+  locatorId: "turnstile-checkbox",
+  maxCandidates: 8,
+  includeVisualization: false,
+  serviceName: "DesktopObserver",
+  agentName: "locator-agent",
+  taskName: "locate-control",
+});
+// => { success: true, data: { context, frameReceipt, observation } }
+```
+
+<table>
+  <thead>
+    <tr>
+      <th>Field</th>
+      <th>Requirement</th>
+      <th>Meaning</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>browserId</code></td>
+      <td>Required</td>
+      <td>Retained service-owned browser identity.</td>
+    </tr>
+    <tr>
+      <td><code>locator.locatorId</code></td>
+      <td>Required</td>
+      <td>Registered deterministic locator profile.</td>
+    </tr>
+    <tr>
+      <td><code>locator.maxCandidates</code></td>
+      <td>Optional</td>
+      <td>Positive candidate cap. The default is 8, and the maximum is 32.</td>
+    </tr>
+    <tr>
+      <td><code>includeVisualization</code></td>
+      <td>Optional</td>
+      <td>Requests an annotated response-only visualization. The default is false.</td>
+    </tr>
+    <tr>
+      <td><code>context</code></td>
+      <td>Response</td>
+      <td>Capture authority, coordinate space, geometry, and geometry epoch.</td>
+    </tr>
+    <tr>
+      <td><code>frameReceipt</code></td>
+      <td>Response</td>
+      <td>The fresh frame identity and non-persistence receipt used for location.</td>
+    </tr>
+    <tr>
+      <td><code>observation</code></td>
+      <td>Response</td>
+      <td>Locator profile, status, selected candidate identity, and bounded candidates.</td>
+    </tr>
+    <tr>
+      <td><code>visualizationBase64</code></td>
+      <td>Optional response</td>
+      <td>Annotated PNG returned only when requested. It is response-only sensitive data.</td>
+    </tr>
+  </tbody>
+</table>
+
+`matched` means the locator selected one candidate and returned a non-null
+`selectedCandidateId`. `not_found` means no eligible candidate was found.
+`ambiguous` means the evidence did not support one safe selection, so the
+selection remains null. Candidate records include `candidateId`, `targetClass`,
+`rank`, physical-pixel `bounds` and `center`, `score`, and bounded
+`supportingEvidence`, `decoyEvidence`, and `ambiguityEvidence`.
+
+Text-mode CLI output prints `contextId`, `frameId`, `geometryEpoch`,
+`locatorId`, the profile version, status, selection, and candidate count. It
+never prints base64. JSON preserves the candidates and optional visualization.
+Neither the source frame nor visualization is persisted to service state,
+jobs, events, incidents, logs, or disk.
+
+The locator interface accepts no raw image bytes, template path, display name,
+provider URL, coordinate override, or input instruction. This operation does
+not click, move the pointer, type, submit, authenticate, or solve a challenge.
 
 ## Service clients
 

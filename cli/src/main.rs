@@ -3131,6 +3131,14 @@ mod tests {
     }
 
     #[test]
+    fn test_desktop_locate_skips_browser_launch_and_uses_the_daemon_queue() {
+        let command = json!({ "action": "desktop_locate" });
+
+        assert!(command_skips_browser_launch_for_prestart(&command));
+        assert!(!command_executes_locally_before_daemon(&command));
+    }
+
+    #[test]
     fn test_command_skips_browser_launch_for_service_resource_maintenance() {
         for action in [
             "service_resources",

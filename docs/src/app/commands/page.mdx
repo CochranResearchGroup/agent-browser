@@ -43,6 +43,7 @@ agent-browser stream enable [--port <port>]  # Start runtime WebSocket streaming
 agent-browser stream status           # Show runtime streaming state and bound port
 agent-browser stream disable          # Stop runtime WebSocket streaming
 agent-browser desktop capture --browser-id <id> # Capture one service-bound desktop PNG receipt
+agent-browser desktop locate --browser-id <id> --locator-id <id> # Locate deterministic desktop candidates
 agent-browser service status          # Show service control-plane and configured service state
 agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health and route definitions
@@ -431,6 +432,64 @@ desktop, including browser-external prompts that CDP cannot see. PoC 1 adds no
 image recognition, locator, pointer, keyboard, or challenge-handling behavior.
 
 For the HTTP, MCP, and generated client forms, see [Service Mode](/service-mode#capture-a-service-owned-desktop-frame).
+
+## Locate deterministic desktop candidates
+
+Use `desktop locate` to run one registered locator profile against a fresh
+service-bound frame:
+
+```bash
+agent-browser desktop locate --browser-id browser-123 --locator-id turnstile-checkbox
+agent-browser desktop locate --browser-id browser-123 --locator-id passkey-popup --max-candidates 4 --include-visualization --json
+```
+
+> **Experimental:** P110 PoC 2 is source-only. It has no live RDP or Guacamole
+> acceptance and does not prove that an installed runtime contains the feature.
+
+<table>
+  <thead>
+    <tr>
+      <th>Option</th>
+      <th>Meaning</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>--browser-id &lt;id&gt;</code></td>
+      <td>Required retained service-owned browser identity.</td>
+    </tr>
+    <tr>
+      <td><code>--locator-id &lt;id&gt;</code></td>
+      <td>Required registered deterministic locator profile.</td>
+    </tr>
+    <tr>
+      <td><code>--max-candidates &lt;count&gt;</code></td>
+      <td>Optional candidate cap. The default is 8, and the maximum is 32.</td>
+    </tr>
+    <tr>
+      <td><code>--include-visualization</code></td>
+      <td>Include one response-only annotated visualization in JSON.</td>
+    </tr>
+  </tbody>
+</table>
+
+The caller selects a registered profile, not raw pixels, a template path,
+display coordinates, or provider routing. A `matched` observation has one
+non-null `selectedCandidateId`. `not_found` means no eligible candidate was
+found. `ambiguous` means the evidence did not support one safe selection.
+
+Text output reports `contextId`, `frameId`, `geometryEpoch`, `locatorId`, the
+profile version, status, selection, and candidate count without base64. JSON
+keeps structured candidates and includes `visualizationBase64` only when it was
+requested. This operation does not move the pointer, click, type, submit,
+authenticate, or solve a challenge.
+
+HTTP and software clients use `action: "desktop_locate"`, top-level
+`browserId`, `locator: { locatorId, maxCandidates }`, and
+`includeVisualization`. Include `serviceName`, `agentName`, and `taskName` for
+trace attribution. Unauthenticated HTTP requests require all three labels.
+
+For the complete cross-ingress contract, see [Service Mode](/service-mode#locate-deterministic-desktop-candidates).
 
 ## Service status
 

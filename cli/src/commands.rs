@@ -86,6 +86,9 @@ const SERVICE_BROWSER_CAPABILITY_PREFER_USAGE: &str = "service browser-capabilit
 
 const SERVICE_ACCESS_PLAN_USAGE: &str = "service access-plan [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--site-policy-id <id>] [--challenge-id <id>] [--readiness-profile-id <id>] [--runtime-profile <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--browser-host <local_headless|local_headed|docker_headed|remote_headed|cloud_provider|attached_existing>] [--view-stream-provider <cdp_screencast|chrome_tab_webrtc|virtual_display_webrtc|novnc|rdp_gateway|external_url>] [--control-input-provider <cdp_input|webrtc_input|vnc_input|manual_attached_desktop>] [--display-isolation <private_virtual_display|shared_display|ambient_display>]";
 const DESKTOP_CAPTURE_USAGE: &str = "desktop capture --browser-id <id> [--max-bytes <bytes>]";
+const DESKTOP_LOCATE_USAGE: &str = "desktop locate --browser-id <id> --locator-id <id> [--max-candidates <count>] [--include-visualization]";
+const DESKTOP_LOCATE_DEFAULT_MAX_CANDIDATES: u64 = 8;
+const DESKTOP_LOCATE_HARD_MAX_CANDIDATES: u64 = 32;
 
 fn parse_service_profile_lookup(
     id: String,
@@ -1074,6 +1077,106 @@ fn parse_desktop_capture(id: String, rest: &[&str]) -> Result<Value, ParseError>
         "format": "png",
         "maxBytes": max_bytes,
     }))
+}
+
+/// Parse a deterministic locator request against one service-bound desktop
+/// frame. The caller selects a registered locator recipe, not raw pixels,
+/// templates, provider routing, or an input effect.
+fn parse_desktop_locate(id: String, rest: &[&str]) -> Result<Value, ParseError> {
+    let mut browser_id = None;
+    let mut locator_id = None;
+    let mut max_candidates = DESKTOP_LOCATE_DEFAULT_MAX_CANDIDATES;
+    let mut include_visualization = false;
+    let mut i = 1;
+    while i < rest.len() {
+        match rest[i] {
+            "--browser-id" => {
+                let value = required_next(rest, i, "--browser-id", DESKTOP_LOCATE_USAGE)?;
+                if value.starts_with("--") {
+                    return Err(ParseError::InvalidValue {
+                        message: "Missing value for --browser-id".to_string(),
+                        usage: DESKTOP_LOCATE_USAGE,
+                    });
+                }
+                browser_id = Some(value);
+                i += 1;
+            }
+            "--locator-id" => {
+                let value = required_next(rest, i, "--locator-id", DESKTOP_LOCATE_USAGE)?;
+                if value.starts_with("--") {
+                    return Err(ParseError::InvalidValue {
+                        message: "Missing value for --locator-id".to_string(),
+                        usage: DESKTOP_LOCATE_USAGE,
+                    });
+                }
+                locator_id = Some(value);
+                i += 1;
+            }
+            "--max-candidates" => {
+                let raw = required_next(rest, i, "--max-candidates", DESKTOP_LOCATE_USAGE)?;
+                max_candidates = raw.parse::<u64>().map_err(|_| ParseError::InvalidValue {
+                    message: format!("Invalid --max-candidates value: {raw}"),
+                    usage: DESKTOP_LOCATE_USAGE,
+                })?;
+                if max_candidates == 0 || max_candidates > DESKTOP_LOCATE_HARD_MAX_CANDIDATES {
+                    return Err(ParseError::InvalidValue {
+                        message: format!(
+                            "--max-candidates must be between 1 and {DESKTOP_LOCATE_HARD_MAX_CANDIDATES}"
+                        ),
+                        usage: DESKTOP_LOCATE_USAGE,
+                    });
+                }
+                i += 1;
+            }
+            "--include-visualization" => include_visualization = true,
+            flag => {
+                return Err(ParseError::InvalidValue {
+                    message: format!("Unknown flag for desktop locate: {flag}"),
+                    usage: DESKTOP_LOCATE_USAGE,
+                });
+            }
+        }
+        i += 1;
+    }
+
+    let Some(browser_id) = browser_id else {
+        return Err(ParseError::MissingArguments {
+            context: "desktop locate".to_string(),
+            usage: DESKTOP_LOCATE_USAGE,
+        });
+    };
+    let Some(locator_id) = locator_id else {
+        return Err(ParseError::MissingArguments {
+            context: "desktop locate".to_string(),
+            usage: DESKTOP_LOCATE_USAGE,
+        });
+    };
+
+    Ok(json!({
+        "id": id,
+        "action": "desktop_locate",
+        "browserId": browser_id,
+        "locator": {
+            "locatorId": locator_id,
+            "maxCandidates": max_candidates,
+        },
+        "includeVisualization": include_visualization,
+    }))
+}
+
+fn parse_desktop(id: String, rest: &[&str]) -> Result<Value, ParseError> {
+    match rest.first().copied() {
+        Some("capture") => parse_desktop_capture(id, rest),
+        Some("locate") => parse_desktop_locate(id, rest),
+        Some(subcommand) => Err(ParseError::UnknownSubcommand {
+            subcommand: subcommand.to_string(),
+            valid_options: &["capture", "locate"],
+        }),
+        None => Err(ParseError::MissingArguments {
+            context: "desktop".to_string(),
+            usage: "desktop <capture|locate>",
+        }),
+    }
 }
 
 /// Parse one route-bound open, including an optional command-level timeout
@@ -2383,7 +2486,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
         },
 
         // === Service-owned desktop observation ===
-        "desktop" => parse_desktop_capture(id, &rest),
+        "desktop" => parse_desktop(id, &rest),
 
         // === Service status ===
         "service" => match rest.first().copied() {
@@ -7119,6 +7222,98 @@ mod tests {
         assert!(cmd.get("displayName").is_none());
         assert!(cmd.get("providerUrl").is_none());
         assert!(cmd.get("path").is_none());
+    }
+
+    #[test]
+    fn test_desktop_locate_builds_canonical_service_action() {
+        let cmd = parse_command(
+            &args(
+                "desktop locate --browser-id browser-123 --locator-id turnstile-checkbox --max-candidates 4 --include-visualization",
+            ),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "desktop_locate");
+        assert_eq!(cmd["browserId"], "browser-123");
+        assert_eq!(cmd["locator"]["locatorId"], "turnstile-checkbox");
+        assert_eq!(cmd["locator"]["maxCandidates"], 4);
+        assert_eq!(cmd["includeVisualization"], true);
+        assert!(cmd.get("displayName").is_none());
+        assert!(cmd.get("providerUrl").is_none());
+        assert!(cmd.get("path").is_none());
+    }
+
+    #[test]
+    fn test_desktop_locate_uses_bounded_candidate_default_without_visualization() {
+        let cmd = parse_command(
+            &args("desktop locate --browser-id browser-123 --locator-id passkey-popup"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["locator"]["maxCandidates"], 8);
+        assert_eq!(cmd["includeVisualization"], false);
+    }
+
+    #[test]
+    fn test_desktop_locate_requires_browser_and_locator_id() {
+        for command in [
+            "desktop locate --locator-id turnstile-checkbox",
+            "desktop locate --browser-id browser-123",
+        ] {
+            let err = parse_command(&args(command), &default_flags()).unwrap_err();
+
+            assert!(matches!(err, ParseError::MissingArguments { .. }));
+            assert!(err.format().contains("--browser-id"));
+            assert!(err.format().contains("--locator-id"));
+        }
+    }
+
+    #[test]
+    fn test_desktop_locate_rejects_missing_values_and_unbounded_candidates() {
+        for (command, message) in [
+            (
+                "desktop locate --browser-id --locator-id locator-1",
+                "Missing value for --browser-id",
+            ),
+            (
+                "desktop locate --browser-id browser-123 --locator-id --max-candidates 2",
+                "Missing value for --locator-id",
+            ),
+            (
+                "desktop locate --browser-id browser-123 --locator-id locator-1 --max-candidates 0",
+                "between 1 and 32",
+            ),
+            (
+                "desktop locate --browser-id browser-123 --locator-id locator-1 --max-candidates 33",
+                "between 1 and 32",
+            ),
+        ] {
+            let err = parse_command(&args(command), &default_flags()).unwrap_err();
+
+            assert!(matches!(err, ParseError::InvalidValue { .. }));
+            assert!(err.format().contains(message), "{err:?}");
+        }
+    }
+
+    #[test]
+    fn test_desktop_locate_rejects_pixels_templates_and_input_flags() {
+        for flag in [
+            "--template-path",
+            "--image-base64",
+            "--display-name",
+            "--provider-url",
+            "--click",
+        ] {
+            let command = format!(
+                "desktop locate --browser-id browser-123 --locator-id locator-1 {flag} value"
+            );
+            let err = parse_command(&args(&command), &default_flags()).unwrap_err();
+
+            assert!(matches!(err, ParseError::InvalidValue { .. }));
+            assert!(err.format().contains("Unknown flag for desktop locate"));
+        }
     }
 
     #[test]

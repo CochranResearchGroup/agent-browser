@@ -170,6 +170,45 @@ fn format_desktop_capture_text(data: &serde_json::Value) -> Option<String> {
     Some(lines.join("\n"))
 }
 
+fn format_desktop_locate_text(data: &serde_json::Value) -> Option<String> {
+    let context = data.get("context")?.as_object()?;
+    let receipt = data.get("frameReceipt")?.as_object()?;
+    let observation = data.get("observation")?.as_object()?;
+    let context_id = context.get("contextId")?.as_str()?;
+    let geometry_epoch = context.get("geometryEpoch")?.as_str()?;
+    let frame_id = receipt.get("frameId")?.as_str()?;
+    let locator_id = observation.get("locatorId")?.as_str()?;
+    let profile_version = observation.get("profileVersion")?.as_str()?;
+    let status = observation.get("status")?.as_str()?;
+    let candidate_count = observation.get("candidates")?.as_array()?.len();
+    let selected_candidate_id = observation
+        .get("selectedCandidateId")
+        .and_then(|value| value.as_str())
+        .unwrap_or("none");
+    let status_label = match status {
+        "matched" => "matched",
+        "not_found" => "found no match",
+        "ambiguous" => "was ambiguous",
+        _ => status,
+    };
+
+    Some(
+        [
+            format!("Desktop locator {status_label}"),
+            format!("Context: {context_id}"),
+            format!("Frame: {frame_id}"),
+            format!("Geometry epoch: {geometry_epoch}"),
+            format!("Locator: {locator_id} (profile version: {profile_version})"),
+            format!("Status: {status}"),
+            format!("Selected candidate: {selected_candidate_id}"),
+            format!("Candidates: {candidate_count}"),
+            "Use --json to receive structured candidates and any requested visualizationBase64 payload."
+                .to_string(),
+        ]
+        .join("\n"),
+    )
+}
+
 fn format_service_events_text(data: &serde_json::Value) -> Option<String> {
     let events = data.get("events").and_then(|value| value.as_array())?;
     if events.is_empty() {
@@ -2684,6 +2723,12 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
         }
         if action == Some("desktop_capture") {
             if let Some(output) = format_desktop_capture_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("desktop_locate") {
+            if let Some(output) = format_desktop_locate_text(data) {
                 println!("{}", output);
                 return;
             }
@@ -5281,7 +5326,9 @@ Examples:
             r##"
 agent-browser desktop - Observe one service-owned desktop workspace
 
-Usage: agent-browser desktop capture --browser-id <id> [--max-bytes <bytes>]
+Usage:
+  agent-browser desktop capture --browser-id <id> [--max-bytes <bytes>]
+  agent-browser desktop locate --browser-id <id> --locator-id <id> [--max-candidates <count>] [--include-visualization]
 
 `desktop capture` asks the service worker to resolve one retained browser to
 its exact ready stream, route, and display allocation. It captures one PNG of
@@ -5293,13 +5340,23 @@ input option. The default response limit is 4194304 bytes, and the hard maximum
 is 16777216 bytes. Text output prints receipt metadata only. Add `--json` to
 receive the bounded `imageBase64` value in the immediate response.
 
-PoC 1 is source-only and has no live RDP or Guacamole acceptance. It performs
-observation only. It does not locate controls, recognize images, move the
-pointer, type, or solve challenges.
+`desktop locate` captures a fresh bound frame and runs one registered,
+deterministic locator profile. It accepts no caller-supplied pixels or template
+paths and performs no pointer, keyboard, or challenge-solving effect. A result
+status is `matched`, `not_found`, or `ambiguous`. Text output prints the stable
+context, frame, geometry epoch, locator profile, selection, and candidate count
+without base64. JSON retains structured candidates and, only when requested,
+the response-only `visualizationBase64` value.
+
+PoC 1 capture and PoC 2 location are source-only and have no live RDP or
+Guacamole acceptance. Source presence is not installed-runtime proof.
 
 Options:
   --browser-id <id>       Select one retained service-owned browser
   --max-bytes <bytes>     Bound the PNG response (default: 4194304; max: 16777216)
+  --locator-id <id>       Select one registered deterministic locator profile
+  --max-candidates <n>    Bound candidates (default: 8; max: 32)
+  --include-visualization Include an annotated response-only visualization in JSON
 
 Global Options:
   --json                  Include imageBase64 in the structured response
@@ -5307,6 +5364,8 @@ Global Options:
 Examples:
   agent-browser desktop capture --browser-id browser-123
   agent-browser desktop capture --browser-id browser-123 --max-bytes 8388608 --json
+  agent-browser desktop locate --browser-id browser-123 --locator-id turnstile-checkbox
+  agent-browser desktop locate --browser-id browser-123 --locator-id passkey-popup --include-visualization --json
 "##
         }
 
@@ -6312,6 +6371,8 @@ Streaming:
 Desktop observation:
   desktop capture --browser-id <id>
                              Capture one service-bound desktop PNG receipt
+  desktop locate --browser-id <id> --locator-id <id>
+                             Locate deterministic candidates without input
 
 Service:
   service status             Show service worker health, profile lease waits, and configured service state
@@ -6812,7 +6873,7 @@ pub fn print_version() {
 #[cfg(test)]
 mod tests {
     use super::{
-        format_desktop_capture_text, format_service_access_plan_text,
+        format_desktop_capture_text, format_desktop_locate_text, format_service_access_plan_text,
         format_service_browser_capability_preflight_text, format_service_browsers_text,
         format_service_challenges_text, format_service_events_text, format_service_incidents_text,
         format_service_jobs_text, format_service_monitor_state_text,
@@ -6860,6 +6921,81 @@ mod tests {
         assert!(rendered.contains("SHA-256: abc123"));
         assert!(rendered.contains("Retention: ephemeral (persisted: false)"));
         assert!(!rendered.contains("sensitive-frame-bytes"));
+    }
+
+    #[test]
+    fn desktop_locate_text_prints_stable_receipt_without_visualization_payload() {
+        let data = json!({
+            "ok": true,
+            "action": "desktop_locate",
+            "context": {
+                "contextId": "desktop-context-1",
+                "geometryEpoch": "geometry-1"
+            },
+            "frameReceipt": {
+                "frameId": "desktop-frame-1"
+            },
+            "observation": {
+                "locatorId": "turnstile-checkbox",
+                "profileVersion": "1",
+                "status": "matched",
+                "selectedCandidateId": "candidate-1",
+                "candidates": [{
+                    "candidateId": "candidate-1",
+                    "targetClass": "checkbox",
+                    "rank": 1,
+                    "bounds": { "x": 100, "y": 200, "width": 24, "height": 24 },
+                    "center": { "x": 112, "y": 212 },
+                    "score": 1000,
+                    "supportingEvidence": [{
+                        "detectorId": "square-outline",
+                        "evidenceId": "evidence-1",
+                        "score": 1000
+                    }],
+                    "decoyEvidence": [],
+                    "ambiguityEvidence": []
+                }]
+            },
+            "visualizationBase64": "sensitive-visualization-bytes"
+        });
+
+        let rendered = format_desktop_locate_text(&data).unwrap();
+
+        assert!(rendered.contains("Desktop locator matched"));
+        assert!(rendered.contains("Context: desktop-context-1"));
+        assert!(rendered.contains("Frame: desktop-frame-1"));
+        assert!(rendered.contains("Geometry epoch: geometry-1"));
+        assert!(rendered.contains("Locator: turnstile-checkbox (profile version: 1)"));
+        assert!(rendered.contains("Selected candidate: candidate-1"));
+        assert!(rendered.contains("Candidates: 1"));
+        assert!(!rendered.contains("sensitive-visualization-bytes"));
+    }
+
+    #[test]
+    fn desktop_locate_text_distinguishes_not_found_and_ambiguous() {
+        for (status, heading) in [
+            ("not_found", "Desktop locator found no match"),
+            ("ambiguous", "Desktop locator was ambiguous"),
+        ] {
+            let data = json!({
+                "context": {
+                    "contextId": "desktop-context-1",
+                    "geometryEpoch": "geometry-1"
+                },
+                "frameReceipt": { "frameId": "desktop-frame-1" },
+                "observation": {
+                    "locatorId": "passkey-popup",
+                    "profileVersion": "1",
+                    "status": status,
+                    "selectedCandidateId": null,
+                    "candidates": []
+                }
+            });
+
+            let rendered = format_desktop_locate_text(&data).unwrap();
+            assert!(rendered.contains(heading));
+            assert!(rendered.contains("Selected candidate: none"));
+        }
     }
 
     #[test]

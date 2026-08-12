@@ -374,6 +374,47 @@ contract response can advertise global `desktop_capture` support. Only a
 successful capture for the requested `browserId` proves that its current
 route, display, and provider are ready.
 
+## Deterministic Desktop Location
+
+Use `desktop locate` to run a registered deterministic locator against one
+fresh service-bound frame. This is observation-only and does not authorize a
+click, pointer move, key press, text entry, submission, authentication, or
+challenge-solving effect.
+
+```bash
+agent-browser desktop locate --browser-id browser-123 --locator-id turnstile-checkbox
+agent-browser desktop locate --browser-id browser-123 --locator-id passkey-popup --max-candidates 4 --include-visualization --json
+```
+
+> **Experimental:** P110 PoC 2 is source-only. It has no live RDP or Guacamole
+> acceptance. Do not treat source presence as installed-runtime or live proof.
+
+The required `--locator-id` selects a registered profile. The caller cannot
+supply pixels, a template path, provider routing, or display coordinates.
+`--max-candidates` defaults to 8 and has a hard maximum of 32.
+`--include-visualization` adds a response-only `visualizationBase64` value in
+JSON. Do not persist the visualization or source frame in service records,
+jobs, events, incidents, logs, or artifacts without a later explicit contract.
+
+Interpret `observation.status` narrowly:
+
+- `matched` has one non-null `selectedCandidateId`.
+- `not_found` found no eligible candidate and has no selection.
+- `ambiguous` found evidence that does not support one safe selection and has
+  no selection.
+
+Text output prints `contextId`, `frameId`, `geometryEpoch`, `locatorId`, the
+profile version, status, selection, and candidate count. It omits both frame
+and visualization base64. JSON preserves structured candidates and the
+optional visualization.
+
+HTTP and software-client requests use top-level `browserId`,
+`locator: { locatorId, maxCandidates }`, `includeVisualization`, and
+`action: "desktop_locate"`. Include `serviceName`, `agentName`, and `taskName`;
+an unauthenticated HTTP service request requires all three attribution labels.
+Generated client helpers are `createServiceDesktopLocateRequest()`,
+`requestServiceDesktopLocate()`, and `locateServiceDesktopControl()`.
+
 ## Core Workflow
 
 After the preferred service-owned remote-headed posture produces a browser session, browser automation follows this pattern:
@@ -820,6 +861,7 @@ agent-browser screenshot --annotate   # Annotated screenshot with numbered eleme
 agent-browser screenshot --screenshot-dir ./shots  # Save to custom directory
 agent-browser screenshot --screenshot-format jpeg --screenshot-quality 80
 agent-browser desktop capture --browser-id browser-123 --json # Capture the bound service-owned desktop
+agent-browser desktop locate --browser-id browser-123 --locator-id turnstile-checkbox --json # Locate deterministic candidates without input
 agent-browser pdf output.pdf          # Save as PDF
 
 # Live preview / streaming
