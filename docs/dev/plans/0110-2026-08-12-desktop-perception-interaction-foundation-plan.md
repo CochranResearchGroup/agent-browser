@@ -2,7 +2,7 @@
 
 Date: 2026-08-12
 
-State: OPEN | POC 1 THROUGH 4 SOURCE ACCEPTED | POC 5 DETAIL PLAN NEXT
+State: OPEN | POC 1 THROUGH 4 SOURCE ACCEPTED | POC 5 DETAILED
 
 Authority: SOURCE-ONLY
 
@@ -211,8 +211,7 @@ source acceptance without separate maintainer direction.
 
 ## Current Recommendation
 
-Write Plan 0110-5 for provider-neutral foundation stress and use-case entry.
-Freeze cross-ingress replay, dashboard projection, authority conflicts,
-failure cleanup, durable human handoff, and the exact post-foundation entry
-gate before implementation. Do not begin a real challenge or authentication
-integration.
+Implement Plan 0110-5 with synthetic providers and the named foundation stress
+recipe. Preserve durable cross-ingress replay, safe dashboard and handoff
+projection, failure cleanup, and the planning-only use-case entry gate. Do not
+begin a real challenge or authentication integration.
