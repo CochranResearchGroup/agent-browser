@@ -240,6 +240,13 @@ async fn test_service_status_leaves_guacamole_root_without_route() {
 }
 #[tokio::test]
 async fn test_service_status_legacy_launch_default_does_not_accept_present_malformed_value() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = std::env::temp_dir().join(format!(
+        "agent-browser-service-status-launch-config-home-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir_all(&home).expect("isolated service status home");
+    guard.set("HOME", home.to_str().expect("test home must be UTF-8"));
     let mut state = DaemonState::new();
     let legacy = execute_command(
         &json!({ "action" : "service_status", "id" : "svc-legacy-launch-default" }),
@@ -264,11 +271,15 @@ async fn test_service_status_legacy_launch_default_does_not_accept_present_malfo
     )
     .await;
     assert_eq!(malformed["success"], false);
-    assert!(malformed["error"]
-        .as_str()
-        .unwrap()
-        .contains("invalid launchConfig"));
+    assert!(
+        malformed["error"]
+            .as_str()
+            .unwrap()
+            .contains("invalid launchConfig"),
+        "unexpected malformed launchConfig response: {malformed}"
+    );
     assert!(state.browser.is_none());
+    let _ = std::fs::remove_dir_all(home);
 }
 #[tokio::test]
 async fn test_service_browsers_via_actions_returns_last_health_observation() {
