@@ -119,7 +119,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 #[tokio::test]
-async fn desktop_prompt_observe_provider_gate_precedes_confirmation_and_dispatch_effects() {
+async fn configured_desktop_provider_gates_precede_confirmation_and_dispatch_effects() {
     let mut state = DaemonState::new();
     state.confirm_actions = Some(ConfirmActions {
         categories: HashSet::from(["desktop_prompt_observe".to_string()]),
@@ -143,6 +143,33 @@ async fn desktop_prompt_observe_provider_gate_precedes_confirmation_and_dispatch
     assert!(response["error"]
         .as_str()
         .is_some_and(|error| error.starts_with("desktop_prompt_provider_unavailable:")));
+    assert!(state.pending_confirmation.is_none());
+
+    let mut state = DaemonState::new();
+    state.confirm_actions = Some(ConfirmActions {
+        categories: HashSet::from(["desktop_interact".to_string()]),
+    });
+
+    let response = execute_command(
+        &json!({
+            "id": "desktop-interact-1",
+            "action": "desktop_interact",
+            "browserId": "browser-rdp-1",
+            "controllerLeaseId": "lease-1",
+            "operationId": "operation-stress-1",
+            "recipe": { "recipeId": "p110-foundation-stress-v1" },
+            "serviceName": "DesktopInteractor",
+            "agentName": "fixture-agent",
+            "taskName": "stress"
+        }),
+        &mut state,
+    )
+    .await;
+
+    assert_eq!(response["success"], false);
+    assert!(response["error"]
+        .as_str()
+        .is_some_and(|error| error.starts_with("desktop_input_provider_unavailable:")));
     assert!(state.pending_confirmation.is_none());
 }
 #[test]

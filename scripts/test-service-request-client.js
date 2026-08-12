@@ -113,6 +113,7 @@ function assertServiceRequestActionDataCoverage() {
     assert.ok(schema.properties[field], `canonical schema must include ${field}`);
   }
   assert.ok(SERVICE_REQUEST_STRING_FIELDS.includes('format'));
+  assert.ok(SERVICE_REQUEST_STRING_FIELDS.includes('operationId'));
   assert.ok(SERVICE_REQUEST_INTEGER_FIELDS.includes('maxBytes'));
   assert.deepEqual(schema.properties.format.enum, ['png']);
   assert.equal(schema.properties.maxBytes.maximum, 16 * 1024 * 1024);
@@ -142,6 +143,11 @@ function assertServiceRequestActionDataCoverage() {
   assert.equal(desktopLocateResponseSchema.properties.frameReceipt.$ref, 'frame-receipt.v1.schema.json');
   assert.equal(desktopLocateResponseSchema.properties.observation.$ref, 'observation.v1.schema.json');
   assert.equal(desktopLocateResponseSchema.required.includes('visualizationBase64'), false);
+  assert.equal(schema.properties.operationId.type, 'string');
+  assert.deepEqual(schema.properties.recipe.properties.recipeId.enum, [
+    'p110-pointer-keyboard-v1',
+    'p110-foundation-stress-v1',
+  ]);
   const promptObservationSchema = JSON.parse(
     readFileSync(
       new URL('../docs/dev/contracts/prompt-observation.v1.schema.json', import.meta.url),
@@ -197,6 +203,38 @@ function assertServiceRequestActionDataCoverage() {
     'prompt-observation.v1.schema.json',
   );
   assert.equal(desktopPromptResponseSchema.required.includes('visualizationBase64'), false);
+  const interactionReceiptSchema = JSON.parse(
+    readFileSync(
+      new URL('../docs/dev/contracts/interaction-receipt.v1.schema.json', import.meta.url),
+      'utf8',
+    ),
+  );
+  assert.deepEqual(interactionReceiptSchema.properties.recipeId.enum, [
+    'p110-pointer-keyboard-v1',
+    'p110-foundation-stress-v1',
+  ]);
+  assert.deepEqual(interactionReceiptSchema.properties.replayState.enum, [
+    'first_execution',
+    'replayed_terminal',
+  ]);
+  for (const field of [
+    'operationId',
+    'operationRequestSha256',
+    'recipeProviderId',
+    'recipeProviderVersion',
+    'replayState',
+    'promptDisposition',
+    'humanHandoff',
+    'entryGate',
+    'effectKeyDigest',
+    'effectKeyCount',
+  ]) {
+    assert.ok(interactionReceiptSchema.required.includes(field), `interaction receipt must require ${field}`);
+  }
+  assert.deepEqual(
+    interactionReceiptSchema.$defs.humanHandoff.required,
+    ['state', 'reason', 'handoffId', 'handoffUrl'],
+  );
   assert.equal(schema.properties.args, undefined);
   assert.equal(SERVICE_REQUEST_STRING_FIELDS.includes('args'), false);
 }
@@ -607,6 +645,7 @@ async function main() {
     browserId: 'browser-rdp-1',
     sessionName: 'rdp-1',
     controllerLeaseId: 'viewer:route:fixture-agent:opaque',
+    operationId: 'operation-1',
     recipeId: 'p110-pointer-keyboard-v1',
     serviceName: 'DesktopInteractor',
     agentName: 'fixture-agent',
@@ -618,6 +657,7 @@ async function main() {
     browserId: 'browser-rdp-1',
     sessionName: 'rdp-1',
     controllerLeaseId: 'viewer:route:fixture-agent:opaque',
+    operationId: 'operation-1',
     recipe: { recipeId: 'p110-pointer-keyboard-v1' },
     serviceName: 'DesktopInteractor',
     agentName: 'fixture-agent',
@@ -630,6 +670,7 @@ async function main() {
     {
       browserId: 'browser-rdp-1',
       controllerLeaseId: 'lease-1',
+      operationId: 'operation-1',
       recipeId: 'p110-pointer-keyboard-v1',
       serviceName: 'DesktopInteractor',
       agentName: 'fixture-agent',
@@ -642,6 +683,7 @@ async function main() {
       () => createServiceDesktopInteractRequest({
         browserId: 'browser-rdp-1',
         controllerLeaseId: 'lease-1',
+        operationId: 'operation-1',
         recipeId: 'p110-pointer-keyboard-v1',
         serviceName: 'DesktopInteractor',
         agentName: 'fixture-agent',
@@ -666,7 +708,8 @@ async function main() {
       fetch: recorder.fetch,
       browserId: 'browser-rdp-1',
       controllerLeaseId: 'lease-1',
-      recipeId: 'p110-pointer-keyboard-v1',
+      operationId: 'operation-stress-1',
+      recipeId: 'p110-foundation-stress-v1',
       serviceName: 'DesktopInteractor',
       agentName: 'fixture-agent',
       taskName: 'verify-synthetic-control',
@@ -675,7 +718,8 @@ async function main() {
       action: 'desktop_interact',
       browserId: 'browser-rdp-1',
       controllerLeaseId: 'lease-1',
-      recipe: { recipeId: 'p110-pointer-keyboard-v1' },
+      operationId: 'operation-stress-1',
+      recipe: { recipeId: 'p110-foundation-stress-v1' },
       serviceName: 'DesktopInteractor',
       agentName: 'fixture-agent',
       taskName: 'verify-synthetic-control',

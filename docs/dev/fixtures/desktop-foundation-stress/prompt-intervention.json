@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "p110-foundation-stress-fixture.v1",
+  "fixtureId": "prompt-intervention",
+  "recipeId": "p110-foundation-stress-v1",
+  "recipeProviderId": "synthetic-fixture-provider",
+  "recipeProviderVersion": "v1",
+  "operationId": "prompt-operation-1",
+  "expectedProviderCallCount": 0,
+  "expectedAuthorityEpoch": 7,
+  "expectedEffectState": "no_effect",
+  "expectedCleanupState": "not_needed",
+  "expectedVerificationState": "not_verified",
+  "expectedReplayState": "first_execution",
+  "expectedHandoffState": "ready",
+  "expectedEntryGate": "planning_open_implementation_blocked"
+}

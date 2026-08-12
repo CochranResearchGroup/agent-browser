@@ -651,6 +651,7 @@ export function createServiceDesktopInteractRequest(input) {
     browserId,
     sessionName,
     controllerLeaseId,
+    operationId,
     recipeId,
     serviceName,
     agentName,
@@ -665,6 +666,7 @@ export function createServiceDesktopInteractRequest(input) {
   for (const [field, value] of Object.entries({
     browserId,
     controllerLeaseId,
+    operationId,
     serviceName,
     agentName,
     taskName,
@@ -676,8 +678,10 @@ export function createServiceDesktopInteractRequest(input) {
   if (sessionName !== undefined && (typeof sessionName !== 'string' || sessionName.trim().length === 0)) {
     throw new TypeError('service desktop interact request sessionName must be a non-empty string');
   }
-  if (recipeId !== 'p110-pointer-keyboard-v1') {
-    throw new TypeError('service desktop interact request requires recipeId p110-pointer-keyboard-v1');
+  if (!['p110-pointer-keyboard-v1', 'p110-foundation-stress-v1'].includes(recipeId)) {
+    throw new TypeError(
+      'service desktop interact request requires a supported recipeId',
+    );
   }
   return createServiceRequest({
     ...request,
@@ -685,6 +689,7 @@ export function createServiceDesktopInteractRequest(input) {
     browserId,
     ...(sessionName !== undefined ? { sessionName } : {}),
     controllerLeaseId,
+    operationId,
     recipe: { recipeId },
     serviceName,
     agentName,
@@ -2462,6 +2467,7 @@ function validateDesktopInteractRequest(request) {
     'browserId',
     'sessionName',
     'controllerLeaseId',
+    'operationId',
     'recipe',
     'serviceName',
     'agentName',
@@ -2475,6 +2481,7 @@ function validateDesktopInteractRequest(request) {
   for (const field of [
     'browserId',
     'controllerLeaseId',
+    'operationId',
     'serviceName',
     'agentName',
     'taskName',
@@ -2497,8 +2504,11 @@ function validateDesktopInteractRequest(request) {
   if (recipeField !== undefined) {
     throw new TypeError(`service desktop interact request recipe does not accept ${recipeField}`);
   }
-  if (recipe.recipeId !== 'p110-pointer-keyboard-v1') {
-    throw new TypeError('service desktop interact request requires recipeId p110-pointer-keyboard-v1');
+  if (
+    typeof recipe.recipeId !== 'string' ||
+    !['p110-pointer-keyboard-v1', 'p110-foundation-stress-v1'].includes(recipe.recipeId)
+  ) {
+    throw new TypeError('service desktop interact request requires a supported recipeId');
   }
 }
 

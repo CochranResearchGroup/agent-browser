@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "p110-foundation-stress-fixture.v1",
+  "fixtureId": "post-effect-uncertain-handoff",
+  "recipeId": "p110-foundation-stress-v1",
+  "recipeProviderId": "synthetic-fixture-provider",
+  "recipeProviderVersion": "v1",
+  "operationId": "uncertain-operation-1",
+  "expectedProviderCallCount": 42,
+  "expectedAuthorityEpoch": 7,
+  "expectedEffectState": "effect_uncertain",
+  "expectedCleanupState": "not_needed",
+  "expectedVerificationState": "not_verified",
+  "expectedReplayState": "first_execution",
+  "expectedHandoffState": "ready",
+  "expectedEntryGate": "closed_source_failure"
+}

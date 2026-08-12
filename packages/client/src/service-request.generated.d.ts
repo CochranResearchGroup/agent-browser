@@ -136,6 +136,7 @@ export interface ServiceRequest {
   format?: string;
   promptProfileId?: string;
   controllerLeaseId?: string;
+  operationId?: string;
   sessionName?: string;
   targetServiceIds?: string[];
   targetServices?: string[];
@@ -699,7 +700,7 @@ export interface ServiceDesktopPromptObserveData {
 export interface DesktopInteractionReceipt {
   transactionId: string;
   schemaVersion: "v1";
-  recipeId: "p110-pointer-keyboard-v1";
+  recipeId: "p110-pointer-keyboard-v1" | "p110-foundation-stress-v1";
   recipeVersion: string;
   recipeSha256: string;
   browserId: string;
@@ -739,6 +740,16 @@ export interface DesktopInteractionReceipt {
   stopReason: string | null;
   retention: "ephemeral";
   persistedPixels: false;
+  operationId: string;
+  operationRequestSha256: string;
+  recipeProviderId: string;
+  recipeProviderVersion: string;
+  replayState: "first_execution" | "replayed_terminal";
+  promptDisposition: { state: string; reasonCode: string; observationSha256: string } | null;
+  humanHandoff: { state: string; reason: string; handoffId: string; handoffUrl: string } | null;
+  entryGate: "planning_open_implementation_blocked" | "closed_source_failure" | "closed_live_evidence_required";
+  effectKeyDigest: string;
+  effectKeyCount: number;
   [key: string]: unknown;
 }
 
@@ -1560,7 +1571,8 @@ export interface ServiceDesktopInteractRequestOptions extends Pick<ServiceReques
   browserId: string;
   sessionName?: string;
   controllerLeaseId: string;
-  recipeId: "p110-pointer-keyboard-v1";
+  operationId: string;
+  recipeId: "p110-pointer-keyboard-v1" | "p110-foundation-stress-v1";
   serviceName: string;
   agentName: string;
   taskName: string;

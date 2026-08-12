@@ -470,34 +470,41 @@ attribution. MCP clients use `service_request` or the dedicated
 
 ## Guarded Synthetic Desktop Interaction
 
-Use `desktop interact` only for the registered PoC 3 synthetic recipe and only
-with a pre-existing current controller lease:
+Use `desktop interact` only for a registered P110 synthetic recipe and only
+with a pre-existing current controller lease and a caller-generated operation
+ID:
 
 ```bash
 agent-browser desktop interact \
   --browser-id browser-123 \
   --controller-lease-id viewer-7 \
-  --recipe-id p110-pointer-keyboard-v1 \
+  --operation-id operation-7 \
+  --recipe-id p110-foundation-stress-v1 \
   --service-name DesktopInteractor \
   --agent-name fixture-agent \
-  --task-name verify-synthetic-control \
+  --task-name stress-synthetic-control \
   --json
 ```
 
-PoC 3 is source-only and provider-free. It configures no X11, Guacamole, CDP,
+P110 desktop interaction remains source-only and provider-free. It configures no X11, Guacamole, CDP,
 or operating-system input provider. An ordinary runtime request must fail with
 `desktop_input_provider_unavailable` before capture, controller mutation, or
 input. Do not interpret contract discovery as installed or live readiness.
 
-The recipe owns the fresh locator, server-derived pointer arc, one left click,
+The pointer-keyboard recipe owns the fresh locator, server-derived pointer arc, one left click,
 fixed benign test text, release cleanup, and after-state verifier. Never pass
 coordinates, motion paths, timing, arbitrary buttons, keys or text, clipboard
 content, provider routing, focus actions, or controller takeover. The action
 does not request, renew, release, or take over a lease.
 
+The foundation-stress recipe runs the same source engine across deterministic
+success, replay, conflict, cleanup, verification, prompt-intervention, and
+handoff scenarios without adding a production provider.
+
 HTTP and generated-client requests use `action: "desktop_interact"`, top-level
-`browserId`, `controllerLeaseId`, and
-`recipe: { recipeId: "p110-pointer-keyboard-v1" }`. Supply all three
+`browserId`, `controllerLeaseId`, `operationId`, and either
+`p110-pointer-keyboard-v1` or `p110-foundation-stress-v1` as
+`recipe.recipeId`. Supply all three
 attribution labels. MCP clients can use the canonical `service_request` or the
 dedicated `desktop_interact` tool. Client helpers are
 `createServiceDesktopInteractRequest()`, `requestServiceDesktopInteract()`,
@@ -507,6 +514,14 @@ Treat partial-effect receipts as non-retryable. Receipt metadata omits frame
 pixels, plaintext typed content, and the full motion path. This recipe is not a
 Turnstile, CAPTCHA, passkey, LastPass, credential, or general desktop-control
 workflow.
+
+Treat the foundation-stress entry gate literally. A
+`planning_open_implementation_blocked` result opens planning for discrete use
+cases, but implementation and live-capability claims remain blocked pending
+separately authorized installed-provider proof. Safe text and dashboard
+projections show operation presence, replay, cleanup, verification, and entry
+gate. They expose only an existing opaque handoff ID and state, never an
+operation ID, handoff URL, raw route, text, pixels, or path.
 
 ## Core Workflow
 
@@ -956,7 +971,7 @@ agent-browser screenshot --screenshot-format jpeg --screenshot-quality 80
 agent-browser desktop capture --browser-id browser-123 --json # Capture the bound service-owned desktop
 agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1 --json # Locate the synthetic verification control without input
 agent-browser desktop prompt observe --browser-id browser-123 --prompt-profile-id p110-external-prompt-v1 --json # Observe the source-only synthetic external-prompt fixture
-agent-browser desktop interact --browser-id browser-123 --controller-lease-id viewer-7 --recipe-id p110-pointer-keyboard-v1 --service-name DesktopInteractor --agent-name fixture-agent --task-name verify-synthetic-control --json # Exercise the source-only guarded interaction contract
+agent-browser desktop interact --browser-id browser-123 --controller-lease-id viewer-7 --operation-id operation-7 --recipe-id p110-foundation-stress-v1 --service-name DesktopInteractor --agent-name fixture-agent --task-name stress-synthetic-control --json # Exercise the source-only guarded interaction contract
 agent-browser pdf output.pdf          # Save as PDF
 
 # Live preview / streaming

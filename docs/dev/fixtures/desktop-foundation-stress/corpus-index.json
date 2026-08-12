@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "p110-foundation-stress-corpus.v1",
+  "recipeId": "p110-foundation-stress-v1",
+  "recipeProviderId": "synthetic-fixture-provider",
+  "recipeProviderVersion": "v1",
+  "fixtures": [
+    {
+      "fixtureId": "verified-success-replay",
+      "manifest": "verified-success-replay.json",
+      "manifestSha256": "ecb611b4dcde0e73e36a3853caea3f29cb8572577c0e256deb566633ad1752bd"
+    },
+    {
+      "fixtureId": "prompt-intervention",
+      "manifest": "prompt-intervention.json",
+      "manifestSha256": "e83a19064ae734ac099fc3760bf612e975142e5ad1d89941add334afa61e36a8"
+    },
+    {
+      "fixtureId": "post-effect-uncertain-handoff",
+      "manifest": "post-effect-uncertain-handoff.json",
+      "manifestSha256": "2a7bbe6cb85c8b24eb96aab1229f03737edb6561f685d91efb5b04fe7354b58c"
+    }
+  ]
+}

@@ -867,12 +867,17 @@ fn service_mcp_tools() -> Vec<Value> {
                         "type": "string",
                         "description": "Existing primary controller lease required by action=desktop_interact."
                     },
+                    "operationId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Required caller-generated opaque idempotency identity for action=desktop_interact."
+                    },
                     "recipe": {
                         "type": "object",
                         "additionalProperties": false,
                         "required": ["recipeId"],
                         "properties": {
-                            "recipeId": { "type": "string", "enum": ["p110-pointer-keyboard-v1"] }
+                            "recipeId": { "type": "string", "enum": ["p110-pointer-keyboard-v1", "p110-foundation-stress-v1"] }
                         },
                         "description": "Repository-owned synthetic interaction recipe. Raw input fields are not accepted."
                     },
@@ -4719,7 +4724,7 @@ fn desktop_interact_tool_schema() -> Value {
     json!({
         "name": DESKTOP_INTERACT_MCP_TOOL_NAME,
         "title": "Run guarded synthetic desktop interaction",
-        "description": "Queue one named observe, locate, act, and verify transaction against an exact service-owned desktop. PoC 3 has no configured production input provider, so public dispatch fails closed before capture, lease mutation, or input.",
+        "description": "Queue one registered observe, locate, act, and verify recipe against an exact service-owned desktop. PoC 5 has no configured production input provider, so public dispatch fails closed before capture, lease mutation, or input.",
         "inputSchema": {
             "type": "object",
             "additionalProperties": false,
@@ -4727,13 +4732,14 @@ fn desktop_interact_tool_schema() -> Value {
                 "browserId": { "type": "string", "description": "Required service-owned browser id." },
                 "sessionName": { "type": "string", "description": "Optional daemon session used only to narrow routing." },
                 "controllerLeaseId": { "type": "string", "description": "Existing primary controller lease id." },
-                "recipeId": { "type": "string", "enum": ["p110-pointer-keyboard-v1"], "description": "Sole repository-owned synthetic interaction recipe." },
+                "operationId": { "type": "string", "description": "Required caller-generated opaque idempotency identity; never a daemon selector." },
+                "recipeId": { "type": "string", "enum": ["p110-pointer-keyboard-v1", "p110-foundation-stress-v1"], "description": "Registered repository-owned interaction recipe." },
                 "jobTimeoutMs": { "type": "integer", "minimum": 1 },
                 "serviceName": { "type": "string", "description": "Required calling service name." },
                 "agentName": { "type": "string", "description": "Required calling agent name." },
                 "taskName": { "type": "string", "description": "Required calling task name." }
             },
-            "required": ["browserId", "controllerLeaseId", "recipeId", "serviceName", "agentName", "taskName"]
+            "required": ["browserId", "controllerLeaseId", "operationId", "recipeId", "serviceName", "agentName", "taskName"]
         }
     })
 }
@@ -5853,6 +5859,7 @@ fn desktop_interact_service_request(arguments: &Value) -> Result<Value, JsonRpcE
         "browserId",
         "sessionName",
         "controllerLeaseId",
+        "operationId",
         "recipeId",
         "jobTimeoutMs",
         "serviceName",
@@ -5869,10 +5876,14 @@ fn desktop_interact_service_request(arguments: &Value) -> Result<Value, JsonRpcE
     }
     let browser_id = required_string_argument(arguments, "browserId")?;
     let controller_lease_id = required_string_argument(arguments, "controllerLeaseId")?;
+    let operation_id = required_string_argument(arguments, "operationId")?;
     let recipe_id = required_string_argument(arguments, "recipeId")?;
-    if recipe_id != "p110-pointer-keyboard-v1" {
+    if !matches!(
+        recipe_id,
+        "p110-pointer-keyboard-v1" | "p110-foundation-stress-v1"
+    ) {
         return Err(JsonRpcError::invalid_params(
-            "desktop_interact recipeId must be p110-pointer-keyboard-v1",
+            "desktop_interact recipeId must be registered",
         ));
     }
     let service_name = required_string_argument(arguments, "serviceName")?;
@@ -5882,6 +5893,7 @@ fn desktop_interact_service_request(arguments: &Value) -> Result<Value, JsonRpcE
         "action": "desktop_interact",
         "browserId": browser_id,
         "controllerLeaseId": controller_lease_id,
+        "operationId": operation_id,
         "recipe": { "recipeId": recipe_id },
         "serviceName": service_name,
         "agentName": agent_name,
@@ -12683,6 +12695,7 @@ mod tests {
             json!([
                 "browserId",
                 "controllerLeaseId",
+                "operationId",
                 "recipeId",
                 "serviceName",
                 "agentName",
@@ -12704,7 +12717,8 @@ mod tests {
             "browserId": "browser-rdp-1",
             "sessionName": "rdp-1",
             "controllerLeaseId": "lease-1",
-            "recipeId": "p110-pointer-keyboard-v1",
+            "operationId": "operation-1",
+            "recipeId": "p110-foundation-stress-v1",
             "jobTimeoutMs": 5000,
             "serviceName": "DesktopInteractor",
             "agentName": "fixture-agent",
@@ -12714,13 +12728,14 @@ mod tests {
         assert_eq!(request["action"], "desktop_interact");
         assert_eq!(request["sessionName"], "rdp-1");
         assert_eq!(request["controllerLeaseId"], "lease-1");
-        assert_eq!(request["recipe"]["recipeId"], "p110-pointer-keyboard-v1");
+        assert_eq!(request["operationId"], "operation-1");
+        assert_eq!(request["recipe"]["recipeId"], "p110-foundation-stress-v1");
         assert!(request.get("params").is_none());
 
         for invalid in [
-            json!({"browserId":"browser-rdp-1","controllerLeaseId":"lease-1","recipeId":"wrong","serviceName":"DesktopInteractor","agentName":"fixture-agent","taskName":"verify"}),
-            json!({"browserId":"browser-rdp-1","controllerLeaseId":"lease-1","recipeId":"p110-pointer-keyboard-v1","serviceName":"DesktopInteractor","agentName":"fixture-agent"}),
-            json!({"browserId":"browser-rdp-1","controllerLeaseId":"lease-1","recipeId":"p110-pointer-keyboard-v1","serviceName":"DesktopInteractor","agentName":"fixture-agent","taskName":"verify","text":"secret"}),
+            json!({"browserId":"browser-rdp-1","controllerLeaseId":"lease-1","operationId":"operation-1","recipeId":"wrong","serviceName":"DesktopInteractor","agentName":"fixture-agent","taskName":"verify"}),
+            json!({"browserId":"browser-rdp-1","controllerLeaseId":"lease-1","operationId":"operation-1","recipeId":"p110-pointer-keyboard-v1","serviceName":"DesktopInteractor","agentName":"fixture-agent"}),
+            json!({"browserId":"browser-rdp-1","controllerLeaseId":"lease-1","operationId":"operation-1","recipeId":"p110-pointer-keyboard-v1","serviceName":"DesktopInteractor","agentName":"fixture-agent","taskName":"verify","text":"secret"}),
         ] {
             assert!(desktop_interact_service_request(&invalid).is_err());
         }
@@ -12992,19 +13007,35 @@ mod tests {
             "rdp-locate-session"
         );
 
-        let interact = json!({
+        let interact = service_request_command(&json!({
             "action": "desktop_interact",
             "browserId": "session:must-not-route",
-        });
+            "operationId": "operation-generic",
+            "controllerLeaseId": "lease-1",
+            "recipe": { "recipeId": "p110-foundation-stress-v1" },
+            "serviceName": "DesktopInteractor",
+            "agentName": "fixture-agent",
+            "taskName": "stress",
+        }))
+        .unwrap()
+        .1;
         assert_eq!(
             queued_tool_command_session("service_request", "AgentBrowserDashboard", &interact),
             "AgentBrowserDashboard"
         );
-        let narrowed_interact = json!({
+        let narrowed_interact = service_request_command(&json!({
             "action": "desktop_interact",
             "browserId": "browser-rdp-1",
             "sessionName": "rdp-interact-session",
-        });
+            "operationId": "operation-generic-session",
+            "controllerLeaseId": "lease-1",
+            "recipe": { "recipeId": "p110-foundation-stress-v1" },
+            "serviceName": "DesktopInteractor",
+            "agentName": "fixture-agent",
+            "taskName": "stress",
+        }))
+        .unwrap()
+        .1;
         assert_eq!(
             queued_tool_command_session(
                 "service_request",
@@ -13012,6 +13043,44 @@ mod tests {
                 &narrowed_interact,
             ),
             "rdp-interact-session"
+        );
+
+        let dedicated_interact = desktop_interact_service_request(&json!({
+            "browserId": "session:must-not-route",
+            "operationId": "operation-dedicated",
+            "controllerLeaseId": "lease-1",
+            "recipeId": "p110-foundation-stress-v1",
+            "serviceName": "DesktopInteractor",
+            "agentName": "fixture-agent",
+            "taskName": "stress",
+        }))
+        .unwrap();
+        assert_eq!(
+            queued_tool_command_session(
+                "desktop_interact",
+                "AgentBrowserDashboard",
+                &dedicated_interact,
+            ),
+            "AgentBrowserDashboard"
+        );
+        let dedicated_interact_with_session = desktop_interact_service_request(&json!({
+            "browserId": "session:must-not-route",
+            "sessionName": "dedicated-interact-session",
+            "operationId": "operation-dedicated-session",
+            "controllerLeaseId": "lease-1",
+            "recipeId": "p110-pointer-keyboard-v1",
+            "serviceName": "DesktopInteractor",
+            "agentName": "fixture-agent",
+            "taskName": "verify",
+        }))
+        .unwrap();
+        assert_eq!(
+            queued_tool_command_session(
+                "desktop_interact",
+                "AgentBrowserDashboard",
+                &dedicated_interact_with_session,
+            ),
+            "dedicated-interact-session"
         );
     }
 

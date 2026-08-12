@@ -269,7 +269,7 @@ agent-browser stream disable          # Stop runtime WebSocket streaming
 agent-browser desktop capture --browser-id <id> # Capture one service-bound desktop PNG receipt
 agent-browser desktop locate --browser-id <id> --locator-id <id> # Locate deterministic desktop candidates
 agent-browser desktop prompt observe --browser-id <id> --prompt-profile-id p110-external-prompt-v1 # Observe the synthetic external-prompt fixture
-agent-browser desktop interact --browser-id <id> --controller-lease-id <id> --recipe-id <id> --service-name <name> --agent-name <name> --task-name <name> # Run one guarded synthetic recipe
+agent-browser desktop interact --browser-id <id> --controller-lease-id <id> --operation-id <id> --recipe-id <id> --service-name <name> --agent-name <name> --task-name <name> # Run one guarded synthetic recipe
 agent-browser service status          # Show service control-plane and configured service state
 agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health and route definitions
@@ -497,17 +497,18 @@ labels. MCP clients can use `service_request` or the dedicated
 
 ### Guarded Synthetic Desktop Interaction
 
-PoC 3 defines one atomic observe, locate, act, and verify transaction over the
-repository-owned synthetic fixture:
+P110 defines atomic observe, locate, act, and verify transactions over
+repository-owned synthetic fixtures:
 
 ```bash
 agent-browser desktop interact \
   --browser-id browser-123 \
   --controller-lease-id viewer-7 \
-  --recipe-id p110-pointer-keyboard-v1 \
+  --operation-id operation-7 \
+  --recipe-id p110-foundation-stress-v1 \
   --service-name DesktopInteractor \
   --agent-name fixture-agent \
-  --task-name verify-synthetic-control \
+  --task-name stress-synthetic-control \
   --json
 ```
 
@@ -515,21 +516,26 @@ agent-browser desktop interact \
 | --- | --- |
 | `--browser-id <id>` | Required retained service-owned browser identity |
 | `--controller-lease-id <id>` | Required current controller lease for the exact route and stream |
-| `--recipe-id <id>` | Required registered recipe; PoC 3 accepts only `p110-pointer-keyboard-v1` |
+| `--operation-id <id>` | Required caller-generated opaque idempotency identity; it is distinct from transport request identity |
+| `--recipe-id <id>` | Required registered recipe: `p110-pointer-keyboard-v1` or `p110-foundation-stress-v1` |
 | `--service-name <name>` | Required accountable service label |
 | `--agent-name <name>` | Required accountable agent label |
 | `--task-name <name>` | Required accountable task label |
 
-> **Experimental:** PoC 3 is a provider-free source proof. It configures no
+> **Experimental:** This is a provider-free source proof. It configures no
 > X11, Guacamole, CDP, or operating-system input provider. Ordinary runtime
 > requests fail with `desktop_input_provider_unavailable` before capture,
 > controller mutation, or input.
 
-The recipe derives its target from a fresh `p110-control-v1` observation. It
+The pointer-keyboard recipe derives its target from a fresh `p110-control-v1` observation. It
 owns the deterministic pointer arc, one left click, fixed non-sensitive test
 text, cleanup, and after-state verifier. Callers cannot supply coordinates,
 motion paths, timing, buttons, arbitrary keys or text, clipboard content,
 provider routing, focus actions, or controller takeover.
+
+The foundation-stress recipe runs the same source engine across deterministic
+success, replay, conflict, cleanup, verification, prompt-intervention, and
+handoff scenarios without adding a production provider.
 
 The request requires an existing controller lease; `desktop interact` never
 requests, renews, releases, or takes over control. The complete transaction is
@@ -538,8 +544,8 @@ Turnstile, CAPTCHA, passkey, LastPass, credential, or general desktop-control
 workflow, and source presence is not installed or live proof.
 
 HTTP and software clients use `action: "desktop_interact"`, top-level
-`browserId`, `controllerLeaseId`, and
-`recipe: { recipeId: "p110-pointer-keyboard-v1" }`. All three attribution
+`browserId`, `controllerLeaseId`, `operationId`, and either registered
+`recipe.recipeId`. All three attribution
 labels, `serviceName`, `agentName`, and `taskName`, are required. MCP clients
 can use `service_request` or the dedicated `desktop_interact` tool. Generated
 client helpers are `createServiceDesktopInteractRequest()`,
@@ -549,6 +555,14 @@ Receipts contain authority, hashed input, cleanup, and verification metadata.
 They do not contain frame pixels, plaintext typed content, or the full motion
 path. A partial input effect returns an explicit uncertain receipt and is never
 automatically retried.
+
+The foundation-stress receipt projects operation presence, replay, cleanup,
+verification, entry-gate state, and only an existing opaque handoff ID and
+state. Text and dashboard summaries never expose operation IDs, handoff URLs,
+raw routes, text, pixels, or paths. Source acceptance opens discrete use-case
+planning only through `planning_open_implementation_blocked`; implementation
+and live-capability claims remain blocked until separately authorized installed
+provider proof exists.
 
 ### Get Info
 

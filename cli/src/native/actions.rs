@@ -405,11 +405,17 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
         .unwrap_or("")
         .to_string();
     let cmd_start = std::time::Instant::now();
-    // PoC 4 has no configured production provider. Resolve that static
+    // PoC 4 and PoC 5 have no configured production providers. Resolve that static
     // availability posture before stream broadcast, CDP event drain, policy
     // reload, confirmation mutation, browser recovery, or any other effect.
     if action == "desktop_prompt_observe" {
         return match handle_desktop_prompt_observe(cmd).await {
+            Ok(data) => success_response(&id, data),
+            Err(error) => error_response(&id, &error),
+        };
+    }
+    if action == "desktop_interact" {
+        return match handle_desktop_interact(cmd).await {
             Ok(data) => success_response(&id, data),
             Err(error) => error_response(&id, &error),
         };

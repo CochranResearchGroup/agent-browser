@@ -307,18 +307,19 @@ readiness evidence.
 
 ## Run a guarded synthetic desktop interaction
 
-P110 PoC 3 exposes one atomic `desktop_interact` contract over the
-repository-owned synthetic fixture. It requires an existing current controller
-lease and a named recipe:
+P110 exposes one atomic `desktop_interact` contract over repository-owned
+synthetic fixtures. It requires an existing current controller lease, a
+caller-generated operation ID, and a named recipe:
 
 ```bash
 agent-browser desktop interact \
   --browser-id browser-123 \
   --controller-lease-id viewer-7 \
-  --recipe-id p110-pointer-keyboard-v1 \
+  --operation-id operation-7 \
+  --recipe-id p110-foundation-stress-v1 \
   --service-name DesktopInteractor \
   --agent-name fixture-agent \
-  --task-name verify-synthetic-control \
+  --task-name stress-synthetic-control \
   --json
 ```
 
@@ -327,7 +328,7 @@ Use the canonical service request from HTTP:
 ```bash
 curl -X POST "http://127.0.0.1:9223/api/service/request" \
   -H "content-type: application/json" \
-  -d '{"action":"desktop_interact","browserId":"browser-123","controllerLeaseId":"viewer-7","recipe":{"recipeId":"p110-pointer-keyboard-v1"},"serviceName":"DesktopInteractor","agentName":"fixture-agent","taskName":"verify-synthetic-control"}'
+  -d '{"action":"desktop_interact","browserId":"browser-123","controllerLeaseId":"viewer-7","operationId":"operation-7","recipe":{"recipeId":"p110-foundation-stress-v1"},"serviceName":"DesktopInteractor","agentName":"fixture-agent","taskName":"stress-synthetic-control"}'
 ```
 
 MCP clients can send the same fields through `service_request` or the dedicated
@@ -342,7 +343,8 @@ const interaction = await runServiceDesktopInteraction({
   baseUrl: "http://127.0.0.1:9223",
   browserId: "browser-123",
   controllerLeaseId: "viewer-7",
-  recipeId: "p110-pointer-keyboard-v1",
+  operationId: "operation-7",
+  recipeId: "p110-foundation-stress-v1",
   serviceName: "DesktopInteractor",
   agentName: "fixture-agent",
   taskName: "verify-synthetic-control",
@@ -369,9 +371,14 @@ const interaction = await runServiceDesktopInteraction({
       <td>The exact pre-existing current controller lease.</td>
     </tr>
     <tr>
+      <td><code>operationId</code></td>
+      <td>Required</td>
+      <td>A caller-generated opaque idempotency identity. Transport request IDs may differ across ingresses.</td>
+    </tr>
+    <tr>
       <td><code>recipe.recipeId</code></td>
       <td>Required</td>
-      <td>PoC 3 accepts only <code>p110-pointer-keyboard-v1</code>.</td>
+      <td>Use <code>p110-pointer-keyboard-v1</code> or <code>p110-foundation-stress-v1</code>.</td>
     </tr>
     <tr>
       <td><code>serviceName</code>, <code>agentName</code>, <code>taskName</code></td>
@@ -386,18 +393,32 @@ paths, timing, buttons, arbitrary keys or plaintext, clipboard content,
 provider selection, focus actions, and takeover instructions. It never
 requests, renews, releases, or takes over controller authority.
 
-> **Experimental:** PoC 3 configures no production input provider. Contract
+> **Experimental:** P110 configures no production input provider. Contract
 > discovery can advertise `desktop_interact`, but ordinary production dispatch
 > returns `desktop_input_provider_unavailable` before capture, controller
 > mutation, or input. The complete transaction is proven only with an injected
 > in-memory synthetic fixture provider.
 
-The synthetic recipe owns its locator, server-derived deterministic pointer
+The pointer-keyboard recipe owns its locator, server-derived deterministic pointer
 arc, one left click, fixed benign text, cleanup, and after-state verifier. It
 does not represent a Turnstile, CAPTCHA, passkey, LastPass, credential, or
 general desktop-control workflow. Receipt projections omit frame pixels,
 plaintext typed content, and full motion paths. Partial effects are explicit
 and non-retryable.
+
+The foundation-stress recipe runs the same source engine across deterministic
+success, replay, conflict, cleanup, verification, prompt-intervention, and
+handoff scenarios without adding a production provider.
+
+The persisted foundation-stress receipt projects operation presence, replay,
+cleanup, verification, prompt intervention, and the typed entry gate. Its
+optional handoff projection contains only the existing opaque handoff ID and
+state. Text and dashboard summaries never expose the operation ID, handoff
+URL, raw route, text, pixels, or path.
+
+`planning_open_implementation_blocked` opens discrete use-case planning only.
+Use-case implementation and live-capability claims remain blocked until a
+separately authorized installed provider passes the required controlled proof.
 
 <table>
   <thead>

@@ -1961,6 +1961,71 @@ mod tests {
     }
 
     #[test]
+    fn persisted_foundation_stress_receipt_hashes_operation_and_excludes_private_handoff() {
+        let request = control_request_for_mode_test(json!({ "action": "desktop_interact" }));
+        let response = json!({
+            "success": true,
+            "data": {
+                "ok": true,
+                "action": "desktop_interact",
+                "interactionReceipt": {
+                    "transactionId": "transaction-stress-1",
+                    "recipeId": "p110-foundation-stress-v1",
+                    "operationId": "private-operation-id",
+                    "operationRequestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "recipeProviderId": "synthetic-fixture-provider",
+                    "recipeProviderVersion": "v1",
+                    "promptDisposition": {
+                        "state": "operator_intervention_required",
+                        "reasonCode": "synthetic_prompt_requires_operator_review",
+                        "observationSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                        "promptText": "sensitive prompt"
+                    },
+                    "humanHandoff": {
+                        "state": "required",
+                        "reason": "effect_uncertain",
+                        "handoffId": "handoff-opaque-1",
+                        "handoffUrl": "https://provider.invalid/raw-route"
+                    },
+                    "entryGate": "planning_open_implementation_blocked",
+                    "effectKeyDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "effectKeyCount": 3,
+                    "routeId": "raw-route-id",
+                    "imageBase64": "sensitive-pixels",
+                    "text": "sensitive-plaintext",
+                    "outputPath": "/sensitive/full/path"
+                }
+            }
+        });
+
+        let persisted = service_job_persisted_result(&request, &response);
+        let receipt = &persisted["data"]["interactionReceipt"];
+        assert!(receipt["operationId"].is_null());
+        assert!(receipt["operationIdDigest"]
+            .as_str()
+            .is_some_and(|value| !value.is_empty()));
+        assert_eq!(receipt["humanHandoff"]["handoffId"], "handoff-opaque-1");
+        assert!(receipt["humanHandoff"]["handoffUrl"].is_null());
+        assert!(receipt["routeId"].is_null());
+        assert_eq!(receipt["effectKeyCount"], 3);
+        let serialized = persisted.to_string();
+        for forbidden in [
+            "private-operation-id",
+            "provider.invalid",
+            "raw-route-id",
+            "sensitive-pixels",
+            "sensitive prompt",
+            "sensitive-plaintext",
+            "/sensitive/full/path",
+        ] {
+            assert!(
+                !serialized.contains(forbidden),
+                "persisted forbidden sentinel: {forbidden}"
+            );
+        }
+    }
+
+    #[test]
     fn persisted_desktop_prompt_observation_uses_safe_receipt_projection() {
         let request = control_request_for_mode_test(json!({ "action": "desktop_prompt_observe" }));
         let response = json!({

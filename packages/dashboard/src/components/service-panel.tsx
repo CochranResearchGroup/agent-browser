@@ -112,6 +112,7 @@ import {
   type ServiceViewStream,
 } from "@/lib/service-view-streams";
 import type { ProjectedWorkspaceView } from "@/lib/workspace-view-projection";
+import { projectFoundationStressReceipt } from "@/lib/foundation-stress-receipt";
 import {
   projectServiceWorkspaceViews,
   type WorkspaceBrowserSessionAuthority,
@@ -4642,6 +4643,7 @@ function JobDetailContent({
   const namingWarning = serviceJobNamingWarningLabel(job.namingWarnings);
   const targetIds = serviceJobTargetIds(job);
   const raw = formatDetails(job);
+  const stressReceipt = projectFoundationStressReceipt(job.result);
   return (
     <div className="service-event-dialog-body">
       <InspectorHero
@@ -4740,6 +4742,25 @@ function JobDetailContent({
           ]}
         />
       </InspectorSection>
+      {stressReceipt && (
+        <InspectorSection title="Foundation stress receipt" detail="Immutable persisted projection">
+          <InspectorFactRows
+            rows={[
+              { label: "Recipe", value: stressReceipt.recipeId, mono: true },
+              { label: "Operation identity", value: stressReceipt.operationIdentity },
+              { label: "Effect", value: stressReceipt.effectState },
+              { label: "Replay", value: stressReceipt.replayState },
+              { label: "Cleanup", value: stressReceipt.cleanupState },
+              { label: "Verification", value: stressReceipt.verificationState },
+              { label: "Entry gate", value: stressReceipt.entryGate },
+              { label: "Prompt", value: stressReceipt.promptState },
+              { label: "Prompt reason", value: stressReceipt.promptReasonCode },
+              { label: "Handoff state", value: stressReceipt.handoffState },
+              { label: "Handoff ID", value: stressReceipt.handoffId, mono: true },
+            ]}
+          />
+        </InspectorSection>
+      )}
       <InspectorEvidenceDisclosure
         items={[
           { label: "Job ID", value: job.id, code: true },

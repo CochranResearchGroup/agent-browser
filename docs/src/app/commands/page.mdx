@@ -45,7 +45,7 @@ agent-browser stream disable          # Stop runtime WebSocket streaming
 agent-browser desktop capture --browser-id <id> # Capture one service-bound desktop PNG receipt
 agent-browser desktop locate --browser-id <id> --locator-id <id> # Locate deterministic desktop candidates
 agent-browser desktop prompt observe --browser-id <id> --prompt-profile-id p110-external-prompt-v1 # Observe the synthetic external-prompt fixture
-agent-browser desktop interact --browser-id <id> --controller-lease-id <id> --recipe-id <id> --service-name <name> --agent-name <name> --task-name <name> # Run one guarded synthetic recipe
+agent-browser desktop interact --browser-id <id> --controller-lease-id <id> --operation-id <id> --recipe-id <id> --service-name <name> --agent-name <name> --task-name <name> # Run one guarded synthetic recipe
 agent-browser service status          # Show service control-plane and configured service state
 agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health and route definitions
@@ -564,21 +564,22 @@ For HTTP, MCP, and generated client forms, see [Service Mode](/service-mode#obse
 
 ## Run a guarded synthetic desktop interaction
 
-PoC 3 defines one atomic observe, locate, act, and verify recipe over the
-repository-owned synthetic fixture:
+P110 defines atomic observe, locate, act, and verify recipes over
+repository-owned synthetic fixtures:
 
 ```bash
 agent-browser desktop interact \
   --browser-id browser-123 \
   --controller-lease-id viewer-7 \
-  --recipe-id p110-pointer-keyboard-v1 \
+  --operation-id operation-7 \
+  --recipe-id p110-foundation-stress-v1 \
   --service-name DesktopInteractor \
   --agent-name fixture-agent \
-  --task-name verify-synthetic-control \
+  --task-name stress-synthetic-control \
   --json
 ```
 
-> **Experimental:** PoC 3 is a provider-free source proof. No X11,
+> **Experimental:** This is a provider-free source proof. No X11,
 > Guacamole, CDP, or operating-system input provider is configured. Ordinary
 > runtime requests fail with `desktop_input_provider_unavailable` before
 > capture, controller mutation, or input.
@@ -600,8 +601,12 @@ agent-browser desktop interact \
       <td>Required exact current controller lease.</td>
     </tr>
     <tr>
-      <td><code>--recipe-id p110-pointer-keyboard-v1</code></td>
-      <td>The sole registered synthetic interaction recipe.</td>
+      <td><code>--operation-id &lt;id&gt;</code></td>
+      <td>Required caller-generated opaque idempotency identity, distinct from the transport request identity.</td>
+    </tr>
+    <tr>
+      <td><code>--recipe-id &lt;id&gt;</code></td>
+      <td>Select <code>p110-pointer-keyboard-v1</code> or <code>p110-foundation-stress-v1</code>.</td>
     </tr>
     <tr>
       <td><code>--service-name</code>, <code>--agent-name</code>, <code>--task-name</code></td>
@@ -610,17 +615,31 @@ agent-browser desktop interact \
   </tbody>
 </table>
 
-The recipe derives its target from a fresh `p110-control-v1` observation. It
+The pointer-keyboard recipe derives its target from a fresh `p110-control-v1` observation. It
 owns deterministic pointer motion, one left click, fixed benign text, release
 cleanup, and after-state verification. The caller cannot provide coordinates,
 motion paths, timing, buttons, arbitrary keys or text, clipboard content,
 provider routing, focus actions, or controller takeover.
+
+The foundation-stress recipe runs the same source engine across deterministic
+success, replay, conflict, cleanup, verification, prompt-intervention, and
+handoff scenarios without adding a production provider.
 
 The action requires a pre-existing controller lease and never requests,
 renews, releases, or takes over control. It is not a Turnstile, CAPTCHA,
 passkey, LastPass, credential, or general desktop-control workflow. Partial
 effects produce an uncertain, non-retryable receipt. Receipts omit frame
 pixels, plaintext typed content, and full motion paths.
+
+The foundation-stress receipt safely summarizes operation presence, replay,
+cleanup, verification, and the typed entry gate. An optional handoff projection
+contains only the existing opaque handoff ID and state. It never exposes an
+operation ID, handoff URL, raw route, text, pixels, or path.
+
+> **Planning gate:** A source-accepted
+> `planning_open_implementation_blocked` result opens discrete use-case
+> planning. It does not open implementation or prove an installed or live
+> provider. Those claims remain blocked pending separately authorized proof.
 
 For the cross-ingress shape and production-provider posture, see [Service
 Mode](/service-mode#run-a-guarded-synthetic-desktop-interaction).

@@ -88,7 +88,7 @@ const SERVICE_ACCESS_PLAN_USAGE: &str = "service access-plan [--service-name <na
 const DESKTOP_CAPTURE_USAGE: &str = "desktop capture --browser-id <id> [--max-bytes <bytes>]";
 const DESKTOP_LOCATE_USAGE: &str = "desktop locate --browser-id <id> --locator-id <id> [--max-candidates <count>] [--include-visualization]";
 const DESKTOP_PROMPT_OBSERVE_USAGE: &str = "desktop prompt observe --browser-id <id> --prompt-profile-id p110-external-prompt-v1 [--include-visualization]";
-const DESKTOP_INTERACT_USAGE: &str = "desktop interact --browser-id <id> --controller-lease-id <id> --recipe-id p110-pointer-keyboard-v1 --service-name <name> --agent-name <name> --task-name <name>";
+const DESKTOP_INTERACT_USAGE: &str = "desktop interact --browser-id <id> --controller-lease-id <id> --operation-id <id> --recipe-id <p110-pointer-keyboard-v1|p110-foundation-stress-v1> --service-name <name> --agent-name <name> --task-name <name>";
 const DESKTOP_LOCATE_DEFAULT_MAX_CANDIDATES: u64 = 8;
 const DESKTOP_LOCATE_HARD_MAX_CANDIDATES: u64 = 32;
 
@@ -1262,12 +1262,14 @@ fn parse_desktop_prompt_observe(
     Ok(command)
 }
 
-/// Parse one named guarded desktop interaction recipe. Targets, coordinates,
-/// event plans, input text, timing, and provider selection remain service
-/// owned and cannot be supplied through the CLI.
+/// Parse one named guarded desktop interaction recipe with a caller-generated
+/// opaque operation identity. Targets, coordinates, event plans, input text,
+/// timing, and provider selection remain service owned and cannot be supplied
+/// through the CLI.
 fn parse_desktop_interact(id: String, rest: &[&str]) -> Result<Value, ParseError> {
     let mut browser_id = None;
     let mut controller_lease_id = None;
+    let mut operation_id = None;
     let mut recipe_id = None;
     let mut service_name = None;
     let mut agent_name = None;
@@ -1277,6 +1279,7 @@ fn parse_desktop_interact(id: String, rest: &[&str]) -> Result<Value, ParseError
         let (slot, flag) = match rest[i] {
             "--browser-id" => (&mut browser_id, "--browser-id"),
             "--controller-lease-id" => (&mut controller_lease_id, "--controller-lease-id"),
+            "--operation-id" => (&mut operation_id, "--operation-id"),
             "--recipe-id" => (&mut recipe_id, "--recipe-id"),
             "--service-name" => (&mut service_name, "--service-name"),
             "--agent-name" => (&mut agent_name, "--agent-name"),
@@ -1302,6 +1305,7 @@ fn parse_desktop_interact(id: String, rest: &[&str]) -> Result<Value, ParseError
     let (
         Some(browser_id),
         Some(controller_lease_id),
+        Some(operation_id),
         Some(recipe_id),
         Some(service_name),
         Some(agent_name),
@@ -1309,6 +1313,7 @@ fn parse_desktop_interact(id: String, rest: &[&str]) -> Result<Value, ParseError
     ) = (
         browser_id,
         controller_lease_id,
+        operation_id,
         recipe_id,
         service_name,
         agent_name,
@@ -1320,7 +1325,10 @@ fn parse_desktop_interact(id: String, rest: &[&str]) -> Result<Value, ParseError
             usage: DESKTOP_INTERACT_USAGE,
         });
     };
-    if recipe_id != "p110-pointer-keyboard-v1" {
+    if !matches!(
+        recipe_id.as_str(),
+        "p110-pointer-keyboard-v1" | "p110-foundation-stress-v1"
+    ) {
         return Err(ParseError::InvalidValue {
             message: format!("Unsupported desktop interaction recipe: {recipe_id}"),
             usage: DESKTOP_INTERACT_USAGE,
@@ -1332,6 +1340,7 @@ fn parse_desktop_interact(id: String, rest: &[&str]) -> Result<Value, ParseError
         "action": "desktop_interact",
         "browserId": browser_id,
         "controllerLeaseId": controller_lease_id,
+        "operationId": operation_id,
         "recipe": { "recipeId": recipe_id },
         "serviceName": service_name,
         "agentName": agent_name,
@@ -7588,7 +7597,7 @@ mod tests {
     fn test_desktop_interact_builds_named_guarded_recipe() {
         let cmd = parse_command(
             &args(
-                "desktop interact --browser-id browser-123 --controller-lease-id viewer-7 --recipe-id p110-pointer-keyboard-v1 --service-name DesktopInteractor --agent-name fixture-agent --task-name verify-synthetic-control",
+                "desktop interact --browser-id browser-123 --controller-lease-id viewer-7 --operation-id operation-7 --recipe-id p110-foundation-stress-v1 --service-name DesktopInteractor --agent-name fixture-agent --task-name verify-synthetic-control",
             ),
             &default_flags(),
         )
@@ -7597,7 +7606,8 @@ mod tests {
         assert_eq!(cmd["action"], "desktop_interact");
         assert_eq!(cmd["browserId"], "browser-123");
         assert_eq!(cmd["controllerLeaseId"], "viewer-7");
-        assert_eq!(cmd["recipe"]["recipeId"], "p110-pointer-keyboard-v1");
+        assert_eq!(cmd["operationId"], "operation-7");
+        assert_eq!(cmd["recipe"]["recipeId"], "p110-foundation-stress-v1");
         assert_eq!(cmd["serviceName"], "DesktopInteractor");
         assert_eq!(cmd["agentName"], "fixture-agent");
         assert_eq!(cmd["taskName"], "verify-synthetic-control");
@@ -7608,12 +7618,13 @@ mod tests {
     }
 
     #[test]
-    fn test_desktop_interact_requires_all_authority_fields() {
+    fn test_desktop_interact_requires_operation_controller_and_attribution_fields() {
         for command in [
-            "desktop interact --controller-lease-id viewer-7 --recipe-id p110-pointer-keyboard-v1 --service-name DesktopInteractor --agent-name fixture-agent --task-name verify",
-            "desktop interact --browser-id browser-123 --recipe-id p110-pointer-keyboard-v1 --service-name DesktopInteractor --agent-name fixture-agent --task-name verify",
-            "desktop interact --browser-id browser-123 --controller-lease-id viewer-7 --service-name DesktopInteractor --agent-name fixture-agent --task-name verify",
-            "desktop interact --browser-id browser-123 --controller-lease-id viewer-7 --recipe-id p110-pointer-keyboard-v1 --agent-name fixture-agent --task-name verify",
+            "desktop interact --controller-lease-id viewer-7 --operation-id operation-7 --recipe-id p110-pointer-keyboard-v1 --service-name DesktopInteractor --agent-name fixture-agent --task-name verify",
+            "desktop interact --browser-id browser-123 --operation-id operation-7 --recipe-id p110-pointer-keyboard-v1 --service-name DesktopInteractor --agent-name fixture-agent --task-name verify",
+            "desktop interact --browser-id browser-123 --controller-lease-id viewer-7 --recipe-id p110-pointer-keyboard-v1 --service-name DesktopInteractor --agent-name fixture-agent --task-name verify",
+            "desktop interact --browser-id browser-123 --controller-lease-id viewer-7 --operation-id operation-7 --service-name DesktopInteractor --agent-name fixture-agent --task-name verify",
+            "desktop interact --browser-id browser-123 --controller-lease-id viewer-7 --operation-id operation-7 --recipe-id p110-pointer-keyboard-v1 --agent-name fixture-agent --task-name verify",
         ] {
             let err = parse_command(&args(command), &default_flags()).unwrap_err();
             assert!(matches!(err, ParseError::MissingArguments { .. }));
@@ -7634,7 +7645,7 @@ mod tests {
             "--frame-id",
         ] {
             let command = format!(
-                "desktop interact --browser-id browser-123 --controller-lease-id viewer-7 --recipe-id p110-pointer-keyboard-v1 --service-name DesktopInteractor --agent-name fixture-agent --task-name verify {flag} value"
+                "desktop interact --browser-id browser-123 --controller-lease-id viewer-7 --operation-id operation-7 --recipe-id p110-pointer-keyboard-v1 --service-name DesktopInteractor --agent-name fixture-agent --task-name verify {flag} value"
             );
             let err = parse_command(&args(&command), &default_flags()).unwrap_err();
             assert!(matches!(err, ParseError::InvalidValue { .. }));
@@ -7643,7 +7654,7 @@ mod tests {
 
         let err = parse_command(
             &args(
-                "desktop interact --browser-id browser-123 --controller-lease-id viewer-7 --recipe-id arbitrary-input --service-name DesktopInteractor --agent-name fixture-agent --task-name verify",
+                "desktop interact --browser-id browser-123 --controller-lease-id viewer-7 --operation-id operation-7 --recipe-id arbitrary-input --service-name DesktopInteractor --agent-name fixture-agent --task-name verify",
             ),
             &default_flags(),
         )

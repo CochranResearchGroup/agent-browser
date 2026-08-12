@@ -273,11 +273,42 @@ fn format_desktop_interact_text(data: &serde_json::Value) -> Option<String> {
     let receipt = data.get("interactionReceipt")?.as_object()?;
     let transaction_id = receipt.get("transactionId")?.as_str()?;
     let recipe_id = receipt.get("recipeId")?.as_str()?;
-    let effect_state = receipt.get("effectState")?.as_str()?;
+    let effect_state = safe_receipt_axis(
+        receipt,
+        "effectState",
+        &[
+            "verified_success",
+            "no_effect",
+            "effect_uncertain",
+            "cancelled_after_effect",
+        ],
+    )?;
     let verification_state = receipt
         .get("verificationState")
         .and_then(|value| value.as_str())
+        .map(|value| safe_axis_value(value, &["passed", "unchanged", "not_verified"]))
         .unwrap_or("not_run");
+    let replay_state = receipt
+        .get("replayState")
+        .and_then(|value| value.as_str())
+        .map(|value| safe_axis_value(value, &["first_execution", "replayed_terminal"]));
+    let cleanup_state = receipt
+        .get("cleanupState")
+        .and_then(|value| value.as_str())
+        .map(|value| safe_axis_value(value, &["not_needed", "released", "release_failed"]));
+    let entry_gate = receipt
+        .get("entryGate")
+        .and_then(|value| value.as_str())
+        .map(|value| {
+            safe_axis_value(
+                value,
+                &[
+                    "planning_open_implementation_blocked",
+                    "closed_source_failure",
+                    "closed_live_evidence_required",
+                ],
+            )
+        });
     let stop_reason = receipt
         .get("stopReason")
         .and_then(|value| value.as_str())
@@ -292,21 +323,102 @@ fn format_desktop_interact_text(data: &serde_json::Value) -> Option<String> {
         .and_then(|value| value.as_u64())
         .map(|value| value.to_string())
         .unwrap_or_else(|| "unknown".to_string());
+    let operation_identity = receipt
+        .get("operationId")
+        .and_then(|value| value.as_str())
+        .map(|_| "recorded");
+    let effect_key_count = receipt
+        .get("effectKeyCount")
+        .and_then(|value| value.as_u64());
+    let prompt_disposition = receipt
+        .get("promptDisposition")
+        .and_then(|value| value.as_object());
+    let handoff = receipt
+        .get("humanHandoff")
+        .and_then(|value| value.as_object())
+        .and_then(|handoff| {
+            let state = safe_axis_value(handoff.get("state")?.as_str()?, &["ready"]);
+            let id = handoff.get("handoffId").and_then(|value| value.as_str());
+            Some(match id {
+                Some(id) => format!("Handoff: {state} ({id})"),
+                None => format!("Handoff: {state}"),
+            })
+        });
 
-    Some(
-        [
-            "Desktop interaction receipt".to_string(),
-            format!("Transaction: {transaction_id}"),
-            format!("Recipe: {recipe_id}"),
-            format!("Controller epoch: {controller_epoch}"),
-            format!("Acknowledged events: {event_count}"),
-            format!("Effect state: {effect_state}"),
-            format!("Verification: {verification_state}"),
-            format!("Stop reason: {stop_reason}"),
-            "Use --json for the structured redacted receipt. Frame pixels, plaintext input, and full motion paths are never included.".to_string(),
-        ]
-        .join("\n"),
-    )
+    let mut lines = vec![
+        "Desktop interaction receipt".to_string(),
+        format!("Transaction: {transaction_id}"),
+        format!("Recipe: {recipe_id}"),
+        format!("Controller epoch: {controller_epoch}"),
+        format!("Acknowledged events: {event_count}"),
+        format!("Effect state: {effect_state}"),
+        format!("Verification: {verification_state}"),
+        format!("Stop reason: {stop_reason}"),
+    ];
+    if let Some(operation_identity) = operation_identity {
+        lines.push(format!("Operation identity: {operation_identity}"));
+    }
+    if let Some(effect_key_count) = effect_key_count {
+        lines.push(format!("Effect keys: {effect_key_count}"));
+    }
+    if let Some(replay_state) = replay_state {
+        lines.push(format!("Replay: {replay_state}"));
+    }
+    if let Some(cleanup_state) = cleanup_state {
+        lines.push(format!("Cleanup: {cleanup_state}"));
+    }
+    if let Some(entry_gate) = entry_gate {
+        lines.push(format!("Entry gate: {entry_gate}"));
+    }
+    if let Some(prompt_disposition) = prompt_disposition {
+        if let Some(state) = prompt_disposition
+            .get("state")
+            .and_then(|value| value.as_str())
+        {
+            let state = safe_axis_value(
+                state,
+                &["actionable_observation", "operator_intervention_required"],
+            );
+            lines.push(format!("Prompt disposition: {state}"));
+        }
+        if let Some(reason) = prompt_disposition
+            .get("reasonCode")
+            .and_then(|value| value.as_str())
+        {
+            let reason = safe_axis_value(
+                reason,
+                &[
+                    "synthetic_prompt_actionable",
+                    "synthetic_prompt_requires_operator_review",
+                ],
+            );
+            lines.push(format!("Prompt reason: {reason}"));
+        }
+    }
+    if let Some(handoff) = handoff {
+        lines.push(handoff);
+    }
+    lines.push("Use --json for the structured redacted receipt. Frame pixels, plaintext input, full motion paths, operation identifiers, hashes, and route URLs are never printed in text mode.".to_string());
+    Some(lines.join("\n"))
+}
+
+fn safe_axis_value<'a>(value: &'a str, allowed: &[&str]) -> &'a str {
+    if allowed.contains(&value) {
+        value
+    } else {
+        "unrecognized"
+    }
+}
+
+fn safe_receipt_axis<'a>(
+    receipt: &'a serde_json::Map<String, serde_json::Value>,
+    field: &str,
+    allowed: &[&str],
+) -> Option<&'a str> {
+    receipt
+        .get(field)
+        .and_then(|value| value.as_str())
+        .map(|value| safe_axis_value(value, allowed))
 }
 
 fn format_service_events_text(data: &serde_json::Value) -> Option<String> {
@@ -5444,7 +5556,7 @@ Usage:
   agent-browser desktop capture --browser-id <id> [--max-bytes <bytes>]
   agent-browser desktop locate --browser-id <id> --locator-id <id> [--max-candidates <count>] [--include-visualization]
   agent-browser desktop prompt observe --browser-id <id> --prompt-profile-id p110-external-prompt-v1 [--include-visualization]
-  agent-browser desktop interact --browser-id <id> --controller-lease-id <id> --recipe-id p110-pointer-keyboard-v1 --service-name <name> --agent-name <name> --task-name <name>
+  agent-browser desktop interact --browser-id <id> --controller-lease-id <id> --operation-id <id> --recipe-id <p110-pointer-keyboard-v1|p110-foundation-stress-v1> --service-name <name> --agent-name <name> --task-name <name>
 
 `desktop capture` asks the service worker to resolve one retained browser to
 its exact ready stream, route, and display allocation. It captures one PNG of
@@ -5483,14 +5595,19 @@ effects. Fixture results and source presence do not prove installed behavior or
 detection of a real browser, extension popup, native dialog, credential
 manager, passkey prompt, CAPTCHA, or challenge.
 
-`desktop interact` is the PoC 3 atomic observe, locate, act, and verify
-contract. It accepts only a pre-existing controller lease and the registered
-`p110-pointer-keyboard-v1` synthetic recipe. It cannot request or take over
+`desktop interact` is the source-only atomic observe, locate, act, and verify
+contract. It accepts only a pre-existing controller lease, a caller-generated
+opaque operation ID, and either registered synthetic recipe. It cannot request or take over
 control and accepts no coordinates, event plan, arbitrary key, plaintext, or
-provider selection. PoC 3 configures no production input provider, so ordinary
+provider selection. P110 configures no production input provider, so ordinary
 runtime calls fail closed with `desktop_input_provider_unavailable` before
 capture or input. The complete transaction is source-proven only through an
 in-memory synthetic fixture provider.
+
+The stress receipt covers source-only replay, cleanup, verification,
+prompt-intervention, and opaque-handoff projections. Its successful entry gate
+is `planning_open_implementation_blocked`: planning may begin, but implementation
+and live-capability claims remain blocked pending separately authorized proof.
 
 Options:
   --browser-id <id>       Select one retained service-owned browser
@@ -5502,7 +5619,8 @@ Options:
                           Select p110-external-prompt-v1 for synthetic fixture proof
   --controller-lease-id <id>
                           Require the exact current controller lease
-  --recipe-id <id>        Select the registered synthetic interaction recipe
+  --operation-id <id>     Supply the opaque idempotency identity for this operation
+  --recipe-id <id>        Select p110-pointer-keyboard-v1 or p110-foundation-stress-v1
   --service-name <name>   Prompt-observation or interaction service attribution
   --agent-name <name>     Prompt-observation or interaction agent attribution
   --task-name <name>      Prompt-observation or interaction task attribution
@@ -5519,7 +5637,7 @@ Examples:
   agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1 --include-visualization --json
   agent-browser --session fixture-daemon desktop prompt observe --browser-id browser-123 --session-name fixture-browser --prompt-profile-id p110-external-prompt-v1 --service-name DesktopPerception --agent-name fixture-agent --task-name observe-fixture
   agent-browser desktop prompt observe --browser-id browser-123 --prompt-profile-id p110-external-prompt-v1 --include-visualization --json
-  agent-browser desktop interact --browser-id browser-123 --controller-lease-id viewer-7 --recipe-id p110-pointer-keyboard-v1 --service-name DesktopInteractor --agent-name fixture-agent --task-name verify-synthetic-control --json
+  agent-browser desktop interact --browser-id browser-123 --controller-lease-id viewer-7 --operation-id operation-7 --recipe-id p110-foundation-stress-v1 --service-name DesktopInteractor --agent-name fixture-agent --task-name stress-synthetic-control --json
 "##
         }
 
@@ -6529,7 +6647,7 @@ Desktop observation:
                              Locate deterministic candidates without input
   desktop prompt observe --browser-id <id> --prompt-profile-id p110-external-prompt-v1
                              Observe the source-only synthetic external-prompt fixture
-  desktop interact --browser-id <id> --controller-lease-id <id> --recipe-id <id> --service-name <name> --agent-name <name> --task-name <name>
+  desktop interact --browser-id <id> --controller-lease-id <id> --operation-id <id> --recipe-id <id> --service-name <name> --agent-name <name> --task-name <name>
                              Run one guarded synthetic recipe; production input is unavailable
 
 Service:
@@ -7163,8 +7281,25 @@ mod tests {
             "action": "desktop_interact",
             "interactionReceipt": {
                 "transactionId": "interaction-request-7",
+                "operationId": "operation-secret-7",
+                "operationRequestSha256": "request-hash-secret",
                 "recipeId": "p110-pointer-keyboard-v1",
                 "effectState": "verified_success",
+                "replayState": "original",
+                "cleanupState": "complete",
+                "entryGate": "planning_open_implementation_blocked",
+                "effectKeyCount": 2,
+                "promptDisposition": {
+                    "state": "not_present",
+                    "reasonCode": "fixture_clear",
+                    "observationSha256": "prompt-hash-secret"
+                },
+                "humanHandoff": {
+                    "state": "ready",
+                    "reason": "uncertain_effect",
+                    "handoffId": "handoff-opaque-7",
+                    "handoffUrl": "https://provider.invalid/raw-route"
+                },
                 "stopReason": "completed",
                 "controllerEpoch": 4,
                 "acknowledgementIds": ["ack-1", "ack-2"],
@@ -7179,7 +7314,16 @@ mod tests {
         assert!(rendered.contains("Controller epoch: 4"));
         assert!(rendered.contains("Acknowledged events: 2"));
         assert!(rendered.contains("Effect state: verified_success"));
+        assert!(rendered.contains("Operation identity: recorded"));
+        assert!(rendered.contains("Replay: original"));
+        assert!(rendered.contains("Cleanup: complete"));
         assert!(rendered.contains("Verification: passed"));
+        assert!(rendered.contains("Entry gate: planning_open_implementation_blocked"));
+        assert!(rendered.contains("Handoff: ready (handoff-opaque-7)"));
+        assert!(!rendered.contains("operation-secret-7"));
+        assert!(!rendered.contains("request-hash-secret"));
+        assert!(!rendered.contains("prompt-hash-secret"));
+        assert!(!rendered.contains("provider.invalid"));
         assert!(!rendered.contains("must-not-render"));
         assert!(!rendered.contains("[1,2]"));
     }

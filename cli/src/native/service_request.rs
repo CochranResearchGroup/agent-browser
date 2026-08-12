@@ -324,6 +324,7 @@ const SERVICE_REQUEST_FIELDS: &[ServiceRequestFieldSpec] = &[
     ),
     ServiceRequestFieldSpec::field("promptProfileId", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field("controllerLeaseId", FieldKind::String, true, true, false),
+    ServiceRequestFieldSpec::field("operationId", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field("recipe", FieldKind::Object, true, true, false),
     ServiceRequestFieldSpec::field(
         "allowDuplicateProfileLane",
@@ -1082,6 +1083,7 @@ fn reject_desktop_interact_request(
         "browserId",
         "sessionName",
         "controllerLeaseId",
+        "operationId",
         "recipe",
         "serviceName",
         "agentName",
@@ -1100,6 +1102,7 @@ fn reject_desktop_interact_request(
     for field in [
         "browserId",
         "controllerLeaseId",
+        "operationId",
         "serviceName",
         "agentName",
         "taskName",
@@ -1144,10 +1147,13 @@ fn reject_desktop_interact_request(
             format!("desktop_interact recipe does not accept {field}"),
         ));
     }
-    if recipe.get("recipeId").and_then(Value::as_str) != Some("p110-pointer-keyboard-v1") {
+    if !matches!(
+        recipe.get("recipeId").and_then(Value::as_str),
+        Some("p110-pointer-keyboard-v1" | "p110-foundation-stress-v1")
+    ) {
         return Err(issue(
             ServiceRequestIssueKind::InvalidBoundedRecipe,
-            "desktop_interact requires recipeId p110-pointer-keyboard-v1",
+            "desktop_interact requires a supported recipeId",
         ));
     }
     Ok(())
@@ -1750,7 +1756,10 @@ mod tests {
 
         assert_eq!(canonical_names.len(), 64);
         assert_eq!(canonical_names, spec_names);
-        assert_eq!(role_contract["canonicalPropertyCount"], 64);
+        assert_eq!(
+            role_contract["canonicalPropertyCount"].as_u64(),
+            Some(SERVICE_REQUEST_FIELDS.len() as u64)
+        );
         assert_eq!(role_contract["transportLegacy"], json!(["args"]));
         assert!(!properties.contains_key("args"));
 
@@ -2089,6 +2098,7 @@ mod tests {
             "browserId": "browser-1",
             "sessionName": "rdp-1",
             "controllerLeaseId": "lease-1",
+            "operationId": "operation-1",
             "recipe": { "recipeId": "p110-pointer-keyboard-v1" },
             "serviceName": "DesktopInteractor",
             "agentName": "fixture-agent",
@@ -2097,22 +2107,23 @@ mod tests {
         .unwrap();
         assert_eq!(normalized.command["action"], "desktop_interact");
         assert_eq!(normalized.command["controllerLeaseId"], "lease-1");
+        assert_eq!(normalized.command["operationId"], "operation-1");
 
         for (request, expected_message) in [
             (
-                json!({"action":"desktop_interact","browserId":"browser-1","controllerLeaseId":"lease-1","recipe":{"recipeId":"p110-pointer-keyboard-v1"},"serviceName":"DesktopInteractor","agentName":"fixture-agent"}),
+                json!({"action":"desktop_interact","browserId":"browser-1","controllerLeaseId":"lease-1","operationId":"operation-1","recipe":{"recipeId":"p110-pointer-keyboard-v1"},"serviceName":"DesktopInteractor","agentName":"fixture-agent"}),
                 "desktop_interact requires taskName",
             ),
             (
-                json!({"action":"desktop_interact","browserId":"browser-1","controllerLeaseId":"lease-1","recipe":{"recipeId":"wrong"},"serviceName":"DesktopInteractor","agentName":"fixture-agent","taskName":"verify"}),
-                "desktop_interact requires recipeId p110-pointer-keyboard-v1",
+                json!({"action":"desktop_interact","browserId":"browser-1","controllerLeaseId":"lease-1","operationId":"operation-1","recipe":{"recipeId":"wrong"},"serviceName":"DesktopInteractor","agentName":"fixture-agent","taskName":"verify"}),
+                "desktop_interact requires a supported recipeId",
             ),
             (
-                json!({"action":"desktop_interact","browserId":"browser-1","controllerLeaseId":"lease-1","recipe":{"recipeId":"p110-pointer-keyboard-v1"},"serviceName":"DesktopInteractor","agentName":"fixture-agent","taskName":"verify","params":{}}),
+                json!({"action":"desktop_interact","browserId":"browser-1","controllerLeaseId":"lease-1","operationId":"operation-1","recipe":{"recipeId":"p110-pointer-keyboard-v1"},"serviceName":"DesktopInteractor","agentName":"fixture-agent","taskName":"verify","params":{}}),
                 "desktop_interact does not accept params",
             ),
             (
-                json!({"action":"desktop_interact","browserId":"browser-1","controllerLeaseId":"lease-1","recipe":{"recipeId":"p110-pointer-keyboard-v1","text":"secret"},"serviceName":"DesktopInteractor","agentName":"fixture-agent","taskName":"verify"}),
+                json!({"action":"desktop_interact","browserId":"browser-1","controllerLeaseId":"lease-1","operationId":"operation-1","recipe":{"recipeId":"p110-pointer-keyboard-v1","text":"secret"},"serviceName":"DesktopInteractor","agentName":"fixture-agent","taskName":"verify"}),
                 "desktop_interact recipe does not accept text",
             ),
         ] {
@@ -2603,6 +2614,17 @@ mod tests {
             valid_request_for_action("evaluate"),
             valid_request_for_action("file_transfer"),
             json!({
+                "action": "desktop_interact",
+                "browserId": "browser-rdp-1",
+                "sessionName": "rdp-1",
+                "controllerLeaseId": "lease-1",
+                "operationId": "operation-stress-1",
+                "recipe": { "recipeId": "p110-foundation-stress-v1" },
+                "serviceName": "DesktopInteractor",
+                "agentName": "fixture-agent",
+                "taskName": "stress-synthetic-foundation"
+            }),
+            json!({
                 "action": "desktop_prompt_observe",
                 "browserId": "browser-rdp-1",
                 "sessionName": "rdp-1",
@@ -2626,6 +2648,7 @@ mod tests {
             json!({"action":"tab_new","blockedByManualAction":true,"manualSeedingRequired":true}),
             json!({"action":"evaluate","script":"document.title","timeoutMs":1000,"maxReturnBytes":128}),
             json!({"action":"network_capture","serviceTabHandle":test_tab_handle(true),"networkCapture":{"maxEvents":1}}),
+            json!({"action":"desktop_interact","browserId":"browser-rdp-1","controllerLeaseId":"lease-1","recipe":{"recipeId":"p110-foundation-stress-v1"},"serviceName":"DesktopInteractor","agentName":"fixture-agent","taskName":"stress"}),
             json!({"action":"desktop_prompt_observe","browserId":"browser-rdp-1","promptProfileId":"p110-external-prompt-v1","serviceName":"DesktopPromptObserver","agentName":"fixture-agent","taskName":"observe","params":{}}),
             json!({"action":"desktop_prompt_observe","browserId":"browser-rdp-1","promptProfileId":"wrong","serviceName":"DesktopPromptObserver","agentName":"fixture-agent","taskName":"observe"}),
         ];

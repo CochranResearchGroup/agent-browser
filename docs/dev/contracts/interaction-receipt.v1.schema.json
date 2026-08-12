@@ -7,7 +7,10 @@
   "required": [
     "schemaVersion",
     "transactionId",
-    "recipeId", "recipeVersion", "recipeSha256", "browserId",
+    "recipeId", "recipeVersion", "recipeSha256", "operationId",
+    "operationRequestSha256", "recipeProviderId", "recipeProviderVersion",
+    "replayState", "promptDisposition", "humanHandoff", "entryGate", "effectKeyDigest",
+    "effectKeyCount", "browserId",
     "displayAllocationId", "streamId", "routeId", "controllerEpoch",
     "authorityDigest", "actorDigest", "beforeContextId", "beforeFrameId",
     "beforeFrameSha256", "beforeObservationId", "beforeObservationSha256",
@@ -22,7 +25,7 @@
   "properties": {
     "schemaVersion": { "const": "v1" },
     "transactionId": { "type": "string", "minLength": 1 },
-    "recipeId": { "const": "p110-pointer-keyboard-v1" },
+    "recipeId": { "enum": ["p110-pointer-keyboard-v1", "p110-foundation-stress-v1"] },
     "recipeVersion": { "type": "string", "minLength": 1 },
     "recipeSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "browserId": { "type": "string", "minLength": 1 },
@@ -63,7 +66,29 @@
     "verificationState": { "type": "string", "minLength": 1 },
     "retention": { "const": "ephemeral" },
     "stopReason": { "type": ["string", "null"] },
-    "persistedPixels": { "const": false }
+    "persistedPixels": { "const": false },
+    "operationId": { "type": "string", "minLength": 1 },
+    "operationRequestSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "recipeProviderId": { "type": "string", "minLength": 1 },
+    "recipeProviderVersion": { "type": "string", "minLength": 1 },
+    "replayState": { "enum": ["first_execution", "replayed_terminal"] },
+    "promptDisposition": {
+      "oneOf": [
+        { "$ref": "#/$defs/promptDisposition" },
+        { "type": "null" }
+      ]
+    },
+    "humanHandoff": {
+      "oneOf": [
+        { "$ref": "#/$defs/humanHandoff" },
+        { "type": "null" }
+      ]
+    },
+    "entryGate": {
+      "enum": ["planning_open_implementation_blocked", "closed_source_failure", "closed_live_evidence_required"]
+    },
+    "effectKeyDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "effectKeyCount": { "type": "integer", "minimum": 0 }
   },
   "$defs": {
     "point": {
@@ -72,6 +97,27 @@
       "properties": {
         "x": { "type": "integer", "minimum": 0 },
         "y": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "promptDisposition": {
+      "type": "object",
+      "required": ["state", "reasonCode", "observationSha256"],
+      "properties": {
+        "state": { "type": "string", "minLength": 1 },
+        "reasonCode": { "type": "string", "minLength": 1 },
+        "observationSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      },
+      "additionalProperties": false
+    },
+    "humanHandoff": {
+      "type": "object",
+      "required": ["state", "reason", "handoffId", "handoffUrl"],
+      "properties": {
+        "state": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1 },
+        "handoffId": { "type": "string", "minLength": 1 },
+        "handoffUrl": { "type": "string", "minLength": 1 }
       },
       "additionalProperties": false
     }

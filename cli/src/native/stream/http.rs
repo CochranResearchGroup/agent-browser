@@ -4834,14 +4834,14 @@ mod tests {
 
     #[test]
     fn desktop_interact_browser_identity_does_not_select_a_daemon_lane() {
-        let body = r##"{"action":"desktop_interact","browserId":"browser-rdp-1","controllerLeaseId":"lease-1","recipe":{"recipeId":"p110-pointer-keyboard-v1"},"serviceName":"DesktopInteractor","agentName":"fixture-agent","taskName":"verify"}"##;
+        let body = r##"{"action":"desktop_interact","browserId":"browser-rdp-1","controllerLeaseId":"lease-1","operationId":"operation-1","recipe":{"recipeId":"p110-foundation-stress-v1"},"serviceName":"DesktopInteractor","agentName":"fixture-agent","taskName":"verify"}"##;
         let command: Value = serde_json::from_str(body).unwrap();
         assert_eq!(
             service_request_relay_session("default", body, &command),
             "default"
         );
 
-        let narrowed = r##"{"action":"desktop_interact","browserId":"browser-rdp-1","sessionName":"rdp-session","controllerLeaseId":"lease-1","recipe":{"recipeId":"p110-pointer-keyboard-v1"},"serviceName":"DesktopInteractor","agentName":"fixture-agent","taskName":"verify"}"##;
+        let narrowed = r##"{"action":"desktop_interact","browserId":"browser-rdp-1","sessionName":"rdp-session","controllerLeaseId":"lease-1","operationId":"operation-2","recipe":{"recipeId":"p110-foundation-stress-v1"},"serviceName":"DesktopInteractor","agentName":"fixture-agent","taskName":"verify"}"##;
         let command: Value = serde_json::from_str(narrowed).unwrap();
         assert_eq!(
             service_request_relay_session("default", narrowed, &command),

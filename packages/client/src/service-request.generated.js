@@ -140,6 +140,7 @@ export const SERVICE_REQUEST_STRING_FIELDS = [
   "format",
   "promptProfileId",
   "controllerLeaseId",
+  "operationId",
   "sessionName"
 ];
 
