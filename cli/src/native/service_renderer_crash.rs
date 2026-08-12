@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::future::Future;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 use super::cdp::types::CdpEvent;
@@ -81,6 +82,13 @@ pub(crate) struct RendererCrashPersistence {
     pub duplicate: bool,
 }
 
+/// Result of racing an in-flight browser action against the target-scoped CDP
+/// crash stream.
+pub(crate) enum RendererCrashRace<T> {
+    Action(T),
+    Crash(Box<RendererCrashObservation>),
+}
+
 /// Build the stable command envelope for a correlated renderer crash.
 pub(crate) fn renderer_crash_error_response(
     id: &str,
@@ -138,13 +146,10 @@ pub(crate) fn renderer_crash_targets_context(
     signal: &RendererCrashSignal,
     context: &RendererCrashCommandContext,
 ) -> bool {
-    match (&signal.target_id, &context.target_id) {
-        (Some(observed), Some(active)) => observed == active,
-        (Some(_), None) | (None, Some(_)) => false,
-        (None, None) => {
-            signal.page_session_id.is_some() && signal.page_session_id == context.page_session_id
-        }
+    if let (Some(observed), Some(active)) = (&signal.target_id, &context.target_id) {
+        return observed == active;
     }
+    signal.page_session_id.is_some() && signal.page_session_id == context.page_session_id
 }
 
 /// Wait for the exact renderer crash that owns `context` without consuming the
@@ -167,6 +172,28 @@ pub(crate) async fn wait_for_renderer_crash(
             Err(tokio::sync::broadcast::error::RecvError::Closed) => {
                 std::future::pending::<()>().await;
             }
+        }
+    }
+}
+
+/// Fail an in-flight action as soon as its exact renderer target reports a
+/// crash. Callers without an active CDP subscription retain ordinary action
+/// behavior.
+pub(crate) async fn race_action_with_renderer_crash<F, T>(
+    action: F,
+    receiver: Option<&mut tokio::sync::broadcast::Receiver<CdpEvent>>,
+    context: &RendererCrashCommandContext,
+) -> RendererCrashRace<T>
+where
+    F: Future<Output = T>,
+{
+    let Some(receiver) = receiver else {
+        return RendererCrashRace::Action(action.await);
+    };
+    tokio::select! {
+        result = action => RendererCrashRace::Action(result),
+        observation = wait_for_renderer_crash(receiver, context) => {
+            RendererCrashRace::Crash(Box::new(observation))
         }
     }
 }
@@ -364,6 +391,25 @@ mod tests {
     }
 
     #[test]
+    fn session_scoped_crash_without_target_id_correlates_to_the_active_page() {
+        let mut event = crash_event("Inspector.targetCrashed");
+        event
+            .params
+            .as_object_mut()
+            .expect("crash params")
+            .remove("targetId");
+        let signal = RendererCrashSignal::from_cdp_event(&event).expect("crash signal");
+
+        let observation = correlate_renderer_crash(signal, &context())
+            .expect("matching page session should correlate without a target id");
+        assert_eq!(observation.signal.target_id, None);
+        assert_eq!(
+            observation.signal.page_session_id.as_deref(),
+            Some("page-session-a")
+        );
+    }
+
+    #[test]
     fn crash_projection_is_atomic_deduplicated_and_tab_scoped() {
         let root = std::env::temp_dir().join(format!(
             "agent-browser-renderer-crash-{}",
@@ -506,5 +552,42 @@ mod tests {
         let observation = wait_for_renderer_crash(&mut rx, &context()).await;
         assert_eq!(observation.signal.target_id.as_deref(), Some("target-a"));
         assert_eq!(observation.command.request_id, "request-1");
+    }
+
+    #[tokio::test]
+    async fn in_flight_action_loses_race_to_matching_renderer_crash() {
+        let (tx, mut rx) = broadcast::channel(8);
+        tokio::spawn(async move {
+            tokio::task::yield_now().await;
+            tx.send(crash_event("Inspector.targetCrashed"))
+                .expect("matching crash event");
+        });
+
+        let outcome = race_action_with_renderer_crash(
+            async {
+                tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                "action completed"
+            },
+            Some(&mut rx),
+            &context(),
+        )
+        .await;
+
+        let RendererCrashRace::Crash(observation) = outcome else {
+            panic!("matching renderer crash did not interrupt the in-flight action");
+        };
+        assert_eq!(observation.signal.target_id.as_deref(), Some("target-a"));
+        assert_eq!(observation.command.request_id, "request-1");
+    }
+
+    #[tokio::test]
+    async fn action_completes_normally_without_a_crash_subscription() {
+        let outcome =
+            race_action_with_renderer_crash(async { "action completed" }, None, &context()).await;
+
+        let RendererCrashRace::Action(result) = outcome else {
+            panic!("action without a CDP subscription was misclassified as a crash");
+        };
+        assert_eq!(result, "action completed");
     }
 }

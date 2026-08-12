@@ -157,7 +157,10 @@ use super::service_monitors::{
 };
 use super::service_network_capture::handle_service_network_capture;
 use super::service_probe::handle_service_probe;
-use super::service_renderer_crash::renderer_crash_error_response;
+use super::service_renderer_crash::{
+    persist_renderer_crash_in_repository, race_action_with_renderer_crash,
+    renderer_crash_error_response, RendererCrashRace,
+};
 use super::service_resources::{
     handle_service_access_plan, handle_service_gc, handle_service_resources,
     handle_service_resources_monitor_summary, handle_service_resources_write_monitor_summary,
@@ -166,6 +169,7 @@ use super::service_retained_state::{
     handle_service_prune_retained, handle_service_repair_retained, handle_service_route_pool_repair,
 };
 use super::service_status_projection::handle_service_status;
+use super::service_store::LockedServiceStateRepository;
 use super::service_trace::handle_service_trace;
 use super::service_ui_action::handle_service_ui_action;
 use super::state::{handle_state_load, handle_state_save};
@@ -184,6 +188,12 @@ use crate::native::service_health::BrowserRecoveryPersistence;
 use crate::native::state;
 use crate::native::webdriver::backend::WEBDRIVER_UNSUPPORTED_ACTIONS;
 use serde_json::{json, Value};
+
+macro_rules! race_renderer_crash {
+    ($action:expr, $receiver:expr, $context:expr $(,)?) => {
+        race_action_with_renderer_crash(async { $action }, $receiver, $context)
+    };
+}
 
 pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
     matches!(
@@ -566,289 +576,316 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
         );
     }
     let renderer_crash_context = state.renderer_crash_command_context(cmd);
+    let mut renderer_crash_rx = state
+        .browser
+        .as_ref()
+        .map(|browser| browser.client.subscribe());
     let command_preparation_ms = u64::try_from(cmd_start.elapsed().as_millis()).unwrap_or(u64::MAX);
     let action_started = std::time::Instant::now();
-    let result = match action {
-        "launch" => handle_launch(cmd, state).await,
-        "cdp_free_launch" => handle_cdp_free_launch(cmd, state).await,
-        "external_byop_adopt" => handle_external_byop_adopt(cmd, state).await,
-        "cdp_attach" => handle_cdp_attach(cmd, state).await,
-        "cdp_detach" => handle_cdp_detach(cmd, state).await,
-        "diagnostics" => handle_service_diagnostics(cmd, state).await,
-        "desktop_capture" => handle_desktop_capture(cmd).await,
-        "desktop_locate" => handle_desktop_locate(cmd).await,
-        "desktop_interact" => handle_desktop_interact(cmd).await,
-        "probe" => handle_service_probe(cmd, state).await,
-        "ui_action" => handle_service_ui_action(cmd, state).await,
-        "network_capture" => handle_service_network_capture(cmd, state).await,
-        "file_transfer" => handle_service_file_transfer(cmd, state).await,
-        "navigate" => handle_navigate(cmd, state).await,
-        "url" => handle_url(state).await,
-        "browser_pid" => handle_browser_pid(state),
-        "cdp_url" => handle_cdp_url(state),
-        "inspect" => handle_inspect(state).await,
-        "title" => handle_title(state).await,
-        "content" => handle_content(state).await,
-        "evaluate" => handle_evaluate(cmd, state).await,
-        "runtime_handoff_prepare" => handle_runtime_handoff_prepare(state).await,
-        "runtime_handoff_resume" => handle_runtime_handoff_resume(state).await,
-        "close" => handle_close(state).await,
-        "snapshot" => handle_snapshot(cmd, state).await,
-        "screenshot" => handle_screenshot(cmd, state).await,
-        "click" => handle_click(cmd, state).await,
-        "dblclick" => handle_dblclick(cmd, state).await,
-        "fill" => handle_fill(cmd, state).await,
-        "type" => handle_type(cmd, state).await,
-        "press" => handle_press(cmd, state).await,
-        "hover" => handle_hover(cmd, state).await,
-        "scroll" => handle_scroll(cmd, state).await,
-        "select" => handle_select(cmd, state).await,
-        "check" => handle_check(cmd, state).await,
-        "uncheck" => handle_uncheck(cmd, state).await,
-        "wait" => handle_wait(cmd, state).await,
-        "gettext" => handle_gettext(cmd, state).await,
-        "getattribute" => handle_getattribute(cmd, state).await,
-        "isvisible" => handle_isvisible(cmd, state).await,
-        "isenabled" => handle_isenabled(cmd, state).await,
-        "ischecked" => handle_ischecked(cmd, state).await,
-        "back" => handle_back(state).await,
-        "forward" => handle_forward(state).await,
-        "reload" => handle_reload(state).await,
-        "cookies_get" => handle_cookies_get(cmd, state).await,
-        "cookies_set" => handle_cookies_set(cmd, state).await,
-        "cookies_clear" => handle_cookies_clear(state).await,
-        "storage_get" => handle_storage_get(cmd, state).await,
-        "storage_set" => handle_storage_set(cmd, state).await,
-        "storage_clear" => handle_storage_clear(cmd, state).await,
-        "setcontent" => handle_setcontent(cmd, state).await,
-        "headers" => handle_headers(cmd, state).await,
-        "offline" => handle_offline(cmd, state).await,
-        "console" => handle_console(cmd, state).await,
-        "errors" => handle_errors(state).await,
-        "state_save" => handle_state_save(cmd, state).await,
-        "state_load" => handle_state_load(cmd, state).await,
-        "state_list" | "state_show" | "state_clear" | "state_clean" | "state_rename" => {
-            state::dispatch_state_command(cmd)
-                .expect("dispatch_state_command must handle all state_* actions matched here")
-        }
-        "trace_start" => handle_trace_start(state).await,
-        "trace_stop" => handle_trace_stop(cmd, state).await,
-        "profiler_start" => handle_profiler_start(cmd, state).await,
-        "profiler_stop" => handle_profiler_stop(cmd, state).await,
-        "recording_start" => handle_recording_start(cmd, state).await,
-        "recording_stop" => handle_recording_stop(state).await,
-        "recording_restart" => handle_recording_restart(cmd, state).await,
-        "pdf" => handle_pdf(cmd, state).await,
-        "tab_list" => handle_tab_list(cmd, state).await,
-        "tab_new" => handle_tab_new(cmd, state).await,
-        "tab_switch" => handle_tab_switch(cmd, state).await,
-        "tab_close" => handle_tab_close(cmd, state).await,
-        "tab_handle_refresh" => handle_tab_handle_refresh(cmd, state).await,
-        "tab_handle_release" => handle_tab_handle_release(cmd, state).await,
-        "view_focus" => handle_view_focus(cmd, state).await,
-        "view_takeover" => handle_view_takeover(cmd, state).await,
-        "remote_view_open" => {
-            let attribution = route_bound_open_attribution_from_authenticated_dispatch(cmd);
-            handle_remote_view_open(cmd, state, attribution).await
-        }
-        "service_remote_view_handoff_resolve" => {
-            let attribution = route_bound_open_attribution_from_authenticated_dispatch(cmd);
-            handle_service_remote_view_handoff_resolve(cmd, state, attribution).await
-        }
-        "service_remote_view_route_preflight" => {
-            handle_service_remote_view_route_preflight(cmd, state).await
-        }
-        "service_remote_view_browser_reattach" => {
-            handle_service_remote_view_browser_reattach(cmd, state, false).await
-        }
-        "service_remote_view_route_switch" => {
-            handle_service_remote_view_browser_reattach(cmd, state, true).await
-        }
-        "service_remote_view_route_checkout" => {
-            handle_service_remote_view_route_checkout(cmd, state).await
-        }
-        "service_remote_view_route_release" => {
-            handle_service_remote_view_route_release(cmd, state).await
-        }
-        "service_route_pool_repair" => handle_service_route_pool_repair(cmd).await,
-        "service_viewer_lease_request" => handle_service_viewer_lease_request(cmd, state).await,
-        "service_viewer_lease_heartbeat" => handle_service_viewer_lease_heartbeat(cmd, state).await,
-        "service_viewer_lease_release" => handle_service_viewer_lease_release(cmd, state).await,
-        "service_controller_lease_takeover" => {
-            handle_service_controller_lease_takeover(cmd, state).await
-        }
-        "viewport" => handle_viewport(cmd, state).await,
-        "useragent" | "user_agent" => handle_user_agent(cmd, state).await,
-        "set_media" => handle_set_media(cmd, state).await,
-        "download" => handle_download(cmd, state).await,
-        "diff_snapshot" => handle_diff_snapshot(cmd, state).await,
-        "diff_url" => handle_diff_url(cmd, state).await,
-        "credentials_set" => handle_credentials_set(cmd).await,
-        "credentials_get" => handle_credentials_get(cmd).await,
-        "credentials_delete" => handle_credentials_delete(cmd).await,
-        "credentials_list" => handle_credentials_list().await,
-        "mouse" => handle_mouse(cmd, state).await,
-        "keyboard" => handle_keyboard(cmd, state).await,
-        "focus" => handle_focus(cmd, state).await,
-        "clear" => handle_clear(cmd, state).await,
-        "selectall" => handle_selectall(cmd, state).await,
-        "scrollintoview" => handle_scrollintoview(cmd, state).await,
-        "dispatch" => handle_dispatch(cmd, state).await,
-        "highlight" => handle_highlight(cmd, state).await,
-        "tap" => handle_tap(cmd, state).await,
-        "boundingbox" => handle_boundingbox(cmd, state).await,
-        "innertext" => handle_innertext(cmd, state).await,
-        "innerhtml" => handle_innerhtml(cmd, state).await,
-        "inputvalue" => handle_inputvalue(cmd, state).await,
-        "setvalue" => handle_setvalue(cmd, state).await,
-        "count" => handle_count(cmd, state).await,
-        "styles" => handle_styles(cmd, state).await,
-        "bringtofront" => handle_bringtofront(state).await,
-        "timezone" => handle_timezone(cmd, state).await,
-        "locale" => handle_locale(cmd, state).await,
-        "geolocation" => handle_geolocation(cmd, state).await,
-        "permissions" => handle_permissions(cmd, state).await,
-        "dialog" => handle_dialog(cmd, state).await,
-        "upload" => handle_upload(cmd, state).await,
-        "addscript" => handle_addscript(cmd, state).await,
-        "addinitscript" => handle_addinitscript(cmd, state).await,
-        "addstyle" => handle_addstyle(cmd, state).await,
-        "clipboard" => handle_clipboard(cmd, state).await,
-        "wheel" => handle_wheel(cmd, state).await,
-        "device" => handle_device(cmd, state).await,
-        "screencast_start" => handle_screencast_start(cmd, state).await,
-        "screencast_stop" => handle_screencast_stop(state).await,
-        "stream_enable" => handle_stream_enable(cmd, state).await,
-        "stream_disable" => handle_stream_disable(state).await,
-        "stream_status" => handle_stream_status(state).await,
-        "service_status" => handle_service_status(cmd).await,
-        "service_reconcile" => handle_service_reconcile(cmd).await,
-        "service_browser_close" => handle_service_browser_close(cmd, state).await,
-        "service_browser_repair" => handle_service_browser_repair(cmd).await,
-        "service_resources" => handle_service_resources(cmd).await,
-        "service_resources_monitor_summary" => handle_service_resources_monitor_summary().await,
-        "service_resources_write_monitor_summary" => {
-            handle_service_resources_write_monitor_summary(cmd).await
-        }
-        "service_gc" => handle_service_gc(cmd).await,
-        "service_prune_retained" => handle_service_prune_retained(cmd).await,
-        "service_repair_retained" => handle_service_repair_retained(cmd).await,
-        "service_access_plan" => handle_service_access_plan(cmd).await,
-        "service_browser_capability_preflight" => {
-            handle_service_browser_capability_preflight(cmd).await
-        }
-        "service_browser_capability_preference_guide" => {
-            handle_service_browser_capability_preference_guide(cmd).await
-        }
-        "service_job_cancel" => handle_service_job_cancel(cmd).await,
-        "service_browser_retry" => handle_service_browser_retry(cmd).await,
-        "service_remedies_apply" => handle_service_remedies_apply(cmd).await,
-        "service_profile_upsert" => handle_service_profile_upsert(cmd).await,
-        "service_profile_freshness_update" => handle_service_profile_freshness_update(cmd).await,
-        "service_profile_seeding_handoff_update" => {
-            handle_service_profile_seeding_handoff_update(cmd).await
-        }
-        "service_profile_delete" => handle_service_profile_delete(cmd).await,
-        "service_session_upsert" => handle_service_session_upsert(cmd).await,
-        "service_session_delete" => handle_service_session_delete(cmd).await,
-        "service_site_policy_upsert" => handle_service_site_policy_upsert(cmd).await,
-        "service_site_policy_delete" => handle_service_site_policy_delete(cmd).await,
-        "service_monitor_upsert" => handle_service_monitor_upsert(cmd).await,
-        "service_monitor_delete" => handle_service_monitor_delete(cmd).await,
-        "service_monitor_pause" => {
-            handle_service_monitor_state_update(cmd, MonitorState::Paused).await
-        }
-        "service_monitor_reset_failures" => handle_service_monitor_reset_failures(cmd).await,
-        "service_monitor_resume" => {
-            handle_service_monitor_state_update(cmd, MonitorState::Active).await
-        }
-        "service_monitor_triage" => handle_service_monitor_triage(cmd).await,
-        "service_monitors_run_due" => handle_service_monitors_run_due(cmd).await,
-        "service_provider_upsert" => handle_service_provider_upsert(cmd).await,
-        "service_provider_delete" => handle_service_provider_delete(cmd).await,
-        "service_browser_capability_registry_upsert" => {
-            handle_service_browser_capability_registry_upsert(cmd).await
-        }
-        "service_incident_acknowledge" => handle_service_incident_acknowledge(cmd).await,
-        "service_incident_resolve" => handle_service_incident_resolve(cmd).await,
-        "service_incident_activity" => handle_service_incident_activity(cmd).await,
-        "service_trace" => handle_service_trace(cmd).await,
-        "service_profiles" => handle_service_profiles(cmd).await,
-        "service_profile_lookup" => handle_service_profile_lookup(cmd).await,
-        "service_profile_seeding_handoff" => handle_service_profile_seeding_handoff(cmd).await,
-        "service_sessions" => handle_service_sessions(cmd).await,
-        "service_browsers" => handle_service_browsers(cmd).await,
-        "service_tabs" => handle_service_tabs(cmd).await,
-        "service_monitors" => handle_service_monitors(cmd).await,
-        "service_site_policies" => handle_service_site_policies(cmd).await,
-        "service_providers" => handle_service_providers(cmd).await,
-        "service_challenges" => handle_service_challenges(cmd).await,
-        "service_jobs" => handle_service_jobs(cmd).await,
-        "service_incidents" => handle_service_incidents(cmd).await,
-        "service_events" => handle_service_events(cmd).await,
-        "waitforurl" => handle_waitforurl(cmd, state).await,
-        "waitforloadstate" => handle_waitforloadstate(cmd, state).await,
-        "waitforfunction" => handle_waitforfunction(cmd, state).await,
-        "frame" => handle_frame(cmd, state).await,
-        "mainframe" => handle_mainframe(state).await,
-        "getbyrole" => handle_getbyrole(cmd, state).await,
-        "getbytext" => handle_getbytext(cmd, state).await,
-        "getbylabel" => handle_getbylabel(cmd, state).await,
-        "getbyplaceholder" => handle_getbyplaceholder(cmd, state).await,
-        "getbyalttext" => handle_getbyalttext(cmd, state).await,
-        "getbytitle" => handle_getbytitle(cmd, state).await,
-        "getbytestid" => handle_getbytestid(cmd, state).await,
-        "nth" => handle_nth(cmd, state).await,
-        "find" => handle_find(cmd, state).await,
-        "evalhandle" => handle_evalhandle(cmd, state).await,
-        "drag" => handle_drag(cmd, state).await,
-        "expose" => handle_expose(cmd, state).await,
-        "pause" => handle_pause(state).await,
-        "multiselect" => handle_multiselect(cmd, state).await,
-        "responsebody" => handle_responsebody(cmd, state).await,
-        "waitfordownload" => handle_waitfordownload(cmd, state).await,
-        "window_new" => handle_window_new(cmd, state).await,
-        "diff_screenshot" => handle_diff_screenshot(cmd, state).await,
-        "video_start" => handle_video_start(cmd, state).await,
-        "video_stop" => handle_video_stop(state).await,
-        "har_start" => handle_har_start(state).await,
-        "har_stop" => handle_har_stop(cmd, state).await,
-        "route" => handle_route(cmd, state).await,
-        "unroute" => handle_unroute(cmd, state).await,
-        "requests" => handle_requests(cmd, state).await,
-        "request_detail" => handle_request_detail(cmd, state).await,
-        "credentials" => handle_http_credentials(cmd, state).await,
-        "emulatemedia" => handle_set_media(cmd, state).await,
-        "auth_save" => handle_auth_save(cmd).await,
-        "auth_login" => handle_auth_login(cmd, state).await,
-        "auth_list" => handle_credentials_list().await,
-        "auth_delete" => handle_credentials_delete(cmd).await,
-        "auth_show" => handle_auth_show(cmd).await,
-        "confirm" => match begin_confirmation(state) {
-            Ok(confirmation) => {
-                let command = confirmation.command().clone();
-                let result = Box::pin(execute_command(&command, state)).await;
-                Ok(confirmation.complete(state, result))
+    let action_race = race_renderer_crash!(
+        match action {
+            "launch" => handle_launch(cmd, state).await,
+            "cdp_free_launch" => handle_cdp_free_launch(cmd, state).await,
+            "external_byop_adopt" => handle_external_byop_adopt(cmd, state).await,
+            "cdp_attach" => handle_cdp_attach(cmd, state).await,
+            "cdp_detach" => handle_cdp_detach(cmd, state).await,
+            "diagnostics" => handle_service_diagnostics(cmd, state).await,
+            "desktop_capture" => handle_desktop_capture(cmd).await,
+            "desktop_locate" => handle_desktop_locate(cmd).await,
+            "desktop_interact" => handle_desktop_interact(cmd).await,
+            "probe" => handle_service_probe(cmd, state).await,
+            "ui_action" => handle_service_ui_action(cmd, state).await,
+            "network_capture" => handle_service_network_capture(cmd, state).await,
+            "file_transfer" => handle_service_file_transfer(cmd, state).await,
+            "navigate" => handle_navigate(cmd, state).await,
+            "url" => handle_url(state).await,
+            "browser_pid" => handle_browser_pid(state),
+            "cdp_url" => handle_cdp_url(state),
+            "inspect" => handle_inspect(state).await,
+            "title" => handle_title(state).await,
+            "content" => handle_content(state).await,
+            "evaluate" => handle_evaluate(cmd, state).await,
+            "runtime_handoff_prepare" => handle_runtime_handoff_prepare(state).await,
+            "runtime_handoff_resume" => handle_runtime_handoff_resume(state).await,
+            "close" => handle_close(state).await,
+            "snapshot" => handle_snapshot(cmd, state).await,
+            "screenshot" => handle_screenshot(cmd, state).await,
+            "click" => handle_click(cmd, state).await,
+            "dblclick" => handle_dblclick(cmd, state).await,
+            "fill" => handle_fill(cmd, state).await,
+            "type" => handle_type(cmd, state).await,
+            "press" => handle_press(cmd, state).await,
+            "hover" => handle_hover(cmd, state).await,
+            "scroll" => handle_scroll(cmd, state).await,
+            "select" => handle_select(cmd, state).await,
+            "check" => handle_check(cmd, state).await,
+            "uncheck" => handle_uncheck(cmd, state).await,
+            "wait" => handle_wait(cmd, state).await,
+            "gettext" => handle_gettext(cmd, state).await,
+            "getattribute" => handle_getattribute(cmd, state).await,
+            "isvisible" => handle_isvisible(cmd, state).await,
+            "isenabled" => handle_isenabled(cmd, state).await,
+            "ischecked" => handle_ischecked(cmd, state).await,
+            "back" => handle_back(state).await,
+            "forward" => handle_forward(state).await,
+            "reload" => handle_reload(state).await,
+            "cookies_get" => handle_cookies_get(cmd, state).await,
+            "cookies_set" => handle_cookies_set(cmd, state).await,
+            "cookies_clear" => handle_cookies_clear(state).await,
+            "storage_get" => handle_storage_get(cmd, state).await,
+            "storage_set" => handle_storage_set(cmd, state).await,
+            "storage_clear" => handle_storage_clear(cmd, state).await,
+            "setcontent" => handle_setcontent(cmd, state).await,
+            "headers" => handle_headers(cmd, state).await,
+            "offline" => handle_offline(cmd, state).await,
+            "console" => handle_console(cmd, state).await,
+            "errors" => handle_errors(state).await,
+            "state_save" => handle_state_save(cmd, state).await,
+            "state_load" => handle_state_load(cmd, state).await,
+            "state_list" | "state_show" | "state_clear" | "state_clean" | "state_rename" => {
+                state::dispatch_state_command(cmd)
+                    .expect("dispatch_state_command must handle all state_* actions matched here")
             }
-            Err(error) => Err(error),
+            "trace_start" => handle_trace_start(state).await,
+            "trace_stop" => handle_trace_stop(cmd, state).await,
+            "profiler_start" => handle_profiler_start(cmd, state).await,
+            "profiler_stop" => handle_profiler_stop(cmd, state).await,
+            "recording_start" => handle_recording_start(cmd, state).await,
+            "recording_stop" => handle_recording_stop(state).await,
+            "recording_restart" => handle_recording_restart(cmd, state).await,
+            "pdf" => handle_pdf(cmd, state).await,
+            "tab_list" => handle_tab_list(cmd, state).await,
+            "tab_new" => handle_tab_new(cmd, state).await,
+            "tab_switch" => handle_tab_switch(cmd, state).await,
+            "tab_close" => handle_tab_close(cmd, state).await,
+            "tab_handle_refresh" => handle_tab_handle_refresh(cmd, state).await,
+            "tab_handle_release" => handle_tab_handle_release(cmd, state).await,
+            "view_focus" => handle_view_focus(cmd, state).await,
+            "view_takeover" => handle_view_takeover(cmd, state).await,
+            "remote_view_open" => {
+                let attribution = route_bound_open_attribution_from_authenticated_dispatch(cmd);
+                handle_remote_view_open(cmd, state, attribution).await
+            }
+            "service_remote_view_handoff_resolve" => {
+                let attribution = route_bound_open_attribution_from_authenticated_dispatch(cmd);
+                handle_service_remote_view_handoff_resolve(cmd, state, attribution).await
+            }
+            "service_remote_view_route_preflight" => {
+                handle_service_remote_view_route_preflight(cmd, state).await
+            }
+            "service_remote_view_browser_reattach" => {
+                handle_service_remote_view_browser_reattach(cmd, state, false).await
+            }
+            "service_remote_view_route_switch" => {
+                handle_service_remote_view_browser_reattach(cmd, state, true).await
+            }
+            "service_remote_view_route_checkout" => {
+                handle_service_remote_view_route_checkout(cmd, state).await
+            }
+            "service_remote_view_route_release" => {
+                handle_service_remote_view_route_release(cmd, state).await
+            }
+            "service_route_pool_repair" => handle_service_route_pool_repair(cmd).await,
+            "service_viewer_lease_request" => handle_service_viewer_lease_request(cmd, state).await,
+            "service_viewer_lease_heartbeat" =>
+                handle_service_viewer_lease_heartbeat(cmd, state).await,
+            "service_viewer_lease_release" => handle_service_viewer_lease_release(cmd, state).await,
+            "service_controller_lease_takeover" => {
+                handle_service_controller_lease_takeover(cmd, state).await
+            }
+            "viewport" => handle_viewport(cmd, state).await,
+            "useragent" | "user_agent" => handle_user_agent(cmd, state).await,
+            "set_media" => handle_set_media(cmd, state).await,
+            "download" => handle_download(cmd, state).await,
+            "diff_snapshot" => handle_diff_snapshot(cmd, state).await,
+            "diff_url" => handle_diff_url(cmd, state).await,
+            "credentials_set" => handle_credentials_set(cmd).await,
+            "credentials_get" => handle_credentials_get(cmd).await,
+            "credentials_delete" => handle_credentials_delete(cmd).await,
+            "credentials_list" => handle_credentials_list().await,
+            "mouse" => handle_mouse(cmd, state).await,
+            "keyboard" => handle_keyboard(cmd, state).await,
+            "focus" => handle_focus(cmd, state).await,
+            "clear" => handle_clear(cmd, state).await,
+            "selectall" => handle_selectall(cmd, state).await,
+            "scrollintoview" => handle_scrollintoview(cmd, state).await,
+            "dispatch" => handle_dispatch(cmd, state).await,
+            "highlight" => handle_highlight(cmd, state).await,
+            "tap" => handle_tap(cmd, state).await,
+            "boundingbox" => handle_boundingbox(cmd, state).await,
+            "innertext" => handle_innertext(cmd, state).await,
+            "innerhtml" => handle_innerhtml(cmd, state).await,
+            "inputvalue" => handle_inputvalue(cmd, state).await,
+            "setvalue" => handle_setvalue(cmd, state).await,
+            "count" => handle_count(cmd, state).await,
+            "styles" => handle_styles(cmd, state).await,
+            "bringtofront" => handle_bringtofront(state).await,
+            "timezone" => handle_timezone(cmd, state).await,
+            "locale" => handle_locale(cmd, state).await,
+            "geolocation" => handle_geolocation(cmd, state).await,
+            "permissions" => handle_permissions(cmd, state).await,
+            "dialog" => handle_dialog(cmd, state).await,
+            "upload" => handle_upload(cmd, state).await,
+            "addscript" => handle_addscript(cmd, state).await,
+            "addinitscript" => handle_addinitscript(cmd, state).await,
+            "addstyle" => handle_addstyle(cmd, state).await,
+            "clipboard" => handle_clipboard(cmd, state).await,
+            "wheel" => handle_wheel(cmd, state).await,
+            "device" => handle_device(cmd, state).await,
+            "screencast_start" => handle_screencast_start(cmd, state).await,
+            "screencast_stop" => handle_screencast_stop(state).await,
+            "stream_enable" => handle_stream_enable(cmd, state).await,
+            "stream_disable" => handle_stream_disable(state).await,
+            "stream_status" => handle_stream_status(state).await,
+            "service_status" => handle_service_status(cmd).await,
+            "service_reconcile" => handle_service_reconcile(cmd).await,
+            "service_browser_close" => handle_service_browser_close(cmd, state).await,
+            "service_browser_repair" => handle_service_browser_repair(cmd).await,
+            "service_resources" => handle_service_resources(cmd).await,
+            "service_resources_monitor_summary" => handle_service_resources_monitor_summary().await,
+            "service_resources_write_monitor_summary" => {
+                handle_service_resources_write_monitor_summary(cmd).await
+            }
+            "service_gc" => handle_service_gc(cmd).await,
+            "service_prune_retained" => handle_service_prune_retained(cmd).await,
+            "service_repair_retained" => handle_service_repair_retained(cmd).await,
+            "service_access_plan" => handle_service_access_plan(cmd).await,
+            "service_browser_capability_preflight" => {
+                handle_service_browser_capability_preflight(cmd).await
+            }
+            "service_browser_capability_preference_guide" => {
+                handle_service_browser_capability_preference_guide(cmd).await
+            }
+            "service_job_cancel" => handle_service_job_cancel(cmd).await,
+            "service_browser_retry" => handle_service_browser_retry(cmd).await,
+            "service_remedies_apply" => handle_service_remedies_apply(cmd).await,
+            "service_profile_upsert" => handle_service_profile_upsert(cmd).await,
+            "service_profile_freshness_update" =>
+                handle_service_profile_freshness_update(cmd).await,
+            "service_profile_seeding_handoff_update" => {
+                handle_service_profile_seeding_handoff_update(cmd).await
+            }
+            "service_profile_delete" => handle_service_profile_delete(cmd).await,
+            "service_session_upsert" => handle_service_session_upsert(cmd).await,
+            "service_session_delete" => handle_service_session_delete(cmd).await,
+            "service_site_policy_upsert" => handle_service_site_policy_upsert(cmd).await,
+            "service_site_policy_delete" => handle_service_site_policy_delete(cmd).await,
+            "service_monitor_upsert" => handle_service_monitor_upsert(cmd).await,
+            "service_monitor_delete" => handle_service_monitor_delete(cmd).await,
+            "service_monitor_pause" => {
+                handle_service_monitor_state_update(cmd, MonitorState::Paused).await
+            }
+            "service_monitor_reset_failures" => handle_service_monitor_reset_failures(cmd).await,
+            "service_monitor_resume" => {
+                handle_service_monitor_state_update(cmd, MonitorState::Active).await
+            }
+            "service_monitor_triage" => handle_service_monitor_triage(cmd).await,
+            "service_monitors_run_due" => handle_service_monitors_run_due(cmd).await,
+            "service_provider_upsert" => handle_service_provider_upsert(cmd).await,
+            "service_provider_delete" => handle_service_provider_delete(cmd).await,
+            "service_browser_capability_registry_upsert" => {
+                handle_service_browser_capability_registry_upsert(cmd).await
+            }
+            "service_incident_acknowledge" => handle_service_incident_acknowledge(cmd).await,
+            "service_incident_resolve" => handle_service_incident_resolve(cmd).await,
+            "service_incident_activity" => handle_service_incident_activity(cmd).await,
+            "service_trace" => handle_service_trace(cmd).await,
+            "service_profiles" => handle_service_profiles(cmd).await,
+            "service_profile_lookup" => handle_service_profile_lookup(cmd).await,
+            "service_profile_seeding_handoff" => handle_service_profile_seeding_handoff(cmd).await,
+            "service_sessions" => handle_service_sessions(cmd).await,
+            "service_browsers" => handle_service_browsers(cmd).await,
+            "service_tabs" => handle_service_tabs(cmd).await,
+            "service_monitors" => handle_service_monitors(cmd).await,
+            "service_site_policies" => handle_service_site_policies(cmd).await,
+            "service_providers" => handle_service_providers(cmd).await,
+            "service_challenges" => handle_service_challenges(cmd).await,
+            "service_jobs" => handle_service_jobs(cmd).await,
+            "service_incidents" => handle_service_incidents(cmd).await,
+            "service_events" => handle_service_events(cmd).await,
+            "waitforurl" => handle_waitforurl(cmd, state).await,
+            "waitforloadstate" => handle_waitforloadstate(cmd, state).await,
+            "waitforfunction" => handle_waitforfunction(cmd, state).await,
+            "frame" => handle_frame(cmd, state).await,
+            "mainframe" => handle_mainframe(state).await,
+            "getbyrole" => handle_getbyrole(cmd, state).await,
+            "getbytext" => handle_getbytext(cmd, state).await,
+            "getbylabel" => handle_getbylabel(cmd, state).await,
+            "getbyplaceholder" => handle_getbyplaceholder(cmd, state).await,
+            "getbyalttext" => handle_getbyalttext(cmd, state).await,
+            "getbytitle" => handle_getbytitle(cmd, state).await,
+            "getbytestid" => handle_getbytestid(cmd, state).await,
+            "nth" => handle_nth(cmd, state).await,
+            "find" => handle_find(cmd, state).await,
+            "evalhandle" => handle_evalhandle(cmd, state).await,
+            "drag" => handle_drag(cmd, state).await,
+            "expose" => handle_expose(cmd, state).await,
+            "pause" => handle_pause(state).await,
+            "multiselect" => handle_multiselect(cmd, state).await,
+            "responsebody" => handle_responsebody(cmd, state).await,
+            "waitfordownload" => handle_waitfordownload(cmd, state).await,
+            "window_new" => handle_window_new(cmd, state).await,
+            "diff_screenshot" => handle_diff_screenshot(cmd, state).await,
+            "video_start" => handle_video_start(cmd, state).await,
+            "video_stop" => handle_video_stop(state).await,
+            "har_start" => handle_har_start(state).await,
+            "har_stop" => handle_har_stop(cmd, state).await,
+            "route" => handle_route(cmd, state).await,
+            "unroute" => handle_unroute(cmd, state).await,
+            "requests" => handle_requests(cmd, state).await,
+            "request_detail" => handle_request_detail(cmd, state).await,
+            "credentials" => handle_http_credentials(cmd, state).await,
+            "emulatemedia" => handle_set_media(cmd, state).await,
+            "auth_save" => handle_auth_save(cmd).await,
+            "auth_login" => handle_auth_login(cmd, state).await,
+            "auth_list" => handle_credentials_list().await,
+            "auth_delete" => handle_credentials_delete(cmd).await,
+            "auth_show" => handle_auth_show(cmd).await,
+            "confirm" => match begin_confirmation(state) {
+                Ok(confirmation) => {
+                    let command = confirmation.command().clone();
+                    let result = Box::pin(execute_command(&command, state)).await;
+                    Ok(confirmation.complete(state, result))
+                }
+                Err(error) => Err(error),
+            },
+            "deny" => handle_deny(cmd, state).await,
+            "swipe" => handle_swipe(cmd, state).await,
+            "device_list" => handle_device_list().await,
+            "input_mouse" => handle_input_mouse(cmd, state).await,
+            "input_keyboard" => handle_input_keyboard(cmd, state).await,
+            "input_touch" => handle_input_touch(cmd, state).await,
+            "keydown" => handle_keydown(cmd, state).await,
+            "keyup" => handle_keyup(cmd, state).await,
+            "inserttext" => handle_inserttext(cmd, state).await,
+            "mousemove" => handle_mousemove(cmd, state).await,
+            "mousedown" => handle_mousedown(cmd, state).await,
+            "mouseup" => handle_mouseup(cmd, state).await,
+            _ => Err(format!("Not yet implemented: {}", action)),
         },
-        "deny" => handle_deny(cmd, state).await,
-        "swipe" => handle_swipe(cmd, state).await,
-        "device_list" => handle_device_list().await,
-        "input_mouse" => handle_input_mouse(cmd, state).await,
-        "input_keyboard" => handle_input_keyboard(cmd, state).await,
-        "input_touch" => handle_input_touch(cmd, state).await,
-        "keydown" => handle_keydown(cmd, state).await,
-        "keyup" => handle_keyup(cmd, state).await,
-        "inserttext" => handle_inserttext(cmd, state).await,
-        "mousemove" => handle_mousemove(cmd, state).await,
-        "mousedown" => handle_mousedown(cmd, state).await,
-        "mouseup" => handle_mouseup(cmd, state).await,
-        _ => Err(format!("Not yet implemented: {}", action)),
+        renderer_crash_rx.as_mut(),
+        &renderer_crash_context,
+    )
+    .await;
+    let (result, observed_renderer_crash) = match action_race {
+        RendererCrashRace::Action(result) => (result, None),
+        RendererCrashRace::Crash(observation) => (
+            Err("The active renderer target crashed while the command was running".to_string()),
+            Some(*observation),
+        ),
     };
     let renderer_crash = state
         .drain_cdp_events_for_command(&renderer_crash_context)
-        .await;
+        .await
+        .or_else(|| {
+            observed_renderer_crash.map(|observation| {
+                let persistence =
+                    LockedServiceStateRepository::default_json().and_then(|repository| {
+                        persist_renderer_crash_in_repository(&repository, &observation)
+                    });
+                (observation, persistence)
+            })
+        });
     let mut resp = if let Some((observation, persistence)) = renderer_crash {
         renderer_crash_error_response(&id, observation, persistence)
     } else {
