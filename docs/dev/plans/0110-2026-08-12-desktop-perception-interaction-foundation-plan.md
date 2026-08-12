@@ -2,7 +2,7 @@
 
 Date: 2026-08-12
 
-State: OPEN | POC 1, 2, AND 3 SOURCE ACCEPTED | POC 4 DETAILED
+State: OPEN | POC 1 THROUGH 4 SOURCE ACCEPTED | POC 5 DETAIL PLAN NEXT
 
 Authority: SOURCE-ONLY
 
@@ -211,8 +211,8 @@ source acceptance without separate maintainer direction.
 
 ## Current Recommendation
 
-Implement Plan 0110-4 through the repository-owned three-layer prompt corpus.
-Preserve independent page and DOM absence evidence, the distinct read-only
-action, strict provider-unavailable posture, and fixture-only blindness claim.
-Do not add a live input provider or interact with a real credential manager,
-authentication prompt, or external challenge.
+Write Plan 0110-5 for provider-neutral foundation stress and use-case entry.
+Freeze cross-ingress replay, dashboard projection, authority conflicts,
+failure cleanup, durable human handoff, and the exact post-foundation entry
+gate before implementation. Do not begin a real challenge or authentication
+integration.

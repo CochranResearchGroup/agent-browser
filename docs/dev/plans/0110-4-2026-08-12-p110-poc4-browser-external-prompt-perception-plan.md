@@ -2,7 +2,7 @@
 
 Date: 2026-08-12
 
-State: DETAILED | IMPLEMENTATION READY
+State: SOURCE ACCEPTED
 
 Authority: SOURCE-ONLY | SYNTHETIC FIXTURE | NO LIVE PROMPT
 
@@ -313,3 +313,30 @@ limits the blindness claim to repository fixture inputs.
 
 The sole next recommendation after acceptance is to write Plan 0110-5 for
 provider-neutral foundation stress and use-case entry.
+
+## Source Acceptance | 2026-08-12
+
+PoC 4 is source accepted at remediation commit `7391409b`; its initial
+implementation is `54cbc9e3`. The one fresh audit found six blocking defects:
+MCP browser-ID routing, provider gating after dispatch effects, unattested
+viewport correspondence, unpinned corpus outputs and missing failure cases, a
+shared parity count, and an advertised but unreachable successful
+`indeterminate` state. All six were accepted into one remediation packet.
+
+The remediation makes `sessionName` the sole MCP lane selector, gates provider
+absence before public dispatch effects, derives the viewport layer from the
+decoded desktop frame, binds its geometry and hash, pins the corpus and
+canonical evidence receipts, covers malformed and adversarial inputs, derives
+the parity count from the field ledger, and restricts page visibility to the
+reachable `absent | present` states.
+
+Primary closed-world verification passed: golden corpus 1/1, focused prompt
+27/27, strict Clippy, formatting, PoC 1 through 3 regressions, full service
+client, 100-action API/MCP parity, no-launch service contracts, docs build, and
+diff checks. The durable evidence is
+`docs/dev/notes/0110-4-2026-08-12-browser-external-prompt-perception-source-acceptance.md`.
+
+No live browser, CDP screenshot, display, prompt, credential manager,
+authentication flow, challenge, or input provider was exercised. The
+blindness claim applies only to independently rendered repository fixture
+inputs.
