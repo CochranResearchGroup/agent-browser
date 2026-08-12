@@ -9,6 +9,8 @@ use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+use super::desktop_control_coordinator::{DesktopControlCoordinator, DesktopInteractionClaim};
+
 pub(crate) const RECIPE_ID: &str = "p110-pointer-keyboard-v1";
 const RECIPE_VERSION: &str = "v1";
 const FIXED_TEXT: &str = "fixture-ready";
@@ -197,12 +199,6 @@ pub(crate) trait DesktopInteractionProvider {
     ) -> Result<AfterObservation, DesktopInteractionError>;
 }
 
-pub(crate) trait DesktopControlCoordinator {
-    fn try_claim(&mut self, route_id: &str, transaction_id: &str) -> bool;
-    fn cancelled(&mut self, route_id: &str, transaction_id: &str) -> bool;
-    fn release(&mut self, route_id: &str, transaction_id: &str);
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum IdempotencyRecord {
     InProgress,
@@ -219,7 +215,7 @@ pub(crate) trait InteractionIdempotencyStore {
 pub(crate) struct InteractionDependencies<'a> {
     pub provider: &'a mut dyn DesktopInteractionProvider,
     pub authority: &'a mut dyn ControllerAuthorityRepository,
-    pub coordinator: &'a mut dyn DesktopControlCoordinator,
+    pub coordinator: &'a DesktopControlCoordinator,
     pub idempotency: &'a mut dyn InteractionIdempotencyStore,
     pub clock: &'a mut dyn InteractionClock,
 }
@@ -339,15 +335,15 @@ pub(crate) fn run_desktop_interaction(
     let initial_now = dependencies.clock.now_ms();
     let authority_digest =
         validate_authority(&request, &before.binding, &initial_authority, initial_now)?;
-    if !dependencies
+    let claim = dependencies
         .coordinator
-        .try_claim(&before.binding.route_id, &transaction_id)
-    {
-        return Err(DesktopInteractionError::new(
-            "desktop_interaction_conflict",
-            "the route already has an interaction claim",
-        ));
-    }
+        .claim(&before.binding.route_id, &transaction_id)
+        .map_err(|_| {
+            DesktopInteractionError::new(
+                "desktop_interaction_conflict",
+                "the route already has an interaction claim",
+            )
+        })?;
     dependencies
         .idempotency
         .begin(&request.caller_id, &request.request_id, &transaction_id);
@@ -361,11 +357,10 @@ pub(crate) fn run_desktop_interaction(
         target_bounds,
         initial_authority,
         authority_digest,
+        &claim,
         &mut dependencies,
     );
-    dependencies
-        .coordinator
-        .release(&result.route_id, &transaction_id);
+    drop(claim);
     match result.outcome {
         Ok(receipt) => {
             dependencies
@@ -510,7 +505,6 @@ fn redact_point(value: &Value) -> Value {
 }
 
 struct ClaimedResult {
-    route_id: String,
     outcome: Result<InteractionReceipt, DesktopInteractionError>,
 }
 
@@ -524,11 +518,10 @@ fn run_claimed_interaction(
     target_bounds: PixelBounds,
     initial_authority: ControllerAuthority,
     authority_digest: String,
+    claim: &DesktopInteractionClaim,
     dependencies: &mut InteractionDependencies<'_>,
 ) -> ClaimedResult {
-    let route_id = before.binding.route_id.clone();
     let outcome = (|| {
-        ensure_not_cancelled(dependencies.coordinator, &route_id, transaction_id, false)?;
         let initial_surface = dependencies.provider.probe(&before.binding)?;
         validate_surface(&before.binding, &initial_surface, target, target_bounds)?;
         if dependencies
@@ -564,44 +557,22 @@ fn run_claimed_interaction(
         let mut key_down: Option<char> = None;
 
         for (index, point) in motion.points.iter().copied().enumerate().skip(1) {
-            if let Err(error) = revalidate_authority(
-                request,
-                &before.binding,
-                &initial_authority,
-                dependencies,
-                acknowledged_effect,
-                transaction_id,
-            ) {
-                if acknowledged_effect {
-                    return Err(effect_error(
-                        error.code,
-                        error.message,
-                        base_receipt(
-                            request,
-                            transaction_id,
-                            &before,
-                            &candidate_id,
-                            target,
-                            &initial_surface,
-                            &initial_authority,
-                            &authority_digest,
-                            &motion,
-                            acknowledgements,
-                        ),
-                        "not_needed",
-                        "cancelled_after_effect",
-                    ));
-                }
-                return Err(error);
-            }
             let event = InputEvent::PointerMove {
                 point,
                 at_ms: scheduled_time(index, motion.points.len(), motion.duration_ms),
             };
-            match dependencies
-                .provider
-                .execute_event(&before.binding, &initial_surface, &event)
-            {
+            match execute_guarded_event(
+                request,
+                &before.binding,
+                &initial_authority,
+                &initial_surface,
+                target,
+                target_bounds,
+                claim,
+                dependencies,
+                &event,
+                None,
+            ) {
                 Ok(ack) => {
                     acknowledgements.push(ack.acknowledgement_id);
                     acknowledged_effect = true;
@@ -630,37 +601,37 @@ fn run_claimed_interaction(
             }
         }
 
-        revalidate_authority(
-            request,
-            &before.binding,
-            &initial_authority,
-            dependencies,
-            acknowledged_effect,
-            transaction_id,
-        )?;
-        let pre_press_surface = dependencies.provider.probe(&before.binding)?;
-        validate_surface_stable(
-            &before.binding,
-            &initial_surface,
-            &pre_press_surface,
-            target,
-            target_bounds,
-        )?;
-        let now = dependencies.clock.now_ms();
-        if now.saturating_sub(before.captured_at_ms) > FRESHNESS_LIMIT_MS {
-            return Err(DesktopInteractionError::new(
-                "desktop_interaction_stale_observation",
-                "the selected observation is too old for input",
-            ));
-        }
-
         let down = InputEvent::LeftDown {
             at_ms: motion.duration_ms,
         };
-        let ack =
-            dependencies
-                .provider
-                .execute_event(&before.binding, &pre_press_surface, &down)?;
+        let ack = execute_guarded_event(
+            request,
+            &before.binding,
+            &initial_authority,
+            &initial_surface,
+            target,
+            target_bounds,
+            claim,
+            dependencies,
+            &down,
+            Some(before.captured_at_ms),
+        )
+        .map_err(|error| {
+            post_ack_error(
+                error,
+                acknowledged_effect,
+                request,
+                transaction_id,
+                &before,
+                &candidate_id,
+                target,
+                &initial_surface,
+                &initial_authority,
+                &authority_digest,
+                &motion,
+                acknowledgements.clone(),
+            )
+        })?;
         acknowledgements.push(ack.acknowledgement_id);
         let mut button_down = true;
 
@@ -669,32 +640,44 @@ fn run_claimed_interaction(
             at_ms: motion.duration_ms + hold_ms,
             emergency: false,
         };
-        match dependencies
-            .provider
-            .execute_event(&before.binding, &pre_press_surface, &up)
-        {
+        match execute_guarded_event(
+            request,
+            &before.binding,
+            &initial_authority,
+            &initial_surface,
+            target,
+            target_bounds,
+            claim,
+            dependencies,
+            &up,
+            None,
+        ) {
             Ok(ack) => {
                 acknowledgements.push(ack.acknowledgement_id);
                 button_down = false;
             }
-            Err(_) => {
+            Err(error) => {
                 let cleanup = emergency_release(
-                    dependencies.provider,
-                    &before.binding,
-                    &pre_press_surface,
+                    ReleaseContext {
+                        provider: dependencies.provider,
+                        authority: dependencies.authority,
+                        binding: &before.binding,
+                        surface: &initial_surface,
+                        claim,
+                        acknowledgements: &mut acknowledgements,
+                    },
                     button_down,
                     key_down,
                     motion.duration_ms + hold_ms + 1,
-                    &mut acknowledgements,
                 );
                 return Err(effect_error(
                     if cleanup {
-                        "desktop_input_failed"
+                        error.code
                     } else {
                         "desktop_input_cleanup_failed"
                     },
                     if cleanup {
-                        "input failed after an acknowledged event"
+                        error.message
                     } else {
                         "input release and emergency cleanup failed"
                     },
@@ -722,91 +705,23 @@ fn run_claimed_interaction(
 
         let mut event_time = motion.duration_ms + hold_ms;
         for (index, key) in FIXED_TEXT.chars().enumerate() {
-            if let Err(error) = revalidate_authority(
-                request,
-                &before.binding,
-                &initial_authority,
-                dependencies,
-                true,
-                transaction_id,
-            ) {
-                return Err(with_cleanup(
-                    error,
-                    request,
-                    transaction_id,
-                    &before,
-                    &candidate_id,
-                    target,
-                    &initial_surface,
-                    &initial_authority,
-                    &authority_digest,
-                    &motion,
-                    acknowledgements,
-                    dependencies.provider,
-                    &pre_press_surface,
-                    button_down,
-                    key_down,
-                    event_time + 1,
-                ));
-            }
-            let key_surface = match dependencies.provider.probe(&before.binding) {
-                Ok(surface) => surface,
-                Err(error) => {
-                    return Err(with_cleanup(
-                        error,
-                        request,
-                        transaction_id,
-                        &before,
-                        &candidate_id,
-                        target,
-                        &initial_surface,
-                        &initial_authority,
-                        &authority_digest,
-                        &motion,
-                        acknowledgements,
-                        dependencies.provider,
-                        &pre_press_surface,
-                        button_down,
-                        key_down,
-                        event_time + 1,
-                    ));
-                }
-            };
-            if let Err(error) = validate_surface_stable(
-                &before.binding,
-                &initial_surface,
-                &key_surface,
-                target,
-                target_bounds,
-            ) {
-                return Err(with_cleanup(
-                    error,
-                    request,
-                    transaction_id,
-                    &before,
-                    &candidate_id,
-                    target,
-                    &initial_surface,
-                    &initial_authority,
-                    &authority_digest,
-                    &motion,
-                    acknowledgements,
-                    dependencies.provider,
-                    &pre_press_surface,
-                    button_down,
-                    key_down,
-                    event_time + 1,
-                ));
-            }
             event_time += key_delay_ms(index, &motion.seed_digest);
             let down = InputEvent::KeyDown {
                 key,
                 at_ms: event_time,
             };
-            match dependencies
-                .provider
-                .execute_event(&before.binding, &key_surface, &down)
-            {
+            match execute_guarded_event(
+                request,
+                &before.binding,
+                &initial_authority,
+                &initial_surface,
+                target,
+                target_bounds,
+                claim,
+                dependencies,
+                &down,
+                None,
+            ) {
                 Ok(ack) => {
                     acknowledgements.push(ack.acknowledgement_id);
                     key_down = Some(key);
@@ -825,7 +740,9 @@ fn run_claimed_interaction(
                         &motion,
                         acknowledgements,
                         dependencies.provider,
-                        &key_surface,
+                        dependencies.authority,
+                        &initial_surface,
+                        claim,
                         button_down,
                         key_down,
                         event_time + 1,
@@ -837,32 +754,44 @@ fn run_claimed_interaction(
                 at_ms: event_time + 1,
                 emergency: false,
             };
-            match dependencies
-                .provider
-                .execute_event(&before.binding, &key_surface, &up)
-            {
+            match execute_guarded_event(
+                request,
+                &before.binding,
+                &initial_authority,
+                &initial_surface,
+                target,
+                target_bounds,
+                claim,
+                dependencies,
+                &up,
+                None,
+            ) {
                 Ok(ack) => {
                     acknowledgements.push(ack.acknowledgement_id);
                     key_down = None;
                 }
-                Err(_) => {
+                Err(error) => {
                     let cleanup = emergency_release(
-                        dependencies.provider,
-                        &before.binding,
-                        &key_surface,
+                        ReleaseContext {
+                            provider: dependencies.provider,
+                            authority: dependencies.authority,
+                            binding: &before.binding,
+                            surface: &initial_surface,
+                            claim,
+                            acknowledgements: &mut acknowledgements,
+                        },
                         button_down,
                         key_down,
                         event_time + 2,
-                        &mut acknowledgements,
                     );
                     return Err(effect_error(
                         if cleanup {
-                            "desktop_input_failed"
+                            error.code
                         } else {
                             "desktop_input_cleanup_failed"
                         },
                         if cleanup {
-                            "keyboard input failed after an acknowledged event"
+                            error.message
                         } else {
                             "keyboard release and emergency cleanup failed"
                         },
@@ -889,22 +818,32 @@ fn run_claimed_interaction(
             }
         }
 
-        revalidate_authority(
+        validate_guarded_boundary(
             request,
             &before.binding,
             &initial_authority,
-            dependencies,
-            true,
-            transaction_id,
-        )?;
-        let final_surface = dependencies.provider.probe(&before.binding)?;
-        validate_surface_stable(
-            &before.binding,
             &initial_surface,
-            &final_surface,
             target,
             target_bounds,
-        )?;
+            claim,
+            dependencies,
+        )
+        .map_err(|error| {
+            post_ack_error(
+                error,
+                true,
+                request,
+                transaction_id,
+                &before,
+                &candidate_id,
+                target,
+                &initial_surface,
+                &initial_authority,
+                &authority_digest,
+                &motion,
+                acknowledgements.clone(),
+            )
+        })?;
         let after = dependencies
             .provider
             .observe_after(&before.binding)
@@ -991,7 +930,7 @@ fn run_claimed_interaction(
         receipt.effect_state = "verified_success".to_string();
         Ok(receipt)
     })();
-    ClaimedResult { route_id, outcome }
+    ClaimedResult { outcome }
 }
 
 fn validate_request(request: &DesktopInteractionRequest) -> Result<(), DesktopInteractionError> {
@@ -1065,6 +1004,7 @@ fn validate_authority(
         || authority.lease_viewer_id != request.agent_name
         || authority.lease_role != "controller"
         || authority.lease_state != "controlling"
+        || authority.lease_updated_at.trim().is_empty()
         || !authority.route_contains_lease
         || !authority.stream_contains_lease
         || !authority.route_writable
@@ -1085,20 +1025,29 @@ fn validate_authority(
     Ok(authority_digest(request, binding, authority))
 }
 
-fn revalidate_authority(
+#[allow(clippy::too_many_arguments)]
+fn execute_guarded_event(
     request: &DesktopInteractionRequest,
     binding: &DesktopBinding,
     initial: &ControllerAuthority,
+    initial_surface: &SurfaceSnapshot,
+    target: PixelPoint,
+    target_bounds: PixelBounds,
+    claim: &DesktopInteractionClaim,
     dependencies: &mut InteractionDependencies<'_>,
-    effect_acknowledged: bool,
-    transaction_id: &str,
-) -> Result<(), DesktopInteractionError> {
-    ensure_not_cancelled(
-        dependencies.coordinator,
-        &binding.route_id,
-        transaction_id,
-        effect_acknowledged,
-    )?;
+    event: &InputEvent,
+    freshness_capture_ms: Option<u64>,
+) -> Result<EventAcknowledgement, DesktopInteractionError> {
+    let _guard = claim.begin_event().map_err(|code| {
+        DesktopInteractionError::new(
+            if code == "desktop_interaction_conflict" {
+                "desktop_interaction_conflict"
+            } else {
+                "desktop_interaction_authority_changed"
+            },
+            "desktop event authority fence is unavailable",
+        )
+    })?;
     let now = dependencies.clock.now_ms();
     let current = dependencies.authority.snapshot()?;
     let digest = validate_authority(request, binding, &current, now).map_err(|_| {
@@ -1113,26 +1062,60 @@ fn revalidate_authority(
             "controller authority changed during interaction",
         ));
     }
-    Ok(())
-}
-
-fn ensure_not_cancelled(
-    coordinator: &mut dyn DesktopControlCoordinator,
-    route_id: &str,
-    transaction_id: &str,
-    effect_acknowledged: bool,
-) -> Result<(), DesktopInteractionError> {
-    if coordinator.cancelled(route_id, transaction_id) {
+    if freshness_capture_ms
+        .is_some_and(|captured_at| now.saturating_sub(captured_at) > FRESHNESS_LIMIT_MS)
+    {
         return Err(DesktopInteractionError::new(
-            "desktop_interaction_authority_changed",
-            if effect_acknowledged {
-                "the interaction was cancelled after input"
-            } else {
-                "the interaction was cancelled before input"
-            },
+            "desktop_interaction_stale_observation",
+            "the selected observation is too old for input",
         ));
     }
-    Ok(())
+    let current_surface = dependencies.provider.probe(binding)?;
+    validate_surface_stable(
+        binding,
+        initial_surface,
+        &current_surface,
+        target,
+        target_bounds,
+    )?;
+    dependencies
+        .provider
+        .execute_event(binding, &current_surface, event)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn validate_guarded_boundary(
+    request: &DesktopInteractionRequest,
+    binding: &DesktopBinding,
+    initial: &ControllerAuthority,
+    initial_surface: &SurfaceSnapshot,
+    target: PixelPoint,
+    target_bounds: PixelBounds,
+    claim: &DesktopInteractionClaim,
+    dependencies: &mut InteractionDependencies<'_>,
+) -> Result<(), DesktopInteractionError> {
+    let _guard = claim.begin_event().map_err(|_| {
+        DesktopInteractionError::new(
+            "desktop_interaction_authority_changed",
+            "desktop verification authority fence is unavailable",
+        )
+    })?;
+    let now = dependencies.clock.now_ms();
+    let current = dependencies.authority.snapshot()?;
+    let digest = validate_authority(request, binding, &current, now).map_err(|_| {
+        DesktopInteractionError::new(
+            "desktop_interaction_authority_changed",
+            "controller authority changed during interaction",
+        )
+    })?;
+    if digest != authority_digest(request, binding, initial) {
+        return Err(DesktopInteractionError::new(
+            "desktop_interaction_authority_changed",
+            "controller authority changed during interaction",
+        ));
+    }
+    let surface = dependencies.provider.probe(binding)?;
+    validate_surface_stable(binding, initial_surface, &surface, target, target_bounds)
 }
 
 fn validate_surface(
@@ -1406,14 +1389,20 @@ fn key_delay_ms(index: usize, seed_digest: &str) -> u64 {
     35 + (u64::from(seed[(index + 3) % seed.len()]) % 31)
 }
 
+struct ReleaseContext<'a> {
+    provider: &'a mut dyn DesktopInteractionProvider,
+    authority: &'a mut dyn ControllerAuthorityRepository,
+    binding: &'a DesktopBinding,
+    surface: &'a SurfaceSnapshot,
+    claim: &'a DesktopInteractionClaim,
+    acknowledgements: &'a mut Vec<String>,
+}
+
 fn emergency_release(
-    provider: &mut dyn DesktopInteractionProvider,
-    binding: &DesktopBinding,
-    surface: &SurfaceSnapshot,
+    context: ReleaseContext<'_>,
     button_down: bool,
     key_down: Option<char>,
     at_ms: u64,
-    acknowledgements: &mut Vec<String>,
 ) -> bool {
     let event = if let Some(key) = key_down {
         Some(InputEvent::KeyUp {
@@ -1429,16 +1418,69 @@ fn emergency_release(
     } else {
         None
     };
+    let ReleaseContext {
+        provider,
+        authority,
+        binding,
+        surface,
+        claim,
+        acknowledgements,
+    } = context;
     match event {
-        Some(event) => match provider.execute_event(binding, surface, &event) {
-            Ok(ack) => {
-                acknowledgements.push(ack.acknowledgement_id);
-                true
+        Some(event) => {
+            let Ok(_guard) = claim.begin_cleanup_event() else {
+                return false;
+            };
+            if authority.snapshot().is_err() {
+                return false;
             }
-            Err(_) => false,
-        },
+            let Ok(current_surface) = provider.probe(binding) else {
+                return false;
+            };
+            if validate_cleanup_surface_stable(binding, surface, &current_surface).is_err() {
+                return false;
+            }
+            match provider.execute_event(binding, &current_surface, &event) {
+                Ok(ack) => {
+                    acknowledgements.push(ack.acknowledgement_id);
+                    true
+                }
+                Err(_) => false,
+            }
+        }
         None => true,
     }
+}
+
+fn validate_cleanup_surface_stable(
+    binding: &DesktopBinding,
+    initial: &SurfaceSnapshot,
+    current: &SurfaceSnapshot,
+) -> Result<(), DesktopInteractionError> {
+    if !current.focused
+        || current.provider_id != "synthetic-fixture-v1"
+        || current.width != binding.width
+        || current.height != binding.height
+        || current.scale_millis != binding.scale_millis
+        || current.coordinate_space != binding.coordinate_space
+        || current.geometry_epoch != binding.geometry_epoch
+        || !display_bounds(binding).contains(current.pointer)
+    {
+        return Err(DesktopInteractionError::new(
+            "desktop_interaction_coordinate_mismatch",
+            "cleanup surface geometry does not match the bound desktop",
+        ));
+    }
+    if initial.provider_id != current.provider_id
+        || initial.surface_identity_digest != current.surface_identity_digest
+        || initial.browser_process_identity_digest != current.browser_process_identity_digest
+    {
+        return Err(DesktopInteractionError::new(
+            "desktop_interaction_focus_changed",
+            "cleanup focused surface identity changed during interaction",
+        ));
+    }
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1455,19 +1497,25 @@ fn with_cleanup(
     motion: &MotionPlan,
     mut acknowledgements: Vec<String>,
     provider: &mut dyn DesktopInteractionProvider,
+    authority_repository: &mut dyn ControllerAuthorityRepository,
     cleanup_surface: &SurfaceSnapshot,
+    claim: &DesktopInteractionClaim,
     button_down: bool,
     key_down: Option<char>,
     at_ms: u64,
 ) -> DesktopInteractionError {
     let cleanup = emergency_release(
-        provider,
-        &before.binding,
-        cleanup_surface,
+        ReleaseContext {
+            provider,
+            authority: authority_repository,
+            binding: &before.binding,
+            surface: cleanup_surface,
+            claim,
+            acknowledgements: &mut acknowledgements,
+        },
         button_down,
         key_down,
         at_ms,
-        &mut acknowledgements,
     );
     effect_error(
         if cleanup {
@@ -1524,6 +1572,49 @@ fn effect_error(
 }
 
 #[allow(clippy::too_many_arguments)]
+fn post_ack_error(
+    error: DesktopInteractionError,
+    acknowledged_effect: bool,
+    request: &DesktopInteractionRequest,
+    transaction_id: &str,
+    before: &BeforeObservation,
+    candidate_id: &str,
+    target: PixelPoint,
+    surface: &SurfaceSnapshot,
+    authority: &ControllerAuthority,
+    authority_digest: &str,
+    motion: &MotionPlan,
+    acknowledgements: Vec<String>,
+) -> DesktopInteractionError {
+    if !acknowledged_effect {
+        return error;
+    }
+    let effect_state = if error.code == "desktop_interaction_authority_changed" {
+        "cancelled_after_effect"
+    } else {
+        "effect_uncertain"
+    };
+    effect_error(
+        error.code,
+        error.message,
+        base_receipt(
+            request,
+            transaction_id,
+            before,
+            candidate_id,
+            target,
+            surface,
+            authority,
+            authority_digest,
+            motion,
+            acknowledgements,
+        ),
+        "not_needed",
+        effect_state,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
 fn base_receipt(
     request: &DesktopInteractionRequest,
     transaction_id: &str,
@@ -1577,7 +1668,7 @@ fn base_receipt(
         verification_state: "not_verified".to_string(),
         effect_state: "effect_uncertain".to_string(),
         stop_reason: None,
-        retention: "redacted_receipt_only",
+        retention: "ephemeral",
         persisted_pixels: false,
     }
 }
@@ -1941,26 +2032,14 @@ mod tests {
         assert_eq!(error.code(), "desktop_interaction_authority_changed");
         assert!(fixture.events.is_empty());
 
-        let mut fixture = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
-        let mut authority = ScriptedAuthority::stable(fixture.authority());
-        let mut coordinator = SyntheticCoordinator {
-            cancel_on_check: Some(2),
-            ..SyntheticCoordinator::default()
-        };
-        let mut idempotency = MemoryIdempotency::default();
-        let mut clock = FixedClock::new(1_000);
-        let error = run_desktop_interaction(
-            request(),
-            InteractionDependencies {
-                provider: &mut fixture,
-                authority: &mut authority,
-                coordinator: &mut coordinator,
-                idempotency: &mut idempotency,
-                clock: &mut clock,
-            },
-        )
-        .unwrap_err();
-        assert_eq!(error.code(), "desktop_interaction_authority_changed");
+        let coordinator = SyntheticCoordinator::default();
+        let claim = coordinator.claim("route-1", "cancel-test").unwrap();
+        let mutation = coordinator.begin_controller_mutation("route-1").unwrap();
+        drop(mutation);
+        assert_eq!(
+            claim.begin_event().unwrap_err(),
+            "desktop_interaction_authority_changed"
+        );
     }
 
     #[test]
@@ -2157,6 +2236,184 @@ mod tests {
         }
     }
 
+    #[test]
+    fn every_event_reprobes_and_sink_rejects_boundary_drift() {
+        let seed = digest_text(&format!(
+            "{}\0{}\0{}\0{}:{}\0{}:{}",
+            recipe_sha256(),
+            "frame-before",
+            "candidate-1",
+            12,
+            20,
+            160,
+            100
+        ));
+        let moves = plan_motion(
+            PixelPoint { x: 12, y: 20 },
+            PixelPoint { x: 160, y: 100 },
+            320,
+            200,
+            &seed,
+        )
+        .unwrap()
+        .points
+        .len()
+            - 1;
+        for probe_at in [2, moves + 3, moves + 5] {
+            let inner = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+            let mut fixture = AdversarialFixture::new(inner);
+            fixture.probe_drift = Some((probe_at, ProbeDrift::Focus));
+            let mut authority = ScriptedAuthority::stable(fixture.inner.authority());
+            let coordinator = SyntheticCoordinator::default();
+            let mut idempotency = MemoryIdempotency::default();
+            let mut clock = FixedClock::new(1_000);
+            let error = run_desktop_interaction(
+                request(),
+                InteractionDependencies {
+                    provider: &mut fixture,
+                    authority: &mut authority,
+                    coordinator: &coordinator,
+                    idempotency: &mut idempotency,
+                    clock: &mut clock,
+                },
+            )
+            .unwrap_err();
+            assert_eq!(error.code(), "desktop_interaction_focus_not_ready");
+            if probe_at > 2 {
+                let receipt = error.receipt().unwrap();
+                assert_eq!(receipt.effect_state, "effect_uncertain");
+                assert_eq!(receipt.cleanup_state, "released");
+                assert!(matches!(
+                    idempotency.lookup("caller-1", "request-1"),
+                    Some(IdempotencyRecord::Complete(_))
+                ));
+            } else {
+                assert!(error.receipt().is_none());
+                assert_eq!(idempotency.lookup("caller-1", "request-1"), None);
+            }
+        }
+
+        let inner = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+        let mut fixture = AdversarialFixture::new(inner);
+        let mut authority = ScriptedAuthority::stable(fixture.inner.authority());
+        let coordinator = SyntheticCoordinator::default();
+        let mut idempotency = MemoryIdempotency::default();
+        let mut clock = FixedClock::new(1_000);
+        run_desktop_interaction(
+            request(),
+            InteractionDependencies {
+                provider: &mut fixture,
+                authority: &mut authority,
+                coordinator: &coordinator,
+                idempotency: &mut idempotency,
+                clock: &mut clock,
+            },
+        )
+        .unwrap();
+        assert_eq!(fixture.probe_count, fixture.inner.events.len() + 2);
+        assert_eq!(authority.index, fixture.inner.events.len() + 2);
+
+        let mut sink = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+        let binding = sink.binding();
+        let mut stale_surface = sink.probe(&binding).unwrap();
+        stale_surface.surface_identity_digest = "stale-surface".to_string();
+        let error = sink
+            .execute_event(
+                &binding,
+                &stale_surface,
+                &InputEvent::PointerMove {
+                    point: PixelPoint { x: 13, y: 21 },
+                    at_ms: 1,
+                },
+            )
+            .unwrap_err();
+        assert_eq!(error.code(), "desktop_interaction_focus_changed");
+        assert!(sink.events.is_empty());
+    }
+
+    #[test]
+    fn post_ack_failure_is_persisted_and_replay_never_reemits() {
+        let inner = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+        let mut fixture = AdversarialFixture::new(inner);
+        fixture.event_failure = Some(EventFailure::LeftDown);
+        let mut authority = ScriptedAuthority::stable(fixture.inner.authority());
+        let coordinator = SyntheticCoordinator::default();
+        let mut idempotency = MemoryIdempotency::default();
+        let mut clock = FixedClock::new(1_000);
+        let error = run_desktop_interaction(
+            request(),
+            InteractionDependencies {
+                provider: &mut fixture,
+                authority: &mut authority,
+                coordinator: &coordinator,
+                idempotency: &mut idempotency,
+                clock: &mut clock,
+            },
+        )
+        .unwrap_err();
+        assert!(error.receipt().is_some());
+        let emitted = fixture.inner.events.len();
+        let replay = run_desktop_interaction(
+            request(),
+            InteractionDependencies {
+                provider: &mut fixture,
+                authority: &mut authority,
+                coordinator: &coordinator,
+                idempotency: &mut idempotency,
+                clock: &mut clock,
+            },
+        )
+        .unwrap();
+        assert_eq!(replay.effect_state, "effect_uncertain");
+        assert_eq!(fixture.inner.events.len(), emitted);
+    }
+
+    #[test]
+    fn receipt_retention_matches_schema_and_empty_lease_timestamp_is_rejected() {
+        let mut fixture = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+        let mut authority = ScriptedAuthority::stable(fixture.authority());
+        let coordinator = SyntheticCoordinator::default();
+        let mut idempotency = MemoryIdempotency::default();
+        let mut clock = FixedClock::new(1_000);
+        let receipt = run_desktop_interaction(
+            request(),
+            InteractionDependencies {
+                provider: &mut fixture,
+                authority: &mut authority,
+                coordinator: &coordinator,
+                idempotency: &mut idempotency,
+                clock: &mut clock,
+            },
+        )
+        .unwrap();
+        assert_eq!(receipt.retention, "ephemeral");
+        assert_eq!(
+            serde_json::to_value(receipt).unwrap()["retention"],
+            "ephemeral"
+        );
+
+        let mut fixture = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+        let mut invalid = fixture.authority();
+        invalid.lease_updated_at.clear();
+        let mut authority = ScriptedAuthority::stable(invalid);
+        let coordinator = SyntheticCoordinator::default();
+        let mut idempotency = MemoryIdempotency::default();
+        let mut clock = FixedClock::new(1_000);
+        let error = run_desktop_interaction(
+            request(),
+            InteractionDependencies {
+                provider: &mut fixture,
+                authority: &mut authority,
+                coordinator: &coordinator,
+                idempotency: &mut idempotency,
+                clock: &mut clock,
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.code(), "desktop_interaction_authority_required");
+        assert!(fixture.events.is_empty());
+    }
+
     impl InputEvent {
         fn at_ms(&self) -> u64 {
             match self {
@@ -2181,37 +2438,7 @@ mod tests {
         }
     }
 
-    #[derive(Default)]
-    struct SyntheticCoordinator {
-        claim: Option<(String, String)>,
-        cancellation_checks: usize,
-        cancel_on_check: Option<usize>,
-    }
-
-    impl DesktopControlCoordinator for SyntheticCoordinator {
-        fn try_claim(&mut self, route_id: &str, transaction_id: &str) -> bool {
-            if self.claim.is_some() {
-                return false;
-            }
-            self.claim = Some((route_id.to_string(), transaction_id.to_string()));
-            true
-        }
-
-        fn cancelled(&mut self, _route_id: &str, _transaction_id: &str) -> bool {
-            self.cancellation_checks += 1;
-            self.cancel_on_check == Some(self.cancellation_checks)
-        }
-
-        fn release(&mut self, route_id: &str, transaction_id: &str) {
-            if self
-                .claim
-                .as_ref()
-                .is_some_and(|claim| claim.0 == route_id && claim.1 == transaction_id)
-            {
-                self.claim = None;
-            }
-        }
-    }
+    type SyntheticCoordinator = DesktopControlCoordinator;
 
     #[derive(Default)]
     struct MemoryIdempotency(BTreeMap<(String, String), IdempotencyRecord>);
@@ -2457,10 +2684,16 @@ mod tests {
 
         fn execute_event(
             &mut self,
-            _binding: &DesktopBinding,
-            _expected_surface: &SurfaceSnapshot,
+            binding: &DesktopBinding,
+            expected_surface: &SurfaceSnapshot,
             event: &InputEvent,
         ) -> Result<EventAcknowledgement, DesktopInteractionError> {
+            if binding != &self.binding() || expected_surface != &self.probe(binding)? {
+                return Err(DesktopInteractionError::new(
+                    "desktop_interaction_focus_changed",
+                    "synthetic sink rejected stale binding or surface evidence",
+                ));
+            }
             if let InputEvent::PointerMove { point, .. } = event {
                 self.pointer = *point;
             }

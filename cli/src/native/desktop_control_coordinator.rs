@@ -139,6 +139,32 @@ impl DesktopInteractionClaim {
             route: self.route.clone(),
         })
     }
+
+    /// Fence one best-effort release after a previously acknowledged down
+    /// event. A controller mutation may cancel the claim, but it must finish
+    /// before cleanup can emit and the original claim must still be current.
+    pub(crate) fn begin_cleanup_event(&self) -> Result<DesktopControlEventGuard, String> {
+        let mut state = self
+            .route
+            .state
+            .lock()
+            .map_err(|_| "desktop_control_coordinator_poisoned".to_string())?;
+        while state.controller_mutation_in_flight || state.event_in_flight {
+            state = self
+                .route
+                .changed
+                .wait(state)
+                .map_err(|_| "desktop_control_coordinator_poisoned".to_string())?;
+        }
+        if state.interaction_claim_id.as_deref() != Some(self.claim_id.as_str()) {
+            return Err("desktop_interaction_authority_changed".to_string());
+        }
+        state.event_in_flight = true;
+        drop(state);
+        Ok(DesktopControlEventGuard {
+            route: self.route.clone(),
+        })
+    }
 }
 
 impl Drop for DesktopInteractionClaim {
