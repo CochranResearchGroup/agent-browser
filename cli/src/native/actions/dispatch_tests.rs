@@ -145,6 +145,28 @@ fn test_error_response_structure() {
     assert_eq!(resp["error"], "Something went wrong");
 }
 
+#[test]
+fn desktop_capture_stream_result_redacts_response_only_pixels() {
+    let data = json!({
+        "context": {"contextId": "desktop-context-1"},
+        "frameReceipt": {"frameId": "desktop-frame-1"},
+        "imageBase64": "sensitive-pixels"
+    });
+
+    let broadcast = broadcast_result_data("desktop_capture", &data);
+
+    assert!(broadcast.get("imageBase64").is_none());
+    assert_eq!(broadcast["imagePayload"], "response_only");
+    assert_eq!(broadcast["frameReceipt"]["frameId"], "desktop-frame-1");
+    assert_eq!(data["imageBase64"], "sensitive-pixels");
+}
+
+#[test]
+fn ordinary_stream_results_remain_unchanged() {
+    let data = json!({"value": "ordinary"});
+    assert_eq!(broadcast_result_data("title", &data), data);
+}
+
 #[tokio::test]
 async fn test_execute_har_stop_skips_browser_auto_launch() {
     let path = std::env::temp_dir().join(format!(

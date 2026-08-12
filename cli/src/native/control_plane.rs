@@ -1241,6 +1241,7 @@ fn service_job_control_plane_mode(request: &ControlRequest) -> JobControlPlaneMo
         JobControlPlaneMode::CdpFree
     } else if request.priority == ControlPriority::Lifecycle
         || request.action == "view_takeover"
+        || request.action == "desktop_capture"
         || request.action.starts_with("service_")
     {
         JobControlPlaneMode::Service
@@ -1364,9 +1365,14 @@ fn service_job_command_string_any(command: &Value, keys: &[&str]) -> Option<Stri
 fn service_job_response_string_any(response: Option<&Value>, keys: &[&str]) -> Option<String> {
     let response = response?;
     for container in [response.get("data"), Some(response)].into_iter().flatten() {
-        for key in keys {
-            if let Some(value) = optional_command_string(container, key) {
-                return Some(value);
+        for candidate in [container.get("context"), Some(container)]
+            .into_iter()
+            .flatten()
+        {
+            for key in keys {
+                if let Some(value) = optional_command_string(candidate, key) {
+                    return Some(value);
+                }
             }
         }
     }
@@ -2076,6 +2082,15 @@ mod tests {
         );
         assert!(service_job_lifecycle_only(&view_takeover));
 
+        let desktop_capture = control_request_for_mode_test(json!({
+            "action": "desktop_capture"
+        }));
+        assert_eq!(
+            service_job_control_plane_mode(&desktop_capture),
+            JobControlPlaneMode::Service
+        );
+        assert!(service_job_lifecycle_only(&desktop_capture));
+
         let cdp = control_request_for_mode_test(json!({
             "action": "navigate"
         }));
@@ -2162,6 +2177,31 @@ mod tests {
         assert_eq!(
             finished_refs.controller_lease_id.as_deref(),
             Some("controller-resolved")
+        );
+
+        let desktop_request = control_request_for_mode_test(json!({
+            "action": "desktop_capture",
+            "browserId": "browser-1"
+        }));
+        let desktop_refs = service_job_allocation_refs(
+            &desktop_request,
+            Some(&json!({
+                "success": true,
+                "data": {
+                    "context": {
+                        "displayAllocationId": "display-captured",
+                        "routeId": "route-captured"
+                    }
+                }
+            })),
+        );
+        assert_eq!(
+            desktop_refs.display_allocation_id.as_deref(),
+            Some("display-captured")
+        );
+        assert_eq!(
+            desktop_refs.remote_view_route_id.as_deref(),
+            Some("route-captured")
         );
     }
 

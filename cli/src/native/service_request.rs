@@ -11,7 +11,7 @@ use std::fmt;
 
 use crate::native::remote_view_handoff::apply_remote_view_handoff_route_hints;
 use crate::native::service_access::apply_shared_profile_route_hints_for_service_request;
-use crate::native::service_contracts::SERVICE_REQUEST_ACTIONS;
+use crate::native::service_contracts::{DESKTOP_CAPTURE_HARD_MAX_BYTES, SERVICE_REQUEST_ACTIONS};
 use crate::native::service_model::ServiceState;
 
 const PROFILE_LEASE_POLICIES: &[&str] = &["reject", "wait"];
@@ -312,6 +312,8 @@ const SERVICE_REQUEST_FIELDS: &[ServiceRequestFieldSpec] = &[
     ServiceRequestFieldSpec::field("cdpPort", FieldKind::PositiveInteger, true, false, false),
     ServiceRequestFieldSpec::field("browserId", FieldKind::String, true, true, true),
     ServiceRequestFieldSpec::field("sessionName", FieldKind::String, true, true, true),
+    ServiceRequestFieldSpec::field("format", FieldKind::String, true, true, false),
+    ServiceRequestFieldSpec::field("maxBytes", FieldKind::PositiveInteger, true, true, false),
     ServiceRequestFieldSpec::field(
         "allowDuplicateProfileLane",
         FieldKind::Boolean,
@@ -621,6 +623,7 @@ fn validate_safety_gates(
     reject_external_byop_adopt_request(action, request)?;
     reject_bounded_evaluate_service_request(action, request)?;
     reject_service_diagnostics_request(action, request)?;
+    reject_desktop_capture_request(action, request)?;
     reject_service_probe_request(action, request)?;
     reject_tab_handle_refresh_request(action, request)?;
     reject_service_ui_action_request(action, request)?;
@@ -830,6 +833,91 @@ fn reject_service_diagnostics_request(
 ) -> Result<(), ServiceRequestIssue> {
     if action == "diagnostics" {
         validate_service_tab_handle(request, action, false)?;
+    }
+    Ok(())
+}
+
+fn reject_desktop_capture_request(
+    action: &str,
+    request: &Map<String, Value>,
+) -> Result<(), ServiceRequestIssue> {
+    if action != "desktop_capture" {
+        return Ok(());
+    }
+    let params = request.get("params").and_then(Value::as_object);
+    const DESKTOP_CAPTURE_FIELDS: &[&str] = &["browserId", "sessionName", "format", "maxBytes"];
+    if let Some(params) = params {
+        if let Some(field) = params
+            .keys()
+            .find(|field| !DESKTOP_CAPTURE_FIELDS.contains(&field.as_str()))
+        {
+            return Err(issue(
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                format!("desktop_capture does not accept params.{field}"),
+            ));
+        }
+        for field in DESKTOP_CAPTURE_FIELDS {
+            if let (Some(top_level), Some(nested)) = (request.get(*field), params.get(*field)) {
+                if top_level != nested {
+                    return Err(issue(
+                        ServiceRequestIssueKind::InvalidBoundedRecipe,
+                        format!("desktop_capture has conflicting {field} values"),
+                    ));
+                }
+            }
+        }
+    }
+    let capture_field = |field: &str| {
+        request
+            .get(field)
+            .or_else(|| params.and_then(|p| p.get(field)))
+    };
+    if capture_field("browserId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .is_none()
+    {
+        return Err(issue(
+            ServiceRequestIssueKind::InvalidBoundedRecipe,
+            "desktop_capture requires browserId",
+        ));
+    }
+    if let Some(format) = capture_field("format") {
+        if format.as_str() != Some("png") {
+            return Err(issue(
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                "desktop_capture format must be png",
+            ));
+        }
+    }
+    if capture_field("sessionName").is_some_and(|value| {
+        value
+            .as_str()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_none()
+    }) {
+        return Err(issue(
+            ServiceRequestIssueKind::InvalidBoundedRecipe,
+            "desktop_capture sessionName must be a nonempty string",
+        ));
+    }
+    if let Some(max_bytes) = capture_field("maxBytes") {
+        let Some(max_bytes) = max_bytes.as_u64().filter(|value| *value > 0) else {
+            return Err(issue(
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                "desktop_capture maxBytes must be a positive integer",
+            ));
+        };
+        if max_bytes > DESKTOP_CAPTURE_HARD_MAX_BYTES {
+            return Err(issue(
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                format!(
+                    "desktop_capture maxBytes must not exceed {DESKTOP_CAPTURE_HARD_MAX_BYTES}"
+                ),
+            ));
+        }
     }
     Ok(())
 }
@@ -1358,9 +1446,9 @@ mod tests {
         let canonical_names = sorted_names(properties.keys().cloned());
         let spec_names = spec_role_names(|_| true);
 
-        assert_eq!(canonical_names.len(), 62);
+        assert_eq!(canonical_names.len(), 64);
         assert_eq!(canonical_names, spec_names);
-        assert_eq!(role_contract["canonicalPropertyCount"], 62);
+        assert_eq!(role_contract["canonicalPropertyCount"], 64);
         assert_eq!(role_contract["transportLegacy"], json!(["args"]));
         assert!(!properties.contains_key("args"));
 
@@ -1591,6 +1679,48 @@ mod tests {
         .is_err());
     }
 
+    #[test]
+    fn desktop_capture_rejects_unbound_or_unsafe_request_fields() {
+        let fixtures = [
+            (
+                json!({"action": "desktop_capture", "format": "png"}),
+                "desktop_capture requires browserId",
+            ),
+            (
+                json!({"action": "desktop_capture", "browserId": "browser-1", "format": "jpeg"}),
+                "desktop_capture format must be png",
+            ),
+            (
+                json!({"action": "desktop_capture", "browserId": "browser-1", "maxBytes": DESKTOP_CAPTURE_HARD_MAX_BYTES + 1}),
+                "desktop_capture maxBytes must not exceed 16777216",
+            ),
+            (
+                json!({"action": "desktop_capture", "browserId": "browser-1", "params": {"displayName": ":99"}}),
+                "desktop_capture does not accept params.displayName",
+            ),
+            (
+                json!({"action": "desktop_capture", "browserId": "browser-1", "maxBytes": 1024, "params": {"maxBytes": 2048}}),
+                "desktop_capture has conflicting maxBytes values",
+            ),
+        ];
+
+        for (request, expected_message) in fixtures {
+            let error = normalize(request).unwrap_err();
+            assert_eq!(error.message(), expected_message);
+        }
+
+        assert!(normalize(json!({
+            "action": "desktop_capture",
+            "params": {
+                "browserId": "browser-1",
+                "sessionName": "default",
+                "format": "png",
+                "maxBytes": 1024
+            }
+        }))
+        .is_ok());
+    }
+
     fn test_tab_handle(valid: bool) -> Value {
         json!({
             "browserId": "session:default",
@@ -1621,6 +1751,11 @@ mod tests {
             }
             "diagnostics" => {
                 request["serviceTabHandle"] = test_tab_handle(true);
+            }
+            "desktop_capture" => {
+                request["browserId"] = json!("browser:desktop-fixture");
+                request["format"] = json!("png");
+                request["maxBytes"] = json!(4 * 1024 * 1024);
             }
             "probe" => {
                 request["serviceTabHandle"] = test_tab_handle(true);

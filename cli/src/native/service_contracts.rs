@@ -35,6 +35,7 @@ pub const SERVICE_ROUTE_POOL_MCP_RESOURCE: &str = "agent-browser://route-pool";
 pub const SERVICE_VIEWER_LEASES_MCP_RESOURCE: &str = "agent-browser://viewer-leases";
 pub const SERVICE_ACCESS_PLAN_MCP_TOOL_NAME: &str = "service_access_plan";
 pub const SERVICE_REQUEST_MCP_TOOL_NAME: &str = "service_request";
+pub const DESKTOP_CAPTURE_MCP_TOOL_NAME: &str = "desktop_capture";
 pub const SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME: &str =
     "service_browser_capability_preflight";
 pub const SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME: &str =
@@ -59,6 +60,12 @@ pub const SERVICE_REQUEST_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-request.v1.schema.json";
 pub const SERVICE_REQUEST_MCP_TOOL_CALL_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-request-mcp-tool-call.v1.schema.json";
+pub const DESKTOP_CONTEXT_SCHEMA_ID: &str =
+    "https://agent-browser.local/contracts/desktop-context.v1.schema.json";
+pub const FRAME_RECEIPT_SCHEMA_ID: &str =
+    "https://agent-browser.local/contracts/frame-receipt.v1.schema.json";
+pub const SERVICE_DESKTOP_CAPTURE_RESPONSE_SCHEMA_ID: &str =
+    "https://agent-browser.local/contracts/service-desktop-capture-response.v1.schema.json";
 pub const SERVICE_PROFILE_ALLOCATION_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-profile-allocation-response.v1.schema.json";
 pub const SERVICE_PROFILE_READINESS_RESPONSE_SCHEMA_ID: &str =
@@ -94,6 +101,8 @@ pub const SERVICE_BROWSER_CAPABILITY_PREFLIGHT_RESPONSE_SCHEMA_ID: &str =
 pub const SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-remote-view-route-preflight-response.v1.schema.json";
 pub const SERVICE_REQUEST_CONTRACT_VERSION: &str = "v1";
+pub const DESKTOP_CAPTURE_DEFAULT_MAX_BYTES: u64 = 4 * 1024 * 1024;
+pub const DESKTOP_CAPTURE_HARD_MAX_BYTES: u64 = 16 * 1024 * 1024;
 
 /// Actions accepted by HTTP `/api/service/request`, MCP `service_request`, and
 /// generated software clients. Service-maintenance actions live here too so
@@ -106,6 +115,7 @@ pub const SERVICE_REQUEST_ACTIONS: &[&str] = &[
     "cdp_detach",
     "evaluate",
     "diagnostics",
+    "desktop_capture",
     "probe",
     "tab_handle_refresh",
     "tab_handle_release",
@@ -222,6 +232,45 @@ pub fn service_contracts_metadata() -> Value {
                 "schemaId": SERVICE_REQUEST_MCP_TOOL_CALL_SCHEMA_ID,
                 "schemaPath": "docs/dev/contracts/service-request-mcp-tool-call.v1.schema.json",
                 "tool": SERVICE_REQUEST_MCP_TOOL_NAME,
+            },
+            "desktopContext": {
+                "version": SERVICE_REQUEST_CONTRACT_VERSION,
+                "schemaId": DESKTOP_CONTEXT_SCHEMA_ID,
+                "schemaPath": "docs/dev/contracts/desktop-context.v1.schema.json",
+            },
+            "frameReceipt": {
+                "version": SERVICE_REQUEST_CONTRACT_VERSION,
+                "schemaId": FRAME_RECEIPT_SCHEMA_ID,
+                "schemaPath": "docs/dev/contracts/frame-receipt.v1.schema.json",
+            },
+            "serviceDesktopCaptureResponse": {
+                "version": SERVICE_REQUEST_CONTRACT_VERSION,
+                "schemaId": SERVICE_DESKTOP_CAPTURE_RESPONSE_SCHEMA_ID,
+                "schemaPath": "docs/dev/contracts/service-desktop-capture-response.v1.schema.json",
+                "http": {
+                    "method": "POST",
+                    "route": SERVICE_REQUEST_HTTP_ROUTE,
+                    "action": "desktop_capture",
+                },
+                "mcp": {
+                    "tools": [SERVICE_REQUEST_MCP_TOOL_NAME, DESKTOP_CAPTURE_MCP_TOOL_NAME],
+                },
+                "client": {
+                    "package": "@agent-browser/client/service-request",
+                    "helpers": [
+                        "createServiceDesktopCaptureRequest",
+                        "requestServiceDesktopCapture",
+                        "captureServiceDesktopFrame"
+                    ],
+                },
+                "payload": {
+                    "format": "png",
+                    "defaultMaxBytes": DESKTOP_CAPTURE_DEFAULT_MAX_BYTES,
+                    "hardMaxBytes": DESKTOP_CAPTURE_HARD_MAX_BYTES,
+                    "retention": "ephemeral",
+                    "persisted": false,
+                },
+                "noLaunch": true,
             },
             "serviceBrowserCapabilityRegistryResponse": {
                 "version": SERVICE_REQUEST_CONTRACT_VERSION,
@@ -568,6 +617,7 @@ pub fn service_contracts_metadata() -> Value {
             "contractsResource": SERVICE_CONTRACTS_RESOURCE,
             "serviceBrowserCapabilityRegistryResource": SERVICE_BROWSER_CAPABILITY_REGISTRY_RESOURCE,
             "serviceRequestTool": SERVICE_REQUEST_MCP_TOOL_NAME,
+            "desktopCaptureTool": DESKTOP_CAPTURE_MCP_TOOL_NAME,
             "serviceAccessPlanTool": SERVICE_ACCESS_PLAN_MCP_TOOL_NAME,
             "serviceBrowserCapabilityPreflightTool": SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME,
             "serviceRemoteViewRoutePreflightTool": SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME,
@@ -610,6 +660,22 @@ mod tests {
         assert_eq!(
             metadata["contracts"]["serviceRequest"]["actionCount"],
             SERVICE_REQUEST_ACTIONS.len()
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceDesktopCaptureResponse"]["schemaId"],
+            SERVICE_DESKTOP_CAPTURE_RESPONSE_SCHEMA_ID
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceDesktopCaptureResponse"]["mcp"]["tools"][1],
+            DESKTOP_CAPTURE_MCP_TOOL_NAME
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceDesktopCaptureResponse"]["payload"]["defaultMaxBytes"],
+            DESKTOP_CAPTURE_DEFAULT_MAX_BYTES
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceDesktopCaptureResponse"]["payload"]["hardMaxBytes"],
+            DESKTOP_CAPTURE_HARD_MAX_BYTES
         );
         assert_eq!(
             metadata["contracts"]["serviceBrowserCapabilityRegistryResponse"]["schemaId"],
