@@ -417,6 +417,46 @@ an unauthenticated HTTP service request requires all three attribution labels.
 Generated client helpers are `createServiceDesktopLocateRequest()`,
 `requestServiceDesktopLocate()`, and `locateServiceDesktopControl()`.
 
+## Guarded Synthetic Desktop Interaction
+
+Use `desktop interact` only for the registered PoC 3 synthetic recipe and only
+with a pre-existing current controller lease:
+
+```bash
+agent-browser desktop interact \
+  --browser-id browser-123 \
+  --controller-lease-id viewer-7 \
+  --recipe-id p110-pointer-keyboard-v1 \
+  --service-name DesktopInteractor \
+  --agent-name fixture-agent \
+  --task-name verify-synthetic-control \
+  --json
+```
+
+PoC 3 is source-only and provider-free. It configures no X11, Guacamole, CDP,
+or operating-system input provider. An ordinary runtime request must fail with
+`desktop_input_provider_unavailable` before capture, controller mutation, or
+input. Do not interpret contract discovery as installed or live readiness.
+
+The recipe owns the fresh locator, server-derived pointer arc, one left click,
+fixed benign test text, release cleanup, and after-state verifier. Never pass
+coordinates, motion paths, timing, arbitrary buttons, keys or text, clipboard
+content, provider routing, focus actions, or controller takeover. The action
+does not request, renew, release, or take over a lease.
+
+HTTP and generated-client requests use `action: "desktop_interact"`, top-level
+`browserId`, `controllerLeaseId`, and
+`recipe: { recipeId: "p110-pointer-keyboard-v1" }`. Supply all three
+attribution labels. MCP clients can use the canonical `service_request` or the
+dedicated `desktop_interact` tool. Client helpers are
+`createServiceDesktopInteractRequest()`, `requestServiceDesktopInteract()`,
+and `runServiceDesktopInteraction()`.
+
+Treat partial-effect receipts as non-retryable. Receipt metadata omits frame
+pixels, plaintext typed content, and the full motion path. This recipe is not a
+Turnstile, CAPTCHA, passkey, LastPass, credential, or general desktop-control
+workflow.
+
 ## Core Workflow
 
 After the preferred service-owned remote-headed posture produces a browser session, browser automation follows this pattern:
@@ -864,6 +904,7 @@ agent-browser screenshot --screenshot-dir ./shots  # Save to custom directory
 agent-browser screenshot --screenshot-format jpeg --screenshot-quality 80
 agent-browser desktop capture --browser-id browser-123 --json # Capture the bound service-owned desktop
 agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1 --json # Locate the synthetic verification control without input
+agent-browser desktop interact --browser-id browser-123 --controller-lease-id viewer-7 --recipe-id p110-pointer-keyboard-v1 --service-name DesktopInteractor --agent-name fixture-agent --task-name verify-synthetic-control --json # Exercise the source-only guarded interaction contract
 agent-browser pdf output.pdf          # Save as PDF
 
 # Live preview / streaming

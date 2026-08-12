@@ -244,6 +244,100 @@ const location = await locateServiceDesktopControl({
 // => { success: true, data: { context, frameReceipt, observation } }
 ```
 
+## Run a guarded synthetic desktop interaction
+
+P110 PoC 3 exposes one atomic `desktop_interact` contract over the
+repository-owned synthetic fixture. It requires an existing current controller
+lease and a named recipe:
+
+```bash
+agent-browser desktop interact \
+  --browser-id browser-123 \
+  --controller-lease-id viewer-7 \
+  --recipe-id p110-pointer-keyboard-v1 \
+  --service-name DesktopInteractor \
+  --agent-name fixture-agent \
+  --task-name verify-synthetic-control \
+  --json
+```
+
+Use the canonical service request from HTTP:
+
+```bash
+curl -X POST "http://127.0.0.1:9223/api/service/request" \
+  -H "content-type: application/json" \
+  -d '{"action":"desktop_interact","browserId":"browser-123","controllerLeaseId":"viewer-7","recipe":{"recipeId":"p110-pointer-keyboard-v1"},"serviceName":"DesktopInteractor","agentName":"fixture-agent","taskName":"verify-synthetic-control"}'
+```
+
+MCP clients can send the same fields through `service_request` or the dedicated
+`desktop_interact` tool. Software clients use
+`createServiceDesktopInteractRequest()`, `requestServiceDesktopInteract()`, or
+`runServiceDesktopInteraction()`:
+
+```javascript
+import { runServiceDesktopInteraction } from "@agent-browser/client/service-request";
+
+const interaction = await runServiceDesktopInteraction({
+  baseUrl: "http://127.0.0.1:9223",
+  browserId: "browser-123",
+  controllerLeaseId: "viewer-7",
+  recipeId: "p110-pointer-keyboard-v1",
+  serviceName: "DesktopInteractor",
+  agentName: "fixture-agent",
+  taskName: "verify-synthetic-control",
+});
+```
+
+<table>
+  <thead>
+    <tr>
+      <th>Field</th>
+      <th>Requirement</th>
+      <th>Meaning</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>browserId</code></td>
+      <td>Required</td>
+      <td>The retained service-owned browser. It never selects a daemon session.</td>
+    </tr>
+    <tr>
+      <td><code>controllerLeaseId</code></td>
+      <td>Required</td>
+      <td>The exact pre-existing current controller lease.</td>
+    </tr>
+    <tr>
+      <td><code>recipe.recipeId</code></td>
+      <td>Required</td>
+      <td>PoC 3 accepts only <code>p110-pointer-keyboard-v1</code>.</td>
+    </tr>
+    <tr>
+      <td><code>serviceName</code>, <code>agentName</code>, <code>taskName</code></td>
+      <td>Required</td>
+      <td>Accountable attribution for this effect-capable request.</td>
+    </tr>
+  </tbody>
+</table>
+
+The action rejects nested `params`, caller frames and candidates, coordinates,
+paths, timing, buttons, arbitrary keys or plaintext, clipboard content,
+provider selection, focus actions, and takeover instructions. It never
+requests, renews, releases, or takes over controller authority.
+
+> **Experimental:** PoC 3 configures no production input provider. Contract
+> discovery can advertise `desktop_interact`, but ordinary production dispatch
+> returns `desktop_input_provider_unavailable` before capture, controller
+> mutation, or input. The complete transaction is proven only with an injected
+> in-memory synthetic fixture provider.
+
+The synthetic recipe owns its locator, server-derived deterministic pointer
+arc, one left click, fixed benign text, cleanup, and after-state verifier. It
+does not represent a Turnstile, CAPTCHA, passkey, LastPass, credential, or
+general desktop-control workflow. Receipt projections omit frame pixels,
+plaintext typed content, and full motion paths. Partial effects are explicit
+and non-retryable.
+
 <table>
   <thead>
     <tr>

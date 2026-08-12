@@ -209,6 +209,46 @@ fn format_desktop_locate_text(data: &serde_json::Value) -> Option<String> {
     )
 }
 
+fn format_desktop_interact_text(data: &serde_json::Value) -> Option<String> {
+    let receipt = data.get("interactionReceipt")?.as_object()?;
+    let transaction_id = receipt.get("transactionId")?.as_str()?;
+    let recipe_id = receipt.get("recipeId")?.as_str()?;
+    let effect_state = receipt.get("effectState")?.as_str()?;
+    let verification_state = receipt
+        .get("verificationState")
+        .and_then(|value| value.as_str())
+        .unwrap_or("not_run");
+    let stop_reason = receipt
+        .get("stopReason")
+        .and_then(|value| value.as_str())
+        .unwrap_or("none");
+    let event_count = receipt
+        .get("acknowledgementIds")
+        .and_then(|value| value.as_array())
+        .map(|value| value.len() as u64)
+        .unwrap_or(0);
+    let controller_epoch = receipt
+        .get("controllerEpoch")
+        .and_then(|value| value.as_u64())
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    Some(
+        [
+            "Desktop interaction receipt".to_string(),
+            format!("Transaction: {transaction_id}"),
+            format!("Recipe: {recipe_id}"),
+            format!("Controller epoch: {controller_epoch}"),
+            format!("Acknowledged events: {event_count}"),
+            format!("Effect state: {effect_state}"),
+            format!("Verification: {verification_state}"),
+            format!("Stop reason: {stop_reason}"),
+            "Use --json for the structured redacted receipt. Frame pixels, plaintext input, and full motion paths are never included.".to_string(),
+        ]
+        .join("\n"),
+    )
+}
+
 fn format_service_events_text(data: &serde_json::Value) -> Option<String> {
     let events = data.get("events").and_then(|value| value.as_array())?;
     if events.is_empty() {
@@ -2729,6 +2769,12 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
         }
         if action == Some("desktop_locate") {
             if let Some(output) = format_desktop_locate_text(data) {
+                println!("{}", output);
+                return;
+            }
+        }
+        if action == Some("desktop_interact") {
+            if let Some(output) = format_desktop_interact_text(data) {
                 println!("{}", output);
                 return;
             }
@@ -5324,11 +5370,12 @@ Examples:
         // === Desktop observation ===
         "desktop" => {
             r##"
-agent-browser desktop - Observe one service-owned desktop workspace
+agent-browser desktop - Observe or run one guarded synthetic desktop transaction
 
 Usage:
   agent-browser desktop capture --browser-id <id> [--max-bytes <bytes>]
   agent-browser desktop locate --browser-id <id> --locator-id <id> [--max-candidates <count>] [--include-visualization]
+  agent-browser desktop interact --browser-id <id> --controller-lease-id <id> --recipe-id p110-pointer-keyboard-v1 --service-name <name> --agent-name <name> --task-name <name>
 
 `desktop capture` asks the service worker to resolve one retained browser to
 its exact ready stream, route, and display allocation. It captures one PNG of
@@ -5351,12 +5398,27 @@ the response-only `visualizationBase64` value.
 PoC 1 capture and PoC 2 location are source-only and have no live RDP or
 Guacamole acceptance. Source presence is not installed-runtime proof.
 
+`desktop interact` is the PoC 3 atomic observe, locate, act, and verify
+contract. It accepts only a pre-existing controller lease and the registered
+`p110-pointer-keyboard-v1` synthetic recipe. It cannot request or take over
+control and accepts no coordinates, event plan, arbitrary key, plaintext, or
+provider selection. PoC 3 configures no production input provider, so ordinary
+runtime calls fail closed with `desktop_input_provider_unavailable` before
+capture or input. The complete transaction is source-proven only through an
+in-memory synthetic fixture provider.
+
 Options:
   --browser-id <id>       Select one retained service-owned browser
   --max-bytes <bytes>     Bound the PNG response (default: 4194304; max: 16777216)
   --locator-id <id>       Select one registered deterministic locator profile
   --max-candidates <n>    Bound candidates (default: 8; max: 32)
   --include-visualization Include an annotated response-only visualization in JSON
+  --controller-lease-id <id>
+                          Require the exact current controller lease
+  --recipe-id <id>        Select the registered synthetic interaction recipe
+  --service-name <name>   Accountable service attribution for interaction
+  --agent-name <name>     Accountable agent attribution for interaction
+  --task-name <name>      Accountable task attribution for interaction
 
 Global Options:
   --json                  Include imageBase64 in the structured response
@@ -5366,6 +5428,7 @@ Examples:
   agent-browser desktop capture --browser-id browser-123 --max-bytes 8388608 --json
   agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1
   agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1 --include-visualization --json
+  agent-browser desktop interact --browser-id browser-123 --controller-lease-id viewer-7 --recipe-id p110-pointer-keyboard-v1 --service-name DesktopInteractor --agent-name fixture-agent --task-name verify-synthetic-control --json
 "##
         }
 
@@ -6373,6 +6436,8 @@ Desktop observation:
                              Capture one service-bound desktop PNG receipt
   desktop locate --browser-id <id> --locator-id <id>
                              Locate deterministic candidates without input
+  desktop interact --browser-id <id> --controller-lease-id <id> --recipe-id <id> --service-name <name> --agent-name <name> --task-name <name>
+                             Run one guarded synthetic recipe; production input is unavailable
 
 Service:
   service status             Show service worker health, profile lease waits, and configured service state
@@ -6873,10 +6938,10 @@ pub fn print_version() {
 #[cfg(test)]
 mod tests {
     use super::{
-        format_desktop_capture_text, format_desktop_locate_text, format_service_access_plan_text,
-        format_service_browser_capability_preflight_text, format_service_browsers_text,
-        format_service_challenges_text, format_service_events_text, format_service_incidents_text,
-        format_service_jobs_text, format_service_monitor_state_text,
+        format_desktop_capture_text, format_desktop_interact_text, format_desktop_locate_text,
+        format_service_access_plan_text, format_service_browser_capability_preflight_text,
+        format_service_browsers_text, format_service_challenges_text, format_service_events_text,
+        format_service_incidents_text, format_service_jobs_text, format_service_monitor_state_text,
         format_service_monitors_run_due_text, format_service_monitors_text,
         format_service_profile_seeding_handoff_text, format_service_profiles_text,
         format_service_providers_text, format_service_prune_retained_text,
@@ -6996,6 +7061,33 @@ mod tests {
             assert!(rendered.contains(heading));
             assert!(rendered.contains("Selected candidate: none"));
         }
+    }
+
+    #[test]
+    fn desktop_interact_text_is_redacted_and_reports_effect_state() {
+        let data = json!({
+            "action": "desktop_interact",
+            "interactionReceipt": {
+                "transactionId": "interaction-request-7",
+                "recipeId": "p110-pointer-keyboard-v1",
+                "effectState": "verified_success",
+                "stopReason": "completed",
+                "controllerEpoch": 4,
+                "acknowledgementIds": ["ack-1", "ack-2"],
+                "plaintext": "must-not-render",
+                "fullPath": [[1, 2], [3, 4]],
+                "verificationState": "passed"
+            }
+        });
+
+        let rendered = format_desktop_interact_text(&data).unwrap();
+        assert!(rendered.contains("Transaction: interaction-request-7"));
+        assert!(rendered.contains("Controller epoch: 4"));
+        assert!(rendered.contains("Acknowledged events: 2"));
+        assert!(rendered.contains("Effect state: verified_success"));
+        assert!(rendered.contains("Verification: passed"));
+        assert!(!rendered.contains("must-not-render"));
+        assert!(!rendered.contains("[1,2]"));
     }
 
     #[test]

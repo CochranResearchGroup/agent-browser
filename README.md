@@ -268,6 +268,7 @@ agent-browser stream status           # Show runtime streaming state and bound p
 agent-browser stream disable          # Stop runtime WebSocket streaming
 agent-browser desktop capture --browser-id <id> # Capture one service-bound desktop PNG receipt
 agent-browser desktop locate --browser-id <id> --locator-id <id> # Locate deterministic desktop candidates
+agent-browser desktop interact --browser-id <id> --controller-lease-id <id> --recipe-id <id> --service-name <name> --agent-name <name> --task-name <name> # Run one guarded synthetic recipe
 agent-browser service status          # Show service control-plane and configured service state
 agent-browser service watch           # Poll service health until interrupted
 agent-browser service reconcile       # Refresh persisted browser health and route definitions
@@ -436,6 +437,61 @@ operation is observation-only. It does not click, move the pointer, type,
 submit, authenticate, or solve a challenge. Generated client helpers are
 `createServiceDesktopLocateRequest()`, `requestServiceDesktopLocate()`, and
 `locateServiceDesktopControl()`.
+
+### Guarded Synthetic Desktop Interaction
+
+PoC 3 defines one atomic observe, locate, act, and verify transaction over the
+repository-owned synthetic fixture:
+
+```bash
+agent-browser desktop interact \
+  --browser-id browser-123 \
+  --controller-lease-id viewer-7 \
+  --recipe-id p110-pointer-keyboard-v1 \
+  --service-name DesktopInteractor \
+  --agent-name fixture-agent \
+  --task-name verify-synthetic-control \
+  --json
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--browser-id <id>` | Required retained service-owned browser identity |
+| `--controller-lease-id <id>` | Required current controller lease for the exact route and stream |
+| `--recipe-id <id>` | Required registered recipe; PoC 3 accepts only `p110-pointer-keyboard-v1` |
+| `--service-name <name>` | Required accountable service label |
+| `--agent-name <name>` | Required accountable agent label |
+| `--task-name <name>` | Required accountable task label |
+
+> **Experimental:** PoC 3 is a provider-free source proof. It configures no
+> X11, Guacamole, CDP, or operating-system input provider. Ordinary runtime
+> requests fail with `desktop_input_provider_unavailable` before capture,
+> controller mutation, or input.
+
+The recipe derives its target from a fresh `p110-control-v1` observation. It
+owns the deterministic pointer arc, one left click, fixed non-sensitive test
+text, cleanup, and after-state verifier. Callers cannot supply coordinates,
+motion paths, timing, buttons, arbitrary keys or text, clipboard content,
+provider routing, focus actions, or controller takeover.
+
+The request requires an existing controller lease; `desktop interact` never
+requests, renews, releases, or takes over control. The complete transaction is
+proven only with an injected in-memory synthetic fixture provider. It is not a
+Turnstile, CAPTCHA, passkey, LastPass, credential, or general desktop-control
+workflow, and source presence is not installed or live proof.
+
+HTTP and software clients use `action: "desktop_interact"`, top-level
+`browserId`, `controllerLeaseId`, and
+`recipe: { recipeId: "p110-pointer-keyboard-v1" }`. All three attribution
+labels, `serviceName`, `agentName`, and `taskName`, are required. MCP clients
+can use `service_request` or the dedicated `desktop_interact` tool. Generated
+client helpers are `createServiceDesktopInteractRequest()`,
+`requestServiceDesktopInteract()`, and `runServiceDesktopInteraction()`.
+
+Receipts contain authority, hashed input, cleanup, and verification metadata.
+They do not contain frame pixels, plaintext typed content, or the full motion
+path. A partial input effect returns an explicit uncertain receipt and is never
+automatically retried.
 
 ### Get Info
 

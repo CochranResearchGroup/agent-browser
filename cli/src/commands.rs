@@ -87,6 +87,7 @@ const SERVICE_BROWSER_CAPABILITY_PREFER_USAGE: &str = "service browser-capabilit
 const SERVICE_ACCESS_PLAN_USAGE: &str = "service access-plan [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--site-policy-id <id>] [--challenge-id <id>] [--readiness-profile-id <id>] [--runtime-profile <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--browser-host <local_headless|local_headed|docker_headed|remote_headed|cloud_provider|attached_existing>] [--view-stream-provider <cdp_screencast|chrome_tab_webrtc|virtual_display_webrtc|novnc|rdp_gateway|external_url>] [--control-input-provider <cdp_input|webrtc_input|vnc_input|manual_attached_desktop>] [--display-isolation <private_virtual_display|shared_display|ambient_display>]";
 const DESKTOP_CAPTURE_USAGE: &str = "desktop capture --browser-id <id> [--max-bytes <bytes>]";
 const DESKTOP_LOCATE_USAGE: &str = "desktop locate --browser-id <id> --locator-id <id> [--max-candidates <count>] [--include-visualization]";
+const DESKTOP_INTERACT_USAGE: &str = "desktop interact --browser-id <id> --controller-lease-id <id> --recipe-id p110-pointer-keyboard-v1 --service-name <name> --agent-name <name> --task-name <name>";
 const DESKTOP_LOCATE_DEFAULT_MAX_CANDIDATES: u64 = 8;
 const DESKTOP_LOCATE_HARD_MAX_CANDIDATES: u64 = 32;
 
@@ -1164,17 +1165,95 @@ fn parse_desktop_locate(id: String, rest: &[&str]) -> Result<Value, ParseError> 
     }))
 }
 
+/// Parse one named guarded desktop interaction recipe. Targets, coordinates,
+/// event plans, input text, timing, and provider selection remain service
+/// owned and cannot be supplied through the CLI.
+fn parse_desktop_interact(id: String, rest: &[&str]) -> Result<Value, ParseError> {
+    let mut browser_id = None;
+    let mut controller_lease_id = None;
+    let mut recipe_id = None;
+    let mut service_name = None;
+    let mut agent_name = None;
+    let mut task_name = None;
+    let mut i = 1;
+    while i < rest.len() {
+        let (slot, flag) = match rest[i] {
+            "--browser-id" => (&mut browser_id, "--browser-id"),
+            "--controller-lease-id" => (&mut controller_lease_id, "--controller-lease-id"),
+            "--recipe-id" => (&mut recipe_id, "--recipe-id"),
+            "--service-name" => (&mut service_name, "--service-name"),
+            "--agent-name" => (&mut agent_name, "--agent-name"),
+            "--task-name" => (&mut task_name, "--task-name"),
+            flag => {
+                return Err(ParseError::InvalidValue {
+                    message: format!("Unknown flag for desktop interact: {flag}"),
+                    usage: DESKTOP_INTERACT_USAGE,
+                });
+            }
+        };
+        let value = required_next(rest, i, flag, DESKTOP_INTERACT_USAGE)?;
+        if value.starts_with("--") {
+            return Err(ParseError::InvalidValue {
+                message: format!("Missing value for {flag}"),
+                usage: DESKTOP_INTERACT_USAGE,
+            });
+        }
+        *slot = Some(value);
+        i += 2;
+    }
+
+    let (
+        Some(browser_id),
+        Some(controller_lease_id),
+        Some(recipe_id),
+        Some(service_name),
+        Some(agent_name),
+        Some(task_name),
+    ) = (
+        browser_id,
+        controller_lease_id,
+        recipe_id,
+        service_name,
+        agent_name,
+        task_name,
+    )
+    else {
+        return Err(ParseError::MissingArguments {
+            context: "desktop interact".to_string(),
+            usage: DESKTOP_INTERACT_USAGE,
+        });
+    };
+    if recipe_id != "p110-pointer-keyboard-v1" {
+        return Err(ParseError::InvalidValue {
+            message: format!("Unsupported desktop interaction recipe: {recipe_id}"),
+            usage: DESKTOP_INTERACT_USAGE,
+        });
+    }
+
+    Ok(json!({
+        "id": id,
+        "action": "desktop_interact",
+        "browserId": browser_id,
+        "controllerLeaseId": controller_lease_id,
+        "recipe": { "recipeId": recipe_id },
+        "serviceName": service_name,
+        "agentName": agent_name,
+        "taskName": task_name,
+    }))
+}
+
 fn parse_desktop(id: String, rest: &[&str]) -> Result<Value, ParseError> {
     match rest.first().copied() {
         Some("capture") => parse_desktop_capture(id, rest),
         Some("locate") => parse_desktop_locate(id, rest),
+        Some("interact") => parse_desktop_interact(id, rest),
         Some(subcommand) => Err(ParseError::UnknownSubcommand {
             subcommand: subcommand.to_string(),
-            valid_options: &["capture", "locate"],
+            valid_options: &["capture", "locate", "interact"],
         }),
         None => Err(ParseError::MissingArguments {
             context: "desktop".to_string(),
-            usage: "desktop <capture|locate>",
+            usage: "desktop <capture|locate|interact>",
         }),
     }
 }
@@ -7314,6 +7393,75 @@ mod tests {
             assert!(matches!(err, ParseError::InvalidValue { .. }));
             assert!(err.format().contains("Unknown flag for desktop locate"));
         }
+    }
+
+    #[test]
+    fn test_desktop_interact_builds_named_guarded_recipe() {
+        let cmd = parse_command(
+            &args(
+                "desktop interact --browser-id browser-123 --controller-lease-id viewer-7 --recipe-id p110-pointer-keyboard-v1 --service-name DesktopInteractor --agent-name fixture-agent --task-name verify-synthetic-control",
+            ),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "desktop_interact");
+        assert_eq!(cmd["browserId"], "browser-123");
+        assert_eq!(cmd["controllerLeaseId"], "viewer-7");
+        assert_eq!(cmd["recipe"]["recipeId"], "p110-pointer-keyboard-v1");
+        assert_eq!(cmd["serviceName"], "DesktopInteractor");
+        assert_eq!(cmd["agentName"], "fixture-agent");
+        assert_eq!(cmd["taskName"], "verify-synthetic-control");
+        assert!(cmd.get("params").is_none());
+        assert!(cmd.get("x").is_none());
+        assert!(cmd.get("text").is_none());
+        assert!(cmd.get("provider").is_none());
+    }
+
+    #[test]
+    fn test_desktop_interact_requires_all_authority_fields() {
+        for command in [
+            "desktop interact --controller-lease-id viewer-7 --recipe-id p110-pointer-keyboard-v1 --service-name DesktopInteractor --agent-name fixture-agent --task-name verify",
+            "desktop interact --browser-id browser-123 --recipe-id p110-pointer-keyboard-v1 --service-name DesktopInteractor --agent-name fixture-agent --task-name verify",
+            "desktop interact --browser-id browser-123 --controller-lease-id viewer-7 --service-name DesktopInteractor --agent-name fixture-agent --task-name verify",
+            "desktop interact --browser-id browser-123 --controller-lease-id viewer-7 --recipe-id p110-pointer-keyboard-v1 --agent-name fixture-agent --task-name verify",
+        ] {
+            let err = parse_command(&args(command), &default_flags()).unwrap_err();
+            assert!(matches!(err, ParseError::MissingArguments { .. }));
+            assert!(err.format().contains(DESKTOP_INTERACT_USAGE));
+        }
+    }
+
+    #[test]
+    fn test_desktop_interact_rejects_raw_input_and_effect_options() {
+        for flag in [
+            "--x",
+            "--path",
+            "--motion-seed",
+            "--text",
+            "--key",
+            "--provider",
+            "--takeover",
+            "--frame-id",
+        ] {
+            let command = format!(
+                "desktop interact --browser-id browser-123 --controller-lease-id viewer-7 --recipe-id p110-pointer-keyboard-v1 --service-name DesktopInteractor --agent-name fixture-agent --task-name verify {flag} value"
+            );
+            let err = parse_command(&args(&command), &default_flags()).unwrap_err();
+            assert!(matches!(err, ParseError::InvalidValue { .. }));
+            assert!(err.format().contains("Unknown flag for desktop interact"));
+        }
+
+        let err = parse_command(
+            &args(
+                "desktop interact --browser-id browser-123 --controller-lease-id viewer-7 --recipe-id arbitrary-input --service-name DesktopInteractor --agent-name fixture-agent --task-name verify",
+            ),
+            &default_flags(),
+        )
+        .unwrap_err();
+        assert!(err
+            .format()
+            .contains("Unsupported desktop interaction recipe"));
     }
 
     #[test]

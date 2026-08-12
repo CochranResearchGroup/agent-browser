@@ -48,6 +48,10 @@ pub mod dependent_batch;
 #[allow(dead_code)]
 pub mod desktop_capture;
 #[allow(dead_code)]
+pub(crate) mod desktop_control_coordinator;
+#[allow(dead_code)]
+pub(crate) mod desktop_interaction;
+#[allow(dead_code)]
 pub mod desktop_locator;
 #[allow(dead_code)]
 pub mod diff;
