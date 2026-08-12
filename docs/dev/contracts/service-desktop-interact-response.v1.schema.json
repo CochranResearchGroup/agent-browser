@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-desktop-interact-response.v1.schema.json",
+  "title": "agent-browser desktop interact response",
+  "description": "Immediate response data for action=desktop_interact. PoC 3 exposes only a named synthetic recipe and has no configured production input provider.",
+  "type": "object",
+  "required": ["ok", "action", "interactionReceipt"],
+  "properties": {
+    "ok": { "type": "boolean" },
+    "action": { "const": "desktop_interact" },
+    "interactionReceipt": { "$ref": "interaction-receipt.v1.schema.json" }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/interaction-receipt.v1.schema.json",
+  "title": "agent-browser desktop interaction receipt",
+  "description": "Privacy-safe receipt for one guarded synthetic desktop interaction. Frame bytes, visualization bytes, raw OCR text, plaintext keyboard content, full motion paths, provider stderr, filesystem paths, and provider URLs are excluded.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "transactionId",
+    "recipeId", "recipeVersion", "recipeSha256", "browserId",
+    "displayAllocationId", "streamId", "routeId", "controllerEpoch",
+    "authorityDigest", "actorDigest", "beforeContextId", "beforeFrameId",
+    "beforeFrameSha256", "beforeObservationId", "beforeObservationSha256",
+    "selectedCandidateId", "surfaceIdentityDigest", "browserProcessIdentityDigest",
+    "pointerStart", "target", "coordinateMapping", "motionProfile",
+    "controlPointDigest", "emittedPathSha256", "pointerEventCount", "durationMs",
+    "acknowledgementIds", "cleanupState", "textLength", "textSha256",
+    "afterContextId", "afterFrameId", "afterFrameSha256", "afterObservationId",
+    "afterObservationSha256", "verificationState", "effectState", "stopReason",
+    "retention", "persistedPixels"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "v1" },
+    "transactionId": { "type": "string", "minLength": 1 },
+    "recipeId": { "const": "p110-pointer-keyboard-v1" },
+    "recipeVersion": { "type": "string", "minLength": 1 },
+    "recipeSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "browserId": { "type": "string", "minLength": 1 },
+    "displayAllocationId": { "type": "string", "minLength": 1 },
+    "streamId": { "type": "string", "minLength": 1 },
+    "routeId": { "type": "string", "minLength": 1 },
+    "controllerEpoch": { "type": "integer", "minimum": 1 },
+    "authorityDigest": { "type": "string", "minLength": 1 },
+    "actorDigest": { "type": "string", "minLength": 1 },
+    "beforeContextId": { "type": "string", "minLength": 1 },
+    "beforeFrameId": { "type": "string", "minLength": 1 },
+    "beforeFrameSha256": { "type": "string", "minLength": 1 },
+    "beforeObservationId": { "type": "string", "minLength": 1 },
+    "beforeObservationSha256": { "type": "string", "minLength": 1 },
+    "selectedCandidateId": { "type": "string", "minLength": 1 },
+    "surfaceIdentityDigest": { "type": "string", "minLength": 1 },
+    "browserProcessIdentityDigest": { "type": "string", "minLength": 1 },
+    "pointerStart": { "$ref": "#/$defs/point" },
+    "target": { "$ref": "#/$defs/point" },
+    "coordinateMapping": { "type": "string", "minLength": 1 },
+    "motionProfile": { "type": "string", "minLength": 1 },
+    "controlPointDigest": { "type": "string", "minLength": 1 },
+    "emittedPathSha256": { "type": "string", "minLength": 1 },
+    "pointerEventCount": { "type": "integer", "minimum": 0, "maximum": 64 },
+    "durationMs": { "type": "integer", "minimum": 0 },
+    "acknowledgementIds": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "cleanupState": { "type": "string", "minLength": 1 },
+    "textLength": { "type": "integer", "minimum": 0, "maximum": 32 },
+    "textSha256": { "type": "string", "minLength": 1 },
+    "afterContextId": { "type": ["string", "null"] },
+    "afterFrameId": { "type": ["string", "null"] },
+    "afterFrameSha256": { "type": ["string", "null"] },
+    "afterObservationId": { "type": ["string", "null"] },
+    "afterObservationSha256": { "type": ["string", "null"] },
+    "effectState": {
+      "enum": ["no_effect", "verified_success", "effect_uncertain", "cancelled_after_effect"]
+    },
+    "verificationState": { "type": "string", "minLength": 1 },
+    "retention": { "const": "ephemeral" },
+    "stopReason": { "type": ["string", "null"] },
+    "persistedPixels": { "const": false }
+  },
+  "$defs": {
+    "point": {
+      "type": "object",
+      "required": ["x", "y"],
+      "properties": {
+        "x": { "type": "integer", "minimum": 0 },
+        "y": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

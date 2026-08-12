@@ -36,6 +36,8 @@ const displayIsolationSet = new Set([
  * @typedef {import('./service-request.generated.js').ServiceDiagnosticsRequestOptions} ServiceDiagnosticsRequestOptions
  * @typedef {import('./service-request.generated.js').ServiceDesktopCaptureRequestHttpOptions} ServiceDesktopCaptureRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceDesktopCaptureRequestOptions} ServiceDesktopCaptureRequestOptions
+ * @typedef {import('./service-request.generated.js').ServiceDesktopInteractRequestHttpOptions} ServiceDesktopInteractRequestHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceDesktopInteractRequestOptions} ServiceDesktopInteractRequestOptions
  * @typedef {import('./service-request.generated.js').ServiceDesktopLocateRequestHttpOptions} ServiceDesktopLocateRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceDesktopLocateRequestOptions} ServiceDesktopLocateRequestOptions
  * @typedef {import('./service-request.generated.js').ServiceProbeRequestHttpOptions} ServiceProbeRequestHttpOptions
@@ -160,6 +162,9 @@ export function createServiceRequest(input) {
   }
   if (input.action === 'desktop_locate') {
     validateDesktopLocateRequest(record);
+  }
+  if (input.action === 'desktop_interact') {
+    validateDesktopInteractRequest(record);
   }
 
   return { ...input };
@@ -624,6 +629,61 @@ export function createServiceDesktopLocateRequest(input) {
     ...(sessionName !== undefined ? { sessionName } : {}),
     locator: { locatorId, maxCandidates },
     includeVisualization,
+  });
+}
+
+/**
+ * Builds the sole named guarded synthetic desktop interaction request. Raw
+ * input, coordinates, pixels, provider choices, and generic params are not
+ * accepted by this effectful contract.
+ *
+ * @param {ServiceDesktopInteractRequestOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceDesktopInteractRequest(input) {
+  assertPlainObject(input, 'service desktop interact request');
+  const {
+    browserId,
+    sessionName,
+    controllerLeaseId,
+    recipeId,
+    serviceName,
+    agentName,
+    taskName,
+    ...request
+  } = input;
+  const allowedRequestFields = new Set(['jobTimeoutMs']);
+  const forbiddenField = Object.keys(request).find((field) => !allowedRequestFields.has(field));
+  if (forbiddenField !== undefined) {
+    throw new TypeError(`service desktop interact request does not accept ${forbiddenField}`);
+  }
+  for (const [field, value] of Object.entries({
+    browserId,
+    controllerLeaseId,
+    serviceName,
+    agentName,
+    taskName,
+  })) {
+    if (typeof value !== 'string' || value.trim().length === 0) {
+      throw new TypeError(`service desktop interact request requires ${field}`);
+    }
+  }
+  if (sessionName !== undefined && (typeof sessionName !== 'string' || sessionName.trim().length === 0)) {
+    throw new TypeError('service desktop interact request sessionName must be a non-empty string');
+  }
+  if (recipeId !== 'p110-pointer-keyboard-v1') {
+    throw new TypeError('service desktop interact request requires recipeId p110-pointer-keyboard-v1');
+  }
+  return createServiceRequest({
+    ...request,
+    action: 'desktop_interact',
+    browserId,
+    ...(sessionName !== undefined ? { sessionName } : {}),
+    controllerLeaseId,
+    recipe: { recipeId },
+    serviceName,
+    agentName,
+    taskName,
   });
 }
 
@@ -1377,6 +1437,32 @@ export async function requestServiceDesktopLocate({ baseUrl, fetch = globalThis.
  */
 export async function locateServiceDesktopControl(options) {
   return requestServiceDesktopLocate(options);
+}
+
+/**
+ * Request one guarded named desktop interaction. PoC 3 production dispatch
+ * fails closed until an input provider is configured.
+ *
+ * @param {ServiceDesktopInteractRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function requestServiceDesktopInteract({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceDesktopInteractRequest(request),
+  });
+}
+
+/**
+ * Convenience alias for requestServiceDesktopInteract.
+ *
+ * @param {ServiceDesktopInteractRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function runServiceDesktopInteraction(options) {
+  return requestServiceDesktopInteract(options);
 }
 
 /**
@@ -2274,6 +2360,55 @@ function validateDesktopLocateRequest(request) {
   const includeVisualization = field('includeVisualization');
   if (includeVisualization !== undefined && typeof includeVisualization !== 'boolean') {
     throw new TypeError('service desktop locate request includeVisualization must be a boolean');
+  }
+}
+
+/**
+ * @param {Record<string, unknown>} request
+ */
+function validateDesktopInteractRequest(request) {
+  const allowedFields = new Set([
+    'action',
+    'browserId',
+    'sessionName',
+    'controllerLeaseId',
+    'recipe',
+    'serviceName',
+    'agentName',
+    'taskName',
+    'jobTimeoutMs',
+  ]);
+  const forbiddenField = Object.keys(request).find((field) => !allowedFields.has(field));
+  if (forbiddenField !== undefined) {
+    throw new TypeError(`service desktop interact request does not accept ${forbiddenField}`);
+  }
+  for (const field of [
+    'browserId',
+    'controllerLeaseId',
+    'serviceName',
+    'agentName',
+    'taskName',
+  ]) {
+    if (typeof request[field] !== 'string' || String(request[field]).trim().length === 0) {
+      throw new TypeError(`service desktop interact request requires ${field}`);
+    }
+  }
+  if (
+    request.sessionName !== undefined &&
+    (typeof request.sessionName !== 'string' || request.sessionName.trim().length === 0)
+  ) {
+    throw new TypeError('service desktop interact request sessionName must be a non-empty string');
+  }
+  const recipe = recordFromUnknown(request.recipe);
+  if (recipe === null) {
+    throw new TypeError('service desktop interact request requires recipe');
+  }
+  const recipeField = Object.keys(recipe).find((field) => field !== 'recipeId');
+  if (recipeField !== undefined) {
+    throw new TypeError(`service desktop interact request recipe does not accept ${recipeField}`);
+  }
+  if (recipe.recipeId !== 'p110-pointer-keyboard-v1') {
+    throw new TypeError('service desktop interact request requires recipeId p110-pointer-keyboard-v1');
   }
 }
 

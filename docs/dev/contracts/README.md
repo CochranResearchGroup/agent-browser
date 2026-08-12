@@ -58,6 +58,19 @@ service trace inspection.
 `service-request-mcp-tool-call.v1.schema.json` describes the MCP `tools/call`
 wrapper for invoking `service_request` with the same intent object.
 
+The guarded desktop interaction contract is split between
+`service-desktop-interact-response.v1.schema.json` and
+`interaction-receipt.v1.schema.json`. `desktop_interact` requires an existing
+controller lease, the named `p110-pointer-keyboard-v1` synthetic recipe, and
+complete service, agent, and task attribution. It rejects generic `params`,
+caller coordinates, text, pixels, motion paths, provider selection, and lease
+mutation fields. PoC 3 metadata explicitly advertises
+`productionProviderConfigured: false`, so public production dispatch fails
+closed before capture, controller mutation, or input. Receipts contain hashes,
+identifiers, bounded acknowledgement summaries, and verification state, never
+frame bytes, raw OCR text, plaintext keyboard content, full motion paths,
+provider stderr, filesystem paths, or provider URLs.
+
 HTTP `GET /api/service/contracts` and MCP `agent-browser://contracts` expose
 runtime compatibility metadata for these contract IDs, their shared `v1`
 version, route and tool names, and the supported service request action list.

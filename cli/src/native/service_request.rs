@@ -322,6 +322,8 @@ const SERVICE_REQUEST_FIELDS: &[ServiceRequestFieldSpec] = &[
         true,
         false,
     ),
+    ServiceRequestFieldSpec::field("controllerLeaseId", FieldKind::String, true, true, false),
+    ServiceRequestFieldSpec::field("recipe", FieldKind::Object, true, true, false),
     ServiceRequestFieldSpec::field(
         "allowDuplicateProfileLane",
         FieldKind::Boolean,
@@ -633,6 +635,7 @@ fn validate_safety_gates(
     reject_service_diagnostics_request(action, request)?;
     reject_desktop_capture_request(action, request)?;
     reject_desktop_locate_request(action, request)?;
+    reject_desktop_interact_request(action, request)?;
     reject_service_probe_request(action, request)?;
     reject_tab_handle_refresh_request(action, request)?;
     reject_service_ui_action_request(action, request)?;
@@ -1060,6 +1063,89 @@ fn reject_desktop_locate_request(
         return Err(issue(
             ServiceRequestIssueKind::InvalidBoundedRecipe,
             "desktop_locate includeVisualization must be a boolean",
+        ));
+    }
+    Ok(())
+}
+
+fn reject_desktop_interact_request(
+    action: &str,
+    request: &Map<String, Value>,
+) -> Result<(), ServiceRequestIssue> {
+    if action != "desktop_interact" {
+        return Ok(());
+    }
+    const TOP_LEVEL_FIELDS: &[&str] = &[
+        "action",
+        "browserId",
+        "sessionName",
+        "controllerLeaseId",
+        "recipe",
+        "serviceName",
+        "agentName",
+        "taskName",
+        "jobTimeoutMs",
+    ];
+    if let Some(field) = request
+        .keys()
+        .find(|field| !TOP_LEVEL_FIELDS.contains(&field.as_str()))
+    {
+        return Err(issue(
+            ServiceRequestIssueKind::InvalidBoundedRecipe,
+            format!("desktop_interact does not accept {field}"),
+        ));
+    }
+    for field in [
+        "browserId",
+        "controllerLeaseId",
+        "serviceName",
+        "agentName",
+        "taskName",
+    ] {
+        if request
+            .get(field)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_none()
+        {
+            return Err(issue(
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                format!("desktop_interact requires {field}"),
+            ));
+        }
+    }
+    if request.get("sessionName").is_some_and(|value| {
+        value
+            .as_str()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_none()
+    }) {
+        return Err(issue(
+            ServiceRequestIssueKind::InvalidBoundedRecipe,
+            "desktop_interact sessionName must be a nonempty string",
+        ));
+    }
+    let recipe = request
+        .get("recipe")
+        .and_then(Value::as_object)
+        .ok_or_else(|| {
+            issue(
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                "desktop_interact requires recipe",
+            )
+        })?;
+    if let Some(field) = recipe.keys().find(|field| field.as_str() != "recipeId") {
+        return Err(issue(
+            ServiceRequestIssueKind::InvalidBoundedRecipe,
+            format!("desktop_interact recipe does not accept {field}"),
+        ));
+    }
+    if recipe.get("recipeId").and_then(Value::as_str) != Some("p110-pointer-keyboard-v1") {
+        return Err(issue(
+            ServiceRequestIssueKind::InvalidBoundedRecipe,
+            "desktop_interact requires recipeId p110-pointer-keyboard-v1",
         ));
     }
     Ok(())
@@ -1918,6 +2004,45 @@ mod tests {
             ),
         ];
         for (request, expected_message) in fixtures {
+            let error = normalize(request).unwrap_err();
+            assert_eq!(error.message(), expected_message);
+        }
+    }
+
+    #[test]
+    fn desktop_interact_requires_one_attributed_named_recipe_without_raw_input() {
+        let normalized = normalize(json!({
+            "action": "desktop_interact",
+            "browserId": "browser-1",
+            "sessionName": "rdp-1",
+            "controllerLeaseId": "lease-1",
+            "recipe": { "recipeId": "p110-pointer-keyboard-v1" },
+            "serviceName": "DesktopInteractor",
+            "agentName": "fixture-agent",
+            "taskName": "verify-synthetic-control"
+        }))
+        .unwrap();
+        assert_eq!(normalized.command["action"], "desktop_interact");
+        assert_eq!(normalized.command["controllerLeaseId"], "lease-1");
+
+        for (request, expected_message) in [
+            (
+                json!({"action":"desktop_interact","browserId":"browser-1","controllerLeaseId":"lease-1","recipe":{"recipeId":"p110-pointer-keyboard-v1"},"serviceName":"DesktopInteractor","agentName":"fixture-agent"}),
+                "desktop_interact requires taskName",
+            ),
+            (
+                json!({"action":"desktop_interact","browserId":"browser-1","controllerLeaseId":"lease-1","recipe":{"recipeId":"wrong"},"serviceName":"DesktopInteractor","agentName":"fixture-agent","taskName":"verify"}),
+                "desktop_interact requires recipeId p110-pointer-keyboard-v1",
+            ),
+            (
+                json!({"action":"desktop_interact","browserId":"browser-1","controllerLeaseId":"lease-1","recipe":{"recipeId":"p110-pointer-keyboard-v1"},"serviceName":"DesktopInteractor","agentName":"fixture-agent","taskName":"verify","params":{}}),
+                "desktop_interact does not accept params",
+            ),
+            (
+                json!({"action":"desktop_interact","browserId":"browser-1","controllerLeaseId":"lease-1","recipe":{"recipeId":"p110-pointer-keyboard-v1","text":"secret"},"serviceName":"DesktopInteractor","agentName":"fixture-agent","taskName":"verify"}),
+                "desktop_interact recipe does not accept text",
+            ),
+        ] {
             let error = normalize(request).unwrap_err();
             assert_eq!(error.message(), expected_message);
         }

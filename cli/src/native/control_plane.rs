@@ -10,6 +10,7 @@ use tokio::sync::{mpsc, oneshot};
 use super::action_runtime::{service_profile_lease_gate, DaemonState, ServiceProfileLeaseGate};
 use super::actions::execute_command;
 use super::cancellation::CancellationToken as RunningJobCancel;
+use super::desktop_interaction::redact_desktop_interaction_stream_result;
 use super::service_health::{
     apply_browser_health_observation, browser_health_observation_details,
     persist_reconciled_service_state_in_repository, reconcile_persisted_service_state,
@@ -1028,18 +1029,25 @@ fn persist_service_job_finished(request: &ControlRequest, response: &Value) {
         started_at: Some(started_at),
         completed_at: Some(current_timestamp()),
         timeout_ms: request.timeout_ms,
-        result: Some(service_job_persisted_result(response)),
+        result: Some(service_job_persisted_result(request, response)),
         error,
     });
 }
 
-fn service_job_persisted_result(response: &Value) -> Value {
-    json!({
-        "success": response
-            .get("success")
-            .and_then(Value::as_bool)
-            .unwrap_or(false)
-    })
+fn service_job_persisted_result(request: &ControlRequest, response: &Value) -> Value {
+    let success = response
+        .get("success")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if request.action == "desktop_interact" {
+        return json!({
+            "success": success,
+            "data": redact_desktop_interaction_stream_result(
+                response.get("data").unwrap_or(&Value::Null),
+            ),
+        });
+    }
+    json!({ "success": success })
 }
 
 fn persist_service_job_timed_out(request: &ControlRequest) {
@@ -1252,7 +1260,7 @@ fn service_job_control_plane_mode(request: &ControlRequest) -> JobControlPlaneMo
         || request.action == "view_takeover"
         || matches!(
             request.action.as_str(),
-            "desktop_capture" | "desktop_locate"
+            "desktop_capture" | "desktop_locate" | "desktop_interact"
         )
         || request.action.starts_with("service_")
     {
@@ -1377,9 +1385,13 @@ fn service_job_command_string_any(command: &Value, keys: &[&str]) -> Option<Stri
 fn service_job_response_string_any(response: Option<&Value>, keys: &[&str]) -> Option<String> {
     let response = response?;
     for container in [response.get("data"), Some(response)].into_iter().flatten() {
-        for candidate in [container.get("context"), Some(container)]
-            .into_iter()
-            .flatten()
+        for candidate in [
+            container.get("context"),
+            container.get("interactionReceipt"),
+            Some(container),
+        ]
+        .into_iter()
+        .flatten()
         {
             for key in keys {
                 if let Some(value) = optional_command_string(candidate, key) {
@@ -1881,6 +1893,7 @@ mod tests {
 
     #[test]
     fn persisted_job_result_excludes_response_only_desktop_pixels() {
+        let request = control_request_for_mode_test(json!({ "action": "desktop_capture" }));
         let response = json!({
             "success": true,
             "data": {
@@ -1890,10 +1903,52 @@ mod tests {
             }
         });
 
-        let persisted = service_job_persisted_result(&response);
+        let persisted = service_job_persisted_result(&request, &response);
 
         assert_eq!(persisted, json!({ "success": true }));
         assert!(!persisted.to_string().contains("sensitive-pixels"));
+    }
+
+    #[test]
+    fn persisted_desktop_interaction_uses_the_stream_safe_receipt_projection() {
+        let request = control_request_for_mode_test(json!({ "action": "desktop_interact" }));
+        let response = json!({
+            "success": true,
+            "data": {
+                "ok": true,
+                "action": "desktop_interact",
+                "interactionReceipt": {
+                    "transactionId": "transaction-1",
+                    "recipeId": "p110-pointer-keyboard-v1",
+                    "textLength": 13,
+                    "textSha256": "text-digest",
+                    "emittedPathSha256": "path-digest",
+                    "persistedPixels": false,
+                    "imageBase64": "sensitive-pixels",
+                    "text": "sensitive-plaintext",
+                    "emittedPath": [{ "x": 1, "y": 2 }],
+                    "outputPath": "/sensitive/full/path"
+                }
+            }
+        });
+
+        let persisted = service_job_persisted_result(&request, &response);
+
+        assert_eq!(persisted["success"], json!(true));
+        assert_eq!(persisted["data"]["ok"], json!(true));
+        assert_eq!(
+            persisted["data"]["interactionReceipt"]["transactionId"],
+            json!("transaction-1")
+        );
+        assert_eq!(
+            persisted["data"]["interactionReceipt"]["emittedPathSha256"],
+            json!("path-digest")
+        );
+        let serialized = persisted.to_string();
+        assert!(!serialized.contains("sensitive-pixels"));
+        assert!(!serialized.contains("sensitive-plaintext"));
+        assert!(!serialized.contains("emittedPath\""));
+        assert!(!serialized.contains("/sensitive/full/path"));
     }
 
     fn temp_home(label: &str) -> std::path::PathBuf {
@@ -2128,6 +2183,15 @@ mod tests {
             JobControlPlaneMode::Service
         );
         assert!(service_job_lifecycle_only(&desktop_locate));
+
+        let desktop_interact = control_request_for_mode_test(json!({
+            "action": "desktop_interact"
+        }));
+        assert_eq!(
+            service_job_control_plane_mode(&desktop_interact),
+            JobControlPlaneMode::Service
+        );
+        assert!(service_job_lifecycle_only(&desktop_interact));
 
         let cdp = control_request_for_mode_test(json!({
             "action": "navigate"

@@ -5079,6 +5079,8 @@ pub struct RemoteViewRoute {
     pub state: String,
     pub viewer_lease_ids: Vec<String>,
     pub controller_lease_id: Option<String>,
+    /// Monotonic fencing token for primary-controller authority on this route.
+    pub controller_epoch: u64,
     pub last_provider_event: Option<String>,
     pub readiness: Option<Value>,
 }
@@ -5104,9 +5106,20 @@ impl Default for RemoteViewRoute {
             state: "allocating".to_string(),
             viewer_lease_ids: Vec::new(),
             controller_lease_id: None,
+            controller_epoch: 0,
             last_provider_event: None,
             readiness: None,
         }
+    }
+}
+
+impl RemoteViewRoute {
+    /// Advance primary-controller authority, including same-id re-grants that
+    /// would otherwise permit an ABA reuse of an older authority receipt.
+    pub(crate) fn advance_controller(&mut self, controller_lease_id: Option<String>) -> u64 {
+        self.controller_epoch = self.controller_epoch.saturating_add(1);
+        self.controller_lease_id = controller_lease_id;
+        self.controller_epoch
     }
 }
 
@@ -6054,6 +6067,8 @@ pub struct ViewStream {
     /// Current controller lease id for this route.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub controller_lease_id: Option<String>,
+    /// Route-owned controller fencing token copied into this stream projection.
+    pub controller_epoch: u64,
     pub read_only: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub readiness: Option<Value>,
@@ -6083,12 +6098,73 @@ impl Default for ViewStream {
             provider_mode: None,
             viewer_lease_ids: Vec::new(),
             controller_lease_id: None,
+            controller_epoch: 0,
             read_only: true,
             readiness: None,
             remote_readiness: None,
             attachability: None,
         }
     }
+}
+
+impl ViewStream {
+    /// Copy the authoritative controller identity and fencing epoch from a
+    /// route. Streams never advance controller authority independently.
+    pub(crate) fn project_controller(&mut self, route: &RemoteViewRoute) {
+        self.controller_lease_id = route.controller_lease_id.clone();
+        self.controller_epoch = route.controller_epoch;
+    }
+}
+
+/// Change the primary controller once, advance its ABA fencing epoch, and
+/// project that exact authority into every stream bound to the route.
+pub(crate) fn advance_route_controller_authority(
+    state: &mut ServiceState,
+    route_id: &str,
+    controller_lease_id: Option<String>,
+) -> Result<u64, String> {
+    let route = state
+        .remote_view_routes
+        .get_mut(route_id)
+        .ok_or_else(|| format!("remote view route '{route_id}' not found"))?;
+    let epoch = route.advance_controller(controller_lease_id);
+    let route = route.clone();
+    for browser in state.browsers.values_mut() {
+        for stream in &mut browser.view_streams {
+            if stream.route_id.as_deref() == Some(route_id) {
+                stream.project_controller(&route);
+            }
+        }
+    }
+    Ok(epoch)
+}
+
+/// Check the route/stream portion of a previously observed controller fence.
+/// Lease role, actor, expiry, and desktop binding remain interaction-layer
+/// predicates; this helper prevents former-controller and ABA acceptance.
+pub(crate) fn controller_authority_fence_matches(
+    state: &ServiceState,
+    route_id: &str,
+    stream_id: &str,
+    controller_lease_id: &str,
+    controller_epoch: u64,
+) -> bool {
+    let Some(route) = state.remote_view_routes.get(route_id) else {
+        return false;
+    };
+    if route.controller_lease_id.as_deref() != Some(controller_lease_id)
+        || route.controller_epoch != controller_epoch
+    {
+        return false;
+    }
+    state.browsers.values().any(|browser| {
+        browser.view_streams.iter().any(|stream| {
+            stream.id == stream_id
+                && stream.route_id.as_deref() == Some(route_id)
+                && stream.controller_lease_id.as_deref() == Some(controller_lease_id)
+                && stream.controller_epoch == controller_epoch
+        })
+    })
 }
 
 /// Supported live-view transport families.
@@ -6351,6 +6427,109 @@ pub enum ChallengeState {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn controller_epoch_defaults_for_legacy_records_and_fences_same_id_regrant() {
+        let mut route: RemoteViewRoute = serde_json::from_value(json!({
+            "id": "route-a",
+            "controllerLeaseId": "controller-a"
+        }))
+        .unwrap();
+        let stream: ViewStream = serde_json::from_value(json!({
+            "id": "stream-a",
+            "controllerLeaseId": "controller-a"
+        }))
+        .unwrap();
+
+        assert_eq!(route.controller_epoch, 0);
+        assert_eq!(stream.controller_epoch, 0);
+        assert_eq!(
+            route.advance_controller(Some("controller-a".to_string())),
+            1
+        );
+        assert_eq!(route.advance_controller(None), 2);
+        assert_eq!(
+            route.advance_controller(Some("controller-a".to_string())),
+            3
+        );
+    }
+
+    #[test]
+    fn controller_fence_rejects_former_controller_and_same_id_aba() {
+        let route_id = "route-a".to_string();
+        let mut state = ServiceState {
+            browsers: BTreeMap::from([(
+                "browser-a".to_string(),
+                BrowserProcess {
+                    id: "browser-a".to_string(),
+                    view_streams: vec![ViewStream {
+                        id: "stream-a".to_string(),
+                        route_id: Some(route_id.clone()),
+                        ..ViewStream::default()
+                    }],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            remote_view_routes: BTreeMap::from([(
+                route_id.clone(),
+                RemoteViewRoute {
+                    id: route_id.clone(),
+                    ..RemoteViewRoute::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let first_epoch = advance_route_controller_authority(
+            &mut state,
+            &route_id,
+            Some("controller-a".to_string()),
+        )
+        .unwrap();
+        assert!(controller_authority_fence_matches(
+            &state,
+            &route_id,
+            "stream-a",
+            "controller-a",
+            first_epoch,
+        ));
+
+        let takeover_epoch = advance_route_controller_authority(
+            &mut state,
+            &route_id,
+            Some("controller-b".to_string()),
+        )
+        .unwrap();
+        assert!(!controller_authority_fence_matches(
+            &state,
+            &route_id,
+            "stream-a",
+            "controller-a",
+            first_epoch,
+        ));
+        assert!(controller_authority_fence_matches(
+            &state,
+            &route_id,
+            "stream-a",
+            "controller-b",
+            takeover_epoch,
+        ));
+
+        let aba_epoch = advance_route_controller_authority(
+            &mut state,
+            &route_id,
+            Some("controller-a".to_string()),
+        )
+        .unwrap();
+        assert_ne!(aba_epoch, first_epoch);
+        assert!(!controller_authority_fence_matches(
+            &state,
+            &route_id,
+            "stream-a",
+            "controller-a",
+            first_epoch,
+        ));
+    }
 
     fn assert_schema_required_fields(schema: &serde_json::Value, fields: &[&str]) {
         for field in fields {

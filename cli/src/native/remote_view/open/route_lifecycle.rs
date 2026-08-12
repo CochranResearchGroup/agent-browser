@@ -10,6 +10,8 @@ use super::route_pool::{
     select_browser_reattach_route_pool_entry,
 };
 use super::shared::*;
+use crate::native::desktop_control_coordinator::global_desktop_control_coordinator;
+use crate::native::service_model::advance_route_controller_authority;
 pub(crate) async fn handle_service_remote_view_browser_reattach(
     cmd: &Value,
     daemon_state: &DaemonState,
@@ -542,6 +544,8 @@ pub(crate) async fn handle_service_remote_view_route_release(
     _daemon_state: &DaemonState,
 ) -> Result<Value, String> {
     let route_id = required_remote_view_route_id(cmd)?;
+    let _controller_mutation =
+        global_desktop_control_coordinator().begin_controller_mutation(&route_id)?;
     let now = service_remote_view_timestamp();
     let repository = LockedServiceStateRepository::default_json()?;
     repository.mutate(|state| {
@@ -550,15 +554,23 @@ pub(crate) async fn handle_service_remote_view_route_release(
             .unwrap_or(false);
         let route = state
             .remote_view_routes
-            .get_mut(&route_id)
+            .get(&route_id)
+            .cloned()
             .ok_or_else(|| format!("remote view route '{}' not found", route_id))?;
-        route.state = "released".to_string();
-        route.last_provider_event = Some("route_released".to_string());
         let display_allocation_id = route.display_allocation_id.clone();
         let browser_id = route.browser_id.clone();
         let session_id = route.session_id.clone();
         let viewer_lease_ids = route.viewer_lease_ids.clone();
-        route.controller_lease_id = None;
+        if route.controller_lease_id.is_some() {
+            advance_route_controller_authority(state, &route_id, None)?;
+        }
+        let released_route = state
+            .remote_view_routes
+            .get_mut(&route_id)
+            .ok_or_else(|| format!("remote view route '{}' not found", route_id))?;
+        released_route.state = "released".to_string();
+        released_route.last_provider_event = Some("route_released".to_string());
+        let released_route = released_route.clone();
         for lease_id in &viewer_lease_ids {
             if let Some(lease) = state.viewer_leases.get_mut(lease_id) {
                 lease.state = "disconnected".to_string();
@@ -606,7 +618,7 @@ pub(crate) async fn handle_service_remote_view_route_release(
                 for stream in &mut browser.view_streams {
                     if stream.route_id.as_deref() == Some(route_id.as_str()) {
                         stream.viewer_lease_ids.clear();
-                        stream.controller_lease_id = None;
+                        stream.project_controller(&released_route);
                         stream.remote_readiness =
                             Some(json!({ "state" : "released", "updatedAt" : now, }));
                     }
@@ -677,7 +689,7 @@ pub(crate) fn upsert_remote_view_stream_for_route(
         stream.route_source = Some(route.route_source.clone());
         stream.provider_mode = Some(route.provider_mode.clone());
         stream.viewer_lease_ids = route.viewer_lease_ids.clone();
-        stream.controller_lease_id = route.controller_lease_id.clone();
+        stream.project_controller(route);
         stream.read_only = route.read_only;
         stream.readiness = route.readiness.clone();
         let mut remote_readiness = json!(

@@ -169,6 +169,7 @@ pub(crate) fn remote_headed_view_streams_from_command(command: &Value) -> Vec<Vi
         provider_mode,
         viewer_lease_ids: Vec::new(),
         controller_lease_id: None,
+        controller_epoch: 0,
         read_only: false,
         readiness: None,
         remote_readiness: None,
@@ -378,6 +379,7 @@ pub(crate) fn cdp_screencast_view_stream(
         provider_mode: Some("simultaneous_view".to_string()),
         viewer_lease_ids: Vec::new(),
         controller_lease_id: None,
+        controller_epoch: 0,
         read_only: !ready,
         readiness: Some(cdp_screencast_readiness(
             if ready { "ready" } else { "unavailable" },

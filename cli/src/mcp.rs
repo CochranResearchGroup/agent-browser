@@ -9,8 +9,9 @@ use crate::native::service_access::{
 use crate::native::service_activity::service_incident_activity_response;
 use crate::native::service_contracts::{
     service_contracts_metadata, DESKTOP_CAPTURE_DEFAULT_MAX_BYTES, DESKTOP_CAPTURE_HARD_MAX_BYTES,
-    DESKTOP_CAPTURE_MCP_TOOL_NAME, DESKTOP_LOCATE_MCP_TOOL_NAME, SERVICE_ACCESS_PLAN_MCP_RESOURCE,
-    SERVICE_ACCESS_PLAN_MCP_TOOL_NAME, SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME,
+    DESKTOP_CAPTURE_MCP_TOOL_NAME, DESKTOP_INTERACT_MCP_TOOL_NAME, DESKTOP_LOCATE_MCP_TOOL_NAME,
+    SERVICE_ACCESS_PLAN_MCP_RESOURCE, SERVICE_ACCESS_PLAN_MCP_TOOL_NAME,
+    SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME,
     SERVICE_BROWSER_CAPABILITY_REGISTRY_RESOURCE, SERVICE_CONTRACTS_RESOURCE,
     SERVICE_DISPLAY_ALLOCATIONS_MCP_RESOURCE, SERVICE_PROFILE_SEEDING_HANDOFF_UPDATE_MCP_TOOL_NAME,
     SERVICE_REMOTE_VIEW_ROUTES_MCP_RESOURCE, SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME,
@@ -857,6 +858,19 @@ fn service_mcp_tools() -> Vec<Value> {
                         "default": false,
                         "description": "Return a bounded response-only visualization for action=desktop_locate."
                     },
+                    "controllerLeaseId": {
+                        "type": "string",
+                        "description": "Existing primary controller lease required by action=desktop_interact."
+                    },
+                    "recipe": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["recipeId"],
+                        "properties": {
+                            "recipeId": { "type": "string", "enum": ["p110-pointer-keyboard-v1"] }
+                        },
+                        "description": "Repository-owned synthetic interaction recipe. Raw input fields are not accepted."
+                    },
                     "sessionName": {
                         "type": "string",
                         "description": "Optional daemon session route hint copied from access-plan profileReuse reuse recommendations. Top-level hints route ordinary commands to an existing daemon lane."
@@ -1113,6 +1127,7 @@ fn service_mcp_tools() -> Vec<Value> {
         }),
         desktop_capture_tool_schema(),
         desktop_locate_tool_schema(),
+        desktop_interact_tool_schema(),
         json!({
             "name": "service_job_cancel",
             "title": "Cancel service job",
@@ -4694,6 +4709,29 @@ fn desktop_locate_tool_schema() -> Value {
     })
 }
 
+fn desktop_interact_tool_schema() -> Value {
+    json!({
+        "name": DESKTOP_INTERACT_MCP_TOOL_NAME,
+        "title": "Run guarded synthetic desktop interaction",
+        "description": "Queue one named observe, locate, act, and verify transaction against an exact service-owned desktop. PoC 3 has no configured production input provider, so public dispatch fails closed before capture, lease mutation, or input.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "browserId": { "type": "string", "description": "Required service-owned browser id." },
+                "sessionName": { "type": "string", "description": "Optional daemon session used only to narrow routing." },
+                "controllerLeaseId": { "type": "string", "description": "Existing primary controller lease id." },
+                "recipeId": { "type": "string", "enum": ["p110-pointer-keyboard-v1"], "description": "Sole repository-owned synthetic interaction recipe." },
+                "jobTimeoutMs": { "type": "integer", "minimum": 1 },
+                "serviceName": { "type": "string", "description": "Required calling service name." },
+                "agentName": { "type": "string", "description": "Required calling agent name." },
+                "taskName": { "type": "string", "description": "Required calling task name." }
+            },
+            "required": ["browserId", "controllerLeaseId", "recipeId", "serviceName", "agentName", "taskName"]
+        }
+    })
+}
+
 fn browser_read_tool_schema(spec: BrowserReadToolSpec) -> Value {
     json!({
         "name": spec.tool_name,
@@ -4900,6 +4938,9 @@ fn call_service_mcp_tool(
         }
         DESKTOP_LOCATE_MCP_TOOL_NAME => {
             call_desktop_locate(arguments, session, configured_service_state)
+        }
+        DESKTOP_INTERACT_MCP_TOOL_NAME => {
+            call_desktop_interact(arguments, session, configured_service_state)
         }
         "browser_command" => call_browser_command(arguments, session),
         "browser_navigate" => call_browser_navigate(arguments, session),
@@ -5769,6 +5810,66 @@ fn call_desktop_locate(
     configured_service_state: &ServiceState,
 ) -> Result<Value, JsonRpcError> {
     let request = desktop_locate_service_request(arguments)?;
+    call_service_request(&request, session, configured_service_state)
+}
+
+fn desktop_interact_service_request(arguments: &Value) -> Result<Value, JsonRpcError> {
+    let argument_map = arguments.as_object().ok_or_else(|| {
+        JsonRpcError::invalid_params("desktop_interact arguments must be an object")
+    })?;
+    const ALLOWED_FIELDS: &[&str] = &[
+        "browserId",
+        "sessionName",
+        "controllerLeaseId",
+        "recipeId",
+        "jobTimeoutMs",
+        "serviceName",
+        "agentName",
+        "taskName",
+    ];
+    if let Some(field) = argument_map
+        .keys()
+        .find(|field| !ALLOWED_FIELDS.contains(&field.as_str()))
+    {
+        return Err(JsonRpcError::invalid_params(&format!(
+            "unknown desktop_interact field: {field}"
+        )));
+    }
+    let browser_id = required_string_argument(arguments, "browserId")?;
+    let controller_lease_id = required_string_argument(arguments, "controllerLeaseId")?;
+    let recipe_id = required_string_argument(arguments, "recipeId")?;
+    if recipe_id != "p110-pointer-keyboard-v1" {
+        return Err(JsonRpcError::invalid_params(
+            "desktop_interact recipeId must be p110-pointer-keyboard-v1",
+        ));
+    }
+    let service_name = required_string_argument(arguments, "serviceName")?;
+    let agent_name = required_string_argument(arguments, "agentName")?;
+    let task_name = required_string_argument(arguments, "taskName")?;
+    let mut request = json!({
+        "action": "desktop_interact",
+        "browserId": browser_id,
+        "controllerLeaseId": controller_lease_id,
+        "recipe": { "recipeId": recipe_id },
+        "serviceName": service_name,
+        "agentName": agent_name,
+        "taskName": task_name,
+    });
+    if let Some(value) = optional_string_argument(arguments, "sessionName")? {
+        request["sessionName"] = json!(value);
+    }
+    if let Some(value) = optional_positive_u64_argument(arguments, "jobTimeoutMs")? {
+        request["jobTimeoutMs"] = json!(value);
+    }
+    Ok(request)
+}
+
+fn call_desktop_interact(
+    arguments: &Value,
+    session: &str,
+    configured_service_state: &ServiceState,
+) -> Result<Value, JsonRpcError> {
+    let request = desktop_interact_service_request(arguments)?;
     call_service_request(&request, session, configured_service_state)
 }
 
@@ -9982,7 +10083,7 @@ fn queued_tool_command_session(tool_name: &str, default_session: &str, command: 
     }
     if matches!(
         command.get("action").and_then(Value::as_str),
-        Some("desktop_capture" | "desktop_locate")
+        Some("desktop_capture" | "desktop_locate" | "desktop_interact")
     ) {
         return service_request_session_candidate(command.get("sessionName"))
             .unwrap_or_else(|| default_session.to_string());
@@ -12469,6 +12570,63 @@ mod tests {
     }
 
     #[test]
+    fn desktop_interact_tool_is_strict_and_lowers_to_the_canonical_request() {
+        let tools = service_mcp_tools();
+        let tool = tools
+            .iter()
+            .find(|tool| tool["name"] == "desktop_interact")
+            .expect("desktop_interact schema should be listed");
+        let input = &tool["inputSchema"];
+        assert_eq!(input["additionalProperties"], false);
+        assert_eq!(
+            input["required"],
+            json!([
+                "browserId",
+                "controllerLeaseId",
+                "recipeId",
+                "serviceName",
+                "agentName",
+                "taskName"
+            ])
+        );
+        for forbidden in [
+            "params",
+            "text",
+            "x",
+            "motionSeed",
+            "imageBase64",
+            "routeId",
+        ] {
+            assert!(input["properties"].get(forbidden).is_none());
+        }
+
+        let request = desktop_interact_service_request(&json!({
+            "browserId": "browser-rdp-1",
+            "sessionName": "rdp-1",
+            "controllerLeaseId": "lease-1",
+            "recipeId": "p110-pointer-keyboard-v1",
+            "jobTimeoutMs": 5000,
+            "serviceName": "DesktopInteractor",
+            "agentName": "fixture-agent",
+            "taskName": "verify-synthetic-control"
+        }))
+        .unwrap();
+        assert_eq!(request["action"], "desktop_interact");
+        assert_eq!(request["sessionName"], "rdp-1");
+        assert_eq!(request["controllerLeaseId"], "lease-1");
+        assert_eq!(request["recipe"]["recipeId"], "p110-pointer-keyboard-v1");
+        assert!(request.get("params").is_none());
+
+        for invalid in [
+            json!({"browserId":"browser-rdp-1","controllerLeaseId":"lease-1","recipeId":"wrong","serviceName":"DesktopInteractor","agentName":"fixture-agent","taskName":"verify"}),
+            json!({"browserId":"browser-rdp-1","controllerLeaseId":"lease-1","recipeId":"p110-pointer-keyboard-v1","serviceName":"DesktopInteractor","agentName":"fixture-agent"}),
+            json!({"browserId":"browser-rdp-1","controllerLeaseId":"lease-1","recipeId":"p110-pointer-keyboard-v1","serviceName":"DesktopInteractor","agentName":"fixture-agent","taskName":"verify","text":"secret"}),
+        ] {
+            assert!(desktop_interact_service_request(&invalid).is_err());
+        }
+    }
+
+    #[test]
     fn service_request_mcp_schema_matches_all_canonical_types_and_constraints() {
         let canonical: Value = serde_json::from_str(include_str!(
             "../../docs/dev/contracts/service-request.v1.schema.json"
@@ -12486,7 +12644,7 @@ mod tests {
         let mut mcp_names = mcp_properties.keys().collect::<Vec<_>>();
         canonical_names.sort();
         mcp_names.sort();
-        assert_eq!(canonical_names.len(), 64);
+        assert_eq!(canonical_names.len(), 68);
         assert_eq!(canonical_names, mcp_names);
         assert_eq!(input["additionalProperties"], false);
         assert_eq!(input["required"], canonical["required"]);
@@ -12663,6 +12821,28 @@ mod tests {
                 &narrowed_locate,
             ),
             "rdp-locate-session"
+        );
+
+        let interact = json!({
+            "action": "desktop_interact",
+            "browserId": "session:must-not-route",
+        });
+        assert_eq!(
+            queued_tool_command_session("service_request", "AgentBrowserDashboard", &interact),
+            "AgentBrowserDashboard"
+        );
+        let narrowed_interact = json!({
+            "action": "desktop_interact",
+            "browserId": "browser-rdp-1",
+            "sessionName": "rdp-interact-session",
+        });
+        assert_eq!(
+            queued_tool_command_session(
+                "service_request",
+                "AgentBrowserDashboard",
+                &narrowed_interact,
+            ),
+            "rdp-interact-session"
         );
     }
 

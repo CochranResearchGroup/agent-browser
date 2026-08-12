@@ -7,14 +7,15 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use super::browser::BrowserShutdownOutcome;
+use super::desktop_control_coordinator::global_desktop_control_coordinator;
 use super::remote_view::{route_display_socket_available, route_pool_target_string};
 use super::remote_view_attachability::refresh_remote_view_attachability;
 use super::service_lifecycle::{upsert_service_profile_and_session, ServiceLaunchMetadata};
 use super::service_model::{
-    BrowserHealth, BrowserHealthObservation, BrowserHost, BrowserProcess, BrowserSession,
-    BrowserTab, DisplayAllocation, LeaseState, ServiceBrowserProcessIdentity, ServiceEvent,
-    ServiceEventKind, ServiceIncident, ServiceReconciliationSnapshot, ServiceState, TabLifecycle,
-    ViewStreamProvider,
+    advance_route_controller_authority, BrowserHealth, BrowserHealthObservation, BrowserHost,
+    BrowserProcess, BrowserSession, BrowserTab, DisplayAllocation, LeaseState,
+    ServiceBrowserProcessIdentity, ServiceEvent, ServiceEventKind, ServiceIncident,
+    ServiceReconciliationSnapshot, ServiceState, TabLifecycle, ViewStreamProvider,
 };
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 
@@ -362,12 +363,19 @@ pub struct ServiceReconcileSummary {
 }
 
 pub async fn reconcile_service_state(state: &mut ServiceState) -> ServiceReconcileSummary {
+    reconcile_service_state_with_controller_fence(state, false).await
+}
+
+async fn reconcile_service_state_with_controller_fence(
+    state: &mut ServiceState,
+    controller_fence_held: bool,
+) -> ServiceReconcileSummary {
     let before = state.clone();
     let reconciled_at = current_timestamp();
     refresh_persisted_browser_health(state).await;
     let merged_duplicate_browsers = merge_duplicate_live_browser_records(state);
     reconcile_live_browser_targets(state).await;
-    let remote_view_repair = reconcile_remote_view_state(state);
+    let remote_view_repair = reconcile_remote_view_state(state, controller_fence_held);
     let expired_session_leases = state.expire_stale_session_leases(reconciled_at.as_str());
     state.refresh_service_tab_handles();
     record_health_transition_events(state, &before);
@@ -608,8 +616,14 @@ pub async fn reconcile_service_state_in_repository(
     repository: &impl ServiceStateRepository,
 ) -> Result<ServiceReconcileSummary, String> {
     let before = repository.load_snapshot()?;
+    let _controller_mutations = before
+        .remote_view_routes
+        .values()
+        .filter(|route| route.controller_lease_id.is_some())
+        .map(|route| global_desktop_control_coordinator().begin_controller_mutation(&route.id))
+        .collect::<Result<Vec<_>, _>>()?;
     let mut reconciled_state = before.clone();
-    let summary = reconcile_service_state(&mut reconciled_state).await;
+    let summary = reconcile_service_state_with_controller_fence(&mut reconciled_state, true).await;
     persist_reconciled_service_state_in_repository(repository, &before, &reconciled_state)?;
     Ok(summary)
 }
@@ -1220,6 +1234,19 @@ fn release_one_browser_display_allocation_after_close(
     };
     if state == "released" {
         for route_id in route_ids {
+            let clears_controller =
+                service_state
+                    .remote_view_routes
+                    .get(&route_id)
+                    .is_some_and(|route| {
+                        route.display_allocation_id.as_deref() == Some(display_allocation_id)
+                            && route.browser_id.as_deref() == Some(browser.id.as_str())
+                            && route.controller_lease_id.is_some()
+                    });
+            if clears_controller {
+                advance_route_controller_authority(service_state, &route_id, None)
+                    .expect("route was resolved before controller cleanup");
+            }
             if let Some(route) = service_state.remote_view_routes.get_mut(&route_id) {
                 if route.display_allocation_id.as_deref() == Some(display_allocation_id)
                     && route.browser_id.as_deref() == Some(browser.id.as_str())
@@ -1227,7 +1254,6 @@ fn release_one_browser_display_allocation_after_close(
                     route.state = "released".to_string();
                     route.last_provider_event =
                         Some("route_released_after_browser_close".to_string());
-                    route.controller_lease_id = None;
                     route.viewer_lease_ids.clear();
                     route.readiness = Some(serde_json::json!({
                         "state": "released",
@@ -1251,6 +1277,18 @@ pub(crate) fn persist_closed_browser_health_in_repository(
     session_id: &str,
     outcome: Option<&BrowserShutdownOutcome>,
 ) -> Result<(), String> {
+    let snapshot = repository.load_snapshot()?;
+    let browser_id = service_browser_id_for_session(session_id);
+    let _controller_mutations = snapshot
+        .remote_view_routes
+        .values()
+        .filter(|route| {
+            route.controller_lease_id.is_some()
+                && (route.browser_id.as_deref() == Some(browser_id.as_str())
+                    || route.session_id.as_deref() == Some(session_id))
+        })
+        .map(|route| global_desktop_control_coordinator().begin_controller_mutation(&route.id))
+        .collect::<Result<Vec<_>, _>>()?;
     repository.mutate(|service_state| {
         let id = service_browser_id_for_session(session_id);
         let previous = service_state.browsers.get(&id).cloned();
@@ -1891,14 +1929,22 @@ impl RemoteViewReconcileRepair {
     }
 }
 
-fn reconcile_remote_view_state(state: &mut ServiceState) -> RemoteViewReconcileRepair {
-    reconcile_remote_view_state_with_display_probe(state, route_display_socket_available)
+fn reconcile_remote_view_state(
+    state: &mut ServiceState,
+    controller_fence_held: bool,
+) -> RemoteViewReconcileRepair {
+    reconcile_remote_view_state_with_display_probe(
+        state,
+        route_display_socket_available,
+        controller_fence_held,
+    )
 }
 
 /// Reconciles retained remote-view state against a current route-display probe.
 fn reconcile_remote_view_state_with_display_probe(
     state: &mut ServiceState,
     display_socket_available: impl Fn(&str) -> bool,
+    controller_fence_held: bool,
 ) -> RemoteViewReconcileRepair {
     let now = current_timestamp();
     let browser_health = state
@@ -2165,21 +2211,37 @@ fn reconcile_remote_view_state_with_display_probe(
         .filter(|(_id, lease)| viewer_lease_is_reconcile_active(lease))
         .map(|(id, _lease)| id.clone())
         .collect::<BTreeSet<_>>();
+    let controller_routes_to_clear = state
+        .remote_view_routes
+        .iter()
+        .filter(|(_route_id, route)| {
+            route
+                .controller_lease_id
+                .as_ref()
+                .is_some_and(|id| !active_viewer_leases.contains(id))
+        })
+        .map(|(route_id, _route)| route_id.clone())
+        .collect::<Vec<_>>();
+    let _controller_mutations = if controller_fence_held {
+        Vec::new()
+    } else {
+        controller_routes_to_clear
+            .iter()
+            .map(|route_id| {
+                global_desktop_control_coordinator().begin_controller_mutation(route_id)
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .expect("desktop control coordinator must remain available")
+    };
+    for route_id in &controller_routes_to_clear {
+        advance_route_controller_authority(state, route_id, None)
+            .expect("route was resolved before controller reconciliation");
+        repair.cleared_controller_leases += 1;
+    }
     for route in state.remote_view_routes.values_mut() {
-        let before_controller = route.controller_lease_id.clone();
         route
             .viewer_lease_ids
             .retain(|id| active_viewer_leases.contains(id));
-        if route
-            .controller_lease_id
-            .as_ref()
-            .is_some_and(|id| !active_viewer_leases.contains(id))
-        {
-            route.controller_lease_id = None;
-        }
-        if before_controller.is_some() && route.controller_lease_id.is_none() {
-            repair.cleared_controller_leases += 1;
-        }
     }
 
     for browser in state.browsers.values_mut() {
@@ -2187,15 +2249,9 @@ fn reconcile_remote_view_state_with_display_probe(
             stream
                 .viewer_lease_ids
                 .retain(|id| active_viewer_leases.contains(id));
-            if stream
-                .controller_lease_id
-                .as_ref()
-                .is_some_and(|id| !active_viewer_leases.contains(id))
-            {
-                stream.controller_lease_id = None;
-            }
             if let Some(route_id) = stream.route_id.as_ref() {
                 if let Some(route) = state.remote_view_routes.get(route_id) {
+                    stream.project_controller(route);
                     if let Some(mut readiness) = route.readiness.clone() {
                         let retained_display_content = stream
                             .remote_readiness
@@ -3505,8 +3561,11 @@ mod tests {
             ..ServiceState::default()
         };
 
-        let invalidated =
-            reconcile_remote_view_state_with_display_probe(&mut state, |_display_name| false);
+        let invalidated = reconcile_remote_view_state_with_display_probe(
+            &mut state,
+            |_display_name| false,
+            false,
+        );
 
         assert_eq!(invalidated.unavailable_route_pool_entries, 2);
         assert_eq!(invalidated.restored_route_pool_entries, 0);
@@ -3555,7 +3614,7 @@ mod tests {
         }
 
         let restored =
-            reconcile_remote_view_state_with_display_probe(&mut state, |_display_name| true);
+            reconcile_remote_view_state_with_display_probe(&mut state, |_display_name| true, false);
 
         assert_eq!(restored.unavailable_route_pool_entries, 0);
         assert_eq!(restored.restored_route_pool_entries, 2);
@@ -3610,6 +3669,7 @@ mod tests {
                         display_allocation_id: Some("display-1".to_string()),
                         viewer_lease_ids: vec!["lease-1".to_string()],
                         controller_lease_id: Some("lease-1".to_string()),
+                        controller_epoch: 5,
                         ..ViewStream::default()
                     }],
                     ..BrowserProcess::default()
@@ -3634,6 +3694,7 @@ mod tests {
                     state: "ready".to_string(),
                     viewer_lease_ids: vec!["lease-1".to_string()],
                     controller_lease_id: Some("lease-1".to_string()),
+                    controller_epoch: 5,
                     ..RemoteViewRoute::default()
                 },
             )]),
@@ -3678,6 +3739,7 @@ mod tests {
         assert!(state.remote_view_routes["route-1"]
             .controller_lease_id
             .is_none());
+        assert_eq!(state.remote_view_routes["route-1"].controller_epoch, 6);
         assert!(!state.browsers.contains_key("browser-1"));
         assert!(!state.browser_process_identities.contains_key("browser-1"));
         let remote_view = &state.events.last().unwrap().details.as_ref().unwrap()["remoteView"];
@@ -3718,6 +3780,7 @@ mod tests {
                     state: "ready".to_string(),
                     viewer_lease_ids: vec!["expired-lease".to_string(), "active-lease".to_string()],
                     controller_lease_id: Some("expired-lease".to_string()),
+                    controller_epoch: 3,
                     ..RemoteViewRoute::default()
                 },
             )]),
@@ -3760,6 +3823,7 @@ mod tests {
         assert!(state.remote_view_routes["route-1"]
             .controller_lease_id
             .is_none());
+        assert_eq!(state.remote_view_routes["route-1"].controller_epoch, 4);
         let remote_view = &state.events.last().unwrap().details.as_ref().unwrap()["remoteView"];
         assert_eq!(remote_view["expiredViewerLeases"], 1);
         assert_eq!(remote_view["clearedControllerLeases"], 1);

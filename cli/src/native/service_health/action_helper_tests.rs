@@ -234,6 +234,7 @@ fn test_persist_service_browser_record_clears_stale_view_streams_when_metadata_i
         provider_mode: None,
         viewer_lease_ids: Vec::new(),
         controller_lease_id: None,
+        controller_epoch: 0,
         read_only: false,
         readiness: None,
         remote_readiness: None,

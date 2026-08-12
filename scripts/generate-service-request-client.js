@@ -538,6 +538,59 @@ export interface ServiceDesktopLocateData {
   [key: string]: unknown;
 }
 
+export interface DesktopInteractionReceipt {
+  transactionId: string;
+  schemaVersion: "v1";
+  recipeId: "p110-pointer-keyboard-v1";
+  recipeVersion: string;
+  recipeSha256: string;
+  browserId: string;
+  displayAllocationId: string;
+  streamId: string;
+  routeId: string;
+  controllerEpoch: number;
+  authorityDigest: string;
+  actorDigest: string;
+  beforeContextId: string;
+  beforeFrameId: string;
+  beforeFrameSha256: string;
+  beforeObservationId: string;
+  beforeObservationSha256: string;
+  selectedCandidateId: string;
+  surfaceIdentityDigest: string;
+  browserProcessIdentityDigest: string;
+  pointerStart: { x: number; y: number };
+  target: { x: number; y: number };
+  coordinateMapping: string;
+  motionProfile: string;
+  controlPointDigest: string;
+  emittedPathSha256: string;
+  pointerEventCount: number;
+  durationMs: number;
+  acknowledgementIds: string[];
+  cleanupState: string;
+  textLength: number;
+  textSha256: string;
+  afterContextId: string | null;
+  afterFrameId: string | null;
+  afterFrameSha256: string | null;
+  afterObservationId: string | null;
+  afterObservationSha256: string | null;
+  verificationState: string;
+  effectState: "no_effect" | "verified_success" | "effect_uncertain" | "cancelled_after_effect";
+  stopReason: string | null;
+  retention: "ephemeral";
+  persistedPixels: false;
+  [key: string]: unknown;
+}
+
+export interface ServiceDesktopInteractData {
+  ok: boolean;
+  action: "desktop_interact";
+  interactionReceipt: DesktopInteractionReceipt;
+  [key: string]: unknown;
+}
+
 export interface ServiceTabHandleTraceFilter {
   browserId?: string | null;
   profileId?: string | null;
@@ -1076,6 +1129,7 @@ export interface ServiceRequestActionDataMap {
   diagnostics: ServiceDiagnosticsData;
   desktop_capture: ServiceDesktopCaptureData;
   desktop_locate: ServiceDesktopLocateData;
+  desktop_interact: ServiceDesktopInteractData;
   back: ServiceUrlData;
   forward: ServiceUrlData;
   reload: ServiceUrlData;
@@ -1338,6 +1392,22 @@ export interface ServiceDesktopLocateRequestOptions extends Omit<ServiceRequest,
 }
 
 export interface ServiceDesktopLocateRequestHttpOptions extends ServiceDesktopLocateRequestOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
+export interface ServiceDesktopInteractRequestOptions extends Pick<ServiceRequest, "jobTimeoutMs"> {
+  browserId: string;
+  sessionName?: string;
+  controllerLeaseId: string;
+  recipeId: "p110-pointer-keyboard-v1";
+  serviceName: string;
+  agentName: string;
+  taskName: string;
+}
+
+export interface ServiceDesktopInteractRequestHttpOptions extends ServiceDesktopInteractRequestOptions {
   baseUrl: string;
   fetch?: typeof globalThis.fetch;
   signal?: AbortSignal;
@@ -1613,6 +1683,9 @@ export declare function createServiceDesktopCaptureRequest(
 export declare function createServiceDesktopLocateRequest(
   input: ServiceDesktopLocateRequestOptions,
 ): ServiceRequestForAction<"desktop_locate">;
+export declare function createServiceDesktopInteractRequest(
+  input: ServiceDesktopInteractRequestOptions,
+): ServiceRequestForAction<"desktop_interact">;
 export declare function createServiceProbeRequest(
   input: ServiceProbeRequestOptions,
 ): ServiceRequestForAction<"probe">;
@@ -1708,6 +1781,12 @@ export declare function requestServiceDesktopLocate(
 export declare function locateServiceDesktopControl(
   options: ServiceDesktopLocateRequestHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceDesktopLocateData>>;
+export declare function requestServiceDesktopInteract(
+  options: ServiceDesktopInteractRequestHttpOptions,
+): Promise<ServiceRequestResponse<ServiceDesktopInteractData>>;
+export declare function runServiceDesktopInteraction(
+  options: ServiceDesktopInteractRequestHttpOptions,
+): Promise<ServiceRequestResponse<ServiceDesktopInteractData>>;
 export declare function requestServiceProbe(
   options: ServiceProbeRequestHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceProbeData>>;

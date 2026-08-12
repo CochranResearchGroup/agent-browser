@@ -11,6 +11,7 @@ import {
   createServiceCdpFreeLaunchRequest,
   createServiceDiagnosticsRequest,
   createServiceDesktopCaptureRequest,
+  createServiceDesktopInteractRequest,
   createServiceDesktopLocateRequest,
   createServiceEvaluateRequest,
   createServiceFileTransferRequest,
@@ -46,6 +47,7 @@ import {
   locateServiceDesktopControl,
   requestServiceUiAction,
   refreshServiceTabHandle,
+  runServiceDesktopInteraction,
   runServiceUiAction,
   releaseServiceTabHandle,
   releaseServiceViewerLease,
@@ -55,6 +57,7 @@ import {
   requestServiceCdpFreeLaunch,
   requestServiceDiagnostics,
   requestServiceDesktopCapture,
+  requestServiceDesktopInteract,
   requestServiceDesktopLocate,
   requestServiceEvaluate,
   requestServiceNetworkCapture,
@@ -539,6 +542,85 @@ async function main() {
         maxCandidates: 3,
       },
       includeVisualization: true,
+    });
+  }
+
+  const desktopInteractRequest = createServiceDesktopInteractRequest({
+    browserId: 'browser-rdp-1',
+    sessionName: 'rdp-1',
+    controllerLeaseId: 'viewer:route:fixture-agent:opaque',
+    recipeId: 'p110-pointer-keyboard-v1',
+    serviceName: 'DesktopInteractor',
+    agentName: 'fixture-agent',
+    taskName: 'verify-synthetic-control',
+    jobTimeoutMs: 30_000,
+  });
+  assert.deepEqual(desktopInteractRequest, {
+    action: 'desktop_interact',
+    browserId: 'browser-rdp-1',
+    sessionName: 'rdp-1',
+    controllerLeaseId: 'viewer:route:fixture-agent:opaque',
+    recipe: { recipeId: 'p110-pointer-keyboard-v1' },
+    serviceName: 'DesktopInteractor',
+    agentName: 'fixture-agent',
+    taskName: 'verify-synthetic-control',
+    jobTimeoutMs: 30_000,
+  });
+  for (const input of [
+    {},
+    { browserId: 'browser-rdp-1' },
+    {
+      browserId: 'browser-rdp-1',
+      controllerLeaseId: 'lease-1',
+      recipeId: 'p110-pointer-keyboard-v1',
+      serviceName: 'DesktopInteractor',
+      agentName: 'fixture-agent',
+    },
+  ]) {
+    assert.throws(() => createServiceDesktopInteractRequest(input), /desktop interact request/);
+  }
+  for (const forbidden of ['params', 'text', 'x', 'motionSeed', 'imageBase64', 'routeId']) {
+    assert.throws(
+      () => createServiceDesktopInteractRequest({
+        browserId: 'browser-rdp-1',
+        controllerLeaseId: 'lease-1',
+        recipeId: 'p110-pointer-keyboard-v1',
+        serviceName: 'DesktopInteractor',
+        agentName: 'fixture-agent',
+        taskName: 'verify-synthetic-control',
+        [forbidden]: forbidden === 'params' ? {} : forbidden,
+      }),
+      /does not accept/,
+    );
+  }
+
+  for (const invoke of [requestServiceDesktopInteract, runServiceDesktopInteraction]) {
+    const recorder = createFetchRecorder({
+      success: true,
+      data: {
+        ok: false,
+        action: 'desktop_interact',
+        interactionReceipt: { effectState: 'no_effect' },
+      },
+    });
+    await invoke({
+      baseUrl: 'http://127.0.0.1:9222',
+      fetch: recorder.fetch,
+      browserId: 'browser-rdp-1',
+      controllerLeaseId: 'lease-1',
+      recipeId: 'p110-pointer-keyboard-v1',
+      serviceName: 'DesktopInteractor',
+      agentName: 'fixture-agent',
+      taskName: 'verify-synthetic-control',
+    });
+    assert.deepEqual(recorder.calls[0].body, {
+      action: 'desktop_interact',
+      browserId: 'browser-rdp-1',
+      controllerLeaseId: 'lease-1',
+      recipe: { recipeId: 'p110-pointer-keyboard-v1' },
+      serviceName: 'DesktopInteractor',
+      agentName: 'fixture-agent',
+      taskName: 'verify-synthetic-control',
     });
   }
 

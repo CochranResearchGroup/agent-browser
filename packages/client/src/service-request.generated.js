@@ -11,6 +11,7 @@ export const SERVICE_REQUEST_ACTIONS = [
   "diagnostics",
   "desktop_capture",
   "desktop_locate",
+  "desktop_interact",
   "probe",
   "tab_handle_refresh",
   "tab_handle_release",
@@ -136,6 +137,7 @@ export const SERVICE_REQUEST_STRING_FIELDS = [
   "cdpUrl",
   "browserId",
   "format",
+  "controllerLeaseId",
   "sessionName"
 ];
 
@@ -183,7 +185,8 @@ export const SERVICE_REQUEST_OBJECT_FIELDS = [
   "uiAction",
   "networkCapture",
   "fileTransfer",
-  "locator"
+  "locator",
+  "recipe"
 ];
 
 export const SERVICE_REQUEST_MCP_TOOL_NAME = "service_request";
