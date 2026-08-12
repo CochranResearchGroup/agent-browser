@@ -67,7 +67,7 @@ Treat `AGENTS.md` as a policy-loading contract, not just a static pointer:
 - whether the repo is fundamentally a writing-project workspace with deliverable-driven organization
 - whether the repo is fundamentally an operations-platform workspace with tenant-scoped runtime state, live operator workflows, and fieldwork that later becomes product
 - whether the repo is fundamentally a course-workspace with LMS-backed live course operations, cloud-drive course materials, and student-data or assessment risk
-- whether the repo is fundamentally a website-maintenance workspace with live-surface targeting, DB-backed state, drift reconciliation, or visual release QA
+- whether the repo is fundamentally a website repository with live-surface targeting, DB-backed state, drift reconciliation, or visual release QA
 - whether the repo is fundamentally a formative seminal workspace whose operating model does not fit the existing families cleanly yet
 - whether the repo uses an installed durable graph-memory system and needs explicit read/write/cleanup discipline in addition to notes and memories
 - whether the repo has an indexed codegraph or `../codegraph` workflow that agents should consult before source-code edits or architecture analysis
@@ -134,7 +134,7 @@ Pick the repo purpose first:
 
 - `product-engineering`
 - `operations-platform`
-- `website-maintenance`
+- `website`
 - `course-workspace`
 - `library-cli`
 - `seminal-workspace`
@@ -201,7 +201,12 @@ pre-adoption migration assessment, pass `--force`. For documented non-default
 locations, pass `--plans-dir`, `--roadmap-path`, and/or `--runbook-path`.
 
 `--active-only` evaluates known `PLANNED` and `OPEN` plans and reports closed or
-unclassified legacy exclusions separately. Use it as a current-state gate, not
+unclassified legacy exclusions separately. It does not fail merely because no
+plans directory exists. A repo may retain an exact-match
+`docs/dev/planning-audit-baseline.json` with schema version 1, a rationale,
+review condition, and accepted finding strings; the report keeps matched and
+unused entries visible, and unlisted findings remain blocking. The baseline is
+ignored by full and forced audits. Use active-only as a current-state gate, not
 as proof that historical schema migration is complete.
 
 Prefer the higher-level `scripts/manage_policy.py` entrypoint when the caller wants one command family for:

@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import tempfile
 import textwrap
 import unittest
@@ -201,6 +202,77 @@ class PlanningContractAuditTests(unittest.TestCase):
         self.assertEqual([item["file"] for item in report["plans"]], ["0002-2026-07-20-open.md"])
         self.assertEqual(report["excluded_closed_plans"], ["0001-2026-07-20-closed.md"])
         self.assertEqual(report["excluded_unclassified_plans"], ["legacy.md"])
+
+    def test_active_only_allows_planning_repo_without_a_plans_directory(self):
+        root = self.make_repo(("planning-discipline",))
+
+        report = self.audit.audit_repo(root, active_only=True)
+
+        self.assertTrue(report["ok"], report["problems"])
+        self.assertEqual(report["problems"], [])
+
+    def test_active_only_accepts_only_exact_repo_baseline_findings(self):
+        root = self.make_repo(("planning-discipline", "roadmap-runbook-governance"))
+        (root / "docs/dev/plans").mkdir(parents=True)
+        baseline = root / "docs/dev/planning-audit-baseline.json"
+        baseline.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "rationale": "Canonical planning authorities are intentionally deferred.",
+                    "review_condition": "Re-evaluate when a roadmap is introduced.",
+                    "accepted_findings": ["missing ROADMAP.md"],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        report = self.audit.audit_repo(root, active_only=True)
+
+        self.assertFalse(report["ok"])
+        self.assertEqual(report["problems"], ["missing RUNBOOK.md"])
+        self.assertEqual(report["accepted_baseline_findings"], ["missing ROADMAP.md"])
+        self.assertEqual(report["unused_baseline_findings"], [])
+
+    def test_full_audit_does_not_accept_active_scope_baseline(self):
+        root = self.make_repo(("planning-discipline", "roadmap-runbook-governance"))
+        (root / "docs/dev/plans").mkdir(parents=True)
+        (root / "docs/dev/planning-audit-baseline.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "rationale": "Canonical planning authorities are intentionally deferred.",
+                    "review_condition": "Re-evaluate when a roadmap is introduced.",
+                    "accepted_findings": ["missing ROADMAP.md"],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        report = self.audit.audit_repo(root)
+
+        self.assertFalse(report["ok"])
+        self.assertIn("missing ROADMAP.md", report["problems"])
+        self.assertEqual(report["accepted_baseline_findings"], [])
+
+    def test_active_only_rejects_invalid_baseline_schema_without_crashing(self):
+        root = self.make_repo(("planning-discipline", "roadmap-runbook-governance"))
+        (root / "docs/dev/plans").mkdir(parents=True)
+        (root / "docs/dev/planning-audit-baseline.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "accepted_findings": ["missing ROADMAP.md", "missing RUNBOOK.md"],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        report = self.audit.audit_repo(root, active_only=True)
+
+        self.assertFalse(report["ok"])
+        self.assertIn("invalid planning audit baseline: schema_version must be 1", report["problems"])
+        self.assertEqual(report["accepted_baseline_findings"], [])
 
     def test_force_preserves_strict_pre_adoption_authority_checks(self):
         root = self.make_repo()

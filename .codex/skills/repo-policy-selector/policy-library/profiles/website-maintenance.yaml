@@ -1,6 +1,6 @@
 id: website-maintenance
 summary: Website operations and owned-code profile for repos where conservative live-surface maintenance is the dominant workflow.
-repo_purpose: website-maintenance
+repo_purpose: website
 modules:
   - policy-management
   - policy-upgrade-management

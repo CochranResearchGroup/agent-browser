@@ -64,6 +64,13 @@ tags:
   audit may ignore closed or unclassified historical artifacts only when the
   report names what it excluded and the repo retains a bounded migration or
   baseline decision for that debt.
+- An active-only audit may accept exact repo-local findings from
+  `docs/dev/planning-audit-baseline.json` when the file records a rationale,
+  review condition, and exact finding strings. Keep accepted and unused
+  baseline entries visible in the report; do not apply the baseline to full or
+  forced audits, and do not let one accepted finding suppress a new one.
+- Absence of a plans directory is not itself an active-scope defect. Continue
+  to require the configured directory during full or forced structural audits.
 
 ## Adoption Notes
 

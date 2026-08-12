@@ -16,7 +16,7 @@ modules:
     tags: [memory, graph, retrieval, continuity]
   - id: codegraph-usage
     path: modules/codegraph-usage.md
-    tags: [code, graph, analysis, refactor]
+    tags: [code, graph, analysis, refactor, index, worktree]
   - id: memory-service-runtime-governance
     path: modules/memory-service-runtime-governance.md
     tags: [memory, runtime, mcp, operations]

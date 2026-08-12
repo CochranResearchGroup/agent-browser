@@ -166,6 +166,29 @@ def resolve_repo_path(root: Path, value: str | Path | None, default: str) -> Pat
     return path if path.is_absolute() else root / path
 
 
+def active_baseline_findings(path: Path) -> tuple[list[str], list[str]]:
+    try:
+        baseline = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return [], [f"invalid planning audit baseline: {exc}"]
+    if not isinstance(baseline, dict):
+        return [], ["invalid planning audit baseline: root must be an object"]
+    if baseline.get("schema_version") != 1:
+        return [], ["invalid planning audit baseline: schema_version must be 1"]
+    for field in ("rationale", "review_condition"):
+        value = baseline.get(field)
+        if not isinstance(value, str) or not value.strip():
+            return [], [f"invalid planning audit baseline: {field} must be a non-empty string"]
+    accepted = baseline.get("accepted_findings")
+    if (
+        not isinstance(accepted, list)
+        or not accepted
+        or not all(isinstance(item, str) and item for item in accepted)
+    ):
+        return [], ["invalid planning audit baseline: accepted_findings must be a non-empty string list"]
+    return list(dict.fromkeys(accepted)), []
+
+
 def audit_repo(
     root: Path,
     *,
@@ -213,7 +236,7 @@ def audit_repo(
         problems.append("missing ROADMAP.md")
     if roadmap_applicable and not runbook_text:
         problems.append("missing RUNBOOK.md")
-    if not plans_dir.exists():
+    if not plans_dir.exists() and not active_only:
         problems.append(f"missing plans directory: {plans_dir}")
 
     roadmap_headings = [
@@ -305,6 +328,20 @@ def audit_repo(
             ):
                 problems.append(f"OPEN roadmap lane missing actionable plan coverage: {lane_id}")
 
+    baseline_path = root / "docs/dev/planning-audit-baseline.json"
+    accepted_baseline_findings: list[str] = []
+    unused_baseline_findings: list[str] = []
+    if active_only and baseline_path.exists():
+        accepted, baseline_problems = active_baseline_findings(baseline_path)
+        if baseline_problems:
+            problems.extend(baseline_problems)
+        else:
+            accepted_baseline_findings = [problem for problem in problems if problem in accepted]
+            unused_baseline_findings = [item for item in accepted if item not in problems]
+            problems[:] = [problem for problem in problems if problem not in accepted]
+    report["planning_audit_baseline_path"] = str(baseline_path)
+    report["accepted_baseline_findings"] = accepted_baseline_findings
+    report["unused_baseline_findings"] = unused_baseline_findings
     report["ok"] = not problems
     report["problems"] = problems
     goal_contract = audit_goal_execution_contract(root)

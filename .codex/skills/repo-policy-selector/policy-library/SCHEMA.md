@@ -27,7 +27,7 @@ Initial purpose families:
 
 - `product-engineering`
 - `operations-platform`
-- `website-maintenance`
+- `website`
 - `course-workspace`
 - `library-cli`
 - `seminal-workspace`
@@ -44,6 +44,9 @@ Examples of `workflow_subtype` under `writing-project`:
 
 Rules:
 - purpose should describe the repo's operating model, not only its subject matter
+- `website` is the canonical purpose; the established starter profile remains
+  `website-maintenance`, and selector helpers accept the legacy purpose name as
+  compatibility vocabulary
 - subtype is optional and should refine the operating model when it changes policy needs materially
 - execution bias is optional and should describe whether the repo prefers lower wall-clock time, lower coordination/token cost, or a balance of the two
 - selector output should always include purpose; subtype is recommended when confidence is adequate
@@ -88,6 +91,12 @@ For repos that adopt bounded planning discipline:
   the audit rather than copying artifacts solely to satisfy defaults
 - active-only audits should report excluded closed or unclassified legacy plans;
   they are steady-state gates, not evidence that historical migration is done
+- an active-only audit may consume `docs/dev/planning-audit-baseline.json` with
+  `schema_version: 1`, a non-empty `rationale`, a non-empty
+  `review_condition`, and exact `accepted_findings`; matched and unused entries
+  must remain visible, and the baseline must not affect full or forced audits
+- absence of a plans directory is not an active-only failure, but remains a
+  structural failure for full or forced audits
 
 ## Notes And Memories Contract
 
@@ -225,7 +234,7 @@ For `product-engineering`, likely reusable policy themes include:
 
 Those should stay distinct from `writing-project` modules even when both families use planning or closeout rules.
 
-For `website-maintenance`, likely reusable policy themes include:
+For `website`, likely reusable policy themes include:
 - environment and surface targeting across canonical, staging, local, and deprecated web surfaces
 - governance for DB-backed state that cannot be represented faithfully in git
 - live-drift reconciliation before release
@@ -249,7 +258,7 @@ For `operations-platform`, likely reusable policy themes include:
 - subagent lifecycle and tool-surface governance when live operator workflows depend on spawned agents
 - preview artifact review when operator handoffs, approval packets, dry-run outputs, or generated local artifacts require human review before mutation
 
-Those should stay distinct from both `website-maintenance` and general `product-engineering` modules when the repo's main operating risk is mixing product evolution with live tenant operations.
+Those should stay distinct from both `website` and general `product-engineering` modules when the repo's main operating risk is mixing product evolution with live tenant operations.
 
 For repos that build or operate subagent runtimes, likely reusable policy themes include:
 - status and completion signals derived from runtime state instead of model claims alone
@@ -295,8 +304,10 @@ For repos that contain code and have an indexed codegraph available, likely reus
 - consulting codegraph before non-trivial code edits, architecture claims, trace analysis, or refactor planning
 - using structural queries such as context, trace, callers, callees, impact, and indexed file listings before broad manual search loops
 - treating codegraph output as discovery evidence that still requires source reads and tests
-- accounting for index freshness after edits
-- keeping exact sibling checkout paths, MCP tool names, and index refresh commands repo-local
+- treating fresh-worktree initialization as routine local derived-state maintenance when the repo already establishes codegraph as expected
+- distinguishing a watched active checkout from explicit-path projects and fresh worktrees that may require an explicit sync
+- checking status after edits and performing one explicit sync when the index is stale, pending, unwatched, or auto-sync is disabled
+- keeping exact sibling checkout paths, MCP tool names, service repair, and project-specific index exclusions repo-local
 
 For repos that build or operate installed memory-service runtimes, likely reusable policy themes include:
 - client/server provider boundaries, especially when agent clients do not own service backend credentials

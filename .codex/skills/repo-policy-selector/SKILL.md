@@ -26,8 +26,11 @@ Select the right reusable policy bundle for a repository, then adapt it into rep
    every starter profile adopts proportional bounded planning discipline.
    Supply `--plans-dir`, `--roadmap-path`, or `--runbook-path` for documented
    alternate authorities. `--active-only` is a steady-state gate and reports
-   unclassified legacy exclusions; it does not complete migration. Use
-   `--force` only for pre-adoption assessment.
+   unclassified legacy exclusions; it does not complete migration. It may
+   accept only exact findings named by a valid
+   `docs/dev/planning-audit-baseline.json`, while continuing to report matched
+   and unused baseline entries. Use `--force` only for pre-adoption assessment;
+   active baselines never apply to full or forced audits.
 9. If the repo adopts `goal-execution-governance`, run `scripts/audit_planning_contract.py --goal-only` and require concrete local bounds, significant-departure standing authority, one goal-level review-discovery pass, closed-world verification, evidence-shaped finding fields, dispositions, and checkpoint fields.
 10. Validate that the recommended profile and modules exist in the installed library bundle before drafting changes.
 11. Read the referenced policy modules from this policy library before drafting changes.

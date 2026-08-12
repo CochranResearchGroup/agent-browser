@@ -1698,7 +1698,7 @@ def classify_purpose(signals: dict) -> tuple[str, str | None, list[str]]:
         purpose = "operations-platform"
         reasons.append("repo appears to mix reusable product code with tenant-scoped runtime and live operator workflows")
     elif website_semantic_signals >= 3 and signals["mentions_website_surface"]:
-        purpose = "website-maintenance"
+        purpose = "website"
         reasons.append("repo appears to manage live website surfaces, drift, recovery, or visual release workflows")
     elif seminal_workspace and not strong_engineering:
         purpose = "seminal-workspace"
@@ -1737,7 +1737,15 @@ def classify_execution_bias(signals: dict, purpose: str) -> tuple[str | None, li
     if purpose == "library-cli":
         reasons.append("lighter library repos usually prefer lower coordination and token overhead by default")
         return "max-token-efficiency", reasons
-    if purpose in {"product-engineering", "operations-platform", "workspace-agent", "writing-project", "website-maintenance", "course-workspace"}:
+    if purpose in {
+        "product-engineering",
+        "operations-platform",
+        "workspace-agent",
+        "writing-project",
+        "website",
+        "website-maintenance",
+        "course-workspace",
+    }:
         reasons.append("repo shape suggests a balanced tradeoff between wall-clock speed and coordination cost")
         return "balanced", reasons
     return None, reasons
@@ -1890,7 +1898,7 @@ def purpose_scaffold_text(repo_purpose: str | None) -> str:
             "- Add the exact commands, profiles, runtime paths, and validation surfaces this repo expects.\n"
             "- Document what stays in the product repo versus the user-scoped runtime home.\n"
         )
-    if repo_purpose == "website-maintenance":
+    if repo_purpose in {"website", "website-maintenance"}:
         return (
             "## Repo Context\n\n"
             "- Describe the live surfaces, environments, and recovery-critical deploy constraints here.\n\n"
@@ -1942,7 +1950,7 @@ def policy_reread_triggers_section(repo_purpose: str | None) -> str:
         "- re-read documentation-related policy before changing docs, contracts, or canonical authorities",
         "- re-read validation and closeout policy before claiming work complete",
     ]
-    if repo_purpose in {"operations-platform", "website-maintenance"}:
+    if repo_purpose in {"operations-platform", "website", "website-maintenance"}:
         lines.append("- re-read runtime or environment-boundary policy before touching live state, tenant state, deploy state, or off-repo operator data")
     if repo_purpose == "course-workspace":
         lines.append("- re-read course, LMS, cloud-drive, and student-data policy before changing course config, assignments, submissions, grades, announcements, files, pages, modules, quizzes, forms, or course folders")
@@ -2039,7 +2047,7 @@ def choose_profile(signals: dict, installed_library: dict[str, Any]) -> tuple[st
         profile = "repo-product-engineering"
     elif purpose == "operations-platform":
         profile = "operations-platform"
-    elif purpose == "website-maintenance":
+    elif purpose in {"website", "website-maintenance"}:
         profile = "website-maintenance"
     elif purpose == "course-workspace":
         profile = "course-workspace"

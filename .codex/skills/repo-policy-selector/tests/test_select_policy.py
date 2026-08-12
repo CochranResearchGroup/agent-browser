@@ -68,6 +68,54 @@ class SelectPolicyRegressionTests(unittest.TestCase):
         self.assertNotEqual(purpose, "course-workspace", reasons)
         self.assertNotEqual(profile, "course-workspace", reasons)
 
+    def test_website_repo_uses_general_purpose_and_maintenance_profile(self):
+        repo_root = self.make_repo(
+            readme_text="""
+            # Public Website
+
+            This repo owns the canonical public site and its MySQL-backed CMS.
+            Reconcile live drift before deploy, preserve a tested backup and
+            restore path, and run visual browser review after staging changes.
+            """,
+        )
+
+        signals = self.select_policy.detect_signals(repo_root)
+        installed_library = self.select_policy.enumerate_policy_library(self.policy_root)
+        self.assertEqual(
+            "website",
+            installed_library["parsed_profiles"]["website-maintenance"]["repo_purpose"],
+        )
+        purpose, _subtype, _execution_bias, profile, modules, reasons = self.select_policy.choose_profile(
+            signals, installed_library
+        )
+
+        self.assertTrue(signals["mentions_website_surface"])
+        self.assertEqual("website", purpose, reasons)
+        self.assertEqual("website-maintenance", profile, reasons)
+        self.assertIn("website-surface-targeting", modules)
+        self.assertIn("live-drift-reconciliation", modules)
+        self.assertIn("backup-and-recovery-operations", modules)
+        self.assertIn("visual-release-qa", modules)
+
+    def test_website_purpose_renders_live_surface_wirein_guidance(self):
+        repo_root = self.make_repo()
+
+        agents_draft = self.select_policy.render_agents_wirein(
+            repo_root,
+            install_plan=[],
+            existing_policy_surfaces=[],
+            repo_purpose="website",
+        )
+
+        self.assertIn(
+            "Describe the live surfaces, environments, and recovery-critical deploy constraints",
+            agents_draft,
+        )
+        self.assertIn(
+            "re-read runtime or environment-boundary policy before touching live state",
+            agents_draft,
+        )
+
     def test_graphiti_memory_policy_maps_to_shared_graph_memory_module(self):
         repo_root = self.make_repo()
         policy_dir = repo_root / "docs" / "dev" / "policies"
@@ -262,6 +310,15 @@ class SelectPolicyRegressionTests(unittest.TestCase):
             [str(policy_dir / "0017-codegraph-usage.md")],
         )
         self.assertIn("codegraph-usage", modules, reasons)
+
+    def test_codegraph_module_proactively_repairs_expected_local_indexes(self):
+        installed_library = self.select_policy.enumerate_policy_library(self.policy_root)
+        body = installed_library["parsed_modules"]["codegraph-usage"]["body"]
+
+        self.assertIn("missing index in a verified local worktree", body)
+        self.assertIn("Do not require a fresh approval solely because the worktree is new", body)
+        self.assertIn("run the documented explicit sync once", body)
+        self.assertIn("unexpected tracked-file changes", body)
 
     def test_graphiti_runtime_policy_maps_to_memory_service_runtime_module(self):
         repo_root = self.make_repo(
