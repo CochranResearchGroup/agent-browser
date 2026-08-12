@@ -83,6 +83,23 @@ agent-browser service incidents --limit 10
 
 See [Service Mode](/service-mode) for the persistent control-plane model, HTTP API, MCP resources/tools, browser health handling, and release validation checklist.
 
+## Open an RDP browser for an operator
+
+Use `remote-view open` when another person must see or control the browser.
+Share only the returned `/remote-view/<handoff-id>` URL, not the underlying
+Guacamole route:
+
+```bash
+agent-browser --json remote-view open https://example.com/secure \
+  --runtime-profile operator-review \
+  --browser-build stealthcdp_chromium \
+  --view-stream-provider rdp_gateway
+```
+
+Require `operatorVisible.state=ready`, then copy `handoffUrl`. See
+[Open and reconnect an RDP browser](/remote-view) for the full workflow and URL
+roles.
+
 ## Wait for content
 
 ```bash

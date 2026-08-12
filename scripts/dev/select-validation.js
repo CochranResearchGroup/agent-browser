@@ -248,6 +248,19 @@ function selectRecommendations(files, base) {
     add('diff -q skills/agent-browser/SKILL.md /home/ecochran76/.codex/shared/skills/agent-browser/SKILL.md', 'repo and installed agent-browser skill must stay synced');
   }
 
+  if (
+    files.some(
+      (file) =>
+        file === 'AGENTS.md' ||
+        file === 'README.md' ||
+        file === 'skills/agent-browser/SKILL.md' ||
+        file === 'docs/src/app/remote-view/page.mdx' ||
+        file === 'docs/src/lib/docs-navigation.ts',
+    )
+  ) {
+    add('pnpm test:remote-view-handoff-docs', 'agent and operator remote-view handoff guidance changed');
+  }
+
   if (files.some((file) => file.startsWith('scripts/') || file === '.github/workflows/ci.yml')) {
     add('node scripts/dev/select-validation.js --base HEAD --json', 'validation selector or CI scripts changed');
   }

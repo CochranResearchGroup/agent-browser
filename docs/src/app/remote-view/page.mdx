@@ -1,0 +1,182 @@
+# Open and reconnect an RDP browser
+
+This guide shows agents and operators how to open a browser through RDP or
+Guacamole and preserve one durable link across route changes. The operator
+opens an authenticated `/remote-view/<handoff-id>` URL. Provider URLs remain
+diagnostic evidence and must not become handoff links.
+
+> **Important:** Share only `handoffUrl` from a successful remote-view open.
+> Never share or bookmark `providerExternalUrl`, a raw Guacamole URL, or a URL
+> under `routeBinding`.
+
+## Before you begin
+
+You need a configured runtime profile and a ready RDP route. Check the intended
+subject without changing it:
+
+```bash
+agent-browser doctor remote-view \
+  --session <daemon-session> \
+  --runtime-profile <profile-id> \
+  --json
+```
+
+Require `requestedScope.status` and `remoteControl.status` to be `ready`.
+Review `globalAdvisories`, but do not let unrelated stale sessions replace the
+requested-subject result.
+
+## Open the browser and copy the durable link
+
+Follow these steps to create one operator-visible browser handoff:
+
+1. Open the route-bound browser:
+
+   ```bash
+   agent-browser --json remote-view open https://example.com/secure \
+     --runtime-profile operator-review \
+     --browser-build stealthcdp_chromium \
+     --view-stream-provider rdp_gateway
+   ```
+
+2. Require `operatorVisible.state` to equal `ready`. A URL without this proof
+   does not prove that the requested browser and tab are visible.
+
+3. Copy `handoffUrl`. Its path is `/remote-view/<handoff-id>`.
+
+4. Give that URL to the operator. The operator signs in to the dashboard when
+   prompted and then continues through the same URL.
+
+5. Save the same URL for reconnection. Do not save the current provider route.
+
+## Request a handoff from software
+
+Use `requestServiceRemoteViewHandoff()` when a software client needs a link for
+a person. This helper excludes provider connection URLs from its result:
+
+```js
+import { requestServiceRemoteViewHandoff } from "@agent-browser/client/service-request";
+
+const handoff = await requestServiceRemoteViewHandoff({
+  baseUrl: "http://127.0.0.1:4849",
+  serviceName: "OperatorReview",
+  agentName: "codex",
+  taskName: "review-secure-page",
+  runtimeProfile: "operator-review",
+  browserBuild: "stealthcdp_chromium",
+  viewStreamProvider: "rdp_gateway",
+  url: "https://example.com/secure",
+});
+
+console.log(handoff.handoffUrl);
+// => https://dashboard.example/remote-view/<handoff-id>
+```
+
+The lower-level `requestServiceRemoteViewOpen()` helper also requires a durable
+handoff URL for real opens. Do not set `allowRawProviderUrl: true` outside an
+explicit infrastructure diagnostic.
+
+## Reconnect without opening another browser
+
+Open the same `handoffUrl` again. The authenticated dashboard resolves the
+handoff ID, prefers the original retained target, and reacquires compatible
+route, display, and viewer state when needed.
+
+Do not run another `remote-view open` only because:
+
+- the Guacamole connection ID changed;
+- the route moved to another display;
+- the viewer lease expired;
+- the dashboard asked you to sign in again; or
+- a single-viewer route was taken over by another client.
+
+For a single-viewer disconnect, use **Take over** from the durable handoff
+surface. If the tab was deliberately closed, the handoff remains closed until
+the operator selects **Reopen tab**.
+
+## Keep URL roles separate
+
+Use each URL only for its documented audience.
+
+<table>
+  <thead>
+    <tr>
+      <th>Field or path</th>
+      <th>Use</th>
+      <th>Share with an operator</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>handoffUrl</code> or <code>remote_view_open.externalUrl</code></td>
+      <td>Authenticated, recoverable browser handoff</td>
+      <td>Yes</td>
+    </tr>
+    <tr>
+      <td><code>providerExternalUrl</code></td>
+      <td>Current provider connection evidence</td>
+      <td>No</td>
+    </tr>
+    <tr>
+      <td>Raw Guacamole or <code>routeBinding</code> URL</td>
+      <td>Current route diagnostics</td>
+      <td>No</td>
+    </tr>
+    <tr>
+      <td><code>localEmbedUrl</code> or <code>dashboardEmbedUrl</code></td>
+      <td>Local dashboard iframe</td>
+      <td>No</td>
+    </tr>
+    <tr>
+      <td><code>healthUrl</code></td>
+      <td>Readiness probe</td>
+      <td>No</td>
+    </tr>
+  </tbody>
+</table>
+
+## Troubleshoot an RDP handoff
+
+Use the returned state to choose the next action:
+
+- Missing `handoffUrl`: treat the open as failed, even if a provider URL is
+  present.
+- `operatorVisible.state=wrong_tab`: inspect the selected target and URL. Do
+  not hand off a different visible tab.
+- `operatorVisible.state=guacamole_route_unavailable`: repair or reacquire the
+  route before sharing a link.
+- Dashboard login prompt: authenticate, then reopen the same handoff URL.
+- Provider route changed: reopen the same handoff URL and let the resolver
+  reacquire it.
+- Explicitly closed tab: require the operator to select **Reopen tab**.
+- Repeated viewer disconnect: inspect viewer ownership and use **Take over**;
+  do not launch a duplicate profile lane.
+
+Run the scoped doctor again when the handoff remains unavailable:
+
+```bash
+agent-browser doctor remote-view \
+  --session <daemon-session> \
+  --runtime-profile <profile-id> \
+  --route-id <route-id> \
+  --json
+```
+
+## Distinguish the three handoff types
+
+Remote-view, executable, and profile-seeding handoffs solve different problems:
+
+- A remote-view handoff gives a person an authenticated browser-view URL.
+- `agent-browser handoff prepare` and `agent-browser handoff resume` transfer a
+  live browser to a replacement daemon executable.
+- A profile-seeding handoff guides a person through manual authentication and
+  later freshness verification.
+
+Do not substitute one handoff type for another.
+
+## Next steps
+
+- Review [Service Mode](/service-mode) for service request and control-plane
+  contracts.
+- Review [Dashboard](/dashboard) for login, runtime drift, and operator UI
+  behavior.
+- Review [Commands](/commands) for remote-view doctor and open syntax.

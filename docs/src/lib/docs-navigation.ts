@@ -32,6 +32,7 @@ export const navigation: NavSection[] = [
     items: [
       { name: "Sessions", href: "/sessions" },
       { name: "Service Mode", href: "/service-mode" },
+      { name: "RDP Remote View", href: "/remote-view" },
       { name: "Dashboard", href: "/dashboard" },
       { name: "Diffing", href: "/diffing" },
       { name: "CDP Mode", href: "/cdp-mode" },

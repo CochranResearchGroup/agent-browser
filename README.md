@@ -203,6 +203,32 @@ agent-browser fill "#email" "test@example.com"
 agent-browser find role button click --name "Submit"
 ```
 
+## RDP Remote-View Quick Start
+
+Use `remote-view open` when an operator must see or control a browser through
+RDP or Guacamole:
+
+```bash
+agent-browser --json remote-view open https://example.com/secure \
+  --runtime-profile operator-review \
+  --browser-build stealthcdp_chromium \
+  --view-stream-provider rdp_gateway
+```
+
+Require `operatorVisible.state` to be `ready`. Give the operator only the
+returned `handoffUrl`, shaped as `/remote-view/<handoff-id>`. Reopen that same
+URL after route, display, or viewer changes so agent-browser can reacquire the
+current provider route.
+
+Do not hand off `providerExternalUrl`, a raw Guacamole URL, or any URL under
+`routeBinding`. Those URLs describe the current provider connection and can
+expire when the route changes. Software clients should use
+`requestServiceRemoteViewHandoff()`, which returns only `handoffId` and
+`handoffUrl`.
+
+See the [RDP remote-view handoff guide](docs/src/app/remote-view/page.mdx) for
+the complete agent, operator, reconnect, and troubleshooting workflows.
+
 ## Commands
 
 ### Core Commands

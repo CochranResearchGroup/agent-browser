@@ -4,6 +4,44 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 148 | 2026-08-11
+
+Scope: make the RDP remote-view handoff workflow explicit for agents and
+operators without changing installed runtime, browser, profile, route, or live
+service state.
+
+Actions:
+
+- added one canonical RDP remote-view guide centered on the authenticated,
+  opaque `/remote-view/<handoff-id>` URL;
+- added early hard rules to `AGENTS.md`, the README, and the agent-browser skill
+  so agents require operator-visible readiness and share only `handoffUrl`;
+- corrected guidance that described transient provider route URLs as operator
+  handoff links;
+- linked the guide from Quick Start, Commands, Dashboard, Service Mode, and the
+  docs navigation;
+- added a static regression gate and validation-selector mapping for the
+  durable-link, readiness, reconnect, and raw-provider prohibitions;
+- synchronized the repo skill with the installed shared skill copy.
+
+Validation:
+
+- the remote-view handoff documentation regression, service API and MCP parity,
+  docs production build with all 35 pages, skill synchronization, selector
+  self-check, and patch checks passed;
+- the existing dashboard durable-handoff source regression remained red at
+  `ab30c9f9` because its provider-preference assertion no longer matched the
+  concurrently changed viewport source; this docs turn did not alter that
+  source or test.
+
+Result:
+
+- agents now have one findable, task-shaped procedure for opening, handing off,
+  and reconnecting an RDP browser without leaking or bookmarking a transient
+  provider URL;
+- no browser, daemon, doctor, install, route, profile, or dashboard runtime
+  command ran.
+
 ## Turn 147 | 2026-08-11
 
 Scope: execute the source-authorized Plan 0109 remediation derived from the

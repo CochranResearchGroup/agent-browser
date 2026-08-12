@@ -9,6 +9,7 @@ export const PAGE_TITLES: Record<string, string> = {
   snapshots: "Snapshots",
   sessions: "Sessions",
   "service-mode": "Service Mode",
+  "remote-view": "RDP Remote View",
   diffing: "Diffing",
   "cdp-mode": "CDP Mode",
   dashboard: "Dashboard",

@@ -110,6 +110,28 @@ Match the existing style in that file.
 
 This is a Rust codebase. The browser automation daemon lives in `cli/src/native/` (daemon, actions, browser, CDP client, snapshot, state). The `--engine` flag selects Chrome vs Lightpanda. The `install` command downloads Chrome from Chrome for Testing directly.
 
+## RDP and Remote-View Handoffs
+
+- Give operators only the authenticated, opaque
+  `/remote-view/<handoff-id>` URL returned as `handoffUrl` or the durable
+  `externalUrl` on `remote_view_open`.
+- Never bookmark, persist, or send a raw Guacamole URL, `providerExternalUrl`,
+  `routeBinding` URL, local embed URL, dashboard embed URL, or health URL as an
+  operator handoff. Those values describe the current provider route and may
+  change during recovery.
+- Use `requestServiceRemoteViewHandoff()` when software needs a user-facing
+  link. It returns only `handoffId` and `handoffUrl`.
+- Require `operatorVisible.state=ready` before saying the browser is visible.
+  URL presence alone is not readiness evidence.
+- Reconnect by opening the same durable handoff URL. Do not run another
+  `remote-view open` merely because the Guacamole route, display, or viewer
+  lease changed.
+- Do not confuse a remote-view handoff with `agent-browser handoff
+  prepare|resume`, which transfers a browser between daemon executables, or
+  with a profile-seeding handoff, which guides manual authentication.
+- Follow the [RDP remote-view handoff guide](docs/src/app/remote-view/page.mdx)
+  for the operator and software-client workflows.
+
 ## Testing
 
 ### Unit Tests

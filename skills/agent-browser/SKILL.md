@@ -64,6 +64,27 @@ The CLI uses Chrome/Chromium via CDP directly. For this fork, install the native
 
 For ordinary agent work on this workstation, prefer the service-owned hidden headed remote-control path over ad hoc local headless launches. Treat `chromium-stealthrdp` as operator shorthand for patched `stealthcdp_chromium` launched through `remote_headed`, exposed through the RDP or Guacamole stream, controlled with `manual_attached_desktop`, and still available to agent-browser through CDP when the site policy allows it.
 
+### RDP handoff rules
+
+Follow these rules whenever another person or agent must open the remote
+browser:
+
+1. Run `remote-view open` or call `requestServiceRemoteViewHandoff()`.
+2. Require `operatorVisible.state=ready` for a real open.
+3. Return, store, and reopen only `handoffUrl`, shaped as
+   `/remote-view/<handoff-id>`.
+4. Never use `providerExternalUrl`, a raw Guacamole URL, a `routeBinding` URL,
+   `localEmbedUrl`, `dashboardEmbedUrl`, or `healthUrl` as the handoff.
+5. Reopen the same handoff URL after provider, route, display, or viewer-lease
+   churn. Do not launch a replacement browser merely to reconnect the viewer.
+6. Treat `allowRawProviderUrl: true` as an infrastructure diagnostic escape
+   hatch, never as an ordinary agent workflow.
+
+Do not confuse this remote-view link with `agent-browser handoff
+prepare|resume`, which transfers browser ownership across daemon executable
+replacement. Do not confuse it with a profile-seeding handoff, which guides a
+person through manual authentication.
+
 When `service.defaultBrowserBuild` is set, ordinary launch and queued tab paths use the same service access-plan resolver as software clients. That means a default patched Chromium build can select the compatible managed profile, remote headed posture, view stream provider, and guarded executable binding without requiring every caller to pass the full access-plan command. Explicit caller choices for profile, browser host, headless mode, executable path, or browser build still win. The shipped Google Sheets policy routes `https://docs.google.com/spreadsheets` through the stealth remote-view lane while leaving Google sign-in seeding on its own policy.
 
 Start with an access plan whenever service identity, profile identity, or browser identity matters:
@@ -214,7 +235,14 @@ is not acceptable.
 
 For shared authenticated profiles, prefer one retained browser process group with separate service-owned tabs or viewer leases. A profile can be shared by several clients only through the retained browser lane. Do not start a second independent Chrome process on the same profile directory unless the request explicitly allows duplicate profile lanes for reviewed throwaway isolation. Access-plan `decision.profileReuse` reports `profileProcessPolicy`, `clientSharingPolicy`, `defaultAcquisition`, and `sharedAcquisition`; follow those fields before launching. When `sharedAcquisition.mode` is `tab_new`, use the retained `browserId` and `sessionName` route hints to open an attributed service-owned tab through the existing browser queue. Dashboard workspace rows expose the same distinction as profile actionability: compatible live service-owned owners recommend opening a tab in the retained profile owner and use `service_request` `tab_new` for the enabled Add tab action, live route or profile diagnostics remain visible under Attention instead of disappearing from the left rail, and profile-only conflicts recommend waiting for or inspecting the holder instead of launching a duplicate profile process.
 
-For Guacamole routes, preserve both URL roles. Use `routeDescriptor.localEmbedUrl` or `dashboardEmbedUrl` for local dashboard and test iframe embedding, and use `routeDescriptor.publicOperatorUrl` or `externalUrl` for dyndns.org or other public operator handoff links. Do not replace public ingress with `127.0.0.1` globally, and do not use public ingress for local iframe tests unless the operator explicitly enables that diagnostic.
+For Guacamole route diagnostics, preserve every URL role.
+`routeDescriptor.localEmbedUrl` and `dashboardEmbedUrl` are local dashboard and
+test iframe inputs. `routeDescriptor.publicOperatorUrl` and the route
+descriptor's `externalUrl` identify the current public provider ingress. The
+durable handoff resolver may use that ingress, but agents must not send it as
+the operator handoff. Do not replace public ingress with `127.0.0.1` globally,
+and do not use public ingress for local iframe tests unless the operator
+explicitly enables that diagnostic.
 
 ## Remote View Validation
 

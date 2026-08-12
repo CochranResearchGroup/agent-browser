@@ -15,6 +15,16 @@ Then open `http://localhost:4848` in your browser to see the live dashboard.
 
 All sessions automatically stream to the dashboard. No extra flags are needed.
 
+## Open a durable RDP handoff
+
+When an agent gives you an RDP or Guacamole browser, open the authenticated
+`/remote-view/<handoff-id>` link. Bookmark and reopen that link if the provider
+route changes. Do not bookmark the raw Guacamole URL shown in diagnostic
+evidence.
+
+See [Open and reconnect an RDP browser](/remote-view) for the exact agent and
+operator workflow, takeover behavior, and troubleshooting steps.
+
 ## Dashboard login
 
 The dashboard protects its operator APIs with an app-owned login screen. On

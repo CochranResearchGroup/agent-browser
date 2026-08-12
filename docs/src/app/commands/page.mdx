@@ -462,6 +462,12 @@ agent-browser remote-view open https://www.linkedin.com/ --runtime-profile steal
 agent-browser remote-view open https://messages.google.com/web/conversations --runtime-profile google-messages --browser-build stock_chrome --view-stream-provider rdp_gateway --manual-login-launch
 ```
 
+For operator access, copy only the returned
+<code>/remote-view/&lt;handoff-id&gt;</code> value from <code>handoffUrl</code>.
+Do not hand off a raw Guacamole URL or <code>providerExternalUrl</code>. See
+<a href="/remote-view">Open and reconnect an RDP browser</a> for the complete
+workflow.
+
 `doctor remote-view` reports embedded helper timeouts with distinct
 <code>*_timed_out</code> issue codes. A timeout is inconclusive and does not
 prove install or readiness drift. Run the issue's direct helper command; when

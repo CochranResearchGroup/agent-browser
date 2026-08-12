@@ -658,7 +658,10 @@ another live browser's route surface because no route-pool entry was available.
 Successful `remote_view_open` responses expose a durable authenticated
 `/remote-view/<handoff-id>` URL as `externalUrl` and `handoffUrl` while retaining
 the current provider connection as `providerExternalUrl`. Generic service
-request action `service_remote_view_handoff_resolve` accepts `params.handoffId`
+clients must never substitute `providerExternalUrl` or a route-binding URL for
+the durable handoff. Software clients that need an operator link use
+`requestServiceRemoteViewHandoff()`, which returns only the handoff identity.
+Service request action `service_remote_view_handoff_resolve` accepts `params.handoffId`
 and optional `params.allowReopenClosed`. It replays durable intent without stale
 route, display, or Guacamole connection selectors, prefers the recorded target,
 and preserves the original view stream and control-input posture. Deliberately
