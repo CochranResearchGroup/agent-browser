@@ -9,7 +9,7 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 
 ## P110 | Desktop Perception And Interaction Foundation
 
-State: OPEN | POC 1, 2, AND 3 SOURCE ACCEPTED | POC 4 DETAIL PLAN NEXT
+State: OPEN | POC 1, 2, AND 3 SOURCE ACCEPTED | POC 4 DETAILED
 Current state: Plan 0110-1 is source accepted at `853c2d90`. The canonical
 `desktop_capture` service action resolves an exact service-owned RDP workspace,
 requires operator-visible display proof, captures a bounded ephemeral PNG, and
@@ -28,7 +28,10 @@ route claim and per-event fence, deterministic fixed-point pointer motion, a
 single left click, fixed benign text, bounded release cleanup, receipt-bearing
 partial effects, replay suppression, and after-state verification. PoC 3 adds
 no production input provider and authorizes no live desktop effects. Plan
-0110-4 is the next detail-plan boundary.
+0110-4 now freezes a distinct read-only `desktop_prompt_observe` action,
+independently rendered page and DOM absence evidence, a repository-owned
+three-layer prompt corpus, typed no-effect operator intervention, strict
+privacy, and a configured provider-unavailable posture.
 
 ### Vision
 
@@ -249,10 +252,10 @@ The foundational lane is not accepted until:
 
 ### Next Recommendation
 
-Write Plan 0110-4 for controlled browser-external prompt perception. Freeze
-the repository-owned fixture, CDP-blind evidence, ambiguity handling, privacy,
-and typed operator-intervention boundary before implementation. Do not use a
-real credential, account, authentication popup, or external challenge.
+Implement Plan 0110-4 through the repository-owned prompt fixture. Preserve
+independent page and DOM absence evidence, ambiguity handling, privacy, and the
+typed no-effect operator-intervention boundary. Do not use a real credential,
+account, authentication popup, or external challenge.
 
 ### Evidence
 
@@ -261,6 +264,7 @@ real credential, account, authentication popup, or external challenge.
 - `docs/dev/plans/0110-1-2026-08-12-p110-poc1-display-bound-frame-capture-plan.md`
 - `docs/dev/plans/0110-2-2026-08-12-p110-poc2-deterministic-fixture-location-plan.md`
 - `docs/dev/plans/0110-3-2026-08-12-p110-poc3-guarded-desktop-interaction-plan.md`
+- `docs/dev/plans/0110-4-2026-08-12-p110-poc4-browser-external-prompt-perception-plan.md`
 - `docs/dev/notes/0110-3-2026-08-12-guarded-desktop-interaction-source-acceptance.md`
 - `docs/dev/notes/0110-2-2026-08-12-deterministic-fixture-location-source-acceptance.md`
 - `docs/dev/notes/0110-1-2026-08-12-display-bound-frame-capture-source-acceptance.md`

@@ -2,7 +2,7 @@
 
 Date: 2026-08-12
 
-State: OPEN | POC 1, 2, AND 3 SOURCE ACCEPTED | POC 4 DETAIL PLAN NEXT
+State: OPEN | POC 1, 2, AND 3 SOURCE ACCEPTED | POC 4 DETAILED
 
 Authority: SOURCE-ONLY
 
@@ -211,8 +211,8 @@ source acceptance without separate maintainer direction.
 
 ## Current Recommendation
 
-Write Plan 0110-4 for controlled browser-external prompt perception. Freeze a
-repository-owned prompt fixture, evidence and ambiguity contract, CDP-blind
-proof, privacy posture, and typed operator intervention before implementation.
+Implement Plan 0110-4 through the repository-owned three-layer prompt corpus.
+Preserve independent page and DOM absence evidence, the distinct read-only
+action, strict provider-unavailable posture, and fixture-only blindness claim.
 Do not add a live input provider or interact with a real credential manager,
 authentication prompt, or external challenge.
