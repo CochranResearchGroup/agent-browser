@@ -2,7 +2,7 @@
 
 Date: 2026-08-12
 
-State: DETAILED | IMPLEMENTATION READY
+State: SOURCE ACCEPTED | LIVE FOUNDATION EVIDENCE REQUIRED
 
 Authority: SOURCE-ONLY | SYNTHETIC PROVIDERS | NO LIVE FOUNDATION PROOF
 
@@ -11,6 +11,10 @@ Lane: P110 PoC 5
 Parent: `docs/dev/plans/0110-2026-08-12-desktop-perception-interaction-foundation-plan.md`
 
 Predecessor: PoC 4 source accepted at `987923c7`
+
+Implementation: `25e8b746`
+
+Accepted remediation: `b98343f6`
 
 ## Objective
 
@@ -237,6 +241,14 @@ provider prerequisite, not a PoC 5 source claim.
 
 ## Acceptance
 
-PoC 5 is source accepted only when all fifteen requirements pass, one fresh
-audit has no unresolved blocker after one remediation packet, and the entry
-gate is exactly `planning_open_implementation_blocked`.
+PoC 5 is source accepted. All fifteen requirements pass after one fresh audit,
+one adjudicated remediation packet, and closed-world verification of the eight
+accepted findings. Every operation receipt remains
+`closed_live_evidence_required`. The distinct full-corpus source record is the
+only artifact with `planning_open_implementation_blocked`.
+
+This status opens planning for discrete use cases. It does not authorize their
+implementation or a live provider. P110 Foundation Acceptance remains closed
+until a separately authorized installed binary and controlled RDP or Guacamole
+recipe prove the production provider, external event fence, and live authority
+contract.

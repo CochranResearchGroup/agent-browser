@@ -9,7 +9,7 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 
 ## P110 | Desktop Perception And Interaction Foundation
 
-State: OPEN | POC 1 THROUGH 4 SOURCE ACCEPTED | POC 5 DETAILED
+State: ALL FIVE POCS SOURCE ACCEPTED | LIVE FOUNDATION ACCEPTANCE BLOCKED
 Current state: Plan 0110-1 is source accepted at `853c2d90`. The canonical
 `desktop_capture` service action resolves an exact service-owned RDP workspace,
 requires operator-visible display proof, captures a bounded ephemeral PNG, and
@@ -32,10 +32,14 @@ no production input provider and authorizes no live desktop effects. Plan
 `desktop_prompt_observe` action proves, for repository fixture inputs only,
 independently rendered page and DOM absence evidence, a repository-owned
 three-layer prompt corpus, typed no-effect operator intervention, strict
-privacy, and a configured provider-unavailable posture. Plan 0110-5 freezes a
-second named `desktop_interact` recipe, durable operation identity and replay,
-provider-neutral failure stress, safe dashboard and handoff projection, and a
-planning-only entry gate.
+privacy, and a configured provider-unavailable posture. Plan 0110-5 is source
+accepted at `b98343f6`. Its second named `desktop_interact` recipe proves
+durable cross-ingress operation replay, principal-scoped provider effect keys,
+provider-neutral evidence, service-owned ready handoff resolution, a complete
+25-scenario source matrix, safe durable and dashboard projections, and a
+separate aggregate planning-only entry gate. Every individual operation
+receipt remains live closed. No production desktop provider or controlled live
+recipe was authorized or exercised.
 
 ### Vision
 
@@ -256,10 +260,11 @@ The foundational lane is not accepted until:
 
 ### Next Recommendation
 
-Implement Plan 0110-5 using synthetic providers only. Preserve durable
-cross-ingress replay, dashboard projection, authority and cleanup failures,
-opaque human handoff, and the planning-only entry gate. Do not start a real
-challenge or authentication integration.
+Write a separately authorized controlled-provider plan before live work. It
+should freeze the production provider and cross-process fence, installed-binary
+identity, controlled RDP or Guacamole fixture, rollback, and live evidence.
+Do not start a real challenge or authentication integration until that proof
+passes.
 
 ### Evidence
 
@@ -271,6 +276,7 @@ challenge or authentication integration.
 - `docs/dev/plans/0110-4-2026-08-12-p110-poc4-browser-external-prompt-perception-plan.md`
 - `docs/dev/notes/0110-4-2026-08-12-browser-external-prompt-perception-source-acceptance.md`
 - `docs/dev/plans/0110-5-2026-08-12-p110-poc5-foundation-stress-and-entry-gate-plan.md`
+- `docs/dev/notes/0110-5-2026-08-12-foundation-stress-source-acceptance.md`
 - `docs/dev/notes/0110-3-2026-08-12-guarded-desktop-interaction-source-acceptance.md`
 - `docs/dev/notes/0110-2-2026-08-12-deterministic-fixture-location-source-acceptance.md`
 - `docs/dev/notes/0110-1-2026-08-12-display-bound-frame-capture-source-acceptance.md`

@@ -2,7 +2,7 @@
 
 Date: 2026-08-12
 
-State: OPEN | POC 1 THROUGH 4 SOURCE ACCEPTED | POC 5 DETAILED
+State: ALL FIVE POCS SOURCE ACCEPTED | LIVE FOUNDATION ACCEPTANCE BLOCKED
 
 Authority: SOURCE-ONLY
 
@@ -42,8 +42,19 @@ Proof of Concept 3 is source accepted at `fd9c6a41`. Its one named synthetic
 observe, locate, act, and verify transaction now uses the real process-owned
 route claim and per-event fencing, deterministic motion, bounded release
 cleanup, receipt-bearing partial effects, replay suppression, and after-state
-verification. It adds no production input provider. PoC 4 remains undetailed
-until its detail plan is written and committed.
+verification. It adds no production input provider.
+
+Proof of Concept 4 is source accepted at `7391409b`. The distinct read-only
+`desktop_prompt_observe` action proves repository-owned browser-external
+prompt perception from independently rendered desktop, page, and DOM fixture
+evidence. Configured dispatch remains provider unavailable.
+
+Proof of Concept 5 is source accepted at `b98343f6`. The second named
+`desktop_interact` recipe now proves durable cross-ingress operation replay,
+principal-scoped provider effect keys, a full 25-scenario source matrix,
+provider-neutral receipt identity, service-owned ready handoff resolution,
+safe durable and dashboard projections, and a distinct aggregate source entry
+gate. Individual operation receipts remain live closed.
 
 ## Objective
 
@@ -204,14 +215,16 @@ live route smokes require separate authority.
 
 ## P110 Acceptance
 
-P110 remains open until all five proofs meet the Foundation Acceptance section
-in `ROADMAP.md`. Each accepted proof advances the same lane and records the
-next single detail-plan recommendation. No formal release follows from P110
-source acceptance without separate maintainer direction.
+All five source proofs are accepted. P110 remains open at the separate live
+Foundation Acceptance boundary in `ROADMAP.md`, which requires a controlled
+RDP or Guacamole recipe with an installed binary and a conforming production
+provider. No formal release or use-case implementation follows from source
+acceptance without separate authority.
 
 ## Current Recommendation
 
-Implement Plan 0110-5 with synthetic providers and the named foundation stress
-recipe. Preserve durable cross-ingress replay, safe dashboard and handoff
-projection, failure cleanup, and the planning-only use-case entry gate. Do not
-begin a real challenge or authentication integration.
+Prepare a separate controlled-provider plan before any live work. It should
+freeze the production capture and input provider, cross-process event fence,
+installed-binary identity, controlled RDP or Guacamole fixture, and live
+rollback evidence. Do not begin a real challenge or authentication integration
+until that separately authorized proof passes.
