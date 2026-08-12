@@ -2,7 +2,7 @@
 
 Date: 2026-08-12
 
-State: PLANNED
+State: SOURCE ACCEPTED | NO LIVE OR INPUT PROOF
 
 Authority: SOURCE-ONLY | PROVIDER-FREE FIXTURES | NO INPUT
 
@@ -330,3 +330,35 @@ recorded without claiming ambient OCR, installed, live, or input proof.
 
 The sole next recommendation is to write Plan 0110-3 for guarded pointer and
 keyboard transactions. No PoC 3 implementation begins in PoC 2 closeout.
+
+## Source Acceptance | 2026-08-12
+
+PoC 2 is source accepted at `4281196a`. Implementation commits are
+`eee02341` for contracts/client/MCP, `6f11ea34` for CLI/docs, `da7f91e2` for
+the pure locator and synthetic fixtures, and `b0792c85` for native dispatch,
+HTTP routing, and service control-plane integration.
+
+One independent broad audit produced four blocking candidates and one evidence
+candidate. The single remediation commit `4281196a`:
+
+- compares capture-provider identity across context and receipt before OCR;
+- gives generic service requests the same strict top-level allowlist as the
+  generated client;
+- replaces nonexistent challenge-like example profiles with the sole
+  synthetic `p110-control-v1` profile and documents its narrow meaning;
+- expands the corpus to both themes at 1.00, 1.25, and 1.50 scale and pins full
+  serialized observation and visualization hashes;
+- asserts complete selected bounds, centers, scores, ranks, and evidence;
+- adds typed timeout, oversize, and version-incompatible OCR-provider tests.
+
+Closed-world validation passed guarded formatting, strict Clippy, 10 locator
+core tests, 12 ingress/CLI tests, 26 PoC 1 capture tests, 46 remote-view
+handoff tests, 30 page-screenshot tests with two ignored E2E cases, full
+service client, 98-action API/MCP parity, no-launch service-contract smoke,
+action inventory, WSL Cargo safety, docs build, and patch checks.
+
+No live browser, display, RDP route, Guacamole connection, ImageMagick,
+Tesseract, pointer, keyboard, controller, credential, or challenge was used.
+The timeout case proves the provider contract propagates a typed timeout; PoC
+2 does not introduce an ambient OCR subprocess adapter. This is source
+acceptance of the synthetic deterministic locator only.

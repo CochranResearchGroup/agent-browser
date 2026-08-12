@@ -2,7 +2,7 @@
 
 Date: 2026-08-12
 
-State: OPEN | POC 1 SOURCE ACCEPTED | POC 2 DETAILED
+State: OPEN | POC 1 AND 2 SOURCE ACCEPTED | POC 3 DETAIL PLAN NEXT
 
 Authority: SOURCE-ONLY
 
@@ -201,7 +201,7 @@ source acceptance without separate maintainer direction.
 
 ## Current Recommendation
 
-Execute Plan 0110-2 only. Implement atomic source-bound deterministic fixture
-location with pinned profiles, stable evidence and ordering, explicit
-ambiguity, and response-only visualization. Do not emit input or use ambient
-OCR, a live challenge, credential prompt, browser, RDP route, or display.
+Write Plan 0110-3 for a guarded pointer and keyboard transaction over the
+synthetic fixture. Freeze controller authority, stale-frame abort, coordinate
+mapping, focus, deterministic motion, input receipts, verification, and human
+takeover serialization before changing input source.
