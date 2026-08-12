@@ -9,6 +9,7 @@ export const SERVICE_REQUEST_ACTIONS = [
   "cdp_detach",
   "evaluate",
   "diagnostics",
+  "desktop_capture",
   "probe",
   "tab_handle_refresh",
   "tab_handle_release",
@@ -133,6 +134,7 @@ export const SERVICE_REQUEST_STRING_FIELDS = [
   "profileClass",
   "cdpUrl",
   "browserId",
+  "format",
   "sessionName"
 ];
 
@@ -154,7 +156,8 @@ export const SERVICE_REQUEST_INTEGER_FIELDS = [
   "maxConsoleEntries",
   "maxErrorEntries",
   "maxRequestEntries",
-  "cdpPort"
+  "cdpPort",
+  "maxBytes"
 ];
 
 export const SERVICE_REQUEST_BOOLEAN_FIELDS = [

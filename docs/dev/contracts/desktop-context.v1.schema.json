@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/desktop-context.v1.schema.json",
+  "title": "agent-browser desktop context",
+  "description": "Resolved service-owned desktop identity and geometry for one route-bound observation. Global desktop_capture support does not imply that a particular workspace is ready.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "contextId",
+    "schemaVersion",
+    "browserId",
+    "sessionName",
+    "displayAllocationId",
+    "streamId",
+    "routeId",
+    "captureProvider",
+    "viewStreamProvider",
+    "displayIsolation",
+    "coordinateSpace",
+    "width",
+    "height",
+    "scaleFactor",
+    "geometryEpoch",
+    "resolvedAt",
+    "readinessEvidence"
+  ],
+  "properties": {
+    "contextId": { "type": "string", "minLength": 1 },
+    "schemaVersion": { "const": "v1" },
+    "browserId": { "type": "string", "minLength": 1 },
+    "sessionName": { "type": "string", "minLength": 1 },
+    "profileId": { "type": ["string", "null"] },
+    "displayAllocationId": { "type": "string", "minLength": 1 },
+    "streamId": { "type": "string", "minLength": 1 },
+    "routeId": { "type": "string", "minLength": 1 },
+    "captureProvider": { "type": "string", "minLength": 1 },
+    "viewStreamProvider": { "type": "string", "minLength": 1 },
+    "displayIsolation": {
+      "type": "string",
+      "enum": ["private_virtual_display", "shared_display", "ambient_display"]
+    },
+    "coordinateSpace": { "const": "desktop_physical_pixels" },
+    "width": { "type": "integer", "minimum": 1 },
+    "height": { "type": "integer", "minimum": 1 },
+    "scaleFactor": { "type": "number", "exclusiveMinimum": 0 },
+    "geometryEpoch": { "type": "string", "minLength": 1 },
+    "resolvedAt": { "type": "string", "format": "date-time" },
+    "readinessEvidence": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Non-sensitive evidence that the exact route, allocation, and operator-visible identity were ready."
+    }
+  }
+}

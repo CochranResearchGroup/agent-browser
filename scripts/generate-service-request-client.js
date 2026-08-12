@@ -454,6 +454,59 @@ export interface ServiceDiagnosticsData {
   [key: string]: unknown;
 }
 
+export interface DesktopContext {
+  contextId: string;
+  schemaVersion: "v1";
+  browserId: string;
+  sessionName: string;
+  profileId?: string | null;
+  displayAllocationId: string;
+  streamId: string;
+  routeId: string;
+  captureProvider: string;
+  viewStreamProvider: string;
+  displayIsolation: "private_virtual_display" | "shared_display" | "ambient_display" | string;
+  coordinateSpace: "desktop_physical_pixels";
+  width: number;
+  height: number;
+  scaleFactor: number;
+  geometryEpoch: string;
+  resolvedAt: string;
+  readinessEvidence: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface FrameReceipt {
+  frameId: string;
+  schemaVersion: "v1";
+  contextId: string;
+  captureProvider: string;
+  providerVersion: string;
+  sequence: number;
+  capturedAt: string;
+  width: number;
+  height: number;
+  scaleFactor: number;
+  geometryEpoch: string;
+  mimeType: "image/png";
+  byteLength: number;
+  sha256: string;
+  freshness: string;
+  retention: "ephemeral";
+  persisted: false;
+  [key: string]: unknown;
+}
+
+export interface ServiceDesktopCaptureData {
+  ok: true;
+  action: "desktop_capture";
+  context: DesktopContext;
+  frameReceipt: FrameReceipt;
+  /** Response-only base64 PNG. Base64 transport expands the wire payload. */
+  imageBase64: string;
+  [key: string]: unknown;
+}
+
 export interface ServiceTabHandleTraceFilter {
   browserId?: string | null;
   profileId?: string | null;
@@ -990,6 +1043,7 @@ export interface ServiceRequestActionDataMap {
   network_capture: ServiceNetworkCaptureData;
   file_transfer: ServiceFileTransferData;
   diagnostics: ServiceDiagnosticsData;
+  desktop_capture: ServiceDesktopCaptureData;
   back: ServiceUrlData;
   forward: ServiceUrlData;
   reload: ServiceUrlData;
@@ -1225,6 +1279,19 @@ export interface ServiceDiagnosticsRequestOptions extends Omit<ServiceRequest, "
 }
 
 export interface ServiceDiagnosticsRequestHttpOptions extends ServiceDiagnosticsRequestOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
+export interface ServiceDesktopCaptureRequestOptions extends Omit<ServiceRequest, "action" | "params" | "format" | "maxBytes"> {
+  browserId: string;
+  sessionName?: string;
+  format?: "png";
+  maxBytes?: number;
+}
+
+export interface ServiceDesktopCaptureRequestHttpOptions extends ServiceDesktopCaptureRequestOptions {
   baseUrl: string;
   fetch?: typeof globalThis.fetch;
   signal?: AbortSignal;
@@ -1494,6 +1561,9 @@ export declare function createServiceEvaluateRequest(
 export declare function createServiceDiagnosticsRequest(
   input: ServiceDiagnosticsRequestOptions,
 ): ServiceRequestForAction<"diagnostics">;
+export declare function createServiceDesktopCaptureRequest(
+  input: ServiceDesktopCaptureRequestOptions,
+): ServiceRequestForAction<"desktop_capture">;
 export declare function createServiceProbeRequest(
   input: ServiceProbeRequestOptions,
 ): ServiceRequestForAction<"probe">;
@@ -1577,6 +1647,12 @@ export declare function requestServiceDiagnostics(
 export declare function getServiceTabDiagnostics(
   options: ServiceDiagnosticsRequestHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceDiagnosticsData>>;
+export declare function requestServiceDesktopCapture(
+  options: ServiceDesktopCaptureRequestHttpOptions,
+): Promise<ServiceRequestResponse<ServiceDesktopCaptureData>>;
+export declare function captureServiceDesktopFrame(
+  options: ServiceDesktopCaptureRequestHttpOptions,
+): Promise<ServiceRequestResponse<ServiceDesktopCaptureData>>;
 export declare function requestServiceProbe(
   options: ServiceProbeRequestHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceProbeData>>;

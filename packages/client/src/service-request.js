@@ -34,6 +34,8 @@ const displayIsolationSet = new Set([
  * @typedef {import('./service-request.generated.js').ServiceEvaluateRequestOptions} ServiceEvaluateRequestOptions
  * @typedef {import('./service-request.generated.js').ServiceDiagnosticsRequestHttpOptions} ServiceDiagnosticsRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceDiagnosticsRequestOptions} ServiceDiagnosticsRequestOptions
+ * @typedef {import('./service-request.generated.js').ServiceDesktopCaptureRequestHttpOptions} ServiceDesktopCaptureRequestHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceDesktopCaptureRequestOptions} ServiceDesktopCaptureRequestOptions
  * @typedef {import('./service-request.generated.js').ServiceProbeRequestHttpOptions} ServiceProbeRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceProbeRequestOptions} ServiceProbeRequestOptions
  * @typedef {import('./service-request.generated.js').ServiceUiActionRequestHttpOptions} ServiceUiActionRequestHttpOptions
@@ -138,6 +140,20 @@ export function createServiceRequest(input) {
       if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
         throw new TypeError(`service request ${field} must be an array of strings`);
       }
+    }
+  }
+  if (input.action === 'desktop_capture') {
+    if (typeof record.browserId !== 'string' || record.browserId.length === 0) {
+      throw new TypeError('service request desktop_capture requires browserId');
+    }
+    if (record.format !== undefined && record.format !== 'png') {
+      throw new TypeError('service request desktop_capture format must be png');
+    }
+    if (record.maxBytes !== undefined && (!Number.isInteger(record.maxBytes) || Number(record.maxBytes) < 1)) {
+      throw new TypeError('service request desktop_capture maxBytes must be a positive integer');
+    }
+    if (record.maxBytes !== undefined && Number(record.maxBytes) > 16 * 1024 * 1024) {
+      throw new TypeError('service request desktop_capture maxBytes must not exceed 16777216');
     }
   }
 
@@ -522,6 +538,40 @@ export function createServiceDiagnosticsRequest(input) {
     ...routing,
     serviceTabHandle: handle,
     ...(params !== undefined ? { params } : {}),
+  });
+}
+
+/**
+ * Builds a bounded observation request for one service-owned route-bound desktop.
+ *
+ * @param {ServiceDesktopCaptureRequestOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceDesktopCaptureRequest(input) {
+  assertPlainObject(input, 'service desktop capture request');
+  const { browserId, sessionName, format = 'png', maxBytes = 4 * 1024 * 1024, ...request } = input;
+  if (typeof browserId !== 'string' || browserId.length === 0) {
+    throw new TypeError('service desktop capture request requires browserId');
+  }
+  if (sessionName !== undefined && (typeof sessionName !== 'string' || sessionName.length === 0)) {
+    throw new TypeError('service desktop capture request sessionName must be a non-empty string');
+  }
+  if (format !== 'png') {
+    throw new TypeError('service desktop capture request format must be png');
+  }
+  if (!Number.isInteger(maxBytes) || maxBytes < 1) {
+    throw new TypeError('service desktop capture request maxBytes must be a positive integer');
+  }
+  if (maxBytes > 16 * 1024 * 1024) {
+    throw new TypeError('service desktop capture request maxBytes must not exceed 16777216');
+  }
+  return createServiceRequest({
+    ...request,
+    action: 'desktop_capture',
+    browserId,
+    ...(sessionName !== undefined ? { sessionName } : {}),
+    format,
+    maxBytes,
   });
 }
 
@@ -1225,6 +1275,31 @@ export async function requestServiceDiagnostics({ baseUrl, fetch = globalThis.fe
  */
 export async function getServiceTabDiagnostics(options) {
   return requestServiceDiagnostics(options);
+}
+
+/**
+ * Capture one bounded ephemeral PNG from a service-owned route-bound desktop.
+ *
+ * @param {ServiceDesktopCaptureRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function requestServiceDesktopCapture({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceDesktopCaptureRequest(request),
+  });
+}
+
+/**
+ * Convenience alias for requestServiceDesktopCapture.
+ *
+ * @param {ServiceDesktopCaptureRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function captureServiceDesktopFrame(options) {
+  return requestServiceDesktopCapture(options);
 }
 
 /**

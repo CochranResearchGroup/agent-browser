@@ -131,6 +131,51 @@ try {
     `serviceRequest action count mismatch: ${JSON.stringify(contracts.data.contracts.serviceRequest)}`,
   );
   assert(
+    contracts.data.contracts.serviceRequest.actions.includes('desktop_capture'),
+    `desktop_capture action missing: ${JSON.stringify(contracts.data.contracts.serviceRequest)}`,
+  );
+  assert(
+    contracts.data.mcp?.desktopCaptureTool === 'desktop_capture',
+    `desktop_capture MCP adapter missing: ${JSON.stringify(contracts.data.mcp)}`,
+  );
+  assert(
+    contracts.data?.contracts?.desktopContext?.schemaId ===
+      'https://agent-browser.local/contracts/desktop-context.v1.schema.json',
+    `desktopContext schema id mismatch: ${JSON.stringify(contracts.data?.contracts?.desktopContext)}`,
+  );
+  assert(
+    contracts.data?.contracts?.frameReceipt?.schemaPath ===
+      'docs/dev/contracts/frame-receipt.v1.schema.json',
+    `frameReceipt schema path mismatch: ${JSON.stringify(contracts.data?.contracts?.frameReceipt)}`,
+  );
+  assert(
+    contracts.data?.contracts?.serviceDesktopCaptureResponse?.schemaId ===
+      'https://agent-browser.local/contracts/service-desktop-capture-response.v1.schema.json',
+    `serviceDesktopCaptureResponse schema id mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceDesktopCaptureResponse)}`,
+  );
+  assert(
+    contracts.data?.contracts?.serviceDesktopCaptureResponse?.http?.route ===
+      '/api/service/request',
+    `serviceDesktopCaptureResponse HTTP route mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceDesktopCaptureResponse)}`,
+  );
+  assert(
+    contracts.data?.contracts?.serviceDesktopCaptureResponse?.mcp?.tools?.includes(
+      'desktop_capture',
+    ),
+    `serviceDesktopCaptureResponse MCP tool mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceDesktopCaptureResponse)}`,
+  );
+  assert(
+    contracts.data?.contracts?.serviceDesktopCaptureResponse?.client?.helpers?.includes(
+      'captureServiceDesktopFrame',
+    ),
+    `serviceDesktopCaptureResponse client helpers mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceDesktopCaptureResponse)}`,
+  );
+  assert(
+    contracts.data?.contracts?.serviceDesktopCaptureResponse?.payload?.retention === 'ephemeral' &&
+      contracts.data?.contracts?.serviceDesktopCaptureResponse?.noLaunch === true,
+    `serviceDesktopCaptureResponse posture mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceDesktopCaptureResponse)}`,
+  );
+  assert(
     contracts.data?.contracts?.serviceProfileAllocationResponse?.schemaId ===
       'https://agent-browser.local/contracts/service-profile-allocation-response.v1.schema.json',
     `serviceProfileAllocationResponse schema id mismatch: ${JSON.stringify(contracts.data?.contracts?.serviceProfileAllocationResponse)}`,

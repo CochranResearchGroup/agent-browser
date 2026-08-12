@@ -27,7 +27,7 @@ const targetServiceId = 'google';
 let mcp;
 
 const MCP_TOOL_ALLOWLIST = [
-  'service_access_plan', 'service_request', 'service_job_cancel', 'service_browser_retry',
+  'service_access_plan', 'service_request', 'desktop_capture', 'service_job_cancel', 'service_browser_retry',
   'service_incidents', 'service_remedies_apply', 'service_profile_upsert',
   'service_profile_delete', 'service_profile_freshness_update',
   'service_profile_seeding_handoff_update', 'service_session_upsert',
@@ -76,6 +76,7 @@ const MCP_TEMPLATE_ALLOWLIST = [
 ];
 
 function mcpToolResultClassification(name) {
+  if (name === 'desktop_capture') return 'bounded_ephemeral_desktop_observation';
   if (name === 'browser_command') return 'explicit_full_status_rejection';
   if (name.startsWith('browser_')) return 'narrow_browser_result';
   if (['service_access_plan', 'service_incidents', 'service_trace',

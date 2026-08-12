@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-desktop-capture-response.v1.schema.json",
+  "title": "agent-browser desktop capture response",
+  "description": "Immediate response data for action=desktop_capture. The bounded base64 PNG is response-only and is not retained in service state, events, incidents, job summaries, or logs.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["ok", "action", "context", "frameReceipt", "imageBase64"],
+  "properties": {
+    "ok": { "const": true },
+    "action": { "const": "desktop_capture" },
+    "context": { "$ref": "desktop-context.v1.schema.json" },
+    "frameReceipt": { "$ref": "frame-receipt.v1.schema.json" },
+    "imageBase64": {
+      "type": "string",
+      "contentEncoding": "base64",
+      "contentMediaType": "image/png",
+      "description": "Bounded ephemeral PNG bytes. Base64 encoding expands the HTTP and MCP wire payload beyond frameReceipt.byteLength."
+    }
+  }
+}

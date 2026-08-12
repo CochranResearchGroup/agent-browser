@@ -8,7 +8,8 @@ use crate::native::service_access::{
 };
 use crate::native::service_activity::service_incident_activity_response;
 use crate::native::service_contracts::{
-    service_contracts_metadata, SERVICE_ACCESS_PLAN_MCP_RESOURCE,
+    service_contracts_metadata, DESKTOP_CAPTURE_DEFAULT_MAX_BYTES, DESKTOP_CAPTURE_HARD_MAX_BYTES,
+    DESKTOP_CAPTURE_MCP_TOOL_NAME, SERVICE_ACCESS_PLAN_MCP_RESOURCE,
     SERVICE_ACCESS_PLAN_MCP_TOOL_NAME, SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME,
     SERVICE_BROWSER_CAPABILITY_REGISTRY_RESOURCE, SERVICE_CONTRACTS_RESOURCE,
     SERVICE_DISPLAY_ALLOCATIONS_MCP_RESOURCE, SERVICE_PROFILE_SEEDING_HANDOFF_UPDATE_MCP_TOOL_NAME,
@@ -830,6 +831,17 @@ fn service_mcp_tools() -> Vec<Value> {
                         "type": "string",
                         "description": "Optional retained browser route hint copied from access-plan profileReuse reuse recommendations. Top-level hints route ordinary commands to an existing daemon lane."
                     },
+                    "format": {
+                        "type": "string",
+                        "enum": ["png"],
+                        "description": "Desktop frame encoding for action=desktop_capture. PoC 1 supports PNG only."
+                    },
+                    "maxBytes": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": DESKTOP_CAPTURE_HARD_MAX_BYTES,
+                        "description": "Maximum decoded PNG bytes returned by action=desktop_capture. Defaults to 4194304. Base64 transport increases wire size."
+                    },
                     "sessionName": {
                         "type": "string",
                         "description": "Optional daemon session route hint copied from access-plan profileReuse reuse recommendations. Top-level hints route ordinary commands to an existing daemon lane."
@@ -1084,6 +1096,7 @@ fn service_mcp_tools() -> Vec<Value> {
                 "required": ["action"]
             }
         }),
+        desktop_capture_tool_schema(),
         json!({
             "name": "service_job_cancel",
             "title": "Cancel service job",
@@ -4565,6 +4578,59 @@ fn browser_command_tool_schema() -> Value {
     })
 }
 
+fn desktop_capture_tool_schema() -> Value {
+    json!({
+            "name": DESKTOP_CAPTURE_MCP_TOOL_NAME,
+        "title": "Capture service desktop frame",
+        "description": "Capture one bounded ephemeral PNG from the exact service-owned route-bound desktop. This observation does not launch a browser, attach CDP, grant display access, or persist frame bytes. Global tool availability does not imply that a selected workspace is ready.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "browserId": {
+                    "type": "string",
+                    "description": "Required service-owned browser id used to resolve one exact desktop route."
+                },
+                "sessionName": {
+                    "type": "string",
+                    "description": "Optional session name used only to narrow exact service-owned route resolution."
+                },
+                "format": {
+                    "type": "string",
+                    "enum": ["png"],
+                    "default": "png",
+                    "description": "Frame encoding. PoC 1 supports PNG only."
+                },
+                "maxBytes": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": DESKTOP_CAPTURE_HARD_MAX_BYTES,
+                    "default": DESKTOP_CAPTURE_DEFAULT_MAX_BYTES,
+                    "description": "Maximum decoded PNG bytes. Base64 transport increases the response wire size."
+                },
+                "jobTimeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional worker-bound timeout for the queued capture observation."
+                },
+                "serviceName": {
+                    "type": "string",
+                    "description": "Calling service name."
+                },
+                "agentName": {
+                    "type": "string",
+                    "description": "Calling agent name."
+                },
+                "taskName": {
+                    "type": "string",
+                    "description": "Calling task name."
+                }
+            },
+            "required": ["browserId"]
+        }
+    })
+}
+
 fn browser_read_tool_schema(spec: BrowserReadToolSpec) -> Value {
     json!({
         "name": spec.tool_name,
@@ -4766,6 +4832,9 @@ fn call_service_mcp_tool(
             call_service_remote_view_route_preflight(arguments, session)
         }
         "service_request" => call_service_request(arguments, session, configured_service_state),
+        DESKTOP_CAPTURE_MCP_TOOL_NAME => {
+            call_desktop_capture(arguments, session, configured_service_state)
+        }
         "browser_command" => call_browser_command(arguments, session),
         "browser_navigate" => call_browser_navigate(arguments, session),
         "browser_requests" => call_browser_requests(arguments, session),
@@ -5496,6 +5565,73 @@ fn call_service_request(
     state.refresh_profile_readiness();
     let (trace, command) = service_request_command_with_state(arguments, Some(&state))?;
     send_queued_tool_command("service_request", session, trace, command)
+}
+
+fn desktop_capture_service_request(arguments: &Value) -> Result<Value, JsonRpcError> {
+    let argument_map = arguments.as_object().ok_or_else(|| {
+        JsonRpcError::invalid_params("desktop_capture arguments must be an object")
+    })?;
+    const ALLOWED_FIELDS: &[&str] = &[
+        "browserId",
+        "sessionName",
+        "format",
+        "maxBytes",
+        "jobTimeoutMs",
+        "serviceName",
+        "agentName",
+        "taskName",
+    ];
+    if let Some(field) = argument_map
+        .keys()
+        .find(|field| !ALLOWED_FIELDS.contains(&field.as_str()))
+    {
+        return Err(JsonRpcError::invalid_params(&format!(
+            "unknown desktop_capture field: {field}"
+        )));
+    }
+    let browser_id = required_string_argument(arguments, "browserId")?;
+    let session_name = optional_string_argument(arguments, "sessionName")?;
+    let format = optional_string_argument(arguments, "format")?.unwrap_or("png");
+    if format != "png" {
+        return Err(JsonRpcError::invalid_params(
+            "desktop_capture format must be png",
+        ));
+    }
+    let max_bytes = optional_positive_u64_argument(arguments, "maxBytes")?
+        .unwrap_or(DESKTOP_CAPTURE_DEFAULT_MAX_BYTES);
+    if max_bytes > DESKTOP_CAPTURE_HARD_MAX_BYTES {
+        return Err(JsonRpcError::invalid_params(
+            "desktop_capture maxBytes must not exceed 16777216",
+        ));
+    }
+
+    let mut request = json!({
+        "action": "desktop_capture",
+        "browserId": browser_id,
+        "format": format,
+        "maxBytes": max_bytes,
+    });
+    if let Some(value) = session_name {
+        request["sessionName"] = json!(value);
+    }
+    for name in ["serviceName", "agentName", "taskName"] {
+        if let Some(value) = optional_string_argument(arguments, name)? {
+            request[name] = json!(value);
+        }
+    }
+    if let Some(value) = optional_positive_u64_argument(arguments, "jobTimeoutMs")? {
+        request["jobTimeoutMs"] = json!(value);
+    }
+    Ok(request)
+}
+
+fn call_desktop_capture(
+    arguments: &Value,
+    session: &str,
+    configured_service_state: &ServiceState,
+) -> Result<Value, JsonRpcError> {
+    let request = desktop_capture_service_request(arguments)?;
+    call_service_request(&request, session, configured_service_state)
 }
 
 fn call_browser_navigate(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
@@ -12058,6 +12194,79 @@ mod tests {
     }
 
     #[test]
+    fn desktop_capture_tool_is_a_bounded_service_request_adapter() {
+        let tools = service_mcp_tools();
+        let desktop_capture = tools
+            .iter()
+            .find(|tool| tool["name"] == "desktop_capture")
+            .expect("desktop_capture schema should be listed");
+        let input = &desktop_capture["inputSchema"];
+
+        assert_eq!(input["additionalProperties"], false);
+        assert_eq!(input["required"], json!(["browserId"]));
+        assert_eq!(input["properties"]["format"]["enum"], json!(["png"]));
+        assert_eq!(input["properties"]["maxBytes"]["minimum"], 1);
+        assert_eq!(
+            input["properties"]["maxBytes"]["maximum"],
+            DESKTOP_CAPTURE_HARD_MAX_BYTES
+        );
+        assert!(input["properties"].get("displayName").is_none());
+        assert!(input["properties"].get("providerExternalUrl").is_none());
+    }
+
+    #[test]
+    fn desktop_capture_tool_lowers_to_the_canonical_service_request() {
+        let request = desktop_capture_service_request(&json!({
+            "browserId": "browser-rdp-1",
+            "sessionName": "rdp-1",
+            "format": "png",
+            "maxBytes": 2048,
+            "jobTimeoutMs": 5000,
+            "serviceName": "DesktopObserver",
+            "agentName": "capture-agent",
+            "taskName": "captureFrame"
+        }))
+        .unwrap();
+
+        assert_eq!(request["action"], "desktop_capture");
+        assert_eq!(request["browserId"], "browser-rdp-1");
+        assert_eq!(request["sessionName"], "rdp-1");
+        assert_eq!(request["format"], "png");
+        assert_eq!(request["maxBytes"], 2048);
+        assert_eq!(request["jobTimeoutMs"], 5000);
+        assert!(request.get("params").is_none());
+        assert!(request.get("displayName").is_none());
+
+        let defaults = desktop_capture_service_request(&json!({
+            "browserId": "browser-rdp-1"
+        }))
+        .unwrap();
+        assert_eq!(defaults["format"], "png");
+        assert_eq!(defaults["maxBytes"], DESKTOP_CAPTURE_DEFAULT_MAX_BYTES);
+
+        assert!(desktop_capture_service_request(&json!({
+            "browserId": "browser-rdp-1",
+            "format": "jpeg"
+        }))
+        .is_err());
+        assert!(desktop_capture_service_request(&json!({
+            "browserId": "browser-rdp-1",
+            "maxBytes": 16 * 1024 * 1024 + 1
+        }))
+        .is_err());
+        assert!(desktop_capture_service_request(&json!({
+            "browserId": "browser-rdp-1",
+            "displayName": ":77"
+        }))
+        .is_err());
+        assert!(desktop_capture_service_request(&json!({
+            "browserId": "browser-rdp-1",
+            "providerExternalUrl": "https://provider.invalid/route"
+        }))
+        .is_err());
+    }
+
+    #[test]
     fn service_request_mcp_schema_matches_all_canonical_types_and_constraints() {
         let canonical: Value = serde_json::from_str(include_str!(
             "../../docs/dev/contracts/service-request.v1.schema.json"
@@ -12075,7 +12284,7 @@ mod tests {
         let mut mcp_names = mcp_properties.keys().collect::<Vec<_>>();
         canonical_names.sort();
         mcp_names.sort();
-        assert_eq!(canonical_names.len(), 62);
+        assert_eq!(canonical_names.len(), 64);
         assert_eq!(canonical_names, mcp_names);
         assert_eq!(input["additionalProperties"], false);
         assert_eq!(input["required"], canonical["required"]);
@@ -12087,7 +12296,7 @@ mod tests {
                 "object"
             });
             assert_eq!(mcp_property["type"], canonical_type, "{name}");
-            for constraint in ["minimum", "enum", "additionalProperties"] {
+            for constraint in ["minimum", "maximum", "enum", "additionalProperties"] {
                 if !canonical_property[constraint].is_null() {
                     assert_eq!(
                         mcp_property[constraint], canonical_property[constraint],

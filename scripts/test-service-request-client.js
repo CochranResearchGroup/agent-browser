@@ -10,6 +10,7 @@ import {
   createServiceCdpDetachRequest,
   createServiceCdpFreeLaunchRequest,
   createServiceDiagnosticsRequest,
+  createServiceDesktopCaptureRequest,
   createServiceEvaluateRequest,
   createServiceFileTransferRequest,
   createServiceNetworkCaptureRequest,
@@ -40,6 +41,7 @@ import {
   probeServiceTab,
   requestServiceFileTransfer,
   captureServiceNetwork,
+  captureServiceDesktopFrame,
   requestServiceUiAction,
   refreshServiceTabHandle,
   runServiceUiAction,
@@ -50,6 +52,7 @@ import {
   requestServiceCdpDetach,
   requestServiceCdpFreeLaunch,
   requestServiceDiagnostics,
+  requestServiceDesktopCapture,
   requestServiceEvaluate,
   requestServiceNetworkCapture,
   requestServiceProbe,
@@ -68,6 +71,7 @@ import {
   summarizeServiceRemoteViewOpenProof,
   transferServiceFiles,
   SERVICE_REQUEST_ACTIONS,
+  SERVICE_REQUEST_INTEGER_FIELDS,
   SERVICE_REQUEST_STRING_FIELDS,
   summarizeServiceCdpFreeLaunchAvailability,
   takeoverServiceControllerLease,
@@ -96,6 +100,25 @@ function assertServiceRequestActionDataCoverage() {
     assert.ok(schema.properties[field], `canonical schema must include ${field}`);
     assert.ok(SERVICE_REQUEST_STRING_FIELDS.includes(field), `generated fields must include ${field}`);
   }
+  for (const field of ['format', 'maxBytes']) {
+    assert.ok(schema.properties[field], `canonical schema must include ${field}`);
+  }
+  assert.ok(SERVICE_REQUEST_STRING_FIELDS.includes('format'));
+  assert.ok(SERVICE_REQUEST_INTEGER_FIELDS.includes('maxBytes'));
+  assert.deepEqual(schema.properties.format.enum, ['png']);
+  assert.equal(schema.properties.maxBytes.maximum, 16 * 1024 * 1024);
+  const desktopResponseSchema = JSON.parse(
+    readFileSync(
+      new URL('../docs/dev/contracts/service-desktop-capture-response.v1.schema.json', import.meta.url),
+      'utf8',
+    ),
+  );
+  assert.deepEqual(
+    desktopResponseSchema.required,
+    ['ok', 'action', 'context', 'frameReceipt', 'imageBase64'],
+  );
+  assert.equal(desktopResponseSchema.properties.context.$ref, 'desktop-context.v1.schema.json');
+  assert.equal(desktopResponseSchema.properties.frameReceipt.$ref, 'frame-receipt.v1.schema.json');
   assert.equal(schema.properties.args, undefined);
   assert.equal(SERVICE_REQUEST_STRING_FIELDS.includes('args'), false);
 }
@@ -320,6 +343,88 @@ async function main() {
       }),
     /service request monitorRunDueSummary must be an object/,
   );
+
+  assert.deepEqual(
+    createServiceDesktopCaptureRequest({ browserId: 'browser-rdp-1' }),
+    {
+      action: 'desktop_capture',
+      browserId: 'browser-rdp-1',
+      format: 'png',
+      maxBytes: 4 * 1024 * 1024,
+    },
+  );
+  assert.deepEqual(
+    createServiceDesktopCaptureRequest({
+      browserId: 'browser-rdp-1',
+      sessionName: 'rdp-1',
+      format: 'png',
+      maxBytes: 1024,
+      serviceName: 'DesktopObserver',
+    }),
+    {
+      action: 'desktop_capture',
+      browserId: 'browser-rdp-1',
+      sessionName: 'rdp-1',
+      format: 'png',
+      maxBytes: 1024,
+      serviceName: 'DesktopObserver',
+    },
+  );
+  assert.throws(
+    () => createServiceDesktopCaptureRequest({ browserId: '' }),
+    /requires browserId/,
+  );
+  assert.throws(
+    () => createServiceDesktopCaptureRequest({ browserId: 'browser-rdp-1', format: 'jpeg' }),
+    /format must be png/,
+  );
+  assert.throws(
+    () => createServiceDesktopCaptureRequest({ browserId: 'browser-rdp-1', maxBytes: 0 }),
+    /maxBytes must be a positive integer/,
+  );
+  assert.throws(
+    () => createServiceDesktopCaptureRequest({ browserId: 'browser-rdp-1', maxBytes: 16 * 1024 * 1024 + 1 }),
+    /maxBytes must not exceed 16777216/,
+  );
+  assert.throws(
+    () => createServiceRequest({ action: 'desktop_capture', format: 'png', maxBytes: 1024 }),
+    /desktop_capture requires browserId/,
+  );
+  assert.throws(
+    () => createServiceRequest({ action: 'desktop_capture', browserId: 'browser-rdp-1', format: 'jpeg', maxBytes: 1024 }),
+    /desktop_capture format must be png/,
+  );
+  assert.throws(
+    () => createServiceRequest({ action: 'desktop_capture', browserId: 'browser-rdp-1', format: 'png', maxBytes: 16 * 1024 * 1024 + 1 }),
+    /desktop_capture maxBytes must not exceed 16777216/,
+  );
+
+  for (const invoke of [requestServiceDesktopCapture, captureServiceDesktopFrame]) {
+    const recorder = createFetchRecorder({
+      success: true,
+      data: {
+        context: { contextId: 'context-1' },
+        frame: { frameId: 'frame-1' },
+        imageBase64: 'iVBORw0KGgo=',
+      },
+    });
+    await invoke({
+      baseUrl: 'http://127.0.0.1:9222',
+      fetch: recorder.fetch,
+      browserId: 'browser-rdp-1',
+      sessionName: 'rdp-1',
+      maxBytes: 2048,
+    });
+    assert.equal(recorder.calls.length, 1);
+    assert.equal(recorder.calls[0].url, 'http://127.0.0.1:9222/api/service/request');
+    assert.deepEqual(recorder.calls[0].body, {
+      action: 'desktop_capture',
+      browserId: 'browser-rdp-1',
+      sessionName: 'rdp-1',
+      format: 'png',
+      maxBytes: 2048,
+    });
+  }
 
   const request = createServiceRequest({
     serviceName: 'JournalDownloader',
