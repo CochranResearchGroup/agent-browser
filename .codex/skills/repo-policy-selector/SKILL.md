@@ -31,7 +31,7 @@ Select the right reusable policy bundle for a repository, then adapt it into rep
    `docs/dev/planning-audit-baseline.json`, while continuing to report matched
    and unused baseline entries. Use `--force` only for pre-adoption assessment;
    active baselines never apply to full or forced audits.
-9. If the repo adopts `goal-execution-governance`, run `scripts/audit_planning_contract.py --goal-only` and require concrete local bounds, significant-departure standing authority, one goal-level review-discovery pass, closed-world verification, evidence-shaped finding fields, dispositions, and checkpoint fields.
+9. If the repo adopts `goal-execution-governance`, run `scripts/audit_planning_contract.py --goal-only` and require concrete local bounds, execute-by-default continuation, action-specific approval gates, local replan before escalation, at-most-one risk-triggered drift-discovery pass, closed-world verification when review occurs, and minimal material-checkpoint fields.
 10. Validate that the recommended profile and modules exist in the installed library bundle before drafting changes.
 11. Read the referenced policy modules from this policy library before drafting changes.
 12. Decide whether the repo needs:

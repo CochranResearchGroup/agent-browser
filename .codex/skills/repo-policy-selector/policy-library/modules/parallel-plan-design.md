@@ -27,6 +27,10 @@ tags:
 - Treat high fan-out as a plan smell unless the subtasks are independent, low-conflict, and cheap to verify.
 - Put a semantic exit condition and a hard bound on every review, retry, repair,
   or agent-handoff edge that can cycle back to prior work.
+- Reaching a local loop bound ends or reframes that loop; it does not create a
+  user-approval gate by itself. Continue another safe in-scope route when one is
+  available, and escalate only when no meaningful route remains or an exact
+  action-specific boundary requires a user decision.
 - When a work unit cannot be bounded or has too many coupled write surfaces,
   return it for split/reframe before spawning workers.
 

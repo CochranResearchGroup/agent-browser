@@ -3,23 +3,21 @@
 ## Policy
 
 - Delegate only concrete, bounded subtasks that materially advance the active slice.
-- At the start of each non-trivial slice and after material replanning, make an
-  explicit delegation decision instead of waiting for the user to request
-  subagents.
+- At the start of non-trivial work and after material replanning, consider
+  whether delegation would create a genuinely useful independent lane. This is
+  an execution choice, not a user-approval event.
 - When subagent tooling and capacity are available, spawn without additional
   user prompting if at least one useful bounded lane exists, such as:
   - independent discovery or evidence collection off the immediate critical path
   - implementation with a disjoint write surface
   - context-heavy work that benefits from an isolated context window
   - independent validation, audit, or adversarial review
-- If a long-running or multi-lane goal proceeds without delegation, record the
-  concrete reason, such as no independent lane, unsafe overlap, coordination
-  cost exceeding the expected gain, or unavailable tooling.
-- For planned, multi-slice, or consequential work, leave one durable delegation
-  receipt per execution packet. Record `spawned` or `not_spawned`; the bounded
-  lane or non-delegation reason; available agent/run/session handle; terminal
-  status; evidence returned; and how the primary agent reconciled or rejected
-  the result.
+- Record a non-delegation reason only when a plan expected a worker or the lack
+  of delegation materially affects timing, independence, or evidence. Do not
+  create a `not_spawned` receipt for every routine packet.
+- When delegation occurs, leave a durable receipt for consequential work:
+  record the bounded lane, available agent/run/session handle, terminal status,
+  evidence returned, and the primary agent's reconciliation decision.
 - Keep urgent blocking work local when the next action depends directly on the answer.
 - Give delegated work explicit ownership, expected output, and write scope.
 - Prefer subagents for independent sidecar work, verification, or implementation slices with disjoint write sets.
@@ -36,6 +34,9 @@
   authority, or operator approval. The primary agent reconciles the result and
   may reject, backlog, or seek evidence for a candidate that does not satisfy
   the frozen contract.
+- Do not turn reviewer completion, reviewer agreement, or a second reviewer
+  opinion into a prerequisite for obvious low-risk progress unless an explicit
+  acceptance or safety contract requires that review.
 - Use broad fresh context for the initial drift scan. Use closed-world prompts
   for later verification and carry the same finding identifiers across worker
   replacement, plan revisions, and successor packets so review discovery does

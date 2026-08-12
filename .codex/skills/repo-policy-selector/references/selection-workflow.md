@@ -110,8 +110,9 @@ For long-running goal execution, prioritize explicit signals such as:
 - goal checkpoints, acceptance-progress classification, convergence guards, or
   repeated-hardening stop rules
 - high-level campaign plans that derive bounded execution packets over time
-- standing authority, significant-departure approval gates, renewable execution
-  windows, or complaints about repeated in-envelope approval stops
+- standing authority, execute-by-default continuation, action-specific approval
+  gates, local replan before escalation, or complaints about repeated
+  in-envelope approval stops and gate mazes
 - fresh-context drift review, accepted finding ledgers, primary adjudication, or
   closed-world remediation verification
 
@@ -188,11 +189,11 @@ python scripts/audit_planning_contract.py --repo-root /path/to/repo --goal-only 
 ```
 
 Do not call goal-policy adoption complete until concrete local bounds,
-significant-departure standing authority, renewable execution windows, one
-goal-level review-discovery pass, closed-world verification, evidence-shaped
-finding fields, dispositions, and the checkpoint-record contract pass this
-audit. Treat packet bounds as convergence controls rather than expiring goal
-approval.
+execute-by-default continuation, action-specific approval gates, local replan
+before escalation, at-most-one risk-triggered goal review, closed-world
+verification when review occurs, and the minimal material-checkpoint contract
+pass this audit. Treat packet bounds as convergence controls rather than
+expiring goal approval.
 
 The normal planning audit is applicability-aware. It enforces
 `planning-discipline` only when that policy is adopted, and only requires

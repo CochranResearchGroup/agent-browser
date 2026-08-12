@@ -32,6 +32,10 @@ tags:
   - `CANCELLED`
 - For any plan in an active state such as `OPEN`, require a short `Current State` section that says what already exists and what still remains.
 - Use bounded plan artifacts with explicit scope, non-goals, acceptance criteria, and definition of done.
+- A plan organizes execution; it does not grant, consume, or renew authority.
+  Once the user approves a goal, routine in-scope plan revisions, packets, and
+  successors proceed under that standing authority. Do not ask for approval
+  merely because the next step was not enumerated in advance.
 - Keep plan altitude proportional to its horizon. A campaign or `/goal` plan may
   remain high-level when it preserves the objective, milestones, dependencies,
   gates, and outcome evidence; derive detailed implementation packets just in
@@ -43,6 +47,9 @@ tags:
   packet retries, and reviewer replacement inherit standing authority, accepted
   finding ledgers, review-discovery counts, and no-progress history; they do not
   reset those controls merely by changing a filename or version number.
+- When one reasonable next step is clearly implied and low risk, choose it and
+  keep moving. Ask the user to choose only when alternatives would materially
+  change the outcome, scope, cost, or safety envelope.
 - Give each active execution packet one bounded outcome, owner, expected write
   surface, required inputs, validation evidence, and terminal condition.
 - When a task is large enough to plan, explicitly separate:
@@ -52,7 +59,8 @@ tags:
 - Do not let one plan artifact accumulate endless follow-on polish; close it or open a new bounded slice.
 - Reconcile plan state promptly when implementation lands, a successor
   supersedes the plan, or a gate blocks integration. Stale `OPEN` labels are
-  authority drift even when the implementation itself is sound.
+  continuity debt even when the implementation itself is sound; repair the
+  record, but do not treat the label alone as a new approval gate.
 - Do not equate plan activity with progress. Require current evidence that a
   slice advances an acceptance criterion or removes a verified blocker.
 - Classify plan-only refinement, reviewer novelty, extra documentation, and

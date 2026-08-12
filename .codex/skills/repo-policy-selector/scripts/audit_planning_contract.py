@@ -27,34 +27,32 @@ GOAL_BOUND_PATTERNS = {
     ),
 }
 GOAL_CONTROL_PATTERNS = {
-    "authorization_gate": re.compile(r"(?im)^authorization_gate\s*:\s*significant_departure_only\s*$"),
-    "retry_budget_mode": re.compile(r"(?im)^retry_budget_mode\s*:\s*renewable_execution_window\s*$"),
-    "review_discovery_passes": re.compile(r"(?im)^review_discovery_passes\s*:\s*1\s*$"),
-    "review_verification_mode": re.compile(r"(?im)^review_verification_mode\s*:\s*closed_world\s*$"),
+    "authorization_gate": re.compile(
+        r"(?im)^authorization_gate\s*:\s*material_departure_or_explicit_action_gate_only\s*$"
+    ),
+    "continuation_default": re.compile(
+        r"(?im)^continuation_default\s*:\s*execute_obvious_in_scope_low_risk\s*$"
+    ),
+    "bound_exhaustion_mode": re.compile(
+        r"(?im)^bound_exhaustion_mode\s*:\s*local_replan_before_escalation\s*$"
+    ),
+    "max_review_discovery_passes": re.compile(
+        r"(?im)^max_review_discovery_passes\s*:\s*1\s*$"
+    ),
+    "review_verification_mode": re.compile(
+        r"(?im)^review_verification_mode\s*:\s*closed_world_if_reviewed\s*$"
+    ),
+    "checkpoint_mode": re.compile(
+        r"(?im)^checkpoint_mode\s*:\s*material_boundary_with_cadence_backstop\s*$"
+    ),
 }
 GOAL_CHECKPOINT_FIELD_TOKENS = {
-    "authority_classification",
-    "plan_version",
     "state_transition",
+    "acceptance_state",
     "progress_classification",
     "evidence",
-    "subagent_status",
+    "material_blockers",
     "next_action_or_stop_reason",
-    "review_disposition_summary",
-}
-GOAL_REVIEW_FINDING_FIELDS = {
-    "confidence",
-    "consequence",
-    "criterion",
-    "evidence",
-    "reproducer",
-    "suggested_disposition",
-}
-GOAL_REVIEW_DISPOSITIONS = {
-    "blocking",
-    "needs_evidence",
-    "nonblocking_backlog",
-    "rejected",
 }
 
 
@@ -100,20 +98,6 @@ def audit_goal_execution_contract(root: Path) -> dict:
             if field.strip()
         } if fields_match else set()
         missing_fields = sorted(GOAL_CHECKPOINT_FIELD_TOKENS - fields)
-        finding_fields_match = re.search(r"(?im)^review_finding_fields\s*:\s*(.+)$", text)
-        finding_fields = {
-            field.strip()
-            for field in re.split(r"[,|]", finding_fields_match.group(1))
-            if field.strip()
-        } if finding_fields_match else set()
-        missing_finding_fields = sorted(GOAL_REVIEW_FINDING_FIELDS - finding_fields)
-        dispositions_match = re.search(r"(?im)^review_disposition_values\s*:\s*(.+)$", text)
-        dispositions = {
-            disposition.strip()
-            for disposition in re.split(r"[,|]", dispositions_match.group(1))
-            if disposition.strip()
-        } if dispositions_match else set()
-        missing_dispositions = sorted(GOAL_REVIEW_DISPOSITIONS - dispositions)
         if "## Local Goal Bounds" not in text:
             problems.append(f"goal policy missing Local Goal Bounds section: {policy_path.name}")
         for name in missing_bounds:
@@ -122,18 +106,12 @@ def audit_goal_execution_contract(root: Path) -> dict:
             problems.append(f"goal policy missing or invalid control {name}: {policy_path.name}")
         for name in missing_fields:
             problems.append(f"goal policy missing checkpoint field {name}: {policy_path.name}")
-        for name in missing_finding_fields:
-            problems.append(f"goal policy missing review finding field {name}: {policy_path.name}")
-        for name in missing_dispositions:
-            problems.append(f"goal policy missing review disposition {name}: {policy_path.name}")
         policies.append(
             {
                 "path": str(policy_path),
                 "missing_bounds": missing_bounds,
                 "missing_controls": missing_controls,
                 "missing_checkpoint_fields": missing_fields,
-                "missing_review_finding_fields": missing_finding_fields,
-                "missing_review_dispositions": missing_dispositions,
             }
         )
 

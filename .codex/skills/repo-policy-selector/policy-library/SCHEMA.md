@@ -274,16 +274,19 @@ reusable policy themes include:
 
 - a stable goal objective plus high-level milestone/campaign plan
 - just-in-time bounded execution packets rather than premature low-level plans
-- standing authority for in-envelope continuation, with new approval limited to
-  significant departures and pre-existing human/live/private/security gates
+- standing authority with an execute-by-default rule for obvious, in-scope,
+  low-risk actions
+- approval stops limited to material departures or explicit gates that apply to
+  the exact contemplated action; vague gate labels and local counter exhaustion
+  are insufficient
 - explicit states, dependencies, joins, bounded feedback cycles, and terminal outcomes
 - automatic delegation decisions and calibrated fresh-context worker/auditor roles
-- one broad drift-discovery pass followed by primary adjudication and
-  closed-world verification of accepted findings
+- at most one risk-triggered broad drift-discovery pass followed, when used, by
+  primary adjudication and closed-world verification of accepted findings
 - evidence-shaped review findings, explicit dispositions, and goal-level review
   budgets that survive plan versions and successor packets
-- checkpointed evidence, progress classification, convergence guards, and
-  deterministic stop or escalation conditions
+- material-boundary checkpoints with a cadence backstop, scoped drift guards,
+  and local replan before escalation
 
 Those belong in `goal-execution-governance`. Exact time, token, slice, command,
 and runbook thresholds should remain repo-local.
