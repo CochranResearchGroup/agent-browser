@@ -149,7 +149,7 @@ use super::service_monitors::{
 };
 use super::service_network_capture::handle_service_network_capture;
 use super::service_probe::handle_service_probe;
-use super::service_renderer_crash::{RendererCrashObservation, RendererCrashPersistence};
+use super::service_renderer_crash::renderer_crash_error_response;
 use super::service_resources::{
     handle_service_access_plan, handle_service_gc, handle_service_resources,
     handle_service_resources_monitor_summary, handle_service_resources_write_monitor_summary,
@@ -908,26 +908,4 @@ pub(crate) fn success_response(id: &str, data: Value) -> Value {
 
 pub(crate) fn error_response(id: &str, error: &str) -> Value {
     json!({ "id" : id, "success" : false, "error" : error, })
-}
-
-pub(crate) fn renderer_crash_error_response(
-    id: &str,
-    observation: RendererCrashObservation,
-    persistence: Result<RendererCrashPersistence, String>,
-) -> Value {
-    let (persistence, persistence_error) = match persistence {
-        Ok(persistence) => (json!(persistence), Value::Null),
-        Err(error) => (Value::Null, json!(error)),
-    };
-    json!({
-        "id": id,
-        "success": false,
-        "code": "target_crashed",
-        "error": "The active renderer target crashed while the command was running",
-        "data": {
-            "crash": observation,
-            "persistence": persistence,
-            "persistenceError": persistence_error,
-        },
-    })
 }

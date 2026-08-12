@@ -81,6 +81,29 @@ pub(crate) struct RendererCrashPersistence {
     pub duplicate: bool,
 }
 
+/// Build the stable command envelope for a correlated renderer crash.
+pub(crate) fn renderer_crash_error_response(
+    id: &str,
+    observation: RendererCrashObservation,
+    persistence: Result<RendererCrashPersistence, String>,
+) -> Value {
+    let (persistence, persistence_error) = match persistence {
+        Ok(persistence) => (json!(persistence), Value::Null),
+        Err(error) => (Value::Null, json!(error)),
+    };
+    json!({
+        "id": id,
+        "success": false,
+        "code": "target_crashed",
+        "error": "The active renderer target crashed while the command was running",
+        "data": {
+            "crash": observation,
+            "persistence": persistence,
+            "persistenceError": persistence_error,
+        },
+    })
+}
+
 pub(crate) fn correlate_renderer_crash(
     signal: RendererCrashSignal,
     context: &RendererCrashCommandContext,
@@ -263,14 +286,12 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+    use crate::native::action_runtime::runtime::DaemonState;
     use crate::native::service_model::{
         BrowserProcess, BrowserTab, ServiceState, ServiceTabHandle, TabLifecycle,
     };
     use crate::native::service_store::{
         JsonServiceStateStore, LockedServiceStateRepository, ServiceStateRepository,
-    };
-    use crate::native::{
-        action_runtime::runtime::DaemonState, actions::renderer_crash_error_response,
     };
     use tokio::sync::broadcast;
 

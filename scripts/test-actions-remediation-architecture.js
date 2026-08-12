@@ -116,6 +116,8 @@ requirePattern(
 
 const rustSources = listFiles('cli/src', '.rs');
 const declaredProcessIdentityConsumers = new Map([
+  ['cli/src/connection.rs', 'daemon_identity_capture'],
+  ['cli/src/main.rs', 'close_scope_identity_verification'],
   ['cli/src/native/action_runtime/runtime/daemon.rs', 'handoff_schema'],
   ['cli/src/native/action_runtime/runtime/launch.rs', 'runtime_termination_and_service_capture'],
   ['cli/src/native/action_runtime/runtime/navigation.rs', 'handoff_assessment'],
@@ -123,6 +125,7 @@ const declaredProcessIdentityConsumers = new Map([
   ['cli/src/native/action_runtime/runtime/remote_headed.rs', 'service_capture'],
   ['cli/src/native/action_runtime/runtime/route_host_tests.rs', 'handoff_fixtures'],
   ['cli/src/native/cdp/chrome.rs', 'runtime_state_and_profile_lock'],
+  ['cli/src/native/daemon.rs', 'daemon_identity_publication'],
   ['cli/src/native/remote_view.rs', 'runtime_remote_view'],
   ['cli/src/native/service_config.rs', 'runtime_service_config'],
   ['cli/src/native/service_health.rs', 'service_browser_assessment'],
