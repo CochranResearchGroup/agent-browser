@@ -418,16 +418,27 @@ fn minimal_command(action: &str, id: &str) -> Value {
 fn registered_dispatch_actions() -> BTreeSet<String> {
     let source = include_str!("actions.rs");
     let dispatch = source
-        .split_once("let result = match action {")
+        .split_once("match action {")
         .expect("execute_command dispatch match should remain present")
         .1
         .split_once("_ => Err(format!(\"Not yet implemented: {}\", action)),")
         .expect("execute_command unknown-action arm should remain present")
         .0;
+    let dispatch_arm_indent = dispatch
+        .lines()
+        .find_map(|line| {
+            let trimmed = line.trim_start();
+            trimmed
+                .starts_with('"')
+                .then_some(line.len().saturating_sub(trimmed.len()))
+        })
+        .expect("execute_command dispatch should retain at least one action arm");
     let mut actions = BTreeSet::new();
     for line in dispatch.lines() {
         let trimmed = line.trim_start();
-        if line.len().saturating_sub(trimmed.len()) != 8 || !trimmed.starts_with('"') {
+        if line.len().saturating_sub(trimmed.len()) != dispatch_arm_indent
+            || !trimmed.starts_with('"')
+        {
             continue;
         }
         let Some((pattern, _)) = trimmed.split_once("=>") else {
