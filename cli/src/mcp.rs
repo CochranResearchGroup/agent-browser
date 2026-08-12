@@ -9842,6 +9842,10 @@ fn queued_tool_command_session(tool_name: &str, default_session: &str, command: 
     if tool_name != "service_request" {
         return default_session.to_string();
     }
+    if command.get("action").and_then(Value::as_str) == Some("desktop_capture") {
+        return service_request_session_candidate(command.get("sessionName"))
+            .unwrap_or_else(|| default_session.to_string());
+    }
     for value in [command.get("sessionName"), command.get("browserId")] {
         if let Some(session_name) = service_request_session_candidate(value) {
             return session_name;
@@ -12417,6 +12421,28 @@ mod tests {
         assert_eq!(
             queued_tool_command_session("browser_navigate", "AgentBrowserDashboard", &command),
             "AgentBrowserDashboard"
+        );
+    }
+
+    #[test]
+    fn desktop_capture_browser_identity_does_not_select_an_mcp_daemon_lane() {
+        let command = json!({
+            "action": "desktop_capture",
+            "browserId": "browser-rdp-1",
+        });
+        assert_eq!(
+            queued_tool_command_session("service_request", "AgentBrowserDashboard", &command),
+            "AgentBrowserDashboard"
+        );
+
+        let narrowed = json!({
+            "action": "desktop_capture",
+            "browserId": "browser-rdp-1",
+            "sessionName": "rdp-session",
+        });
+        assert_eq!(
+            queued_tool_command_session("service_request", "AgentBrowserDashboard", &narrowed),
+            "rdp-session"
         );
     }
 

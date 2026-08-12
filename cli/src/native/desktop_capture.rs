@@ -405,6 +405,11 @@ fn resolve_candidate(
             format!("route {route_id} is missing"),
         )
     })?;
+    if route.id != route_id {
+        return Err(identity_mismatch(
+            "route map key and route identity disagree",
+        ));
+    }
     validate_route(route, browser, session_name)?;
     let display_id = exact_display_id(browser, stream, route)?;
     let display = state.display_allocations.get(display_id).ok_or_else(|| {
@@ -413,6 +418,11 @@ fn resolve_candidate(
             format!("display allocation {display_id} is missing"),
         )
     })?;
+    if display.id != display_id {
+        return Err(identity_mismatch(
+            "display map key and display allocation identity disagree",
+        ));
+    }
     validate_display(display, browser, route, session_name)?;
     let display_name = display.display_name.as_deref().ok_or_else(|| {
         DesktopCaptureError::new(
@@ -426,10 +436,16 @@ fn resolve_candidate(
         ));
     }
     let attachability = derive_stream_attachability(browser, stream, state);
-    if attachability.get("state").and_then(Value::as_str) != Some("attached_ready") {
+    if attachability.get("state").and_then(Value::as_str) != Some("attached_ready")
+        || attachability.get("proofState").and_then(Value::as_str) != Some("ready")
+        || attachability
+            .get("displayContentState")
+            .and_then(Value::as_str)
+            != Some("browser_window_visible")
+    {
         return Err(DesktopCaptureError::new(
             "desktop_route_not_ready",
-            format!("route {route_id} is not attached-ready"),
+            format!("route {route_id} lacks current operator-visible display proof"),
         ));
     }
     Ok(ResolvedDesktop {
@@ -717,20 +733,8 @@ fn run_bounded_command(
         })?;
     let stdout = child.stdout.take().expect("piped stdout");
     let stderr = child.stderr.take().expect("piped stderr");
-    let stdout_reader = thread::spawn(move || {
-        let mut bytes = Vec::new();
-        stdout
-            .take(max_stdout_bytes.saturating_add(1))
-            .read_to_end(&mut bytes)
-            .map(|_| bytes)
-    });
-    let stderr_reader = thread::spawn(move || {
-        let mut bytes = Vec::new();
-        stderr
-            .take(MAX_STDERR_BYTES)
-            .read_to_end(&mut bytes)
-            .map(|_| bytes)
-    });
+    let stdout_reader = thread::spawn(move || read_bounded_and_drain(stdout, max_stdout_bytes));
+    let stderr_reader = thread::spawn(move || read_bounded_and_drain(stderr, MAX_STDERR_BYTES));
     let started = Instant::now();
     let status = loop {
         match child.try_wait() {
@@ -767,19 +771,46 @@ fn run_bounded_command(
             DesktopCaptureError::new("desktop_capture_failed", "capture output could not be read")
         })?;
     let _redacted_stderr = stderr_reader.join();
+    if stdout.overflowed {
+        return Err(DesktopCaptureError::new(
+            "desktop_frame_too_large",
+            format!("capture provider output exceeds maxBytes {max_stdout_bytes}"),
+        ));
+    }
     if !status.success() {
         return Err(DesktopCaptureError::new(
             "desktop_capture_failed",
             format!("capture provider command {program} failed"),
         ));
     }
-    if stdout.len() as u64 > max_stdout_bytes {
-        return Err(DesktopCaptureError::new(
-            "desktop_frame_too_large",
-            format!("capture provider output exceeds maxBytes {max_stdout_bytes}"),
-        ));
+    Ok(stdout.bytes)
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct BoundedRead {
+    bytes: Vec<u8>,
+    overflowed: bool,
+}
+
+fn read_bounded_and_drain(
+    mut reader: impl Read,
+    max_retained_bytes: u64,
+) -> std::io::Result<BoundedRead> {
+    let max_retained_bytes = usize::try_from(max_retained_bytes).unwrap_or(usize::MAX);
+    let mut bytes = Vec::with_capacity(max_retained_bytes.min(64 * 1024));
+    let mut overflowed = false;
+    let mut chunk = [0_u8; 8192];
+    loop {
+        let read = reader.read(&mut chunk)?;
+        if read == 0 {
+            break;
+        }
+        let remaining = max_retained_bytes.saturating_sub(bytes.len());
+        let retain = remaining.min(read);
+        bytes.extend_from_slice(&chunk[..retain]);
+        overflowed |= retain < read;
     }
-    Ok(stdout)
+    Ok(BoundedRead { bytes, overflowed })
 }
 
 fn parse_xdpyinfo_geometry(output: &[u8]) -> Result<Geometry, DesktopCaptureError> {
@@ -832,6 +863,18 @@ pub(crate) async fn handle_desktop_capture(cmd: &Value) -> Result<Value, String>
         "frameReceipt": result.frame_receipt,
         "imageBase64": BASE64_STANDARD.encode(result.image_bytes),
     }))
+}
+
+/// Remove response-only pixels before a desktop capture result enters the
+/// long-lived stream event channel. The immediate request response is not
+/// passed through this projection.
+pub(crate) fn redact_desktop_capture_stream_result(data: &Value) -> Value {
+    let mut redacted = data.clone();
+    if let Some(record) = redacted.as_object_mut() {
+        record.remove("imageBase64");
+        record.insert("imagePayload".to_string(), json!("response_only"));
+    }
+    redacted
 }
 
 fn parse_request(cmd: &Value) -> Result<DesktopCaptureRequest, DesktopCaptureError> {
@@ -891,7 +934,7 @@ mod tests {
     };
     use serde_json::json;
     use std::collections::{BTreeMap, VecDeque};
-    use std::io::Cursor;
+    use std::io::{Cursor, Write};
     use std::sync::Mutex;
 
     struct FixedClock(&'static str);
@@ -945,6 +988,7 @@ mod tests {
     struct FakeFrameProvider {
         geometries: Mutex<VecDeque<Geometry>>,
         capture: Result<Vec<u8>, DesktopCaptureError>,
+        capture_calls: AtomicU64,
     }
 
     impl FakeFrameProvider {
@@ -959,7 +1003,12 @@ mod tests {
             Self {
                 geometries: Mutex::new(geometries.into()),
                 capture,
+                capture_calls: AtomicU64::new(0),
             }
+        }
+
+        fn capture_calls(&self) -> u64 {
+            self.capture_calls.load(Ordering::Relaxed)
         }
     }
 
@@ -987,6 +1036,7 @@ mod tests {
             _display_name: &str,
             _max_bytes: u64,
         ) -> Result<Vec<u8>, DesktopCaptureError> {
+            self.capture_calls.fetch_add(1, Ordering::Relaxed);
             self.capture.clone()
         }
     }
@@ -1023,6 +1073,15 @@ mod tests {
         assert_eq!(result.frame_receipt.retention, "ephemeral");
         assert!(!result.frame_receipt.persisted);
         assert_eq!(result.image_bytes, one_pixel_png());
+        let expected_geometry_epoch = digest_text("browser-1\0display-1\0route-1\01\01\01000");
+        let expected_context_id = format!(
+            "desktop-context-{}",
+            &digest_text(&format!(
+                "browser-1\0stream-1\0route-1\0{expected_geometry_epoch}\02026-08-12T12:00:00Z"
+            ))[..24]
+        );
+        assert_eq!(result.context.geometry_epoch, expected_geometry_epoch);
+        assert_eq!(result.context.context_id, expected_context_id);
         let context = serde_json::to_value(&result.context).unwrap();
         let receipt = serde_json::to_value(&result.frame_receipt).unwrap();
         assert_eq!(context["schemaVersion"], "v1");
@@ -1031,6 +1090,22 @@ mod tests {
         assert_eq!(receipt["schemaVersion"], "v1");
         assert_eq!(receipt["sha256"], digest_bytes(&one_pixel_png()));
         assert!(receipt.get("contentSha256").is_none());
+    }
+
+    #[test]
+    fn stream_projection_removes_response_only_pixels() {
+        let data = json!({
+            "context": {"contextId": "desktop-context-1"},
+            "frameReceipt": {"frameId": "desktop-frame-1"},
+            "imageBase64": "sensitive-pixels"
+        });
+
+        let broadcast = redact_desktop_capture_stream_result(&data);
+
+        assert!(broadcast.get("imageBase64").is_none());
+        assert_eq!(broadcast["imagePayload"], "response_only");
+        assert_eq!(broadcast["frameReceipt"]["frameId"], "desktop-frame-1");
+        assert_eq!(data["imageBase64"], "sensitive-pixels");
     }
 
     #[test]
@@ -1072,6 +1147,18 @@ mod tests {
         let mut display = ready_state();
         display.browsers.get_mut("browser-1").unwrap().display_name = Some(":202".to_string());
         assert_capture_code(display, Some("session-1"), "desktop_identity_mismatch");
+
+        let mut route_key = ready_state();
+        route_key.remote_view_routes.get_mut("route-1").unwrap().id = "route-2".to_string();
+        assert_capture_code(route_key, Some("session-1"), "desktop_identity_mismatch");
+
+        let mut display_key = ready_state();
+        display_key
+            .display_allocations
+            .get_mut("display-1")
+            .unwrap()
+            .id = "display-2".to_string();
+        assert_capture_code(display_key, Some("session-1"), "desktop_identity_mismatch");
     }
 
     #[test]
@@ -1095,6 +1182,23 @@ mod tests {
             .unwrap()
             .display_isolation = "unknown".to_string();
         assert_capture_code(isolation, Some("session-1"), "desktop_identity_mismatch");
+
+        let mut no_visible_content = ready_state();
+        no_visible_content
+            .browsers
+            .get_mut("browser-1")
+            .unwrap()
+            .view_streams[0]
+            .readiness = Some(json!({ "state": "ready" }));
+        assert_capture_code(
+            no_visible_content,
+            Some("session-1"),
+            "desktop_route_not_ready",
+        );
+
+        let mut exited = ready_state();
+        exited.browsers.get_mut("browser-1").unwrap().health = BrowserHealth::ProcessExited;
+        assert_capture_code(exited, Some("session-1"), "desktop_display_not_ready");
     }
 
     #[test]
@@ -1195,6 +1299,91 @@ mod tests {
                 .code(),
             "desktop_geometry_unavailable"
         );
+
+        let drained = read_bounded_and_drain(Cursor::new(b"abcdefgh"), 4).unwrap();
+        assert_eq!(drained.bytes, b"abcd");
+        assert!(drained.overflowed);
+    }
+
+    #[test]
+    fn bounded_provider_processes_report_missing_timeout_overflow_and_redact_stderr() {
+        let missing = run_bounded_command(
+            "agent-browser-desktop-capture-provider-does-not-exist",
+            &[],
+            64,
+            Duration::from_millis(20),
+        )
+        .unwrap_err();
+        assert_eq!(missing.code(), "desktop_capture_provider_unavailable");
+
+        let executable = std::env::current_exe().unwrap();
+        let executable = executable.to_str().unwrap();
+        let timeout = run_bounded_command(
+            executable,
+            &[
+                "native::desktop_capture::tests::desktop_capture_timeout_subprocess_fixture",
+                "--exact",
+            ],
+            1024,
+            Duration::from_millis(30),
+        )
+        .unwrap_err();
+        assert_eq!(timeout.code(), "desktop_capture_failed");
+        assert!(timeout.to_string().contains("timed out"));
+
+        let overflow = run_bounded_command(
+            executable,
+            &[
+                "native::desktop_capture::tests::desktop_capture_overflow_subprocess_fixture",
+                "--exact",
+            ],
+            8,
+            Duration::from_secs(2),
+        )
+        .unwrap_err();
+        assert_eq!(overflow.code(), "desktop_frame_too_large");
+
+        let failure = run_bounded_command(
+            executable,
+            &[
+                "native::desktop_capture::tests::desktop_capture_stderr_subprocess_fixture",
+                "--exact",
+            ],
+            1024,
+            Duration::from_secs(2),
+        )
+        .unwrap_err();
+        assert_eq!(failure.code(), "desktop_capture_failed");
+        assert!(!failure.to_string().contains("sensitive-provider-stderr"));
+    }
+
+    #[test]
+    fn desktop_capture_timeout_subprocess_fixture() {
+        if subprocess_fixture_active("desktop_capture_timeout_subprocess_fixture") {
+            thread::sleep(Duration::from_secs(1));
+        }
+    }
+
+    #[test]
+    fn desktop_capture_overflow_subprocess_fixture() {
+        if subprocess_fixture_active("desktop_capture_overflow_subprocess_fixture") {
+            std::io::stdout().write_all(&vec![b'x'; 128]).unwrap();
+            std::io::stdout().flush().unwrap();
+        }
+    }
+
+    #[test]
+    fn desktop_capture_stderr_subprocess_fixture() {
+        if subprocess_fixture_active("desktop_capture_stderr_subprocess_fixture") {
+            eprintln!("sensitive-provider-stderr");
+            panic!("fixture provider failure");
+        }
+    }
+
+    fn subprocess_fixture_active(name: &str) -> bool {
+        let arguments = std::env::args().collect::<Vec<_>>();
+        arguments.iter().any(|argument| argument == "--exact")
+            && arguments.iter().any(|argument| argument.ends_with(name))
     }
 
     fn capture_with(
@@ -1235,6 +1424,11 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(error.code(), expected, "{error}");
+        assert_eq!(
+            provider.capture_calls(),
+            0,
+            "provider ran before {expected}"
+        );
     }
 
     fn ready_state() -> ServiceState {

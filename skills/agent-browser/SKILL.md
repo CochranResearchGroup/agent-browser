@@ -366,7 +366,8 @@ HTTP clients send `action: "desktop_capture"` through
 `desktop_capture` tool. Software clients can call
 `requestServiceDesktopCapture()` or `captureServiceDesktopFrame()` from
 `@agent-browser/client/service-request`. All paths enter the canonical queued
-service action.
+service action. Include `serviceName`, `agentName`, and `taskName`; an
+unauthenticated HTTP service request requires all three attribution labels.
 
 Treat contract discovery and workspace readiness as separate evidence. A
 contract response can advertise global `desktop_capture` support. Only a

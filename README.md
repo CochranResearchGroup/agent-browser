@@ -382,6 +382,9 @@ MCP clients can use `service_request` or the dedicated `desktop_capture` tool.
 Software clients can call `requestServiceDesktopCapture()` from
 `@agent-browser/client/service-request`. Every ingress enters the same queued
 service action and returns the same response fields.
+HTTP and software-client requests should include `serviceName`, `agentName`,
+and `taskName`; unauthenticated HTTP requests require all three attribution
+labels.
 
 Contract discovery can prove that the runtime supports `desktop_capture`. It
 does not prove that one retained browser has a ready route and capture

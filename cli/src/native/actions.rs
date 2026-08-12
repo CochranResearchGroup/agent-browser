@@ -78,7 +78,7 @@ use super::browser_navigation::{
 use super::browser_tabs::{handle_browser_pid, handle_tab_list, handle_tab_new, handle_window_new};
 use super::clipboard::handle_clipboard;
 use super::cookies::{handle_cookies_clear, handle_cookies_get, handle_cookies_set};
-use super::desktop_capture::handle_desktop_capture;
+use super::desktop_capture::{handle_desktop_capture, redact_desktop_capture_stream_result};
 use super::diff::{handle_diff_screenshot, handle_diff_snapshot, handle_diff_url};
 use super::element::{
     handle_boundingbox, handle_count, handle_innerhtml, handle_innertext, handle_inputvalue,
@@ -287,20 +287,6 @@ pub(crate) fn active_target_binding(state: &DaemonState) -> Option<String> {
         .as_ref()
         .and_then(|manager| manager.active_session_id().ok())
         .map(str::to_string)
-}
-
-/// Keep sensitive response-only desktop pixels out of the long-lived stream
-/// event broadcast. The immediate command response remains unchanged.
-fn broadcast_result_data(action: &str, data: &Value) -> Value {
-    if action != "desktop_capture" {
-        return data.clone();
-    }
-    let mut redacted = data.clone();
-    if let Some(record) = redacted.as_object_mut() {
-        record.remove("imageBase64");
-        record.insert("imagePayload".to_string(), json!("response_only"));
-    }
-    redacted
 }
 
 /// Executes parsed commands under the outer control-plane request. Stable
@@ -880,7 +866,12 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
             .get("status")
             .and_then(|v| v.as_str())
             .is_some_and(|s| s == "success");
-        let data = broadcast_result_data(action, resp.get("data").unwrap_or(&Value::Null));
+        let response_data = resp.get("data").unwrap_or(&Value::Null);
+        let data = if action == "desktop_capture" {
+            redact_desktop_capture_stream_result(response_data)
+        } else {
+            response_data.clone()
+        };
         server.broadcast_result(&id, action, success, &data, duration_ms);
         if let Some(ref mgr) = state.browser {
             server.broadcast_tabs(&mgr.tab_list(false)).await;

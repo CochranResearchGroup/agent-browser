@@ -1028,9 +1028,18 @@ fn persist_service_job_finished(request: &ControlRequest, response: &Value) {
         started_at: Some(started_at),
         completed_at: Some(current_timestamp()),
         timeout_ms: request.timeout_ms,
-        result: Some(json!({ "success": success })),
+        result: Some(service_job_persisted_result(response)),
         error,
     });
+}
+
+fn service_job_persisted_result(response: &Value) -> Value {
+    json!({
+        "success": response
+            .get("success")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+    })
 }
 
 fn persist_service_job_timed_out(request: &ControlRequest) {
@@ -1866,6 +1875,23 @@ mod tests {
     use super::super::service_store::{JsonServiceStateStore, ServiceStateStore};
     use super::*;
     use crate::test_utils::EnvGuard;
+
+    #[test]
+    fn persisted_job_result_excludes_response_only_desktop_pixels() {
+        let response = json!({
+            "success": true,
+            "data": {
+                "context": { "contextId": "desktop-context-1" },
+                "frameReceipt": { "frameId": "desktop-frame-1" },
+                "imageBase64": "sensitive-pixels"
+            }
+        });
+
+        let persisted = service_job_persisted_result(&response);
+
+        assert_eq!(persisted, json!({ "success": true }));
+        assert!(!persisted.to_string().contains("sensitive-pixels"));
+    }
 
     fn temp_home(label: &str) -> std::path::PathBuf {
         let path = std::env::temp_dir().join(format!(

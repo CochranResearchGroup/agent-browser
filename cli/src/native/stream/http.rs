@@ -1744,6 +1744,15 @@ fn service_request_relay_session(default_session: &str, body: &str, command: &Va
         serde_json::from_str::<Value>(body).unwrap_or(Value::Null)
     };
 
+    if command.get("action").and_then(Value::as_str) == Some("desktop_capture") {
+        for value in [request.pointer("/sessionName"), command.get("sessionName")] {
+            if let Some(session_name) = service_request_relay_session_candidate(value) {
+                return session_name;
+            }
+        }
+        return default_session.to_string();
+    }
+
     if !matches!(
         command.get("action").and_then(Value::as_str),
         Some("view_focus" | "view_takeover")
@@ -4781,6 +4790,24 @@ mod tests {
         assert_eq!(
             service_request_relay_session("AgentBrowserDashboard", body, &command),
             "odollo-carrier-ups"
+        );
+    }
+
+    #[test]
+    fn desktop_capture_browser_identity_does_not_select_a_daemon_lane() {
+        let body = r##"{"action":"desktop_capture","browserId":"browser-rdp-1","serviceName":"desktop-observer","agentName":"codex","taskName":"capture"}"##;
+        let command = service_request_command(body).unwrap();
+
+        assert_eq!(
+            service_request_relay_session("AgentBrowserDashboard", body, &command),
+            "AgentBrowserDashboard"
+        );
+
+        let narrowed = r##"{"action":"desktop_capture","browserId":"browser-rdp-1","sessionName":"rdp-session","serviceName":"desktop-observer","agentName":"codex","taskName":"capture"}"##;
+        let command = service_request_command(narrowed).unwrap();
+        assert_eq!(
+            service_request_relay_session("AgentBrowserDashboard", narrowed, &command),
+            "rdp-session"
         );
     }
 

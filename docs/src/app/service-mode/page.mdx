@@ -51,7 +51,7 @@ Use the canonical service request from HTTP:
 ```bash
 curl -X POST "http://127.0.0.1:9223/api/service/request" \
   -H "content-type: application/json" \
-  -d '{"action":"desktop_capture","browserId":"browser-123","format":"png","maxBytes":4194304}'
+  -d '{"action":"desktop_capture","browserId":"browser-123","format":"png","maxBytes":4194304,"serviceName":"DesktopObserver","agentName":"capture-agent","taskName":"capture-frame"}'
 ```
 
 MCP clients can send the same fields through `service_request` or call the
@@ -68,6 +68,9 @@ const desktopFrame = await captureServiceDesktopFrame({
   baseUrl: "http://127.0.0.1:9223",
   browserId: "browser-123",
   maxBytes: 4 * 1024 * 1024,
+  serviceName: "DesktopObserver",
+  agentName: "capture-agent",
+  taskName: "capture-frame",
 });
 // => { success: true, data: { context, frameReceipt, imageBase64 } }
 ```
