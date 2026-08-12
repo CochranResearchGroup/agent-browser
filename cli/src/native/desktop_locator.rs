@@ -486,6 +486,28 @@ pub(crate) fn redact_desktop_locate_stream_result(data: &Value) -> Value {
 }
 
 fn parse_request(cmd: &Value) -> Result<LocateRequest, DesktopLocatorError> {
+    const ALLOWED_FIELDS: &[&str] = &[
+        "action",
+        "id",
+        "browserId",
+        "sessionName",
+        "locator",
+        "includeVisualization",
+        "jobTimeoutMs",
+        "serviceName",
+        "agentName",
+        "taskName",
+    ];
+    if let Some(field) = cmd.as_object().and_then(|record| {
+        record
+            .keys()
+            .find(|field| !ALLOWED_FIELDS.contains(&field.as_str()))
+    }) {
+        return Err(DesktopLocatorError::new(
+            "desktop_locator_unsupported",
+            format!("desktop_locate does not accept {field}"),
+        ));
+    }
     for forbidden in [
         "imageBase64",
         "frameId",
@@ -581,6 +603,7 @@ fn validate_bound_frame(frame: &BoundFrame) -> Result<RgbaImage, DesktopLocatorE
     if frame.context.schema_version != "v1"
         || frame.frame_receipt.schema_version != "v1"
         || frame.context.context_id != frame.frame_receipt.context_id
+        || frame.context.capture_provider != frame.frame_receipt.capture_provider
         || frame.context.width != frame.frame_receipt.width
         || frame.context.height != frame.frame_receipt.height
         || scale_millis(frame.context.scale_factor)
@@ -1075,6 +1098,7 @@ mod tests {
         decoys: Vec<FixturePoint>,
         expected_status: String,
         expected_candidate_count: usize,
+        expected_observation_sha256: String,
         expected_visualization_sha256: String,
     }
 
@@ -1118,10 +1142,12 @@ mod tests {
         }
     }
 
-    const FIXTURES: [&str; 7] = [
+    const FIXTURES: [&str; 9] = [
         include_str!("../../../docs/dev/fixtures/desktop-locator/single-light-100.json"),
         include_str!("../../../docs/dev/fixtures/desktop-locator/single-dark-100.json"),
         include_str!("../../../docs/dev/fixtures/desktop-locator/single-light-125.json"),
+        include_str!("../../../docs/dev/fixtures/desktop-locator/single-dark-125.json"),
+        include_str!("../../../docs/dev/fixtures/desktop-locator/single-light-150.json"),
         include_str!("../../../docs/dev/fixtures/desktop-locator/single-dark-150.json"),
         include_str!("../../../docs/dev/fixtures/desktop-locator/ambiguous-equal.json"),
         include_str!("../../../docs/dev/fixtures/desktop-locator/decoy-only.json"),
@@ -1157,6 +1183,12 @@ mod tests {
                 fixture.fixture_id
             );
             assert_eq!(first.visualization_bytes, second.visualization_bytes);
+            let observation_sha256 = digest_bytes(&serde_json::to_vec(&first.observation).unwrap());
+            assert_eq!(
+                observation_sha256, fixture.expected_observation_sha256,
+                "{} observation hash",
+                fixture.fixture_id
+            );
             let visualization_sha256 = &first
                 .observation
                 .visualization_receipt
@@ -1171,10 +1203,21 @@ mod tests {
             if fixture.expected_status == "matched" {
                 let expected = &fixture.targets[0];
                 let selected = &first.observation.candidates[0];
+                let expected_size = scaled(12, fixture.scale_millis).unwrap();
                 assert_eq!(
-                    (selected.bounds.x, selected.bounds.y),
-                    (expected.x, expected.y)
+                    selected.bounds,
+                    PixelBounds {
+                        x: expected.x,
+                        y: expected.y,
+                        width: expected_size,
+                        height: expected_size,
+                    }
                 );
+                assert_eq!(selected.center, selected.bounds.center());
+                assert_eq!(selected.score, 10_000);
+                assert_eq!(selected.rank, 1);
+                assert_eq!(selected.supporting_evidence.len(), 3);
+                assert_eq!(selected.decoy_evidence.len(), 2);
                 assert_eq!(
                     first.observation.selected_candidate_id.as_deref(),
                     Some(selected.candidate_id.as_str())
@@ -1199,11 +1242,18 @@ mod tests {
 
         assert_eq!(error.code(), "desktop_locator_frame_mismatch");
         assert_eq!(provider.calls(), 0);
+
+        let (mut frame, tokens) = render_fixture(&fixture);
+        frame.frame_receipt.capture_provider = "different-provider";
+        let provider = FixtureOcrProvider::new(tokens);
+        let error = locate_bound_frame(frame, LOCATOR_ID, 8, false, &provider).unwrap_err();
+        assert_eq!(error.code(), "desktop_locator_frame_mismatch");
+        assert_eq!(provider.calls(), 0);
     }
 
     #[test]
     fn ambiguity_cannot_be_hidden_by_a_one_candidate_response_limit() {
-        let fixture: Fixture = serde_json::from_str(FIXTURES[4]).unwrap();
+        let fixture: Fixture = serde_json::from_str(FIXTURES[6]).unwrap();
         let (frame, tokens) = render_fixture(&fixture);
         let result = locate_bound_frame(
             frame,
@@ -1263,6 +1313,74 @@ mod tests {
     }
 
     #[test]
+    fn timeout_oversize_and_version_incompatible_ocr_are_typed() {
+        struct TimedOut;
+        impl OcrEvidenceProvider for TimedOut {
+            fn evidence(
+                &self,
+                _image: &RgbaImage,
+                _profile: &LocatorProfile,
+            ) -> Result<OcrEvidence, DesktopLocatorError> {
+                Err(DesktopLocatorError::new(
+                    "desktop_locator_detector_failed",
+                    "normalized OCR evidence provider timed out",
+                ))
+            }
+        }
+        let fixture: Fixture = serde_json::from_str(FIXTURES[0]).unwrap();
+        let (frame, _) = render_fixture(&fixture);
+        let timeout = locate_bound_frame(frame, LOCATOR_ID, 8, false, &TimedOut).unwrap_err();
+        assert_eq!(timeout.code(), "desktop_locator_detector_failed");
+
+        struct Oversized;
+        impl OcrEvidenceProvider for Oversized {
+            fn evidence(
+                &self,
+                _image: &RgbaImage,
+                _profile: &LocatorProfile,
+            ) -> Result<OcrEvidence, DesktopLocatorError> {
+                let tokens = (0..=256)
+                    .map(|x| OcrTokenEvidence {
+                        token_id: "verify-control".to_string(),
+                        bounds: PixelBounds {
+                            x,
+                            y: 0,
+                            width: 1,
+                            height: 1,
+                        },
+                    })
+                    .collect::<Vec<_>>();
+                Ok(OcrEvidence {
+                    provider_version: "fixture-ocr-v1".to_string(),
+                    evidence_hash: hash_tokens("fixture-ocr-v1", &tokens),
+                    tokens,
+                })
+            }
+        }
+        let (frame, _) = render_fixture(&fixture);
+        let oversized = locate_bound_frame(frame, LOCATOR_ID, 8, false, &Oversized).unwrap_err();
+        assert_eq!(oversized.code(), "desktop_locator_detector_failed");
+
+        struct WrongVersion;
+        impl OcrEvidenceProvider for WrongVersion {
+            fn evidence(
+                &self,
+                _image: &RgbaImage,
+                _profile: &LocatorProfile,
+            ) -> Result<OcrEvidence, DesktopLocatorError> {
+                Ok(OcrEvidence {
+                    provider_version: "unsupported-ocr-v9".to_string(),
+                    evidence_hash: digest_text("empty"),
+                    tokens: Vec::new(),
+                })
+            }
+        }
+        let (frame, _) = render_fixture(&fixture);
+        let version = locate_bound_frame(frame, LOCATOR_ID, 8, false, &WrongVersion).unwrap_err();
+        assert_eq!(version.code(), "desktop_locator_detector_failed");
+    }
+
+    #[test]
     fn malformed_png_unsupported_scale_and_bad_ocr_fail_closed() {
         let fixture: Fixture = serde_json::from_str(FIXTURES[0]).unwrap();
         let (mut invalid, tokens) = render_fixture(&fixture);
@@ -1318,7 +1436,13 @@ mod tests {
         injected["imageBase64"] = json!("pixels");
         assert_eq!(
             parse_request(&injected).unwrap_err().code(),
-            "desktop_locator_frame_mismatch"
+            "desktop_locator_unsupported"
+        );
+        let mut unrelated = valid.clone();
+        unrelated["uiAction"] = json!({"type": "click"});
+        assert_eq!(
+            parse_request(&unrelated).unwrap_err().code(),
+            "desktop_locator_unsupported"
         );
         let oversized = json!({
             "browserId": "browser-1",

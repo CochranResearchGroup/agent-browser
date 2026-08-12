@@ -8,5 +8,6 @@
   "decoys": [{ "x": 52, "y": 32 }],
   "expectedStatus": "not_found",
   "expectedCandidateCount": 0,
+  "expectedObservationSha256": "5bc4b3750cdef0690cad1853e1febf406ceecd3c4a58f6bff5af9fa7cd5226e8",
   "expectedVisualizationSha256": "32c73389ed1da41ecd759714519d9923273c3288d0314d3a84ec6d80cb3f8b29"
 }

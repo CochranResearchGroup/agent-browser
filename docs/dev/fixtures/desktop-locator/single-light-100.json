@@ -8,5 +8,6 @@
   "decoys": [{ "x": 70, "y": 45 }],
   "expectedStatus": "matched",
   "expectedCandidateCount": 1,
+  "expectedObservationSha256": "db29f56ae3ece7803209a5872911d189a71958c8eca0b48cc6569d7c59ac05d9",
   "expectedVisualizationSha256": "68dd33e075dfcce60d528b1d0ce26bb7e82d1c1ea29c4fc4f89e44d909f91392"
 }

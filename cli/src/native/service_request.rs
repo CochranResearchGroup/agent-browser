@@ -938,6 +938,27 @@ fn reject_desktop_locate_request(
     if action != "desktop_locate" {
         return Ok(());
     }
+    const TOP_LEVEL_FIELDS: &[&str] = &[
+        "action",
+        "browserId",
+        "sessionName",
+        "locator",
+        "includeVisualization",
+        "jobTimeoutMs",
+        "serviceName",
+        "agentName",
+        "taskName",
+        "params",
+    ];
+    if let Some(field) = request
+        .keys()
+        .find(|field| !TOP_LEVEL_FIELDS.contains(&field.as_str()))
+    {
+        return Err(issue(
+            ServiceRequestIssueKind::InvalidBoundedRecipe,
+            format!("desktop_locate does not accept {field}"),
+        ));
+    }
     let params = request.get("params").and_then(Value::as_object);
     const DESKTOP_LOCATE_FIELDS: &[&str] = &[
         "browserId",
@@ -1886,6 +1907,14 @@ mod tests {
             (
                 json!({"action": "desktop_locate", "browserId": "browser-1", "locator": {"locatorId": "p110-control-v1"}, "params": {"imageBase64": "pixels"}}),
                 "desktop_locate does not accept params.imageBase64",
+            ),
+            (
+                json!({"action": "desktop_locate", "browserId": "browser-1", "locator": {"locatorId": "p110-control-v1"}, "cdpUrl": "http://caller.invalid"}),
+                "desktop_locate does not accept cdpUrl",
+            ),
+            (
+                json!({"action": "desktop_locate", "browserId": "browser-1", "locator": {"locatorId": "p110-control-v1"}, "uiAction": {"type": "click"}}),
+                "desktop_locate does not accept uiAction",
             ),
         ];
         for (request, expected_message) in fixtures {

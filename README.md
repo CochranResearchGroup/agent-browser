@@ -398,8 +398,8 @@ Run one registered locator profile against a fresh service-bound desktop
 frame without producing any pointer or keyboard input:
 
 ```bash
-agent-browser desktop locate --browser-id browser-123 --locator-id turnstile-checkbox
-agent-browser desktop locate --browser-id browser-123 --locator-id passkey-popup --max-candidates 4 --include-visualization --json
+agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1
+agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1 --max-candidates 4 --include-visualization --json
 ```
 
 | Option | Meaning |
@@ -412,7 +412,9 @@ agent-browser desktop locate --browser-id browser-123 --locator-id passkey-popup
 > **Experimental:** P110 PoC 2 is source-only. It has no live RDP or Guacamole
 > acceptance and does not prove that an installed runtime contains the feature.
 
-The command accepts a registered `locatorId`, not raw image bytes, a template
+PoC 2 registers only `p110-control-v1`, which locates the repository's
+synthetic verification control. It is not a Turnstile, passkey, or general UI
+profile. The command accepts that registered `locatorId`, not raw image bytes, a template
 path, a display name, or provider routing. It captures a fresh frame through
 the same service-bound authority as `desktop capture`, then returns the
 matching `context`, `frameReceipt`, and an `observation`. `matched` means one

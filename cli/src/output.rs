@@ -5364,8 +5364,8 @@ Global Options:
 Examples:
   agent-browser desktop capture --browser-id browser-123
   agent-browser desktop capture --browser-id browser-123 --max-bytes 8388608 --json
-  agent-browser desktop locate --browser-id browser-123 --locator-id turnstile-checkbox
-  agent-browser desktop locate --browser-id browser-123 --locator-id passkey-popup --include-visualization --json
+  agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1
+  agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1 --include-visualization --json
 "##
         }
 
@@ -6936,7 +6936,7 @@ mod tests {
                 "frameId": "desktop-frame-1"
             },
             "observation": {
-                "locatorId": "turnstile-checkbox",
+                "locatorId": "p110-control-v1",
                 "profileVersion": "1",
                 "status": "matched",
                 "selectedCandidateId": "candidate-1",
@@ -6965,7 +6965,7 @@ mod tests {
         assert!(rendered.contains("Context: desktop-context-1"));
         assert!(rendered.contains("Frame: desktop-frame-1"));
         assert!(rendered.contains("Geometry epoch: geometry-1"));
-        assert!(rendered.contains("Locator: turnstile-checkbox (profile version: 1)"));
+        assert!(rendered.contains("Locator: p110-control-v1 (profile version: 1)"));
         assert!(rendered.contains("Selected candidate: candidate-1"));
         assert!(rendered.contains("Candidates: 1"));
         assert!(!rendered.contains("sensitive-visualization-bytes"));
@@ -6984,7 +6984,7 @@ mod tests {
                 },
                 "frameReceipt": { "frameId": "desktop-frame-1" },
                 "observation": {
-                    "locatorId": "passkey-popup",
+                    "locatorId": "p110-control-v1",
                     "profileVersion": "1",
                     "status": status,
                     "selectedCandidateId": null,

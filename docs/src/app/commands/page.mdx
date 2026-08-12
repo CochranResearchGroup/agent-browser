@@ -439,12 +439,15 @@ Use `desktop locate` to run one registered locator profile against a fresh
 service-bound frame:
 
 ```bash
-agent-browser desktop locate --browser-id browser-123 --locator-id turnstile-checkbox
-agent-browser desktop locate --browser-id browser-123 --locator-id passkey-popup --max-candidates 4 --include-visualization --json
+agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1
+agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1 --max-candidates 4 --include-visualization --json
 ```
 
 > **Experimental:** P110 PoC 2 is source-only. It has no live RDP or Guacamole
 > acceptance and does not prove that an installed runtime contains the feature.
+
+PoC 2 registers only `p110-control-v1` for the repository's synthetic
+verification control. It is not a Turnstile, passkey, or general UI profile.
 
 <table>
   <thead>

@@ -8,5 +8,6 @@
   "decoys": [],
   "expectedStatus": "frame_mismatch",
   "expectedCandidateCount": 0,
+  "expectedObservationSha256": "not-rendered",
   "expectedVisualizationSha256": "not-rendered"
 }

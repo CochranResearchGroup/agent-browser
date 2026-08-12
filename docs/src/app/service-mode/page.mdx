@@ -202,11 +202,14 @@ input.
 > **Experimental:** P110 PoC 2 is source-only. It has no live RDP or Guacamole
 > acceptance and does not prove that an installed runtime contains the feature.
 
+PoC 2 registers only `p110-control-v1` for the repository's synthetic
+verification control. It is not a Turnstile, passkey, or general UI profile.
+
 Use the CLI:
 
 ```bash
-agent-browser desktop locate --browser-id browser-123 --locator-id turnstile-checkbox
-agent-browser desktop locate --browser-id browser-123 --locator-id passkey-popup --max-candidates 4 --include-visualization --json
+agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1
+agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1 --max-candidates 4 --include-visualization --json
 ```
 
 Use the canonical service request from HTTP:
@@ -214,7 +217,7 @@ Use the canonical service request from HTTP:
 ```bash
 curl -X POST "http://127.0.0.1:9223/api/service/request" \
   -H "content-type: application/json" \
-  -d '{"action":"desktop_locate","browserId":"browser-123","locator":{"locatorId":"turnstile-checkbox","maxCandidates":8},"includeVisualization":false,"serviceName":"DesktopObserver","agentName":"locator-agent","taskName":"locate-control"}'
+  -d '{"action":"desktop_locate","browserId":"browser-123","locator":{"locatorId":"p110-control-v1","maxCandidates":8},"includeVisualization":false,"serviceName":"DesktopObserver","agentName":"locator-agent","taskName":"locate-control"}'
 ```
 
 MCP clients can send the same fields through `service_request` or use the
@@ -231,7 +234,7 @@ import { locateServiceDesktopControl } from "@agent-browser/client/service-reque
 const location = await locateServiceDesktopControl({
   baseUrl: "http://127.0.0.1:9223",
   browserId: "browser-123",
-  locatorId: "turnstile-checkbox",
+  locatorId: "p110-control-v1",
   maxCandidates: 8,
   includeVisualization: false,
   serviceName: "DesktopObserver",

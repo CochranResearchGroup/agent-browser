@@ -382,14 +382,16 @@ click, pointer move, key press, text entry, submission, authentication, or
 challenge-solving effect.
 
 ```bash
-agent-browser desktop locate --browser-id browser-123 --locator-id turnstile-checkbox
-agent-browser desktop locate --browser-id browser-123 --locator-id passkey-popup --max-candidates 4 --include-visualization --json
+agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1
+agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1 --max-candidates 4 --include-visualization --json
 ```
 
 > **Experimental:** P110 PoC 2 is source-only. It has no live RDP or Guacamole
 > acceptance. Do not treat source presence as installed-runtime or live proof.
 
-The required `--locator-id` selects a registered profile. The caller cannot
+PoC 2 registers only `p110-control-v1` for the repository's synthetic
+verification control. It is not a Turnstile, passkey, or general UI profile.
+The required `--locator-id` selects that registered profile. The caller cannot
 supply pixels, a template path, provider routing, or display coordinates.
 `--max-candidates` defaults to 8 and has a hard maximum of 32.
 `--include-visualization` adds a response-only `visualizationBase64` value in
@@ -861,7 +863,7 @@ agent-browser screenshot --annotate   # Annotated screenshot with numbered eleme
 agent-browser screenshot --screenshot-dir ./shots  # Save to custom directory
 agent-browser screenshot --screenshot-format jpeg --screenshot-quality 80
 agent-browser desktop capture --browser-id browser-123 --json # Capture the bound service-owned desktop
-agent-browser desktop locate --browser-id browser-123 --locator-id turnstile-checkbox --json # Locate deterministic candidates without input
+agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1 --json # Locate the synthetic verification control without input
 agent-browser pdf output.pdf          # Save as PDF
 
 # Live preview / streaming
