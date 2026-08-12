@@ -12,6 +12,7 @@ mod native;
 mod output;
 mod process_identity;
 mod remote_view_doctor;
+mod remote_view_helper_contract;
 mod runtime_profile;
 mod session_supervisor;
 #[cfg(test)]
@@ -1693,8 +1694,9 @@ fn main() {
                 return;
             }
             Some("remote-view") => {
-                remote_view_doctor::run_remote_view_doctor(&clean, flags.json);
-                return;
+                exit(remote_view_doctor::run_remote_view_doctor(
+                    &args, flags.json,
+                ));
             }
             Some(unknown) => {
                 if flags.json {

@@ -5316,7 +5316,7 @@ Examples:
 agent-browser doctor - Diagnose local environment and browser connectivity
 
 Usage: agent-browser doctor windows-browser [--port <port>] [--host <host>] [--scan-ports] [--firewall] [--json]
-       agent-browser doctor remote-view [--allow-shared-target] [--json]
+       agent-browser doctor remote-view [--session <name>] [--runtime-profile <id>] [--route-id <id>] [--allow-shared-target] [--json]
        agent-browser remote-view open [url] [--runtime-profile <id>] [--browser-build <build>] [--view-stream-provider rdp_gateway] [--route-pool-entry-id <id>] [--route-pool-entry-json <json>] [--display <name>] [--manual-login-launch] [--dry-run]
 
 Subcommands:
@@ -5330,6 +5330,10 @@ Options:
   --scan-ports          Run a bounded scan of common browser/debug ports and localhost listeners
   --firewall            Query Windows firewall and Hyper-V firewall state through PowerShell when available
   --allow-shared-target Treat shared Guacamole RDP targets as diagnostic-ready for route-pool inspection
+  --session <name>      Report readiness for one retained remote-view daemon session
+  --runtime-profile <id>
+                       Report readiness for one retained runtime profile
+  --route-id <id>       Report readiness for one retained remote-view route
   --browser-build <build>
                        Select the browser build for remote-view open, for example stealthcdp_chromium
   --view-stream-provider rdp_gateway
@@ -5384,6 +5388,7 @@ Examples:
   agent-browser doctor windows-browser --host 127.0.0.1 --port 9222 --json
   agent-browser doctor remote-view
   agent-browser doctor remote-view --json
+  agent-browser doctor remote-view --session google-messages --route-id guacamole:1 --json
   agent-browser remote-view open https://www.linkedin.com/ --runtime-profile stealthcdp-default --browser-build stealthcdp_chromium --view-stream-provider rdp_gateway
   agent-browser remote-view open linkedin.com --route-pool-entry-id pool-a --display :11 --dry-run
 "##

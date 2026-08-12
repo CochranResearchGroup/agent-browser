@@ -226,6 +226,16 @@ mismatch, missing Guacamole schema, permission gap, or unroutable dashboard
 embed is not a healthy remote-control browser even if the Chrome process is
 alive.
 
+Add `--session <name>`, `--runtime-profile <id>`, or `--route-id <id>` when
+the task targets one retained route. Require `requestedScope.status=ready` for
+that subject and still report `globalAdvisories`; unrelated stale sessions are
+advisory and do not override proven requested-route readiness. Ambiguous or
+contradictory selectors fail closed. Read `helperContract` as separate command
+inventory, version, capability, and fixed-path root-owned provenance evidence.
+The optional `verify-install` command may be absent on a compatible helper,
+but missing required commands, sudoers policy, ownership, or capabilities are
+blocking.
+
 Read `remoteControl.installDoctorReady` as the raw embedded install-doctor
 result and `remoteControl.installReady` as the effective single-route
 classification. Duplicate-profile pressure may be listed in

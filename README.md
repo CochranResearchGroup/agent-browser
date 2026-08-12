@@ -583,6 +583,7 @@ agent-browser install doctor          # Check binary drift, launch readiness, an
 agent-browser doctor windows-browser  # Diagnose WSL to Windows browser CDP routing
 agent-browser doctor windows-browser --scan-ports --firewall  # Scan bounded ports and query Windows firewall state
 agent-browser doctor remote-view      # Diagnose Guacamole, XRDP, RDP users, privileges, displays, and display access
+agent-browser doctor remote-view --session <name> --route-id <id> --json  # Separate requested-route readiness from global advisories
 agent-browser setup windows-browser --print-powershell  # Print reviewed Windows routing setup script
 agent-browser setup windows-browser --print-powershell --doctor  # Embed current route diagnostics in the script
 agent-browser install --with-deps     # Also install system deps (Linux)
@@ -1758,6 +1759,17 @@ are reported as doctor issues before remote-view work proceeds. The remote-view
 doctor prefers reusing the existing
 `agent-browser-rdp` user and only points toward route-specific users when the
 current state shows they are actually needed.
+
+Add `--session <name>`, `--runtime-profile <id>`, or `--route-id <id>` to
+diagnose one retained remote-view subject. The additive `requestedScope`
+object reports that subject as `ready`, `degraded`, or `unavailable`, while
+unrelated host drift remains visible under `globalAdvisories`. Selectors that
+match multiple routes or disagree about ownership fail closed. Helper
+readiness is capability-based: `helperContract` reports the command set,
+contract version, capability checks, and root-owned fixed-path provenance
+separately. An older compatible helper may omit optional `verify-install`, but
+missing required commands, sudoers policy, ownership, or capabilities remain
+blocking.
 
 Service reconciliation treats the live X11 socket as part of each retained RDP
 route's readiness. If a reboot removes a configured route display, the

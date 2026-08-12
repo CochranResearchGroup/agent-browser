@@ -2828,7 +2828,12 @@ fn remote_view_privilege_status() -> serde_json::Value {
         &["-n", &helper_path, "status-json"],
     ));
     let helper_desktop_session = remote_view_helper_desktop_session_status(&helper_path);
-    let helper_status_ready = remote_view_helper_status_contract_ready(&helper_status);
+    let helper_contract = crate::remote_view_helper_contract::helper_contract_report(
+        &helper_path,
+        &helper_check,
+        &helper_status,
+        sudoers_exists,
+    );
 
     let mut issues = Vec::new();
     if !group_exists {
@@ -2876,7 +2881,7 @@ fn remote_view_privilege_status() -> serde_json::Value {
             false,
         ));
     }
-    if helper_exists && !helper_status_ready {
+    if helper_exists && helper_contract.get("ready").and_then(Value::as_bool) != Some(true) {
         issues.push(remote_view_privilege_issue(
             "remote_view_privileged_helper_status_stale",
             "the installed remote-view helper does not expose the current route-desktop and display-access capability contract",
@@ -2897,7 +2902,7 @@ fn remote_view_privilege_status() -> serde_json::Value {
             .get("ready")
             .and_then(|value| value.as_bool())
             == Some(true)
-        && helper_status_ready;
+        && helper_contract.get("ready").and_then(Value::as_bool) == Some(true);
 
     json!({
         "ready": ready,
@@ -2915,6 +2920,7 @@ fn remote_view_privilege_status() -> serde_json::Value {
         "installVerification": install_verification,
         "helperCheck": helper_check,
         "helperStatus": helper_status,
+        "helperContract": helper_contract,
         "issues": issues,
     })
 }
@@ -2943,35 +2949,7 @@ fn helper_status_output(mut report: Value) -> Value {
 }
 
 fn remote_view_helper_status_contract_ready(report: &Value) -> bool {
-    report.get("success").and_then(Value::as_bool) == Some(true)
-        && report
-            .pointer("/parsed/schemaVersion")
-            .and_then(Value::as_i64)
-            == Some(1)
-        && report
-            .pointer("/parsed/helperVersion")
-            .and_then(Value::as_str)
-            .is_some_and(|value| value.starts_with("2026-06-23.p44-route-desktop-v"))
-        && report
-            .pointer("/parsed/routeDesktopSession/ready")
-            .and_then(Value::as_bool)
-            == Some(true)
-        && report
-            .pointer("/parsed/routeDesktopSession/terminalStartupDetected")
-            .and_then(Value::as_bool)
-            == Some(false)
-        && report
-            .pointer("/parsed/displayAccess/supportsFilesystemX11Socket")
-            .and_then(Value::as_bool)
-            == Some(true)
-        && report
-            .pointer("/parsed/displayAccess/supportsAbstractX11Socket")
-            .and_then(Value::as_bool)
-            == Some(true)
-        && report
-            .pointer("/parsed/displayAccess/boundedXhostTimeoutSeconds")
-            .and_then(Value::as_i64)
-            .is_some_and(|value| value > 0 && value <= 2)
+    crate::remote_view_helper_contract::status_contract_ready(report)
 }
 
 fn remote_view_helper_desktop_session_status(helper_path: &str) -> Value {

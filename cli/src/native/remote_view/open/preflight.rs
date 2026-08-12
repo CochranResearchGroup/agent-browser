@@ -357,35 +357,7 @@ pub(crate) fn remote_view_helper_status_probe(helper_path: &str) -> Value {
     }
 }
 pub(crate) fn remote_view_helper_status_contract_ready(report: &Value) -> bool {
-    report.get("success").and_then(Value::as_bool) == Some(true)
-        && report
-            .pointer("/parsed/schemaVersion")
-            .and_then(Value::as_i64)
-            == Some(1)
-        && report
-            .pointer("/parsed/helperVersion")
-            .and_then(Value::as_str)
-            .is_some_and(|value| value.starts_with("2026-06-23.p44-route-desktop-v"))
-        && report
-            .pointer("/parsed/routeDesktopSession/ready")
-            .and_then(Value::as_bool)
-            == Some(true)
-        && report
-            .pointer("/parsed/routeDesktopSession/terminalStartupDetected")
-            .and_then(Value::as_bool)
-            == Some(false)
-        && report
-            .pointer("/parsed/displayAccess/supportsFilesystemX11Socket")
-            .and_then(Value::as_bool)
-            == Some(true)
-        && report
-            .pointer("/parsed/displayAccess/supportsAbstractX11Socket")
-            .and_then(Value::as_bool)
-            == Some(true)
-        && report
-            .pointer("/parsed/displayAccess/boundedXhostTimeoutSeconds")
-            .and_then(Value::as_i64)
-            .is_some_and(|value| value > 0 && value <= 2)
+    crate::remote_view_helper_contract::status_contract_ready(report)
 }
 pub(crate) fn remote_view_display_access_preflight_component(
     route_binding: &super::super::super::remote_view::RemoteViewRouteBinding,

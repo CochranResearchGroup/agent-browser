@@ -35,6 +35,7 @@ agent-browser handoff resume          # Reattach a replacement daemon to the bro
 agent-browser doctor windows-browser  # Diagnose WSL to Windows browser CDP routing
 agent-browser doctor windows-browser --scan-ports --firewall # Scan bounded ports and query firewall state
 agent-browser doctor remote-view # Diagnose Guacamole, XRDP, RDP users, privileges, displays, and issue codes
+agent-browser doctor remote-view --session google-messages --route-id guacamole:1 --json # Scope readiness without hiding global advisories
 agent-browser setup windows-browser --print-powershell # Print reviewed Windows routing setup script
 agent-browser setup windows-browser --print-powershell --doctor # Embed current route diagnostics in the script
 pnpm test:wsl-windows-chromium-profile-live # Validate WSL Windows Chromium profile writes when doctor says available
@@ -466,6 +467,18 @@ agent-browser remote-view open https://messages.google.com/web/conversations --r
 prove install or readiness drift. Run the issue's direct helper command; when
 route-display inspection completed and found missing route sessions, that
 result remains the primary remediation even if another helper timed out.
+
+Use <code>--session &lt;name&gt;</code>,
+<code>--runtime-profile &lt;id&gt;</code>, or <code>--route-id &lt;id&gt;</code> to
+select one retained remote-view subject. The additive
+<code>requestedScope</code> result is independent of
+<code>globalAdvisories</code>, so unrelated stale daemons remain visible without
+making a proven healthy requested route unavailable. Ambiguous and
+contradictory selectors fail closed. <code>helperContract</code> reports command
+inventory, contract version, required capabilities, and root-owned fixed-path
+provenance independently. Optional <code>verify-install</code> may be absent on
+an otherwise compatible helper; required command, sudoers, ownership, and
+capability failures remain blocking.
 
 The remote-control JSON distinguishes aggregate install health from effective
 single-route readiness. <code>remoteControl.installDoctorReady</code> is the raw

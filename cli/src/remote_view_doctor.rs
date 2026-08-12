@@ -8,10 +8,14 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::color;
+use crate::native::service_model::ServiceState;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct DoctorArgs {
     allow_shared_target: bool,
+    session: Option<String>,
+    runtime_profile: Option<String>,
+    route_id: Option<String>,
 }
 
 const DOCTOR_JSON_COMMAND_TIMEOUT: Duration = Duration::from_secs(45);
@@ -29,8 +33,26 @@ enum DoctorCommandResult {
 /// Run the read-only remote-view doctor. This command inventories existing
 /// install, Guacamole, XRDP, user, and route-display state before setup helpers
 /// are allowed to suggest creating users or mutating configuration.
-pub fn run_remote_view_doctor(clean: &[String], json_mode: bool) {
-    let args = parse_doctor_args(clean);
+pub fn run_remote_view_doctor(raw_args: &[String], json_mode: bool) -> i32 {
+    let args = match parse_doctor_args(raw_args) {
+        Ok(args) => args,
+        Err(error) => {
+            if json_mode {
+                println!(
+                    "{}",
+                    json!({
+                        "success": false,
+                        "type": "usage_error",
+                        "code": "invalid_remote_view_doctor_scope",
+                        "error": error,
+                    })
+                );
+            } else {
+                eprintln!("{} {error}", color::error_indicator());
+            }
+            return 2;
+        }
+    };
     let report = remote_view_doctor_report(&args);
 
     if json_mode {
@@ -40,16 +62,75 @@ pub fn run_remote_view_doctor(clean: &[String], json_mode: bool) {
                 r#"{"success":false,"error":"Failed to serialize remote-view doctor"}"#.to_string()
             })
         );
-        return;
+        return 0;
     }
 
     print_remote_view_doctor_report(&report);
+    0
 }
 
-fn parse_doctor_args(clean: &[String]) -> DoctorArgs {
-    DoctorArgs {
-        allow_shared_target: clean.iter().any(|arg| arg == "--allow-shared-target"),
+fn parse_doctor_args(raw_args: &[String]) -> Result<DoctorArgs, String> {
+    let mut args = DoctorArgs {
+        allow_shared_target: false,
+        session: None,
+        runtime_profile: None,
+        route_id: None,
+    };
+    let mut index = raw_args
+        .windows(2)
+        .position(|window| window[0] == "doctor" && window[1] == "remote-view")
+        .map(|index| index + 2)
+        .ok_or_else(|| "Usage: agent-browser doctor remote-view [selectors]".to_string())?;
+    while index < raw_args.len() {
+        match raw_args[index].as_str() {
+            "--json" => {}
+            "--allow-shared-target" => args.allow_shared_target = true,
+            option @ ("--session" | "--runtime-profile" | "--route-id") => {
+                index += 1;
+                let value = raw_args
+                    .get(index)
+                    .filter(|value| !value.starts_with("--"))
+                    .map(|value| value.trim())
+                    .filter(|value| !value.is_empty())
+                    .ok_or_else(|| format!("{option} requires a value"))?;
+                let destination = match option {
+                    "--session" => &mut args.session,
+                    "--runtime-profile" => &mut args.runtime_profile,
+                    "--route-id" => &mut args.route_id,
+                    _ => unreachable!(),
+                };
+                if destination.is_some() {
+                    return Err(format!("{option} may be supplied only once"));
+                }
+                *destination = Some(value.to_string());
+            }
+            unknown if unknown.starts_with("--") => {
+                return Err(format!("unknown remote-view doctor option: {unknown}"));
+            }
+            _ => {}
+        }
+        index += 1;
     }
+    if let Some(session) = args.session.as_deref() {
+        if !crate::validation::is_valid_session_name(session) {
+            return Err(crate::validation::session_name_error(session));
+        }
+    }
+    if let Some(profile) = args.runtime_profile.as_deref() {
+        if !crate::validation::is_valid_session_name(profile) {
+            return Err("runtime profile must use a safe identifier".to_string());
+        }
+    }
+    if let Some(route_id) = args.route_id.as_deref() {
+        if route_id.len() > 256
+            || !route_id
+                .chars()
+                .all(|value| value.is_ascii_alphanumeric() || "-_.:/".contains(value))
+        {
+            return Err("route id contains unsupported characters".to_string());
+        }
+    }
+    Ok(args)
 }
 
 fn remote_view_doctor_report(args: &DoctorArgs) -> Value {
@@ -129,6 +210,13 @@ fn remote_view_doctor_report(args: &DoctorArgs) -> Value {
         privileges: &privileges,
         next_action: &next_action,
     });
+    let requested_scope = requested_scope_report(
+        args,
+        read_persisted_service_state(),
+        &rdp_gateway,
+        &privileges,
+    );
+    let global_advisories = requested_scope_global_advisories(&requested_scope, &issues);
 
     json!({
         "success": true,
@@ -157,12 +245,282 @@ fn remote_view_doctor_report(args: &DoctorArgs) -> Value {
             "config": config,
             "drift": drift,
             "issues": issues,
+            "requestedScope": requested_scope,
+            "globalAdvisories": global_advisories,
             "scriptRoot": script_root.display().to_string(),
             "stateSources": state_sources(),
             "nextAction": next_action,
             "nextCommand": next_command,
         }
     })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RequestedRouteSubject {
+    route_id: String,
+    route_aliases: Vec<String>,
+    session: Option<String>,
+    runtime_profile: Option<String>,
+    browser_id: Option<String>,
+    display_allocation_id: Option<String>,
+    route_state: String,
+    route_url_ready: bool,
+    display_ready: bool,
+    route_pool_ready: bool,
+}
+
+fn read_persisted_service_state() -> Result<ServiceState, String> {
+    let path = crate::native::service_store::JsonServiceStateStore::default_path()?;
+    match fs::read_to_string(&path) {
+        Ok(raw) => serde_json::from_str(&raw).map_err(|error| {
+            format!(
+                "invalid persisted service state {}: {error}",
+                path.display()
+            )
+        }),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(ServiceState::default()),
+        Err(error) => Err(format!(
+            "could not read persisted service state {}: {error}",
+            path.display()
+        )),
+    }
+}
+
+fn requested_route_subjects(state: &ServiceState) -> Vec<RequestedRouteSubject> {
+    let mut subjects = Vec::new();
+    for route in state.remote_view_routes.values() {
+        let browser = route
+            .browser_id
+            .as_deref()
+            .and_then(|browser_id| state.browsers.get(browser_id));
+        let display = route
+            .display_allocation_id
+            .as_deref()
+            .and_then(|display_id| state.display_allocations.get(display_id));
+        let mut session = route
+            .session_id
+            .clone()
+            .or_else(|| display.and_then(|value| value.owner_session_id.clone()));
+        if session.is_none() {
+            let active_sessions = browser
+                .map(|value| value.active_session_ids.as_slice())
+                .unwrap_or_default();
+            if active_sessions.len() == 1 {
+                session = active_sessions.first().cloned();
+            }
+        }
+        let session_record = session
+            .as_deref()
+            .and_then(|session_id| state.sessions.get(session_id));
+        let runtime_profile = display
+            .and_then(|value| value.profile_id.clone())
+            .or_else(|| browser.and_then(|value| value.profile_id.clone()))
+            .or_else(|| session_record.and_then(|value| value.profile_id.clone()));
+        let pool_entry = state.route_pool.values().find(|entry| {
+            entry.route_id == route.id
+                || route.connection_id.is_some()
+                    && route.connection_id.as_deref() == entry.connection_id.as_deref()
+        });
+        let mut route_aliases = vec![route.id.clone()];
+        if let Some(pool_route_id) = pool_entry.map(|entry| entry.route_id.clone()) {
+            if !pool_route_id.is_empty() && !route_aliases.contains(&pool_route_id) {
+                route_aliases.push(pool_route_id);
+            }
+        }
+        subjects.push(RequestedRouteSubject {
+            route_id: route.id.clone(),
+            route_aliases,
+            session,
+            runtime_profile,
+            browser_id: route.browser_id.clone(),
+            display_allocation_id: route.display_allocation_id.clone(),
+            route_state: route.state.clone(),
+            route_url_ready: route.frame_url.is_some() || route.external_url.is_some(),
+            display_ready: display.is_some_and(|value| value.state == "ready"),
+            route_pool_ready: pool_entry.is_some_and(|value| value.state == "ready"),
+        });
+    }
+    subjects.sort_by(|left, right| left.route_id.cmp(&right.route_id));
+    subjects
+}
+
+fn requested_scope_report(
+    args: &DoctorArgs,
+    state: Result<ServiceState, String>,
+    rdp_gateway: &Value,
+    privileges: &Value,
+) -> Value {
+    let selectors = json!({
+        "session": args.session,
+        "runtimeProfile": args.runtime_profile,
+        "routeId": args.route_id,
+    });
+    if args.session.is_none() && args.runtime_profile.is_none() && args.route_id.is_none() {
+        return json!({
+            "selectors": selectors,
+            "status": "not_requested",
+            "issues": [],
+            "nextAction": "rerun_with_session_profile_or_route_selector",
+            "subject": null,
+        });
+    }
+    let state = match state {
+        Ok(state) => state,
+        Err(error) => {
+            return json!({
+                "selectors": selectors,
+                "status": "unavailable",
+                "issues": [requested_scope_issue("service_state_unavailable", &error)],
+                "nextAction": "repair_service_state_readability",
+                "subject": null,
+            });
+        }
+    };
+    let subjects = requested_route_subjects(&state);
+    let matches_selector = |subject: &RequestedRouteSubject| {
+        args.session
+            .as_deref()
+            .is_none_or(|value| subject.session.as_deref() == Some(value))
+            && args
+                .runtime_profile
+                .as_deref()
+                .is_none_or(|value| subject.runtime_profile.as_deref() == Some(value))
+            && args.route_id.as_deref().is_none_or(|value| {
+                subject
+                    .route_aliases
+                    .iter()
+                    .any(|candidate| candidate == value)
+            })
+    };
+    let matches = subjects
+        .iter()
+        .filter(|subject| matches_selector(subject))
+        .collect::<Vec<_>>();
+    if matches.len() > 1 {
+        return json!({
+            "selectors": selectors,
+            "status": "degraded",
+            "issues": [requested_scope_issue(
+                "ambiguous_requested_scope",
+                "The selectors match multiple retained remote-view routes.",
+            )],
+            "nextAction": "add_a_route_id_selector",
+            "candidateRouteIds": matches.iter().map(|value| value.route_id.as_str()).collect::<Vec<_>>(),
+            "subject": null,
+        });
+    }
+    let Some(subject) = matches.first().copied() else {
+        let individually_available = [
+            args.session.as_deref().map(|value| {
+                subjects
+                    .iter()
+                    .any(|subject| subject.session.as_deref() == Some(value))
+            }),
+            args.runtime_profile.as_deref().map(|value| {
+                subjects
+                    .iter()
+                    .any(|subject| subject.runtime_profile.as_deref() == Some(value))
+            }),
+            args.route_id.as_deref().map(|value| {
+                subjects.iter().any(|subject| {
+                    subject
+                        .route_aliases
+                        .iter()
+                        .any(|candidate| candidate == value)
+                })
+            }),
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+        let contradictory = individually_available.len() > 1
+            && individually_available.iter().all(|available| *available);
+        return json!({
+            "selectors": selectors,
+            "status": if contradictory { "degraded" } else { "unavailable" },
+            "issues": [requested_scope_issue(
+                if contradictory { "contradictory_requested_scope" } else { "requested_scope_not_found" },
+                if contradictory {
+                    "The selectors resolve to different retained remote-view subjects."
+                } else {
+                    "No retained remote-view route matches the requested selectors."
+                },
+            )],
+            "nextAction": if contradictory { "correct_the_conflicting_selectors" } else { "inspect_retained_remote_view_routes" },
+            "subject": null,
+        });
+    };
+    let mut issues = Vec::new();
+    if subject.route_state != "ready" {
+        issues.push(requested_scope_issue(
+            "requested_route_not_ready",
+            "The retained remote-view route is not ready.",
+        ));
+    }
+    if !subject.route_url_ready {
+        issues.push(requested_scope_issue(
+            "requested_route_url_missing",
+            "The retained remote-view route has no operator URL.",
+        ));
+    }
+    if !subject.display_ready {
+        issues.push(requested_scope_issue(
+            "requested_display_not_ready",
+            "The requested route display allocation is not ready.",
+        ));
+    }
+    if !subject.route_pool_ready {
+        issues.push(requested_scope_issue(
+            "requested_route_pool_entry_not_ready",
+            "The requested route has no ready route-pool entry.",
+        ));
+    }
+    if !nested_bool(rdp_gateway, &["data", "success"]) {
+        issues.push(requested_scope_issue(
+            "requested_route_gateway_not_ready",
+            "The RDP gateway is not ready for the requested route.",
+        ));
+    }
+    if privileges.get("ready").and_then(Value::as_bool) != Some(true) {
+        issues.push(requested_scope_issue(
+            "requested_route_helper_not_ready",
+            "The privileged helper contract is not ready for the requested route.",
+        ));
+    }
+    json!({
+        "selectors": selectors,
+        "status": if issues.is_empty() { "ready" } else { "degraded" },
+        "issues": issues,
+        "nextAction": if issues.is_empty() { "no_action" } else { "repair_requested_route" },
+        "subject": {
+            "routeId": subject.route_id,
+            "routeAliases": subject.route_aliases,
+            "session": subject.session,
+            "runtimeProfile": subject.runtime_profile,
+            "browserId": subject.browser_id,
+            "displayAllocationId": subject.display_allocation_id,
+            "routeState": subject.route_state,
+            "routeUrlReady": subject.route_url_ready,
+            "displayReady": subject.display_ready,
+            "routePoolReady": subject.route_pool_ready,
+        },
+    })
+}
+
+fn requested_scope_issue(code: &str, message: &str) -> Value {
+    json!({
+        "code": code,
+        "severity": "warning",
+        "message": message,
+    })
+}
+
+fn requested_scope_global_advisories(requested_scope: &Value, issues: &[Value]) -> Vec<Value> {
+    if requested_scope["status"] == "not_requested" {
+        Vec::new()
+    } else {
+        issues.to_vec()
+    }
 }
 
 const REMOTE_VIEW_HELPER_SCRIPTS: [&str; 3] = [
@@ -483,7 +841,18 @@ fn inspect_privileges() -> Value {
         &["-n", &helper_path, "status-json"],
     ));
     let helper_desktop_session = remote_view_helper_desktop_session_status(&helper_path);
-    let helper_status_ready = remote_view_helper_status_contract_ready(&helper_status);
+    let helper_contract = crate::remote_view_helper_contract::helper_contract_report(
+        &helper_path,
+        &helper_check,
+        &helper_status,
+        sudoers_exists,
+    );
+    let ready = group_exists
+        && user_in_group
+        && helper_exists
+        && sudoers_exists
+        && helper_desktop_session["ready"].as_bool() == Some(true)
+        && helper_contract["ready"].as_bool() == Some(true);
 
     json!({
         "groupName": group_name,
@@ -496,8 +865,9 @@ fn inspect_privileges() -> Value {
         "sudoersExists": sudoers_exists,
         "helperCheck": helper_check,
         "helperStatus": helper_status,
+        "helperContract": helper_contract,
         "helperDesktopSession": helper_desktop_session,
-        "ready": group_exists && user_in_group && helper_exists && sudoers_exists && helper_check["success"].as_bool() == Some(true) && helper_desktop_session["ready"].as_bool() == Some(true) && helper_status_ready,
+        "ready": ready,
     })
 }
 
@@ -525,35 +895,7 @@ fn helper_status_output(mut report: Value) -> Value {
 }
 
 fn remote_view_helper_status_contract_ready(report: &Value) -> bool {
-    report.get("success").and_then(Value::as_bool) == Some(true)
-        && report
-            .pointer("/parsed/schemaVersion")
-            .and_then(Value::as_i64)
-            == Some(1)
-        && report
-            .pointer("/parsed/helperVersion")
-            .and_then(Value::as_str)
-            .is_some_and(|value| value.starts_with("2026-06-23.p44-route-desktop-v"))
-        && report
-            .pointer("/parsed/routeDesktopSession/ready")
-            .and_then(Value::as_bool)
-            == Some(true)
-        && report
-            .pointer("/parsed/routeDesktopSession/terminalStartupDetected")
-            .and_then(Value::as_bool)
-            == Some(false)
-        && report
-            .pointer("/parsed/displayAccess/supportsFilesystemX11Socket")
-            .and_then(Value::as_bool)
-            == Some(true)
-        && report
-            .pointer("/parsed/displayAccess/supportsAbstractX11Socket")
-            .and_then(Value::as_bool)
-            == Some(true)
-        && report
-            .pointer("/parsed/displayAccess/boundedXhostTimeoutSeconds")
-            .and_then(Value::as_i64)
-            .is_some_and(|value| value > 0 && value <= 2)
+    crate::remote_view_helper_contract::status_contract_ready(report)
 }
 
 fn remote_view_helper_desktop_session_status(helper_path: &str) -> Value {
@@ -2247,6 +2589,20 @@ fn print_remote_view_doctor_report(report: &Value) {
         display_value(&data["runtimeConvergence"]["status"])
     );
     println!(
+        "requested scope: {}",
+        display_value(&data["requestedScope"]["status"])
+    );
+    println!(
+        "requested route: {}",
+        display_value(&data["requestedScope"]["subject"]["routeId"])
+    );
+    println!(
+        "global advisories: {}",
+        data["globalAdvisories"]
+            .as_array()
+            .map_or_else(|| "unknown".to_string(), |values| values.len().to_string())
+    );
+    println!(
         "simultaneous viewing ready: {}",
         display_value(&data["manyToMany"]["simultaneousViewingReady"])
     );
@@ -3560,5 +3916,123 @@ EOF
             .collect::<Vec<_>>();
         assert!(codes.contains(&"guacamole_schema_missing"));
         assert!(codes.contains(&"guacamole_connection_permission_missing"));
+    }
+
+    fn scoped_doctor_args(
+        session: Option<&str>,
+        runtime_profile: Option<&str>,
+        route_id: Option<&str>,
+    ) -> DoctorArgs {
+        DoctorArgs {
+            allow_shared_target: false,
+            session: session.map(str::to_string),
+            runtime_profile: runtime_profile.map(str::to_string),
+            route_id: route_id.map(str::to_string),
+        }
+    }
+
+    fn scoped_service_state(shared_profile: bool) -> ServiceState {
+        serde_json::from_value(json!({
+            "sessions": {
+                "session-a": {"id": "session-a", "profileId": "profile-a", "browserIds": ["browser-a"]},
+                "session-b": {"id": "session-b", "profileId": if shared_profile { "profile-a" } else { "profile-b" }, "browserIds": ["browser-b"]}
+            },
+            "browsers": {
+                "browser-a": {"id": "browser-a", "profileId": "profile-a", "activeSessionIds": ["session-a"]},
+                "browser-b": {"id": "browser-b", "profileId": if shared_profile { "profile-a" } else { "profile-b" }, "activeSessionIds": ["session-b"]}
+            },
+            "displayAllocations": {
+                "display-a": {"id": "display-a", "state": "ready", "profileId": "profile-a", "ownerSessionId": "session-a"},
+                "display-b": {"id": "display-b", "state": "ready", "profileId": if shared_profile { "profile-a" } else { "profile-b" }, "ownerSessionId": "session-b"}
+            },
+            "routePool": {
+                "pool-a": {"id": "pool-a", "routeId": "guacamole:1", "connectionId": "1", "state": "ready"},
+                "pool-b": {"id": "pool-b", "routeId": "guacamole:2", "connectionId": "2", "state": "ready"}
+            },
+            "remoteViewRoutes": {
+                "route-a": {
+                    "id": "route-a", "state": "ready", "sessionId": "session-a", "browserId": "browser-a",
+                    "displayAllocationId": "display-a", "connectionId": "1", "frameUrl": "/guacamole/#/client/a"
+                },
+                "route-b": {
+                    "id": "route-b", "state": "ready", "sessionId": "session-b", "browserId": "browser-b",
+                    "displayAllocationId": "display-b", "connectionId": "2", "frameUrl": "/guacamole/#/client/b"
+                }
+            }
+        }))
+        .expect("scoped service state")
+    }
+
+    #[test]
+    fn requested_route_can_be_ready_while_unrelated_global_drift_remains_advisory() {
+        let requested = requested_scope_report(
+            &scoped_doctor_args(Some("session-a"), Some("profile-a"), Some("guacamole:1")),
+            Ok(scoped_service_state(false)),
+            &json!({"data": {"success": true}}),
+            &json!({"ready": true}),
+        );
+        let global_issue = json!({
+            "code": "runtime_executable_out_of_sync",
+            "message": "unrelated stale daemon",
+            "sessions": ["unrelated-session"]
+        });
+        let advisories =
+            requested_scope_global_advisories(&requested, std::slice::from_ref(&global_issue));
+
+        assert_eq!(requested["status"], "ready");
+        assert_eq!(requested["subject"]["routeId"], "route-a");
+        assert_eq!(advisories, vec![global_issue]);
+    }
+
+    #[test]
+    fn contradictory_session_and_route_selectors_fail_closed() {
+        let requested = requested_scope_report(
+            &scoped_doctor_args(Some("session-a"), None, Some("guacamole:2")),
+            Ok(scoped_service_state(false)),
+            &json!({"data": {"success": true}}),
+            &json!({"ready": true}),
+        );
+
+        assert_eq!(requested["status"], "degraded");
+        assert_eq!(
+            requested["issues"][0]["code"],
+            "contradictory_requested_scope"
+        );
+        assert_eq!(requested["subject"], Value::Null);
+    }
+
+    #[test]
+    fn profile_selector_matching_multiple_routes_is_ambiguous() {
+        let requested = requested_scope_report(
+            &scoped_doctor_args(None, Some("profile-a"), None),
+            Ok(scoped_service_state(true)),
+            &json!({"data": {"success": true}}),
+            &json!({"ready": true}),
+        );
+
+        assert_eq!(requested["status"], "degraded");
+        assert_eq!(requested["issues"][0]["code"], "ambiguous_requested_scope");
+        assert_eq!(
+            requested["candidateRouteIds"],
+            json!(["route-a", "route-b"])
+        );
+    }
+
+    #[test]
+    fn selector_parser_rejects_repeated_and_unsafe_values() {
+        let repeated = [
+            "doctor",
+            "remote-view",
+            "--route-id",
+            "route-a",
+            "--route-id",
+            "route-b",
+        ]
+        .map(str::to_string);
+        assert!(parse_doctor_args(&repeated).is_err());
+
+        let unsafe_route =
+            ["doctor", "remote-view", "--route-id", "../route?bad"].map(str::to_string);
+        assert!(parse_doctor_args(&unsafe_route).is_err());
     }
 }
