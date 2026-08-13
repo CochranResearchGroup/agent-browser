@@ -31,6 +31,7 @@ use super::http::{
 
 const DASHBOARD_SERVICE_BACKEND_SESSION: &str = "dashboard-service-backend";
 const DASHBOARD_LOCAL_PROXY_TIMEOUT: Duration = Duration::from_secs(2);
+const DASHBOARD_REMOTE_VIEW_REQUEST_PROXY_TIMEOUT: Duration = Duration::from_secs(15);
 const DASHBOARD_REMOTE_VIEW_HANDOFF_PROXY_TIMEOUT: Duration = Duration::from_secs(60);
 const DASHBOARD_STREAM_FRAME_PROXY_TIMEOUT: Duration = Duration::from_secs(7);
 const DASHBOARD_CDP_SCREENSHOT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -753,8 +754,32 @@ fn service_api_proxy_timeout(method: &str, path: &str, body: &str) -> Duration {
         if action.as_deref() == Some("service_remote_view_handoff_resolve") {
             return DASHBOARD_REMOTE_VIEW_HANDOFF_PROXY_TIMEOUT;
         }
+        if action.as_deref().is_some_and(is_remote_view_service_action) {
+            return DASHBOARD_REMOTE_VIEW_REQUEST_PROXY_TIMEOUT;
+        }
     }
     DASHBOARD_LOCAL_PROXY_TIMEOUT
+}
+
+/// Remote-view lifecycle requests may require service-state reconciliation and
+/// display readiness probes. Keep their proxy budget bounded but distinct from
+/// ordinary local dashboard requests.
+fn is_remote_view_service_action(action: &str) -> bool {
+    matches!(
+        action,
+        "remote_view_open"
+            | "service_remote_view_route_preflight"
+            | "service_remote_view_browser_reattach"
+            | "service_remote_view_route_switch"
+            | "service_remote_view_route_checkout"
+            | "service_remote_view_route_release"
+            | "service_route_pool_repair"
+            | "service_viewer_lease_request"
+            | "service_viewer_lease_heartbeat"
+            | "service_viewer_lease_release"
+            | "service_controller_lease_takeover"
+            | "view_takeover"
+    )
 }
 
 fn service_request_focus_command_body(path: &str, body: &str) -> Option<(String, String)> {
@@ -3057,6 +3082,31 @@ mod tests {
             service_api_proxy_timeout("GET", "/api/service/status", ""),
             DASHBOARD_SERVICE_STATUS_PROXY_TIMEOUT
         );
+    }
+
+    #[test]
+    fn dashboard_service_request_allows_remote_view_recovery_to_finish() {
+        for action in [
+            "remote_view_open",
+            "service_remote_view_route_preflight",
+            "service_remote_view_browser_reattach",
+            "service_remote_view_route_switch",
+            "service_remote_view_route_checkout",
+            "service_remote_view_route_release",
+            "service_route_pool_repair",
+            "service_viewer_lease_request",
+            "service_viewer_lease_heartbeat",
+            "service_viewer_lease_release",
+            "service_controller_lease_takeover",
+            "view_takeover",
+        ] {
+            let body = serde_json::json!({ "action": action }).to_string();
+            assert_eq!(
+                service_api_proxy_timeout("POST", "/api/service/request", &body),
+                Duration::from_secs(15),
+                "unexpected proxy timeout for {action}"
+            );
+        }
     }
 
     #[test]

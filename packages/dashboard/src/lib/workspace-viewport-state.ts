@@ -319,18 +319,19 @@ function firstBlockingReadinessComponent(
     const isFailed = FAILED_READINESS_STATES.has(status);
     if (!isFailed && !ACTION_READINESS_STATES.has(status)) continue;
     const label = componentLabel(component.component);
+    const readinessLabel = componentReadinessLabel(label);
     const nextAction = readinessNextAction(component);
     return {
       component: component.component,
       status: isFailed ? "blocked" : "action_required",
-      evidence: component.evidence || component.message || `${label} readiness is ${component.status ?? "not ready"}.`,
+      evidence: component.evidence || component.message || `${readinessLabel} is ${component.status ?? "not ready"}.`,
       nextAction,
-      title: `${label} readiness ${isFailed ? "failed" : "needs attention"}`,
+      title: `${readinessLabel} ${isFailed ? "failed" : "needs attention"}`,
       recoveryCopy: component.recovery
         || component.message
         || helperRefreshCopy(component, nextAction)
         || component.nextAction
-        || `Inspect ${label} readiness before opening the workspace stream.`,
+        || `Inspect ${readinessLabel} before opening the workspace stream.`,
     };
   }
   return null;
@@ -383,6 +384,10 @@ function providerComponent(message?: string | null): string {
 
 function componentLabel(component: string): string {
   return component.replaceAll("_", " ").replaceAll("-", " ");
+}
+
+function componentReadinessLabel(label: string): string {
+  return normalized(label).endsWith("readiness") ? label : `${label} readiness`;
 }
 
 function normalized(value?: string | null): string {

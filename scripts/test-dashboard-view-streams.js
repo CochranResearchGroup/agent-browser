@@ -17,6 +17,10 @@ import {
   viewStreamRouteSummary,
 } from '../packages/dashboard/src/lib/service-view-streams.ts';
 import {
+  selectWorkspaceViewerRoute,
+  workspaceRecoveryFailureMessage,
+} from '../packages/dashboard/src/lib/workspace-recovery.ts';
+import {
   borrowForeignCdpControl,
   dispatchForeignCdpInput,
   fetchForeignCdpScreenshot,
@@ -63,6 +67,41 @@ assert.equal(
 assert.equal(
   viewStreamDashboardFrameUrl(route, 'https://dashboard.example.test/'),
   route.routeDescriptor.dashboardEmbedUrl,
+);
+
+const daemonStream = {
+  id: 'daemon-stream:qbo-soylei',
+  provider: 'cdp_screencast',
+  routeId: 'daemon:qbo-soylei',
+  url: 'http://127.0.0.1:38285/',
+  readiness: { state: 'ready' },
+};
+assert.equal(
+  selectWorkspaceViewerRoute([daemonStream, route], daemonStream)?.routeId,
+  'route-a',
+);
+assert.equal(selectWorkspaceViewerRoute([daemonStream], daemonStream), null);
+assert.equal(
+  workspaceRecoveryFailureMessage(
+    { code: 'remote_view_route_not_found', error: "remote view route 'route-a' not found" },
+    'service_viewer_lease_request',
+  ),
+  "remote_view_route_not_found: remote view route 'route-a' not found",
+);
+assert.equal(
+  workspaceRecoveryFailureMessage(
+    { code: 'remote_view_route_not_found', error: "remote_view_route_not_found: route 'route-a' not found" },
+    'service_viewer_lease_request',
+  ),
+  "remote_view_route_not_found: route 'route-a' not found",
+);
+assert.equal(
+  workspaceRecoveryFailureMessage({ error: 'backend unavailable' }, 'service_viewer_lease_request'),
+  'backend unavailable',
+);
+assert.equal(
+  workspaceRecoveryFailureMessage({}, 'service_viewer_lease_request'),
+  'service_viewer_lease_request was not accepted',
 );
 
 const blocked = { ...route, readiness: { state: 'stale_target', reason: 'Selected tab is not visible' } };
@@ -138,5 +177,7 @@ assert.match(viewport, /Borrow control[\s\S]*Release control/);
 assert.match(viewport, /dispatchForeignCdpInput[\s\S]*canControl=\{foreignBorrow\?\.active === true\}/);
 assert.match(viewport, /projection\.selected[\s\S]*projection\.tiles/);
 assert.doesNotMatch(viewport, /fetch\(`\$\{serviceBase\(activePort\)\}\/status`\)/);
+assert.match(viewport, /selectWorkspaceViewerRoute\(streamChoices, stream\)/);
+assert.match(viewport, /workspaceViewerRoute\?\.routeId/);
 
 console.log('dashboard view-stream tests passed');

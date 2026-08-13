@@ -4,6 +4,39 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 151 | 2026-08-13
+
+Scope: repair the dashboard remote-view reconnect failure, validate all four
+incident defects, and synchronize the committed source with the installed and
+active runtime.
+
+Actions:
+
+- reproduced the retired `38215` port and mapped the current dashboard backend
+  to `38017`;
+- measured current service status at about 3.5 to 4.0 seconds against a generic
+  two-second dashboard proxy allowance;
+- found the persisted viewer reconnect job failed against pseudo-route
+  `daemon:qbo-soylei` while the browser's authoritative RDP stream reports
+  `guacamole:2`;
+- confirmed no viewer lease was created by the failed request;
+- confirmed current remote-view doctor evidence is ready across route pool,
+  displays, Guacamole ingress, and runtime convergence;
+- opened Plan 0112 for authoritative route selection, bounded remote-view
+  request timeouts, typed error rendering, readiness wording, and synchronized
+  installation.
+
+Validation:
+
+- implementation and final validation are in progress;
+- no browser, profile, authentication, route, display, or lease mutation was
+  performed during diagnosis and planning.
+
+Result:
+
+- P112 is in progress;
+- the next action is the first red-to-green route-authority slice.
+
 ## Turn 150 | 2026-08-13
 
 Scope: convert the maintainer discussion about duplicate-profile pressure and

@@ -93,6 +93,12 @@ For a single-viewer disconnect, use **Take over** from the durable handoff
 surface. If the tab was deliberately closed, the handoff remains closed until
 the operator selects **Reopen tab**.
 
+Dashboard reconnect selects the browser's service-owned RDP stream for viewer
+lease authority, even when a CDP stream is currently selected for presentation.
+Synthetic daemon stream identifiers are never sent as remote-view route IDs.
+Remote-view recovery requests receive a bounded extended proxy budget, and a
+typed backend failure code is shown when recovery is rejected.
+
 ## Keep URL roles separate
 
 Use each URL only for its documented audience.

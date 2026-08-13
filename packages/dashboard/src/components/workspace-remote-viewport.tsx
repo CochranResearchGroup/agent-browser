@@ -27,6 +27,10 @@ import {
 } from "@/lib/workspace-url-selection";
 import type { SelectedWorkspaceContext } from "@/lib/selected-workspace-context";
 import type { WorkspaceViewProjection } from "@/lib/workspace-view-projection";
+import {
+  selectWorkspaceViewerRoute,
+  workspaceRecoveryFailureMessage,
+} from "@/lib/workspace-recovery";
 import { activePortAtom, activeSessionNameAtom, sessionsAtom } from "@/store/sessions";
 import { appendConsoleLogsAtom } from "@/store/stream";
 import type { SessionInfo } from "@/types";
@@ -85,6 +89,7 @@ type WorkspaceViewportTab = {
 type ApiResponse<T> = {
   success: boolean;
   data?: T;
+  code?: string | null;
   error?: string | null;
 };
 
@@ -1838,15 +1843,21 @@ export function WorkspaceRemoteViewport({
       }),
     });
     const json = await readWorkspaceApiResponse<ApiResponse<unknown>>(resp);
-    if (!resp.ok || !json.success) throw new Error(json.error || `${action} was not accepted`);
+    if (!resp.ok || !json.success) {
+      throw new Error(workspaceRecoveryFailureMessage(json, action));
+    }
     return json;
   }, [activePort, activeSessionName]);
 
-  const workspaceRouteId = snapshotStream ? null : stream?.routeId?.trim() || null;
+  const workspaceViewerRoute = useMemo(
+    () => snapshotStream ? null : selectWorkspaceViewerRoute(streamChoices, stream),
+    [snapshotStream, stream, streamChoices],
+  );
+  const workspaceRouteId = workspaceViewerRoute?.routeId?.trim() || null;
   const workspaceViewerLeaseIds = useMemo(() => Array.from(new Set([
-    ...(stream?.viewerLeaseIds ?? []),
-    ...(stream?.controllerLeaseId ? [stream.controllerLeaseId] : []),
-  ].filter((id): id is string => Boolean(id?.trim())))), [stream?.controllerLeaseId, stream?.viewerLeaseIds]);
+    ...(workspaceViewerRoute?.viewerLeaseIds ?? []),
+    ...(workspaceViewerRoute?.controllerLeaseId ? [workspaceViewerRoute.controllerLeaseId] : []),
+  ].filter((id): id is string => Boolean(id?.trim())))), [workspaceViewerRoute?.controllerLeaseId, workspaceViewerRoute?.viewerLeaseIds]);
   const workspaceViewerId = activeSessionName || "operator";
 
   const recoverWorkspaceBrowser = useCallback(async (

@@ -7,6 +7,27 @@ This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
 
+## P112 | Dashboard Remote-View Reconnect Repair
+
+State: IN PROGRESS
+Current state: a live dashboard reconnect selected pseudo-route
+`daemon:qbo-soylei` instead of the browser's authoritative `guacamole:2` RDP
+route. The backend correctly rejected that route, but the dashboard's generic
+two-second Service API proxy timeout hid the typed failure because current
+large-state requests require about 3.5 to 4.0 seconds. Plan 0112 repairs route
+authority, bounded remote-view timeouts, typed recovery errors, and duplicated
+readiness wording, then requires a pushed and synchronized checkpoint install.
+
+### Plan
+
+- `docs/dev/plans/0112-2026-08-13-dashboard-remote-view-reconnect-repair-plan.md`
+
+### Next Recommendation
+
+Execute the four vertical TDD slices, validate all touched Rust and dashboard
+surfaces, then rebuild and install without replacing the existing browser or
+route.
+
 ## P111 | Multi-Agent Shared-Browser Profile Authority
 
 State: OPEN

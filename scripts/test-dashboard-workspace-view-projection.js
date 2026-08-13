@@ -414,6 +414,28 @@ const viewportReady = deriveWorkspaceViewportReadiness({
 assert.equal(viewportReady.status, 'ready');
 assert.match(viewportReady.evidence, /stream URL is present/);
 
+const genericReadinessFailure = deriveWorkspaceViewportReadiness({
+  hasBrowser: true,
+  browserHealth: 'ready',
+  hasStream: true,
+  streamProvider: 'rdp_gateway',
+  streamUrl: 'https://operator.example.test/context-route',
+  streamReadiness: { component: 'readiness', state: 'failed' },
+  canEmbed: true,
+  canControl: true,
+  mode: 'view',
+  preflightStatus: 'ready',
+});
+assert.equal(genericReadinessFailure.title, 'readiness failed');
+assert.equal(
+  genericReadinessFailure.recoveryCopy,
+  'Inspect readiness before opening the workspace stream.',
+);
+assert.doesNotMatch(
+  `${genericReadinessFailure.title} ${genericReadinessFailure.recoveryCopy}`,
+  /readiness readiness/i,
+);
+
 const browserBStream = { ...rdp, id: 'rdp-b', routeId: 'route-b', displayAllocationId: 'display-b' };
 const tiles = projectWorkspaceViews({
   sources: {
