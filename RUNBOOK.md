@@ -4,6 +4,52 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 150 | 2026-08-13
+
+Scope: convert the maintainer discussion about duplicate-profile pressure and
+multi-agent browser sharing into a bounded development plan without changing
+browser, profile, route, service, or installed runtime state.
+
+Actions:
+
+- reconciled the current profile reuse, exclusive lease, retained-browser tab
+  acquisition, duplicate-pressure warning, process identity, and service-state
+  locking seams;
+- confirmed that P69 already defines one profile-owning browser with shared
+  tabs, but leaves browser-owner reservation non-atomic and user-facing
+  `profile lease` language broader than the contested resource;
+- wrote Plan 0111 around one canonical profile owner, many accountable agent
+  participants, per-tab mutation queues, browser-global coordination, and
+  display-controller authority;
+- froze atomic reserve, launch, finalize, and rollback semantics with owner
+  generations and process-instance proof;
+- required duplicate diagnostics to count root browser owners rather than
+  Chromium child processes or evidence-poor retained rows;
+- limited the first implementation packet to red fixtures and contract
+  vocabulary, with controlled live validation deferred to a new noncritical
+  temporary profile.
+
+Validation:
+
+- CodeGraph was healthy at 551 files, 19,498 nodes, and 67,830 edges;
+- Graphiti `agent_browser_main` returned three facts, including the implemented
+  P69 shared-profile routing episode, which was verified against the current
+  plan and source;
+- current read-only resource evidence showed one duplicate-profile warning for
+  two evidence-poor attached-existing `default` rows and zero GC candidates;
+- planning patch formatting and link checks passed;
+- pre-existing uncommitted `daemon.rs` and `service_store.rs` implementation
+  changes were not modified.
+
+Result:
+
+- P111 is open and indexed in the roadmap;
+- no implementation, browser launch, profile mutation, process termination,
+  cleanup, install, or live validation was performed;
+- the next bounded packet is P111 Slice A red fixtures for profile identity,
+  root ownership, reservation races, stale adoption evidence, and exact route
+  validation.
+
 ## Turn 149 | 2026-08-12
 
 Scope: open P110 and freeze the sequential desktop perception and interaction

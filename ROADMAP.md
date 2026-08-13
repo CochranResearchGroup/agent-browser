@@ -1,11 +1,49 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-08-12
+Updated: 2026-08-13
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
+
+## P111 | Multi-Agent Shared-Browser Profile Authority
+
+State: OPEN
+Current state: Plan 0111 freezes the ordinary browser-sharing topology as one
+canonical writable profile directory, one owning browser instance and Chromium
+process group, many accountable agent sessions, and many independently owned
+tabs or windows. It separates browser-instance profile ownership from
+per-agent participation, per-tab mutation ordering, browser-global mutation,
+and display-controller authority. The plan also targets the remaining
+check-then-launch race, stale attached-existing browser evidence, route-hint
+validation, and duplicate-pressure terminology left after P69's shared-tab
+routing implementation.
+
+### Current Evidence
+
+- P69 already routes ordinary compatible work through retained-browser tab
+  acquisition and declares `exclusive_process` plus `shared_browser_tabs`.
+- Current installed service state models three ready browser records against
+  profile `default`; two evidence-poor `attached_existing` rows produce a
+  duplicate-profile warning while reviewed GC has no safe candidate.
+- The service-state repository provides cross-process atomic mutations, but
+  profile availability is currently checked before launch without first
+  persisting an owner reservation.
+- Maintainer direction is that agents, tabs, windows, and normal Chromium child
+  processes are shareable. Only independent browser roots writing the same
+  canonical profile directory require exclusion.
+
+### Plan
+
+- `docs/dev/plans/0111-2026-08-13-multi-agent-shared-browser-profile-authority-plan.md`
+
+### Next Recommendation
+
+Execute Slice A only: freeze red fixtures for canonical profile identity,
+browser-root classification, concurrent owner reservation, stale
+attached-existing rows, and invalid route-hint bypass before changing launch
+behavior.
 
 ## P110 | Desktop Perception And Interaction Foundation
 
@@ -1499,10 +1537,10 @@ process.
 
 ### Next Recommendation
 
-Start P69 Slice A with parser and no-launch launch-planning coverage for plain
-`open --runtime-profile <non-default> --browser-host remote_headed
---browser-build stealthcdp_chromium`, then implement Slice B so an in-use
-compatible retained profile opens a shared tab instead of launching or refusing.
+Keep P69 as the route-bound handoff consolidation authority. Its Slice A and
+Slice B shared-profile routing behavior are implemented. Use P111 for the
+remaining browser-owner reservation, multi-agent participation, scoped
+operation authority, and duplicate-evidence reconciliation work.
 
 ## P42 | Runtime Convergence
 
