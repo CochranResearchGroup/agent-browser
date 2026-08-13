@@ -9,14 +9,15 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 
 ## P112 | Dashboard Remote-View Reconnect Repair
 
-State: IN PROGRESS
-Current state: a live dashboard reconnect selected pseudo-route
-`daemon:qbo-soylei` instead of the browser's authoritative `guacamole:2` RDP
-route. The backend correctly rejected that route, but the dashboard's generic
-two-second Service API proxy timeout hid the typed failure because current
-large-state requests require about 3.5 to 4.0 seconds. Plan 0112 repairs route
-authority, bounded remote-view timeouts, typed recovery errors, and duplicated
-readiness wording, then requires a pushed and synchronized checkpoint install.
+State: COMPLETED
+Current state: the dashboard now separates the selected presentation stream
+from authoritative viewer-route operations, applies a bounded fifteen-second
+remote-view request allowance, preserves typed backend failures, and renders
+readiness guidance without duplicated wording. The pushed checkpoint is
+installed with converged native, dashboard, workstation, supervisor, and
+runtime provenance. Live readback restored `guacamole:2` to `attached_ready`
+and persisted an observing lease while preserving the existing QBO browser,
+profile, display, and process.
 
 ### Plan
 
@@ -24,9 +25,8 @@ readiness wording, then requires a pushed and synchronized checkpoint install.
 
 ### Next Recommendation
 
-Execute the four vertical TDD slices, validate all touched Rust and dashboard
-surfaces, then rebuild and install without replacing the existing browser or
-route.
+Continue P111. Its duplicate-profile-pressure lane owns the two evidence-poor
+retained `default` profile rows that remain outside P112's reconnect repair.
 
 ## P111 | Multi-Agent Shared-Browser Profile Authority
 

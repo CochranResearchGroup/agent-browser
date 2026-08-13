@@ -2,7 +2,7 @@
 
 Date: 2026-08-13
 
-State: IN PROGRESS
+State: CLOSED
 
 Lane: P112
 
@@ -114,3 +114,27 @@ runtime state do not diverge.
   validated build and current pushed commit.
 - Live readback proves remote-view readiness and a successful observer lease on
   the exact current route.
+
+## Closeout Evidence
+
+- Commits `885db6db` and `cadccee3` are pushed on
+  `architecture-deepening-20260809`.
+- Focused route-selection, timeout, typed-error, and readiness-copy tests pass,
+  along with the selected dashboard, Rust, documentation, and installation
+  gates.
+- The supported checkpoint publisher installed matching native and dashboard
+  artifacts. Runtime convergence reports no stale executable processes, and
+  the workstation payload and session supervisors report current provenance.
+- The existing QBO browser remained PID `51579` on profile `qbo-soylei` and
+  display allocation `display:shared_display:qbo-soylei-11`.
+- A dashboard-proxied browser reattach returned success, restored
+  `attached_ready` on `guacamole:2`, and a dashboard-proxied observer lease
+  request persisted an active observing lease on that route.
+- The installed dashboard workspace smoke passed with the repaired reconnect
+  marker, the RDP gateway viewport, ready runtime health, and the existing QBO
+  browser process.
+- Install doctor has no binary, manifest, dashboard, workstation-payload,
+  supervisor, or runtime-convergence drift. Its sole remaining warning is the
+  pre-existing P111 duplicate-profile-pressure evidence for two empty retained
+  `default` profile rows; reviewed retained-state cleanup exposes no safe
+  candidate, so P112 does not delete that forensic state.

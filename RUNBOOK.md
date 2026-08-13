@@ -24,18 +24,33 @@ Actions:
   displays, Guacamole ingress, and runtime convergence;
 - opened Plan 0112 for authoritative route selection, bounded remote-view
   request timeouts, typed error rendering, readiness wording, and synchronized
-  installation.
+  installation;
+- implemented and pushed the four repairs in `cadccee3`, with the prerequisite
+  large-state stack hardening isolated in `885db6db`;
+- published and installed the release-mode native binary and dashboard assets,
+  synchronized workstation payload and session-supervisor provenance, and
+  confirmed zero stale runtime executables;
+- reattached the existing QBO route through the installed dashboard proxy and
+  persisted an observer lease on `guacamole:2` without replacing browser PID
+  `51579`, its profile, or its display;
+- passed the installed dashboard workspace smoke with the RDP gateway viewport
+  and ready runtime health.
 
 Validation:
 
-- implementation and final validation are in progress;
-- no browser, profile, authentication, route, display, or lease mutation was
-  performed during diagnosis and planning.
+- focused TDD slices, dashboard tests and build, docs build, Cargo format,
+  strict Clippy, the canonical Rust partition, selector-chosen gates, install
+  readback, route readiness, and live viewer reconnect passed;
+- install doctor reports synchronized binary, dashboard, workstation,
+  supervisor, and runtime provenance. Its only remaining warning is the
+  pre-existing P111 duplicate-profile-pressure evidence, for which retained
+  cleanup reports no safe candidate.
 
 Result:
 
-- P112 is in progress;
-- the next action is the first red-to-green route-authority slice.
+- P112 is closed and installed;
+- P111 remains the bounded owner of duplicate-profile authority and stale-row
+  classification work.
 
 ## Turn 150 | 2026-08-13
 
