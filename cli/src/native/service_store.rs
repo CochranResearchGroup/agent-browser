@@ -19,6 +19,7 @@ const REMOTE_VIEW_HANDOFFS_FILENAME: &str = "remote-view-handoffs.json";
 const REMOTE_VIEW_HANDOFFS_SCHEMA_VERSION: &str = "agent-browser.remote-view-handoffs.v1";
 static SERVICE_STATE_MUTATION_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 const DEFAULT_SERVICE_STATE_LOCK_TIMEOUT: Duration = Duration::from_secs(1);
+const SERVICE_STATE_JSON_STACK_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -145,13 +146,7 @@ impl ServiceStateStore for JsonServiceStateStore {
         recover_service_state_transaction(&self.path)?;
         let mut state_file_missing = false;
         let mut state = match fs::read_to_string(&self.path) {
-            Ok(raw) => serde_json::from_str(&raw).map_err(|err| {
-                format!(
-                    "Invalid service state JSON {}: {}",
-                    self.path.display(),
-                    err
-                )
-            })?,
+            Ok(raw) => parse_service_state_json(raw, &self.path)?,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                 state_file_missing = true;
                 ServiceState::default()
@@ -176,23 +171,60 @@ impl ServiceStateStore for JsonServiceStateStore {
     }
 
     fn save(&self, state: &ServiceState) -> Result<(), String> {
-        let mut normalized = state.clone();
-        normalized.refresh_derived_views();
-        normalized.remove_builtin_entity_defaults_for_persistence();
-        let serialized = serde_json::to_string_pretty(&normalized)
-            .map_err(|err| format!("Failed to serialize service state: {}", err))?;
-        let transaction = ServiceStateTransaction {
-            state_payload: format!("{}\n", serialized),
-            handoff_payload: remote_view_handoff_registry_payload(
-                &normalized.remote_view_handoffs,
-            )?,
-        };
+        let transaction = prepare_service_state_transaction(state)?;
         commit_service_state_transaction(self, &transaction)
     }
 
     fn state_path(&self) -> Option<&Path> {
         Some(&self.path)
     }
+}
+
+fn parse_service_state_json(raw: String, path: &Path) -> Result<ServiceState, String> {
+    let display_path = path.display().to_string();
+    // Large service histories can exhaust a Tokio worker's comparatively small stack
+    // inside serde_json. Keep that recursive work on an explicitly bounded stack.
+    std::thread::Builder::new()
+        .name("service-state-json".to_string())
+        .stack_size(SERVICE_STATE_JSON_STACK_BYTES)
+        .spawn(move || serde_json::from_str::<ServiceState>(&raw))
+        .map_err(|err| {
+            format!(
+                "Failed to start service state JSON parser for {}: {}",
+                display_path, err
+            )
+        })?
+        .join()
+        .map_err(|_| format!("Service state JSON parser panicked for {display_path}"))?
+        .map_err(|err| format!("Invalid service state JSON {display_path}: {err}"))
+}
+
+fn prepare_service_state_transaction(
+    state: &ServiceState,
+) -> Result<ServiceStateTransaction, String> {
+    // Clone, derived-view refresh, and serialization can recurse through the same
+    // large state tree, so the complete preparation boundary uses the JSON stack.
+    std::thread::scope(|scope| {
+        std::thread::Builder::new()
+            .name("service-state-json".to_string())
+            .stack_size(SERVICE_STATE_JSON_STACK_BYTES)
+            .spawn_scoped(scope, move || {
+                let mut state = state.clone();
+                state.refresh_derived_views();
+                state.remove_builtin_entity_defaults_for_persistence();
+                let serialized = serde_json::to_string_pretty(&state)
+                    .map_err(|err| format!("Failed to serialize service state: {err}"))?;
+                Ok(ServiceStateTransaction {
+                    state_payload: format!("{serialized}\n"),
+                    handoff_payload: remote_view_handoff_registry_payload(
+                        &state.remote_view_handoffs,
+                    )?,
+                })
+            })
+            .map_err(|err| format!("Failed to start service state JSON serializer: {err}"))?
+            .join()
+            .map_err(|_| "Service state JSON serializer panicked".to_string())?
+    })
 }
 
 impl<S> ServiceStateRepository for LockedServiceStateRepository<S>
@@ -599,7 +631,8 @@ fn acquire_service_state_file_lock_until(
 mod tests {
     use super::*;
     use crate::native::service_model::{
-        BrowserHealth, BrowserHost, BrowserProcess, RemoteViewHandoff, SitePolicy,
+        BrowserHealth, BrowserHost, BrowserProcess, DisplayAllocation, RemoteViewAcquisitionLease,
+        RemoteViewHandoff, SitePolicy,
     };
     use std::collections::BTreeMap;
 
@@ -668,6 +701,85 @@ mod tests {
             Some(super::super::service_model::ServiceEntitySource::Builtin)
         );
         assert_eq!(store.path(), path.as_path());
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn large_remote_view_lease_state_round_trips_on_a_constrained_tokio_worker() {
+        let path = unique_state_path("large-remote-view-lease-state");
+        let store = JsonServiceStateStore::new(&path);
+        let nested_readiness = serde_json::json!({
+            "state": "pending",
+            "evidence": {
+                "route": {
+                    "display": {
+                        "probe": {
+                            "attempts": [{
+                                "result": {
+                                    "details": {
+                                        "message": "synthetic bounded fixture"
+                                    }
+                                }
+                            }]
+                        }
+                    }
+                }
+            }
+        });
+        let remote_view_acquisition_leases = (0..640)
+            .map(|index| {
+                let id = format!("lease-{index}");
+                (
+                    id.clone(),
+                    RemoteViewAcquisitionLease {
+                        id,
+                        browser_id: "browser-1".to_string(),
+                        session_id: "session-1".to_string(),
+                        route_id: "route-1".to_string(),
+                        display_allocation_id: "display-1".to_string(),
+                        previous_display_allocation: Some(DisplayAllocation {
+                            id: "display-1".to_string(),
+                            readiness: Some(nested_readiness.clone()),
+                            ..DisplayAllocation::default()
+                        }),
+                        ..RemoteViewAcquisitionLease::default()
+                    },
+                )
+            })
+            .collect();
+        store
+            .save(&ServiceState {
+                remote_view_acquisition_leases,
+                ..ServiceState::default()
+            })
+            .expect("large fixture should save");
+
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .thread_stack_size(128 * 1024)
+            .enable_all()
+            .build()
+            .expect("fixture runtime should build");
+        let loaded = runtime
+            .block_on(async move {
+                tokio::spawn(async move {
+                    let stack_pressure = [0_u8; 64 * 1024];
+                    std::hint::black_box(&stack_pressure);
+                    let result = store.load();
+                    if let Ok(state) = result.as_ref() {
+                        store
+                            .save(state)
+                            .expect("large service state should save from a constrained worker");
+                    }
+                    std::hint::black_box(&stack_pressure);
+                    result
+                })
+                .await
+                .expect("service-state loader task should not crash")
+            })
+            .expect("large fixture should load");
+
+        assert_eq!(loaded.remote_view_acquisition_leases.len(), 640);
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 

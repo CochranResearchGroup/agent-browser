@@ -2,7 +2,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::env;
 use std::fs;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process;
 use std::sync::Arc;
@@ -63,9 +63,16 @@ fn secure_daemon_file(path: &std::path::Path) {
 }
 
 fn file_sha256(path: &Path) -> Result<String, std::io::Error> {
-    let bytes = fs::read(path)?;
+    let mut file = fs::File::open(path)?;
     let mut hasher = Sha256::new();
-    hasher.update(bytes);
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let count = file.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        hasher.update(&buffer[..count]);
+    }
     Ok(format!("{:x}", hasher.finalize()))
 }
 
@@ -725,6 +732,27 @@ fn get_port_for_session(session: &str) -> u16 {
 mod tests {
     #[allow(unused_imports)]
     use super::*;
+
+    #[test]
+    fn executable_hashing_streams_file_contents() {
+        let path = std::env::temp_dir().join(format!(
+            "agent-browser-daemon-hash-{}-{}",
+            process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock should follow Unix epoch")
+                .as_nanos()
+        ));
+        fs::write(&path, b"abc").expect("hash fixture should be written");
+
+        let digest = file_sha256(&path).expect("hash fixture should be readable");
+
+        assert_eq!(
+            digest,
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        fs::remove_file(path).expect("hash fixture should be removed");
+    }
 
     #[cfg(unix)]
     #[test]
