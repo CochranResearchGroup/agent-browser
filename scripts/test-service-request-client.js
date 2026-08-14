@@ -2647,6 +2647,8 @@ async function main() {
     serviceName: 'agent-browser-dashboard',
     apply: false,
     staleCheckouts: true,
+    stalePendingAcquisitions: true,
+    acquisitionLeaseId: 'lease-terminal',
     serviceState: {
       routePool: {},
     },
@@ -2655,6 +2657,8 @@ async function main() {
   assert.deepEqual(routePoolRepairRequest.params, {
     apply: false,
     staleCheckouts: true,
+    stalePendingAcquisitions: true,
+    acquisitionLeaseId: 'lease-terminal',
     serviceState: {
       routePool: {},
     },
@@ -3244,11 +3248,15 @@ async function main() {
     fetch: routePoolRepairWorkflow.fetch,
     apply: false,
     staleCheckouts: true,
+    stalePendingAcquisitions: true,
+    acquisitionLeaseId: 'lease-terminal',
   });
   assert.equal(routePoolRepairWorkflow.calls[0].body.action, 'service_route_pool_repair');
   assert.deepEqual(routePoolRepairWorkflow.calls[0].body.params, {
     apply: false,
     staleCheckouts: true,
+    stalePendingAcquisitions: true,
+    acquisitionLeaseId: 'lease-terminal',
   });
 
   const viewerWorkflow = createFetchRecorder({

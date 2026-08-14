@@ -857,6 +857,7 @@ export interface ServiceRoutePoolRepairData {
   candidateReasons?: Record<string, Record<string, unknown>>;
   candidateCounts: Record<string, number>;
   skipped?: Record<string, string[]>;
+  skippedReasons?: Record<string, Record<string, unknown>>;
   skippedCounts?: Record<string, number>;
   repairedCounts: Record<string, number>;
   recommendedNextStep?: string;
@@ -1682,6 +1683,8 @@ export interface ServiceRemoteViewRouteReleaseOptions extends Omit<ServiceReques
 export interface ServiceRoutePoolRepairOptions extends Omit<ServiceRequest, "action" | "params"> {
   apply?: boolean;
   staleCheckouts?: boolean;
+  stalePendingAcquisitions?: boolean;
+  acquisitionLeaseId?: string;
   serviceState?: Record<string, unknown>;
   params?: Record<string, unknown>;
 }

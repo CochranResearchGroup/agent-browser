@@ -4,6 +4,39 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 154 | 2026-08-14
+
+Scope: repair one terminal route-bound acquisition quarantine without weakening
+the fail-closed boundary for live or ambiguous browser effects.
+
+Actions:
+
+- confirmed the Google Messages native supervisor and loopback endpoint are
+  healthy while one August 13 focus timeout blocks every new acquisition;
+- proved the quarantined browser, process identity, and session are absent and
+  the matching route, display, and route-pool entry are terminal;
+- opened Plan 0114 and extended `service_route_pool_repair` with exact
+  `acquisitionLeaseId` scoping;
+- added dry-run candidate reporting and apply-time promotion from
+  `rollback_incomplete` to `rollback_complete` only when retained-state
+  inactivity is fully demonstrated;
+- added typed skipped reasons for live browser, process, session, route,
+  display, and pool evidence, plus generated service-client support.
+
+Validation:
+
+- the red focused Rust fixture failed on the missing terminal recovery helper;
+- five route-pool state tests, three repair-action tests, and the full service
+  client suite now pass;
+- broader validation, documentation gates, checkpoint install, and live exact
+  recovery remain pending.
+
+Result:
+
+- P114 is source-implemented but not yet installed or applied;
+- the existing Google Messages profile, browser family, route, authentication,
+  and keyring posture remain unchanged.
+
 ## Turn 153 | 2026-08-14
 
 Scope: implement, install, and live-validate Plan 0113 so the workspace

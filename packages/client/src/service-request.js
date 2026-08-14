@@ -1223,7 +1223,13 @@ export function createServiceRoutePoolRepairRequest(input = {}) {
   return createServiceRequest({
     ...request,
     action: 'service_route_pool_repair',
-    params: mergeParams(params, request, ['apply', 'staleCheckouts', 'serviceState']),
+    params: mergeParams(params, request, [
+      'apply',
+      'staleCheckouts',
+      'stalePendingAcquisitions',
+      'acquisitionLeaseId',
+      'serviceState',
+    ]),
   });
 }
 

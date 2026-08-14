@@ -195,13 +195,18 @@ pub(crate) mod service_commands {
     }
     pub(crate) async fn handle_service_route_pool_repair(cmd: &Value) -> Result<Value, String> {
         let options = ServiceRoutePoolRepairOptions::from_command(cmd);
+        let acquisition_lease_id = cmd
+            .get("acquisitionLeaseId")
+            .and_then(Value::as_str)
+            .map(str::to_string);
         let observed_at = chrono::Utc::now().to_rfc3339();
         if options.apply {
             let repository = LockedServiceStateRepository::default_json()?;
             repository.mutate(|state| {
-                Ok(repair_route_pool_service_state(
+                Ok(repair_route_pool_service_state_for_lease(
                     state,
                     options,
+                    acquisition_lease_id.as_deref(),
                     observed_at.as_str(),
                 ))
             })
@@ -212,9 +217,10 @@ pub(crate) mod service_commands {
             } else {
                 LockedServiceStateRepository::default_json()?.load_snapshot()?
             };
-            Ok(repair_route_pool_service_state(
+            Ok(repair_route_pool_service_state_for_lease(
                 &mut service_state,
                 options,
+                acquisition_lease_id.as_deref(),
                 observed_at.as_str(),
             ))
         }
@@ -224,17 +230,51 @@ pub(crate) mod service_commands {
         options: ServiceRoutePoolRepairOptions,
         observed_at: &str,
     ) -> Value {
+        repair_route_pool_service_state_for_lease(state, options, None, observed_at)
+    }
+    /// Repairs stale route-pool state, optionally limiting acquisition repair
+    /// to one exact retained lease. Terminal quarantine is promoted only when
+    /// every related retained owner and allocation is absent or released.
+    pub(crate) fn repair_route_pool_service_state_for_lease(
+        state: &mut ServiceState,
+        options: ServiceRoutePoolRepairOptions,
+        acquisition_lease_id: Option<&str>,
+        observed_at: &str,
+    ) -> Value {
         let before_route_pool_count = state.route_pool.len();
         let mut stale_checkouts = Vec::new();
         let mut stale_checkout_reasons = serde_json::Map::new();
         let mut skipped_active_checkouts = Vec::new();
         let mut stale_pending_acquisitions = Vec::new();
         let mut stale_pending_acquisition_reasons = serde_json::Map::new();
+        let mut rollback_incomplete_acquisitions = Vec::new();
+        let mut rollback_incomplete_acquisition_reasons = serde_json::Map::new();
+        let mut skipped_rollback_incomplete_acquisition_reasons = serde_json::Map::new();
         let mut stale_route_ids = BTreeSet::new();
         let mut stale_display_allocation_ids = BTreeSet::new();
         if options.stale_pending_acquisitions {
             for lease in state.remote_view_acquisition_leases.values() {
+                if lease.state == "failed" && lease.phase == "rollback_incomplete" {
+                    if acquisition_lease_id.is_some_and(|id| id != lease.id) {
+                        continue;
+                    }
+                    match rollback_incomplete_acquisition_repair_reason(state, lease) {
+                        Ok(reason) => {
+                            rollback_incomplete_acquisitions.push(lease.id.clone());
+                            rollback_incomplete_acquisition_reasons
+                                .insert(lease.id.clone(), json!(reason));
+                        }
+                        Err(reason) => {
+                            skipped_rollback_incomplete_acquisition_reasons
+                                .insert(lease.id.clone(), json!(reason));
+                        }
+                    }
+                    continue;
+                }
                 if lease.state != "pending" {
+                    continue;
+                }
+                if acquisition_lease_id.is_some_and(|id| id != lease.id) {
                     continue;
                 }
                 match pending_acquisition_stale_reason(state, lease) {
@@ -307,12 +347,14 @@ pub(crate) mod service_commands {
         }
         stale_checkouts.sort();
         stale_pending_acquisitions.sort();
+        rollback_incomplete_acquisitions.sort();
         skipped_active_checkouts.sort();
         let stale_routes = stale_route_ids.into_iter().collect::<Vec<_>>();
         let stale_display_allocations =
             stale_display_allocation_ids.into_iter().collect::<Vec<_>>();
         let repaired_count = stale_checkouts.len();
         let repaired_pending_count = stale_pending_acquisitions.len();
+        let repaired_rollback_incomplete_count = rollback_incomplete_acquisitions.len();
         let released_route_count = stale_routes.len();
         let released_display_allocation_count = stale_display_allocations.len();
         if options.apply {
@@ -386,6 +428,33 @@ pub(crate) mod service_commands {
                     }
                 }
             }
+            for lease_id in &rollback_incomplete_acquisitions {
+                if let Some(lease) = state.remote_view_acquisition_leases.get_mut(lease_id) {
+                    let previous_cleanup = lease.cleanup.clone().unwrap_or_else(|| json!({}));
+                    let mut rollback = previous_cleanup.clone();
+                    if !rollback.is_object() {
+                        rollback = json!({ "previousCleanup": previous_cleanup });
+                    }
+                    if let Some(object) = rollback.as_object_mut() {
+                        object.insert("state".to_string(), json!("rolled_back"));
+                        object.insert("updatedAt".to_string(), json!(observed_at));
+                        object.insert(
+                            "cleanup".to_string(),
+                            json!({
+                                "state": "confirmed_inactive_retained_state",
+                                "reason": "rollback_incomplete_acquisition_repair",
+                                "previous": previous_cleanup.get("cleanup").cloned(),
+                                "observedAt": observed_at,
+                            }),
+                        );
+                        object.remove("quarantine");
+                    }
+                    lease.state = "failed".to_string();
+                    lease.phase = "rollback_complete".to_string();
+                    lease.updated_at = Some(observed_at.to_string());
+                    lease.cleanup = Some(rollback);
+                }
+            }
             for entry_id in &stale_checkouts {
                 if let Some(entry) = state.route_pool.get_mut(entry_id) {
                     let previous_route_allocation_id = entry.current_route_allocation_id.clone();
@@ -430,6 +499,7 @@ pub(crate) mod service_commands {
         }
         let repaired_total = if options.apply {
             repaired_pending_count
+                + repaired_rollback_incomplete_count
                 + repaired_count
                 + released_route_count
                 + released_display_allocation_count
@@ -441,26 +511,40 @@ pub(crate) mod service_commands {
         } else {
             0
         };
+        let repaired_rollback_incomplete_total = if options.apply {
+            repaired_rollback_incomplete_count
+        } else {
+            0
+        };
         json!(
             { "repaired" : options.apply, "dryRun" : ! options.apply, "observedAt" :
             observed_at, "policy" : { "staleCheckouts" : options.stale_checkouts,
             "stalePendingAcquisitions" : options.stale_pending_acquisitions,
+            "rollbackIncompleteAcquisitions" : options.stale_pending_acquisitions,
+            "acquisitionLeaseId" : acquisition_lease_id,
             "repairsCheckedOutEntriesOnly" : false, "preservesActiveReadyRoutes" : true,
             }, "before" : { "routePoolEntryCount" : before_route_pool_count, },
             "candidates" : { "stalePendingAcquisitions" : stale_pending_acquisitions,
+            "rollbackIncompleteAcquisitions" : rollback_incomplete_acquisitions,
             "staleCheckouts" : stale_checkouts, "staleRoutes" : stale_routes,
             "staleDisplayAllocations" : stale_display_allocations, }, "candidateReasons"
             : { "staleCheckouts" : stale_checkout_reasons, "stalePendingAcquisitions" :
-            stale_pending_acquisition_reasons, }, "candidateCounts" : {
+            stale_pending_acquisition_reasons, "rollbackIncompleteAcquisitions" :
+            rollback_incomplete_acquisition_reasons, }, "candidateCounts" : {
             "stalePendingAcquisitions" : repaired_pending_count, "staleCheckouts" :
-            repaired_count, "staleRoutes" : released_route_count,
+            repaired_count, "rollbackIncompleteAcquisitions" :
+            repaired_rollback_incomplete_count,
+            "staleRoutes" : released_route_count,
             "staleDisplayAllocations" : released_display_allocation_count, "total" :
-            repaired_pending_count + repaired_count + released_route_count +
+            repaired_pending_count + repaired_rollback_incomplete_count + repaired_count + released_route_count +
             released_display_allocation_count, }, "skipped" : { "activeCheckouts" :
-            skipped_active_checkouts, }, "skippedCounts" : { "activeCheckouts" :
+            skipped_active_checkouts, }, "skippedReasons" : {
+            "rollbackIncompleteAcquisitions" :
+            skipped_rollback_incomplete_acquisition_reasons, }, "skippedCounts" : { "activeCheckouts" :
             skipped_active_checkouts.len(), }, "repairedCounts" : {
             "stalePendingAcquisitions" : repaired_pending_total, "staleCheckouts" : if
             options.apply { repaired_count } else { 0 },
+            "rollbackIncompleteAcquisitions" : repaired_rollback_incomplete_total,
             "staleRoutes" : if options.apply { released_route_count } else { 0 },
             "staleDisplayAllocations" : if options.apply {
             released_display_allocation_count } else { 0 }, "total" : repaired_total, },
@@ -506,6 +590,51 @@ pub(crate) mod service_commands {
             return Some("pending_acquisition_without_ready_browser");
         }
         None
+    }
+
+    /// Returns a repairable reason only when retained state proves that a
+    /// terminal acquisition quarantine no longer protects a possible effect.
+    fn rollback_incomplete_acquisition_repair_reason(
+        state: &ServiceState,
+        lease: &RemoteViewAcquisitionLease,
+    ) -> Result<&'static str, &'static str> {
+        if state.browsers.contains_key(&lease.browser_id) {
+            return Err("browser_record_present");
+        }
+        if state
+            .browser_process_identities
+            .contains_key(&lease.browser_id)
+        {
+            return Err("browser_process_identity_present");
+        }
+        if state.sessions.contains_key(&lease.session_id) {
+            return Err("session_record_present");
+        }
+        if state
+            .remote_view_routes
+            .get(&lease.route_id)
+            .is_some_and(|route| route.state != "released")
+        {
+            return Err("route_not_released");
+        }
+        if state
+            .display_allocations
+            .get(&lease.display_allocation_id)
+            .is_some_and(|allocation| allocation.state != "released")
+        {
+            return Err("display_allocation_not_released");
+        }
+        if let Some(entry_id) = lease.route_pool_entry_id.as_ref() {
+            if let Some(entry) = state.route_pool.get(entry_id) {
+                if !matches!(entry.state.as_str(), "available" | "unavailable") {
+                    return Err("route_pool_entry_not_terminal");
+                }
+                if entry.current_route_allocation_id.is_some() {
+                    return Err("route_pool_entry_still_allocated");
+                }
+            }
+        }
+        Ok("inactive_retained_state")
     }
     pub(crate) fn route_pool_checkout_stale_reason(
         state: &ServiceState,

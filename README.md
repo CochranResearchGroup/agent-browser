@@ -2431,6 +2431,12 @@ The repair returns stale checked-out route-pool entries to `available` and
 releases the stale remote-view route and display-allocation records tied to
 those entries, so retained state no longer needs hand edits after a browser
 crash.
+It also accepts an exact `acquisitionLeaseId` for a
+`failed/rollback_incomplete` acquisition. Dry run reports that lease only when
+its browser, process identity, and session are absent and its route, display,
+and pool are terminal. Apply records confirmed inactive retained state and
+promotes the lease to `failed/rollback_complete`; any live or ambiguous
+evidence remains quarantined with a typed skipped reason.
 Use `pnpm test:rdp-guac-cold-restart-readback-live` for the Slice J cold
 restart readback gate. It uses the current Guacamole route-pool readiness
 report, launches one isolated `remote_headed` browser, checks out one

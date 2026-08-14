@@ -100,7 +100,9 @@ use crate::native::service_model::{JobState, ServiceJob};
 use crate::native::service_model::{LeaseState, ProfileAllocationPolicy};
 use crate::native::service_network_capture::*;
 use crate::native::service_probe::*;
-use crate::native::service_retained_state::repair_route_pool_service_state;
+use crate::native::service_retained_state::{
+    repair_route_pool_service_state, repair_route_pool_service_state_for_lease,
+};
 use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
 use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use crate::native::service_ui_action::*;
@@ -316,6 +318,149 @@ fn test_repair_route_pool_service_state_apply_rolls_back_stale_pending_acquisiti
     assert_eq!(
         lease.cleanup.as_ref().unwrap()["cleanup"]["state"],
         "stale_pending_acquisition_repaired"
+    );
+}
+
+#[test]
+fn test_repair_route_pool_service_state_confirms_inactive_terminal_quarantine() {
+    let mut service_state = ServiceState {
+        display_allocations: BTreeMap::from([(
+            "display-terminal".to_string(),
+            DisplayAllocation {
+                id: "display-terminal".to_string(),
+                state: "released".to_string(),
+                ..DisplayAllocation::default()
+            },
+        )]),
+        remote_view_routes: BTreeMap::from([(
+            "route-terminal".to_string(),
+            RemoteViewRoute {
+                id: "route-terminal".to_string(),
+                state: "released".to_string(),
+                display_allocation_id: Some("display-terminal".to_string()),
+                ..RemoteViewRoute::default()
+            },
+        )]),
+        route_pool: BTreeMap::from([(
+            "pool-terminal".to_string(),
+            RoutePoolEntry {
+                id: "pool-terminal".to_string(),
+                route_id: "route-terminal".to_string(),
+                state: "available".to_string(),
+                current_route_allocation_id: None,
+                ..RoutePoolEntry::default()
+            },
+        )]),
+        remote_view_acquisition_leases: BTreeMap::from([(
+            "lease-terminal".to_string(),
+            RemoteViewAcquisitionLease {
+                id: "lease-terminal".to_string(),
+                browser_id: "session:terminal".to_string(),
+                session_id: "terminal".to_string(),
+                route_id: "route-terminal".to_string(),
+                display_allocation_id: "display-terminal".to_string(),
+                route_pool_entry_id: Some("pool-terminal".to_string()),
+                state: "failed".to_string(),
+                phase: "rollback_incomplete".to_string(),
+                failure_reason: Some("focus_failed".to_string()),
+                cleanup: Some(json!({
+                    "state": "rollback_incomplete",
+                    "cleanup": { "state": "pending_after_rollback" },
+                    "quarantine": { "state": "active" }
+                })),
+                ..RemoteViewAcquisitionLease::default()
+            },
+        )]),
+        ..ServiceState::default()
+    };
+
+    let result = repair_route_pool_service_state_for_lease(
+        &mut service_state,
+        ServiceRoutePoolRepairOptions {
+            apply: true,
+            stale_checkouts: true,
+            stale_pending_acquisitions: true,
+        },
+        Some("lease-terminal"),
+        "2026-08-14T12:00:00Z",
+    );
+
+    assert_eq!(
+        result["candidateCounts"]["rollbackIncompleteAcquisitions"],
+        1
+    );
+    assert_eq!(
+        result["repairedCounts"]["rollbackIncompleteAcquisitions"],
+        1
+    );
+    let lease = &service_state.remote_view_acquisition_leases["lease-terminal"];
+    assert_eq!(lease.state, "failed");
+    assert_eq!(lease.phase, "rollback_complete");
+    assert_eq!(
+        lease.cleanup.as_ref().unwrap()["cleanup"]["state"],
+        "confirmed_inactive_retained_state"
+    );
+    assert!(lease.cleanup.as_ref().unwrap().get("quarantine").is_none());
+    assert_eq!(service_state.route_pool["pool-terminal"].state, "available");
+    assert_eq!(
+        service_state.remote_view_routes["route-terminal"].state,
+        "released"
+    );
+    assert_eq!(
+        service_state.display_allocations["display-terminal"].state,
+        "released"
+    );
+}
+
+#[test]
+fn test_repair_route_pool_service_state_rejects_terminal_quarantine_with_live_browser() {
+    let mut service_state = ServiceState {
+        browsers: BTreeMap::from([(
+            "session:terminal".to_string(),
+            BrowserProcess {
+                id: "session:terminal".to_string(),
+                health: ServiceBrowserHealth::Ready,
+                ..BrowserProcess::default()
+            },
+        )]),
+        remote_view_acquisition_leases: BTreeMap::from([(
+            "lease-terminal".to_string(),
+            RemoteViewAcquisitionLease {
+                id: "lease-terminal".to_string(),
+                browser_id: "session:terminal".to_string(),
+                session_id: "terminal".to_string(),
+                route_id: "route-terminal".to_string(),
+                display_allocation_id: "display-terminal".to_string(),
+                state: "failed".to_string(),
+                phase: "rollback_incomplete".to_string(),
+                ..RemoteViewAcquisitionLease::default()
+            },
+        )]),
+        ..ServiceState::default()
+    };
+
+    let result = repair_route_pool_service_state_for_lease(
+        &mut service_state,
+        ServiceRoutePoolRepairOptions {
+            apply: true,
+            stale_checkouts: true,
+            stale_pending_acquisitions: true,
+        },
+        Some("lease-terminal"),
+        "2026-08-14T12:00:00Z",
+    );
+
+    assert_eq!(
+        result["candidateCounts"]["rollbackIncompleteAcquisitions"],
+        0
+    );
+    assert_eq!(
+        result["skippedReasons"]["rollbackIncompleteAcquisitions"]["lease-terminal"],
+        "browser_record_present"
+    );
+    assert_eq!(
+        service_state.remote_view_acquisition_leases["lease-terminal"].phase,
+        "rollback_incomplete"
     );
 }
 #[test]

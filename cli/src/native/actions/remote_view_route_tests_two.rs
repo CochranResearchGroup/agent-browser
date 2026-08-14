@@ -285,6 +285,47 @@ async fn test_service_route_pool_repair_dry_run_reports_stale_checkouts() {
     assert_eq!(result["data"]["repairedCounts"]["staleCheckouts"], 0);
     assert!(state.browser.is_none());
 }
+
+#[tokio::test]
+async fn test_service_route_pool_repair_scopes_terminal_quarantine_to_exact_lease() {
+    let mut state = DaemonState::new();
+    let cmd = json!({
+        "action": "service_route_pool_repair",
+        "acquisitionLeaseId": "lease-a",
+        "serviceState": {
+            "remoteViewAcquisitionLeases": {
+                "lease-a": {
+                    "id": "lease-a",
+                    "browserId": "session:a",
+                    "sessionId": "a",
+                    "routeId": "route-a",
+                    "displayAllocationId": "display-a",
+                    "state": "failed",
+                    "phase": "rollback_incomplete"
+                },
+                "lease-b": {
+                    "id": "lease-b",
+                    "browserId": "session:b",
+                    "sessionId": "b",
+                    "routeId": "route-b",
+                    "displayAllocationId": "display-b",
+                    "state": "failed",
+                    "phase": "rollback_incomplete"
+                }
+            }
+        }
+    });
+
+    let result = execute_command(&cmd, &mut state).await;
+
+    assert_eq!(result["success"], true);
+    assert_eq!(
+        result["data"]["candidates"]["rollbackIncompleteAcquisitions"],
+        json!(["lease-a"])
+    );
+    assert_eq!(result["data"]["policy"]["acquisitionLeaseId"], "lease-a");
+}
+
 #[tokio::test]
 async fn test_service_route_pool_repair_dry_run_reads_persisted_state() {
     let guard = EnvGuard::new(&["HOME"]);

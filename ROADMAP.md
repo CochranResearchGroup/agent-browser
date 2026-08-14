@@ -7,6 +7,26 @@ This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
 
+## P114 | Terminal Route Quarantine Recovery
+
+State: OPEN
+Current state: one Google Messages route-bound acquisition lease remains in
+`rollback_incomplete` after its matching browser, process identity, and session
+disappeared and its route, display, and pool became terminal. The existing
+repair action now has focused source coverage for exact-lease dry run and
+apply, safe promotion to `rollback_complete`, and rejection when any live
+browser evidence remains. Broader validation and one installed exact-lease
+recovery remain open.
+
+### Plan
+
+- `docs/dev/plans/0114-2026-08-14-terminal-route-quarantine-recovery-plan.md`
+
+### Next Recommendation
+
+Complete source and documentation validation, install one matching checkpoint,
+then dry-run and apply only the exact inactive Google Messages quarantine.
+
 ## P113 | Workspace Viewport Just-Works UX
 
 State: COMPLETED
