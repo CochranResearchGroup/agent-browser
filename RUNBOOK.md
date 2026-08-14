@@ -4,6 +4,79 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 153 | 2026-08-14
+
+Scope: implement, install, and live-validate Plan 0113 so the workspace
+viewport connects a healthy managed browser without exposing provider and
+lease mechanics as ordinary controls.
+
+Actions:
+
+- added a pure semantic source resolver and bounded automatic connection
+  coordinator for ready-source selection, approved route recovery, and
+  observer-lease acquisition;
+- replaced duplicate provider buttons with a compact `View` menu and one
+  connection state, retained one `Retry connection` fallback, and moved
+  low-level operations into text-labelled `Advanced connection controls`;
+- kept safely recoverable live browsers in active inventory and excluded
+  recovered informational incidents from attention classification;
+- updated help, README, the repository and installed Agent Browser skill, and
+  remote-view documentation;
+- published the release-mode checkpoint, synchronized workstation payload and
+  the inactive supervisor manifest, and preserved the existing QBO browser
+  process, profile, display, CDP endpoint, and RDP route.
+
+Validation:
+
+- focused dashboard source, projection, navigator, inspector, viewport,
+  route-confusion, and handoff-documentation gates passed;
+- dashboard and docs builds, Rust formatting, strict Clippy, focused CLI-help
+  test, validation selection, and diff checks passed;
+- installed runtime smoke passed with runtime health ready, route readiness
+  ready, a live Guacamole frame, workspace state `controllable`, and QBO PID
+  `51579` preserved;
+- installed, release, and packaged Linux binaries share SHA-256
+  `2ec94b993431da5c91db921250c2a7fadb363f2a9cb4bfa9a52e1b2712141452`;
+  installed dashboard SHA-256 is
+  `017b73508b33138b6b61bd552e26630db871daefb391dc760d41a3843d0e6d3e`;
+- install doctor reports no binary, dashboard, workstation, or supervisor
+  drift. The remaining duplicate-profile-pressure finding is the preserved
+  P111 forensic issue.
+
+Result:
+
+- P113 is complete, installed, and live-smoked;
+- the normal viewport no longer requires a provider-selection or viewer-lease
+  click to expose the healthy QBO desktop;
+- P111 remains the sole owner of duplicate-profile authority work.
+
+## Turn 152 | 2026-08-14
+
+Scope: simplify the workspace viewport so a healthy managed browser displays
+through its best usable source without exposing provider and lease mechanics as
+normal operator controls.
+
+Actions:
+
+- audited the focused and tiled viewport source controls, refresh and lease
+  actions, automatic iframe retry, and workspace inventory classification;
+- confirmed the QBO browser is healthy while its RDP stream can independently
+  require safe route reattachment;
+- found that provider-only source labels can be indistinguishable and that two
+  adjacent circular-arrow buttons perform unrelated reload and lease effects;
+- opened Plan 0113 for an automatic connection coordinator, compact semantic
+  source menu, progressive disclosure, and honest browser versus stream state.
+
+Validation:
+
+- implementation has not begun;
+- read-only service status and current source are the planning authority.
+
+Result:
+
+- P113 is in progress;
+- the next action is the first red-to-green automatic source-selection slice.
+
 ## Turn 151 | 2026-08-13
 
 Scope: repair the dashboard remote-view reconnect failure, validate all four

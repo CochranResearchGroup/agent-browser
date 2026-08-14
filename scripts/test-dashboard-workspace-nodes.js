@@ -39,12 +39,12 @@ assert.match(
 assert.match(
   workspaceNavigatorSource,
   /preferredIds: WorkspaceNodeActionId\[\] = \["repair", "focus", "launch", "seed"\]/,
-  'A stream recovery row must expose Wake stream before generic Focus',
+  'A stream recovery row must expose Reconnect view before generic Focus',
 );
 assert.match(
   workspaceNavigatorSource,
   /action\.id === "repair"[\s\S]*pushWorkspaceViewportUrl\(node, "view"\)/,
-  'Wake stream must open the recovery viewport instead of acting like a dead selection',
+  'Reconnect view must open the recovery viewport instead of acting like a dead selection',
 );
 
 function byId(nodes, id) {
@@ -432,9 +432,10 @@ assert.equal(unboundDisplayNode.viewStream?.controllable, false);
 assert.equal(action(unboundDisplayNode, 'view').enabled, false);
 assert.equal(action(unboundDisplayNode, 'control').enabled, false);
 assert.equal(action(unboundDisplayNode, 'repair').enabled, true);
-assert.equal(action(unboundDisplayNode, 'repair').label, 'Wake stream');
-assert.equal(unboundDisplayNode.inventoryPlacement?.lane, 'attention');
-assert.equal(workspaceInventoryGroupForNode(unboundDisplayNode), 'needs-attention');
+assert.equal(action(unboundDisplayNode, 'repair').label, 'Reconnect view');
+assert.equal(action(unboundDisplayNode, 'repair').automatic, true);
+assert.equal(unboundDisplayNode.inventoryPlacement?.lane, 'primary');
+assert.equal(workspaceInventoryGroupForNode(unboundDisplayNode), 'active');
 
 const proofMissingNode = byId(diagnosticNodes, 'browser:rdp-proof-missing');
 assert.equal(proofMissingNode.diagnostics.some((diagnostic) => diagnostic.kind === 'idle-route-display'), false);

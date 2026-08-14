@@ -89,7 +89,7 @@ Do not run another `remote-view open` only because:
 - the dashboard asked you to sign in again; or
 - a single-viewer route was taken over by another client.
 
-For a single-viewer disconnect, use **Take over** from the durable handoff
+For a single-viewer disconnect, use **Take control** from the durable handoff
 surface. If the tab was deliberately closed, the handoff remains closed until
 the operator selects **Reopen tab**.
 
@@ -98,6 +98,18 @@ lease authority, even when a CDP stream is currently selected for presentation.
 Synthetic daemon stream identifiers are never sent as remote-view route IDs.
 Remote-view recovery requests receive a bounded extended proxy budget, and a
 typed backend failure code is shown when recovery is rejected.
+
+The workspace viewport keeps browser lifecycle separate from presentation
+readiness. A healthy retained browser remains in Active while its view
+reconnects. The compact **View** menu uses semantic Desktop, Live page, and
+Snapshot names and removes duplicate provider choices. It preserves a usable
+operator selection; otherwise it selects a ready source and performs one safe
+route or observer reconnect attempt for the current binding. If recovery does
+not complete, use the single **Retry connection** action. **Take control** is
+always explicit. Reload, route reattach, viewer reconnect or release, and
+Guacamole input settings are grouped under **Advanced connection controls**.
+Automatic recovery never launches another browser, mutates its profile, takes
+control, or releases a viewer.
 
 ## Keep URL roles separate
 

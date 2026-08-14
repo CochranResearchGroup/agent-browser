@@ -665,6 +665,15 @@ live targets before follow-on work.
 Dashboard workspace viewport URLs that carry a stale `tab=target:*` selection
 are replaced with the current live service tab before control mode queues
 `view_focus`; do not treat that recovery as browser failure.
+The viewport also separates live browser health from presentation readiness. A
+healthy retained browser remains Active while its Desktop or Live page source
+reconnects. The compact View menu preserves a usable explicit source, otherwise
+selects a ready source and makes one bounded route or observer reconnect attempt
+for the current binding. Use the single Retry connection action if automatic
+recovery does not finish. Take control is always explicit. Route reattach,
+viewer reconnect or release, reload, and Guacamole input settings are grouped
+under Advanced connection controls; automatic recovery never launches another
+browser, changes the profile, takes control, or releases a viewer.
 When a client is finished with a leased shared-profile tab, use
 `releaseServiceTabHandle()` or service request `action: "tab_handle_release"`.
 Release best-effort closes that exact physical target when the routed live

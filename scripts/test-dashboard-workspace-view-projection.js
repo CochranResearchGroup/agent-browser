@@ -114,6 +114,47 @@ assert.equal(unrouted.selected.canControl, false);
 assert.equal(unrouted.selected.readiness.state, 'reattachable_no_route');
 assert.equal(unrouted.selected.readiness.recoveryAction, 'service_remote_view_browser_reattach');
 assert.match(unrouted.selected.readiness.reason ?? '', /no remote-view route/i);
+const autoRecoverableNode = deriveWorkspaceNodes({
+  serviceBrowsers: [{
+    id: 'browser-auto-recoverable',
+    health: 'ready',
+    pid: 7702,
+    activeSessionIds: ['session-auto-recoverable'],
+    viewStreams: [{
+      ...rdp,
+      id: 'rdp-auto-recoverable',
+      routeId: null,
+      attachability: {
+        state: 'reattachable_no_route',
+        recommendedAction: 'service_remote_view_browser_reattach',
+        reason: 'browser is live but no remote-view route is selected',
+      },
+    }],
+  }],
+  serviceSessions: [{
+    id: 'session-auto-recoverable',
+    browserIds: ['browser-auto-recoverable'],
+    tabIds: ['tab-auto-recoverable'],
+  }],
+  serviceTabs: [{
+    id: 'tab-auto-recoverable',
+    browserId: 'browser-auto-recoverable',
+    lifecycle: 'active',
+    url: 'https://example.test/auto-recoverable',
+  }],
+  incidents: [{
+    id: 'incident-auto-recovered',
+    browserId: 'browser-auto-recoverable',
+    state: 'recovered',
+    severity: 'info',
+    latestMessage: 'Browser recovered and is ready.',
+    recommendedAction: 'No operator action required.',
+  }],
+}).find((node) => node.id === 'browser:browser-auto-recoverable');
+assert.ok(autoRecoverableNode);
+assert.equal(autoRecoverableNode.group, 'active');
+assert.notEqual(autoRecoverableNode.state, 'needs-attention');
+assert.equal(autoRecoverableNode.actions.find((action) => action.id === 'repair')?.automatic, true);
 
 const observedSources = applyStatusObservationsToWorkspaceSources({
   serviceBrowsers: [{ id: 'browser-observed', viewStreams: [{ id: 'stream-observed', provider: 'rdp_gateway' }] }],

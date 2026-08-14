@@ -5490,10 +5490,16 @@ memory, CPU, CDP, and stream-port indicators when available, and open a dense
 right-pane Workspace inspector with action reasons, page identity, ownership,
 viewport readiness, and collapsed diagnostic evidence. Selecting a row with an
 embeddable stream opens the workspace viewport, including CDP screencast streams.
-When a browser reports several streams, the viewport lets the operator choose
-CDP or RDP and remembers that source per browser. Recoverable browsers with no
-usable stream remain visible with Wake stream, which reattaches or switches the
-retained browser route without launching a duplicate browser process.
+When a browser reports several streams, the viewport presents one compact View
+menu with Desktop, Live page, and Snapshot choices and remembers a usable
+operator selection. If the selected presentation is unavailable, the viewport
+automatically chooses a ready source, performs at most one safe route recovery
+or observer reconnect for the current binding, and keeps the live browser in
+Active. Normal recovery uses one connection status and one Retry connection
+fallback. Explicit Take control and lower-level route, viewer, reload, release,
+and Guacamole settings remain under Advanced connection controls. Automatic
+recovery never takes controller ownership, releases a viewer, launches another
+browser, or mutates the profile.
 Detected non-owned browsers with reachable page CDP targets provide Screenshot
 and a responsive Watch live image feed. A dashboard superuser can explicitly
 Borrow pointer, keyboard, and wheel input for up to five minutes, then Release

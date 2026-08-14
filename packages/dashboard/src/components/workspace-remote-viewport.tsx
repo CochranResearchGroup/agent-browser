@@ -3,18 +3,16 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from "react";
 import { createPortal } from "react-dom";
 import { useAtomValue, useSetAtom } from "jotai/react";
-import { AlertTriangle, Download, ExternalLink, LogIn, Maximize2, Minimize2, MousePointer2, PlugZap, RefreshCw, Settings2, SquareArrowOutUpRight, Unplug } from "lucide-react";
+import { AlertTriangle, ChevronDown, Download, ExternalLink, LogIn, Maximize2, Minimize2, MoreHorizontal, MousePointer2, PlugZap, RefreshCw, Settings2, SquareArrowOutUpRight, Unplug } from "lucide-react";
 import {
   canEmbedViewStream,
   canOpenControlViewStream,
   canOpenViewStream,
   controlInputLabel,
-  viewStreamCapabilityLabel,
   viewStreamDashboardFrameUrl,
   viewStreamExternalUrl,
   viewStreamLabel,
   viewStreamOpenTitle,
-  viewStreamReadinessLabel,
   viewStreamRouteSummary,
   type ServiceViewStream,
 } from "@/lib/service-view-streams";
@@ -31,6 +29,13 @@ import {
   selectWorkspaceViewerRoute,
   workspaceRecoveryFailureMessage,
 } from "@/lib/workspace-recovery";
+import {
+  planAutomaticWorkspaceConnection,
+  resolveWorkspaceViewSources,
+  workspaceConnectionReadinessGeneration,
+  workspaceViewerRouteIsAttached,
+  type WorkspaceViewSource,
+} from "@/lib/workspace-view-connection";
 import { activePortAtom, activeSessionNameAtom, sessionsAtom } from "@/store/sessions";
 import { appendConsoleLogsAtom } from "@/store/stream";
 import type { SessionInfo } from "@/types";
@@ -39,8 +44,6 @@ import { SERVICE_API_BASE } from "@/lib/dashboard-api";
 import {
   deriveWorkspaceViewportReadiness,
   deriveWorkspaceViewportUxState,
-  workspaceViewportReadinessStatusLabel,
-  workspaceViewportUxStateLabel,
 } from "@/lib/workspace-viewport-state";
 import {
   INITIAL_WORKSPACE_VIEWPORT_CONTROLLER_STATE,
@@ -51,6 +54,16 @@ import {
 } from "@/lib/workspace-viewport-controller";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { StreamMessage } from "@/types";
 import {
   borrowForeignCdpControl,
@@ -1223,6 +1236,49 @@ function WorkspaceCdpSnapshotViewer({
   );
 }
 
+function WorkspaceSourceMenu({
+  sources,
+  selected,
+  onSelect,
+  label = "View",
+}: {
+  sources: readonly WorkspaceViewSource[];
+  selected: WorkspaceViewSource | null;
+  onSelect: (source: WorkspaceViewSource) => void;
+  label?: string;
+}) {
+  if (sources.length <= 1) return null;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button type="button" size="sm" variant="outline" aria-label={`${label} source`}>
+          {label}: {selected?.label ?? "Unavailable"}
+          <ChevronDown className="size-3.5" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-56">
+        <DropdownMenuLabel>Browser view</DropdownMenuLabel>
+        <DropdownMenuRadioGroup
+          value={selected?.identity ?? ""}
+          onValueChange={(identity) => {
+            const source = sources.find((candidate) => candidate.identity === identity);
+            if (source) onSelect(source);
+          }}
+        >
+          {sources.map((source) => (
+            <DropdownMenuRadioItem key={source.identity} value={source.identity}>
+              <span className="flex min-w-0 flex-col">
+                <span>{source.label}</span>
+                <span className="truncate text-xs text-muted-foreground">{source.detail}</span>
+              </span>
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function WorkspaceRemoteViewport({
   fallback,
   selectedWorkspaceContext,
@@ -1253,6 +1309,8 @@ export function WorkspaceRemoteViewport({
   const [fullscreenFallback, setFullscreenFallback] = useState(false);
   const [streamRefreshNonce, setStreamRefreshNonce] = useState(() => Date.now());
   const [tileRefreshNonces, setTileRefreshNonces] = useState<Record<string, number>>({});
+  const [automaticAttemptKeys, setAutomaticAttemptKeys] = useState<string[]>([]);
+  const [connectionRetryNonce, setConnectionRetryNonce] = useState(0);
   const [frameIssue, setFrameIssue] = useState<WorkspaceFrameIssue>(null);
   const [viewportController, dispatchViewportController] = useReducer(
     workspaceViewportControllerReducer,
@@ -1262,6 +1320,7 @@ export function WorkspaceRemoteViewport({
   const viewportFrameRef = useRef<HTMLIFrameElement | null>(null);
   const focusedKeyRef = useRef("");
   const streamFrameRetryRef = useRef(0);
+  const automaticAttemptKeyRef = useRef(new Set<string>());
   const touchClickBridgeCleanupRef = useRef<(() => void) | null>(null);
 
   const clearFullscreenFallbackOffset = useCallback(() => {
@@ -1324,6 +1383,11 @@ export function WorkspaceRemoteViewport({
     ?? { tab: null, tabIndex: null, recoveredFromStaleSelection: false, staleSelectionId: null };
   const streamChoices = selectedProjection?.streamChoices ?? [];
   const stream = selectedProjection?.stream ?? null;
+  const singleWorkspaceMode = viewportSelection?.mode === "control" ? "control" : "view";
+  const sourceResolution = useMemo(
+    () => resolveWorkspaceViewSources({ streams: streamChoices, selected: stream, mode: singleWorkspaceMode }),
+    [singleWorkspaceMode, stream, streamChoices],
+  );
   const tileStreams: WorkspaceViewportTile[] = viewportSelection?.mode === "tile"
     ? projection.tiles.map((tile) => ({
         browser: tile.browser,
@@ -1368,7 +1432,6 @@ export function WorkspaceRemoteViewport({
   const canRenderCdpStream = canRenderSelectedBrowser && isCdpScreencastStream(stream) && Boolean(streamUrl) && streamPreflight.status === "ready";
   const canRenderSnapshotStream = canRenderSelectedBrowser && snapshotStream && Boolean(snapshotUrl) && streamPreflight.status === "ready";
   const canRenderFrame = canRenderSelectedBrowser && !isCdpScreencastStream(stream) && !snapshotStream && canEmbed && streamPreflight.status === "ready";
-  const singleWorkspaceMode = viewportSelection?.mode === "control" ? "control" : "view";
   const viewportUxState = deriveWorkspaceViewportUxState({
     hasBrowser: Boolean(browser),
     browserHealth: browser?.health,
@@ -1859,6 +1922,33 @@ export function WorkspaceRemoteViewport({
     ...(workspaceViewerRoute?.controllerLeaseId ? [workspaceViewerRoute.controllerLeaseId] : []),
   ].filter((id): id is string => Boolean(id?.trim())))), [workspaceViewerRoute?.controllerLeaseId, workspaceViewerRoute?.viewerLeaseIds]);
   const workspaceViewerId = activeSessionName || "operator";
+  const routeRecoveryAction = selectedProjection?.readiness.recoveryAction ?? null;
+  const connectionReadinessGeneration = workspaceConnectionReadinessGeneration(
+    workspaceViewerRoute ?? stream,
+    routeRecoveryAction,
+  );
+  const connectionPlan = planAutomaticWorkspaceConnection({
+    browserId: browser?.id ?? "unselected",
+    browserLive: selectedProjection?.authority.lifecycle.live ?? false,
+    mode: singleWorkspaceMode,
+    sourceResolution,
+    currentStream: stream,
+    routeRecoveryAction,
+    readinessGeneration: connectionReadinessGeneration,
+    viewerRoute: workspaceViewerRoute,
+    viewerRouteReady: workspaceViewerRouteIsAttached(workspaceViewerRoute),
+    viewerLeaseIds: workspaceViewerLeaseIds,
+    attemptedActionKeys: automaticAttemptKeys,
+  });
+  const connectionInProgress = Boolean(recoveryPending)
+    || loading
+    || connectionPlan.status === "connecting"
+    || streamPreflight.status === "checking";
+  const connectionStatusLabel = connectionInProgress
+    ? "Connecting…"
+    : viewportReadiness.status === "ready"
+      ? "Ready"
+      : "Action required";
 
   const recoverWorkspaceBrowser = useCallback(async (
     targetBrowser: WorkspaceViewportBrowser | null,
@@ -1980,6 +2070,54 @@ export function WorkspaceRemoteViewport({
     }
   }, [postWorkspaceRecoveryRequest, refreshProjection, workspaceViewerLeaseIds]);
 
+  const retryWorkspaceConnection = useCallback(() => {
+    automaticAttemptKeyRef.current.clear();
+    setAutomaticAttemptKeys([]);
+    setConnectionRetryNonce((current) => current + 1);
+    setFocusMessage("Retrying the browser connection.");
+    refreshWorkspaceViewport();
+  }, [refreshWorkspaceViewport]);
+
+  useEffect(() => {
+    automaticAttemptKeyRef.current.clear();
+    setAutomaticAttemptKeys([]);
+  }, [browser?.id]);
+
+  useEffect(() => {
+    if (viewportSelection?.mode === "tile" || !browser || loading || recoveryPending || takeoverPending) return;
+    const action = connectionPlan.action;
+    if (!action || automaticAttemptKeyRef.current.has(action.attemptKey)) return;
+    automaticAttemptKeyRef.current.add(action.attemptKey);
+    setAutomaticAttemptKeys((current) => current.includes(action.attemptKey)
+      ? current
+      : [...current, action.attemptKey]);
+
+    if (action.kind === "select-source") {
+      const index = streamChoices.indexOf(action.source.stream);
+      if (index >= 0) selectWorkspaceStream(browser.id, action.source.stream, index);
+      return;
+    }
+    if (action.kind === "recover-route") {
+      void recoverWorkspaceBrowser(browser, workspaceViewerRoute ?? stream);
+      return;
+    }
+    void reconnectWorkspaceViewer();
+  }, [
+    browser,
+    connectionPlan.action,
+    connectionRetryNonce,
+    loading,
+    reconnectWorkspaceViewer,
+    recoverWorkspaceBrowser,
+    recoveryPending,
+    selectWorkspaceStream,
+    stream,
+    streamChoices,
+    takeoverPending,
+    viewportSelection?.mode,
+    workspaceViewerRoute,
+  ]);
+
   const requestWorkspaceTakeover = useCallback(async (openMode: "iframe" | "external") => {
     if (!browser || !stream) return false;
     const sessionName = viewportSelection ? daemonSessionNameForBrowser(browser, viewportSelection.selection) : null;
@@ -2092,6 +2230,11 @@ export function WorkspaceRemoteViewport({
               const nonce = tileRefreshNonces[tile.browser.id] ?? streamRefreshNonce;
               const tileFrameUrl = tile.frameUrl ? buildWorkspaceFrameUrl(tile.frameUrl, nonce) : null;
               const tileChoices = tile.streamChoices;
+              const tileSourceResolution = resolveWorkspaceViewSources({
+                streams: tileChoices,
+                selected: tile.stream,
+                mode: "view",
+              });
               return (
                 <article
                   key={tile.browser.id}
@@ -2108,7 +2251,7 @@ export function WorkspaceRemoteViewport({
                           <span className="workspace-remote-viewport-badge-text">shared route</span>
                         </Badge>
                       )}
-                      {tileFrameUrl ? (
+                      {tileFrameUrl && (
                         <Button
                           type="button"
                           size="icon"
@@ -2124,19 +2267,6 @@ export function WorkspaceRemoteViewport({
                         >
                           <RefreshCw className="size-3.5" />
                         </Button>
-                      ) : (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="default"
-                          disabled={Boolean(recoveryPending)}
-                          onClick={() => {
-                            void recoverWorkspaceBrowser(tile.browser, tile.stream);
-                          }}
-                        >
-                          <PlugZap className={cn("size-3.5", recoveryPending === "route-refresh" && "animate-spin")} />
-                          Wake stream
-                        </Button>
                       )}
                       {tile.externalUrl && (
                         <Button size="icon" variant="outline" asChild>
@@ -2147,26 +2277,16 @@ export function WorkspaceRemoteViewport({
                       )}
                     </div>
                   </header>
-                  {tileChoices.length > 1 && (
-                    <div className="workspace-remote-viewport-stream-picker" role="group" aria-label={`Stream source for ${tile.browser.displayName || tile.browser.id}`}>
-                      {tileChoices.map((option, index) => {
-                        const optionKey = tile.streamChoiceKeys[index] ?? `${tile.browser.id}:${index}`;
-                        const selected = option === tile.stream;
-                        return (
-                          <Button
-                            key={optionKey}
-                            type="button"
-                            size="sm"
-                            variant={selected ? "default" : "outline"}
-                            aria-pressed={selected}
-                            onClick={() => selectWorkspaceStream(tile.browser.id, option, index)}
-                          >
-                            Use {viewStreamLabel(option)}
-                          </Button>
-                        );
-                      })}
-                    </div>
-                  )}
+                  <div className="workspace-remote-viewport-stream-picker">
+                    <WorkspaceSourceMenu
+                      sources={tileSourceResolution.choices}
+                      selected={tileSourceResolution.selected}
+                      onSelect={(source) => {
+                        const index = tileChoices.indexOf(source.stream);
+                        if (index >= 0) selectWorkspaceStream(tile.browser.id, source.stream, index);
+                      }}
+                    />
+                  </div>
                   {tile.sharedRoute && (
                     <p className="workspace-remote-viewport-notice workspace-remote-viewport-notice-bad">
                       <AlertTriangle className="size-3.5" />
@@ -2186,8 +2306,8 @@ export function WorkspaceRemoteViewport({
                     ) : (
                       <div className="workspace-remote-viewport-empty workspace-remote-viewport-tile-empty">
                         <PlugZap className="size-6" />
-                        <h3>Stream needs attention</h3>
-                        <p>This retained browser has no embeddable stream. Reattach it to reuse the existing process and profile.</p>
+                        <h3>Connecting browser view</h3>
+                        <p>The browser is still running. Retry its presentation connection without restarting the browser or profile.</p>
                         <div className="workspace-remote-viewport-empty-actions">
                           <Button
                             size="sm"
@@ -2198,7 +2318,7 @@ export function WorkspaceRemoteViewport({
                             }}
                           >
                             <PlugZap className={cn("size-3.5", recoveryPending === "route-refresh" && "animate-spin")} />
-                            Wake stream
+                            Retry connection
                           </Button>
                         </div>
                       </div>
@@ -2240,80 +2360,23 @@ export function WorkspaceRemoteViewport({
           <p>{browser ? workspaceViewportSubtitle(browser, tabSelection.tab) : "Select a workspace with service-owned view-stream evidence."}</p>
         </div>
         <div className="workspace-remote-viewport-actions">
-          {browser && streamChoices.length > 1 && (
-            <div className="workspace-remote-viewport-stream-picker" role="group" aria-label="Stream source">
-              {streamChoices.map((option, index) => {
-                const optionKey = selectedProjection?.streamChoiceKeys[index] ?? `${browser.id}:${index}`;
-                const selected = option === stream;
-                return (
-                  <Button
-                    key={optionKey}
-                    type="button"
-                    size="sm"
-                    variant={selected ? "default" : "outline"}
-                    aria-pressed={selected}
-                    aria-label={`Use ${viewStreamLabel(option)} stream`}
-                    title={`${viewStreamRouteSummary(option)}. Use this stream for ${browser.displayName || browser.id}.`}
-                    onClick={() => selectWorkspaceStream(browser.id, option, index)}
-                  >
-                    Use {viewStreamLabel(option)}
-                  </Button>
-                );
-              })}
-            </div>
+          {browser && (
+            <WorkspaceSourceMenu
+              sources={sourceResolution.choices}
+              selected={sourceResolution.selected}
+              onSelect={(source) => {
+                const index = streamChoices.indexOf(source.stream);
+                if (index >= 0) selectWorkspaceStream(browser.id, source.stream, index);
+              }}
+            />
           )}
-          {stream && (
-            <Badge
-              variant={canControl ? "default" : canEmbed ? "secondary" : "outline"}
-              className="workspace-remote-viewport-badge"
-            >
-              <span className="workspace-remote-viewport-badge-text">
-                {viewStreamCapabilityLabel(stream)}
-              </span>
-            </Badge>
-          )}
-          {stream && (
-            <Badge variant="outline" className="workspace-remote-viewport-badge">
-              <span className="workspace-remote-viewport-badge-text">
-                {viewStreamRouteSummary(stream)}
-              </span>
-            </Badge>
-          )}
-          {stream && (
-            <Badge
-              variant={viewStreamReadinessLabel(stream) === "ready" ? "secondary" : "outline"}
-              className="workspace-remote-viewport-badge"
-            >
-              <span className="workspace-remote-viewport-badge-text">
-                {viewStreamReadinessLabel(stream)}
-              </span>
-            </Badge>
-          )}
-          <Badge variant="outline" className="workspace-remote-viewport-badge">
-            <span className="workspace-remote-viewport-badge-text">
-              {workspaceViewportUxStateLabel(viewportUxState)}
-            </span>
-          </Badge>
           <Badge
             variant={viewportReadiness.status === "ready" ? "secondary" : viewportReadiness.status === "blocked" ? "destructive" : "outline"}
             className="workspace-remote-viewport-badge"
+            aria-live="polite"
           >
-            <span className="workspace-remote-viewport-badge-text">
-              {workspaceViewportReadinessStatusLabel(viewportReadiness.status)}
-            </span>
+            <span className="workspace-remote-viewport-badge-text">{connectionStatusLabel}</span>
           </Badge>
-          <Button
-            type="button"
-            size="icon"
-            variant="outline"
-            aria-label="Refresh workspace viewport"
-            title="Refresh workspace viewport"
-            onClick={() => {
-              refreshWorkspaceViewport();
-            }}
-          >
-            <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
-          </Button>
           {snapshotStream && foreignCdpPort && (
             <Button
               type="button"
@@ -2362,66 +2425,71 @@ export function WorkspaceRemoteViewport({
               Release control
             </Button>
           )}
-          {stream && !snapshotStream && (
-            <Button
-              type="button"
-              size="icon"
-              variant="outline"
-              aria-label="Reattach remote browser route"
-              title="Reattach remote browser route"
-              disabled={Boolean(recoveryPending)}
-              onClick={() => {
-                void recoverWorkspaceBrowser(browser, stream);
-              }}
-            >
-              <PlugZap className={cn("size-3.5", recoveryPending === "route-refresh" && "animate-spin")} />
-            </Button>
-          )}
-          {workspaceRouteId && (
-            <Button
-              type="button"
-              size="icon"
-              variant="outline"
-              aria-label="Reconnect viewer lease"
-              title="Reconnect viewer lease"
-              disabled={Boolean(recoveryPending)}
-              onClick={() => {
-                void reconnectWorkspaceViewer();
-              }}
-            >
-              <RefreshCw className={cn("size-3.5", recoveryPending === "viewer-reconnect" && "animate-spin")} />
-            </Button>
-          )}
-          {workspaceRouteId && (
-            <Button
-              type="button"
-              size="icon"
-              variant="outline"
-              aria-label="Take controller lease"
-              title="Take controller lease"
-              disabled={Boolean(recoveryPending)}
-              onClick={() => {
-                void takeoverWorkspaceController();
-              }}
-            >
-              <MousePointer2 className={cn("size-3.5", recoveryPending === "controller-takeover" && "animate-spin")} />
-            </Button>
-          )}
-          {workspaceViewerLeaseIds.length > 0 && (
-            <Button
-              type="button"
-              size="icon"
-              variant="outline"
-              aria-label="Release viewer leases"
-              title="Release viewer leases"
-              disabled={Boolean(recoveryPending)}
-              onClick={() => {
-                void releaseWorkspaceViewers();
-              }}
-            >
-              <Unplug className={cn("size-3.5", recoveryPending === "viewer-release" && "animate-spin")} />
-            </Button>
-          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                aria-label="Advanced connection controls"
+              >
+                <MoreHorizontal className="size-3.5" />
+                Advanced
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-56">
+              <DropdownMenuLabel>Advanced connection controls</DropdownMenuLabel>
+              <DropdownMenuItem onSelect={refreshWorkspaceViewport}>
+                <RefreshCw className="size-3.5" />
+                Reload view
+              </DropdownMenuItem>
+              {stream && !snapshotStream && (
+                <DropdownMenuItem
+                  disabled={Boolean(recoveryPending)}
+                  onSelect={() => { void recoverWorkspaceBrowser(browser, stream); }}
+                >
+                  <PlugZap className="size-3.5" />
+                  Reattach desktop route
+                </DropdownMenuItem>
+              )}
+              {workspaceRouteId && (
+                <DropdownMenuItem
+                  disabled={Boolean(recoveryPending)}
+                  onSelect={() => { void reconnectWorkspaceViewer(); }}
+                >
+                  <RefreshCw className="size-3.5" />
+                  Reconnect viewer
+                </DropdownMenuItem>
+              )}
+              {workspaceRouteId && (
+                <DropdownMenuItem
+                  disabled={Boolean(recoveryPending)}
+                  onSelect={() => { void takeoverWorkspaceController(); }}
+                >
+                  <MousePointer2 className="size-3.5" />
+                  Take control
+                </DropdownMenuItem>
+              )}
+              {workspaceViewerLeaseIds.length > 0 && (
+                <DropdownMenuItem
+                  disabled={Boolean(recoveryPending)}
+                  onSelect={() => { void releaseWorkspaceViewers(); }}
+                >
+                  <Unplug className="size-3.5" />
+                  Release viewer
+                </DropdownMenuItem>
+              )}
+              {stream?.provider === "rdp_gateway" && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem disabled={!canRenderFrame} onSelect={openInteractionSettings}>
+                    <Settings2 className="size-3.5" />
+                    Mouse and keyboard settings
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
           {externalStreamUrl && (
             <Button
               type="button"
@@ -2432,19 +2500,6 @@ export function WorkspaceRemoteViewport({
               onClick={openWorkspaceStreamExternally}
             >
               <ExternalLink className="size-3.5" />
-            </Button>
-          )}
-          {stream?.provider === "rdp_gateway" && (
-            <Button
-              type="button"
-              size="icon"
-              variant="outline"
-              aria-label="Open Guacamole interaction settings"
-              title="Open Guacamole keyboard and mouse settings"
-              disabled={!canRenderFrame}
-              onClick={openInteractionSettings}
-            >
-              <Settings2 className="size-3.5" />
             </Button>
           )}
           <Button
@@ -2461,7 +2516,7 @@ export function WorkspaceRemoteViewport({
       </header>
 
       {(error || viewportReadiness.status !== "ready" || focusMessage || takeoverPending || recoveryPending || (stream && !canControl && viewportSelection.mode === "control")) && (
-        <div className="workspace-remote-viewport-notices">
+        <div className="workspace-remote-viewport-notices" aria-live="polite">
           {error && (
             <p className="workspace-remote-viewport-notice workspace-remote-viewport-notice-bad">
               <AlertTriangle className="size-3.5" />
@@ -2471,15 +2526,21 @@ export function WorkspaceRemoteViewport({
           {viewportReadiness.status !== "ready" && (
             <div className={cn(
               "workspace-remote-viewport-notice",
-              viewportReadiness.status === "blocked" || viewportReadiness.nextAction === "take_over"
+              !connectionInProgress && (viewportReadiness.status === "blocked" || viewportReadiness.nextAction === "take_over")
                 ? "workspace-remote-viewport-notice-bad"
                 : undefined,
             )}>
-              <AlertTriangle className="size-3.5" />
+              {connectionInProgress
+                ? <RefreshCw className="size-3.5 animate-spin" />
+                : <AlertTriangle className="size-3.5" />}
               <span className="workspace-remote-viewport-notice-text">
-                <strong>{viewportReadiness.title}.</strong> {viewportReadiness.recoveryCopy}
+                {connectionInProgress ? (
+                  <><strong>{connectionPlan.message}.</strong> The browser process and profile remain active.</>
+                ) : (
+                  <><strong>{viewportReadiness.title}.</strong> {viewportReadiness.recoveryCopy}</>
+                )}
               </span>
-              {viewportReadiness.nextAction === "take_over" && (
+              {!connectionInProgress && viewportReadiness.nextAction === "take_over" && (
                 <Button
                   type="button"
                   size="sm"
@@ -2490,11 +2551,11 @@ export function WorkspaceRemoteViewport({
                     void requestWorkspaceTakeover("iframe");
                   }}
                 >
-                  <RefreshCw className={cn("size-3.5", takeoverPending && "animate-spin")} />
-                  Take over
+                  <MousePointer2 className={cn("size-3.5", takeoverPending && "animate-spin")} />
+                  Take control
                 </Button>
               )}
-              {viewportReadiness.nextAction === "sign_in_again" && (
+              {!connectionInProgress && viewportReadiness.nextAction === "sign_in_again" && (
                 <Button size="sm" variant="default" className="workspace-remote-viewport-notice-action" asChild>
                   <a href={dashboardLoginPath()}>
                     <LogIn className="size-3.5" />
@@ -2502,33 +2563,21 @@ export function WorkspaceRemoteViewport({
                   </a>
                 </Button>
               )}
-              {viewportReadiness.nextAction === "open_externally" && externalStreamUrl && (
+              {!connectionInProgress && viewportReadiness.nextAction !== "take_over" && viewportReadiness.nextAction !== "sign_in_again" && (
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
                   className="workspace-remote-viewport-notice-action"
-                  onClick={openWorkspaceStreamExternally}
+                  onClick={retryWorkspaceConnection}
                 >
-                  <ExternalLink className="size-3.5" />
-                  Open externally
+                  <RefreshCw className="size-3.5" />
+                  Retry connection
                 </Button>
               )}
             </div>
           )}
-          {takeoverPending && (
-            <p className="workspace-remote-viewport-notice">
-              <RefreshCw className="size-3.5 animate-spin" />
-              Reconnecting the service-owned viewer lease.
-            </p>
-          )}
-          {recoveryPending && (
-            <p className="workspace-remote-viewport-notice">
-              <RefreshCw className="size-3.5 animate-spin" />
-              Running service-owned remote-view recovery action.
-            </p>
-          )}
-          {focusMessage && (
+          {focusMessage && !connectionInProgress && (
             <p className="workspace-remote-viewport-notice">
               <MousePointer2 className="size-3.5" />
               {focusMessage}
@@ -2587,35 +2636,6 @@ export function WorkspaceRemoteViewport({
                 || streamPreflight.message
                 || (stream ? viewStreamOpenTitle(stream) : "The selected workspace does not currently report a service-owned view stream.")}
             </p>
-            <div className="workspace-remote-viewport-empty-actions">
-              {!stream && browser && (
-                <Button
-                  size="sm"
-                  variant="default"
-                  disabled={Boolean(recoveryPending)}
-                  onClick={() => {
-                    void recoverWorkspaceBrowser(browser, null);
-                  }}
-                >
-                  <PlugZap className={cn("size-3.5", recoveryPending === "route-refresh" && "animate-spin")} />
-                  Wake stream
-                </Button>
-              )}
-              {viewportReadiness.nextAction === "sign_in_again" && (
-                <Button size="sm" variant="default" asChild>
-                  <a href={dashboardLoginPath()}>
-                    <LogIn className="size-3.5" />
-                    Sign in again
-                  </a>
-                </Button>
-              )}
-              {externalStreamUrl && (
-                <Button size="sm" variant="outline" onClick={openWorkspaceStreamExternally}>
-                  <ExternalLink className="size-3.5" />
-                  Open externally
-                </Button>
-              )}
-            </div>
           </div>
         )}
       </div>

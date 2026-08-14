@@ -74,6 +74,8 @@ export type WorkspaceNodeAction = {
   label: string;
   enabled: boolean;
   reason?: string | null;
+  /** Safe for bounded dashboard orchestration without an operator decision. */
+  automatic?: boolean;
 };
 
 export type WorkspaceProfileActionabilityAction =
@@ -384,6 +386,7 @@ export type WorkspaceServiceJob = {
 export type WorkspaceServiceIncident = {
   id: string;
   browserId?: string | null;
+  state?: string | null;
   label?: string | null;
   severity?: string | null;
   escalation?: string | null;
@@ -874,7 +877,7 @@ export function isLiveWorkspaceNode(node: WorkspaceNode): boolean {
 }
 
 export function workspaceInventoryPlacementForNode(node: WorkspaceNode): WorkspaceInventoryPlacement {
-  const recoveryAction = node.actions.find((action) => action.enabled && (
+  const recoveryAction = node.actions.find((action) => action.enabled && action.automatic !== true && (
     action.id === "repair" ||
     action.id === "resume" ||
     action.id === "seed"
@@ -1434,8 +1437,9 @@ function browserProjectionActions({
     .map((action) => action.id === "repair" && streamRecoveryAction
       ? {
           ...action,
-          label: "Wake stream",
+          label: "Reconnect view",
           enabled: true,
+          automatic: true,
           reason: projectedView?.readiness.reason ?? "The browser needs a service-owned view route before it can be opened.",
         }
       : action);
@@ -2121,7 +2125,7 @@ function profileActionabilitySummary(actionability?: WorkspaceProfileActionabili
 }
 
 function unresolvedIncidentReason(incidents: WorkspaceServiceIncident[]): string | null {
-  const incident = incidents.find((item) => !item.resolvedAt);
+  const incident = incidents.find((item) => !item.resolvedAt && normalize(item.state) !== "recovered");
   if (!incident) return null;
   return humanRecommendedAction(incident.recommendedAction) || incident.latestMessage || incident.label || "Service incident needs attention.";
 }

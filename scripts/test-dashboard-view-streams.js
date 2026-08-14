@@ -21,6 +21,12 @@ import {
   workspaceRecoveryFailureMessage,
 } from '../packages/dashboard/src/lib/workspace-recovery.ts';
 import {
+  planAutomaticWorkspaceConnection,
+  resolveWorkspaceViewSources,
+  workspaceConnectionReadinessGeneration,
+  workspaceViewerRouteIsAttached,
+} from '../packages/dashboard/src/lib/workspace-view-connection.ts';
+import {
   borrowForeignCdpControl,
   dispatchForeignCdpInput,
   fetchForeignCdpScreenshot,
@@ -72,10 +78,114 @@ assert.equal(
 const daemonStream = {
   id: 'daemon-stream:qbo-soylei',
   provider: 'cdp_screencast',
+  controlInput: 'cdp_input',
   routeId: 'daemon:qbo-soylei',
   url: 'http://127.0.0.1:38285/',
   readiness: { state: 'ready' },
 };
+const blockedDaemonStream = {
+  ...daemonStream,
+  readiness: { state: 'stale_target', reason: 'Selected target is stale' },
+};
+const automaticDesktop = resolveWorkspaceViewSources({
+  streams: [blockedDaemonStream, route],
+  selected: blockedDaemonStream,
+  mode: 'control',
+});
+assert.equal(automaticDesktop.selected?.stream, route);
+assert.equal(automaticDesktop.selected?.label, 'Desktop');
+assert.equal(automaticDesktop.selectionReason, 'automatic-ready-fallback');
+const explicitLivePage = resolveWorkspaceViewSources({
+  streams: [daemonStream, route],
+  selected: daemonStream,
+  mode: 'control',
+});
+assert.equal(explicitLivePage.selected?.stream, daemonStream);
+assert.equal(explicitLivePage.selectionReason, 'selected-ready');
+const duplicateDesktopChoices = resolveWorkspaceViewSources({
+  streams: [
+    route,
+    { ...route, id: 'remote-headed-view-duplicate' },
+    {
+      ...route,
+      id: 'remote-headed-view-b',
+      routeId: 'route-b',
+      connectionName: 'Browser B',
+      displayAllocationId: 'display-b',
+    },
+  ],
+  selected: route,
+  mode: 'control',
+});
+assert.equal(duplicateDesktopChoices.choices.length, 2);
+assert.deepEqual(
+  duplicateDesktopChoices.choices.map((choice) => choice.label),
+  ['Desktop — Browser A', 'Desktop — Browser B'],
+);
+const recoveryPlan = planAutomaticWorkspaceConnection({
+  browserId: 'browser-a',
+  browserLive: true,
+  mode: 'control',
+  sourceResolution: resolveWorkspaceViewSources({ streams: [route], selected: route, mode: 'control' }),
+  currentStream: route,
+  routeRecoveryAction: 'service_remote_view_browser_reattach',
+  readinessGeneration: 'reattachable-stale-route:2026-08-14T12:00:00Z',
+  viewerRoute: route,
+  viewerLeaseIds: [],
+  attemptedActionKeys: [],
+});
+assert.equal(recoveryPlan.action?.kind, 'recover-route');
+assert.equal(recoveryPlan.action?.serviceAction, 'service_remote_view_browser_reattach');
+const repeatedRecoveryPlan = planAutomaticWorkspaceConnection({
+  browserId: 'browser-a',
+  browserLive: true,
+  mode: 'control',
+  sourceResolution: resolveWorkspaceViewSources({ streams: [route], selected: route, mode: 'control' }),
+  currentStream: route,
+  routeRecoveryAction: 'service_remote_view_browser_reattach',
+  readinessGeneration: 'reattachable-stale-route:2026-08-14T12:00:00Z',
+  viewerRoute: route,
+  viewerLeaseIds: [],
+  attemptedActionKeys: [recoveryPlan.action?.attemptKey],
+});
+assert.equal(repeatedRecoveryPlan.action, null);
+assert.equal(repeatedRecoveryPlan.status, 'action-required');
+const attachedRoute = {
+  ...route,
+  attachability: { state: 'attached_ready' },
+  remoteReadiness: { state: 'ready' },
+};
+assert.equal(workspaceViewerRouteIsAttached(attachedRoute), true);
+const readinessGeneration = workspaceConnectionReadinessGeneration(attachedRoute, null);
+const viewerPlan = planAutomaticWorkspaceConnection({
+  browserId: 'browser-a',
+  browserLive: true,
+  mode: 'control',
+  sourceResolution: resolveWorkspaceViewSources({ streams: [attachedRoute], selected: attachedRoute, mode: 'control' }),
+  currentStream: attachedRoute,
+  routeRecoveryAction: null,
+  readinessGeneration,
+  viewerRoute: attachedRoute,
+  viewerRouteReady: true,
+  viewerLeaseIds: [],
+  attemptedActionKeys: [],
+});
+assert.equal(viewerPlan.action?.kind, 'request-viewer-lease');
+const repeatedViewerPlan = planAutomaticWorkspaceConnection({
+  browserId: 'browser-a',
+  browserLive: true,
+  mode: 'control',
+  sourceResolution: resolveWorkspaceViewSources({ streams: [attachedRoute], selected: attachedRoute, mode: 'control' }),
+  currentStream: attachedRoute,
+  routeRecoveryAction: null,
+  readinessGeneration,
+  viewerRoute: attachedRoute,
+  viewerRouteReady: true,
+  viewerLeaseIds: [],
+  attemptedActionKeys: [viewerPlan.action?.attemptKey],
+});
+assert.equal(repeatedViewerPlan.action, null);
+assert.equal(repeatedViewerPlan.status, 'action-required');
 assert.equal(
   selectWorkspaceViewerRoute([daemonStream, route], daemonStream)?.routeId,
   'route-a',
@@ -179,5 +289,13 @@ assert.match(viewport, /projection\.selected[\s\S]*projection\.tiles/);
 assert.doesNotMatch(viewport, /fetch\(`\$\{serviceBase\(activePort\)\}\/status`\)/);
 assert.match(viewport, /selectWorkspaceViewerRoute\(streamChoices, stream\)/);
 assert.match(viewport, /workspaceViewerRoute\?\.routeId/);
+assert.match(viewport, /WorkspaceSourceMenu/);
+assert.match(viewport, /Advanced connection controls/);
+assert.match(viewport, /Retry connection/);
+assert.match(viewport, /Take control/);
+assert.doesNotMatch(viewport, /Use \{viewStreamLabel/);
+assert.doesNotMatch(viewport, /Wake stream/);
+assert.doesNotMatch(viewport, /aria-label="Refresh workspace viewport"/);
+assert.doesNotMatch(viewport, /aria-label="Reconnect viewer lease"/);
 
 console.log('dashboard view-stream tests passed');

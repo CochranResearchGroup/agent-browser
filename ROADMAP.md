@@ -1,11 +1,32 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-08-13
+Updated: 2026-08-14
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
+
+## P113 | Workspace Viewport Just-Works UX
+
+State: COMPLETED
+Current state: the workspace viewport now selects the best usable source and
+performs one bounded service-approved route or observer-lease recovery without
+an operator guessing provider mechanics. The normal surface has one semantic
+`View` menu, one connection state, one `Retry connection` fallback, and text
+labelled low-level operations under `Advanced connection controls`. Live QBO
+runtime smoke renders the RDP desktop as `controllable` while preserving the
+existing browser, profile, display, and route identities.
+
+### Plan
+
+- `docs/dev/plans/0113-2026-08-14-workspace-viewport-just-works-ux-plan.md`
+
+### Next Recommendation
+
+Continue P111. Its separately bounded duplicate-profile-pressure lane owns the
+only remaining install-doctor finding and must preserve the forensic retained
+state until its owner-classification fixtures are accepted.
 
 ## P112 | Dashboard Remote-View Reconnect Repair
 
