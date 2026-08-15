@@ -50,7 +50,10 @@ protected PostgreSQL password with any retained database container, preserves
 the other protected values and private file mode, and leaves the database
 unchanged. It reuses the retained Compose project label so existing containers
 are reconciled in place. A retained container without a usable password or
-project label fails closed. Use `agent-browser install workstation reconcile
+project label fails closed. Duplicate-profile pressure and executable drift in
+an inactive optional session supervisor remain visible as install-doctor
+advisories without failing workstation route reconciliation. Active supervisor
+drift remains blocking. Use `agent-browser install workstation reconcile
 --json` for an
 explicit installed-controller recovery pass and `agent-browser install
 workstation backup --json` for the protected PostgreSQL backup operation. This

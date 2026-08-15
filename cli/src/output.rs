@@ -5406,6 +5406,8 @@ Workstation apply reruns stop the managed dashboard, runtime interlock, and
 backup timer during reconciliation, then reactivate them after final readiness.
 If reconciliation fails, their exact prior active states are restored and a
 private workstation-last-failure.json diagnostic receipt is written.
+Duplicate-profile pressure and inactive optional-supervisor drift remain
+install-doctor advisories without failing workstation route readiness.
 Before Compose can recreate Guacamole, reconciliation aligns the protected
 PostgreSQL password with any retained database container without changing the
 database and reuses its Compose project label. A retained container without a

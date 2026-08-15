@@ -124,6 +124,10 @@ reactivates those units after final readiness succeeds. If reconciliation
 fails, it restores each previously installed unit to its exact prior active
 state and writes a private diagnostic receipt to
 `~/.agent-browser/convergence/workstation-last-failure.json`.
+Duplicate-profile pressure and executable drift in an inactive optional
+session supervisor remain visible as install-doctor advisories, but they do not
+fail workstation route reconciliation. Drift in an active supervisor remains
+blocking.
 Before Compose can recreate Guacamole, reconciliation compares the protected
 PostgreSQL password with any retained database container. If they differ, it
 updates only the protected password entry, keeps the file private, and leaves

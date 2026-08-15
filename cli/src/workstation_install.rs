@@ -1903,11 +1903,58 @@ fn verify_final_doctors(
         )?;
         let payload: Value = serde_json::from_slice(&output.stdout)
             .map_err(|error| format!("{label} JSON parse failed: {error}"))?;
-        if payload.pointer(readiness_pointer).and_then(Value::as_bool) != Some(true) {
+        let ready = if label == "install doctor" {
+            install_doctor_reports_workstation_ready(&payload)
+        } else {
+            payload.pointer(readiness_pointer).and_then(Value::as_bool) == Some(true)
+        };
+        if !ready {
             return Err(format!("{label} did not report ready"));
         }
     }
     Ok(())
+}
+
+/// Accepts a globally degraded install doctor only when every reported issue
+/// is known not to affect workstation route readiness. Duplicate profile
+/// pressure remains visible to operators, while an inactive optional session
+/// supervisor may retain stale executable provenance without taking the
+/// dashboard, RDP route, or Guacamole interlock down. Active supervisor drift
+/// and every other doctor issue remain blocking.
+fn install_doctor_reports_workstation_ready(payload: &Value) -> bool {
+    if payload.get("success").and_then(Value::as_bool) == Some(true) {
+        return true;
+    }
+
+    let Some(data) = payload.get("data") else {
+        return false;
+    };
+    let Some(issues) = data.get("issues").and_then(Value::as_array) else {
+        return false;
+    };
+    if issues.is_empty() {
+        return false;
+    }
+
+    let session_supervisors = data.get("sessionSupervisors").unwrap_or(&Value::Null);
+    let inactive_supervisors = session_supervisors
+        .get("sessions")
+        .and_then(Value::as_array)
+        .is_some_and(|sessions| {
+            sessions.iter().all(|session| {
+                session.get("activeState").and_then(Value::as_str) == Some("inactive")
+            })
+        });
+    let supervisor_issues = session_supervisors
+        .get("issues")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    issues.iter().all(|issue| {
+        issue.get("code").and_then(Value::as_str) == Some("service_duplicate_profile_pressure")
+            || (inactive_supervisors && supervisor_issues.contains(issue))
+    })
 }
 
 fn write_private_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
@@ -3094,6 +3141,47 @@ mod tests {
         assert_eq!(receipt["error"], "route readiness failed");
         assert_eq!(receipt["version"], env!("CARGO_PKG_VERSION"));
         assert!(receipt["recordedAtUnixMs"].as_u64().unwrap() > 0);
+    }
+
+    #[test]
+    fn workstation_reconcile_accepts_only_proven_advisory_install_doctor_issues() {
+        let advisory = serde_json::json!({
+            "success": false,
+            "data": {
+                "issues": [
+                    {"code": "service_duplicate_profile_pressure"},
+                    {"code": "executable_drift", "severity": "warning"}
+                ],
+                "sessionSupervisors": {
+                    "sessions": [{"activeState": "inactive"}],
+                    "issues": [{"code": "executable_drift", "severity": "warning"}]
+                }
+            }
+        });
+        assert!(install_doctor_reports_workstation_ready(&advisory));
+
+        let active_supervisor = serde_json::json!({
+            "success": false,
+            "data": {
+                "issues": [{"code": "executable_drift", "severity": "warning"}],
+                "sessionSupervisors": {
+                    "sessions": [{"activeState": "active"}],
+                    "issues": [{"code": "executable_drift", "severity": "warning"}]
+                }
+            }
+        });
+        assert!(!install_doctor_reports_workstation_ready(
+            &active_supervisor
+        ));
+
+        let route_blocker = serde_json::json!({
+            "success": false,
+            "data": {
+                "issues": [{"code": "dashboard_runtime_stale_or_unreadable"}],
+                "sessionSupervisors": {"sessions": [], "issues": []}
+            }
+        });
+        assert!(!install_doctor_reports_workstation_ready(&route_blocker));
     }
 
     #[cfg(unix)]
