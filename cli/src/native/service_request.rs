@@ -1951,6 +1951,25 @@ mod tests {
     }
 
     #[test]
+    fn route_pool_repair_params_project_exact_acquisition_lease_into_command() {
+        let normalized = normalize(json!({
+            "action": "service_route_pool_repair",
+            "params": {
+                "acquisitionLeaseId": "lease-terminal",
+                "apply": false,
+                "staleCheckouts": false,
+                "stalePendingAcquisitions": true
+            }
+        }))
+        .unwrap();
+
+        assert_eq!(normalized.command["acquisitionLeaseId"], "lease-terminal");
+        assert_eq!(normalized.command["apply"], false);
+        assert_eq!(normalized.command["staleCheckouts"], false);
+        assert_eq!(normalized.command["stalePendingAcquisitions"], true);
+    }
+
+    #[test]
     fn canonical_types_nulls_enums_and_unknown_fields_are_rejected() {
         let fixtures = [
             (
