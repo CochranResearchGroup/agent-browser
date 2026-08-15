@@ -1206,7 +1206,10 @@ doctor reports missing fixtures or a collapsed same-user display, restores
 missing Guacamole/XRDP route displays, reapplies display
 access when required, and records
 <code>~/.agent-browser/convergence/local-runtime-latest.json</code>. It does
-not publish or replace the installed binary. Set
+not publish or replace the installed binary. If a pass fails after quiescing
+the managed dashboard or timers, it restores their exact prior active states
+and records the failure in
+<code>~/.agent-browser/convergence/workstation-last-failure.json</code>. Set
 <code>AGENT_BROWSER_RUNTIME_INTERLOCK_INTERVAL</code> before installation to a
 systemd duration such as <code>5min</code> when a different cadence is needed.
 The fixture repair uses the route-specific user-scoped XRDP secrets and stops

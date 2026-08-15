@@ -5404,6 +5404,8 @@ requires at least 6 GiB free before sudo, payload staging, or package mutation.
 
 Workstation apply reruns stop the managed dashboard, runtime interlock, and
 backup timer during reconciliation, then reactivate them after final readiness.
+If reconciliation fails, their exact prior active states are restored and a
+private workstation-last-failure.json diagnostic receipt is written.
 Before Compose can recreate Guacamole, reconciliation aligns the protected
 PostgreSQL password with any retained database container without changing the
 database and reuses its Compose project label. A retained container without a

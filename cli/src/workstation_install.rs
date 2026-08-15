@@ -6,7 +6,8 @@
 //! fresh login is required. Runtime reconciliation activates services only
 //! after canonical route projection and final doctor readiness. Real-host
 //! preflight also requires enough free disk capacity before sudo or payload
-//! mutation begins.
+//! mutation begins. Failed reconciliation restores the exact prior active state
+//! of managed user units and writes a private diagnostic receipt.
 
 use serde::Serialize;
 use serde_json::Value;
@@ -227,11 +228,13 @@ fn run_workstation_install(args: &[String]) {
     } else {
         None
     };
+    let mut apply_quiesced_user_units = None;
 
     let mutated = if parsed.mode == InstallMode::Apply {
         if !isolated_root {
-            if let Err(error) = quiesce_existing_user_units(&paths) {
-                fail(&error, parsed.json);
+            match quiesce_existing_user_units(&paths) {
+                Ok(quiesced) => apply_quiesced_user_units = Some(quiesced),
+                Err(error) => fail(&error, parsed.json),
             }
         }
         match materialize_payload(&paths, &parsed) {
@@ -239,7 +242,12 @@ fn run_workstation_install(args: &[String]) {
                 phases.extend(["payload-staged", "units-staged", "payload-committed"]);
                 true
             }
-            Err(error) => fail(&error, parsed.json),
+            Err(error) => fail_with_user_unit_restoration(
+                &error,
+                parsed.json,
+                &paths,
+                apply_quiesced_user_units.as_ref(),
+            ),
         }
     } else {
         false
@@ -252,7 +260,12 @@ fn run_workstation_install(args: &[String]) {
         "workstation substrate provisioning is required before service activation".to_string();
     if parsed.mode == InstallMode::Apply && !isolated_root {
         if let Err(error) = crate::install::install_remote_view_privileges(true, parsed.json) {
-            fail(&error, parsed.json);
+            fail_with_user_unit_restoration(
+                &error,
+                parsed.json,
+                &paths,
+                apply_quiesced_user_units.as_ref(),
+            );
         }
         phases.push("host-dependencies-prepared");
         host_prepared = true;
@@ -263,7 +276,12 @@ fn run_workstation_install(args: &[String]) {
         } else {
             let reconcile = match reconcile_workstation_locked(&root, &paths) {
                 Ok(reconcile) => reconcile,
-                Err(error) => fail(&error, parsed.json),
+                Err(error) => fail_with_user_unit_restoration(
+                    &error,
+                    parsed.json,
+                    &paths,
+                    apply_quiesced_user_units.as_ref(),
+                ),
             };
             phases.push("workstation-reconciled");
             workstation_ready = true;
@@ -271,6 +289,20 @@ fn run_workstation_install(args: &[String]) {
             "run agent-browser install doctor --json and review the installed workstation state"
                 .to_string()
         };
+    }
+    if session_refresh_required {
+        if let Some(quiesced) = apply_quiesced_user_units.as_ref() {
+            if let Err(error) =
+                restore_previously_active_user_units(&paths, &paths.root, &[], quiesced)
+            {
+                fail(
+                    &format!(
+                        "workstation installation requires a fresh login; failed to restore previously active workstation user units: {error}"
+                    ),
+                    parsed.json,
+                );
+            }
+        }
     }
 
     let report = WorkstationInstallReport {
@@ -367,7 +399,37 @@ fn reconcile_workstation() -> Result<WorkstationReconcileReport, String> {
     let root = workstation_root()?;
     let paths = install_paths(&root);
     let _lock = WorkstationLock::acquire(&root)?;
-    reconcile_workstation_locked(&root, &paths)
+    match reconcile_workstation_locked(&root, &paths) {
+        Ok(report) => Ok(report),
+        Err(error) => {
+            let receipt_path =
+                root.join(".agent-browser/convergence/workstation-last-failure.json");
+            let receipt = workstation_reconcile_failure_receipt(&error);
+            match write_private_json(&receipt_path, &receipt) {
+                Ok(()) => Err(format!(
+                    "{error}; failure receipt: {}",
+                    receipt_path.display()
+                )),
+                Err(receipt_error) => Err(format!(
+                    "{error}; failed to write workstation reconciliation failure receipt: {receipt_error}"
+                )),
+            }
+        }
+    }
+}
+
+fn workstation_reconcile_failure_receipt(error: &str) -> Value {
+    let recorded_at_unix_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or_default();
+    serde_json::json!({
+        "schemaVersion": "agent-browser.workstation-reconcile-failure.v1",
+        "success": false,
+        "version": env!("CARGO_PKG_VERSION"),
+        "recordedAtUnixMs": recorded_at_unix_ms,
+        "error": error,
+    })
 }
 
 fn reconcile_workstation_locked(
@@ -377,17 +439,34 @@ fn reconcile_workstation_locked(
     require_installed_payload(paths)?;
     require_effective_groups()?;
     let support_root = &paths.support_dir;
+    let command_env = workstation_command_env(paths);
+    let quiesced_user_units = quiesce_existing_user_units(paths)?;
+    let reconcile_result =
+        reconcile_workstation_after_quiesce(root, paths, support_root, command_env.clone());
+    complete_reconcile_with_unit_restore(reconcile_result, || {
+        restore_previously_active_user_units(
+            paths,
+            support_root,
+            &command_env,
+            &quiesced_user_units,
+        )
+    })
+}
+
+fn reconcile_workstation_after_quiesce(
+    root: &Path,
+    paths: &InstallPaths,
+    support_root: &Path,
+    command_env: Vec<(String, String)>,
+) -> Result<WorkstationReconcileReport, String> {
     let scripts_dir = support_root.join("scripts");
     let guacamole_dir = support_root.join("guacamole");
     let guacamole_env = paths.guacamole_state_dir.join(".env");
-    let command_env = workstation_command_env(paths);
-    let mut steps = Vec::new();
-
-    quiesce_existing_user_units(paths)?;
-    steps.push(ReconcileStep {
+    let mut steps = vec![ReconcileStep {
         name: "existing-user-units-quiesced",
         success: true,
-    });
+    }];
+    inject_failure("existing-user-units-quiesced")?;
 
     run_required(
         paths
@@ -1600,16 +1679,60 @@ fn systemd_unit_is_failed(stdout: &[u8]) -> Result<bool, String> {
     }
 }
 
-/// Stops installed user units that could race with workstation reconciliation.
-///
-/// The final readiness gate reactivates these units after route and payload
-/// convergence succeeds.
-fn quiesce_existing_user_units(paths: &InstallPaths) -> Result<(), String> {
+/// Snapshots and stops installed user units that could race with workstation
+/// reconciliation. Success activates the canonical unit set; failure restores
+/// every pre-existing unit to its exact prior active state.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct QuiescedUserUnits {
+    prior_states: Vec<(&'static str, bool)>,
+}
+
+impl QuiescedUserUnits {
+    #[cfg(test)]
+    fn from_states(states: impl IntoIterator<Item = (&'static str, bool)>) -> Self {
+        Self {
+            prior_states: states.into_iter().collect(),
+        }
+    }
+
+    fn units_to_start(&self) -> Vec<&'static str> {
+        self.prior_states
+            .iter()
+            .filter_map(|(unit, active)| active.then_some(*unit))
+            .collect()
+    }
+
+    fn units_to_stop(&self) -> Vec<&'static str> {
+        self.prior_states
+            .iter()
+            .filter_map(|(unit, active)| (!active).then_some(*unit))
+            .collect()
+    }
+}
+
+fn quiesce_existing_user_units(paths: &InstallPaths) -> Result<QuiescedUserUnits, String> {
+    let existing_units = WORKSTATION_RECONCILE_QUIESCE_UNITS
+        .into_iter()
+        .filter(|unit| paths.unit_dir.join(unit).is_file())
+        .collect::<Vec<_>>();
+    let mut prior_states = Vec::new();
+    for unit in &existing_units {
+        let status = run_observed(
+            "systemctl",
+            &["--user", "is-active", "--quiet", unit],
+            &paths.root,
+            &[],
+        )
+        .map_err(|error| format!("inspect workstation user unit {unit}: {error}"))?;
+        prior_states.push((*unit, status.status.success()));
+    }
+    let quiesced = QuiescedUserUnits { prior_states };
+
     if !WORKSTATION_RECONCILE_QUIESCE_UNITS
         .iter()
         .any(|unit| paths.unit_dir.join(unit).is_file())
     {
-        return Ok(());
+        return Ok(quiesced);
     }
 
     run_required(
@@ -1622,14 +1745,133 @@ fn quiesce_existing_user_units(paths: &InstallPaths) -> Result<(), String> {
     )?;
     let mut args = vec!["--user", "stop"];
     args.extend(WORKSTATION_RECONCILE_QUIESCE_UNITS);
-    run_required(
+    let stopped = run_required(
         "systemctl",
         &args,
         &paths.root,
         &[],
         false,
         "quiesce existing workstation user units before reconciliation",
-    )
+    );
+    if let Err(error) = stopped {
+        return match restore_previously_active_user_units(paths, &paths.root, &[], &quiesced) {
+            Ok(()) => Err(format!(
+                "{error}; previously active workstation user units were restored"
+            )),
+            Err(restore_error) => Err(format!(
+                "{error}; failed to restore previously active workstation user units: {restore_error}"
+            )),
+        };
+    }
+    Ok(quiesced)
+}
+
+fn restore_previously_active_user_units(
+    paths: &InstallPaths,
+    support_root: &Path,
+    command_env: &[(String, String)],
+    quiesced: &QuiescedUserUnits,
+) -> Result<(), String> {
+    if quiesced.prior_states.is_empty() {
+        return Ok(());
+    }
+    let mut errors = Vec::new();
+    if let Err(error) = run_required(
+        "systemctl",
+        &["--user", "daemon-reload"],
+        support_root,
+        command_env,
+        false,
+        "reload workstation user units before failure restoration",
+    ) {
+        errors.push(error);
+    }
+    let units_to_stop = quiesced.units_to_stop();
+    if !units_to_stop.is_empty() {
+        let mut args = vec!["--user", "stop"];
+        args.extend(units_to_stop.iter().copied());
+        if let Err(error) = run_required(
+            "systemctl",
+            &args,
+            support_root,
+            command_env,
+            false,
+            "restore previously inactive workstation user units after reconciliation failure",
+        ) {
+            errors.push(error);
+        }
+    }
+    let units_to_start = quiesced.units_to_start();
+    if !units_to_start.is_empty() {
+        let mut args = vec!["--user", "start"];
+        args.extend(units_to_start.iter().copied());
+        if let Err(error) = run_required(
+            "systemctl",
+            &args,
+            support_root,
+            command_env,
+            false,
+            "restore previously active workstation user units after reconciliation failure",
+        ) {
+            errors.push(error);
+        }
+    }
+    for (unit, expected_active) in &quiesced.prior_states {
+        match run_observed(
+            "systemctl",
+            &["--user", "is-active", "--quiet", unit],
+            &paths.root,
+            command_env,
+        ) {
+            Ok(status) if status.status.success() == *expected_active => {}
+            Ok(_) => errors.push(format!(
+                "restored workstation user unit {unit} did not return to its prior state"
+            )),
+            Err(error) => errors.push(format!(
+                "verify restored workstation user unit {unit}: {error}"
+            )),
+        }
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("; "))
+    }
+}
+
+fn complete_reconcile_with_unit_restore<T>(
+    reconcile_result: Result<T, String>,
+    restore: impl FnOnce() -> Result<(), String>,
+) -> Result<T, String> {
+    match reconcile_result {
+        Ok(value) => Ok(value),
+        Err(error) => match restore() {
+            Ok(()) => Err(format!(
+                "{error}; previously active workstation user units were restored"
+            )),
+            Err(restore_error) => Err(format!(
+                "{error}; failed to restore previously active workstation user units: {restore_error}"
+            )),
+        },
+    }
+}
+
+fn fail_with_user_unit_restoration(
+    error: &str,
+    json: bool,
+    paths: &InstallPaths,
+    quiesced: Option<&QuiescedUserUnits>,
+) -> ! {
+    let restored_error = match quiesced {
+        Some(quiesced) => {
+            complete_reconcile_with_unit_restore::<()>(Err(error.to_string()), || {
+                restore_previously_active_user_units(paths, &paths.root, &[], quiesced)
+            })
+            .unwrap_err()
+        }
+        None => error.to_string(),
+    };
+    fail(&restored_error, json)
 }
 
 fn verify_final_doctors(
@@ -2787,6 +3029,71 @@ mod tests {
             .contains(&"agent-browser-guacamole-postgres-backup.timer"));
         assert!(!WORKSTATION_RECONCILE_QUIESCE_UNITS
             .contains(&"agent-browser-runtime-interlock.service"));
+    }
+
+    #[test]
+    fn reconcile_failure_restores_previously_active_user_units() {
+        let restored = std::cell::Cell::new(false);
+        let result = complete_reconcile_with_unit_restore::<()>(
+            Err("route readiness failed".to_string()),
+            || {
+                restored.set(true);
+                Ok(())
+            },
+        );
+
+        assert!(restored.get());
+        let error = result.unwrap_err();
+        assert!(error.contains("route readiness failed"));
+        assert!(error.contains("previously active workstation user units were restored"));
+    }
+
+    #[test]
+    fn reconcile_failure_reports_restoration_failure_without_hiding_original_error() {
+        let result = complete_reconcile_with_unit_restore::<()>(
+            Err("route readiness failed".to_string()),
+            || Err("systemctl start failed".to_string()),
+        );
+
+        let error = result.unwrap_err();
+        assert!(error.contains("route readiness failed"));
+        assert!(error.contains("failed to restore previously active workstation user units"));
+        assert!(error.contains("systemctl start failed"));
+    }
+
+    #[test]
+    fn reconciliation_restoration_returns_units_to_their_exact_prior_state() {
+        let snapshot = QuiescedUserUnits::from_states([
+            ("agent-browser-dashboard.service", true),
+            ("agent-browser-runtime-interlock.timer", true),
+            ("agent-browser-guacamole-postgres-backup.timer", false),
+        ]);
+
+        assert_eq!(
+            snapshot.units_to_start(),
+            vec![
+                "agent-browser-dashboard.service",
+                "agent-browser-runtime-interlock.timer"
+            ]
+        );
+        assert_eq!(
+            snapshot.units_to_stop(),
+            vec!["agent-browser-guacamole-postgres-backup.timer"]
+        );
+    }
+
+    #[test]
+    fn reconciliation_failure_receipt_is_durable_and_diagnostic() {
+        let receipt = workstation_reconcile_failure_receipt("route readiness failed");
+
+        assert_eq!(
+            receipt["schemaVersion"],
+            "agent-browser.workstation-reconcile-failure.v1"
+        );
+        assert_eq!(receipt["success"], false);
+        assert_eq!(receipt["error"], "route readiness failed");
+        assert_eq!(receipt["version"], env!("CARGO_PKG_VERSION"));
+        assert!(receipt["recordedAtUnixMs"].as_u64().unwrap() > 0);
     }
 
     #[cfg(unix)]

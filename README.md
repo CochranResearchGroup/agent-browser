@@ -120,7 +120,10 @@ required.
 
 On rerun, apply first stops the managed dashboard, runtime interlock, and
 backup timer while it reconciles the installed payload and routes. It
-reactivates those units only after final readiness succeeds.
+reactivates those units after final readiness succeeds. If reconciliation
+fails, it restores each previously installed unit to its exact prior active
+state and writes a private diagnostic receipt to
+`~/.agent-browser/convergence/workstation-last-failure.json`.
 Before Compose can recreate Guacamole, reconciliation compares the protected
 PostgreSQL password with any retained database container. If they differ, it
 updates only the protected password entry, keeps the file private, and leaves

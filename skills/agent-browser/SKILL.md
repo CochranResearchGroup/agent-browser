@@ -42,7 +42,10 @@ the `text` input method. Text input is therefore selected for existing and new
 connections, while a later user-selected override remains persistent.
 Reruns first stop the managed dashboard, runtime interlock, and backup
 timer while reconciliation is active, then reactivate them after final
-readiness. Before Compose can recreate Guacamole, reconciliation aligns the
+readiness. A failed pass restores every installed unit to its exact prior
+active state and writes
+`~/.agent-browser/convergence/workstation-last-failure.json`. Before Compose
+can recreate Guacamole, reconciliation aligns the
 protected PostgreSQL password with any retained database container, preserves
 the other protected values and private file mode, and leaves the database
 unchanged. It reuses the retained Compose project label so existing containers
