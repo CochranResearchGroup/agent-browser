@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "agent-browser.runtime-adoption.v1",
+  "fixtures": [
+    {
+      "fixtureId": "workstation-payload-before-runtime-preservation",
+      "sourceAnchors": [
+        "cli/src/workstation_install.rs:233 run_workstation_install apply branch",
+        "cli/src/workstation_install.rs:240 materialize_payload before reconciliation",
+        "cli/src/workstation_install.rs:2189 support commit",
+        "cli/src/workstation_install.rs:2193 stable binary replacement"
+      ],
+      "currentSequence": [
+        "plan_validated",
+        "selected_units_quiesced",
+        "payload_commit",
+        "host_preparation",
+        "runtime_reconciliation"
+      ],
+      "requiredSequence": [
+        "plan_validated",
+        "runtime_census_stable",
+        "runtime_preservation_proven",
+        "payload_commit"
+      ],
+      "expectedRedReason": "payload_commit_precedes_runtime_preservation"
+    },
+    {
+      "fixtureId": "verified-orphan-requires-prepared-handoff",
+      "sourceAnchors": [
+        "cli/src/native/action_runtime/runtime/navigation.rs:223 read_runtime_handoff required by resume",
+        "cli/src/native/action_runtime/runtime/navigation.rs:239 connect only after descriptor",
+        "cli/src/native/action_runtime/runtime/navigation.rs:202 old owner relinquishes before candidate proof"
+      ],
+      "currentSequence": [
+        "verified_surviving_browser",
+        "prepared_handoff_descriptor_missing",
+        "runtime_handoff_resume_requested",
+        "adoption_rejected"
+      ],
+      "requiredSequence": [
+        "verified_surviving_browser",
+        "candidate_observation_attachment",
+        "owner_compare_and_swap",
+        "adopted"
+      ],
+      "expectedRedReason": "verified_orphan_adoption_requires_old_daemon_descriptor"
+    }
+  ]
+}

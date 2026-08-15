@@ -13,6 +13,8 @@ mod output;
 mod process_identity;
 mod remote_view_doctor;
 mod remote_view_helper_contract;
+#[allow(dead_code)]
+mod runtime_adoption;
 mod runtime_profile;
 mod session_supervisor;
 #[cfg(test)]

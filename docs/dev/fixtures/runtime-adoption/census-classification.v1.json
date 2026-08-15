@@ -1,0 +1,343 @@
+{
+  "schemaVersion": "agent-browser.runtime-adoption.v1",
+  "sourceLedger": [
+    {
+      "source": "service_browser_records",
+      "observationOnly": true,
+      "authorityLimit": "Service rows describe logical browser intent but do not independently prove a live owner."
+    },
+    {
+      "source": "runtime_profile_state",
+      "observationOnly": true,
+      "authorityLimit": "Runtime profile state must agree with current process, profile, and endpoint evidence."
+    },
+    {
+      "source": "profile_owner_reservations",
+      "observationOnly": true,
+      "authorityLimit": "Owner reservations identify claimed generations but require current process-instance proof."
+    },
+    {
+      "source": "named_session_supervisors",
+      "observationOnly": true,
+      "authorityLimit": "Supervisor state proves configured process supervision, not browser attachment."
+    },
+    {
+      "source": "daemon_metadata",
+      "observationOnly": true,
+      "authorityLimit": "Socket, port, PID, token, and executable metadata do not independently grant browser authority."
+    },
+    {
+      "source": "operating_system_process_identity",
+      "observationOnly": true,
+      "authorityLimit": "Process identity rejects PID reuse but does not prove profile or CDP agreement."
+    },
+    {
+      "source": "profile_lock_and_devtools",
+      "observationOnly": true,
+      "authorityLimit": "Profile lock and DevToolsActivePort evidence must bind to the same current browser process."
+    },
+    {
+      "source": "cdp_browser_and_targets",
+      "observationOnly": true,
+      "authorityLimit": "Bounded CDP observations prove endpoint and target identity but do not grant owner generation."
+    },
+    {
+      "source": "display_allocations_and_visible_window_proof",
+      "observationOnly": true,
+      "authorityLimit": "Display allocation and visible-window proof establish geometry posture but do not grant browser authority."
+    },
+    {
+      "source": "view_streams_route_pool_guacamole_and_handoffs",
+      "observationOnly": true,
+      "authorityLimit": "View streams, route pool, Guacamole, and handoff records prove presentation posture only when generation-bound."
+    }
+  ],
+  "fixtures": [
+    {
+      "fixtureId": "cooperative-live-owner",
+      "observedSources": ["service_browser_records", "runtime_profile_state", "profile_owner_reservations", "named_session_supervisors", "daemon_metadata", "operating_system_process_identity", "profile_lock_and_devtools", "cdp_browser_and_targets", "display_allocations_and_visible_window_proof", "view_streams_route_pool_guacamole_and_handoffs"],
+      "evidence": {
+        "browserLive": true,
+        "daemonLive": true,
+        "daemonCooperative": true,
+        "manualBrowser": false,
+        "externallyOwned": false,
+        "metadataPresent": true,
+        "observationRoundsAgree": true,
+        "registryRevisionStable": true,
+        "ownerGenerations": [7],
+        "processIdentity": "match",
+        "profileIdentity": "match",
+        "browserFamily": "match",
+        "cdpEndpoint": "match",
+        "targetSet": "match"
+      },
+      "expectedClassification": "cooperative_live_owner",
+      "expectedReasonCodes": ["cooperative_owner_verified"]
+    },
+    {
+      "fixtureId": "orphan-adoptable-browser",
+      "observedSources": ["service_browser_records", "runtime_profile_state", "operating_system_process_identity", "profile_lock_and_devtools", "cdp_browser_and_targets", "display_allocations_and_visible_window_proof", "view_streams_route_pool_guacamole_and_handoffs"],
+      "evidence": {
+        "browserLive": true,
+        "daemonLive": false,
+        "daemonCooperative": false,
+        "manualBrowser": false,
+        "externallyOwned": false,
+        "metadataPresent": true,
+        "observationRoundsAgree": true,
+        "registryRevisionStable": true,
+        "ownerGenerations": [],
+        "processIdentity": "match",
+        "profileIdentity": "match",
+        "browserFamily": "match",
+        "cdpEndpoint": "match",
+        "targetSet": "match"
+      },
+      "expectedClassification": "orphan_adoptable",
+      "expectedReasonCodes": ["verified_browser_without_live_daemon"]
+    },
+    {
+      "fixtureId": "manual-browser-without-cdp",
+      "observedSources": ["service_browser_records", "runtime_profile_state", "operating_system_process_identity", "profile_lock_and_devtools", "display_allocations_and_visible_window_proof", "view_streams_route_pool_guacamole_and_handoffs"],
+      "evidence": {
+        "browserLive": true,
+        "daemonLive": false,
+        "daemonCooperative": false,
+        "manualBrowser": true,
+        "externallyOwned": false,
+        "metadataPresent": true,
+        "observationRoundsAgree": true,
+        "registryRevisionStable": true,
+        "ownerGenerations": [],
+        "processIdentity": "match",
+        "profileIdentity": "match",
+        "browserFamily": "match",
+        "cdpEndpoint": "missing",
+        "targetSet": "not_applicable"
+      },
+      "expectedClassification": "manual_preserve_only",
+      "expectedReasonCodes": ["manual_browser_without_cdp"]
+    },
+    {
+      "fixtureId": "idle-daemon",
+      "observedSources": ["named_session_supervisors", "daemon_metadata"],
+      "evidence": {
+        "browserLive": false,
+        "daemonLive": true,
+        "daemonCooperative": true,
+        "manualBrowser": false,
+        "externallyOwned": false,
+        "metadataPresent": true,
+        "observationRoundsAgree": true,
+        "registryRevisionStable": true,
+        "ownerGenerations": [],
+        "processIdentity": "not_applicable",
+        "profileIdentity": "not_applicable",
+        "browserFamily": "not_applicable",
+        "cdpEndpoint": "not_applicable",
+        "targetSet": "not_applicable"
+      },
+      "expectedClassification": "idle_daemon",
+      "expectedReasonCodes": ["daemon_without_live_browser"]
+    },
+    {
+      "fixtureId": "stale-metadata",
+      "observedSources": ["service_browser_records", "runtime_profile_state", "daemon_metadata"],
+      "evidence": {
+        "browserLive": false,
+        "daemonLive": false,
+        "daemonCooperative": false,
+        "manualBrowser": false,
+        "externallyOwned": false,
+        "metadataPresent": true,
+        "observationRoundsAgree": true,
+        "registryRevisionStable": true,
+        "ownerGenerations": [],
+        "processIdentity": "missing",
+        "profileIdentity": "match",
+        "browserFamily": "missing",
+        "cdpEndpoint": "missing",
+        "targetSet": "missing"
+      },
+      "expectedClassification": "stale_metadata",
+      "expectedReasonCodes": ["metadata_without_live_runtime"]
+    },
+    {
+      "fixtureId": "pid-reuse",
+      "observedSources": ["runtime_profile_state", "daemon_metadata", "operating_system_process_identity", "profile_lock_and_devtools", "cdp_browser_and_targets"],
+      "evidence": {
+        "browserLive": true,
+        "daemonLive": false,
+        "daemonCooperative": false,
+        "manualBrowser": false,
+        "externallyOwned": false,
+        "metadataPresent": true,
+        "observationRoundsAgree": true,
+        "registryRevisionStable": true,
+        "ownerGenerations": [],
+        "processIdentity": "mismatch",
+        "profileIdentity": "match",
+        "browserFamily": "match",
+        "cdpEndpoint": "match",
+        "targetSet": "match"
+      },
+      "expectedClassification": "insufficient_evidence",
+      "expectedReasonCodes": ["process_identity_mismatch"]
+    },
+    {
+      "fixtureId": "wrong-profile",
+      "observedSources": ["runtime_profile_state", "profile_owner_reservations", "operating_system_process_identity", "profile_lock_and_devtools", "cdp_browser_and_targets"],
+      "evidence": {
+        "browserLive": true,
+        "daemonLive": false,
+        "daemonCooperative": false,
+        "manualBrowser": false,
+        "externallyOwned": false,
+        "metadataPresent": true,
+        "observationRoundsAgree": true,
+        "registryRevisionStable": true,
+        "ownerGenerations": [],
+        "processIdentity": "match",
+        "profileIdentity": "mismatch",
+        "browserFamily": "match",
+        "cdpEndpoint": "match",
+        "targetSet": "match"
+      },
+      "expectedClassification": "insufficient_evidence",
+      "expectedReasonCodes": ["profile_identity_mismatch"]
+    },
+    {
+      "fixtureId": "wrong-browser-family",
+      "observedSources": ["runtime_profile_state", "operating_system_process_identity", "profile_lock_and_devtools", "cdp_browser_and_targets"],
+      "evidence": {
+        "browserLive": true,
+        "daemonLive": false,
+        "daemonCooperative": false,
+        "manualBrowser": false,
+        "externallyOwned": false,
+        "metadataPresent": true,
+        "observationRoundsAgree": true,
+        "registryRevisionStable": true,
+        "ownerGenerations": [],
+        "processIdentity": "match",
+        "profileIdentity": "match",
+        "browserFamily": "mismatch",
+        "cdpEndpoint": "match",
+        "targetSet": "match"
+      },
+      "expectedClassification": "insufficient_evidence",
+      "expectedReasonCodes": ["browser_family_mismatch"]
+    },
+    {
+      "fixtureId": "wrong-endpoint",
+      "observedSources": ["runtime_profile_state", "operating_system_process_identity", "profile_lock_and_devtools", "cdp_browser_and_targets"],
+      "evidence": {
+        "browserLive": true,
+        "daemonLive": false,
+        "daemonCooperative": false,
+        "manualBrowser": false,
+        "externallyOwned": false,
+        "metadataPresent": true,
+        "observationRoundsAgree": true,
+        "registryRevisionStable": true,
+        "ownerGenerations": [],
+        "processIdentity": "match",
+        "profileIdentity": "match",
+        "browserFamily": "match",
+        "cdpEndpoint": "mismatch",
+        "targetSet": "match"
+      },
+      "expectedClassification": "insufficient_evidence",
+      "expectedReasonCodes": ["cdp_endpoint_mismatch"]
+    },
+    {
+      "fixtureId": "conflicting-owners",
+      "observedSources": ["service_browser_records", "profile_owner_reservations", "named_session_supervisors", "daemon_metadata", "operating_system_process_identity"],
+      "evidence": {
+        "browserLive": true,
+        "daemonLive": true,
+        "daemonCooperative": true,
+        "manualBrowser": false,
+        "externallyOwned": false,
+        "metadataPresent": true,
+        "observationRoundsAgree": true,
+        "registryRevisionStable": true,
+        "ownerGenerations": [4, 5],
+        "processIdentity": "match",
+        "profileIdentity": "match",
+        "browserFamily": "match",
+        "cdpEndpoint": "match",
+        "targetSet": "match"
+      },
+      "expectedClassification": "conflicting_owner",
+      "expectedReasonCodes": ["multiple_owner_generations"]
+    },
+    {
+      "fixtureId": "insufficient-target-evidence",
+      "observedSources": ["service_browser_records", "runtime_profile_state", "operating_system_process_identity", "profile_lock_and_devtools"],
+      "evidence": {
+        "browserLive": true,
+        "daemonLive": false,
+        "daemonCooperative": false,
+        "manualBrowser": false,
+        "externallyOwned": false,
+        "metadataPresent": true,
+        "observationRoundsAgree": true,
+        "registryRevisionStable": true,
+        "ownerGenerations": [],
+        "processIdentity": "match",
+        "profileIdentity": "match",
+        "browserFamily": "match",
+        "cdpEndpoint": "match",
+        "targetSet": "missing"
+      },
+      "expectedClassification": "insufficient_evidence",
+      "expectedReasonCodes": ["required_identity_evidence_missing"]
+    },
+    {
+      "fixtureId": "runtime-changed-during-classification",
+      "observedSources": ["service_browser_records", "runtime_profile_state", "profile_owner_reservations", "named_session_supervisors", "daemon_metadata", "operating_system_process_identity", "profile_lock_and_devtools", "cdp_browser_and_targets"],
+      "evidence": {
+        "browserLive": true,
+        "daemonLive": true,
+        "daemonCooperative": true,
+        "manualBrowser": false,
+        "externallyOwned": false,
+        "metadataPresent": true,
+        "observationRoundsAgree": false,
+        "registryRevisionStable": false,
+        "ownerGenerations": [7],
+        "processIdentity": "match",
+        "profileIdentity": "match",
+        "browserFamily": "match",
+        "cdpEndpoint": "match",
+        "targetSet": "match"
+      },
+      "expectedClassification": "insufficient_evidence",
+      "expectedReasonCodes": ["census_changed_during_classification"]
+    },
+    {
+      "fixtureId": "external-observed-browser",
+      "observedSources": ["operating_system_process_identity", "profile_lock_and_devtools", "display_allocations_and_visible_window_proof", "view_streams_route_pool_guacamole_and_handoffs"],
+      "evidence": {
+        "browserLive": true,
+        "daemonLive": false,
+        "daemonCooperative": false,
+        "manualBrowser": true,
+        "externallyOwned": true,
+        "metadataPresent": false,
+        "observationRoundsAgree": true,
+        "registryRevisionStable": true,
+        "ownerGenerations": [],
+        "processIdentity": "match",
+        "profileIdentity": "missing",
+        "browserFamily": "match",
+        "cdpEndpoint": "missing",
+        "targetSet": "not_applicable"
+      },
+      "expectedClassification": "external_observed",
+      "expectedReasonCodes": ["external_owner_preserved"]
+    }
+  ]
+}

@@ -4,6 +4,51 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 156 | 2026-08-15
+
+Scope: execute Plan 0116 Slice A without changing installer behavior or live
+runtime state.
+
+Actions:
+
+- added the internal provider-free runtime-adoption authority model with the
+  frozen `RuntimeGeneration`, `UpgradeTransaction`, `BrowserAdoptionReceipt`,
+  and `PresentationReceipt` schemas;
+- froze a closed ten-source runtime census ledger and thirteen deterministic
+  fixtures spanning all eight runtime classifications, including PID reuse,
+  identity mismatches, conflicting owners, external preservation, and a census
+  that changes during classification;
+- added two intentional red fixtures for payload commit before runtime
+  preservation and for verified orphan adoption remaining blocked on an
+  old-daemon handoff descriptor;
+- bound both red fixtures to current source ordering so later production repair
+  must deliberately change the expected seam;
+- completed the one allowed broad architecture-drift review with no blocking
+  finding: the fixture model remains compatible with P108 process identity and
+  P111 profile digest and owner generation, creates no competing registry, and
+  exposes no public surface.
+
+Validation:
+
+- five focused `runtime_adoption::tests` pass;
+- JSON fixture parsing, `git diff --check`, Rust formatting, and strict Clippy
+  pass;
+- the broad Rust run reached 2,025 passing tests, 57 ignored tests, and six
+  failures; isolated serial reruns cleared three race-sensitive failures;
+- three tests remain reproducibly failing when the Slice A module registration
+  is removed: `test_confirm_executes_once_and_restores_confirmation_gate`,
+  `test_service_status_leaves_guacamole_root_without_route`, and
+  `test_service_status_repairs_stale_guacamole_view_url`.
+
+Result:
+
+- P116 Slice A is source-implemented but not yet accepted because the broad
+  baseline gate is not green;
+- installer, daemon, browser, profile, route, display, dashboard, installed
+  payload, supervisor, and external state remain unchanged;
+- the next bounded packet is baseline-test reconciliation followed by Slice A
+  acceptance, then Slice B immutable generation staging.
+
 ## Turn 155 | 2026-08-15
 
 Scope: convert the wrong-daemon, wrong-executable, recurring interlock outage,

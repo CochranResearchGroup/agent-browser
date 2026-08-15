@@ -21,7 +21,13 @@ freezes immutable generation staging, closed-world runtime census, verified
 orphan adoption, two-phase owner transfer, continuous dashboard ingress,
 read-mostly durable handoff recovery, hard provider requirements, end-to-end
 presentation receipts, and rollback that proves the operator journey rather
-than only restoring files or units.
+than only restoring files or units. Slice A is source-implemented with a
+closed ten-source census ledger, thirteen deterministic runtime fixtures
+covering all eight classifications, frozen generation, transaction, adoption,
+and presentation schemas, and source-bound red proofs for the two current
+unsafe seams. Focused tests, formatting, and strict Clippy pass. Broad source
+acceptance remains incomplete because three pre-existing unit tests fail both
+with and without the Slice A module registered.
 
 ### Plan
 
@@ -29,11 +35,10 @@ than only restoring files or units.
 
 ### Next Recommendation
 
-Execute Slice A only. Add provider-free red fixtures for payload commit before
-runtime preservation and for the inability of a fresh daemon to adopt a fully
-verified surviving browser without an old-daemon handoff descriptor. Do not
-change the installer, installed payload, recurring interlock, or any live
-browser during this first slice.
+Reconcile the three current baseline unit-test failures recorded in Plan 0116,
+then accept Slice A without changing installer or runtime behavior. After that
+gate is green, begin Slice B immutable generation staging. Do not replace the
+installed payload, enable the recurring interlock, or touch a live browser.
 
 ## P114 | Terminal Route Quarantine Recovery
 

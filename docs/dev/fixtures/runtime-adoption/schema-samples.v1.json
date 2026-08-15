@@ -1,0 +1,99 @@
+{
+  "runtimeGeneration": {
+    "schemaVersion": "agent-browser.runtime-adoption.v1",
+    "generationId": "generation-candidate-001",
+    "packageVersion": "0.28.0",
+    "binarySha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "supportManifestSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "controllerCompatibilityVersion": 1,
+    "schemaCompatibilityVersion": 1,
+    "immutableInstallationPath": "/generations/generation-candidate-001",
+    "createdAt": "2026-08-15T12:00:00Z",
+    "acceptedAt": null,
+    "state": "staged"
+  },
+  "upgradeTransaction": {
+    "schemaVersion": "agent-browser.runtime-adoption.v1",
+    "transactionId": "upgrade-001",
+    "requestedBy": "operator-request-001",
+    "oldGenerationId": "generation-current-001",
+    "candidateGenerationId": "generation-candidate-001",
+    "candidateBinarySha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "candidateSupportManifestSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "runtimeCensusDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "runtimeMigrations": [
+      {
+        "logicalBrowserId": "browser-opaque-001",
+        "profileIdentityDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "classification": "orphan_adoptable",
+        "disposition": "orphan_adoption",
+        "adoptionReceiptId": "adoption-001",
+        "reasonCodes": ["verified_browser_without_live_daemon"]
+      }
+    ],
+    "state": "census_stable",
+    "revision": 4,
+    "checkpoints": [
+      {
+        "name": "census_stable",
+        "transactionRevision": 4,
+        "recordedAt": "2026-08-15T12:01:00Z"
+      }
+    ],
+    "dashboardValidationSummary": null,
+    "presentationValidationSummary": null,
+    "terminalResult": null,
+    "stopReason": null
+  },
+  "browserAdoptionReceipt": {
+    "schemaVersion": "agent-browser.runtime-adoption.v1",
+    "receiptId": "adoption-001",
+    "logicalBrowserId": "browser-opaque-001",
+    "profileIdentityDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "browserPid": 4242,
+    "processInstanceDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "executableFamily": "chrome",
+    "executableIdentityDigest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "cdpEndpointIdentityDigest": "1111111111111111111111111111111111111111111111111111111111111111",
+    "browserVersionDigest": "2222222222222222222222222222222222222222222222222222222222222222",
+    "targetSetDigest": "3333333333333333333333333333333333333333333333333333333333333333",
+    "selectedTargetIdentityDigest": "4444444444444444444444444444444444444444444444444444444444444444",
+    "runtimeProfileIdentityDigest": "5555555555555555555555555555555555555555555555555555555555555555",
+    "runtimeProfileAgreement": true,
+    "serviceStateRevision": 17,
+    "serviceStateAgreement": true,
+    "displayIdentityDigest": "6666666666666666666666666666666666666666666666666666666666666666",
+    "geometryEpoch": "geometry-7",
+    "routeIdentityDigest": "7777777777777777777777777777777777777777777777777777777777777777",
+    "streamProvider": "rdp",
+    "presentationAgreement": true,
+    "previousOwnerGeneration": 7,
+    "candidateOwnerGeneration": 8,
+    "adoptionMode": "orphan_adoption",
+    "decision": "authorized",
+    "reasonCodes": ["all_identity_evidence_matches"],
+    "recordedAt": "2026-08-15T12:02:00Z",
+    "retentionPosture": "transaction_and_rollback_window",
+    "redactionPosture": "digests_and_opaque_ids_only"
+  },
+  "presentationReceipt": {
+    "schemaVersion": "agent-browser.runtime-adoption.v1",
+    "receiptId": "presentation-001",
+    "dashboardDeploymentGeneration": "dashboard-generation-2",
+    "coordinatorGeneration": "generation-candidate-001",
+    "daemonGeneration": "generation-candidate-001",
+    "logicalBrowserId": "browser-opaque-001",
+    "processInstanceDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "selectedTargetGeneration": 11,
+    "selectedTargetIdentityDigest": "4444444444444444444444444444444444444444444444444444444444444444",
+    "requiredStreamProvider": "rdp",
+    "displayAllocationId": "display-opaque-001",
+    "geometryEpoch": "geometry-7",
+    "routeGeneration": 9,
+    "guacamoleConnectionGeneration": 5,
+    "authenticatedIngressProbeAt": "2026-08-15T12:03:00Z",
+    "operatorSurfaceLoadResult": "authenticated_external_view_loaded",
+    "state": "ready",
+    "reasonCodes": []
+  }
+}

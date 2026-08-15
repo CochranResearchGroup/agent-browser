@@ -971,6 +971,61 @@ Do not change installer behavior, replace the installed binary, enable the
 recurring interlock, stop a live daemon, adopt a live browser, or run a private
 handoff during Slice A.
 
+## Execution Status
+
+### 2026-08-15 | Slice A Source Implementation
+
+Acceptance state: `IMPLEMENTED_NOT_ACCEPTED`
+
+Implemented:
+
+- one internal, provider-free runtime-adoption authority module with no
+  installer, daemon, browser, dashboard, or public-contract integration;
+- a closed ten-source census ledger covering service state, runtime state,
+  profile ownership, supervisors, daemon metadata, process identity, profile
+  lock and DevTools evidence, CDP browser and targets, display proof, and the
+  view-stream, route-pool, Guacamole, and handoff join;
+- thirteen deterministic fixtures covering all eight classifications plus PID
+  reuse, wrong profile, wrong browser family, wrong endpoint, missing target
+  evidence, conflicting owners, external observation, and an unstable census;
+- frozen `RuntimeGeneration`, `UpgradeTransaction`,
+  `BrowserAdoptionReceipt`, and `PresentationReceipt` serialization samples
+  with private runtime evidence excluded from receipts and projections;
+- two intentional red results for payload commit before runtime preservation
+  and descriptor-bound orphan adoption, plus source-order guards tying those
+  results to the current implementation.
+
+Architecture drift review:
+
+- completed the one broad Slice A review allowed by the plan;
+- consolidated blocking-finding set: empty;
+- P108 process-instance evidence and P111 profile identity digest and owner
+  generation remain the compatible upstream vocabulary;
+- the module creates no competing owner registry and does not alter existing
+  `BrowserSessionAuthoritySnapshot`, `RuntimeState`, or
+  `RuntimeHandoffDescriptor` behavior.
+
+Validation:
+
+- `runtime_adoption::tests`: 5 passed;
+- JSON fixture parsing: passed;
+- `scripts/ci/cargo-safe.sh fmt --manifest-path cli/Cargo.toml -- --check`:
+  passed;
+- `scripts/ci/cargo-safe.sh clippy --manifest-path cli/Cargo.toml -- -D
+  warnings`: passed;
+- broad Rust run: 2,025 passed, 57 ignored, and 6 failed;
+- isolated serial reruns cleared three race-sensitive failures;
+- the following three failures reproduce with the Slice A module registration
+  removed, proving they are current baseline failures rather than Slice A
+  regressions:
+  - `test_confirm_executes_once_and_restores_confirmation_gate`;
+  - `test_service_status_leaves_guacamole_root_without_route`;
+  - `test_service_status_repairs_stale_guacamole_view_url`.
+
+No live or installed validation was authorized or attempted. Slice A remains
+not accepted until the three baseline failures are reconciled and the broad
+source gate is green.
+
 ## Planning Evidence
 
 - CodeGraph was healthy on 2026-08-15 with 553 files, 19,654 nodes, and 68,296
