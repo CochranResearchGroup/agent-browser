@@ -1616,6 +1616,15 @@ agent-browser --cdp 9222 snapshot
 
 Auto-connect discovers Chrome via `DevToolsActivePort`, common debugging ports (9222, 9229), and falls back to a direct WebSocket connection if HTTP-based CDP discovery fails.
 
+For a controlled local-Chrome diagnostic, set
+`AGENT_BROWSER_CDP_BOOTSTRAP_MODE=navigation_minimal` before the first command
+launches Chrome. The selected target initially enables only the Page domain.
+`networkidle` navigation promotes that target to the ordinary eager posture,
+and network-capture features enable the Network domain when requested. The
+default is `eager`; attached-existing, provider, runtime-handoff, and
+Lightpanda paths remain eager. Treat this as an instrumentation experiment,
+not a CAPTCHA bypass or concealment guarantee.
+
 ### Color Scheme (Dark Mode)
 
 ```bash

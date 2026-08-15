@@ -2198,6 +2198,16 @@ This enables control of:
 - WebView2 applications
 - Any browser exposing a CDP endpoint
 
+For controlled diagnostics on a newly launched local Chrome process, set
+`AGENT_BROWSER_CDP_BOOTSTRAP_MODE=navigation_minimal`. The first attached
+target enables only the Page domain. A `networkidle` navigation promotes that
+target to the ordinary eager posture before relying on network lifecycle
+events, while HAR and bounded network-capture commands enable the Network
+domain explicitly. The default is `eager`, and existing-browser, provider,
+runtime-handoff, and Lightpanda connections keep their existing eager behavior.
+This mode creates a reproducible instrumentation boundary; it is not a CAPTCHA
+bypass or a promise that a site will treat automation as human traffic.
+
 ### Auto-Connect
 
 Use `--auto-connect` to automatically discover and connect to a running Chrome instance without specifying a port:

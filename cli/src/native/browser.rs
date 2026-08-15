@@ -247,9 +247,99 @@ impl WaitUntil {
     }
 }
 
+fn navigation_requires_eager_bootstrap(wait_until: WaitUntil) -> bool {
+    wait_until == WaitUntil::NetworkIdle
+}
+
 pub enum BrowserProcess {
     Chrome(ChromeProcess),
     Lightpanda(LightpandaProcess),
+}
+
+/// Selects how much CDP instrumentation a newly launched local Chrome target
+/// receives before its first action. The default remains the historical eager
+/// posture; `navigation_minimal` is an experimental, local-launch-only mode.
+const CDP_BOOTSTRAP_MODE_ENV: &str = "AGENT_BROWSER_CDP_BOOTSTRAP_MODE";
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum CdpBootstrapMode {
+    #[default]
+    Eager,
+    NavigationMinimal,
+}
+
+impl CdpBootstrapMode {
+    fn parse(value: &str) -> Result<Self, String> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "eager" => Ok(Self::Eager),
+            "navigation_minimal" => Ok(Self::NavigationMinimal),
+            _ => Err(format!(
+                "Invalid {CDP_BOOTSTRAP_MODE_ENV} value '{value}'. Expected eager or navigation_minimal."
+            )),
+        }
+    }
+
+    #[cfg(test)]
+    fn initial_methods(self) -> &'static [&'static str] {
+        match self {
+            Self::Eager => &[
+                "Page.enable",
+                "Runtime.enable",
+                "Runtime.runIfWaitingForDebugger",
+                "Network.enable",
+                "Target.setAutoAttach",
+            ],
+            Self::NavigationMinimal => &["Page.enable"],
+        }
+    }
+
+    fn for_local_launch() -> Result<Self, String> {
+        match std::env::var(CDP_BOOTSTRAP_MODE_ENV) {
+            Ok(value) => Self::parse(&value),
+            Err(std::env::VarError::NotPresent) => Ok(Self::Eager),
+            Err(std::env::VarError::NotUnicode(_)) => Err(format!(
+                "Invalid {CDP_BOOTSTRAP_MODE_ENV} value. Expected eager or navigation_minimal."
+            )),
+        }
+    }
+}
+
+async fn apply_cdp_eager_extensions(client: &CdpClient, session_id: &str) -> Result<(), String> {
+    client
+        .send_command_no_params("Runtime.enable", Some(session_id))
+        .await?;
+    let _ = client
+        .send_command_no_params("Runtime.runIfWaitingForDebugger", Some(session_id))
+        .await;
+    client
+        .send_command_no_params("Network.enable", Some(session_id))
+        .await?;
+    let _ = client
+        .send_command(
+            "Target.setAutoAttach",
+            Some(json!({
+                "autoAttach": true,
+                "waitForDebuggerOnStart": false,
+                "flatten": true
+            })),
+            Some(session_id),
+        )
+        .await;
+    Ok(())
+}
+
+async fn apply_cdp_bootstrap(
+    client: &CdpClient,
+    session_id: &str,
+    mode: CdpBootstrapMode,
+) -> Result<(), String> {
+    client
+        .send_command_no_params("Page.enable", Some(session_id))
+        .await?;
+    if mode == CdpBootstrapMode::NavigationMinimal {
+        return Ok(());
+    }
+    apply_cdp_eager_extensions(client, session_id).await
 }
 
 /// Shutdown remedy outcome used to classify browser health after close.
@@ -398,6 +488,8 @@ pub struct BrowserManager {
     pub ignore_https_errors: bool,
     /// Origins visited during this session, used by save_state to collect cross-origin localStorage.
     visited_origins: HashSet<String>,
+    bootstrap_mode: CdpBootstrapMode,
+    eager_session_ids: HashSet<String>,
 }
 
 const LIGHTPANDA_CDP_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -408,6 +500,11 @@ const RUNTIME_HANDOFF_TARGET_INIT_TIMEOUT: Duration = Duration::from_secs(2);
 impl BrowserManager {
     pub async fn launch(options: LaunchOptions, engine: Option<&str>) -> Result<Self, String> {
         let engine = engine.unwrap_or("chrome");
+        let bootstrap_mode = if engine == "chrome" {
+            CdpBootstrapMode::for_local_launch()?
+        } else {
+            CdpBootstrapMode::Eager
+        };
 
         match engine {
             "chrome" => {
@@ -470,6 +567,8 @@ impl BrowserManager {
                 download_path: download_path.clone(),
                 ignore_https_errors,
                 visited_origins: HashSet::new(),
+                bootstrap_mode,
+                eager_session_ids: HashSet::new(),
             };
             manager.discover_and_attach_targets().await?;
             manager
@@ -544,6 +643,8 @@ impl BrowserManager {
             download_path: None,
             ignore_https_errors: false,
             visited_origins: HashSet::new(),
+            bootstrap_mode: CdpBootstrapMode::Eager,
+            eager_session_ids: HashSet::new(),
         };
         manager
             .discover_and_attach_retained_targets_for_handoff(preferred_target_id)
@@ -581,6 +682,8 @@ impl BrowserManager {
             download_path: None,
             ignore_https_errors: false,
             visited_origins: HashSet::new(),
+            bootstrap_mode: CdpBootstrapMode::Eager,
+            eager_session_ids: HashSet::new(),
         };
 
         if direct_page {
@@ -792,37 +895,17 @@ impl BrowserManager {
     }
 
     async fn enable_domains(&self, session_id: &str) -> Result<(), String> {
-        self.client
-            .send_command_no_params("Page.enable", Some(session_id))
-            .await?;
-        self.client
-            .send_command_no_params("Runtime.enable", Some(session_id))
-            .await?;
-        // Resume the target if it is paused waiting for the debugger.
-        // This is needed for real browser sessions (Chrome 144+) where targets
-        // are paused after attach until explicitly resumed. No-op otherwise.
-        let _ = self
-            .client
-            .send_command_no_params("Runtime.runIfWaitingForDebugger", Some(session_id))
-            .await;
-        self.client
-            .send_command_no_params("Network.enable", Some(session_id))
-            .await?;
-        // Enable auto-attach for cross-origin iframe support.
-        // flatten: true gives each iframe its own session_id.
-        // Ignored on engines that don't support it (e.g. Lightpanda).
-        let _ = self
-            .client
-            .send_command(
-                "Target.setAutoAttach",
-                Some(json!({
-                    "autoAttach": true,
-                    "waitForDebuggerOnStart": false,
-                    "flatten": true
-                })),
-                Some(session_id),
-            )
-            .await;
+        apply_cdp_bootstrap(&self.client, session_id, self.bootstrap_mode).await
+    }
+
+    async fn ensure_eager_domains(&mut self, session_id: &str) -> Result<(), String> {
+        if self.bootstrap_mode == CdpBootstrapMode::Eager
+            || self.eager_session_ids.contains(session_id)
+        {
+            return Ok(());
+        }
+        apply_cdp_eager_extensions(&self.client, session_id).await?;
+        self.eager_session_ids.insert(session_id.to_string());
         Ok(())
     }
 
@@ -895,6 +978,9 @@ impl BrowserManager {
 
     pub async fn navigate(&mut self, url: &str, wait_until: WaitUntil) -> Result<Value, String> {
         let mut session_id = self.active_session_id()?.to_string();
+        if navigation_requires_eager_bootstrap(wait_until) {
+            self.ensure_eager_domains(&session_id).await?;
+        }
         let mut lifecycle_rx = self.client.subscribe();
 
         let nav_params = PageNavigateParams {
@@ -2179,6 +2265,8 @@ async fn initialize_lightpanda_manager(
             download_path: None,
             ignore_https_errors: false,
             visited_origins: HashSet::new(),
+            bootstrap_mode: CdpBootstrapMode::Eager,
+            eager_session_ids: HashSet::new(),
         };
 
         match discover_and_attach_lightpanda_targets(&mut manager, deadline).await {
@@ -2652,10 +2740,158 @@ mod x11_focus {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::EnvGuard;
     use futures_util::{SinkExt, StreamExt};
+    use std::sync::{Arc as StdArc, Mutex as StdMutex};
     use tokio::net::TcpListener;
     use tokio::time::sleep;
     use tokio_tungstenite::tungstenite::Message;
+
+    async fn recording_cdp_client(
+        expected_commands: usize,
+    ) -> (
+        CdpClient,
+        StdArc<StdMutex<Vec<String>>>,
+        tokio::task::JoinHandle<()>,
+    ) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let methods = StdArc::new(StdMutex::new(Vec::new()));
+        let recorded = methods.clone();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut websocket = tokio_tungstenite::accept_async(stream).await.unwrap();
+            for _ in 0..expected_commands {
+                let command = websocket.next().await.unwrap().unwrap();
+                let command: Value = serde_json::from_str(command.to_text().unwrap()).unwrap();
+                recorded
+                    .lock()
+                    .unwrap()
+                    .push(command["method"].as_str().unwrap().to_string());
+                websocket
+                    .send(Message::Text(
+                        json!({"id": command["id"], "result": {}}).to_string(),
+                    ))
+                    .await
+                    .unwrap();
+            }
+        });
+        let client = CdpClient::connect(&format!("ws://{address}"))
+            .await
+            .unwrap();
+        (client, methods, server)
+    }
+
+    #[test]
+    fn navigation_minimal_bootstrap_enables_page_only() {
+        let mode = CdpBootstrapMode::parse("navigation_minimal").unwrap();
+
+        assert_eq!(mode.initial_methods(), &["Page.enable"]);
+    }
+
+    #[test]
+    fn eager_bootstrap_remains_the_default() {
+        let guard = EnvGuard::new(&[CDP_BOOTSTRAP_MODE_ENV]);
+        guard.remove(CDP_BOOTSTRAP_MODE_ENV);
+
+        assert_eq!(
+            CdpBootstrapMode::for_local_launch().unwrap(),
+            CdpBootstrapMode::Eager
+        );
+    }
+
+    #[tokio::test]
+    async fn navigation_minimal_bootstrap_sends_only_page_enable() {
+        let (client, methods, server) = recording_cdp_client(1).await;
+
+        apply_cdp_bootstrap(&client, "session-1", CdpBootstrapMode::NavigationMinimal)
+            .await
+            .unwrap();
+        server.await.unwrap();
+
+        assert_eq!(methods.lock().unwrap().as_slice(), ["Page.enable"]);
+    }
+
+    #[tokio::test]
+    async fn eager_bootstrap_preserves_the_existing_command_sequence() {
+        let (client, methods, server) = recording_cdp_client(5).await;
+
+        apply_cdp_bootstrap(&client, "session-1", CdpBootstrapMode::Eager)
+            .await
+            .unwrap();
+        server.await.unwrap();
+
+        assert_eq!(
+            methods.lock().unwrap().as_slice(),
+            [
+                "Page.enable",
+                "Runtime.enable",
+                "Runtime.runIfWaitingForDebugger",
+                "Network.enable",
+                "Target.setAutoAttach",
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn minimal_bootstrap_promotion_is_session_scoped() {
+        let (client, methods, server) = recording_cdp_client(8).await;
+        let mut manager = BrowserManager {
+            client: Arc::new(client),
+            browser_process: None,
+            ws_url: "ws://fixture".to_string(),
+            pages: Vec::new(),
+            active_page_index: 0,
+            default_timeout_ms: 25_000,
+            download_path: None,
+            ignore_https_errors: false,
+            visited_origins: HashSet::new(),
+            bootstrap_mode: CdpBootstrapMode::NavigationMinimal,
+            eager_session_ids: HashSet::new(),
+        };
+
+        manager.ensure_eager_domains("session-1").await.unwrap();
+        manager.ensure_eager_domains("session-1").await.unwrap();
+        manager.ensure_eager_domains("session-2").await.unwrap();
+        server.await.unwrap();
+
+        assert_eq!(manager.bootstrap_mode, CdpBootstrapMode::NavigationMinimal);
+        assert!(manager.eager_session_ids.contains("session-1"));
+        assert!(manager.eager_session_ids.contains("session-2"));
+        assert_eq!(
+            methods.lock().unwrap().as_slice(),
+            [
+                "Runtime.enable",
+                "Runtime.runIfWaitingForDebugger",
+                "Network.enable",
+                "Target.setAutoAttach",
+                "Runtime.enable",
+                "Runtime.runIfWaitingForDebugger",
+                "Network.enable",
+                "Target.setAutoAttach",
+            ]
+        );
+    }
+
+    #[test]
+    fn network_idle_navigation_requires_eager_bootstrap() {
+        assert!(navigation_requires_eager_bootstrap(WaitUntil::NetworkIdle));
+        assert!(!navigation_requires_eager_bootstrap(WaitUntil::Load));
+        assert!(!navigation_requires_eager_bootstrap(
+            WaitUntil::DomContentLoaded
+        ));
+        assert!(!navigation_requires_eager_bootstrap(WaitUntil::None));
+    }
+
+    #[test]
+    fn invalid_bootstrap_mode_fails_closed() {
+        let guard = EnvGuard::new(&[CDP_BOOTSTRAP_MODE_ENV]);
+        guard.set(CDP_BOOTSTRAP_MODE_ENV, "stealth");
+        let error = CdpBootstrapMode::for_local_launch().unwrap_err();
+
+        assert!(error.contains(CDP_BOOTSTRAP_MODE_ENV));
+        assert!(error.contains("Expected eager or navigation_minimal"));
+    }
 
     #[test]
     fn test_should_track_popup_target_with_empty_url() {
@@ -2796,6 +3032,8 @@ mod tests {
             download_path: None,
             ignore_https_errors: false,
             visited_origins: HashSet::new(),
+            bootstrap_mode: CdpBootstrapMode::Eager,
+            eager_session_ids: HashSet::new(),
         };
 
         let error = manager
