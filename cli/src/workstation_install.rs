@@ -1891,7 +1891,7 @@ fn verify_final_doctors(
             "/data/remoteControl/ready",
         ),
     ] {
-        let output = run_status(
+        let output = run_observed(
             paths
                 .binary
                 .to_str()
@@ -1899,20 +1899,33 @@ fn verify_final_doctors(
             &args,
             support_root,
             command_env,
-            false,
         )?;
         let payload: Value = serde_json::from_slice(&output.stdout)
             .map_err(|error| format!("{label} JSON parse failed: {error}"))?;
-        let ready = if label == "install doctor" {
-            install_doctor_reports_workstation_ready(&payload)
-        } else {
-            payload.pointer(readiness_pointer).and_then(Value::as_bool) == Some(true)
-        };
+        let ready =
+            final_doctor_reports_ready(label, &payload, output.status.success(), readiness_pointer);
         if !ready {
-            return Err(format!("{label} did not report ready"));
+            return Err(format!(
+                "{label} did not report ready (status {})",
+                output.status
+            ));
         }
     }
     Ok(())
+}
+
+fn final_doctor_reports_ready(
+    label: &str,
+    payload: &Value,
+    command_succeeded: bool,
+    readiness_pointer: &str,
+) -> bool {
+    if label == "install doctor" {
+        install_doctor_reports_workstation_ready(payload)
+    } else {
+        command_succeeded
+            && payload.pointer(readiness_pointer).and_then(Value::as_bool) == Some(true)
+    }
 }
 
 /// Accepts a globally degraded install doctor only when every reported issue
@@ -3158,7 +3171,12 @@ mod tests {
                 }
             }
         });
-        assert!(install_doctor_reports_workstation_ready(&advisory));
+        assert!(final_doctor_reports_ready(
+            "install doctor",
+            &advisory,
+            false,
+            "/success"
+        ));
 
         let active_supervisor = serde_json::json!({
             "success": false,
@@ -3182,6 +3200,16 @@ mod tests {
             }
         });
         assert!(!install_doctor_reports_workstation_ready(&route_blocker));
+
+        let remote_view_ready = serde_json::json!({
+            "data": {"remoteControl": {"ready": true}}
+        });
+        assert!(!final_doctor_reports_ready(
+            "remote-view doctor",
+            &remote_view_ready,
+            false,
+            "/data/remoteControl/ready"
+        ));
     }
 
     #[cfg(unix)]
