@@ -1342,9 +1342,10 @@ struct RemoteControlInstallReadiness {
 /// Classify embedded install-doctor output for single-route remote control.
 ///
 /// The install doctor remains the authority for aggregate workstation health.
-/// Remote control may proceed through unrelated duplicate-profile pressure only
-/// when the structured report proves that no resource candidate affects
-/// readiness. Missing or mixed evidence fails closed.
+/// Remote control may proceed through unrelated duplicate-profile pressure or
+/// exact issues copied from inactive optional session supervisors only when the
+/// structured report proves that no resource candidate affects readiness.
+/// Missing, active-supervisor, or mixed evidence fails closed.
 fn remote_control_install_readiness(install: &Value) -> RemoteControlInstallReadiness {
     let doctor_ready = nested_bool(install, &["success"]);
     if doctor_ready {
@@ -1361,22 +1362,51 @@ fn remote_control_install_readiness(install: &Value) -> RemoteControlInstallRead
     let readiness_impacting_candidates = install
         .pointer("/data/data/serviceResources/readinessImpactingCandidates")
         .and_then(Value::as_u64);
-    let duplicate_pressure_only = issues.is_some_and(|issues| {
-        !issues.is_empty()
-            && issues.iter().all(|issue| {
-                issue.get("code").and_then(Value::as_str)
-                    == Some("service_duplicate_profile_pressure")
+    let session_supervisors = install
+        .pointer("/data/data/sessionSupervisors")
+        .unwrap_or(&Value::Null);
+    let inactive_supervisors = session_supervisors
+        .get("sessions")
+        .and_then(Value::as_array)
+        .is_some_and(|sessions| {
+            sessions.iter().all(|session| {
+                session.get("activeState").and_then(Value::as_str) == Some("inactive")
             })
-    });
-    let duplicate_pressure_is_non_blocking = !doctor_command_timed_out(install)
-        && duplicate_pressure_only
+        });
+    let supervisor_issues = session_supervisors
+        .get("issues")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let non_blocking_issue_codes = issues
+        .filter(|issues| !issues.is_empty())
+        .and_then(|issues| {
+            issues
+                .iter()
+                .map(|issue| {
+                    let code = issue.get("code").and_then(Value::as_str)?;
+                    if code == "service_duplicate_profile_pressure"
+                        || (inactive_supervisors && supervisor_issues.contains(issue))
+                    {
+                        Some(code.to_string())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Option<Vec<_>>>()
+        })
+        .unwrap_or_default();
+    let advisory_issues_only = issues
+        .is_some_and(|issues| !issues.is_empty() && non_blocking_issue_codes.len() == issues.len());
+    let advisory_issues_are_non_blocking = !doctor_command_timed_out(install)
+        && advisory_issues_only
         && readiness_impacting_candidates == Some(0);
 
     RemoteControlInstallReadiness {
         doctor_ready,
-        ready: duplicate_pressure_is_non_blocking,
-        non_blocking_issue_codes: if duplicate_pressure_is_non_blocking {
-            vec!["service_duplicate_profile_pressure".to_string()]
+        ready: advisory_issues_are_non_blocking,
+        non_blocking_issue_codes: if advisory_issues_are_non_blocking {
+            non_blocking_issue_codes
         } else {
             Vec::new()
         },
@@ -3379,6 +3409,39 @@ MaxSessions=50
             issue.get("code").and_then(Value::as_str)
                 == Some("install_service_duplicate_profile_pressure")
         }));
+    }
+
+    #[test]
+    fn inactive_supervisor_drift_is_nonblocking_for_remote_control() {
+        let mut install = duplicate_pressure_only_install();
+        let supervisor_issue = json!({
+            "code": "executable_drift",
+            "message": "inactive supervisor executable drift",
+            "severity": "warning"
+        });
+        install["data"]["data"]["issues"]
+            .as_array_mut()
+            .unwrap()
+            .push(supervisor_issue.clone());
+        install["data"]["data"]["sessionSupervisors"] = json!({
+            "sessions": [{"activeState": "inactive"}],
+            "issues": [supervisor_issue]
+        });
+
+        let readiness = remote_control_install_readiness(&install);
+        assert!(!readiness.doctor_ready);
+        assert!(readiness.ready);
+        assert_eq!(
+            readiness.non_blocking_issue_codes,
+            vec![
+                "service_duplicate_profile_pressure".to_string(),
+                "executable_drift".to_string()
+            ]
+        );
+
+        install["data"]["data"]["sessionSupervisors"]["sessions"][0]["activeState"] =
+            json!("active");
+        assert!(!remote_control_install_readiness(&install).ready);
     }
 
     #[test]
