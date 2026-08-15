@@ -402,8 +402,7 @@ pub struct LaunchOptions {
     /// area matches the desired viewport from the start.
     pub viewport_size: Option<(u32, u32)>,
     /// When true, omit `--password-store=basic` and `--use-mock-keychain` so
-    /// Chrome uses the real system keychain. Set automatically when launching with
-    /// a managed profile name.
+    /// Chrome uses the real system keychain.
     pub use_real_keychain: bool,
     /// Optional keychain password used to unlock the native credential store
     /// before launch on supported platforms.
@@ -701,9 +700,14 @@ fn build_chrome_args(
         args.push("--remote-debugging-port=0".to_string());
     }
 
-    if !options.use_real_keychain && !manual_login_mode {
+    if !options.use_real_keychain {
         args.push("--password-store=basic".to_string());
-        args.push("--use-mock-keychain".to_string());
+        // Manual login must avoid the mock-keychain fingerprint, but the basic
+        // password store is still required on Linux to prevent a desktop
+        // keyring-unlock prompt from obscuring the login ceremony.
+        if !manual_login_mode {
+            args.push("--use-mock-keychain".to_string());
+        }
     }
 
     let has_extensions = options
@@ -4244,7 +4248,7 @@ mod tests {
             .args
             .iter()
             .any(|a| a == "--disable-background-networking"));
-        assert!(!result.args.iter().any(|a| a == "--password-store=basic"));
+        assert!(result.args.iter().any(|a| a == "--password-store=basic"));
         assert!(!result.args.iter().any(|a| a == "--use-mock-keychain"));
     }
 
@@ -4267,7 +4271,7 @@ mod tests {
             .iter()
             .any(|a| a.starts_with("--remote-debugging-port")));
         assert!(!result.args.iter().any(|a| a == "--disable-sync"));
-        assert!(!result.args.iter().any(|a| a == "--password-store=basic"));
+        assert!(result.args.iter().any(|a| a == "--password-store=basic"));
         assert!(!result.args.iter().any(|a| a == "--use-mock-keychain"));
     }
 
@@ -4290,11 +4294,11 @@ mod tests {
             "--disable-background-networking",
             "--disable-component-update",
             "--disable-sync",
-            "--password-store=basic",
             "--use-mock-keychain",
         ] {
             assert!(!result.args.iter().any(|a| a == excluded), "{excluded}");
         }
+        assert!(result.args.iter().any(|a| a == "--password-store=basic"));
     }
 
     #[test]
