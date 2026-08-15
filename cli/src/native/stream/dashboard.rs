@@ -11,6 +11,8 @@ use tokio::time::{timeout, Duration, Instant};
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::connection::get_socket_dir;
+use crate::native::service_model::ServiceState;
+use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
 
 #[cfg(test)]
 use super::super::remote_view::{display_content_from_xwininfo, should_probe_route_display};
@@ -524,6 +526,52 @@ async fn handle_service_api_request(
                 }
             }
         }
+
+        if let Some(session_name) = service_request_handoff_target_session_name(path, body) {
+            if let Some(port) = session_port_for_name(&session_name) {
+                match proxy_dashboard_service_api_request(
+                    port,
+                    "POST",
+                    path,
+                    body,
+                    DASHBOARD_REMOTE_VIEW_HANDOFF_PROXY_TIMEOUT,
+                )
+                .await
+                {
+                    Ok(response) => {
+                        let response = match service_api_handler_backend_response(
+                            method, path, response, port,
+                        ) {
+                            Ok(response) => response,
+                            Err(err) => {
+                                write_json_error_with_code(
+                                    stream,
+                                    "502 Bad Gateway",
+                                    &format!("Durable handoff owner proxy failed: {err}"),
+                                    Some(err.code),
+                                    err.details.clone(),
+                                )
+                                .await;
+                                return;
+                            }
+                        };
+                        let _ = stream.write_all(&response).await;
+                        return;
+                    }
+                    Err(err) => {
+                        write_json_error_with_code(
+                            stream,
+                            "502 Bad Gateway",
+                            &format!("Durable handoff owner proxy failed: {err}"),
+                            Some(err.code),
+                            err.details.clone(),
+                        )
+                        .await;
+                        return;
+                    }
+                }
+            }
+        }
     }
 
     if dashboard_service_status_cacheable(method, path) {
@@ -735,6 +783,42 @@ fn service_request_target_session_name(path: &str, body: &str) -> Option<String>
         }
     }
     None
+}
+
+fn service_request_handoff_target_session_name(path: &str, body: &str) -> Option<String> {
+    let state_path = JsonServiceStateStore::default_path().ok()?;
+    let state = JsonServiceStateStore::new(state_path).load().ok()?;
+    service_request_handoff_target_session_name_from_state(path, body, &state)
+}
+
+fn service_request_handoff_target_session_name_from_state(
+    path: &str,
+    body: &str,
+    state: &ServiceState,
+) -> Option<String> {
+    let (path, _) = split_path_query(path);
+    if path != "/api/service/request" {
+        return None;
+    }
+    let request: Value = serde_json::from_str(body).ok()?;
+    if request.get("action").and_then(Value::as_str) != Some("service_remote_view_handoff_resolve")
+    {
+        return None;
+    }
+    let handoff_id = request
+        .pointer("/params/handoffId")
+        .or_else(|| request.get("handoffId"))
+        .and_then(Value::as_str)?
+        .trim();
+    if handoff_id.is_empty() {
+        return None;
+    }
+    let handoff = state.remote_view_handoffs.get(handoff_id)?;
+    handoff
+        .session_name
+        .as_deref()
+        .and_then(normalize_service_request_session_name)
+        .or_else(|| service_request_session_candidate(handoff.intent.get("sessionName")))
 }
 
 fn service_api_proxy_timeout(method: &str, path: &str, body: &str) -> Duration {
@@ -3063,6 +3147,31 @@ mod tests {
         assert_eq!(
             service_request_target_session_name("/api/service/request", body),
             None
+        );
+    }
+
+    #[test]
+    fn dashboard_durable_handoff_resolution_targets_retained_owner_session() {
+        let state = crate::native::service_model::ServiceState {
+            remote_view_handoffs: std::collections::BTreeMap::from([(
+                "handoff-a".to_string(),
+                crate::native::service_model::RemoteViewHandoff {
+                    id: "handoff-a".to_string(),
+                    session_name: Some("im-receipts-google-messages-stock-v4".to_string()),
+                    ..crate::native::service_model::RemoteViewHandoff::default()
+                },
+            )]),
+            ..crate::native::service_model::ServiceState::default()
+        };
+        let body = r##"{"action":"service_remote_view_handoff_resolve","params":{"handoffId":"handoff-a"}}"##;
+
+        assert_eq!(
+            service_request_handoff_target_session_name_from_state(
+                "/api/service/request",
+                body,
+                &state,
+            ),
+            Some("im-receipts-google-messages-stock-v4".to_string())
         );
     }
 
