@@ -113,9 +113,11 @@ new binary.
   documentation guard passed.
 - The installed binary, checkout binary, dashboard runtime, workstation payload,
   and installed Agent Browser skill were synchronized. Runtime convergence was
-  8/8 with zero stale runtimes. Doctor remained nonzero only for the deliberately
-  retained duplicate-profile experiment pressure and an unrelated inactive Mail
-  Receipts supervisor manifest that still names the previous executable hash.
+  8/8 with zero stale runtimes. The inactive Mail Receipts supervisor manifest
+  was refreshed to the current executable without launching a browser, then
+  returned to its prior inactive state. Doctor remained nonzero only for the
+  deliberately retained duplicate-profile experiment pressure and that stopped
+  supervisor; neither issue represents executable drift.
 - One bounded Google comparison used fresh isolated profiles and the same
   installed stealth Chromium. Eager bootstrap reached search results in 2/2
   trials. Minimal bootstrap reached results in 1/2 and received an untouched
