@@ -12,7 +12,9 @@ use super::planner::{
     remote_view_open_command_with_effective_intent,
     remote_view_open_ensure_managed_one_time_profile, remote_view_open_one_time_profile_warning,
     remote_view_open_persist_request_route_pool, remote_view_open_runtime_attach_launch_command,
-    remote_view_open_should_reuse_current_browser, service_remote_view_acquisition_plan_from_state,
+    remote_view_open_should_reuse_current_browser,
+    remote_view_open_should_reuse_current_browser_for_durable_resolution,
+    service_remote_view_acquisition_plan_from_state,
 };
 use super::route_lifecycle::service_remote_view_timestamp;
 use super::runtime::{
@@ -160,6 +162,8 @@ pub(crate) struct RouteBoundDirectOpenRequest {
     intent: RemoteViewOpenIntent,
     dry_run: bool,
     handoff_id: Option<String>,
+    prefer_existing_browser: bool,
+    retained_handoff: Option<RemoteViewHandoff>,
 }
 
 impl RouteBoundDirectOpenRequest {
@@ -188,7 +192,15 @@ impl RouteBoundDirectOpenRequest {
             intent,
             dry_run,
             handoff_id,
+            prefer_existing_browser: false,
+            retained_handoff: None,
         })
+    }
+
+    fn prefer_existing_browser(mut self, handoff: RemoteViewHandoff) -> Self {
+        self.prefer_existing_browser = true;
+        self.retained_handoff = Some(handoff);
+        self
     }
 
     fn command(&self) -> Value {
@@ -410,9 +422,11 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
     repository: &P,
     supervisor: &RouteBoundOpenSupervisor,
 ) -> Result<RouteBoundDirectOpenResult, RouteBoundOpenExecutionError> {
-    let cmd = request.command();
+    let mut cmd = request.command();
     let mut intent = request.intent;
     let handoff_id = request.handoff_id;
+    let prefer_existing_browser = request.prefer_existing_browser;
+    let retained_handoff = request.retained_handoff;
     let initial_browser = supervisor
         .forward("observe_browser", runtime.observe_browser())
         .await?;
@@ -430,6 +444,19 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
             repository.snapshot(supervisor.forward_repository_lock_timeout()),
         )
         .await?;
+    let reuse_durable_browser = prefer_existing_browser
+        && remote_view_open_should_reuse_current_browser_for_durable_resolution(
+            &initial_browser,
+            &intent,
+            &browser_id,
+            &session_id,
+            &service_state,
+        );
+    if reuse_durable_browser {
+        if let Some(retained_handoff) = retained_handoff.as_ref() {
+            apply_available_retained_remote_view_route(&service_state, retained_handoff, &mut cmd);
+        }
+    }
     let dry_run = request.dry_run;
     let managed_one_time_profile = supervisor
         .forward(
@@ -588,7 +615,7 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
         &initial_browser,
         &browser_id,
         &session_id,
-    );
+    ) || reuse_durable_browser;
     let launch = if reused_current_browser {
         route_bound_handoff_reused_browser_launch_result(&route_binding, &browser_id, &session_id)
     } else {
@@ -987,7 +1014,8 @@ pub(crate) async fn execute_durable_resolution<
         resolution_command,
         Some(handoff.id.clone()),
         attribution,
-    )?;
+    )?
+    .prefer_existing_browser(handoff.clone());
     let opened = match execute_direct_open(direct_request, runtime, repository, supervisor).await {
         Ok(RouteBoundDirectOpenResult::Planned(plan)) => {
             return Ok(RouteBoundOpenOutcome::Planned { plan });

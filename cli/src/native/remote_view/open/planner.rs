@@ -102,6 +102,51 @@ pub(crate) fn remote_view_open_should_reuse_current_browser(
         decision.step == "route_pool_entry" && decision.reason == "same_owner_checked_out_route"
     })
 }
+
+/// Durable handoff resolution is browser-first: an exact live daemon/profile
+/// owner may acquire a new route without launching a second browser process.
+/// Route ownership is deliberately not required here because restoring that
+/// missing route binding is the purpose of durable resolution.
+pub(crate) fn remote_view_open_should_reuse_current_browser_for_durable_resolution(
+    observation: &RouteBoundBrowserObservation,
+    intent: &super::super::super::remote_view::RemoteViewOpenIntent,
+    browser_id: &str,
+    session_id: &str,
+    service_state: &ServiceState,
+) -> bool {
+    if !observation.browser_present
+        || browser_id != observation.browser_id
+        || session_id != observation.session_id
+    {
+        return false;
+    }
+
+    let requested_profile = intent
+        .runtime_profile
+        .as_deref()
+        .or(intent.profile.as_deref());
+    if requested_profile.is_none() || observation.runtime_profile.as_deref() == requested_profile {
+        return true;
+    }
+
+    let Some(browser) = service_state.browsers.get(browser_id) else {
+        return false;
+    };
+    browser.pid == observation.browser_pid
+        && browser.profile_id.as_deref() == requested_profile
+        && browser
+            .active_session_ids
+            .iter()
+            .any(|active_session_id| active_session_id == session_id)
+        && !matches!(
+            browser.health,
+            ServiceBrowserHealth::NotStarted
+                | ServiceBrowserHealth::ProcessExited
+                | ServiceBrowserHealth::Closing
+                | ServiceBrowserHealth::Faulted
+        )
+}
+
 pub(crate) fn remote_view_open_runtime_attach_launch_command(
     launch_command: &Value,
     observation: &RouteBoundBrowserObservation,

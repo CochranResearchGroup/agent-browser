@@ -195,6 +195,8 @@ pub(crate) async fn observe_daemon_browser(
 ) -> Result<RouteBoundBrowserObservation, RouteBoundRuntimeIssue> {
     let session_id = state.session_id.clone();
     let browser_id = service_browser_id(&session_id);
+    let attached_browser_pid = state.attached_browser_pid;
+    let attached_runtime_profile = state.attached_runtime_profile.clone();
     let Some(manager) = state.browser.as_mut() else {
         return Ok(RouteBoundBrowserObservation {
             browser_present: false,
@@ -210,10 +212,13 @@ pub(crate) async fn observe_daemon_browser(
     };
     Ok(RouteBoundBrowserObservation {
         browser_present: true,
-        browser_pid: manager.browser_pid(),
+        browser_pid: manager.browser_pid().or(attached_browser_pid),
         browser_id,
         session_id,
-        runtime_profile: manager.runtime_profile_name().map(str::to_string),
+        runtime_profile: manager
+            .runtime_profile_name()
+            .map(str::to_string)
+            .or(attached_runtime_profile),
         active_target_id: manager.active_target_id().ok().map(str::to_string),
         active_url: manager.get_url().await.ok(),
         active_title: manager.get_title().await.ok(),

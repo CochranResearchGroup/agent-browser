@@ -808,6 +808,83 @@ fn authorized_attribution() -> RouteBoundOpenAttribution {
     }
 }
 
+#[test]
+fn durable_resolution_reuses_only_the_exact_live_profile_owner() {
+    let intent = normalize_remote_view_open_intent(&json!({
+        "browserId": "session:qbo-soylei",
+        "sessionName": "qbo-soylei",
+        "runtimeProfile": "qbo-soylei",
+        "viewStreamProvider": "rdp_gateway"
+    }))
+    .unwrap();
+    let mut observation = RouteBoundBrowserObservation {
+        browser_present: true,
+        browser_pid: Some(51579),
+        browser_id: "session:qbo-soylei".to_string(),
+        session_id: "qbo-soylei".to_string(),
+        runtime_profile: None,
+        active_target_id: Some("target-qbo".to_string()),
+        active_url: Some("https://accounts.intuit.com/".to_string()),
+        active_title: Some("QuickBooks".to_string()),
+        pages: Vec::new(),
+    };
+    let mut service_state = ServiceState {
+        browsers: BTreeMap::from([(
+            "session:qbo-soylei".to_string(),
+            BrowserProcess {
+                id: "session:qbo-soylei".to_string(),
+                pid: Some(51579),
+                profile_id: Some("qbo-soylei".to_string()),
+                active_session_ids: vec!["qbo-soylei".to_string()],
+                health: ServiceBrowserHealth::Ready,
+                ..BrowserProcess::default()
+            },
+        )]),
+        ..ServiceState::default()
+    };
+
+    assert!(
+        remote_view_open_should_reuse_current_browser_for_durable_resolution(
+            &observation,
+            &intent,
+            "session:qbo-soylei",
+            "qbo-soylei",
+            &service_state,
+        )
+    );
+
+    service_state
+        .browsers
+        .get_mut("session:qbo-soylei")
+        .unwrap()
+        .profile_id = Some("other-profile".to_string());
+    assert!(
+        !remote_view_open_should_reuse_current_browser_for_durable_resolution(
+            &observation,
+            &intent,
+            "session:qbo-soylei",
+            "qbo-soylei",
+            &service_state,
+        )
+    );
+
+    service_state
+        .browsers
+        .get_mut("session:qbo-soylei")
+        .unwrap()
+        .profile_id = Some("qbo-soylei".to_string());
+    observation.session_id = "other-session".to_string();
+    assert!(
+        !remote_view_open_should_reuse_current_browser_for_durable_resolution(
+            &observation,
+            &intent,
+            "session:qbo-soylei",
+            "qbo-soylei",
+            &service_state,
+        )
+    );
+}
+
 #[tokio::test]
 async fn coordinator_returns_typed_not_found_without_starting_a_runtime_effect() {
     let repository = StaticRepository {

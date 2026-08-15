@@ -24,10 +24,11 @@ pub(crate) use crate::native::remote_view::{
 };
 pub(crate) use crate::native::remote_view_attachability::refresh_remote_view_attachability;
 pub(crate) use crate::native::remote_view_handoff::{
-    apply_retained_remote_view_route, begin_route_bound_handoff_failure_recovery,
-    begin_route_bound_handoff_plan_acquisition, complete_route_bound_handoff_failure_cleanup,
-    complete_route_bound_handoff_open, planned_route_bound_handoff_response,
-    remote_view_handoff_resolution_command, remote_view_handoff_was_explicitly_closed,
+    apply_available_retained_remote_view_route, apply_retained_remote_view_route,
+    begin_route_bound_handoff_failure_recovery, begin_route_bound_handoff_plan_acquisition,
+    complete_route_bound_handoff_failure_cleanup, complete_route_bound_handoff_open,
+    planned_route_bound_handoff_response, remote_view_handoff_resolution_command,
+    remote_view_handoff_was_explicitly_closed,
     route_bound_handoff_checkout_command_with_visible_window_proof,
     route_bound_handoff_checkout_failure, route_bound_handoff_failure_cleanup_task_result,
     route_bound_handoff_focus_command, route_bound_handoff_focus_failure,
