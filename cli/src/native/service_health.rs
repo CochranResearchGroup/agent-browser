@@ -377,6 +377,7 @@ async fn reconcile_service_state_with_controller_fence(
     reconcile_live_browser_targets(state).await;
     let remote_view_repair = reconcile_remote_view_state(state, controller_fence_held);
     let expired_session_leases = state.expire_stale_session_leases(reconciled_at.as_str());
+    normalize_ready_browsers_without_runtime_evidence(state);
     state.refresh_service_tab_handles();
     record_health_transition_events(state, &before);
     record_tab_lifecycle_events(state, &before);
@@ -2934,6 +2935,47 @@ fn remove_post_termination_browser_history(state: &mut ServiceState) -> usize {
         .iter()
         .map(|id| remove_browser_operational_record(state, id, None))
         .sum()
+}
+
+/// Downgrade legacy `ready` rows after their last lease has been released.
+/// A browser with no process, CDP endpoint, live tab, active session, or ready
+/// view stream has no remaining runtime evidence and is only retained history.
+fn normalize_ready_browsers_without_runtime_evidence(state: &mut ServiceState) {
+    let browser_ids = state
+        .browsers
+        .iter()
+        .filter(|(browser_id, browser)| {
+            browser.health == BrowserHealth::Ready
+                && browser.pid.is_none()
+                && browser.cdp_endpoint.is_none()
+                && browser.active_session_ids.iter().all(|session_id| {
+                    state.sessions.get(session_id).is_none_or(|session| {
+                        matches!(session.lease, LeaseState::Released | LeaseState::Expired)
+                    })
+                })
+                && !state.tabs.values().any(|tab| {
+                    tab.browser_id.as_str() == browser_id.as_str()
+                        && tab.lifecycle != TabLifecycle::Closed
+                })
+                && !browser.view_streams.iter().any(|stream| {
+                    stream
+                        .readiness
+                        .as_ref()
+                        .and_then(|readiness| readiness.get("state"))
+                        .and_then(|state| state.as_str())
+                        == Some("ready")
+                })
+        })
+        .map(|(browser_id, _)| browser_id.clone())
+        .collect::<Vec<_>>();
+
+    for browser_id in browser_ids {
+        if let Some(browser) = state.browsers.get_mut(&browser_id) {
+            browser.health = BrowserHealth::NotStarted;
+            browser.last_error = None;
+            browser.last_health_observation = None;
+        }
+    }
 }
 
 fn historical_browser_placeholder(
@@ -5578,6 +5620,78 @@ mod tests {
             state.events.last().unwrap().details.as_ref().unwrap()["removedTerminatedBrowsers"],
             2
         );
+    }
+
+    #[tokio::test]
+    async fn reconcile_removes_released_ready_browser_without_runtime_evidence() {
+        let mut state = ServiceState {
+            browsers: BTreeMap::from([(
+                "session:released-ready".to_string(),
+                BrowserProcess {
+                    id: "session:released-ready".to_string(),
+                    health: BrowserHealth::Ready,
+                    active_session_ids: vec!["released-ready".to_string()],
+                    profile_id: Some("default".to_string()),
+                    view_streams: vec![ViewStream {
+                        id: "stale-stream".to_string(),
+                        readiness: Some(serde_json::json!({
+                            "state": "unavailable",
+                            "reason": "missing_cdp_endpoint",
+                        })),
+                        ..ViewStream::default()
+                    }],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "released-ready".to_string(),
+                BrowserSession {
+                    id: "released-ready".to_string(),
+                    lease: LeaseState::Released,
+                    profile_id: Some("default".to_string()),
+                    browser_ids: vec!["session:released-ready".to_string()],
+                    ..BrowserSession::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let summary = reconcile_service_state(&mut state).await;
+
+        assert_eq!(summary.browser_count, 0);
+        assert_eq!(summary.changed_browsers, 1);
+        assert!(state.browsers.is_empty());
+        assert!(state.sessions.is_empty());
+        assert_eq!(
+            state.events.last().unwrap().details.as_ref().unwrap()["removedTerminatedBrowsers"],
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn reconcile_preserves_ready_browser_with_ready_view_stream() {
+        let mut state = ServiceState {
+            browsers: BTreeMap::from([(
+                "browser-rdp".to_string(),
+                BrowserProcess {
+                    id: "browser-rdp".to_string(),
+                    health: BrowserHealth::Ready,
+                    view_streams: vec![ViewStream {
+                        id: "rdp-stream".to_string(),
+                        readiness: Some(serde_json::json!({ "state": "ready" })),
+                        ..ViewStream::default()
+                    }],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let summary = reconcile_service_state(&mut state).await;
+
+        assert_eq!(summary.browser_count, 1);
+        assert_eq!(summary.changed_browsers, 0);
+        assert_eq!(state.browsers["browser-rdp"].health, BrowserHealth::Ready);
     }
 
     #[tokio::test]
