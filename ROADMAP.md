@@ -1,11 +1,39 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-08-14
+Updated: 2026-08-15
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
+
+## P116 | Runtime Adoption And Transactional Upgrade
+
+State: OPEN
+Current state: Plan 0116 converts the August 15 runtime and durable-handoff
+failures into one generation-aware architecture. Current workstation apply can
+commit the new payload before runtime reconciliation, restore only systemd
+active states after later failure, and leave live daemons bound to prior or
+deleted executable generations. Cooperative handoff requires the old daemon to
+prepare a descriptor, while durable handoff resolution can replay navigation
+and silently render CDP before the requested RDP presentation converges. P116
+freezes immutable generation staging, closed-world runtime census, verified
+orphan adoption, two-phase owner transfer, continuous dashboard ingress,
+read-mostly durable handoff recovery, hard provider requirements, end-to-end
+presentation receipts, and rollback that proves the operator journey rather
+than only restoring files or units.
+
+### Plan
+
+- `docs/dev/plans/0116-2026-08-15-runtime-adoption-and-transactional-upgrade-plan.md`
+
+### Next Recommendation
+
+Execute Slice A only. Add provider-free red fixtures for payload commit before
+runtime preservation and for the inability of a fresh daemon to adopt a fully
+verified surviving browser without an old-daemon handoff descriptor. Do not
+change the installer, installed payload, recurring interlock, or any live
+browser during this first slice.
 
 ## P114 | Terminal Route Quarantine Recovery
 

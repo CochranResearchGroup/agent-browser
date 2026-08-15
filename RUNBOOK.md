@@ -4,6 +4,50 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 155 | 2026-08-15
+
+Scope: convert the wrong-daemon, wrong-executable, recurring interlock outage,
+fresh-install corruption, orphan-browser, and durable-handoff convergence
+discussion into one bounded runtime-adoption and transactional-upgrade plan.
+
+Actions:
+
+- traced workstation apply from payload staging through unit quiescence,
+  reconciliation, service restoration, and final doctor;
+- confirmed payload replacement currently precedes live runtime census or
+  browser-owner transfer, while failure restoration covers unit active states
+  rather than prior payload and ownership;
+- reconciled the cooperative development publisher with its socket-only
+  discovery, relinquish-first transfer, dashboard outage, and incomplete
+  post-handoff rollback boundaries;
+- connected the August 15 durable-handoff failures to effectful open replay,
+  soft provider fallback, and the absence of one end-to-end presentation
+  generation;
+- opened Plan 0116 for immutable runtime generations, closed-world census,
+  verified orphan adoption, two-phase owner transfer, continuous dashboard
+  ingress, read-mostly handoff recovery, generation-bound presentation proof,
+  and transactional rollback;
+- limited the first implementation slice to provider-free red fixtures and
+  contract vocabulary.
+
+Validation:
+
+- CodeGraph was healthy at 553 files, 19,654 nodes, and 68,296 edges;
+- Graphiti `agent_browser_main` returned source-linked control-plane and
+  durable-install direction, which was checked against current source and repo
+  plans;
+- plan links, roadmap linkage, markdown formatting, and scoped diff checks
+  passed;
+- no browser, profile, daemon, route, display, dashboard, installed payload,
+  supervisor, or external state was mutated.
+
+Result:
+
+- P116 is open and indexed in the roadmap;
+- the current installer and handoff behavior remain unchanged;
+- the next bounded packet is P116 Slice A red fixtures for unsafe payload
+  ordering and missing verified orphan adoption.
+
 ## Turn 154 | 2026-08-14
 
 Scope: repair one terminal route-bound acquisition quarantine without weakening
