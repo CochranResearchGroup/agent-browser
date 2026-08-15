@@ -1189,7 +1189,7 @@ pub(crate) async fn handle_cdp_free_launch(
     });
     persist_service_browser_record(
         &state.session_id,
-        ServiceBrowserHost::LocalHeaded,
+        plan.service_host,
         ServiceBrowserHealth::Ready,
         Some(launch.pid),
         None,

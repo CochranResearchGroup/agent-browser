@@ -36,6 +36,7 @@ use std::env;
 pub(crate) struct CdpFreeLaunchPlan {
     pub(crate) launch_options: LaunchOptions,
     pub(crate) metadata: ServiceLaunchMetadata,
+    pub(crate) service_host: ServiceBrowserHost,
     pub(crate) url: Option<String>,
 }
 impl ServiceLaunchMetadata {

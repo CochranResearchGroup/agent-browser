@@ -3217,7 +3217,11 @@ commands, so a normal queued tab request cannot accidentally open a
 DevTools-attached browser for a CDP-sensitive site. Use the explicit
 `requestServiceCdpFreeLaunch()` helper or the lower-level `cdp_free_launch`
 service request action when the intended behavior is only to launch and track a
-headed no-DevTools browser. The access-plan decision includes
+headed no-DevTools browser. A request that explicitly selects
+`browserHost: "remote_headed"` may also carry the allocated display and RDP
+route fields; the CDP-free launch preserves that hidden display, records the
+remote-headed browser and view stream, and still omits every DevTools endpoint.
+The access-plan decision includes
 `decision.serviceRequest.cdpFreeAvailability` before launch so API, MCP, and
 dashboard clients can see that only `cdp_free_launch` is currently available
 for that lifecycle-only posture. `createServiceCdpFreeLaunchRequest()` accepts the
@@ -3392,7 +3396,10 @@ When the copied tab request carries `requiresCdpFree: true` and
 refuse that CDP-backed tab request. The first non-CDP service action is
 `cdp_free_launch`, which starts a headed Chrome process without DevTools,
 records the browser PID, profile, session ownership, and lease state, and
-returns unsupported CDP operations and command names explicitly. Software clients can use
+returns unsupported CDP operations and command names explicitly. For manual
+login through a managed hidden desktop, pass `browserHost: "remote_headed"`
+with the preflighted display and route metadata; the retained browser record
+and RDP stream stay bound to that surface without enabling CDP. Software clients can use
 `requestServiceCdpFreeLaunch({ accessPlan, url })` instead of manually copying
 the service request fields, or read
 `accessPlan.decision.serviceRequest.cdpFreeAvailability` when they need the

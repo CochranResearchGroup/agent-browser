@@ -1,7 +1,8 @@
 #![allow(unused_imports)]
 use super::capability::service_browser_id;
 use super::cdp_free_plan::{
-    optional_command_string, remote_headed_display_isolation, CdpFreeLaunchPlan,
+    apply_launch_host_hints, optional_command_string, remote_headed_display_isolation,
+    CdpFreeLaunchPlan,
 };
 use super::daemon::{
     apply_service_browser_capability_selection, apply_service_profile_selection,
@@ -129,6 +130,9 @@ pub(crate) fn build_cdp_free_launch_plan(cmd: &Value) -> Result<CdpFreeLaunchPla
         remote_headed: false,
         remote_headed_display_isolation: None,
     };
+    // CDP-free is a control-plane posture, not a request to abandon an
+    // explicitly allocated remote-headed display or its operator view stream.
+    let service_host = apply_launch_host_hints(&mut launch_options, cmd);
     let selection_reason = apply_service_profile_selection(&mut launch_options, cmd);
     let browser_capability_launch =
         apply_service_browser_capability_selection(&mut launch_options, cmd);
@@ -138,6 +142,7 @@ pub(crate) fn build_cdp_free_launch_plan(cmd: &Value) -> Result<CdpFreeLaunchPla
     Ok(CdpFreeLaunchPlan {
         launch_options,
         metadata,
+        service_host,
         url,
     })
 }

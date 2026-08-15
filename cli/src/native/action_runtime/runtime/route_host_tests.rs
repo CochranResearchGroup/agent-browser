@@ -1435,6 +1435,49 @@ fn test_cdp_free_launch_plan_is_no_devtools_headed_lifecycle_only() {
     assert!(plan.metadata.persistent_profile);
 }
 #[test]
+fn test_cdp_free_launch_plan_preserves_remote_headed_route_without_devtools() {
+    let cmd = json!(
+        { "action" : "cdp_free_launch", "serviceName" : "im-receipts", "agentName" :
+        "im-receipts-service", "taskName" : "google-messages-manual-seeding",
+        "targetServiceId" : "google-messages", "runtimeProfile" :
+        "im-receipts-google-messages-stock-v4", "url" :
+        "https://messages.google.com/web/", "browserHost" : "remote_headed",
+        "requiresCdpFree" : true, "cdpAttachmentAllowed" : false, "params" : {
+        "browserHost" : "remote_headed", "displayIsolation" : "shared_display",
+        "remoteHeadedDisplay" : ":10", "viewStreamProvider" : "rdp_gateway",
+        "controlInputProvider" : "manual_attached_desktop", "routeId" :
+        "guacamole:1", "displayAllocationId" : "remote-view-display:10", "frameUrl" :
+        "http://127.0.0.1:8092/guacamole/#/client/opaque", "externalUrl" :
+        "https://agent-browser.example/guacamole/#/client/opaque", "connectionId" :
+        "1", "connectionName" : "Agent Browser RDP Route A" } }
+    );
+    let plan = build_cdp_free_launch_plan(&cmd).expect("plan should parse without launching");
+    assert_eq!(plan.service_host, ServiceBrowserHost::RemoteHeaded);
+    assert!(!plan.launch_options.headless);
+    assert!(plan.launch_options.remote_headed);
+    assert!(!plan.launch_options.attachable);
+    assert!(plan.launch_options.manual_login);
+    assert_eq!(plan.launch_options.display.as_deref(), Some(":10"));
+    assert_eq!(
+        plan.launch_options
+            .remote_headed_display_isolation
+            .as_deref(),
+        Some("shared_display")
+    );
+    assert_eq!(plan.metadata.display_name.as_deref(), Some(":10"));
+    let stream = plan
+        .metadata
+        .view_streams
+        .first()
+        .expect("remote headed launch should retain one RDP stream");
+    assert_eq!(stream.provider, ViewStreamProvider::RdpGateway);
+    assert_eq!(stream.route_id.as_deref(), Some("guacamole:1"));
+    assert_eq!(
+        stream.display_allocation_id.as_deref(),
+        Some("remote-view-display:10")
+    );
+}
+#[test]
 fn test_cdp_free_launch_response_reports_unsupported_cdp_operations() {
     let mut state = DaemonState::new();
     state.session_id = "cdp-free-session".to_string();
