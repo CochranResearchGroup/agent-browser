@@ -47,7 +47,17 @@ staging on incomplete, changing, conflicting, or owner-generation-poor
 evidence. P111 owner generations remain absent in current source, so a live
 cooperative daemon cannot be granted transfer authority yet; that fail-closed
 result is deliberate and compatible with P111 rather than a competing owner
-registry.
+registry. Slice D now has a provider-neutral ownership foundation in the one
+locked service-state repository. It uses P111-compatible profile owner states,
+monotonic owner generations, observation-only candidate attachments, atomic
+compare-and-swap commit, idempotent replay, ownerless verified-orphan adoption,
+and receipt-bearing reverse transfer that advances generation to prevent ABA.
+The daemon command path has a generation fence before stream broadcast,
+browser recovery, or dispatch whenever a transfer binding is present, and the
+census reads this registry before falling back to legacy session references.
+This is a partial Slice D checkpoint: the current handoff commands do not yet
+bind old and candidate daemons to the protocol, so the descriptor-bound orphan
+and relinquish-first source guards remain intentionally red.
 
 ### Plan
 
@@ -55,10 +65,12 @@ registry.
 
 ### Next Recommendation
 
-Begin Slice D with provider-free two-phase transfer and orphan-adoption
-fixtures. Consume the canonical profile identity and future P111 owner
-generation seam without creating a competing registry. Do not replace the
-installed payload, enable the recurring interlock, or touch a live browser.
+Continue Slice D by binding active session supervisors and the old and
+candidate daemon handoff paths to the locked owner registry. Candidate proof
+must precede compare-and-swap, the old daemon must stay authoritative before
+commit, and post-commit failure must invoke the tested reverse-transfer path.
+Do not replace the installed payload, enable the recurring interlock, or touch
+a live browser.
 
 ## P114 | Terminal Route Quarantine Recovery
 

@@ -415,6 +415,20 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
         .unwrap_or("")
         .to_string();
     let cmd_start = std::time::Instant::now();
+    if let Some(binding) = state.runtime_owner_binding.as_ref() {
+        let repository =
+            match crate::native::service_store::LockedServiceStateRepository::default_json() {
+                Ok(repository) => repository,
+                Err(error) => return error_response(&id, &error),
+            };
+        if let Err(error) = crate::runtime_owner_transfer::require_owner_effect_authority(
+            &repository,
+            binding,
+            action,
+        ) {
+            return error_response(&id, &error);
+        }
+    }
     // PoC 4 and PoC 5 have no configured production providers. Resolve that static
     // availability posture before stream broadcast, CDP event drain, policy
     // reload, confirmation mutation, browser recovery, or any other effect.

@@ -1165,6 +1165,47 @@ production build. No installed or live runtime state was changed.
 The next source packet is Slice D two-phase transfer and orphan adoption. It
 must consume P111 owner generations rather than creating a competing registry.
 
+### 2026-08-15 | Slice D Ownership Foundation
+
+Slice D has a provider-neutral ownership foundation, but production handoff
+integration remains open:
+
+- the locked service-state repository now contains the single runtime owner
+  registry. Its profile identity, owner states, monotonic owner generation,
+  process identity, browser identity, session route, and reservation semantics
+  deliberately match P111 rather than creating a parallel file authority;
+- cooperative transfer keeps the old owner effect-capable while a candidate
+  attachment is observation-only. One owner-generation compare-and-swap flips
+  authority only after process, profile, browser family, CDP endpoint, target
+  set, selected target, transfer nonce, and candidate generation agree;
+- a verified ownerless orphan begins as a generation-zero observation with no
+  effect authority and commits through the same compare-and-swap seam;
+- same-nonce commit replay returns the same receipt without advancing twice.
+  Reverse transfer is receipt-bearing and restores the prior owner identity at
+  a new generation, preventing ABA reuse of the old generation;
+- manual preservation is rejected by the transfer engine, and existing manual
+  and external census classifications retain their no-automation disposition;
+- transfer-bound daemon effects now fail closed against the current registry
+  generation before stream broadcast, browser recovery, auto-launch, or action
+  dispatch. Observation-only commands remain available;
+- the census owner source reads authoritative registry records first and uses
+  legacy session references only when no canonical owner exists for that
+  profile.
+
+Eight initial owner-transfer tests plus the later manual-preservation and
+source-order guards cover cooperative commit, pre-commit mismatch, replay,
+ownerless orphan adoption, reverse transfer, locked-repository persistence,
+daemon generation fencing, manual preservation, and the seven-case frozen
+authority fixture corpus. Focused runtime-adoption tests, Rust formatting, and
+strict Clippy pass. No installed or live runtime state was changed.
+
+This checkpoint does not accept Slice D. `runtime_handoff_prepare` still
+relinquishes before a distinct candidate daemon proves attachment, and
+`runtime_handoff_resume` still requires the old descriptor. The next packet
+must bind active supervisors and both daemon generations to the tested registry
+protocol, then turn those two source guards green without weakening process,
+profile, endpoint, or target evidence.
+
 ## Planning Evidence
 
 - CodeGraph was healthy on 2026-08-15 with 553 files, 19,654 nodes, and 68,296

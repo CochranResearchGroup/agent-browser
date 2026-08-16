@@ -2365,6 +2365,13 @@ pub struct ServiceState {
     pub browsers: BTreeMap<String, BrowserProcess>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub browser_process_identities: BTreeMap<String, ServiceBrowserProcessIdentity>,
+    /// Cross-generation profile-owner authority used by transactional runtime
+    /// adoption. The record contains opaque IDs and digests only.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::runtime_owner_transfer::RuntimeOwnerRegistry::is_empty"
+    )]
+    pub(crate) runtime_owner_registry: crate::runtime_owner_transfer::RuntimeOwnerRegistry,
     pub sessions: BTreeMap<String, BrowserSession>,
     pub tabs: BTreeMap<String, BrowserTab>,
     pub jobs: BTreeMap<String, ServiceJob>,

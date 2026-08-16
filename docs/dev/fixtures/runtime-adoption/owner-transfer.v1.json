@@ -1,0 +1,68 @@
+{
+  "schemaVersion": "agent-browser.runtime-adoption.v1",
+  "fixtures": [
+    {
+      "fixtureId": "cooperative-transfer-commit",
+      "mode": "cooperative_transfer",
+      "initialOwnerState": "ready",
+      "previousOwnerGeneration": 7,
+      "candidateOwnerGeneration": 8,
+      "candidateObservationEffectCapable": false,
+      "expectedAuthorityTimeline": ["old", "old", "candidate"]
+    },
+    {
+      "fixtureId": "cooperative-transfer-precommit-failure",
+      "mode": "cooperative_transfer",
+      "initialOwnerState": "ready",
+      "previousOwnerGeneration": 11,
+      "candidateOwnerGeneration": 12,
+      "candidateObservationEffectCapable": false,
+      "expectedAuthorityTimeline": ["old", "old", "old"]
+    },
+    {
+      "fixtureId": "cooperative-transfer-reverse",
+      "mode": "cooperative_transfer",
+      "initialOwnerState": "ready",
+      "previousOwnerGeneration": 17,
+      "candidateOwnerGeneration": 18,
+      "candidateObservationEffectCapable": false,
+      "expectedAuthorityTimeline": ["old", "candidate", "old_at_generation_19"]
+    },
+    {
+      "fixtureId": "verified-ownerless-orphan-adoption",
+      "mode": "orphan_adoption",
+      "initialOwnerState": "missing",
+      "previousOwnerGeneration": 0,
+      "candidateOwnerGeneration": 1,
+      "candidateObservationEffectCapable": false,
+      "expectedAuthorityTimeline": ["none", "none", "candidate"]
+    },
+    {
+      "fixtureId": "manual-browser-preservation",
+      "mode": "manual_preservation",
+      "initialOwnerState": "missing",
+      "previousOwnerGeneration": 0,
+      "candidateOwnerGeneration": 0,
+      "candidateObservationEffectCapable": false,
+      "expectedAuthorityTimeline": ["none", "none", "none"]
+    },
+    {
+      "fixtureId": "external-browser-preservation",
+      "mode": "manual_preservation",
+      "initialOwnerState": "external_observed",
+      "previousOwnerGeneration": 0,
+      "candidateOwnerGeneration": 0,
+      "candidateObservationEffectCapable": false,
+      "expectedAuthorityTimeline": ["external", "external", "external"]
+    },
+    {
+      "fixtureId": "candidate-target-mismatch",
+      "mode": "cooperative_transfer",
+      "initialOwnerState": "ready",
+      "previousOwnerGeneration": 23,
+      "candidateOwnerGeneration": 24,
+      "candidateObservationEffectCapable": false,
+      "expectedAuthorityTimeline": ["old", "old", "old"]
+    }
+  ]
+}

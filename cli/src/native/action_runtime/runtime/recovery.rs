@@ -184,6 +184,10 @@ pub(crate) struct DaemonState {
     /// Launch-time shared-profile acquisition evidence to attach to the next
     /// command response that consumes the auto-launched tab.
     pub(crate) pending_shared_profile_acquisition: Option<Value>,
+    /// Present only while this daemon participates in a generation-bound
+    /// browser owner transfer. Browser effects then fail closed against the
+    /// locked service-state owner generation.
+    pub(crate) runtime_owner_binding: Option<crate::runtime_owner_transfer::RuntimeOwnerBinding>,
     /// Storage mutations made through agent-browser storage commands, keyed by origin.
     /// This preserves cross-origin storage for state saves even after navigation.
     pub(crate) tracked_origin_storage: HashMap<String, state::OriginStorage>,
@@ -245,6 +249,7 @@ impl DaemonState {
             browser_recovery_policy_config: browser_recovery_policy_config_from_env(),
             current_cancellation: None,
             pending_shared_profile_acquisition: None,
+            runtime_owner_binding: None,
             tracked_origin_storage: HashMap::new(),
         }
     }
