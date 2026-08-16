@@ -476,8 +476,10 @@ pub fn durable_remote_view_handoff_url(
         return None;
     }
 
-    let public_url = route_descriptor_url(route_binding, "publicOperatorUrl")
-        .or_else(|| route_binding.external_url.clone())?;
+    // A durable handoff is served by the authenticated dashboard ingress. A
+    // provider external URL may point directly at Guacamole and must never be
+    // rewritten into a dashboard-only `/remote-view/<id>` path.
+    let public_url = route_descriptor_url(route_binding, "publicOperatorUrl")?;
     let mut url = url::Url::parse(&public_url).ok()?;
     if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
         return None;
@@ -2780,12 +2782,17 @@ mod tests {
 
     #[test]
     fn durable_handoff_url_uses_public_origin_and_opaque_id() {
-        let route_binding = command_test_route_binding();
+        let mut route_binding = command_test_route_binding();
+        route_binding.route_descriptor = Some(json!({
+            "kind": "guacamole",
+            "id": "route-a",
+            "publicOperatorUrl": "https://dashboard.example/operator"
+        }));
 
         let url = durable_remote_view_handoff_url(&route_binding, "job-opaque-a")
             .expect("public operator route should produce a durable handoff URL");
 
-        assert_eq!(url, "https://guac.example/remote-view/job-opaque-a");
+        assert_eq!(url, "https://dashboard.example/remote-view/job-opaque-a");
         assert!(!url.contains("guacamole"));
         assert!(!url.contains("client"));
         assert!(!url.contains("route-a"));
@@ -2793,12 +2800,30 @@ mod tests {
 
     #[test]
     fn durable_handoff_url_percent_encodes_client_supplied_job_id_as_one_segment() {
-        let route_binding = command_test_route_binding();
+        let mut route_binding = command_test_route_binding();
+        route_binding.route_descriptor = Some(json!({
+            "kind": "guacamole",
+            "id": "route-a",
+            "publicOperatorUrl": "https://dashboard.example/operator"
+        }));
 
         let url = durable_remote_view_handoff_url(&route_binding, "job/opaque?#")
             .expect("public operator route should encode an opaque handoff ID");
 
-        assert_eq!(url, "https://guac.example/remote-view/job%2Fopaque%3F%23");
+        assert_eq!(
+            url,
+            "https://dashboard.example/remote-view/job%2Fopaque%3F%23"
+        );
+    }
+
+    #[test]
+    fn durable_handoff_url_never_uses_provider_external_origin() {
+        let route_binding = command_test_route_binding();
+
+        assert_eq!(
+            durable_remote_view_handoff_url(&route_binding, "job-opaque-a"),
+            None
+        );
     }
 
     #[test]

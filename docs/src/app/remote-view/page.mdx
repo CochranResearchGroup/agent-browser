@@ -9,6 +9,11 @@ diagnostic evidence and must not become handoff links.
 > Never share or bookmark `providerExternalUrl`, a raw Guacamole URL, or a URL
 > under `routeBinding`.
 
+The selected route must provide `publicOperatorUrl` for the authenticated
+dashboard origin. If it is absent, the open has no durable handoff URL. Agent
+Browser does not rewrite a provider or Guacamole origin into the dashboard-only
+`/remote-view/<handoff-id>` route.
+
 ## Before you begin
 
 You need a configured runtime profile and a ready RDP route. Check the intended

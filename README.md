@@ -284,6 +284,11 @@ target without navigating, opening a replacement target, relaunching the
 browser, or changing providers. The dashboard stays on the durable URL and
 waits for a matching authenticated presentation generation before rendering.
 
+The route must supply `publicOperatorUrl` for the authenticated dashboard
+origin. If it is absent, the open does not return a durable handoff URL. Agent
+Browser never rewrites `providerExternalUrl` or a raw Guacamole origin into a
+dashboard-only `/remote-view/<handoff-id>` path.
+
 Do not hand off `providerExternalUrl`, a raw Guacamole URL, or any URL under
 `routeBinding`. Those URLs describe the current provider connection and can
 expire when the route changes. Software clients should use

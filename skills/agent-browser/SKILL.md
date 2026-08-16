@@ -125,13 +125,16 @@ browser:
    `/remote-view/<handoff-id>`.
 4. Never use `providerExternalUrl`, a raw Guacamole URL, a `routeBinding` URL,
    `localEmbedUrl`, `dashboardEmbedUrl`, or `healthUrl` as the handoff.
-5. Reopen the same handoff URL after provider, route, display, or viewer-lease
+5. Require the route to supply the authenticated dashboard
+   `publicOperatorUrl`. If it is absent, treat the missing `handoffUrl` as a
+   failed handoff. Never rewrite a provider URL into `/remote-view/<handoff-id>`.
+6. Reopen the same handoff URL after provider, route, display, or viewer-lease
    churn. Do not launch a replacement browser merely to reconnect the viewer.
-6. Require a ready `presentationReceipt` whose generation, dashboard
+7. Require a ready `presentationReceipt` whose generation, dashboard
    deployment, logical browser, daemon owner generation, process identity,
    target, and requested provider match the resolution.
    Treat `status=converging` as retryable on the same durable URL.
-7. Treat `allowRawProviderUrl: true` as an infrastructure diagnostic escape
+8. Treat `allowRawProviderUrl: true` as an infrastructure diagnostic escape
    hatch, never as an ordinary agent workflow.
 
 Do not confuse this remote-view link with `agent-browser handoff
