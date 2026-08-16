@@ -2207,6 +2207,45 @@ fn test_service_profile_lease_gate_allows_duplicate_lane_route_hints() {
     let _ = fs::remove_dir_all(&home);
 }
 #[test]
+fn test_service_profile_lease_gate_defers_to_attributed_tab_handle() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("profile-lane-tab-handle-home");
+    fs::create_dir_all(&home).expect("test home should be created");
+    guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+    store
+        .save(&ServiceState {
+            browsers: BTreeMap::from([(
+                "browser-existing".to_string(),
+                BrowserProcess {
+                    id: "browser-existing".to_string(),
+                    profile_id: Some("default".to_string()),
+                    health: ServiceBrowserHealth::Ready,
+                    active_session_ids: vec!["existing-session".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            ..ServiceState::default()
+        })
+        .expect("service state should be persisted");
+    let command = json!({
+        "action": "cdp_attach",
+        "serviceName": "Odollo",
+        "serviceTabHandle": {
+            "browserId": "browser-existing",
+            "tabId": "tab:carrier-evidence",
+            "targetId": "target-carrier-evidence"
+        }
+    });
+    assert!(service_profile_lease_metadata_for_command(&command).is_none());
+    assert!(matches!(
+        service_profile_lease_gate(&command, "existing-session", Some(0))
+            .expect("attributed tab handle should bypass launch-profile leasing"),
+        ServiceProfileLeaseGate::Ready
+    ));
+    let _ = fs::remove_dir_all(&home);
+}
+#[test]
 fn test_service_profile_lease_gate_allows_duplicate_lane_override() {
     let guard = EnvGuard::new(&["HOME"]);
     let home = unique_socket_dir("profile-lane-override-home");

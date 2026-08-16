@@ -116,6 +116,9 @@ pub(crate) fn service_profile_lease_gate(
 pub(crate) fn service_profile_lease_metadata_for_command(
     command: &Value,
 ) -> Option<ServiceLaunchMetadata> {
+    if command.get("serviceTabHandle").is_some() {
+        return None;
+    }
     if command
         .get("action")
         .and_then(|value| value.as_str())
