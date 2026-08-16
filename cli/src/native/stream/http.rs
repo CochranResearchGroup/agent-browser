@@ -1743,10 +1743,24 @@ fn service_request_command_with_state_and_principal(
     let mut command = normalized.command;
     command["id"] = json!(request_id);
     apply_service_request_attribution(&mut command, &normalized.attribution);
+    if authenticated_dashboard_user.is_some() {
+        apply_dashboard_deployment_generation(
+            &mut command,
+            std::env::var("AGENT_BROWSER_DASHBOARD_GENERATION")
+                .ok()
+                .as_deref(),
+        );
+    }
     if let Some(args) = legacy_args {
         command["args"] = args;
     }
     Ok(command)
+}
+
+fn apply_dashboard_deployment_generation(command: &mut Value, generation_id: Option<&str>) {
+    if let Some(generation_id) = generation_id.filter(|value| !value.trim().is_empty()) {
+        command["dashboardDeploymentGeneration"] = json!(generation_id);
+    }
 }
 
 #[cfg(test)]
@@ -4721,6 +4735,23 @@ mod tests {
         assert!(command["requestId"]
             .as_str()
             .is_some_and(|value| value.starts_with("http-service-request-navigate-")));
+    }
+
+    #[test]
+    fn authenticated_dashboard_generation_is_internal_daemon_command_metadata() {
+        let mut command = json!({"action": "service_remote_view_handoff_resolve"});
+
+        apply_dashboard_deployment_generation(&mut command, Some("generation-candidate"));
+
+        assert_eq!(
+            command["dashboardDeploymentGeneration"],
+            "generation-candidate"
+        );
+        apply_dashboard_deployment_generation(&mut command, Some("   "));
+        assert_eq!(
+            command["dashboardDeploymentGeneration"],
+            "generation-candidate"
+        );
     }
 
     #[test]
