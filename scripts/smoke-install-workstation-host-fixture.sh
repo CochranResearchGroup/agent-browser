@@ -104,6 +104,17 @@ fi
 exec /usr/bin/stat "$@"
 EOF
 
+cat >"$FAKE_BIN/grep" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${*: -1}" == "$AGENT_BROWSER_APPARMOR_PROFILES_PATH" \
+   && -f "$AGENT_BROWSER_FIXTURE_STATE/profiles-read-denied" ]]; then
+  echo "grep: $AGENT_BROWSER_APPARMOR_PROFILES_PATH: Permission denied" >&2
+  exit 2
+fi
+exec /usr/bin/grep "$@"
+EOF
+
 cat >"$FAKE_BIN/apt-get" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -304,7 +315,7 @@ fi
 
 first_command_count="$(wc -l <"$LOG" | tr -d ' ')"
 printf '\n# compatible local policy annotation\n' >>"$APPARMOR_PROFILE_PATH"
-chmod 000 "$APPARMOR_PROFILES_PATH"
+touch "$STATE/profiles-read-denied"
 run_installer >"$WORKDIR/second.out"
 second_command_count="$(wc -l <"$LOG" | tr -d ' ')"
 
@@ -326,7 +337,7 @@ if [[ "$(tail -n 3 "$LOG" | head -n 1)" != "SUDO -n $HELPER_PATH check" \
   exit 1
 fi
 
-chmod 600 "$APPARMOR_PROFILES_PATH"
+rm "$STATE/profiles-read-denied"
 printf 'N\n' >"$APPARMOR_ENABLED_PATH"
 rm "$APPARMOR_PROFILE_PATH"
 : >"$APPARMOR_PROFILES_PATH"

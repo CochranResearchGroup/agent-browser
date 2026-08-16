@@ -156,9 +156,9 @@ apparmor_profile_ready() {
   profile_header="profile $APPARMOR_PROFILE_NAME \"$chrome_path\" flags=(unconfined) {"
   grep -Fqx "$profile_header" "$APPARMOR_PROFILE_PATH" || return 1
   grep -Eq '^[[:space:]]*userns,[[:space:]]*$' "$APPARMOR_PROFILE_PATH" || return 1
-  if [[ -r "$APPARMOR_PROFILES_PATH" ]]; then
-    grep -Fqx "$APPARMOR_PROFILE_NAME (unconfined)" "$APPARMOR_PROFILES_PATH"
-    return
+  if [[ -r "$APPARMOR_PROFILES_PATH" ]] \
+    && grep -Fqx "$APPARMOR_PROFILE_NAME (unconfined)" "$APPARMOR_PROFILES_PATH" 2>/dev/null; then
+    return 0
   fi
 
   # Ubuntu protects the loaded-profile registry from unprivileged readers.
