@@ -1253,7 +1253,17 @@ fn reconcile_workstation_locked_for_upgrade(
     require_installed_payload(paths)?;
     require_effective_groups()?;
     let support_root = &paths.support_dir;
-    let command_env = workstation_command_env(paths);
+    let mut command_env = workstation_command_env(paths);
+    if let Some(expected_upgrade) = expected_upgrade {
+        command_env.push((
+            crate::runtime_adoption::RUNTIME_ADMISSION_TRANSACTION_ID_ENV.to_string(),
+            expected_upgrade.transaction_id.clone(),
+        ));
+        command_env.push((
+            crate::runtime_adoption::RUNTIME_ADMISSION_TRANSACTION_REVISION_ENV.to_string(),
+            expected_upgrade.revision.to_string(),
+        ));
+    }
     let quiesced_user_units = quiesce_existing_user_units(paths)?;
     let reconcile_result = reconcile_workstation_after_quiesce(
         root,

@@ -442,7 +442,7 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
             Err(error) => return error_response(&id, &error),
         };
         if let Err(error) =
-            crate::runtime_adoption::require_runtime_admission(&admission_drain, action)
+            crate::runtime_adoption::require_runtime_admission(&admission_drain, action, cmd)
         {
             return error_response(&id, &error);
         }

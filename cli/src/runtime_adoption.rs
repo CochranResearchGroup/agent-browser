@@ -11,6 +11,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 pub(crate) const RUNTIME_ADOPTION_SCHEMA_VERSION: &str = "agent-browser.runtime-adoption.v1";
+pub(crate) const RUNTIME_ADMISSION_TRANSACTION_ID_ENV: &str =
+    "AGENT_BROWSER_RUNTIME_ADMISSION_TRANSACTION_ID";
+pub(crate) const RUNTIME_ADMISSION_TRANSACTION_REVISION_ENV: &str =
+    "AGENT_BROWSER_RUNTIME_ADMISSION_TRANSACTION_REVISION";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -150,7 +154,11 @@ pub(crate) fn runtime_admission_drain_path() -> Result<PathBuf, String> {
 /// Rejects ordinary browser effects while an upgrade owns the admission
 /// drain. Exact handoff lifecycle commands remain available so the installer
 /// can transfer or reverse ownership without reopening general admission.
-pub(crate) fn require_runtime_admission(drain_path: &Path, action: &str) -> Result<(), String> {
+pub(crate) fn require_runtime_admission(
+    drain_path: &Path,
+    action: &str,
+    command: &serde_json::Value,
+) -> Result<(), String> {
     if runtime_admission_action_allowed(action) || !drain_path.exists() {
         return Ok(());
     }
@@ -166,10 +174,29 @@ pub(crate) fn require_runtime_admission(drain_path: &Path, action: &str) -> Resu
             drain_path.display()
         )
     })?;
+    if runtime_admission_claim_matches(action, command, &drain) {
+        return Ok(());
+    }
     Err(format!(
         "runtime_admission_draining: transaction '{}' is transferring runtime ownership at revision {}",
         drain.transaction_id, drain.transaction_revision
     ))
+}
+
+fn runtime_admission_claim_matches(
+    action: &str,
+    command: &serde_json::Value,
+    drain: &RuntimeAdmissionDrain,
+) -> bool {
+    action == "service_reconcile"
+        && command
+            .pointer("/runtimeAdmissionClaim/transactionId")
+            .and_then(serde_json::Value::as_str)
+            == Some(drain.transaction_id.as_str())
+        && command
+            .pointer("/runtimeAdmissionClaim/transactionRevision")
+            .and_then(serde_json::Value::as_u64)
+            == Some(drain.transaction_revision)
 }
 
 fn runtime_admission_action_allowed(action: &str) -> bool {
@@ -2204,12 +2231,37 @@ mod tests {
         )
         .unwrap();
 
-        assert!(require_runtime_admission(&path, "navigate")
-            .unwrap_err()
-            .contains("upgrade-test"));
-        require_runtime_admission(&path, "runtime_handoff_prepare").unwrap();
-        require_runtime_admission(&path, "runtime_handoff_resume").unwrap();
-        require_runtime_admission(&path, "snapshot").unwrap();
+        assert!(
+            require_runtime_admission(&path, "navigate", &serde_json::json!({}))
+                .unwrap_err()
+                .contains("upgrade-test")
+        );
+        require_runtime_admission(&path, "runtime_handoff_prepare", &serde_json::json!({}))
+            .unwrap();
+        require_runtime_admission(&path, "runtime_handoff_resume", &serde_json::json!({})).unwrap();
+        require_runtime_admission(&path, "snapshot", &serde_json::json!({})).unwrap();
+        require_runtime_admission(
+            &path,
+            "service_reconcile",
+            &serde_json::json!({
+                "runtimeAdmissionClaim": {
+                    "transactionId": "upgrade-test",
+                    "transactionRevision": 4,
+                }
+            }),
+        )
+        .unwrap();
+        assert!(require_runtime_admission(
+            &path,
+            "service_reconcile",
+            &serde_json::json!({
+                "runtimeAdmissionClaim": {
+                    "transactionId": "upgrade-test",
+                    "transactionRevision": 3,
+                }
+            }),
+        )
+        .is_err());
         fs::remove_dir_all(root).unwrap();
     }
 

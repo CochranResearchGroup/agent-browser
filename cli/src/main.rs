@@ -1994,6 +1994,11 @@ fn main() {
             exit(1);
         }
     };
+    apply_runtime_admission_claim_from_sources(
+        &mut cmd,
+        env::var(crate::runtime_adoption::RUNTIME_ADMISSION_TRANSACTION_ID_ENV).ok(),
+        env::var(crate::runtime_adoption::RUNTIME_ADMISSION_TRANSACTION_REVISION_ENV).ok(),
+    );
 
     // Handle --password-stdin for auth save
     if cmd.get("action").and_then(|v| v.as_str()) == Some("auth_save") {
@@ -2981,6 +2986,28 @@ fn main() {
     }
 }
 
+fn apply_runtime_admission_claim_from_sources(
+    command: &mut serde_json::Value,
+    transaction_id: Option<String>,
+    transaction_revision: Option<String>,
+) {
+    if command.get("action").and_then(serde_json::Value::as_str) != Some("service_reconcile") {
+        return;
+    }
+    let Some(transaction_id) = transaction_id.filter(|value| !value.trim().is_empty()) else {
+        return;
+    };
+    let Some(transaction_revision) =
+        transaction_revision.and_then(|value| value.parse::<u64>().ok())
+    else {
+        return;
+    };
+    command["runtimeAdmissionClaim"] = json!({
+        "transactionId": transaction_id,
+        "transactionRevision": transaction_revision,
+    });
+}
+
 fn run_batch(flags: &Flags, bail: bool, dependent: bool, arg_commands: Option<Vec<Vec<String>>>) {
     let commands: Vec<Vec<String>> = if let Some(cmds) = arg_commands {
         cmds
@@ -3220,6 +3247,39 @@ fn command_targets_existing_daemon_before_prestart(cmd: &serde_json::Value) -> b
 mod tests {
     use super::*;
     use crate::test_utils::EnvGuard;
+
+    #[test]
+    fn runtime_admission_claim_is_exact_and_service_reconcile_only() {
+        let mut reconcile = json!({"action": "service_reconcile"});
+        apply_runtime_admission_claim_from_sources(
+            &mut reconcile,
+            Some("upgrade-test".to_string()),
+            Some("9".to_string()),
+        );
+        assert_eq!(
+            reconcile["runtimeAdmissionClaim"],
+            json!({
+                "transactionId": "upgrade-test",
+                "transactionRevision": 9,
+            })
+        );
+
+        let mut navigate = json!({"action": "navigate"});
+        apply_runtime_admission_claim_from_sources(
+            &mut navigate,
+            Some("upgrade-test".to_string()),
+            Some("9".to_string()),
+        );
+        assert!(navigate.get("runtimeAdmissionClaim").is_none());
+
+        let mut invalid_revision = json!({"action": "service_reconcile"});
+        apply_runtime_admission_claim_from_sources(
+            &mut invalid_revision,
+            Some("upgrade-test".to_string()),
+            Some("not-a-revision".to_string()),
+        );
+        assert!(invalid_revision.get("runtimeAdmissionClaim").is_none());
+    }
 
     #[test]
     fn test_parse_proxy_simple() {
