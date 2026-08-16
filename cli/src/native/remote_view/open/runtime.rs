@@ -205,7 +205,14 @@ pub(crate) async fn observe_daemon_browser(
     state: &mut DaemonState,
 ) -> Result<RouteBoundBrowserObservation, RouteBoundRuntimeIssue> {
     let session_id = state.session_id.clone();
-    let browser_id = service_browser_id(&session_id);
+    let browser_id = state
+        .runtime_owner_binding
+        .as_ref()
+        .filter(|binding| {
+            binding.effect_capable && binding.claim.daemon_session_route == session_id
+        })
+        .map(|binding| binding.claim.logical_browser_id.clone())
+        .unwrap_or_else(|| service_browser_id(&session_id));
     let attached_browser_pid = state.attached_browser_pid;
     let attached_runtime_profile = state.attached_runtime_profile.clone();
     let Some(manager) = state.browser.as_mut() else {
@@ -461,5 +468,50 @@ impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
                     route_bound_runtime_issue("observe_operator_access", message, None)
                 })
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime_owner_transfer::{OwnerAuthorityClaim, RuntimeOwnerBinding};
+
+    #[tokio::test]
+    async fn daemon_browser_observation_uses_committed_logical_browser_identity() {
+        let mut state = DaemonState::new();
+        state.session_id = "handoff-candidate".to_string();
+        state.runtime_owner_binding =
+            Some(RuntimeOwnerBinding::effect_capable(OwnerAuthorityClaim {
+                owner_id: "owner-candidate".to_string(),
+                profile_identity_digest: "profile-digest".to_string(),
+                owner_generation: 2,
+                logical_browser_id: "session:source".to_string(),
+                daemon_session_route: state.session_id.clone(),
+                process_instance_digest: "process-digest".to_string(),
+            }));
+
+        let observation = observe_daemon_browser(&mut state).await.unwrap();
+
+        assert_eq!(observation.browser_id, "session:source");
+        assert_eq!(observation.session_id, "handoff-candidate");
+    }
+
+    #[tokio::test]
+    async fn daemon_browser_observation_rejects_binding_for_another_session_route() {
+        let mut state = DaemonState::new();
+        state.session_id = "handoff-candidate".to_string();
+        state.runtime_owner_binding =
+            Some(RuntimeOwnerBinding::effect_capable(OwnerAuthorityClaim {
+                owner_id: "owner-stale".to_string(),
+                profile_identity_digest: "profile-digest".to_string(),
+                owner_generation: 1,
+                logical_browser_id: "session:source".to_string(),
+                daemon_session_route: "different-candidate".to_string(),
+                process_instance_digest: "process-digest".to_string(),
+            }));
+
+        let observation = observe_daemon_browser(&mut state).await.unwrap();
+
+        assert_eq!(observation.browser_id, "session:handoff-candidate");
     }
 }
