@@ -108,6 +108,10 @@ pub(crate) struct RuntimeHandoffDescriptor {
     pub(crate) close_browser_on_close: bool,
     #[serde(default)]
     pub(crate) active_target_id: Option<String>,
+    /// Present for the generation-fenced two-phase protocol. Schema version 1
+    /// descriptors remain readable only as verified orphan-adoption evidence.
+    #[serde(default)]
+    pub(crate) owner_transfer: Option<crate::runtime_owner_transfer::OwnerTransferProposal>,
     pub(crate) prepared_at: String,
 }
 pub(crate) fn debug_session_events_enabled() -> bool {

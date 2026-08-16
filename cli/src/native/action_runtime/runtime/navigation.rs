@@ -23,9 +23,9 @@ use crate::native::service_model::{
     ControlInputProvider, DisplayAllocation, JobState as ServiceJobState, LeaseState, MonitorState,
     ProfileAllocationPolicy, ProfileClass, ProfileKeyringPolicy, ProfileLeaseDisposition,
     ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease, RemoteViewHandoff,
-    RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent, ServiceEventKind,
-    ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle, ViewStream,
-    ViewStreamProvider, ViewerLease,
+    RemoteViewRoute, RoutePoolEntry, ServiceBrowserProcessIdentity, ServiceEntitySource,
+    ServiceEvent, ServiceEventKind, ServiceState, ServiceTabHandle, SessionCleanupPolicy,
+    TabLifecycle, ViewStream, ViewStreamProvider, ViewerLease,
 };
 use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use crate::native::snapshot::{self, SnapshotOptions};
@@ -39,6 +39,7 @@ use crate::runtime_profile::{
     runtime_profile_user_data_dir,
 };
 use serde_json::{json, Map, Value};
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -170,61 +171,226 @@ pub(crate) async fn handle_runtime_handoff_prepare(
             state.session_id
         ));
     }
-    let browser_pid = manager.browser_pid().or(state.attached_browser_pid);
+    if let Ok(descriptor) = read_runtime_handoff(&state.session_id) {
+        if descriptor.schema_version == 2 {
+            let proposal = descriptor.owner_transfer.as_ref().ok_or_else(|| {
+                "runtime_handoff_owner_transfer_missing: prepared descriptor has no owner proposal"
+                    .to_string()
+            })?;
+            let repository = LockedServiceStateRepository::default_json()?;
+            let current_owner = repository
+                .load_snapshot()?
+                .runtime_owner_registry
+                .owner(&proposal.request.profile_identity_digest)
+                .cloned()
+                .ok_or_else(|| {
+                    "runtime_handoff_owner_missing: prepared owner is not registered".to_string()
+                })?;
+            if current_owner.pending_transfer.as_ref() != Some(proposal) {
+                return Err(
+                    "runtime_handoff_prepare_replay_mismatch: descriptor and owner registry differ"
+                        .to_string(),
+                );
+            }
+            state.runtime_owner_binding = Some(
+                crate::runtime_owner_transfer::RuntimeOwnerBinding::effect_capable(
+                    crate::runtime_owner_transfer::OwnerAuthorityClaim::from_owner(&current_owner),
+                ),
+            );
+            return Ok(runtime_handoff_prepared_response(
+                &descriptor,
+                runtime_handoff_path(&state.session_id),
+                true,
+            ));
+        }
+    }
+    let browser_pid = manager
+        .browser_pid()
+        .or(state.attached_browser_pid)
+        .ok_or_else(|| {
+            format!(
+                "Cannot prepare runtime handoff for session '{}': browser PID is unavailable",
+                state.session_id
+            )
+        })?;
     let runtime_profile = manager
         .runtime_profile_name()
         .map(str::to_string)
-        .or_else(|| state.attached_runtime_profile.clone());
-    let process_identity = browser_pid
-        .and_then(|pid| crate::process_identity::capture_process_identity(pid, None, None));
-    if browser_pid.is_some() && runtime_profile.is_none() && process_identity.is_none() {
-        return Err(format!(
-            "Cannot prepare runtime handoff for session '{}': browser process identity is unavailable",
+        .or_else(|| state.attached_runtime_profile.clone())
+        .ok_or_else(|| {
+            format!(
+                "Cannot prepare runtime handoff for session '{}': canonical runtime profile is unavailable",
+                state.session_id
+            )
+        })?;
+    let process_identity = crate::process_identity::capture_process_identity(browser_pid, None, None)
+        .ok_or_else(|| {
+            format!(
+                "Cannot prepare runtime handoff for session '{}': browser process identity is unavailable",
+                state.session_id
+            )
+        })?;
+    let profile_identity_digest = runtime_handoff_profile_digest(&runtime_profile)?;
+    let process_instance_digest = runtime_handoff_json_digest(&process_identity)?;
+    let cdp_endpoint_identity_digest = runtime_handoff_digest(manager.get_cdp_url());
+    let target_set_digest = runtime_handoff_target_set_digest(manager)?;
+    let active_target_id = manager.active_target_id()?.to_string();
+    let selected_target_identity_digest = runtime_handoff_digest(&active_target_id);
+    let prepared_at = runtime_handoff_timestamp();
+    let owner_id = format!(
+        "owner-{}",
+        &runtime_handoff_digest(&format!(
+            "{}:{profile_identity_digest}:{process_instance_digest}",
             state.session_id
-        ));
-    }
+        ))[..20]
+    );
+    let repository = LockedServiceStateRepository::default_json()?;
+    let current_owner = if let Some(owner) = repository
+        .load_snapshot()?
+        .runtime_owner_registry
+        .owner(&profile_identity_digest)
+        .cloned()
+    {
+        if owner.state != crate::runtime_owner_transfer::ProfileOwnerState::Ready
+            || owner.owner_id != owner_id
+            || owner.browser_id != service_browser_id(&state.session_id)
+            || owner.daemon_session_route != state.session_id
+            || owner.process_instance_digest != process_instance_digest
+            || owner.browser_family != state.engine
+            || owner.cdp_endpoint_identity_digest != cdp_endpoint_identity_digest
+            || owner.target_set_digest != target_set_digest
+        {
+            return Err("runtime_owner_current_evidence_mismatch: existing profile owner does not match the preparing daemon".to_string());
+        }
+        owner
+    } else {
+        crate::runtime_owner_transfer::register_current_owner(
+            &repository,
+            crate::runtime_owner_transfer::ProfileOwner {
+                owner_id: owner_id.clone(),
+                profile_identity_digest: profile_identity_digest.clone(),
+                state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+                owner_generation: 1,
+                browser_id: service_browser_id(&state.session_id),
+                daemon_session_route: state.session_id.clone(),
+                process_instance_digest: process_instance_digest.clone(),
+                browser_family: state.engine.clone(),
+                cdp_endpoint_identity_digest: cdp_endpoint_identity_digest.clone(),
+                target_set_digest: target_set_digest.clone(),
+                pending_transfer: None,
+                last_transition: None,
+            },
+        )?
+    };
+    let transfer_nonce_digest = runtime_handoff_digest(&format!(
+        "{}:{prepared_at}:{process_instance_digest}:{target_set_digest}",
+        state.session_id
+    ));
+    let candidate_session = format!("handoff-{}", &transfer_nonce_digest[..16]);
+    let proposal = crate::runtime_owner_transfer::begin_owner_transfer(
+        &repository,
+        crate::runtime_owner_transfer::OwnerTransferRequest {
+            mode: crate::runtime_adoption::BrowserAdoptionMode::CooperativeTransfer,
+            logical_browser_id: current_owner.browser_id.clone(),
+            profile_identity_digest: profile_identity_digest.clone(),
+            expected_owner_id: Some(current_owner.owner_id.clone()),
+            expected_owner_generation: current_owner.owner_generation,
+            candidate_owner_id: format!("owner-{}", &transfer_nonce_digest[16..36]),
+            candidate_daemon_session_route: candidate_session.clone(),
+            process_instance_digest,
+            browser_family: state.engine.clone(),
+            cdp_endpoint_identity_digest,
+            target_set_digest,
+            selected_target_identity_digest,
+            transfer_nonce_digest,
+        },
+    )?;
+    state.runtime_owner_binding = Some(
+        crate::runtime_owner_transfer::RuntimeOwnerBinding::effect_capable(
+            crate::runtime_owner_transfer::OwnerAuthorityClaim::from_owner(&current_owner),
+        ),
+    );
     let descriptor = RuntimeHandoffDescriptor {
-        schema_version: 1,
+        schema_version: 2,
         session_name: state.session_id.clone(),
         cdp_url: manager.get_cdp_url().to_string(),
-        browser_pid,
-        runtime_profile,
-        process_identity,
+        browser_pid: Some(browser_pid),
+        runtime_profile: Some(runtime_profile),
+        process_identity: Some(process_identity),
         engine: state.engine.clone(),
         host: current_service_browser_host(&state.session_id),
         close_browser_on_close: state.close_behavior == CloseBehavior::CloseBrowser,
-        active_target_id: manager.active_target_id().ok().map(str::to_string),
-        prepared_at: OffsetDateTime::now_utc()
-            .format(&Rfc3339)
-            .unwrap_or_else(|_| OffsetDateTime::now_utc().unix_timestamp().to_string()),
+        active_target_id: Some(active_target_id),
+        owner_transfer: Some(proposal.clone()),
+        prepared_at,
     };
     let path = write_runtime_handoff(&descriptor)?;
-    manager.relinquish_browser_for_handoff();
-    state.browser = None;
-    state.screencasting = false;
-    state.reset_input_state();
-    state.update_stream_client().await;
-    Ok(json!(
-        { "prepared" : true, "browserPresent" : true, "sessionName" : descriptor
-        .session_name, "browserPid" : descriptor.browser_pid, "cdpUrl" : descriptor
-        .cdp_url, "runtimeProfile" : descriptor.runtime_profile, "handoffPath" :
-        path, }
-    ))
+    Ok(runtime_handoff_prepared_response(&descriptor, path, false))
 }
 pub(crate) async fn handle_runtime_handoff_resume(
+    cmd: &Value,
     state: &mut DaemonState,
 ) -> Result<Value, String> {
-    if state.browser.is_some() {
+    let source_session = cmd
+        .get("sourceSession")
+        .and_then(Value::as_str)
+        .unwrap_or(&state.session_id)
+        .to_string();
+    if !crate::validation::is_valid_session_name(&source_session) {
+        return Err(crate::validation::session_name_error(&source_session));
+    }
+    if let Some(manager) = state.browser.as_ref() {
+        let binding = state.runtime_owner_binding.as_ref().ok_or_else(|| {
+            format!(
+                "Cannot replay runtime handoff for session '{}': daemon browser is not owner-bound",
+                state.session_id
+            )
+        })?;
+        let repository = LockedServiceStateRepository::default_json()?;
+        if !crate::runtime_owner_transfer::owner_authority_is_current(&repository, &binding.claim)?
+        {
+            return Err(format!(
+                "Cannot replay runtime handoff for session '{}': owner generation is stale",
+                state.session_id
+            ));
+        }
+        return Ok(json!({
+            "resumed": true,
+            "replayed": true,
+            "sourceSessionName": source_session,
+            "sessionName": state.session_id,
+            "browserPid": state.attached_browser_pid,
+            "cdpUrl": manager.get_cdp_url(),
+            "runtimeProfile": state.attached_runtime_profile,
+            "activeTargetId": manager.active_target_id().ok(),
+            "retryRecordRemoved": false,
+            "transferState": "candidate_committed",
+            "targetsReattached": manager.page_count(),
+        }));
+    }
+    let descriptor_path = runtime_handoff_path(&source_session);
+    if !descriptor_path.exists() {
+        return handle_runtime_handoff_orphan_adoption(&source_session, None, state).await;
+    }
+    let descriptor = read_runtime_handoff(&source_session)?;
+    if descriptor.schema_version == 1 {
+        return handle_runtime_handoff_orphan_adoption(&source_session, Some(descriptor), state)
+            .await;
+    }
+    if descriptor.schema_version != 2 || descriptor.session_name != source_session {
         return Err(format!(
-            "Cannot resume runtime handoff for session '{}': daemon already has a browser",
-            state.session_id
+            "Runtime handoff identity mismatch for source session '{}'",
+            source_session
         ));
     }
-    let descriptor = read_runtime_handoff(&state.session_id)?;
-    if descriptor.schema_version != 1 || descriptor.session_name != state.session_id {
+    let proposal = descriptor.owner_transfer.as_ref().ok_or_else(|| {
+        "runtime_handoff_owner_transfer_missing: descriptor has no two-phase owner proposal"
+            .to_string()
+    })?;
+    if proposal.request.candidate_daemon_session_route != state.session_id {
         return Err(format!(
-            "Runtime handoff identity mismatch for session '{}'",
-            state.session_id
+            "Runtime handoff candidate session mismatch: expected '{}' but received '{}'",
+            proposal.request.candidate_daemon_session_route, state.session_id
         ));
     }
     if let Some(browser_pid) = descriptor.browser_pid {
@@ -241,6 +407,43 @@ pub(crate) async fn handle_runtime_handoff_resume(
         descriptor.active_target_id.as_deref(),
     )
     .await?;
+    let runtime_profile = descriptor.runtime_profile.as_deref().ok_or_else(|| {
+        "runtime_handoff_profile_missing: candidate requires canonical profile identity".to_string()
+    })?;
+    let process_identity = descriptor.process_identity.as_ref().ok_or_else(|| {
+        "runtime_handoff_process_identity_missing: candidate requires process-instance evidence"
+            .to_string()
+    })?;
+    let attachment = crate::runtime_owner_transfer::CandidateOwnerAttachment {
+        candidate_owner_id: proposal.request.candidate_owner_id.clone(),
+        candidate_daemon_session_route: state.session_id.clone(),
+        candidate_owner_generation: proposal.candidate_owner_generation,
+        logical_browser_id: proposal.request.logical_browser_id.clone(),
+        profile_identity_digest: runtime_handoff_profile_digest(runtime_profile)?,
+        process_instance_digest: runtime_handoff_json_digest(process_identity)?,
+        browser_family: descriptor.engine.clone(),
+        cdp_endpoint_identity_digest: runtime_handoff_digest(&descriptor.cdp_url),
+        target_set_digest: runtime_handoff_target_set_digest(&manager)?,
+        selected_target_identity_digest: runtime_handoff_digest(manager.active_target_id()?),
+        transfer_nonce_digest: proposal.request.transfer_nonce_digest.clone(),
+        effect_capable: false,
+    };
+    let repository = LockedServiceStateRepository::default_json()?;
+    let owner_receipt =
+        crate::runtime_owner_transfer::commit_candidate_owner(&repository, attachment)?;
+    let candidate_owner = repository
+        .load_snapshot()?
+        .runtime_owner_registry
+        .owner(&proposal.request.profile_identity_digest)
+        .cloned()
+        .ok_or_else(|| {
+            "runtime_handoff_candidate_owner_missing: committed owner was not readable".to_string()
+        })?;
+    state.runtime_owner_binding = Some(
+        crate::runtime_owner_transfer::RuntimeOwnerBinding::effect_capable(
+            crate::runtime_owner_transfer::OwnerAuthorityClaim::from_owner(&candidate_owner),
+        ),
+    );
     state.reset_input_state();
     state.attached_runtime_profile = descriptor.runtime_profile.clone();
     state.attached_browser_pid = descriptor.browser_pid;
@@ -256,16 +459,474 @@ pub(crate) async fn handle_runtime_handoff_resume(
     state.start_fetch_handler();
     state.start_dialog_handler();
     state.update_stream_client().await;
-    persist_current_browser_health(state, descriptor.host, ServiceBrowserHealth::Ready, None);
-    let retry_record_removed = fs::remove_file(runtime_handoff_path(&state.session_id)).is_ok();
+    persist_adopted_logical_browser_health(
+        state,
+        &proposal.request.logical_browser_id,
+        descriptor.host,
+    )?;
     Ok(json!(
         { "resumed" : true, "sessionName" : descriptor.session_name, "browserPid" :
         descriptor.browser_pid, "cdpUrl" : descriptor.cdp_url, "runtimeProfile" :
         descriptor.runtime_profile, "activeTargetId" : state.browser.as_ref()
         .and_then(| browser | browser.active_target_id().ok()), "retryRecordRemoved"
-        : retry_record_removed, "targetsReattached" : state.browser.as_ref()
+        : false, "transferState" : "candidate_committed", "ownerTransferReceipt" :
+        owner_receipt, "targetsReattached" : state.browser.as_ref()
         .map(BrowserManager::page_count).unwrap_or(0), }
     ))
+}
+
+async fn handle_runtime_handoff_orphan_adoption(
+    source_session: &str,
+    legacy_descriptor: Option<RuntimeHandoffDescriptor>,
+    state: &mut DaemonState,
+) -> Result<Value, String> {
+    let repository = LockedServiceStateRepository::default_json()?;
+    let snapshot = repository.load_snapshot()?;
+    let logical_browser_id = service_browser_id(source_session);
+    let browser = snapshot
+        .browsers
+        .get(&logical_browser_id)
+        .cloned()
+        .ok_or_else(|| {
+            format!(
+                "runtime_handoff_orphan_browser_missing: no logical browser is recorded for source session '{source_session}'"
+            )
+        })?;
+    let recorded = snapshot
+        .browser_process_identities
+        .get(&logical_browser_id)
+        .cloned()
+        .ok_or_else(|| {
+            "runtime_handoff_orphan_process_identity_missing: exact process evidence is required"
+                .to_string()
+        })?;
+    let browser_pid = browser.pid.ok_or_else(|| {
+        "runtime_handoff_orphan_pid_missing: exact browser PID is required".to_string()
+    })?;
+    let cdp_url = browser
+        .cdp_endpoint
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| {
+            "runtime_handoff_orphan_cdp_missing: bounded DevTools evidence is required".to_string()
+        })?;
+    let runtime_profile = recorded
+        .runtime_profile
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| {
+            "runtime_handoff_orphan_profile_missing: canonical runtime profile is required"
+                .to_string()
+        })?;
+    if let Some(legacy) = legacy_descriptor.as_ref() {
+        if legacy.session_name != source_session
+            || legacy.browser_pid != Some(browser_pid)
+            || legacy.cdp_url != cdp_url
+            || legacy.runtime_profile.as_deref() != Some(runtime_profile.as_str())
+            || legacy.process_identity.as_ref() != Some(&recorded.process_identity)
+        {
+            return Err(
+                "runtime_handoff_legacy_orphan_mismatch: descriptor and independent service evidence differ"
+                    .to_string(),
+            );
+        }
+    }
+    let engine = recorded
+        .process_identity
+        .browser_family
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| state.engine.clone());
+    if engine != state.engine {
+        return Err(format!(
+            "runtime_handoff_orphan_browser_family_mismatch: expected '{}' but observed '{}'",
+            state.engine, engine
+        ));
+    }
+    let provisional = RuntimeHandoffDescriptor {
+        schema_version: 2,
+        session_name: source_session.to_string(),
+        cdp_url: cdp_url.clone(),
+        browser_pid: Some(browser_pid),
+        runtime_profile: Some(runtime_profile.clone()),
+        process_identity: Some(recorded.process_identity.clone()),
+        engine: engine.clone(),
+        host: browser.host,
+        close_browser_on_close: false,
+        active_target_id: None,
+        owner_transfer: None,
+        prepared_at: runtime_handoff_timestamp(),
+    };
+    let assessment = runtime_handoff_process_assessment(&provisional, browser_pid);
+    if !assessment.authorizes_adoption() {
+        return Err(format!(
+            "runtime_handoff_orphan_process_mismatch: {}",
+            assessment.reason
+        ));
+    }
+    let manager = BrowserManager::connect_cdp_for_handoff(&cdp_url, None).await?;
+    let profile_identity_digest = runtime_handoff_profile_digest(&runtime_profile)?;
+    if snapshot
+        .runtime_owner_registry
+        .owner(&profile_identity_digest)
+        .is_some()
+    {
+        return Err(
+            "runtime_handoff_orphan_owner_present: direct adoption requires an ownerless registry"
+                .to_string(),
+        );
+    }
+    let process_instance_digest = runtime_handoff_json_digest(&recorded.process_identity)?;
+    let target_set_digest = runtime_handoff_target_set_digest(&manager)?;
+    let selected_target_identity_digest = runtime_handoff_digest(manager.active_target_id()?);
+    let transfer_nonce_digest = runtime_handoff_digest(&format!(
+        "orphan:{logical_browser_id}:{process_instance_digest}:{target_set_digest}"
+    ));
+    let proposal = crate::runtime_owner_transfer::begin_owner_transfer(
+        &repository,
+        crate::runtime_owner_transfer::OwnerTransferRequest {
+            mode: crate::runtime_adoption::BrowserAdoptionMode::OrphanAdoption,
+            logical_browser_id: logical_browser_id.clone(),
+            profile_identity_digest: profile_identity_digest.clone(),
+            expected_owner_id: None,
+            expected_owner_generation: 0,
+            candidate_owner_id: format!("owner-{}", &transfer_nonce_digest[16..36]),
+            candidate_daemon_session_route: state.session_id.clone(),
+            process_instance_digest,
+            browser_family: engine,
+            cdp_endpoint_identity_digest: runtime_handoff_digest(&cdp_url),
+            target_set_digest,
+            selected_target_identity_digest,
+            transfer_nonce_digest,
+        },
+    )?;
+    let descriptor = RuntimeHandoffDescriptor {
+        active_target_id: Some(manager.active_target_id()?.to_string()),
+        owner_transfer: Some(proposal.clone()),
+        ..provisional
+    };
+    let path = write_runtime_handoff(&descriptor)?;
+    let receipt = crate::runtime_owner_transfer::commit_candidate_owner(
+        &repository,
+        crate::runtime_owner_transfer::CandidateOwnerAttachment::from_request(
+            &proposal.request,
+            proposal.candidate_owner_generation,
+        ),
+    )?;
+    let candidate_owner = repository
+        .load_snapshot()?
+        .runtime_owner_registry
+        .owner(&profile_identity_digest)
+        .cloned()
+        .ok_or_else(|| {
+            "runtime_handoff_orphan_commit_missing: committed owner was not readable".to_string()
+        })?;
+    state.runtime_owner_binding = Some(
+        crate::runtime_owner_transfer::RuntimeOwnerBinding::effect_capable(
+            crate::runtime_owner_transfer::OwnerAuthorityClaim::from_owner(&candidate_owner),
+        ),
+    );
+    state.reset_input_state();
+    state.attached_runtime_profile = Some(runtime_profile.clone());
+    state.attached_browser_pid = Some(browser_pid);
+    state.close_behavior = CloseBehavior::Detach;
+    state.engine = descriptor.engine.clone();
+    write_engine_file(&state.session_id, &state.engine);
+    state.browser = Some(manager);
+    state.subscribe_to_browser_events();
+    state.start_fetch_handler();
+    state.start_dialog_handler();
+    state.update_stream_client().await;
+    persist_adopted_logical_browser_health(state, &logical_browser_id, browser.host)?;
+    Ok(json!({
+        "resumed": true,
+        "replayed": false,
+        "adoptionMode": "orphan_adoption",
+        "sourceSessionName": source_session,
+        "sessionName": state.session_id,
+        "browserPid": browser_pid,
+        "cdpUrl": cdp_url,
+        "runtimeProfile": runtime_profile,
+        "handoffPath": path,
+        "retryRecordRemoved": false,
+        "transferState": "candidate_committed",
+        "ownerTransferReceipt": receipt,
+        "targetsReattached": state.browser.as_ref().map(BrowserManager::page_count).unwrap_or(0),
+    }))
+}
+
+fn persist_adopted_logical_browser_health(
+    state: &DaemonState,
+    logical_browser_id: &str,
+    host: ServiceBrowserHost,
+) -> Result<(), String> {
+    let manager = state.browser.as_ref().ok_or_else(|| {
+        "runtime_handoff_persist_browser_missing: adopted browser is unavailable".to_string()
+    })?;
+    let pid = manager.browser_pid().or(state.attached_browser_pid);
+    let cdp_endpoint = manager.get_cdp_url().to_string();
+    let process_identity = pid.and_then(|pid| {
+        crate::process_identity::capture_process_identity(pid, None, None).map(|identity| {
+            ServiceBrowserProcessIdentity {
+                process_identity: identity,
+                user_data_dir: manager
+                    .browser_user_data_dir()
+                    .map(|path| path.to_string_lossy().into_owned()),
+                runtime_profile: manager
+                    .runtime_profile_name()
+                    .map(str::to_string)
+                    .or_else(|| state.attached_runtime_profile.clone()),
+            }
+        })
+    });
+    LockedServiceStateRepository::default_json()?.mutate(|service_state| {
+        let browser = service_state
+            .browsers
+            .get_mut(logical_browser_id)
+            .ok_or_else(|| {
+                "runtime_handoff_logical_browser_missing: owner browser record disappeared"
+                    .to_string()
+            })?;
+        browser.host = host;
+        browser.health = ServiceBrowserHealth::Ready;
+        browser.pid = pid;
+        browser.cdp_endpoint = Some(cdp_endpoint);
+        browser.active_session_ids = vec![state.session_id.clone()];
+        browser.last_error = None;
+        if let Some(process_identity) = process_identity {
+            service_state
+                .browser_process_identities
+                .insert(logical_browser_id.to_string(), process_identity);
+        }
+        Ok(())
+    })
+}
+
+fn runtime_handoff_prepared_response(
+    descriptor: &RuntimeHandoffDescriptor,
+    path: PathBuf,
+    replayed: bool,
+) -> Value {
+    let proposal = descriptor
+        .owner_transfer
+        .as_ref()
+        .expect("schema version 2 descriptor must carry an owner proposal");
+    json!({
+        "prepared": true,
+        "replayed": replayed,
+        "browserPresent": true,
+        "sessionName": descriptor.session_name,
+        "browserPid": descriptor.browser_pid,
+        "cdpUrl": descriptor.cdp_url,
+        "runtimeProfile": descriptor.runtime_profile,
+        "handoffPath": path,
+        "transferState": "awaiting_candidate",
+        "oldOwnerEffectCapable": true,
+        "candidateSessionName": proposal.request.candidate_daemon_session_route,
+        "previousOwnerGeneration": proposal.previous_owner_generation,
+        "candidateOwnerGeneration": proposal.candidate_owner_generation,
+    })
+}
+
+pub(crate) async fn handle_runtime_handoff_finalize(
+    state: &mut DaemonState,
+) -> Result<Value, String> {
+    let binding = state.runtime_owner_binding.as_ref().ok_or_else(|| {
+        "runtime_handoff_finalize_unbound: daemon has no owner-transfer binding".to_string()
+    })?;
+    if !binding.effect_capable {
+        return Err(
+            "runtime_handoff_finalize_observation_only: candidate cannot finalize the old owner"
+                .to_string(),
+        );
+    }
+    let repository = LockedServiceStateRepository::default_json()?;
+    if crate::runtime_owner_transfer::owner_authority_is_current(&repository, &binding.claim)? {
+        return Err(
+            "runtime_handoff_finalize_before_commit: old daemon remains effect-capable".to_string(),
+        );
+    }
+    let Some(manager) = state.browser.as_mut() else {
+        return Err(
+            "runtime_handoff_finalize_browser_missing: old browser is unavailable".to_string(),
+        );
+    };
+    manager.relinquish_browser_for_handoff();
+    state.browser = None;
+    state.screencasting = false;
+    state.reset_input_state();
+    state.update_stream_client().await;
+    let retry_record_removed = fs::remove_file(runtime_handoff_path(&state.session_id)).is_ok();
+    Ok(json!({
+        "finalized": true,
+        "sessionName": state.session_id,
+        "browserPreserved": true,
+        "retryRecordRemoved": retry_record_removed,
+    }))
+}
+
+pub(crate) fn handle_runtime_handoff_abort(state: &mut DaemonState) -> Result<Value, String> {
+    let binding = state.runtime_owner_binding.as_ref().ok_or_else(|| {
+        "runtime_handoff_abort_unbound: old daemon has no owner-transfer binding".to_string()
+    })?;
+    if !binding.effect_capable || binding.claim.daemon_session_route != state.session_id {
+        return Err(
+            "runtime_handoff_abort_not_old_owner: only the current old owner may abort".to_string(),
+        );
+    }
+    let descriptor = read_runtime_handoff(&state.session_id)?;
+    let proposal = descriptor.owner_transfer.as_ref().ok_or_else(|| {
+        "runtime_handoff_owner_transfer_missing: abort descriptor has no owner proposal".to_string()
+    })?;
+    if descriptor.schema_version != 2
+        || proposal.request.profile_identity_digest != binding.claim.profile_identity_digest
+        || proposal.request.expected_owner_id.as_deref() != Some(binding.claim.owner_id.as_str())
+        || proposal.request.expected_owner_generation != binding.claim.owner_generation
+        || proposal.request.logical_browser_id != binding.claim.logical_browser_id
+        || proposal.request.process_instance_digest != binding.claim.process_instance_digest
+    {
+        return Err(
+            "runtime_handoff_abort_evidence_mismatch: old owner and descriptor differ".to_string(),
+        );
+    }
+    let repository = LockedServiceStateRepository::default_json()?;
+    if !crate::runtime_owner_transfer::owner_authority_is_current(&repository, &binding.claim)? {
+        return Err(
+            "runtime_handoff_abort_after_commit: candidate owner already committed".to_string(),
+        );
+    }
+    let aborted = crate::runtime_owner_transfer::abort_owner_transfer(
+        &repository,
+        &proposal.request.profile_identity_digest,
+        &binding.claim.owner_id,
+        binding.claim.owner_generation,
+        &proposal.request.transfer_nonce_digest,
+    )?;
+    let retry_record_removed = fs::remove_file(runtime_handoff_path(&state.session_id)).is_ok();
+    Ok(json!({
+        "aborted": aborted,
+        "sessionName": state.session_id,
+        "oldOwnerEffectCapable": true,
+        "browserPreserved": true,
+        "retryRecordRemoved": retry_record_removed,
+    }))
+}
+
+pub(crate) async fn handle_runtime_handoff_rollback(
+    cmd: &Value,
+    state: &mut DaemonState,
+) -> Result<Value, String> {
+    let source_session = cmd
+        .get("sourceSession")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            "runtime_handoff_source_session_missing: rollback requires --source-session".to_string()
+        })?;
+    if !crate::validation::is_valid_session_name(source_session) {
+        return Err(crate::validation::session_name_error(source_session));
+    }
+    let binding = state.runtime_owner_binding.as_ref().ok_or_else(|| {
+        "runtime_handoff_rollback_unbound: candidate has no owner-transfer binding".to_string()
+    })?;
+    if !binding.effect_capable || binding.claim.daemon_session_route != state.session_id {
+        return Err(
+            "runtime_handoff_rollback_not_candidate: only the committed candidate may roll back"
+                .to_string(),
+        );
+    }
+    let descriptor = read_runtime_handoff(source_session)?;
+    let proposal = descriptor.owner_transfer.as_ref().ok_or_else(|| {
+        "runtime_handoff_owner_transfer_missing: rollback descriptor has no owner proposal"
+            .to_string()
+    })?;
+    if descriptor.schema_version != 2
+        || descriptor.session_name != source_session
+        || proposal.request.candidate_owner_id != binding.claim.owner_id
+        || proposal.candidate_owner_generation != binding.claim.owner_generation
+        || proposal.request.profile_identity_digest != binding.claim.profile_identity_digest
+        || proposal.request.logical_browser_id != binding.claim.logical_browser_id
+        || proposal.request.process_instance_digest != binding.claim.process_instance_digest
+    {
+        return Err(
+            "runtime_handoff_rollback_evidence_mismatch: candidate and descriptor differ"
+                .to_string(),
+        );
+    }
+    let repository = LockedServiceStateRepository::default_json()?;
+    if !crate::runtime_owner_transfer::owner_authority_is_current(&repository, &binding.claim)? {
+        return Err(
+            "runtime_handoff_rollback_owner_stale: candidate is no longer authoritative"
+                .to_string(),
+        );
+    }
+    let reverse_nonce_digest = runtime_handoff_digest(&format!(
+        "reverse:{}:{}",
+        proposal.request.transfer_nonce_digest, state.session_id
+    ));
+    let receipt = crate::runtime_owner_transfer::reverse_candidate_owner(
+        &repository,
+        crate::runtime_owner_transfer::ReverseOwnerTransferRequest {
+            profile_identity_digest: proposal.request.profile_identity_digest.clone(),
+            expected_candidate_owner_id: proposal.request.candidate_owner_id.clone(),
+            expected_candidate_owner_generation: proposal.candidate_owner_generation,
+            transfer_nonce_digest: proposal.request.transfer_nonce_digest.clone(),
+            reverse_nonce_digest,
+        },
+    )?;
+    let manager = state.browser.as_mut().ok_or_else(|| {
+        "runtime_handoff_rollback_browser_missing: candidate browser is unavailable".to_string()
+    })?;
+    manager.relinquish_browser_for_handoff();
+    state.browser = None;
+    state.screencasting = false;
+    state.reset_input_state();
+    state.update_stream_client().await;
+    let retry_record_removed = fs::remove_file(runtime_handoff_path(source_session)).is_ok();
+    Ok(json!({
+        "rolledBack": true,
+        "sourceSessionName": source_session,
+        "candidateSessionName": state.session_id,
+        "browserPreserved": true,
+        "retryRecordRemoved": retry_record_removed,
+        "ownerTransferReceipt": receipt,
+    }))
+}
+
+fn runtime_handoff_profile_digest(runtime_profile: &str) -> Result<String, String> {
+    let user_data_dir = runtime_profile_user_data_dir(runtime_profile)?;
+    crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir)
+}
+
+fn runtime_handoff_target_set_digest(manager: &BrowserManager) -> Result<String, String> {
+    let mut target_ids = manager
+        .pages_list()
+        .into_iter()
+        .map(|page| page.target_id)
+        .collect::<Vec<_>>();
+    target_ids.sort();
+    target_ids.dedup();
+    if target_ids.is_empty() {
+        return Err(
+            "runtime_handoff_target_set_missing: browser has no retained targets".to_string(),
+        );
+    }
+    runtime_handoff_json_digest(&target_ids)
+}
+
+fn runtime_handoff_json_digest(value: &impl serde::Serialize) -> Result<String, String> {
+    let bytes = serde_json::to_vec(value)
+        .map_err(|error| format!("could not serialize runtime handoff evidence: {error}"))?;
+    Ok(format!("{:x}", Sha256::digest(bytes)))
+}
+
+fn runtime_handoff_digest(value: &str) -> String {
+    format!("{:x}", Sha256::digest(value.as_bytes()))
+}
+
+fn runtime_handoff_timestamp() -> String {
+    OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .unwrap_or_else(|_| OffsetDateTime::now_utc().unix_timestamp().to_string())
 }
 
 pub(crate) fn runtime_handoff_process_assessment(

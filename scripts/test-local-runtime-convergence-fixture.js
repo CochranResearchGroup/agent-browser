@@ -244,6 +244,7 @@ function runScenario(name, controllerArgs, state = {}) {
       ...process.env,
       HOME: fixtureRoot,
       AGENT_BROWSER_BIN: fakeAgentBrowser,
+      AGENT_BROWSER_SOCKET_DIR: join(fixtureRoot, 'socket-dir'),
       PNPM_BIN: fakePnpm,
       P78_FIXTURE_LOG: logPath,
       P78_FIXTURE_STATE: statePath,

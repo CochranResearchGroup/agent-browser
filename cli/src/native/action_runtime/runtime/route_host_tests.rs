@@ -2181,6 +2181,7 @@ fn test_no_runtime_profile_handoff_identity_matches_at_resume_boundary() {
         host: ServiceBrowserHost::AttachedExisting,
         close_browser_on_close: false,
         active_target_id: None,
+        owner_transfer: None,
         prepared_at: "2026-08-10T12:00:00Z".to_string(),
     };
 
@@ -2220,6 +2221,7 @@ fn test_no_runtime_profile_handoff_identity_mismatch_is_rejected_before_resume()
         host: ServiceBrowserHost::AttachedExisting,
         close_browser_on_close: false,
         active_target_id: None,
+        owner_transfer: None,
         prepared_at: "2026-08-10T12:00:00Z".to_string(),
     };
 

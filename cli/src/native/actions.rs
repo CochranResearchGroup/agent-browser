@@ -35,7 +35,8 @@ mod state_tests;
 use super::action_runtime::runtime::{
     active_browser_profile_mismatch, auto_launch, detect_browser_stale_state, handle_cdp_attach,
     handle_cdp_detach, handle_cdp_free_launch, handle_close, handle_external_byop_adopt,
-    handle_launch, handle_navigate, handle_runtime_handoff_prepare, handle_runtime_handoff_resume,
+    handle_launch, handle_navigate, handle_runtime_handoff_abort, handle_runtime_handoff_finalize,
+    handle_runtime_handoff_prepare, handle_runtime_handoff_resume, handle_runtime_handoff_rollback,
     handle_snapshot, persist_browser_recovery_started_from_persisted_state,
     persist_current_browser_stale_health, BackendType, DaemonState, PendingConfirmation,
 };
@@ -199,6 +200,9 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
         "" | "launch"
             | "runtime_handoff_prepare"
             | "runtime_handoff_resume"
+            | "runtime_handoff_abort"
+            | "runtime_handoff_rollback"
+            | "runtime_handoff_finalize"
             | "cdp_free_launch"
             | "external_byop_adopt"
             | "cdp_attach"
@@ -415,18 +419,52 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
         .unwrap_or("")
         .to_string();
     let cmd_start = std::time::Instant::now();
-    if let Some(binding) = state.runtime_owner_binding.as_ref() {
-        let repository =
-            match crate::native::service_store::LockedServiceStateRepository::default_json() {
-                Ok(repository) => repository,
-                Err(error) => return error_response(&id, &error),
-            };
-        if let Err(error) = crate::runtime_owner_transfer::require_owner_effect_authority(
-            &repository,
-            binding,
-            action,
-        ) {
-            return error_response(&id, &error);
+    if action != "confirm"
+        && action != "deny"
+        && !matches!(action, "desktop_interact" | "desktop_prompt_observe")
+    {
+        if let Some(ref ca) = state.confirm_actions {
+            if ca.requires_confirmation(action) {
+                state.pending_confirmation = Some(PendingConfirmation {
+                    action: action.to_string(),
+                    cmd: cmd.clone(),
+                });
+                return json!(
+                    { "id" : id, "success" : true, "data" : { "confirmation_required" :
+                    true, "confirmation_id" : id, "action" : action, }, }
+                );
+            }
+        }
+    }
+    if crate::runtime_owner_transfer::action_requires_owner_effect_authority(action) {
+        if state.runtime_owner_binding.is_none() {
+            let repository =
+                match crate::native::service_store::LockedServiceStateRepository::default_json() {
+                    Ok(repository) => repository,
+                    Err(error) => return error_response(&id, &error),
+                };
+            state.runtime_owner_binding =
+                match crate::runtime_owner_transfer::owner_binding_for_session(
+                    &repository,
+                    &state.session_id,
+                ) {
+                    Ok(binding) => binding,
+                    Err(error) => return error_response(&id, &error),
+                };
+        }
+        if let Some(binding) = state.runtime_owner_binding.as_mut() {
+            let repository =
+                match crate::native::service_store::LockedServiceStateRepository::default_json() {
+                    Ok(repository) => repository,
+                    Err(error) => return error_response(&id, &error),
+                };
+            if let Err(error) = crate::runtime_owner_transfer::require_owner_effect_authority(
+                &repository,
+                binding,
+                action,
+            ) {
+                return error_response(&id, &error);
+            }
         }
     }
     // PoC 4 and PoC 5 have no configured production providers. Resolve that static
@@ -620,7 +658,10 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
             "content" => handle_content(state).await,
             "evaluate" => handle_evaluate(cmd, state).await,
             "runtime_handoff_prepare" => handle_runtime_handoff_prepare(state).await,
-            "runtime_handoff_resume" => handle_runtime_handoff_resume(state).await,
+            "runtime_handoff_abort" => handle_runtime_handoff_abort(state),
+            "runtime_handoff_resume" => handle_runtime_handoff_resume(cmd, state).await,
+            "runtime_handoff_rollback" => handle_runtime_handoff_rollback(cmd, state).await,
+            "runtime_handoff_finalize" => handle_runtime_handoff_finalize(state).await,
             "close" => handle_close(state).await,
             "snapshot" => handle_snapshot(cmd, state).await,
             "screenshot" => handle_screenshot(cmd, state).await,

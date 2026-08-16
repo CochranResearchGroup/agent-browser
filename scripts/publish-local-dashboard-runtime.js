@@ -87,11 +87,15 @@ const report = {
   handoffs: {
     prepared: [],
     resumed: [],
-    rollbackResumed: [],
+    aborted: [],
+    rolledBack: [],
+    finalized: [],
+    activeSupervisorSessions: [],
     retiredIdleSessions: [],
     unsupportedActiveSessions: [],
   },
 };
+let handoffFinalizeStarted = false;
 
 try {
   await run();
@@ -133,7 +137,7 @@ async function run() {
 
   quiesceDashboardForRuntimeHandoff();
   try {
-    prepareRuntimeHandoffs(builtBin, installBin);
+    prepareRuntimeHandoffs(installBin);
     installBinaryAtomically(builtBin, installBin, beforeStat ? beforeStat.mode & 0o777 : 0o755);
     if (options.syncReferenceBinaries) {
       report.referenceBinaries = syncReferenceBinaries(builtBin);
@@ -146,9 +150,13 @@ async function run() {
       report.smoke = runSmoke(installBin);
       report.runtimeManifest = verifyRuntimeManifestReadback(installBin, report.smoke.runtimeManifest);
     }
+    handoffFinalizeStarted = true;
+    finalizeRuntimeHandoffs(installBin);
   } catch (error) {
-    const browserHandoffStarted = report.handoffs.prepared.length > 0;
-    if (!browserHandoffStarted && backupPath && existsSync(backupPath)) {
+    const transferRestored = handoffFinalizeStarted
+      ? false
+      : restoreRuntimeHandoffs(installBin);
+    if (!handoffFinalizeStarted && transferRestored && backupPath && existsSync(backupPath)) {
       installBinaryAtomically(backupPath, installBin, beforeStat ? beforeStat.mode & 0o777 : 0o755);
       report.restoredBackup = true;
     }
@@ -231,18 +239,50 @@ function runtimeSocketDir() {
 
 function runtimeSessionNames() {
   const socketDir = runtimeSocketDir();
-  if (!existsSync(socketDir)) return [];
+  const sessions = new Set();
   const suffix = process.platform === 'win32' ? '.port' : '.sock';
-  return readdirSync(socketDir)
-    .filter((name) => name.endsWith(suffix))
-    .map((name) => name.slice(0, -suffix.length))
-    .filter((name) => /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name))
-    .sort();
+  if (existsSync(socketDir)) {
+    for (const name of readdirSync(socketDir)) {
+      if (!name.endsWith(suffix)) continue;
+      const session = name.slice(0, -suffix.length);
+      if (/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(session)) sessions.add(session);
+    }
+  }
+  for (const session of activeSupervisorSessionNames()) sessions.add(session);
+  return [...sessions].sort();
 }
 
-function prepareRuntimeHandoffs(clientBin, rollbackBin) {
-  try {
-    for (const sessionName of runtimeSessionNames()) {
+function activeSupervisorSessionNames() {
+  const root = process.env.AGENT_BROWSER_SESSION_SUPERVISOR_ROOT
+    ? resolve(process.env.AGENT_BROWSER_SESSION_SUPERVISOR_ROOT, 'manifests')
+    : resolve(homedir(), '.config', 'agent-browser', 'session-supervisors');
+  if (!existsSync(root) || process.platform !== 'linux') return [];
+  const sessions = [];
+  for (const name of readdirSync(root).filter((entry) => entry.endsWith('.json')).sort()) {
+    try {
+      const manifest = JSON.parse(readFileSync(join(root, name), 'utf8'));
+      const session = manifest?.session;
+      if (
+        manifest?.schemaVersion !== 'agent-browser.session-supervisor.v1'
+        || typeof session !== 'string'
+        || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(session)
+      ) continue;
+      const active = spawnSync(
+        'systemctl',
+        ['--user', 'is-active', `agent-browser-session@${session}.service`],
+        { cwd: rootDir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+      );
+      if (active.status === 0 && active.stdout.trim() === 'active') sessions.push(session);
+    } catch {
+      continue;
+    }
+  }
+  report.handoffs.activeSupervisorSessions = sessions;
+  return sessions;
+}
+
+function prepareRuntimeHandoffs(rollbackBin) {
+  for (const sessionName of runtimeSessionNames()) {
       const daemonPid = readRuntimePid(sessionName);
       const daemonClientBin = runtimeDaemonClientBinary(daemonPid, rollbackBin);
       const serviceReadback = serviceBrowserForSession(daemonClientBin, sessionName);
@@ -278,10 +318,17 @@ function prepareRuntimeHandoffs(clientBin, rollbackBin) {
         continue;
       }
 
-      const prepared = runAgentJson(clientBin, sessionName, ['handoff', 'prepare']);
+      const prepared = runAgentJson(daemonClientBin, sessionName, ['handoff', 'prepare']);
       if (prepared.status === 0 && prepared.json?.success === true) {
         const data = prepared.json.data || {};
         if (data.prepared === true) {
+          const candidateSessionName = typeof data.candidateSessionName === 'string'
+            ? data.candidateSessionName
+            : `orphan-${createHash('sha256')
+              .update(`${sessionName}:${data.browserPid ?? 'unknown'}`)
+              .digest('hex')
+              .slice(0, 16)}`;
+          const legacyOrphan = typeof data.candidateSessionName !== 'string';
           report.handoffs.prepared.push({
             sessionName,
             daemonPid,
@@ -289,11 +336,15 @@ function prepareRuntimeHandoffs(clientBin, rollbackBin) {
             cdpUrl: data.cdpUrl ?? null,
             runtimeProfile: data.runtimeProfile ?? null,
             handoffPath: data.handoffPath ?? null,
+            candidateSessionName,
+            legacyOrphan,
           });
+          if (legacyOrphan) waitForDaemonExit(sessionName, daemonPid);
         } else {
-          report.handoffs.retiredIdleSessions.push({ sessionName, daemonPid });
+          throw new Error(
+            `Active browser session '${sessionName}' disappeared during handoff preparation.`,
+          );
         }
-        waitForDaemonExit(sessionName, daemonPid);
         continue;
       }
 
@@ -308,17 +359,6 @@ function prepareRuntimeHandoffs(clientBin, rollbackBin) {
         `Installed daemon cannot hand off active browser session '${sessionName}'. ` +
         'The publish was stopped before replacing the executable.',
       );
-    }
-  } catch (error) {
-    for (const prepared of report.handoffs.prepared) {
-      const resumed = runAgentJson(rollbackBin, prepared.sessionName, ['handoff', 'resume']);
-      report.handoffs.rollbackResumed.push({
-        sessionName: prepared.sessionName,
-        success: resumed.status === 0 && resumed.json?.success === true,
-        error: resumed.status === 0 && resumed.json?.success === true ? null : resumed.error,
-      });
-    }
-    throw error;
   }
 }
 
@@ -326,17 +366,31 @@ function resumeRuntimeHandoffs(installBin) {
   for (const prepared of report.handoffs.prepared) {
     let resumed;
     for (let attempt = 1; attempt <= 3; attempt += 1) {
-      resumed = runAgentJson(installBin, prepared.sessionName, ['handoff', 'resume']);
+      resumed = runAgentJson(
+        installBin,
+        prepared.candidateSessionName,
+        ['handoff', 'resume', '--source-session', prepared.sessionName],
+      );
       if (resumed.status === 0 && resumed.json?.success === true) break;
       if (attempt < 3) sleep(250);
     }
     if (resumed.status !== 0 || resumed.json?.success !== true) {
       throw new Error(
-        `Replacement daemon could not resume browser session '${prepared.sessionName}'. ` +
+        `Candidate daemon could not resume browser session '${prepared.sessionName}'. ` +
         `The browser and retry record remain available: ${resumed.error}`,
       );
     }
     const data = resumed.json.data || {};
+    report.handoffs.resumed.push({
+      sessionName: prepared.sessionName,
+      candidateSessionName: prepared.candidateSessionName,
+      browserPid: data.browserPid ?? null,
+      cdpUrl: data.cdpUrl ?? null,
+      runtimeProfile: data.runtimeProfile ?? null,
+      targetsReattached: data.targetsReattached ?? null,
+      retryRecordRemoved: data.retryRecordRemoved === true,
+      daemonPid: readRuntimePid(prepared.candidateSessionName),
+    });
     if (prepared.browserPid !== null && data.browserPid !== prepared.browserPid) {
       throw new Error(
         `Runtime handoff changed browser PID for session '${prepared.sessionName}': ` +
@@ -349,15 +403,68 @@ function resumeRuntimeHandoffs(installBin) {
         `${prepared.cdpUrl} -> ${data.cdpUrl}`,
       );
     }
-    report.handoffs.resumed.push({
+  }
+}
+
+function abortPreparedRuntimeHandoffs(fallbackBin, preparedHandoffs) {
+  for (const prepared of preparedHandoffs) {
+    const daemonBin = runtimeDaemonClientBinary(prepared.daemonPid, fallbackBin);
+    const aborted = runAgentJson(daemonBin, prepared.sessionName, ['handoff', 'abort']);
+    report.handoffs.aborted.push({
       sessionName: prepared.sessionName,
-      browserPid: data.browserPid ?? null,
-      cdpUrl: data.cdpUrl ?? null,
-      runtimeProfile: data.runtimeProfile ?? null,
-      targetsReattached: data.targetsReattached ?? null,
-      retryRecordRemoved: data.retryRecordRemoved === true,
-      daemonPid: readRuntimePid(prepared.sessionName),
+      success: aborted.status === 0 && aborted.json?.success === true,
+      error: aborted.status === 0 && aborted.json?.success === true ? null : aborted.error,
     });
+  }
+}
+
+function restoreRuntimeHandoffs(installBin) {
+  const resumedBySource = new Map(
+    report.handoffs.resumed.map((handoff) => [handoff.sessionName, handoff]),
+  );
+  let restored = true;
+  for (const prepared of report.handoffs.prepared) {
+    const resumed = resumedBySource.get(prepared.sessionName);
+    if (!resumed) continue;
+    const rollback = runAgentJson(
+      installBin,
+      resumed.candidateSessionName,
+      ['handoff', 'rollback', '--source-session', prepared.sessionName],
+    );
+    const success = rollback.status === 0 && rollback.json?.success === true;
+    restored = restored && success;
+    report.handoffs.rolledBack.push({
+      sessionName: prepared.sessionName,
+      candidateSessionName: resumed.candidateSessionName,
+      success,
+      error: success ? null : rollback.error,
+    });
+  }
+  const uncommitted = report.handoffs.prepared.filter(
+    (prepared) => !resumedBySource.has(prepared.sessionName),
+  );
+  abortPreparedRuntimeHandoffs(installBin, uncommitted);
+  restored = restored && report.handoffs.aborted.every((handoff) => handoff.success);
+  return restored;
+}
+
+function finalizeRuntimeHandoffs(fallbackBin) {
+  for (const prepared of report.handoffs.prepared) {
+    const daemonBin = runtimeDaemonClientBinary(prepared.daemonPid, fallbackBin);
+    const finalized = runAgentJson(daemonBin, prepared.sessionName, ['handoff', 'finalize']);
+    const success = finalized.status === 0 && finalized.json?.success === true;
+    report.handoffs.finalized.push({
+      sessionName: prepared.sessionName,
+      success,
+      error: success ? null : finalized.error,
+    });
+    if (!success) {
+      throw new Error(
+        `Old daemon session '${prepared.sessionName}' could not acknowledge candidate commit. ` +
+        'The candidate remains authoritative and operator recovery is required.',
+      );
+    }
+    waitForDaemonExit(prepared.sessionName, prepared.daemonPid);
   }
 }
 

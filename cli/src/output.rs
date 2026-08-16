@@ -4593,13 +4593,15 @@ Examples:
             r##"
 agent-browser handoff - Transfer a live browser to a replacement daemon
 
-Usage: agent-browser handoff <prepare|resume>
+Usage: agent-browser handoff <prepare|resume|abort|rollback|finalize>
 
 Subcommands:
-  prepare    Persist the browser PID and CDP endpoint, relinquish process
-             ownership, and stop the current daemon without closing the browser
-  resume     Start a replacement daemon, reconnect to the same browser and
-             targets, then remove the durable retry record
+  prepare    Keep the old daemon authoritative and propose a candidate session
+  resume     Attach the candidate observation, verify retained identity, and
+             commit the next owner generation
+  abort      Cancel the matching proposal before candidate commit
+  rollback   Reverse a committed candidate to the old owner at a new generation
+  finalize   Relinquish and stop the old daemon after candidate commit
 
 This command is used by the local development publisher and runtime interlock.
 The browser process, DevTools port, profile, and open tabs remain live during
@@ -4611,7 +4613,10 @@ Global Options:
 
 Examples:
   agent-browser --session work handoff prepare
-  agent-browser --session work handoff resume
+  agent-browser --session <candidate> handoff resume --source-session work
+  agent-browser --session work handoff abort
+  agent-browser --session <candidate> handoff rollback --source-session work
+  agent-browser --session work handoff finalize
 "##
         }
 
@@ -6609,7 +6614,8 @@ Core Commands:
   snapshot                   Accessibility tree with refs (for AI)
   eval <js>                  Run JavaScript
   connect <port|url>         Connect to browser via CDP
-  handoff <prepare|resume>   Transfer a live browser to a replacement daemon
+  handoff <prepare|resume|abort|rollback|finalize>
+                             Transfer a live browser to a replacement daemon
   close [--all]              Close browser (--all closes every session)
 
 Navigation:

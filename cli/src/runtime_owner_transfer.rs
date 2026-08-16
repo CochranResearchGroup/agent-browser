@@ -110,6 +110,7 @@ pub(crate) struct OwnerAuthorityClaim {
     pub(crate) owner_generation: u64,
     pub(crate) logical_browser_id: String,
     pub(crate) daemon_session_route: String,
+    pub(crate) process_instance_digest: String,
 }
 
 impl OwnerAuthorityClaim {
@@ -120,6 +121,7 @@ impl OwnerAuthorityClaim {
             owner_generation: owner.owner_generation,
             logical_browser_id: owner.browser_id.clone(),
             daemon_session_route: owner.daemon_session_route.clone(),
+            process_instance_digest: owner.process_instance_digest.clone(),
         }
     }
 }
@@ -263,6 +265,25 @@ impl RuntimeOwnerRegistry {
         self.owners.get(profile_identity_digest)
     }
 
+    pub(crate) fn register_current_owner(
+        &mut self,
+        owner: ProfileOwner,
+    ) -> Result<ProfileOwner, OwnerTransferError> {
+        validate_profile_owner(&owner)?;
+        if let Some(existing) = self.owners.get(&owner.profile_identity_digest) {
+            if existing == &owner {
+                return Ok(existing.clone());
+            }
+            return Err(transfer_error(
+                OwnerTransferFailureCode::OwnerCompareAndSwapMismatch,
+            ));
+        }
+        self.owners
+            .insert(owner.profile_identity_digest.clone(), owner.clone());
+        self.revision = self.revision.saturating_add(1);
+        Ok(owner)
+    }
+
     pub(crate) fn authorizes(&self, claim: &OwnerAuthorityClaim) -> bool {
         self.owners
             .get(&claim.profile_identity_digest)
@@ -272,7 +293,57 @@ impl RuntimeOwnerRegistry {
                     && owner.owner_generation == claim.owner_generation
                     && owner.browser_id == claim.logical_browser_id
                     && owner.daemon_session_route == claim.daemon_session_route
+                    && owner.process_instance_digest == claim.process_instance_digest
             })
+    }
+
+    fn binding_for_session(&self, session_id: &str) -> Result<Option<RuntimeOwnerBinding>, String> {
+        let logical_browser_id = format!("session:{session_id}");
+        let matches = self
+            .owners
+            .values()
+            .filter(|owner| {
+                let previous_daemon_session_route = owner
+                    .last_transition
+                    .as_ref()
+                    .map(|transition| transition.original_owner.daemon_session_route.as_str());
+                owner.state == ProfileOwnerState::Ready
+                    && (owner.daemon_session_route == session_id
+                        || owner.browser_id == logical_browser_id
+                        || previous_daemon_session_route == Some(session_id))
+            })
+            .collect::<Vec<_>>();
+        if matches.len() > 1 {
+            return Err(format!(
+                "runtime_owner_session_ambiguous: session '{session_id}' matches multiple profile owners"
+            ));
+        }
+        Ok(matches.first().map(|owner| {
+            let claim = OwnerAuthorityClaim::from_owner(owner);
+            if owner.daemon_session_route == session_id {
+                RuntimeOwnerBinding::effect_capable(claim)
+            } else {
+                RuntimeOwnerBinding::observation_only(claim)
+            }
+        }))
+    }
+
+    fn refreshed_claim_after_reverse(
+        &self,
+        claim: &OwnerAuthorityClaim,
+    ) -> Option<OwnerAuthorityClaim> {
+        let owner = self.owners.get(&claim.profile_identity_digest)?;
+        let reverse = owner.last_transition.as_ref()?.reverse_receipt.as_ref()?;
+        (owner.state == ProfileOwnerState::Ready
+            && owner.owner_id == claim.owner_id
+            && owner.browser_id == claim.logical_browser_id
+            && owner.daemon_session_route == claim.daemon_session_route
+            && owner.process_instance_digest == claim.process_instance_digest
+            && owner.owner_generation > claim.owner_generation
+            && reverse.transition_kind == OwnerTransferTransitionKind::Reverse
+            && reverse.candidate_owner_id == claim.owner_id
+            && reverse.candidate_owner_generation == owner.owner_generation)
+            .then(|| OwnerAuthorityClaim::from_owner(owner))
     }
 
     pub(crate) fn begin_transfer(
@@ -447,6 +518,36 @@ impl RuntimeOwnerRegistry {
         Ok(receipt)
     }
 
+    pub(crate) fn abort_pending_transfer(
+        &mut self,
+        profile_identity_digest: &str,
+        expected_owner_id: &str,
+        expected_owner_generation: u64,
+        transfer_nonce_digest: &str,
+    ) -> Result<bool, OwnerTransferError> {
+        if !is_sha256(profile_identity_digest) || !is_sha256(transfer_nonce_digest) {
+            return Err(transfer_error(OwnerTransferFailureCode::InvalidEvidence));
+        }
+        let owner = self
+            .owners
+            .get_mut(profile_identity_digest)
+            .ok_or_else(|| transfer_error(OwnerTransferFailureCode::OwnerMissing))?;
+        let Some(proposal) = owner.pending_transfer.as_ref() else {
+            return Ok(false);
+        };
+        if owner.owner_id != expected_owner_id
+            || owner.owner_generation != expected_owner_generation
+            || proposal.request.transfer_nonce_digest != transfer_nonce_digest
+        {
+            return Err(transfer_error(
+                OwnerTransferFailureCode::OwnerCompareAndSwapMismatch,
+            ));
+        }
+        owner.pending_transfer = None;
+        self.revision = self.revision.saturating_add(1);
+        Ok(true)
+    }
+
     pub(crate) fn reverse_transfer(
         &mut self,
         request: ReverseOwnerTransferRequest,
@@ -498,7 +599,7 @@ impl RuntimeOwnerRegistry {
         receipt.transfer_nonce_digest = request.reverse_nonce_digest.clone();
 
         owner.owner_id = original.owner_id;
-        owner.state = ProfileOwnerState::Ready;
+        owner.state = original.state;
         owner.owner_generation = reverse_generation;
         owner.browser_id = original.browser_id;
         owner.daemon_session_route = original.daemon_session_route;
@@ -512,6 +613,18 @@ impl RuntimeOwnerRegistry {
         self.revision = self.revision.saturating_add(1);
         Ok(receipt)
     }
+}
+
+pub(crate) fn register_current_owner(
+    repository: &impl ServiceStateRepository,
+    owner: ProfileOwner,
+) -> Result<ProfileOwner, String> {
+    repository.mutate(|state| {
+        state
+            .runtime_owner_registry
+            .register_current_owner(owner)
+            .map_err(owner_transfer_error_text)
+    })
 }
 
 pub(crate) fn begin_owner_transfer(
@@ -538,6 +651,26 @@ pub(crate) fn commit_candidate_owner(
     })
 }
 
+pub(crate) fn abort_owner_transfer(
+    repository: &impl ServiceStateRepository,
+    profile_identity_digest: &str,
+    expected_owner_id: &str,
+    expected_owner_generation: u64,
+    transfer_nonce_digest: &str,
+) -> Result<bool, String> {
+    repository.mutate(|state| {
+        state
+            .runtime_owner_registry
+            .abort_pending_transfer(
+                profile_identity_digest,
+                expected_owner_id,
+                expected_owner_generation,
+                transfer_nonce_digest,
+            )
+            .map_err(owner_transfer_error_text)
+    })
+}
+
 pub(crate) fn reverse_candidate_owner(
     repository: &impl ServiceStateRepository,
     request: ReverseOwnerTransferRequest,
@@ -560,12 +693,32 @@ pub(crate) fn owner_authority_is_current(
         .authorizes(claim))
 }
 
+pub(crate) fn owner_binding_for_session(
+    repository: &impl ServiceStateRepository,
+    session_id: &str,
+) -> Result<Option<RuntimeOwnerBinding>, String> {
+    repository
+        .load_snapshot()?
+        .runtime_owner_registry
+        .binding_for_session(session_id)
+}
+
+fn refreshed_owner_claim_after_reverse(
+    repository: &impl ServiceStateRepository,
+    claim: &OwnerAuthorityClaim,
+) -> Result<Option<OwnerAuthorityClaim>, String> {
+    Ok(repository
+        .load_snapshot()?
+        .runtime_owner_registry
+        .refreshed_claim_after_reverse(claim))
+}
+
 /// Fence browser effects for daemons participating in owner transfer.
 /// Legacy daemons remain unbound until a transfer begins. Once bound, reads
 /// may continue but every browser effect requires the current registry owner.
 pub(crate) fn require_owner_effect_authority(
     repository: &impl ServiceStateRepository,
-    binding: &RuntimeOwnerBinding,
+    binding: &mut RuntimeOwnerBinding,
     action: &str,
 ) -> Result<(), String> {
     if action_is_observation_only(action) {
@@ -575,6 +728,10 @@ pub(crate) fn require_owner_effect_authority(
         return Err("runtime_owner_observation_only: candidate cannot issue browser effects before owner compare-and-swap".to_string());
     }
     if !owner_authority_is_current(repository, &binding.claim)? {
+        if let Some(claim) = refreshed_owner_claim_after_reverse(repository, &binding.claim)? {
+            binding.claim = claim;
+            return Ok(());
+        }
         return Err(
             "runtime_owner_generation_stale: daemon is no longer the effect-capable browser owner"
                 .to_string(),
@@ -583,19 +740,52 @@ pub(crate) fn require_owner_effect_authority(
     Ok(())
 }
 
+/// Return whether an action must hydrate and validate runtime owner authority.
+/// Read-only actions stay independent of the user-scoped owner registry so
+/// observation remains available during transfer and in isolated test runs.
+pub(crate) fn action_requires_owner_effect_authority(action: &str) -> bool {
+    !action_is_observation_only(action)
+}
+
 fn action_is_observation_only(action: &str) -> bool {
     matches!(
         action,
         "browser_pid"
             | "cdp_url"
+            | "confirm"
             | "console"
             | "content"
             | "cookies_get"
+            | "dependent_batch"
             | "diagnostics"
             | "desktop_prompt_observe"
+            | "deny"
             | "errors"
             | "inspect"
             | "probe"
+            | "runtime_handoff_finalize"
+            | "service_browser_capability_preflight"
+            | "service_browser_capability_preference_guide"
+            | "service_browsers"
+            | "service_challenges"
+            | "service_events"
+            | "service_incident_activity"
+            | "service_incidents"
+            | "service_jobs"
+            | "service_monitors"
+            | "service_profile_lookup"
+            | "service_profile_seeding_handoff"
+            | "service_profiles"
+            | "service_providers"
+            | "service_remote_view_handoff_resolve"
+            | "service_remote_view_route_preflight"
+            | "service_resources"
+            | "service_resources_monitor_summary"
+            | "service_sessions"
+            | "service_site_policies"
+            | "service_status"
+            | "service_tabs"
+            | "service_trace"
             | "screenshot"
             | "snapshot"
             | "storage_get"
@@ -647,6 +837,30 @@ fn validate_request(request: &OwnerTransferRequest) -> Result<(), OwnerTransferE
             .is_some_and(|value| value.trim().is_empty())
         || (request.expected_owner_id.is_none()
             && request.mode != BrowserAdoptionMode::OrphanAdoption)
+    {
+        return Err(transfer_error(OwnerTransferFailureCode::InvalidEvidence));
+    }
+    Ok(())
+}
+
+fn validate_profile_owner(owner: &ProfileOwner) -> Result<(), OwnerTransferError> {
+    let opaque_ids = [
+        owner.owner_id.as_str(),
+        owner.browser_id.as_str(),
+        owner.daemon_session_route.as_str(),
+        owner.browser_family.as_str(),
+    ];
+    let digests = [
+        owner.profile_identity_digest.as_str(),
+        owner.process_instance_digest.as_str(),
+        owner.cdp_endpoint_identity_digest.as_str(),
+        owner.target_set_digest.as_str(),
+    ];
+    if owner.state != ProfileOwnerState::Ready
+        || owner.owner_generation == 0
+        || owner.pending_transfer.is_some()
+        || opaque_ids.iter().any(|value| value.trim().is_empty())
+        || digests.iter().any(|value| !is_sha256(value))
     {
         return Err(transfer_error(OwnerTransferFailureCode::InvalidEvidence));
     }
@@ -842,12 +1056,20 @@ mod tests {
             .unwrap();
         assert_eq!(receipt.previous_owner_generation, 7);
         assert_eq!(receipt.candidate_owner_generation, 8);
+        let committed = registry.owner(&request.profile_identity_digest).unwrap();
+        assert_eq!(committed.browser_id, request.logical_browser_id);
+        assert_eq!(
+            committed.process_instance_digest,
+            request.process_instance_digest
+        );
+        assert_eq!(committed.target_set_digest, request.target_set_digest);
         assert!(!registry.authorizes(&OwnerAuthorityClaim {
             owner_id: "owner-old".to_string(),
             profile_identity_digest: digest("profile"),
             owner_generation: 7,
             logical_browser_id: "browser-a".to_string(),
             daemon_session_route: "session-old".to_string(),
+            process_instance_digest: digest("process"),
         }));
         assert!(registry.authorizes(&OwnerAuthorityClaim::from_owner(
             registry.owner(&request.profile_identity_digest).unwrap()
@@ -872,6 +1094,45 @@ mod tests {
     }
 
     #[test]
+    fn precommit_abort_is_exact_idempotent_and_preserves_old_authority() {
+        let repository = MemoryRepository::default();
+        repository
+            .mutate(|state| {
+                state.runtime_owner_registry = RuntimeOwnerRegistry::from_owner(owner());
+                Ok(())
+            })
+            .unwrap();
+        let request = cooperative_request();
+        begin_owner_transfer(&repository, request.clone()).unwrap();
+
+        assert!(abort_owner_transfer(
+            &repository,
+            &request.profile_identity_digest,
+            request.expected_owner_id.as_deref().unwrap(),
+            request.expected_owner_generation,
+            &request.transfer_nonce_digest,
+        )
+        .unwrap());
+        assert!(!abort_owner_transfer(
+            &repository,
+            &request.profile_identity_digest,
+            request.expected_owner_id.as_deref().unwrap(),
+            request.expected_owner_generation,
+            &request.transfer_nonce_digest,
+        )
+        .unwrap());
+        let persisted = repository.load_snapshot().unwrap();
+        let owner = persisted
+            .runtime_owner_registry
+            .owner(&request.profile_identity_digest)
+            .unwrap();
+        assert!(owner.pending_transfer.is_none());
+        assert!(persisted
+            .runtime_owner_registry
+            .authorizes(&OwnerAuthorityClaim::from_owner(owner)));
+    }
+
+    #[test]
     fn orphan_adoption_uses_the_same_compare_and_swap_seam() {
         let mut registry = RuntimeOwnerRegistry::default();
         let mut request = cooperative_request();
@@ -891,10 +1152,27 @@ mod tests {
             .unwrap();
 
         assert_eq!(receipt.mode, BrowserAdoptionMode::OrphanAdoption);
+        let adopted = registry.owner(&digest("profile")).unwrap();
+        assert_eq!(adopted.owner_id, "owner-adopter");
+        assert_eq!(adopted.browser_id, request.logical_browser_id);
         assert_eq!(
-            registry.owner(&digest("profile")).unwrap().owner_id,
-            "owner-adopter"
+            adopted.process_instance_digest,
+            request.process_instance_digest
         );
+        assert_eq!(adopted.target_set_digest, request.target_set_digest);
+
+        registry
+            .reverse_transfer(ReverseOwnerTransferRequest {
+                profile_identity_digest: digest("profile"),
+                expected_candidate_owner_id: "owner-adopter".to_string(),
+                expected_candidate_owner_generation: 1,
+                transfer_nonce_digest: digest("transfer"),
+                reverse_nonce_digest: digest("orphan-reverse"),
+            })
+            .unwrap();
+        let restored = registry.owner(&digest("profile")).unwrap();
+        assert_eq!(restored.state, ProfileOwnerState::Orphaned);
+        assert!(!registry.authorizes(&OwnerAuthorityClaim::from_owner(restored)));
     }
 
     #[test]
@@ -970,7 +1248,7 @@ mod tests {
             })
             .unwrap();
         let request = cooperative_request();
-        let old_binding = RuntimeOwnerBinding::effect_capable(OwnerAuthorityClaim::from_owner(
+        let mut old_binding = RuntimeOwnerBinding::effect_capable(OwnerAuthorityClaim::from_owner(
             repository
                 .load_snapshot()
                 .unwrap()
@@ -978,17 +1256,19 @@ mod tests {
                 .owner(&digest("profile"))
                 .unwrap(),
         ));
-        let candidate_binding = RuntimeOwnerBinding::observation_only(OwnerAuthorityClaim {
+        let mut candidate_binding = RuntimeOwnerBinding::observation_only(OwnerAuthorityClaim {
             owner_id: "owner-new".to_string(),
             profile_identity_digest: digest("profile"),
             owner_generation: 8,
             logical_browser_id: "browser-a".to_string(),
             daemon_session_route: "session-new".to_string(),
+            process_instance_digest: digest("process"),
         });
 
-        assert!(require_owner_effect_authority(&repository, &old_binding, "navigate").is_ok());
+        assert!(require_owner_effect_authority(&repository, &mut old_binding, "navigate").is_ok());
         assert!(
-            require_owner_effect_authority(&repository, &candidate_binding, "navigate").is_err()
+            require_owner_effect_authority(&repository, &mut candidate_binding, "navigate")
+                .is_err()
         );
         begin_owner_transfer(&repository, request.clone()).unwrap();
         commit_candidate_owner(
@@ -997,12 +1277,65 @@ mod tests {
         )
         .unwrap();
 
-        assert!(require_owner_effect_authority(&repository, &old_binding, "navigate").is_err());
-        assert!(require_owner_effect_authority(&repository, &old_binding, "tab_list").is_ok());
-        let committed_candidate = RuntimeOwnerBinding::effect_capable(candidate_binding.claim);
+        assert!(require_owner_effect_authority(&repository, &mut old_binding, "navigate").is_err());
+        assert!(require_owner_effect_authority(&repository, &mut old_binding, "tab_list").is_ok());
+        assert!(!action_requires_owner_effect_authority("dependent_batch"));
+        assert!(!action_requires_owner_effect_authority("service_incidents"));
+        assert!(action_requires_owner_effect_authority(
+            "service_incident_resolve"
+        ));
+        let mut committed_candidate = RuntimeOwnerBinding::effect_capable(candidate_binding.claim);
         assert!(
-            require_owner_effect_authority(&repository, &committed_candidate, "navigate").is_ok()
+            require_owner_effect_authority(&repository, &mut committed_candidate, "navigate")
+                .is_ok()
         );
+    }
+
+    #[test]
+    fn session_binding_fences_restarted_supervisor_and_refreshes_reversed_owner() {
+        let repository = MemoryRepository {
+            state: Mutex::new(ServiceState {
+                runtime_owner_registry: RuntimeOwnerRegistry::from_owner(owner()),
+                ..ServiceState::default()
+            }),
+        };
+        let original = owner_binding_for_session(&repository, "session-old")
+            .unwrap()
+            .unwrap();
+        assert!(original.effect_capable);
+
+        let proposal = begin_owner_transfer(&repository, cooperative_request()).unwrap();
+        let attachment = CandidateOwnerAttachment::from_request(
+            &proposal.request,
+            proposal.candidate_owner_generation,
+        );
+        commit_candidate_owner(&repository, attachment).unwrap();
+
+        let restarted_old = owner_binding_for_session(&repository, "session-old")
+            .unwrap()
+            .unwrap();
+        assert!(!restarted_old.effect_capable);
+        let candidate = owner_binding_for_session(&repository, "session-new")
+            .unwrap()
+            .unwrap();
+        assert!(candidate.effect_capable);
+
+        reverse_candidate_owner(
+            &repository,
+            ReverseOwnerTransferRequest {
+                profile_identity_digest: digest("profile"),
+                expected_candidate_owner_id: "owner-new".to_string(),
+                expected_candidate_owner_generation: proposal.candidate_owner_generation,
+                transfer_nonce_digest: digest("transfer"),
+                reverse_nonce_digest: digest("reverse"),
+            },
+        )
+        .unwrap();
+
+        let mut stale_old = original;
+        require_owner_effect_authority(&repository, &mut stale_old, "navigate").unwrap();
+        assert!(stale_old.effect_capable);
+        assert_eq!(stale_old.claim.owner_generation, 9);
     }
 
     #[test]
@@ -1033,6 +1366,29 @@ mod tests {
                 .unwrap()
                 .owner_id,
             "owner-new"
+        );
+    }
+
+    #[test]
+    fn current_owner_registration_is_idempotent_and_rejects_conflicts() {
+        let repository = MemoryRepository::default();
+        let registered = register_current_owner(&repository, owner()).unwrap();
+        let replay = register_current_owner(&repository, owner()).unwrap();
+        assert_eq!(registered, replay);
+
+        let mut conflict = owner();
+        conflict.process_instance_digest = digest("different-process");
+        assert!(register_current_owner(&repository, conflict).is_err());
+
+        let persisted = repository.load_snapshot().unwrap();
+        assert_eq!(persisted.runtime_owner_registry.revision, 1);
+        assert_eq!(
+            persisted
+                .runtime_owner_registry
+                .owner(&digest("profile"))
+                .unwrap()
+                .process_instance_digest,
+            digest("process")
         );
     }
 
@@ -1072,7 +1428,7 @@ mod tests {
     fn daemon_owner_gate_precedes_stream_broadcast_and_browser_recovery() {
         let source = include_str!("native/actions.rs");
         let gate = source
-            .find("if let Some(binding) = state.runtime_owner_binding.as_ref()")
+            .find("if state.runtime_owner_binding.is_none()")
             .expect("runtime owner gate must be installed");
         let desktop_effect = source
             .find("if action == \"desktop_interact\"")

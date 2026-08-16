@@ -59,8 +59,8 @@ assert.match(
 
 assert.match(
   script,
-  /prepare_stale_daemon_handoff_[\s\S]*handoff', 'prepare'[\s\S]*resume_stale_daemon_handoff_[\s\S]*handoff', 'resume'[\s\S]*resumedBrowserPid !== handoff\.browserPid[\s\S]*resumedCdpUrl !== handoff\.cdpUrl/,
-  'stale daemon repair must preserve and verify browser PID and CDP endpoint through handoff',
+  /prepare_stale_daemon_handoff_[\s\S]*handoff', 'prepare'[\s\S]*resume_stale_daemon_handoff_[\s\S]*--source-session'[\s\S]*resumedBrowserPid !== handoff\.browserPid[\s\S]*resumedCdpUrl !== handoff\.cdpUrl[\s\S]*rollback_stale_daemon_handoff_[\s\S]*finalize_stale_daemon_handoff_/,
+  'stale daemon repair must use two-phase transfer, continuity checks, rollback, and finalize',
 );
 
 assert.match(
@@ -155,8 +155,14 @@ assert.match(
 
 assert.match(
   publisher,
-  /prepareRuntimeHandoffs\(builtBin, installBin\)[\s\S]*installBinaryAtomically\(builtBin, installBin[\s\S]*resumeRuntimeHandoffs\(installBin\)/,
+  /prepareRuntimeHandoffs\(installBin\)[\s\S]*installBinaryAtomically\(builtBin, installBin[\s\S]*resumeRuntimeHandoffs\(installBin\)[\s\S]*finalizeRuntimeHandoffs\(installBin\)/,
   'local publishing must bracket executable replacement with daemon handoff',
+);
+
+assert.match(
+  publisher,
+  /for \(const session of activeSupervisorSessionNames\(\)\)[\s\S]*function activeSupervisorSessionNames\(\)[\s\S]*agent-browser\.session-supervisor\.v1[\s\S]*systemctl[\s\S]*is-active/,
+  'publisher inventory must include active named supervisors instead of relying on sockets alone',
 );
 
 assert.match(

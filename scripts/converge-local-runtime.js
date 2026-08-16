@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   closeSync,
   existsSync,
@@ -332,13 +333,24 @@ function repairConfirmedStaleDaemons(install, label) {
         prepared: prepared.data?.prepared === true,
         browserPid: prepared.data?.browserPid ?? null,
         cdpUrl: prepared.data?.cdpUrl ?? null,
+        candidateSession: prepared.data?.candidateSessionName ??
+          `orphan-${createHash('sha256')
+            .update(`${remedy.session}:${prepared.data?.browserPid ?? 'unknown'}`)
+            .digest('hex')
+            .slice(0, 16)}`,
+        legacyOrphan: typeof prepared.data?.candidateSessionName !== 'string',
         resumed: false,
       };
       if (handoff.prepared) {
         const resumed = runJsonStep(
           `${label}_resume_stale_daemon_handoff_${remedy.session}`,
           agentBrowserCommand,
-          ['--json', '--session', remedy.session, 'handoff', 'resume'],
+          [
+            '--json',
+            '--session', handoff.candidateSession,
+            'handoff', 'resume',
+            '--source-session', remedy.session,
+          ],
           { required: false },
         );
         handoff.resumed = resumed.success === true;
@@ -349,12 +361,47 @@ function repairConfirmedStaleDaemons(install, label) {
           handoff.resumedBrowserPid !== handoff.browserPid ||
           handoff.resumedCdpUrl !== handoff.cdpUrl
         ) {
+          const recovery = handoff.resumed
+            ? runJsonStep(
+              `${label}_rollback_stale_daemon_handoff_${remedy.session}`,
+              agentBrowserCommand,
+              [
+                '--json',
+                '--session', handoff.candidateSession,
+                'handoff', 'rollback',
+                '--source-session', remedy.session,
+              ],
+              { required: false },
+            )
+            : runJsonStep(
+              `${label}_abort_stale_daemon_handoff_${remedy.session}`,
+              agentBrowserCommand,
+              ['--json', '--session', remedy.session, 'handoff', 'abort'],
+              { required: false },
+            );
+          handoff.recovery = recovery.success === true;
           report.skippedRemedies.push({
             session: remedy.session,
             argv: remedy.argv,
             reason: 'runtime_handoff_resume_failed',
             error: resumed.error ?? null,
           });
+        } else if (!handoff.legacyOrphan) {
+          const finalized = runJsonStep(
+            `${label}_finalize_stale_daemon_handoff_${remedy.session}`,
+            agentBrowserCommand,
+            ['--json', '--session', remedy.session, 'handoff', 'finalize'],
+            { required: false },
+          );
+          handoff.finalized = finalized.success === true;
+          if (!handoff.finalized) {
+            report.skippedRemedies.push({
+              session: remedy.session,
+              argv: remedy.argv,
+              reason: 'runtime_handoff_finalize_failed',
+              error: finalized.error ?? null,
+            });
+          }
         }
       } else {
         handoff.idleDaemonRetired = retireConfirmedIdleDaemon(remedy.listenerPid);

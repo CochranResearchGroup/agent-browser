@@ -593,7 +593,10 @@ async fn handle_connection<S>(
                 }
 
                 let action = cmd.get("action").and_then(|v| v.as_str());
-                let exits_daemon = matches!(action, Some("close" | "runtime_handoff_prepare"));
+                let exits_daemon = matches!(
+                    action,
+                    Some("close" | "runtime_handoff_finalize" | "runtime_handoff_rollback")
+                );
 
                 let response = if action == Some("worker_status") {
                     let id = cmd.get("id").and_then(|v| v.as_str()).unwrap_or("");
@@ -635,8 +638,8 @@ async fn handle_connection<S>(
                         let _ = fs::remove_file(path);
                     }
                     // Signal the daemon loop to exit gracefully. Close has
-                    // already shut down the browser, while handoff prepare has
-                    // explicitly relinquished browser process ownership.
+                    // shut down the browser. Handoff finalize and rollback
+                    // relinquish it only after a receipted owner transition.
                     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                     close_notify.notify_one();
                     return;

@@ -184,8 +184,8 @@ agent-browser doctor remote-view \
 Remote-view, executable, and profile-seeding handoffs solve different problems:
 
 - A remote-view handoff gives a person an authenticated browser-view URL.
-- `agent-browser handoff prepare` and `agent-browser handoff resume` transfer a
-  live browser to a replacement daemon executable.
+- The two-phase `agent-browser handoff` prepare, resume, rollback, and finalize
+  commands transfer a live browser between daemon executable generations.
 - A profile-seeding handoff guides a person through manual authentication and
   later freshness verification.
 

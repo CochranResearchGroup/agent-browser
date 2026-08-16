@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::env;
 use std::fs;
@@ -613,16 +613,7 @@ fn daemon_auth_token_available(session: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Disconnect a stale daemon from the current session metadata without trusting
-/// the PID file. This avoids killing an unrelated process if the recorded PID
-/// has been reused by the OS.
-fn disconnect_stale_daemon(session: &str) {
-    cleanup_stale_files(session);
-}
-
 pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult, String> {
-    let mut prepared_handoff = false;
-    let mut prepared_handoff_pid = None;
     // Socket connectivity is the sole liveness check — no PID check — so
     // callers in a different PID namespace (e.g. unshare) can still reuse
     // an existing daemon they can reach over the socket.
@@ -663,44 +654,9 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
                 ));
             }
             if !version_matches || !sha_matches {
-                eprintln!(
-                    "{} Daemon metadata mismatch detected, restarting...",
-                    crate::color::warning_indicator()
-                );
-                let handoff = send_command(
-                        json!({
-                            "id": format!("automatic-executable-handoff-{}", std::process::id()),
-                            "action": "runtime_handoff_prepare",
-                        }),
-                        session,
-                    )
-                    .map_err(|error| {
-                        format!(
-                            "Cannot refresh stale daemon session '{}' without risking its active browser: {}",
-                            session, error
-                        )
-                    })?;
-                if !handoff.success {
-                    return Err(format!(
-                            "Cannot refresh stale daemon session '{}' without risking its active browser: {}",
-                            session,
-                            handoff
-                                .error
-                                .unwrap_or_else(|| "handoff prepare failed".to_string())
-                        ));
-                }
-                prepared_handoff = handoff
-                    .data
-                    .as_ref()
-                    .is_some_and(|data| data["prepared"].as_bool() == Some(true));
-                prepared_handoff_pid = handoff
-                    .data
-                    .as_ref()
-                    .filter(|_| prepared_handoff)
-                    .and_then(|data| data["browserPid"].as_u64())
-                    .and_then(|pid| u32::try_from(pid).ok());
-                disconnect_stale_daemon(session);
-                // Fall through to spawn a new daemon below
+                return Err(format!(
+                    "Cannot refresh stale daemon session '{session}' implicitly. Run `agent-browser --session {session} handoff prepare`, attach the candidate session reported by that command, then finalize the old owner only after candidate commit."
+                ));
             } else {
                 return Ok(DaemonResult {
                     already_running: true,
@@ -804,41 +760,6 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
     let startup_started = Instant::now();
     while startup_started.elapsed() < DAEMON_START_TIMEOUT {
         if daemon_ready(session) {
-            if prepared_handoff {
-                let resume = send_command(
-                    json!({
-                        "id": format!("automatic-executable-handoff-resume-{}", std::process::id()),
-                        "action": "runtime_handoff_resume",
-                    }),
-                    session,
-                )
-                .map_err(|error| {
-                    format!(
-                        "Fresh daemon started for session '{}', but browser handoff resume failed: {}",
-                        session, error
-                    )
-                })?;
-                if !resume.success {
-                    return Err(format!(
-                        "Fresh daemon started for session '{}', but browser handoff resume failed: {}",
-                        session,
-                        resume
-                            .error
-                            .unwrap_or_else(|| "handoff resume failed".to_string())
-                    ));
-                }
-                let resumed_pid = resume
-                    .data
-                    .as_ref()
-                    .and_then(|data| data["browserPid"].as_u64())
-                    .and_then(|pid| u32::try_from(pid).ok());
-                if prepared_handoff_pid.is_some() && resumed_pid != prepared_handoff_pid {
-                    return Err(format!(
-                        "Fresh daemon session '{}' resumed a different browser PID: expected {:?}, received {:?}",
-                        session, prepared_handoff_pid, resumed_pid
-                    ));
-                }
-            }
             return Ok(DaemonResult {
                 already_running: false,
             });

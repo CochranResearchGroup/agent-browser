@@ -30,8 +30,9 @@ agent-browser pdf <path>              # Save page as PDF
 agent-browser snapshot                # Accessibility tree with refs
 agent-browser eval <js>               # Run JavaScript
 agent-browser connect <port|url>      # Connect to browser via CDP
-agent-browser handoff prepare         # Relinquish the browser and stop this daemon
-agent-browser handoff resume          # Reattach a replacement daemon to the browser
+agent-browser --session work handoff prepare
+agent-browser --session <candidate> handoff resume --source-session work
+agent-browser --session work handoff finalize
 agent-browser doctor windows-browser  # Diagnose WSL to Windows browser CDP routing
 agent-browser doctor windows-browser --scan-ports --firewall # Scan bounded ports and query firewall state
 agent-browser doctor remote-view # Diagnose Guacamole, XRDP, RDP users, privileges, displays, and issue codes
@@ -112,18 +113,22 @@ monitor for the same target identity. Software clients can call
 
 ## Runtime executable handoff
 
-`agent-browser handoff prepare` writes a private retry record with the session
-identity, browser PID, and CDP endpoint, relinquishes browser-process ownership,
-and exits the current daemon without closing the browser. `agent-browser
-handoff resume` starts a replacement daemon, reconnects to the same browser and
-open targets, refreshes the runtime stream record, and removes the retry record
-only after the attach succeeds.
+`agent-browser handoff prepare` writes a private owner-generation proposal and
+keeps the old daemon effect-capable. It returns the candidate session name.
+Run `agent-browser handoff resume --source-session <old>` in that candidate to
+attach observation-only, revalidate the retained process, profile, endpoint,
+and targets, then commit the next owner generation. Run `agent-browser handoff
+finalize` in the old session only after candidate validation. Use `handoff
+abort` for pre-commit failure and candidate `handoff rollback --source-session
+<old>` for post-commit failure. Verified ownerless browsers use the same resume
+path without an old daemon proposal.
 
-The local development publisher runs this protocol automatically around
-executable replacement. Browser PIDs, DevTools ports, profiles, and tabs remain
-live during the changeover. Publishing fails before replacement if an active
-older daemon cannot support handoff. A later normal `close` still terminates an
-owned browser.
+The local development publisher inventories daemon sockets and active named
+supervisors, runs this protocol around executable replacement, and finalizes
+the old daemon only after candidate validation. Browser PIDs, DevTools ports,
+profiles, and tabs remain live during the changeover. A legacy daemon that
+relinquishes first enters the verified orphan-adoption path. A later normal
+`close` still terminates an owned browser.
 
 Use service request `action: "probe"` for generic identity, account, readiness,
 or compact page-state checks against a leased service tab. A probe request

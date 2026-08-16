@@ -4,6 +4,49 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 162 | 2026-08-15
+
+Scope: complete Plan 0116 Slice D at the source and isolated-fixture boundary
+without installed or live runtime mutation.
+
+Actions:
+
+- replaced relinquish-first cooperative handoff with old-owner prepare,
+  observation-only candidate resume, exact owner-generation commit, and stale
+  old-owner finalize;
+- added exact pre-commit abort plus receipt-bearing post-commit rollback, with
+  reverse generation refresh restricted to a matching reverse receipt;
+- added verified ownerless and legacy-descriptor orphan adoption through the
+  same process, profile, endpoint, target-set, selected-target, and logical
+  browser evidence seam without launch or navigation;
+- preserved the existing logical browser record while rebinding its current
+  daemon attachment, and fenced supervisor-restored old sessions as
+  observation-only after candidate commit;
+- removed implicit stale-daemon replacement from connection startup and made
+  executable drift require the explicit two-phase protocol;
+- updated the development publisher and runtime interlock for candidate
+  sessions, abort, reverse, finalize, and active named-supervisor discovery;
+- aligned CLI help, README, repository skill, docs site, plan, roadmap, and
+  runbook with the two-phase command contract.
+
+Validation:
+
+- thirteen owner-transfer tests pass for exact commit, abort, replay, orphan,
+  reverse, supervisor restart, generation refresh, identity preservation, and
+  effect fencing;
+- all ten runtime-adoption tests and the focused command, no-launch action,
+  publisher, and interlock contract tests pass;
+- strict Clippy and Rust formatting pass;
+- no installed payload, daemon, browser, profile, route, display, dashboard,
+  supervisor, or external state was changed.
+
+Result:
+
+- Slice D is accepted at the source and isolated-fixture boundary;
+- the descriptor-bound orphan red seam is closed. Payload commit before full
+  runtime preservation remains intentionally red for later installer work;
+- the next packet is Slice E stable dashboard ingress and presentation commit.
+
 ## Turn 161 | 2026-08-15
 
 Scope: begin Plan 0116 Slice D with a provider-neutral two-phase owner-transfer

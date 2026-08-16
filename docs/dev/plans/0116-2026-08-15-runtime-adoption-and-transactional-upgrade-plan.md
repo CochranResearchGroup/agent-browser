@@ -1206,6 +1206,50 @@ must bind active supervisors and both daemon generations to the tested registry
 protocol, then turn those two source guards green without weakening process,
 profile, endpoint, or target evidence.
 
+### 2026-08-15 | Slice D Source Acceptance
+
+Slice D is accepted at the source and isolated-fixture boundary:
+
+- cooperative prepare registers the current logical owner, begins one exact
+  proposal, keeps the old daemon effect-capable, and returns a distinct
+  candidate session without relinquishing its browser connection;
+- candidate resume connects observation-only, revalidates process, canonical
+  profile, browser family, CDP endpoint, target set, and selected target, then
+  commits one owner-generation compare-and-swap before enabling effects;
+- pre-commit abort clears only the matching pending proposal. Post-commit
+  rollback performs the receipt-bearing reverse transition, advances owner
+  generation, relinquishes the candidate, and lets the old daemon refresh only
+  from that exact reverse receipt;
+- finalize is reachable by the stale old owner but succeeds only after the
+  candidate commit. It then relinquishes the old connection without closing
+  the browser;
+- verified ownerless browsers and schema-one legacy descriptors enter direct
+  orphan adoption through independent service process evidence and the same
+  registry seam. Orphan rollback restores a non-effect-capable orphan state;
+- adopted candidates update the existing logical browser record rather than
+  creating a browser identity from the temporary candidate session;
+- a daemon restored by a named supervisor rehydrates its registry binding.
+  The old logical route is observation-only after commit, preventing a
+  duplicate auto-launch, while the candidate route is effect-capable;
+- the development publisher joins active supervisor manifests with socket
+  discovery, validates every candidate before finalize, aborts uncommitted
+  proposals, reverses committed candidates on pre-finalize failure, and keeps a
+  committed candidate authoritative if final acknowledgement needs recovery;
+- implicit stale-daemon replacement is removed. Executable mismatch now fails
+  closed and directs callers to the explicit transaction.
+
+Thirteen focused ownership tests cover cooperative and orphan identity
+preservation, candidate mismatch, same-nonce replay, exact abort, reverse,
+supervisor restart, reverse-generation refresh, manual preservation, locked
+repository persistence, and effect ordering. The ten runtime-adoption tests,
+focused command and no-launch tests, publisher and interlock contract smoke,
+strict Clippy, and Rust formatting pass. No installed payload, daemon, browser,
+profile, route, display, dashboard, supervisor, or external state was changed.
+
+The orphan red fixture is removed because production resume can now prove and
+adopt an ownerless survivor. Payload commit before runtime preservation remains
+the one intentionally red P116 seam. Slice E is next.
+
 ## Planning Evidence
 
 - CodeGraph was healthy on 2026-08-15 with 553 files, 19,654 nodes, and 68,296

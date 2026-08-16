@@ -156,6 +156,9 @@ fn test_service_profile_lease_gate_allows_service_control_commands() {
     for action in [
         "runtime_handoff_prepare",
         "runtime_handoff_resume",
+        "runtime_handoff_abort",
+        "runtime_handoff_rollback",
+        "runtime_handoff_finalize",
         "service_status",
         "service_reconcile",
         "service_job_cancel",

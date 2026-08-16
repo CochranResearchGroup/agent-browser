@@ -2434,15 +2434,103 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
             let subcommand = rest.first().copied().ok_or_else(|| {
                 ParseError::MissingArguments {
                     context: "handoff".to_string(),
-                    usage: "handoff <prepare|resume>",
+                    usage: "handoff <prepare|resume|abort|rollback|finalize>",
                 }
             })?;
             match subcommand {
-                "prepare" => Ok(json!({ "id": id, "action": "runtime_handoff_prepare" })),
-                "resume" => Ok(json!({ "id": id, "action": "runtime_handoff_resume" })),
+                "prepare" if rest.len() == 1 => {
+                    Ok(json!({ "id": id, "action": "runtime_handoff_prepare" }))
+                }
+                "resume" => {
+                    let mut source_session = None;
+                    let mut index = 1;
+                    while index < rest.len() {
+                        match rest[index] {
+                            "--source-session" => {
+                                if source_session.is_some() {
+                                    return Err(ParseError::InvalidValue {
+                                        message: "handoff resume --source-session may be supplied once"
+                                            .to_string(),
+                                        usage: "handoff resume --source-session <session>",
+                                    });
+                                }
+                                let value = rest.get(index + 1).ok_or_else(|| {
+                                    ParseError::MissingArguments {
+                                        context: "handoff resume".to_string(),
+                                        usage: "handoff resume --source-session <session>",
+                                    }
+                                })?;
+                                if !crate::validation::is_valid_session_name(value) {
+                                    return Err(ParseError::InvalidValue {
+                                        message: crate::validation::session_name_error(value),
+                                        usage: "handoff resume --source-session <session>",
+                                    });
+                                }
+                                source_session = Some(*value);
+                                index += 2;
+                            }
+                            option => {
+                                return Err(ParseError::InvalidValue {
+                                    message: format!(
+                                        "Unknown handoff resume option: {option}"
+                                    ),
+                                    usage: "handoff resume --source-session <session>",
+                                });
+                            }
+                        }
+                    }
+                    let source_session = source_session.ok_or_else(|| {
+                        ParseError::MissingArguments {
+                            context: "handoff resume".to_string(),
+                            usage: "handoff resume --source-session <session>",
+                        }
+                    })?;
+                    Ok(json!({
+                        "id": id,
+                        "action": "runtime_handoff_resume",
+                        "sourceSession": source_session,
+                    }))
+                }
+                "abort" if rest.len() == 1 => {
+                    Ok(json!({ "id": id, "action": "runtime_handoff_abort" }))
+                }
+                "rollback" => {
+                    if rest.get(1).copied() != Some("--source-session") {
+                        return Err(ParseError::MissingArguments {
+                            context: "handoff rollback".to_string(),
+                            usage: "handoff rollback --source-session <session>",
+                        });
+                    }
+                    let source_session = rest.get(2).copied().ok_or_else(|| {
+                        ParseError::MissingArguments {
+                            context: "handoff rollback".to_string(),
+                            usage: "handoff rollback --source-session <session>",
+                        }
+                    })?;
+                    if rest.len() != 3 || !crate::validation::is_valid_session_name(source_session)
+                    {
+                        return Err(ParseError::InvalidValue {
+                            message: if rest.len() != 3 {
+                                "handoff rollback accepts only --source-session <session>"
+                                    .to_string()
+                            } else {
+                                crate::validation::session_name_error(source_session)
+                            },
+                            usage: "handoff rollback --source-session <session>",
+                        });
+                    }
+                    Ok(json!({
+                        "id": id,
+                        "action": "runtime_handoff_rollback",
+                        "sourceSession": source_session,
+                    }))
+                }
+                "finalize" if rest.len() == 1 => {
+                    Ok(json!({ "id": id, "action": "runtime_handoff_finalize" }))
+                }
                 _ => Err(ParseError::UnknownSubcommand {
                     subcommand: subcommand.to_string(),
-                    valid_options: &["prepare", "resume"],
+                    valid_options: &["prepare", "resume", "abort", "rollback", "finalize"],
                 }),
             }
         }
@@ -9692,10 +9780,35 @@ mod tests {
         let prepare = parse_command(&args("handoff prepare"), &default_flags()).unwrap();
         assert_eq!(prepare["action"], "runtime_handoff_prepare");
 
-        let resume = parse_command(&args("handoff resume"), &default_flags()).unwrap();
+        let resume = parse_command(
+            &args("handoff resume --source-session work"),
+            &default_flags(),
+        )
+        .unwrap();
         assert_eq!(resume["action"], "runtime_handoff_resume");
+        assert_eq!(resume["sourceSession"], "work");
+
+        let finalize = parse_command(&args("handoff finalize"), &default_flags()).unwrap();
+        assert_eq!(finalize["action"], "runtime_handoff_finalize");
+
+        let abort = parse_command(&args("handoff abort"), &default_flags()).unwrap();
+        assert_eq!(abort["action"], "runtime_handoff_abort");
+
+        let rollback = parse_command(
+            &args("handoff rollback --source-session work"),
+            &default_flags(),
+        )
+        .unwrap();
+        assert_eq!(rollback["action"], "runtime_handoff_rollback");
+        assert_eq!(rollback["sourceSession"], "work");
 
         assert!(parse_command(&args("handoff"), &default_flags()).is_err());
+        assert!(parse_command(&args("handoff resume"), &default_flags()).is_err());
+        assert!(parse_command(
+            &args("handoff resume --source-session ../escape"),
+            &default_flags()
+        )
+        .is_err());
         assert!(parse_command(&args("handoff unknown"), &default_flags()).is_err());
     }
 

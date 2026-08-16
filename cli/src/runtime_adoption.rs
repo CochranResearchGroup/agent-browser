@@ -2085,10 +2085,10 @@ mod tests {
     }
 
     #[test]
-    fn current_upgrade_and_orphan_paths_are_intentionally_red() {
+    fn current_payload_commit_path_remains_intentionally_red() {
         let corpus: UnsafeSeamCorpus = serde_json::from_str(UNSAFE_SEAMS).unwrap();
         assert_eq!(corpus.schema_version, RUNTIME_ADOPTION_SCHEMA_VERSION);
-        assert_eq!(corpus.fixtures.len(), 2);
+        assert_eq!(corpus.fixtures.len(), 1);
         for fixture in corpus.fixtures {
             assert!(!fixture.source_anchors.is_empty(), "{}", fixture.fixture_id);
             let decision = evaluate_unsafe_seam(&fixture);
@@ -2118,16 +2118,32 @@ mod tests {
         assert_source_order(
             handoff,
             &[
-                "let descriptor = read_runtime_handoff(&state.session_id)?;",
+                "let descriptor = read_runtime_handoff(&source_session)?;",
                 "BrowserManager::connect_cdp_for_handoff(",
+                "commit_candidate_owner(&repository, attachment)",
             ],
         );
         assert_source_order(
             handoff,
             &[
+                "begin_owner_transfer(",
                 "let path = write_runtime_handoff(&descriptor)?;",
+                "\"oldOwnerEffectCapable\": true",
+                "handle_runtime_handoff_finalize(",
                 "manager.relinquish_browser_for_handoff();",
                 "state.browser = None;",
+            ],
+        );
+        assert_source_order(
+            handoff,
+            &[
+                "handle_runtime_handoff_orphan_adoption(",
+                "runtime_handoff_process_assessment(&provisional, browser_pid)",
+                "BrowserManager::connect_cdp_for_handoff(&cdp_url, None)",
+                "BrowserAdoptionMode::OrphanAdoption",
+                "write_runtime_handoff(&descriptor)?",
+                "commit_candidate_owner(",
+                "persist_adopted_logical_browser_health(",
             ],
         );
     }

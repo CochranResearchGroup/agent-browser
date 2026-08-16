@@ -47,7 +47,8 @@ staging on incomplete, changing, conflicting, or owner-generation-poor
 evidence. P111 owner generations remain absent in current source, so a live
 cooperative daemon cannot be granted transfer authority yet; that fail-closed
 result is deliberate and compatible with P111 rather than a competing owner
-registry. Slice D now has a provider-neutral ownership foundation in the one
+registry. Slice D is accepted at the source and isolated-fixture boundary. It
+has a provider-neutral ownership foundation in the one
 locked service-state repository. It uses P111-compatible profile owner states,
 monotonic owner generations, observation-only candidate attachments, atomic
 compare-and-swap commit, idempotent replay, ownerless verified-orphan adoption,
@@ -55,9 +56,15 @@ and receipt-bearing reverse transfer that advances generation to prevent ABA.
 The daemon command path has a generation fence before stream broadcast,
 browser recovery, or dispatch whenever a transfer binding is present, and the
 census reads this registry before falling back to legacy session references.
-This is a partial Slice D checkpoint: the current handoff commands do not yet
-bind old and candidate daemons to the protocol, so the descriptor-bound orphan
-and relinquish-first source guards remain intentionally red.
+The production handoff path keeps the old daemon authoritative through
+candidate observation and compare-and-swap, supports exact pre-commit abort,
+receipt-bearing post-commit reverse, and old-owner finalize only after commit.
+Verified ownerless browsers and legacy schema-one retry records enter the same
+process, profile, endpoint, target, and logical-browser proof seam without
+launch or navigation. Named-supervisor restarts rehydrate from the registry as
+current or observation-only bindings, and the development publisher joins
+active supervisor manifests with socket discovery. The orphan red seam is
+closed. Payload commit before runtime preservation remains intentionally red.
 
 ### Plan
 
@@ -65,12 +72,10 @@ and relinquish-first source guards remain intentionally red.
 
 ### Next Recommendation
 
-Continue Slice D by binding active session supervisors and the old and
-candidate daemon handoff paths to the locked owner registry. Candidate proof
-must precede compare-and-swap, the old daemon must stay authoritative before
-commit, and post-commit failure must invoke the tested reverse-transfer path.
-Do not replace the installed payload, enable the recurring interlock, or touch
-a live browser.
+Continue with Slice E's stable dashboard ingress and presentation commit at the
+source and isolated-fixture boundary. Do not replace the installed payload,
+enable the recurring interlock, or touch a live browser. Slice I remains a
+separate explicit authorization gate.
 
 ## P114 | Terminal Route Quarantine Recovery
 

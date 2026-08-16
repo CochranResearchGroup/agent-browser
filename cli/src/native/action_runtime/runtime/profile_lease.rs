@@ -121,7 +121,14 @@ pub(crate) fn service_profile_lease_metadata_for_command(
         .and_then(|value| value.as_str())
         .is_some_and(|action| {
             action.starts_with("service_")
-                || matches!(action, "runtime_handoff_prepare" | "runtime_handoff_resume")
+                || matches!(
+                    action,
+                    "runtime_handoff_prepare"
+                        | "runtime_handoff_resume"
+                        | "runtime_handoff_abort"
+                        | "runtime_handoff_rollback"
+                        | "runtime_handoff_finalize"
+                )
         })
     {
         return None;
