@@ -4,6 +4,59 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 158 | 2026-08-15
+
+Scope: execute Plan 0116 Slice B without changing the installed payload or live
+runtime state.
+
+Actions:
+
+- replaced mutable workstation payload commits with sealed generation
+  directories containing the binary, support assets, payload and generation
+  manifests, and rendered unit templates;
+- added stable command and unit links through an atomically replaced `current`
+  generation selector, including rollback after an injected post-commit
+  selector failure;
+- made a no-op apply reuse the byte-identical generation, retained prior and
+  failed candidate generations as complete immutable rollback assets, and
+  rejected incomplete, writable, or externally targeted current selectors;
+- kept payload materialization separate from runtime reconciliation and proved
+  the standalone reconcile command does not alter the generation store or
+  selector;
+- replaced shallow inode helper tests with public installer-interface coverage
+  across all seven staging and selector failure boundaries;
+- reconciled one validation-only network race so the download diagnostic test
+  accepts both refused and reset local connections while still requiring the
+  underlying connection detail.
+
+Validation:
+
+- the expanded source-free workstation fixture passes first install, no-op
+  reinstall, seven injected failures, selector rollback, changed-generation
+  selection, old-generation retention, and reconcile non-mutation;
+- the workstation host-provision, fresh-VM harness, Guacamole asset,
+  PostgreSQL durability, and route-user projection fixtures pass;
+- 23 focused workstation installer tests, three workstation payload-status
+  tests, Rust formatting, strict Clippy, and `git diff --check` pass;
+- the repaired connection diagnostic test passes ten consecutive isolated
+  runs;
+- one complete CI-partitioned Rust run passed every parallel-safe and serialized
+  partition; repeated stress runs surfaced unrelated timing-sensitive baseline
+  failures in download diagnostics, service inventory, remote-view fallback,
+  and MCP invalid-input tests, while each failed case or module passed on an
+  immediate isolated serial rerun;
+- CodeGraph is current at 554 files, 19,801 nodes, and 68,606 edges.
+
+Result:
+
+- P116 Slice B is accepted at the source and isolated-fixture boundary;
+- repeated full-suite baseline timing remains a nonblocking validation risk for
+  later CI evaluation, not evidence of a Slice B generation failure;
+- no installed payload, daemon, browser, profile, route, display, dashboard,
+  supervisor, or external state was changed;
+- the next authorized packet is Slice C closed-world runtime census and
+  adoption decisions.
+
 ## Turn 157 | 2026-08-15
 
 Scope: reconcile the Plan 0116 baseline failures and decide Slice A

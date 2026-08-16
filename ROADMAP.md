@@ -29,7 +29,13 @@ unsafe seams. The three pre-existing baseline failures discovered during Slice
 A were reconciled: confirmation control actions no longer launch Chrome, and
 legacy service-status fixtures now carry the ready-stream evidence required by
 current reconciliation. Focused tests, formatting, strict Clippy, and the
-CI-partitioned Rust suite pass.
+CI-partitioned Rust suite pass. Slice B is accepted with one sealed runtime
+generation containing the binary, support payload, manifest, and unit
+templates; stable command and unit links resolve through an atomically replaced
+`current` selector. Seven injected staging and selector failures preserve the
+selected generation byte-for-byte, selector-commit failure restores the prior
+selection, changed payloads retain the old generation, and standalone
+reconciliation cannot mutate or select payload generations.
 
 ### Plan
 
@@ -37,8 +43,9 @@ CI-partitioned Rust suite pass.
 
 ### Next Recommendation
 
-Begin Slice B immutable generation staging. Do not replace the installed
-payload, enable the recurring interlock, or touch a live browser.
+Begin Slice C closed-world runtime census and adoption decisions. Do not
+replace the installed payload, enable the recurring interlock, or touch a live
+browser.
 
 ## P114 | Terminal Route Quarantine Recovery
 

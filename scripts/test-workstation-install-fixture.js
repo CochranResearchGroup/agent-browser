@@ -8,9 +8,11 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readlinkSync,
   readdirSync,
   rmSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -73,29 +75,92 @@ try {
   assertJsonSuccess(firstApply.stdout, 'first apply');
   assert.ok(existsSync(installRoot), 'apply must create the isolated workstation root');
 
-  const firstManifest = treeManifest(installRoot);
-  assert.equal(
-    firstManifest.some((entry) => entry.type === 'symlink'),
-    false,
-    'a source-free payload must not contain symlinks back to external state',
+  const generationStore = join(
+    installRoot,
+    '.local',
+    'lib',
+    'agent-browser',
+    'generations',
   );
+  const currentSelector = join(
+    installRoot,
+    '.local',
+    'lib',
+    'agent-browser',
+    'current',
+  );
+  const stableBinary = join(installRoot, '.local', 'bin', 'agent-browser');
+  assert.equal(
+    lstatSync(currentSelector).isSymbolicLink(),
+    true,
+    'apply must atomically select one immutable runtime generation',
+  );
+  assert.equal(
+    lstatSync(stableBinary).isSymbolicLink(),
+    true,
+    'the stable command must resolve through the current-generation selector',
+  );
+  const generationIds = readdirSync(generationStore);
+  assert.equal(generationIds.length, 1, 'first apply must create exactly one generation');
+  const selectedGenerationRoot = join(generationStore, generationIds[0]);
+  for (const relative of [
+    join('bin', 'agent-browser'),
+    join('support', 'manifest.json'),
+    join('units', 'agent-browser-dashboard.service'),
+    'generation.json',
+  ]) {
+    assert.ok(
+      existsSync(join(selectedGenerationRoot, relative)),
+      `selected generation must contain ${relative}`,
+    );
+  }
+  for (const entry of treeManifest(selectedGenerationRoot)) {
+    assert.equal(
+      entry.mode & 0o222,
+      0,
+      `immutable generation entry must not be writable: ${entry.path}`,
+    );
+  }
+
+  const firstManifest = treeManifest(installRoot);
+  const installedLinks = firstManifest.filter((entry) => entry.type === 'symlink');
+  assert.ok(installedLinks.length > 0, 'immutable generation selection must use stable links');
+  for (const entry of installedLinks) {
+    const linkPath = join(installRoot, entry.path);
+    const target = readlinkSync(linkPath);
+    assert.equal(
+      target.startsWith('/'),
+      false,
+      `${entry.path} must not use an absolute link target`,
+    );
+    assert.ok(
+      resolve(dirname(linkPath), target).startsWith(`${installRoot}/`),
+      `${entry.path} must resolve only inside the installed workstation root`,
+    );
+  }
   const installedFiles = regularFiles(installRoot);
-  const installedBasenames = new Set(installedFiles.map((path) => basename(path)));
-  const installedBinary = installedFiles.find((path) => (
-    basename(path) === 'agent-browser'
-    && path.includes(`${join('.local', 'bin')}/`)
-  ));
-  assert.ok(installedBinary, 'apply must install the agent-browser executable');
+  const installedBinary = stableBinary;
+  assert.ok(existsSync(installedBinary), 'apply must install the agent-browser executable');
   assert.notEqual(
-    lstatSync(installedBinary).mode & 0o111,
+    statSync(installedBinary).mode & 0o111,
     0,
     'the installed agent-browser payload must be executable',
   );
   for (const unit of expectedUnits) {
-    assert.ok(installedBasenames.has(unit), `apply must install ${unit}`);
+    const unitPath = join(installRoot, '.config', 'systemd', 'user', unit);
+    assert.ok(existsSync(unitPath), `apply must install ${unit}`);
+    assert.equal(
+      lstatSync(unitPath).isSymbolicLink(),
+      true,
+      `${unit} must resolve through the current-generation selector`,
+    );
   }
-  const dashboardUnit = installedFiles.find(
-    (path) => basename(path) === 'agent-browser-dashboard.service',
+  const dashboardUnit = join(
+    installRoot,
+    '.config',
+    'systemd',
+    'user',
+    'agent-browser-dashboard.service',
   );
   const dashboardSource = readFileSync(dashboardUnit, 'utf8');
   assert.match(
@@ -158,8 +223,12 @@ try {
     );
   }
 
-  const interlockUnit = installedFiles.find(
-    (path) => basename(path) === 'agent-browser-runtime-interlock.service',
+  const interlockUnit = join(
+    installRoot,
+    '.config',
+    'systemd',
+    'user',
+    'agent-browser-runtime-interlock.service',
   );
   const interlockSource = readFileSync(interlockUnit, 'utf8');
   assert.match(
@@ -328,6 +397,140 @@ try {
     'a no-op second apply must preserve versioned support-file inodes',
   );
 
+  const baselineSelectorTarget = readlinkSync(currentSelector);
+  const baselineGenerationRoot = resolve(dirname(currentSelector), baselineSelectorTarget);
+  const baselineGenerationManifest = treeManifest(baselineGenerationRoot);
+  const baselineStableBinaryTarget = readlinkSync(stableBinary);
+  const failurePhases = [
+    'binary-staged',
+    'support-staged',
+    'units-staged',
+    'generation-preflight-ready',
+    'generation-staged',
+    'selector-staged',
+    'selector-committed',
+  ];
+  for (const [index, phase] of failurePhases.entries()) {
+    const failedUpgrade = runInstaller(
+      installRoot,
+      ['--apply', '--dashboard-port', String(4800 + index), '--json'],
+      { AGENT_BROWSER_WORKSTATION_FAIL_AFTER: phase },
+    );
+    assert.notEqual(
+      failedUpgrade.status,
+      0,
+      `failure injection after ${phase} must return a nonzero status`,
+    );
+    assert.equal(
+      readlinkSync(currentSelector),
+      baselineSelectorTarget,
+      `${phase} failure must preserve the selected generation`,
+    );
+    assert.deepEqual(
+      treeManifest(baselineGenerationRoot),
+      baselineGenerationManifest,
+      `${phase} failure must leave the selected generation byte-identical`,
+    );
+    assert.equal(
+      readlinkSync(stableBinary),
+      baselineStableBinaryTarget,
+      `${phase} failure must preserve the stable command link`,
+    );
+    assertGenerationStoreHealthy(generationStore);
+  }
+
+  const upgradedApply = runInstaller(
+    installRoot,
+    ['--apply', '--dashboard-port', '4999', '--json'],
+  );
+  assert.equal(
+    upgradedApply.status,
+    0,
+    `changed workstation payload must select successfully:\n${upgradedApply.stdout}${upgradedApply.stderr}`,
+  );
+  assertJsonSuccess(upgradedApply.stdout, 'changed payload apply');
+  const upgradedSelectorTarget = readlinkSync(currentSelector);
+  assert.notEqual(
+    upgradedSelectorTarget,
+    baselineSelectorTarget,
+    'a changed unit payload must select a distinct runtime generation',
+  );
+  assert.ok(
+    existsSync(baselineGenerationRoot),
+    'the prior runtime generation must remain available for rollback acceptance',
+  );
+  assert.match(
+    readFileSync(
+      join(resolve(dirname(currentSelector), upgradedSelectorTarget), 'units', 'agent-browser-dashboard.service'),
+      'utf8',
+    ),
+    /AGENT_BROWSER_DASHBOARD_PORT=4999/,
+    'the selected generation must contain the changed unit payload',
+  );
+  assertGenerationStoreHealthy(generationStore);
+
+  const generationStoreBeforeReconcile = treeManifest(generationStore);
+  const selectorBeforeReconcile = readlinkSync(currentSelector);
+  const reconcile = runInstaller(installRoot, ['reconcile', '--json']);
+  assert.notEqual(
+    reconcile.status,
+    null,
+    'workstation reconcile must finish through the public command interface',
+  );
+  assert.doesNotMatch(
+    `${reconcile.stdout}${reconcile.stderr}`,
+    /Usage:/,
+    'workstation reconcile must be accepted as an operational command',
+  );
+  JSON.parse(reconcile.stdout);
+  assert.equal(
+    readlinkSync(currentSelector),
+    selectorBeforeReconcile,
+    'workstation reconcile must not select or replace a payload generation',
+  );
+  assert.deepEqual(
+    treeManifest(generationStore),
+    generationStoreBeforeReconcile,
+    'workstation reconcile must not mutate immutable payload generations',
+  );
+
+  const selectedAfterUpgrade = resolve(dirname(currentSelector), readlinkSync(currentSelector));
+  const generationManifestPath = join(selectedAfterUpgrade, 'generation.json');
+  const generationManifestMode = lstatSync(generationManifestPath).mode & 0o777;
+  chmodSync(generationManifestPath, generationManifestMode | 0o200);
+  const writableGenerationApply = runInstaller(installRoot, ['--apply', '--json']);
+  assert.notEqual(
+    writableGenerationApply.status,
+    0,
+    'apply must reject a writable selected generation before staging',
+  );
+  assert.match(
+    `${writableGenerationApply.stdout}${writableGenerationApply.stderr}`,
+    /generation entry is writable/,
+  );
+  chmodSync(generationManifestPath, generationManifestMode);
+
+  const missingUnitPath = join(
+    selectedAfterUpgrade,
+    'units',
+    'agent-browser-guacamole-postgres-backup.service',
+  );
+  const generationUnitDir = dirname(missingUnitPath);
+  const generationUnitDirMode = lstatSync(generationUnitDir).mode & 0o777;
+  chmodSync(generationUnitDir, generationUnitDirMode | 0o200);
+  unlinkSync(missingUnitPath);
+  chmodSync(generationUnitDir, generationUnitDirMode);
+  const incompleteGenerationApply = runInstaller(installRoot, ['--apply', '--json']);
+  assert.notEqual(
+    incompleteGenerationApply.status,
+    0,
+    'apply must reject an incomplete selected generation before staging',
+  );
+  assert.match(
+    `${incompleteGenerationApply.stdout}${incompleteGenerationApply.stderr}`,
+    /current runtime generation is incomplete/,
+  );
+
   writeFileSync(commandLog, '');
   const failedApply = runInstaller(
     failedInstallRoot,
@@ -377,7 +580,22 @@ try {
 
   console.log('Workstation install source-free fixture passed');
 } finally {
+  makeTreeWritable(fixtureRoot);
   rmSync(fixtureRoot, { recursive: true, force: true });
+}
+
+function makeTreeWritable(path) {
+  if (!existsSync(path)) return;
+  const metadata = lstatSync(path);
+  if (metadata.isSymbolicLink()) return;
+  if (metadata.isDirectory()) {
+    chmodSync(path, 0o700);
+    for (const entry of readdirSync(path)) {
+      makeTreeWritable(join(path, entry));
+    }
+    return;
+  }
+  chmodSync(path, metadata.mode | 0o200);
 }
 
 function resolveAgentBrowser() {
@@ -487,6 +705,8 @@ function treeManifest(root, ignored = new Set()) {
     };
     if (stat.isFile()) {
       entry.sha256 = createHash('sha256').update(readFileSync(path)).digest('hex');
+    } else if (stat.isSymbolicLink()) {
+      entry.target = readlinkSync(path);
     }
     manifest.push(entry);
   });
@@ -498,8 +718,32 @@ function visit(root, callback) {
   for (const entry of readdirSync(root).sort()) {
     const path = join(root, entry);
     const decision = callback(path);
-    if (decision !== 'skip' && statSync(path).isDirectory()) {
+    if (decision !== 'skip' && lstatSync(path).isDirectory()) {
       visit(path, callback);
+    }
+  }
+}
+
+function assertGenerationStoreHealthy(generationStore) {
+  for (const generationId of readdirSync(generationStore)) {
+    const generationRoot = join(generationStore, generationId);
+    for (const relative of [
+      join('bin', 'agent-browser'),
+      join('support', 'manifest.json'),
+      join('units', 'agent-browser-dashboard.service'),
+      'generation.json',
+    ]) {
+      assert.ok(
+        existsSync(join(generationRoot, relative)),
+        `runtime generation ${generationId} must contain ${relative}`,
+      );
+    }
+    for (const entry of treeManifest(generationRoot)) {
+      assert.equal(
+        entry.mode & 0o222,
+        0,
+        `runtime generation ${generationId} must be sealed: ${entry.path}`,
+      );
     }
   }
 }

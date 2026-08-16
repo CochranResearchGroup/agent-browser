@@ -1053,6 +1053,57 @@ No installer, daemon, browser, profile, route, display, dashboard, installed
 payload, supervisor, or external state was changed. Slice A is accepted. The
 next authorized implementation packet is Slice B immutable generation staging.
 
+### 2026-08-15 | Slice B Immutable Generation Staging Acceptance
+
+Workstation payload installation now commits one complete generation before it
+changes selection:
+
+- each generation contains the executable, support tree, payload and generation
+  manifests, and rendered systemd unit templates under
+  `~/.local/lib/agent-browser/generations/<generation-id>/`;
+- committed generation directories and files have no write bits, while the
+  stable command and unit links resolve through the relative, atomically
+  replaced `current` selector;
+- a byte-identical apply reuses the selected generation, a changed payload
+  selects a distinct generation, and the prior generation remains available
+  through rollback acceptance;
+- current-selector validation rejects incomplete generations, writable
+  generation trees, and targets outside the one-level `generations/<id>`
+  namespace;
+- standalone workstation reconcile and backup require a valid selected
+  generation when the selector exists, but neither path can stage, commit, or
+  select payload content.
+
+The source-free fixture injects failure after `binary-staged`,
+`support-staged`, `units-staged`, `generation-preflight-ready`,
+`generation-staged`, `selector-staged`, and `selector-committed`. Every case
+returns nonzero, preserves the selected generation byte-for-byte, keeps the
+stable command link unchanged, and leaves every retained generation complete
+and sealed. The post-commit selector case restores the prior selector target.
+
+Acceptance validation:
+
+- expanded source-free workstation install fixture: passed;
+- workstation host-provision and fresh-VM harness fixtures: passed;
+- Guacamole asset, PostgreSQL durability, and route-user projection fixtures:
+  passed;
+- focused workstation installer tests: 23 passed;
+- focused workstation payload-status tests: 3 passed;
+- connection-failure diagnostic baseline test: 10 consecutive isolated runs
+  passed after accepting both refused and reset local-socket outcomes;
+- `git diff --check`, Rust formatting, and strict Clippy: passed;
+- CI-partitioned Rust suite: one complete run passed all parallel-safe and
+  serialized partitions. Repeated stress runs surfaced unrelated
+  timing-sensitive failures in download diagnostics, service inventory,
+  remote-view fallback, and MCP invalid-input tests; each failed case or module
+  passed on immediate isolated serial rerun, and no failure exercised the Slice
+  B generation path.
+
+No installed payload, daemon, browser, profile, route, display, dashboard,
+supervisor, or external state was changed. Slice B is accepted at the source
+and isolated-fixture boundary. The next authorized implementation packet is
+Slice C closed-world runtime census and adoption decisions.
+
 ## Planning Evidence
 
 - CodeGraph was healthy on 2026-08-15 with 553 files, 19,654 nodes, and 68,296

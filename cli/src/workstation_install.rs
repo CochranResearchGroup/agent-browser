@@ -1,13 +1,16 @@
 //! Source-free Linux workstation installation.
 //!
-//! The workstation installer materializes the release binary and versioned
-//! support assets without relying on a repository checkout or package manager
-//! command at runtime. Host provisioning stops with a resumable status when a
-//! fresh login is required. Runtime reconciliation activates services only
-//! after canonical route projection and final doctor readiness. Real-host
-//! preflight also requires enough free disk capacity before sudo or payload
-//! mutation begins. Failed reconciliation restores the exact prior active state
-//! of managed user units and writes a private diagnostic receipt.
+//! The workstation installer stages the release binary, support assets,
+//! manifests, and rendered unit templates in a sealed generation before
+//! atomically selecting it. Stable command and unit links resolve through that
+//! selector without relying on a repository checkout or package manager at
+//! runtime. Host provisioning stops with a resumable status when a fresh login
+//! is required. Runtime reconciliation consumes the selected generation and
+//! activates services only after canonical route projection and final doctor
+//! readiness. Real-host preflight also requires enough free disk capacity
+//! before sudo or payload mutation begins. Failed reconciliation restores the
+//! exact prior active state of managed user units and writes a private
+//! diagnostic receipt.
 
 use serde::Serialize;
 use serde_json::Value;
@@ -27,6 +30,13 @@ const MIN_WORKSTATION_FREE_DISK_BYTES: u64 = 6 * 1024 * 1024 * 1024;
 const WORKSTATION_RECONCILE_QUIESCE_UNITS: [&str; 3] = [
     "agent-browser-dashboard.service",
     "agent-browser-runtime-interlock.timer",
+    "agent-browser-guacamole-postgres-backup.timer",
+];
+const WORKSTATION_GENERATION_UNITS: [&str; 5] = [
+    "agent-browser-dashboard.service",
+    "agent-browser-runtime-interlock.service",
+    "agent-browser-runtime-interlock.timer",
+    "agent-browser-guacamole-postgres-backup.service",
     "agent-browser-guacamole-postgres-backup.timer",
 ];
 const GUACAMOLE_COMPOSE: &str = include_str!("../assets/workstation/guacamole/compose.yml");
@@ -200,7 +210,7 @@ fn run_workstation_install(args: &[String]) {
         Ok(root) => root,
         Err(error) => fail(&error, parsed.json),
     };
-    let paths = install_paths(&root);
+    let mut paths = install_paths(&root);
     let mut phases = vec!["plan-validated"];
     let isolated_root = env::var_os("AGENT_BROWSER_WORKSTATION_ROOT").is_some();
     let host_plan = build_host_plan(isolated_root, &root);
@@ -240,6 +250,7 @@ fn run_workstation_install(args: &[String]) {
         match materialize_payload(&paths, &parsed) {
             Ok(()) => {
                 phases.extend(["payload-staged", "units-staged", "payload-committed"]);
+                paths = install_paths(&root);
                 true
             }
             Err(error) => fail_with_user_unit_restoration(
@@ -982,6 +993,7 @@ fn require_effective_groups() -> Result<(), String> {
 }
 
 fn require_installed_payload(paths: &InstallPaths) -> Result<(), String> {
+    validate_selected_generation_if_present(paths)?;
     let required = [
         paths.binary.clone(),
         paths.support_dir.join("manifest.json"),
@@ -1003,6 +1015,17 @@ fn require_installed_payload(paths: &InstallPaths) -> Result<(), String> {
         "workstation payload is incomplete; missing: {}",
         missing.join(", ")
     ))
+}
+
+fn validate_selected_generation_if_present(paths: &InstallPaths) -> Result<(), String> {
+    match fs::symlink_metadata(&paths.current_selector) {
+        Ok(_) => validate_generation_install_preconditions(paths),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!(
+            "Unable to inspect current runtime generation selector {}: {error}",
+            paths.current_selector.display()
+        )),
+    }
 }
 
 fn workstation_command_env(paths: &InstallPaths) -> Vec<(String, String)> {
@@ -2103,6 +2126,9 @@ fn workstation_usage() -> &'static str {
 struct InstallPaths {
     root: PathBuf,
     binary: PathBuf,
+    generations_dir: PathBuf,
+    current_selector: PathBuf,
+    legacy_support_dir: PathBuf,
     support_dir: PathBuf,
     unit_dir: PathBuf,
     guacamole_state_dir: PathBuf,
@@ -2121,12 +2147,22 @@ fn workstation_root() -> Result<PathBuf, String> {
 }
 
 fn install_paths(root: &Path) -> InstallPaths {
+    let store_dir = root.join(".local/lib/agent-browser");
+    let generations_dir = store_dir.join("generations");
+    let current_selector = store_dir.join("current");
+    let legacy_support_dir = store_dir.join(env!("CARGO_PKG_VERSION"));
+    let support_dir = if fs::symlink_metadata(&current_selector).is_ok() {
+        current_selector.join("support")
+    } else {
+        legacy_support_dir.clone()
+    };
     InstallPaths {
         root: root.to_path_buf(),
         binary: root.join(".local/bin/agent-browser"),
-        support_dir: root
-            .join(".local/lib/agent-browser")
-            .join(env!("CARGO_PKG_VERSION")),
+        generations_dir,
+        current_selector,
+        legacy_support_dir,
+        support_dir,
         unit_dir: root.join(".config/systemd/user"),
         guacamole_state_dir: root.join(".agent-browser/guacamole"),
         guacamole_secret_file: root.join(".agent-browser/guacamole/secrets/guacamole.env"),
@@ -2134,10 +2170,15 @@ fn install_paths(root: &Path) -> InstallPaths {
 }
 
 fn materialize_payload(paths: &InstallPaths, args: &WorkstationInstallArgs) -> Result<(), String> {
+    validate_generation_install_preconditions(paths)?;
     let staging = paths
         .root
         .join(".agent-browser/install-staging")
-        .join(env!("CARGO_PKG_VERSION"));
+        .join(format!(
+            "{}-{}",
+            env!("CARGO_PKG_VERSION"),
+            uuid::Uuid::new_v4()
+        ));
     if staging.exists() {
         fs::remove_dir_all(&staging).map_err(display_io("clear install staging", &staging))?;
     }
@@ -2159,11 +2200,13 @@ fn materialize_payload(paths: &InstallPaths, args: &WorkstationInstallArgs) -> R
         fs::copy(&current_exe, &staged_binary)
             .map_err(display_io("stage agent-browser executable", &staged_binary))?;
         set_executable(&staged_binary)?;
+        inject_failure("binary-staged")?;
 
         let final_binary = paths.binary.display().to_string();
+        let selected_support_dir = paths.current_selector.join("support");
         let rendered_units = render_units(
             &final_binary,
-            &paths.support_dir,
+            &selected_support_dir,
             &paths.guacamole_secret_file,
             args.dashboard_port,
         );
@@ -2178,6 +2221,7 @@ fn materialize_payload(paths: &InstallPaths, args: &WorkstationInstallArgs) -> R
         .map_err(display_io("stage support readme", &staged_support))?;
         materialize_guacamole_assets(&staged_support)?;
         materialize_controller_assets(&staged_support)?;
+        inject_failure("support-staged")?;
 
         for (name, content) in &rendered_units {
             fs::write(staged_units.join(name), content)
@@ -2186,24 +2230,463 @@ fn materialize_payload(paths: &InstallPaths, args: &WorkstationInstallArgs) -> R
 
         inject_failure("units-staged")?;
 
-        commit_directory(&staged_support, &paths.support_dir)?;
-        if let Some(parent) = paths.binary.parent() {
-            fs::create_dir_all(parent).map_err(display_io("create binary directory", parent))?;
-        }
-        replace_file(&staged_binary, &paths.binary)?;
-        fs::create_dir_all(&paths.unit_dir)
-            .map_err(display_io("create systemd user directory", &paths.unit_dir))?;
-        for entry in
-            fs::read_dir(&staged_units).map_err(display_io("read staged units", &staged_units))?
-        {
-            let entry = entry.map_err(|error| format!("Unable to read staged unit: {error}"))?;
-            replace_file(&entry.path(), &paths.unit_dir.join(entry.file_name()))?;
-        }
+        let support_manifest_sha256 =
+            workstation_file_sha256(&staged_support.join("manifest.json"))?;
+        let generation_id = format!(
+            "{}-{}-{}",
+            env!("CARGO_PKG_VERSION"),
+            &binary_sha256[..12],
+            &support_manifest_sha256[..12]
+        );
+        let generation_path = paths.generations_dir.join(&generation_id);
+        let generation_manifest = serde_json::to_string_pretty(&serde_json::json!({
+            "schemaVersion": "agent-browser.runtime-generation.v1",
+            "generationId": generation_id,
+            "packageVersion": env!("CARGO_PKG_VERSION"),
+            "binarySha256": binary_sha256,
+            "supportManifestSha256": support_manifest_sha256,
+            "controllerCompatibilityVersion": 1,
+            "schemaCompatibilityVersion": 1,
+            "immutableInstallationPath": generation_path,
+        }))
+        .expect("runtime generation manifest must serialize");
+        fs::write(staging.join("generation.json"), generation_manifest)
+            .map_err(display_io("stage runtime generation manifest", &staging))?;
+        preflight_staged_generation(
+            &staging,
+            &binary_sha256,
+            &support_manifest_sha256,
+            &rendered_units,
+        )?;
+        inject_failure("generation-preflight-ready")?;
+
+        commit_immutable_generation(&staging, &generation_path)?;
+        inject_failure("generation-staged")?;
         ensure_workstation_state(paths, args)?;
+        let created_links = prepare_stable_generation_links(paths, &rendered_units)?;
+        if let Err(error) = select_generation(paths, &generation_id) {
+            remove_created_links(&created_links);
+            return Err(error);
+        }
         Ok(())
     })();
-    let _ = fs::remove_dir_all(&staging);
+    let _ = remove_generation_tree(&staging);
     result
+}
+
+fn validate_generation_install_preconditions(paths: &InstallPaths) -> Result<(), String> {
+    match fs::symlink_metadata(&paths.current_selector) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            let selected_target = fs::read_link(&paths.current_selector).map_err(display_io(
+                "read current runtime generation selector",
+                &paths.current_selector,
+            ))?;
+            let generation_id = selected_target
+                .strip_prefix("generations")
+                .ok()
+                .filter(|relative| relative.components().count() == 1)
+                .ok_or_else(|| {
+                    format!(
+                        "current runtime generation selector has an invalid target: {}",
+                        selected_target.display()
+                    )
+                })?;
+            let selected = paths.generations_dir.join(generation_id);
+            for required in [
+                selected.join("generation.json"),
+                selected.join("bin/agent-browser"),
+                selected.join("support/manifest.json"),
+            ] {
+                if !required.is_file() {
+                    return Err(format!(
+                        "current runtime generation is incomplete; missing {}",
+                        required.display()
+                    ));
+                }
+            }
+            for unit in WORKSTATION_GENERATION_UNITS {
+                let required = selected.join("units").join(unit);
+                if !required.is_file() {
+                    return Err(format!(
+                        "current runtime generation is incomplete; missing {}",
+                        required.display()
+                    ));
+                }
+            }
+            validate_sealed_generation_tree(&selected)?;
+        }
+        Ok(_) => {
+            return Err(format!(
+                "current runtime generation selector is not a symlink: {}",
+                paths.current_selector.display()
+            ));
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            let legacy_units = WORKSTATION_RECONCILE_QUIESCE_UNITS
+                .iter()
+                .any(|unit| paths.unit_dir.join(unit).exists());
+            if paths.binary.exists() || paths.legacy_support_dir.exists() || legacy_units {
+                return Err(
+                    "legacy mutable workstation payload requires transactional generation migration before apply"
+                        .to_string(),
+                );
+            }
+        }
+        Err(error) => {
+            return Err(format!(
+                "Unable to inspect current runtime generation selector {}: {error}",
+                paths.current_selector.display()
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn preflight_staged_generation(
+    staging: &Path,
+    expected_binary_sha256: &str,
+    expected_support_manifest_sha256: &str,
+    units: &[(&'static str, String)],
+) -> Result<(), String> {
+    let binary = staging.join("bin/agent-browser");
+    let support_manifest = staging.join("support/manifest.json");
+    if workstation_file_sha256(&binary)? != expected_binary_sha256 {
+        return Err("staged runtime generation binary hash mismatch".to_string());
+    }
+    if workstation_file_sha256(&support_manifest)? != expected_support_manifest_sha256 {
+        return Err("staged runtime generation support manifest hash mismatch".to_string());
+    }
+    for (name, expected) in units {
+        let path = staging.join("units").join(name);
+        let actual = fs::read_to_string(&path)
+            .map_err(display_io("read staged runtime generation unit", &path))?;
+        if actual != *expected {
+            return Err(format!(
+                "staged runtime generation unit does not match rendered content: {name}"
+            ));
+        }
+    }
+    if !staging.join("generation.json").is_file() {
+        return Err("staged runtime generation manifest is missing".to_string());
+    }
+    Ok(())
+}
+
+fn commit_immutable_generation(staging: &Path, destination: &Path) -> Result<(), String> {
+    if destination.exists() {
+        validate_sealed_generation_tree(destination)?;
+        if !directory_tree_contents_match(staging, destination)? {
+            return Err(format!(
+                "immutable runtime generation already exists with different content: {}",
+                destination.display()
+            ));
+        }
+        remove_generation_tree(staging)?;
+        return Ok(());
+    }
+    if let Some(parent) = destination.parent() {
+        fs::create_dir_all(parent)
+            .map_err(display_io("create runtime generation store", parent))?;
+    }
+    fs::rename(staging, destination).map_err(display_io(
+        "commit immutable runtime generation",
+        destination,
+    ))?;
+    if let Err(error) = seal_generation_tree(destination) {
+        let cleanup = remove_generation_tree(destination);
+        return match cleanup {
+            Ok(()) => Err(error),
+            Err(cleanup_error) => Err(format!(
+                "{error}; additionally failed to remove the unsealed runtime generation: {cleanup_error}"
+            )),
+        };
+    }
+    Ok(())
+}
+
+fn seal_generation_tree(path: &Path) -> Result<(), String> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(display_io("inspect staged runtime generation entry", path))?;
+    if metadata.is_dir() {
+        for entry in fs::read_dir(path)
+            .map_err(display_io("read staged runtime generation directory", path))?
+        {
+            let entry = entry
+                .map_err(|error| format!("Unable to read staged generation entry: {error}"))?;
+            seal_generation_tree(&entry.path())?;
+        }
+    }
+    if !metadata.file_type().is_symlink() {
+        let mut permissions = metadata.permissions();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            permissions.set_mode(permissions.mode() & !0o222);
+        }
+        #[cfg(not(unix))]
+        permissions.set_readonly(true);
+        fs::set_permissions(path, permissions)
+            .map_err(display_io("seal immutable runtime generation entry", path))?;
+    }
+    Ok(())
+}
+
+fn validate_sealed_generation_tree(path: &Path) -> Result<(), String> {
+    let metadata = fs::symlink_metadata(path).map_err(display_io(
+        "inspect immutable runtime generation entry",
+        path,
+    ))?;
+    #[cfg(unix)]
+    let writable = {
+        use std::os::unix::fs::PermissionsExt;
+        metadata.permissions().mode() & 0o222 != 0
+    };
+    #[cfg(not(unix))]
+    let writable = !metadata.permissions().readonly();
+    if !metadata.file_type().is_symlink() && writable {
+        return Err(format!(
+            "immutable runtime generation entry is writable: {}",
+            path.display()
+        ));
+    }
+    if metadata.is_dir() {
+        for entry in fs::read_dir(path).map_err(display_io(
+            "read immutable runtime generation directory",
+            path,
+        ))? {
+            let entry = entry
+                .map_err(|error| format!("Unable to read runtime generation entry: {error}"))?;
+            validate_sealed_generation_tree(&entry.path())?;
+        }
+    }
+    Ok(())
+}
+
+fn remove_generation_tree(path: &Path) -> Result<(), String> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(format!(
+                "Unable to inspect staged runtime generation {}: {error}",
+                path.display()
+            ));
+        }
+    };
+    if metadata.is_dir() {
+        let mut permissions = metadata.permissions();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            permissions.set_mode(permissions.mode() | 0o700);
+        }
+        #[cfg(not(unix))]
+        permissions.set_readonly(false);
+        fs::set_permissions(path, permissions).map_err(display_io(
+            "unseal staged runtime generation directory",
+            path,
+        ))?;
+        for entry in fs::read_dir(path).map_err(display_io(
+            "read staged runtime generation for cleanup",
+            path,
+        ))? {
+            let entry = entry
+                .map_err(|error| format!("Unable to read staged generation entry: {error}"))?;
+            if entry
+                .file_type()
+                .map_err(|error| format!("Unable to inspect staged generation entry: {error}"))?
+                .is_dir()
+            {
+                remove_generation_tree(&entry.path())?;
+            }
+        }
+        fs::remove_dir_all(path).map_err(display_io("remove staged runtime generation", path))
+    } else {
+        fs::remove_file(path).map_err(display_io("remove staged runtime generation file", path))
+    }
+}
+
+fn prepare_stable_generation_links(
+    paths: &InstallPaths,
+    units: &[(&'static str, String)],
+) -> Result<Vec<PathBuf>, String> {
+    let mut created = Vec::new();
+    let binary_target = PathBuf::from("../lib/agent-browser/current/bin/agent-browser");
+    match ensure_stable_symlink(&paths.binary, &binary_target) {
+        Ok(true) => created.push(paths.binary.clone()),
+        Ok(false) => {}
+        Err(error) => return Err(error),
+    }
+    for (name, _) in units {
+        let link = paths.unit_dir.join(name);
+        let target = PathBuf::from("../../../.local/lib/agent-browser/current/units").join(name);
+        match ensure_stable_symlink(&link, &target) {
+            Ok(true) => created.push(link),
+            Ok(false) => {}
+            Err(error) => {
+                remove_created_links(&created);
+                return Err(error);
+            }
+        }
+    }
+    Ok(created)
+}
+
+fn ensure_stable_symlink(link: &Path, target: &Path) -> Result<bool, String> {
+    match fs::symlink_metadata(link) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            let existing = fs::read_link(link)
+                .map_err(display_io("read stable runtime generation link", link))?;
+            if existing == target {
+                return Ok(false);
+            }
+            Err(format!(
+                "stable runtime generation link has unexpected target {}: {}",
+                link.display(),
+                existing.display()
+            ))
+        }
+        Ok(_) => Err(format!(
+            "stable runtime generation link is occupied by mutable payload: {}",
+            link.display()
+        )),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            atomic_symlink(target, link)?;
+            Ok(true)
+        }
+        Err(error) => Err(format!(
+            "Unable to inspect stable runtime generation link {}: {error}",
+            link.display()
+        )),
+    }
+}
+
+fn atomic_symlink(target: &Path, destination: &Path) -> Result<(), String> {
+    let parent = destination.parent().ok_or_else(|| {
+        format!(
+            "runtime generation link has no parent: {}",
+            destination.display()
+        )
+    })?;
+    fs::create_dir_all(parent).map_err(display_io(
+        "create runtime generation link directory",
+        parent,
+    ))?;
+    let temporary = parent.join(format!(
+        ".{}.{}-tmp",
+        destination
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("generation-link"),
+        uuid::Uuid::new_v4()
+    ));
+    create_generation_symlink(target, &temporary).map_err(display_io(
+        "stage atomic runtime generation link",
+        &temporary,
+    ))?;
+    if let Err(error) = fs::rename(&temporary, destination) {
+        let _ = fs::remove_file(&temporary);
+        return Err(format!(
+            "Unable to commit atomic runtime generation link {}: {error}",
+            destination.display()
+        ));
+    }
+    Ok(())
+}
+
+fn select_generation(paths: &InstallPaths, generation_id: &str) -> Result<(), String> {
+    let destination = paths.generations_dir.join(generation_id);
+    if !destination.is_dir() {
+        return Err(format!(
+            "cannot select missing runtime generation: {}",
+            destination.display()
+        ));
+    }
+    let previous = match fs::symlink_metadata(&paths.current_selector) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            Some(fs::read_link(&paths.current_selector).map_err(display_io(
+                "read previous runtime generation selector",
+                &paths.current_selector,
+            ))?)
+        }
+        Ok(_) => {
+            return Err(format!(
+                "current runtime generation selector is not a symlink: {}",
+                paths.current_selector.display()
+            ));
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+        Err(error) => {
+            return Err(format!(
+                "Unable to inspect previous runtime generation selector {}: {error}",
+                paths.current_selector.display()
+            ));
+        }
+    };
+    let selected_target = PathBuf::from("generations").join(generation_id);
+    let parent = paths
+        .current_selector
+        .parent()
+        .expect("current generation selector always has a parent");
+    fs::create_dir_all(parent).map_err(display_io(
+        "create runtime generation selector directory",
+        parent,
+    ))?;
+    let temporary = parent.join(format!(".current.{}-tmp", uuid::Uuid::new_v4()));
+    create_generation_symlink(&selected_target, &temporary).map_err(display_io(
+        "stage current runtime generation selector",
+        &temporary,
+    ))?;
+    if let Err(error) = inject_failure("selector-staged") {
+        let _ = fs::remove_file(&temporary);
+        return Err(error);
+    }
+    fs::rename(&temporary, &paths.current_selector).map_err(display_io(
+        "commit current runtime generation selector",
+        &paths.current_selector,
+    ))?;
+    if let Err(error) = inject_failure("selector-committed") {
+        restore_generation_selector(paths, previous.as_deref())?;
+        return Err(error);
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn create_generation_symlink(target: &Path, link: &Path) -> io::Result<()> {
+    std::os::unix::fs::symlink(target, link)
+}
+
+#[cfg(not(unix))]
+fn create_generation_symlink(_target: &Path, _link: &Path) -> io::Result<()> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "workstation runtime generation links are only supported on Unix",
+    ))
+}
+
+fn restore_generation_selector(
+    paths: &InstallPaths,
+    previous: Option<&Path>,
+) -> Result<(), String> {
+    if let Some(previous) = previous {
+        atomic_symlink(previous, &paths.current_selector)
+    } else {
+        match fs::remove_file(&paths.current_selector) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(format!(
+                "Unable to roll back current runtime generation selector {}: {error}",
+                paths.current_selector.display()
+            )),
+        }
+    }
+}
+
+fn remove_created_links(paths: &[PathBuf]) {
+    for path in paths.iter().rev() {
+        let _ = fs::remove_file(path);
+    }
 }
 
 fn materialize_guacamole_assets(staged_support: &Path) -> Result<(), String> {
@@ -2513,57 +2996,12 @@ fn inject_failure(phase: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn commit_directory(staged: &Path, destination: &Path) -> Result<(), String> {
-    if destination.exists() && directory_trees_match(staged, destination)? {
-        fs::remove_dir_all(staged).map_err(display_io(
-            "remove unchanged staged support directory",
-            staged,
-        ))?;
-        return Ok(());
-    }
-    if destination.exists() {
-        fs::remove_dir_all(destination).map_err(display_io(
-            "replace installed support directory",
-            destination,
-        ))?;
-    }
-    if let Some(parent) = destination.parent() {
-        fs::create_dir_all(parent)
-            .map_err(display_io("create installed support parent", parent))?;
-    }
-    fs::rename(staged, destination).map_err(display_io(
-        "commit installed support directory",
-        destination,
-    ))
-}
-
-fn replace_file(staged: &Path, destination: &Path) -> Result<(), String> {
-    if destination.exists() && files_match(staged, destination)? {
-        fs::remove_file(staged).map_err(display_io(
-            "remove unchanged staged workstation file",
-            staged,
-        ))?;
-        return Ok(());
-    }
-    if destination.exists() {
-        fs::remove_file(destination).map_err(display_io(
-            "replace installed workstation file",
-            destination,
-        ))?;
-    }
-    fs::rename(staged, destination)
-        .map_err(display_io("commit installed workstation file", destination))
-}
-
-fn directory_trees_match(left: &Path, right: &Path) -> Result<bool, String> {
+fn directory_tree_contents_match(left: &Path, right: &Path) -> Result<bool, String> {
     let left_metadata =
         fs::symlink_metadata(left).map_err(display_io("inspect staged directory", left))?;
     let right_metadata =
         fs::symlink_metadata(right).map_err(display_io("inspect installed directory", right))?;
-    if !left_metadata.is_dir()
-        || !right_metadata.is_dir()
-        || !permissions_match(&left_metadata, &right_metadata)
-    {
+    if !left_metadata.is_dir() || !right_metadata.is_dir() {
         return Ok(false);
     }
 
@@ -2585,11 +3023,11 @@ fn directory_trees_match(left: &Path, right: &Path) -> Result<bool, String> {
             .map_err(display_io("inspect installed support entry", &right_entry))?
             .file_type();
         if left_type.is_dir() && right_type.is_dir() {
-            if !directory_trees_match(&left_entry, &right_entry)? {
+            if !directory_tree_contents_match(&left_entry, &right_entry)? {
                 return Ok(false);
             }
         } else if left_type.is_file() && right_type.is_file() {
-            if !files_match(&left_entry, &right_entry)? {
+            if !file_contents_match(&left_entry, &right_entry)? {
                 return Ok(false);
             }
         } else {
@@ -2610,7 +3048,7 @@ fn directory_entry_names(path: &Path) -> Result<Vec<std::ffi::OsString>, String>
         .collect()
 }
 
-fn files_match(left: &Path, right: &Path) -> Result<bool, String> {
+fn file_contents_match(left: &Path, right: &Path) -> Result<bool, String> {
     let left_metadata =
         fs::symlink_metadata(left).map_err(display_io("inspect staged file", left))?;
     let right_metadata =
@@ -2618,7 +3056,6 @@ fn files_match(left: &Path, right: &Path) -> Result<bool, String> {
     if !left_metadata.is_file()
         || !right_metadata.is_file()
         || left_metadata.len() != right_metadata.len()
-        || !permissions_match(&left_metadata, &right_metadata)
     {
         return Ok(false);
     }
@@ -2640,18 +3077,6 @@ fn files_match(left: &Path, right: &Path) -> Result<bool, String> {
         if left_count == 0 {
             return Ok(true);
         }
-    }
-}
-
-fn permissions_match(left: &fs::Metadata, right: &fs::Metadata) -> bool {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        left.permissions().mode() == right.permissions().mode()
-    }
-    #[cfg(not(unix))]
-    {
-        left.permissions().readonly() == right.permissions().readonly()
     }
 }
 
@@ -3210,47 +3635,5 @@ mod tests {
             false,
             "/data/remoteControl/ready"
         ));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn unchanged_payload_files_and_directories_keep_their_inodes() {
-        use std::os::unix::fs::MetadataExt;
-
-        let root = env::temp_dir().join(format!(
-            "agent-browser-workstation-idempotency-test-{}",
-            uuid::Uuid::new_v4()
-        ));
-        let staged = root.join("staged");
-        let installed = root.join("installed");
-        fs::create_dir_all(staged.join("nested")).unwrap();
-        fs::create_dir_all(installed.join("nested")).unwrap();
-        fs::write(staged.join("nested/asset"), "same").unwrap();
-        fs::write(installed.join("nested/asset"), "same").unwrap();
-
-        let installed_dir_inode = fs::metadata(&installed).unwrap().ino();
-        let installed_asset_inode = fs::metadata(installed.join("nested/asset")).unwrap().ino();
-        commit_directory(&staged, &installed).unwrap();
-
-        assert_eq!(fs::metadata(&installed).unwrap().ino(), installed_dir_inode);
-        assert_eq!(
-            fs::metadata(installed.join("nested/asset")).unwrap().ino(),
-            installed_asset_inode
-        );
-        assert!(!staged.exists());
-
-        let staged_file = root.join("staged-binary");
-        let installed_file = root.join("installed-binary");
-        fs::write(&staged_file, "same binary").unwrap();
-        fs::write(&installed_file, "same binary").unwrap();
-        let installed_file_inode = fs::metadata(&installed_file).unwrap().ino();
-        replace_file(&staged_file, &installed_file).unwrap();
-        assert_eq!(
-            fs::metadata(&installed_file).unwrap().ino(),
-            installed_file_inode
-        );
-        assert!(!staged_file.exists());
-
-        fs::remove_dir_all(&root).unwrap();
     }
 }

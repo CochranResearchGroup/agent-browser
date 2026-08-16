@@ -5171,7 +5171,7 @@ EOF
     }
 
     #[test]
-    fn download_bytes_connection_refused_includes_details() {
+    fn download_bytes_connection_failure_includes_details() {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -5191,6 +5191,8 @@ EOF
             err.contains("Connection refused")
                 || err.contains("connection refused")
                 || err.contains("actively refused it")
+                || err.contains("Connection reset by peer")
+                || err.contains("connection reset by peer")
                 || err.contains("timed out")
                 || err.contains("deadline has elapsed")
                 || err.contains("timed out while waiting"),
