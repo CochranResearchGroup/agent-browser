@@ -986,7 +986,9 @@ fn profile_owner_readback(
             evidence.metadata_present = true;
             evidence.profile_identity = profile_digest
                 .as_ref()
-                .map_or(EvidenceAgreement::Missing, |_| EvidenceAgreement::Match);
+                .map_or(EvidenceAgreement::NotApplicable, |_| {
+                    EvidenceAgreement::Match
+                });
             Some(Ok(RuntimeCensusObservation {
                 logical_browser_id_hint: (session.browser_ids.len() == 1)
                     .then(|| session.browser_ids[0].clone()),
@@ -2336,6 +2338,32 @@ mod tests {
             .iter()
             .filter(|alias| alias.starts_with("view-stream:"))
             .all(|alias| !beta.aliases.contains(alias)));
+    }
+
+    #[test]
+    fn profileless_legacy_session_alias_is_neutral_identity_evidence() {
+        use crate::native::service_model::{BrowserSession, ServiceState};
+
+        let mut state = ServiceState::default();
+        state.sessions.insert(
+            "p116-alpha".to_string(),
+            BrowserSession {
+                id: "p116-alpha".to_string(),
+                browser_ids: vec!["session:p116-alpha-daemon".to_string()],
+                ..BrowserSession::default()
+            },
+        );
+
+        let readback = profile_owner_readback(&state, "service-revision").unwrap();
+        assert_eq!(readback.observations.len(), 1);
+        assert_eq!(
+            readback.observations[0].evidence.profile_identity,
+            EvidenceAgreement::NotApplicable
+        );
+        assert_eq!(
+            readback.observations[0].logical_browser_id_hint.as_deref(),
+            Some("session:p116-alpha-daemon")
+        );
     }
 
     #[test]
