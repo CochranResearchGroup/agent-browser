@@ -1,0 +1,18 @@
+{
+  "receiptId": "fixture-presentation-1",
+  "dashboardDeploymentGeneration": "candidate-1",
+  "coordinatorGeneration": "fixture-coordinator-1",
+  "daemonGeneration": "fixture-daemon-1",
+  "logicalBrowserId": "fixture-browser-1",
+  "processInstanceDigest": "fixture-process-digest",
+  "selectedTargetGeneration": 1,
+  "selectedTargetIdentityDigest": "fixture-target-digest",
+  "requiredStreamProvider": "rdp_gateway",
+  "observedStreamProvider": "rdp_gateway",
+  "displayAllocationId": "fixture-display-1",
+  "geometryEpoch": "fixture-geometry-1",
+  "routeGeneration": 1,
+  "guacamoleConnectionGeneration": 1,
+  "authenticatedIngressProbeAt": "2026-08-15T12:00:00Z",
+  "operatorSurfaceLoadResult": "ready"
+}

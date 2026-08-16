@@ -1250,6 +1250,54 @@ The orphan red fixture is removed because production resume can now prove and
 adopt an ownerless survivor. Payload commit before runtime preservation remains
 the one intentionally red P116 seam. Slice E is next.
 
+### 2026-08-16 | Slice E Source Checkpoint
+
+Slice E is implemented and validated at the source and isolated-fixture
+boundary, but acceptance is withheld because the first diagnostic dashboard
+smokes inherited user-scoped auth and service-state paths before fixture
+isolation was complete:
+
+- `dashboard start` now separates stable ingress from the generation backend.
+  Workstation units keep `agent-browser-dashboard.service` running while the
+  backend uses `agent-browser-dashboard-backend.service` on the next validated
+  port;
+- one private revision-fenced registry records selected, candidate, fallback,
+  and the last generation-bound `PresentationReceipt`. Stage and commit probe
+  the candidate runtime manifest, and commit requires matching ready
+  authenticated operator-journey evidence;
+- a committed backend retains the old accepted backend as fallback. Safe
+  requests retry that fallback when the selected backend fails before its first
+  response bytes, while mutation requests return typed converging status and
+  are never replayed;
+- the stable ingress owns the shared dashboard service relay. Generation
+  backends run in backend-only mode so shadow processes do not race to create
+  the relay;
+- runtime health and install doctor expose `dashboardIngressReady`,
+  `operatorJourneyReady`, ingress state, and presentation receipt. A live
+  dashboard without matching journey proof is not doctor-ready;
+- the development publisher no longer stops stable ingress. Split installs
+  restart only the backend, while older unsplit installs retain a compatibility
+  restart;
+- the isolated CLI transaction staged revision 2, committed revision 3,
+  selected `candidate-1`, retained the prior dashboard generation, terminated
+  the candidate, and continued serving the runtime manifest through the same
+  public ingress from fallback;
+- seven focused ingress tests, twenty-five workstation tests, the source-free
+  workstation fixture, strict Clippy, Rust formatting, local publisher guard,
+  help readback, and the docs production build pass.
+
+Boundary incident: early diagnostic processes rewrote the existing
+user-scoped `dashboard-auth.json` through the normal idempotent startup path,
+and the shared service-state mtime advanced during the same interval while
+lock contention was observed. No installed binary, unit, browser, profile,
+route, display, or public handoff was intentionally changed, and no retained
+browser was used. Exact temporary dashboard processes left by a failed shell
+assertion were terminated. Source now supports
+`AGENT_BROWSER_DASHBOARD_AUTH_DIR`, backend-only mode, and relay-skip isolation
+so the accepted fixture no longer touches those user-scoped paths. Do not call
+Slice E accepted or infer semantic equivalence of the rewritten files without
+operator adjudication or independent before-and-after evidence.
+
 ## Planning Evidence
 
 - CodeGraph was healthy on 2026-08-15 with 553 files, 19,654 nodes, and 68,296

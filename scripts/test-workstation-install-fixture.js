@@ -32,6 +32,7 @@ const xdgRoot = join(fixtureRoot, 'xdg');
 const agentBrowser = resolveAgentBrowser();
 
 const expectedUnits = new Set([
+  'agent-browser-dashboard-backend.service',
   'agent-browser-dashboard.service',
   'agent-browser-runtime-interlock.service',
   'agent-browser-runtime-interlock.timer',
@@ -106,6 +107,7 @@ try {
   for (const relative of [
     join('bin', 'agent-browser'),
     join('support', 'manifest.json'),
+    join('units', 'agent-browser-dashboard-backend.service'),
     join('units', 'agent-browser-dashboard.service'),
     'generation.json',
   ]) {
@@ -167,6 +169,25 @@ try {
     dashboardSource,
     /EnvironmentFile=-%h\/.agent-browser\/\.env/,
     'dashboard service must load the managed agent-browser environment',
+  );
+  assert.match(
+    dashboardSource,
+    /AGENT_BROWSER_DASHBOARD_INGRESS=1/,
+    'dashboard service must remain the stable ingress process',
+  );
+  const dashboardBackendSource = readFileSync(
+    join(installRoot, '.config', 'systemd', 'user', 'agent-browser-dashboard-backend.service'),
+    'utf8',
+  );
+  assert.match(
+    dashboardBackendSource,
+    /AGENT_BROWSER_DASHBOARD=1/,
+    'dashboard backend service must run the generation-specific application server',
+  );
+  assert.match(
+    dashboardBackendSource,
+    /AGENT_BROWSER_DASHBOARD_BACKEND_ONLY=1/,
+    'dashboard backend must not race stable ingress for the shared service relay',
   );
   const payloadManifestPath = installedFiles.find(
     (path) => basename(path) === 'manifest.json' && !path.includes(`${join('guacamole')}/`),
@@ -730,6 +751,7 @@ function assertGenerationStoreHealthy(generationStore) {
     for (const relative of [
       join('bin', 'agent-browser'),
       join('support', 'manifest.json'),
+      join('units', 'agent-browser-dashboard-backend.service'),
       join('units', 'agent-browser-dashboard.service'),
       'generation.json',
     ]) {

@@ -1601,7 +1601,16 @@ agent-browser open example.com
 agent-browser dashboard stop
 ```
 
-The dashboard runs as a standalone background process on port 4848, independent of browser sessions. It stays available even when no sessions are running. All sessions automatically stream to the dashboard.
+The dashboard command starts a stable ingress process on port 4848 and a generation-specific backend on the next port. The ingress remains the public listener while validated backend generations change. It retains the previously selected backend as a draining fallback, returns typed converging status when neither backend is reachable, and never selects a candidate whose runtime manifest or authenticated operator-journey evidence fails validation. All sessions automatically stream to the dashboard.
+
+Use `agent-browser dashboard ingress status` to inspect the selected,
+candidate, fallback, and presentation-receipt state. Upgrade coordinators can
+use `dashboard ingress stage`, `commit`, and `rollback` with exact
+`--expected-revision` compare-and-swap values. `stage` probes the shadow
+backend runtime manifest, while `commit` re-probes it and requires a matching
+authenticated presentation-evidence file before selection. Set
+`AGENT_BROWSER_DASHBOARD_INGRESS_STATE` only when an isolated runtime needs a
+non-default private registry path.
 The standalone dashboard also exposes `/api/service/*` on the same origin by proxying to the active session service API when available and falling back to CLI-backed read-only service views where possible. This keeps the Service view usable through stable local or authenticated ingress routes instead of requiring the operator's browser to reach per-session localhost ports.
 When a long-lived `dashboard-service-backend` session is present, the standalone
 dashboard prefers it for proxied service API requests before falling back to
@@ -1615,7 +1624,9 @@ mode-0600 bootstrap credential file at
 `~/.agent-browser/dashboard-auth.env`. The default `admin` account and the
 `codex` observer account are superusers. `~/.agent-browser/.env` records
 `AGENT_BROWSER_DASHBOARD_AUTH_FILE` so the user-scoped service and foreground
-runs use the same credential store.
+runs use the same credential store. Set `AGENT_BROWSER_DASHBOARD_AUTH_DIR` to
+an isolated directory when a fixture must not read or rewrite the user-scoped
+auth store, bootstrap credentials, or managed environment file.
 
 Dashboard sections have stable paths, so refreshes and shared links keep the
 selected area instead of returning to the home view. Use `/service` for the
@@ -1635,10 +1646,12 @@ or external ingress route, install the user-scoped systemd service:
 bash scripts/install-dashboard-user-service.sh
 ```
 
-The service runs the bundled dashboard in foreground mode on port 4848, enables
-restart-on-failure behavior, and starts at user login. Set
+The install creates a stable `agent-browser-dashboard.service` ingress and a
+separate `agent-browser-dashboard-backend.service` generation backend. Both
+use restart-on-failure behavior and start at user login. Set
 `AGENT_BROWSER_DASHBOARD_PORT` before running the script to choose another
-port. The installer also enables `agent-browser-runtime-interlock.timer` and
+ingress port; the next port must remain available for the backend. The
+installer also enables `agent-browser-runtime-interlock.timer` and
 `agent-browser-guacamole-postgres-backup.timer`. The backup timer creates one
 atomic, checksummed custom-format dump each day under
 `~/.agent-browser/backups/guacamole-postgres`, validates its restore catalog,
@@ -1687,7 +1700,9 @@ pnpm publish:local-dashboard -- --expect-marker "Stream port"
 
 That command builds the dashboard, rebuilds the local CLI, backs up and replaces
 the user-scoped binary, hands active browser sessions to replacement daemons,
-restarts `agent-browser-dashboard.service`, and smokes the live dashboard URL.
+preserves the stable ingress, restarts the split generation backend when
+installed, and smokes the live dashboard URL. Older unsplit installs retain a
+single-unit compatibility restart.
 Browser PIDs, CDP endpoints, profiles, and tabs remain unchanged across the
 replacement. The publisher inventories active named supervisors as well as
 daemon sockets. An older relinquish-first daemon enters verified orphan

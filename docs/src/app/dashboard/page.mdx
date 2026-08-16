@@ -15,6 +15,26 @@ Then open `http://localhost:4848` in your browser to see the live dashboard.
 
 All sessions automatically stream to the dashboard. No extra flags are needed.
 
+`dashboard start` keeps port 4848 as stable ingress and starts the current
+generation backend on the next port. The ingress retains the prior selected
+backend as a draining fallback. It changes selection only after a shadow
+candidate passes its runtime-manifest probe and authenticated operator-journey
+proof.
+
+```bash
+agent-browser dashboard ingress status
+agent-browser dashboard ingress stage --expected-revision 1 --generation candidate-1 --port 4850 --manifest-sha256 <sha256>
+agent-browser dashboard ingress commit --expected-revision 2 --evidence <presentation-evidence.json>
+agent-browser dashboard ingress rollback --expected-revision 2 --generation candidate-1
+```
+
+The mutating ingress commands use revision compare-and-swap. `commit` probes
+the candidate again and refuses selection when its manifest changed or the
+evidence does not describe a ready authenticated operator surface. Set
+`AGENT_BROWSER_DASHBOARD_INGRESS_STATE` only for an isolated private registry.
+Set `AGENT_BROWSER_DASHBOARD_AUTH_DIR` as well when a fixture must isolate the
+auth store, bootstrap credentials, and managed environment file.
+
 ## Open a durable RDP handoff
 
 When an agent gives you an RDP or Guacamole browser, open the authenticated
@@ -80,8 +100,9 @@ pnpm publish:local-dashboard -- --expect-marker "Stream port"
 ```
 
 The command builds <code>packages/dashboard/out</code>, rebuilds the local CLI,
-backs up and replaces <code>~/.local/bin/agent-browser</code>, restarts
-<code>agent-browser-dashboard.service</code>, and smokes the live dashboard URL.
+backs up and replaces <code>~/.local/bin/agent-browser</code>, preserves the
+stable ingress, restarts only the generation backend when the split units are
+installed, and smokes the live dashboard URL.
 The smoke reads <code>/api/runtime/manifest</code> from the running service and
 records the served package version, service UI contract, embedded dashboard
 SHA-256, supported UI features, current executable path, and current executable

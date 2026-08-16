@@ -4,6 +4,50 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 163 | 2026-08-16
+
+Scope: implement Plan 0116 Slice E at the source and isolated-fixture boundary
+without installed-payload or browser mutation.
+
+Actions:
+
+- separated stable dashboard ingress from generation-specific backends and
+  added revision-fenced selected, candidate, fallback, and presentation state;
+- bound stage and commit to live candidate runtime-manifest probes, retained
+  the prior accepted backend after commit, and retried only safe requests;
+- made split workstation and development-publisher flows preserve stable
+  ingress while restarting or quiescing only generation backends;
+- projected ingress and operator-journey readiness into runtime health and
+  install doctor, with live missing journey proof reported as non-ready;
+- added isolated dashboard auth-directory, backend-only, and relay-skip seams
+  after a diagnostic boundary incident exposed inherited user-scoped paths;
+- aligned CLI help, README, repository skill, docs site, inline comments,
+  fixture expectations, plan, roadmap, and runbook.
+
+Validation:
+
+- seven ingress tests cover manifest binding, revision compare-and-swap,
+  receipt derivation, failed candidate preservation, fallback continuity, and
+  mutation no-replay;
+- twenty-five workstation tests and the source-free workstation fixture pass;
+- an isolated CLI transaction selected a candidate, terminated it, and served
+  the same public manifest from retained fallback;
+- strict Clippy, Rust formatting, publisher guards, help readback, and docs
+  production build pass.
+
+Result:
+
+- Slice E is `IMPLEMENTED_NOT_ACCEPTED`;
+- early diagnostic processes rewrote user-scoped `dashboard-auth.json` through
+  normal startup, and shared service-state mtime advanced while lock contention
+  was observed. No semantic before-and-after proof exists, so this turn does
+  not claim a clean no-live-state boundary;
+- exact leaked temporary dashboard processes were terminated. No installed
+  binary, unit, browser, profile, route, display, or public handoff was
+  intentionally changed;
+- Slice F source work remains authorized. Slice I still requires separate
+  explicit live authorization.
+
 ## Turn 162 | 2026-08-15
 
 Scope: complete Plan 0116 Slice D at the source and isolated-fixture boundary

@@ -131,11 +131,13 @@ pub async fn run_dashboard_server(port: u16) {
         eprintln!("Failed to initialize dashboard auth: {}", err);
         return;
     }
-    if let Err(err) =
-        super::http::ensure_service_daemon_session(DASHBOARD_SERVICE_BACKEND_SESSION).await
-    {
-        eprintln!("Failed to initialize dashboard service backend: {}", err);
+    if std::env::var_os("AGENT_BROWSER_DASHBOARD_BACKEND_ONLY").is_none() {
+        ensure_dashboard_service_backend().await;
     }
+    // Build and cache the manifest before accepting traffic so a newly
+    // selected backend cannot lose its first ingress probe to debug-build
+    // executable and embedded-asset hashing latency.
+    let _ = runtime_manifest_json();
 
     let addr = format!("127.0.0.1:{}", port);
     let listener = match TcpListener::bind(&addr).await {
@@ -153,6 +155,14 @@ pub async fn run_dashboard_server(port: u16) {
         tokio::spawn(async move {
             handle_dashboard_connection(stream).await;
         });
+    }
+}
+
+pub(crate) async fn ensure_dashboard_service_backend() {
+    if let Err(err) =
+        super::http::ensure_service_daemon_session(DASHBOARD_SERVICE_BACKEND_SESSION).await
+    {
+        eprintln!("Failed to initialize dashboard service backend: {err}");
     }
 }
 

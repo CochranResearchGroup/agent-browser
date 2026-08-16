@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const AUTH_FILE_ENV: &str = "AGENT_BROWSER_DASHBOARD_AUTH_FILE";
+const AUTH_DIR_ENV: &str = "AGENT_BROWSER_DASHBOARD_AUTH_DIR";
 const AUTH_FILE_NAME: &str = "dashboard-auth.json";
 const BOOTSTRAP_CREDENTIAL_FILE_NAME: &str = "dashboard-auth.env";
 const PBKDF2_ITERATIONS: u32 = 120_000;
@@ -391,8 +392,18 @@ pub(super) fn parse_headers(header_str: &str) -> Vec<(String, String)> {
 }
 
 fn dashboard_auth_dir() -> Result<PathBuf, String> {
-    dirs::home_dir()
-        .map(|home| home.join(".agent-browser"))
+    dashboard_auth_dir_from(
+        std::env::var_os(AUTH_DIR_ENV).map(PathBuf::from),
+        dirs::home_dir(),
+    )
+}
+
+fn dashboard_auth_dir_from(
+    isolated_dir: Option<PathBuf>,
+    home_dir: Option<PathBuf>,
+) -> Result<PathBuf, String> {
+    isolated_dir
+        .or_else(|| home_dir.map(|home| home.join(".agent-browser")))
         .ok_or_else(|| "Cannot resolve the user-scoped agent-browser directory".to_string())
 }
 
@@ -852,6 +863,17 @@ fn set_private_file(path: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn isolated_dashboard_auth_directory_does_not_resolve_through_user_home() {
+        let isolated = PathBuf::from("/tmp/agent-browser-dashboard-auth-fixture");
+        let home = PathBuf::from("/home/operator");
+
+        assert_eq!(
+            dashboard_auth_dir_from(Some(isolated.clone()), Some(home)).unwrap(),
+            isolated
+        );
+    }
 
     #[test]
     fn password_hash_round_trips() {

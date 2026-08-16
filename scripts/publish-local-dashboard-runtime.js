@@ -77,7 +77,9 @@ const report = {
   backupPath: null,
   service: {
     before: null,
+    backendBefore: null,
     after: null,
+    backendAfter: null,
     action: 'none',
     quiesced: false,
   },
@@ -127,6 +129,7 @@ async function run() {
   report.builtBin = builtBin;
 
   report.service.before = serviceStatus();
+  report.service.backendBefore = dashboardBackendServiceStatus();
   const beforeStat = existsSync(installBin) ? statSync(installBin) : null;
   const backupPath = `${installBin}.pre-local-dashboard-${timestamp()}`;
   if (beforeStat) {
@@ -168,6 +171,7 @@ async function run() {
     throw error;
   } finally {
     report.service.after = serviceStatus();
+    report.service.backendAfter = dashboardBackendServiceStatus();
   }
 }
 
@@ -563,20 +567,21 @@ function guardInstallPath(path) {
 }
 
 function quiesceDashboardForRuntimeHandoff() {
-  if (
-    report.service.before?.loadState === 'loaded'
-    && report.service.before?.activeState === 'active'
-  ) {
-    runCommand('systemctl', ['--user', 'stop', 'agent-browser-dashboard.service']);
-    report.service.quiesced = true;
-    report.service.action = 'stop-for-runtime-handoff';
+  if (report.service.before?.loadState === 'loaded') {
+    report.service.action = 'preserve-stable-ingress';
   }
 }
 
 async function restartOrStartDashboard(installBin, { restoring = false } = {}) {
-  const status = serviceStatus();
-  if (status.loadState === 'loaded') {
-    report.service.action = restoring ? 'restart-after-restore' : 'restart';
+  const backendStatus = dashboardBackendServiceStatus();
+  if (backendStatus.loadState === 'loaded') {
+    report.service.action = restoring ? 'restart-backend-after-restore' : 'restart-backend';
+    runCommand('systemctl', ['--user', 'restart', 'agent-browser-dashboard-backend.service']);
+    return;
+  }
+  const ingressStatus = serviceStatus();
+  if (ingressStatus.loadState === 'loaded') {
+    report.service.action = restoring ? 'restart-legacy-dashboard-after-restore' : 'restart-legacy-dashboard';
     runCommand('systemctl', ['--user', 'restart', 'agent-browser-dashboard.service']);
     return;
   }
@@ -588,11 +593,19 @@ async function restartOrStartDashboard(installBin, { restoring = false } = {}) {
   runCommand(installBin, ['dashboard', 'start']);
 }
 
+function dashboardBackendServiceStatus() {
+  return userServiceStatus('agent-browser-dashboard-backend.service');
+}
+
 function serviceStatus() {
+  return userServiceStatus('agent-browser-dashboard.service');
+}
+
+function userServiceStatus(unit) {
   const result = spawnSync('systemctl', [
     '--user',
     'show',
-    'agent-browser-dashboard.service',
+    unit,
     '--property=LoadState',
     '--property=ActiveState',
     '--property=MainPID',

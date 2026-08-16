@@ -159,6 +159,18 @@ assert.match(
   'local publishing must bracket executable replacement with daemon handoff',
 );
 
+assert.doesNotMatch(
+  publisher,
+  /systemctl', \['--user', 'stop', 'agent-browser-dashboard\.service'/,
+  'local publishing must never stop the stable dashboard ingress',
+);
+
+assert.match(
+  publisher,
+  /restart', 'agent-browser-dashboard-backend\.service'/,
+  'local publishing may restart the generation backend without restarting stable ingress',
+);
+
 assert.match(
   publisher,
   /for \(const session of activeSupervisorSessionNames\(\)\)[\s\S]*function activeSupervisorSessionNames\(\)[\s\S]*agent-browser\.session-supervisor\.v1[\s\S]*systemctl[\s\S]*is-active/,

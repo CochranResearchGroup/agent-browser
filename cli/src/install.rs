@@ -37,7 +37,8 @@ const LIVE_DASHBOARD_PROBE_TIMEOUT: Duration = Duration::from_secs(3);
 const LIVE_DASHBOARD_READ_TIMEOUT: Duration = Duration::from_millis(250);
 const LIVE_DASHBOARD_READ_RETRY_DELAY: Duration = Duration::from_millis(25);
 static INSTALL_DOCTOR_COMMAND_OUTPUT_COUNTER: AtomicU64 = AtomicU64::new(0);
-const WORKSTATION_UNIT_NAMES: [&str; 5] = [
+const WORKSTATION_UNIT_NAMES: [&str; 6] = [
+    "agent-browser-dashboard-backend.service",
     "agent-browser-dashboard.service",
     "agent-browser-runtime-interlock.service",
     "agent-browser-runtime-interlock.timer",
@@ -1080,11 +1081,13 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
     install_doctor_trace("dashboard_runtime");
     let dashboard_runtime = runtime_manifest_json();
     install_doctor_trace("live_dashboard_runtime");
-    let live_dashboard_runtime = live_dashboard_runtime_probe(
+    let mut live_dashboard_runtime = live_dashboard_runtime_probe(
         current_executable
             .get("sha256")
             .and_then(|value| value.as_str()),
     );
+    live_dashboard_runtime["dashboardIngress"] =
+        crate::dashboard_ingress::dashboard_ingress_status_json();
     install_doctor_trace("service_status");
     let service = service_status_probe();
     install_doctor_trace("service_resources");
@@ -1639,6 +1642,34 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
         }));
     }
 
+    if let Some(ingress) = live_dashboard_runtime
+        .get("dashboardIngress")
+        .and_then(Value::as_object)
+    {
+        if ingress
+            .get("dashboardIngressReady")
+            .and_then(Value::as_bool)
+            == Some(false)
+        {
+            issues.push(json!({
+                "code": "dashboard_ingress_not_ready",
+                "message": "the stable dashboard ingress registry is unavailable or invalid",
+                "state": ingress.get("state").cloned().unwrap_or(Value::Null)
+            }));
+        } else if live_dashboard_runtime
+            .get("available")
+            .and_then(Value::as_bool)
+            == Some(true)
+            && ingress.get("operatorJourneyReady").and_then(Value::as_bool) == Some(false)
+        {
+            issues.push(json!({
+                "code": "dashboard_operator_journey_not_ready",
+                "message": "the selected dashboard generation does not have a matching authenticated operator-journey receipt",
+                "state": ingress.get("state").cloned().unwrap_or(Value::Null)
+            }));
+        }
+    }
+
     if let Some(rows) = runtime_inventory
         .get("runtimes")
         .and_then(|value| value.as_array())
@@ -1895,10 +1926,12 @@ pub(crate) fn active_runtime_inventory(expected_sha256: Option<&str>) -> serde_j
 pub(crate) fn runtime_health_json() -> serde_json::Value {
     let current_executable = binary_fingerprint(std::env::current_exe().ok());
     let expected_sha256 = current_executable.get("sha256").and_then(Value::as_str);
-    runtime_health_from_inventory_and_supervisors(
+    let mut health = runtime_health_from_inventory_and_supervisors(
         active_runtime_inventory(expected_sha256),
         crate::session_supervisor::session_supervisor_health_json(),
-    )
+    );
+    health["dashboardIngress"] = crate::dashboard_ingress::dashboard_ingress_status_json();
+    health
 }
 
 #[cfg(test)]
@@ -2491,12 +2524,24 @@ fn runtime_convergence_summary(
         .get("state")
         .and_then(|value| value.as_str())
         .unwrap_or("unknown");
+    let dashboard_ingress_ready = live_dashboard_runtime
+        .pointer("/dashboardIngress/dashboardIngressReady")
+        .and_then(Value::as_bool);
+    let operator_journey_ready = live_dashboard_runtime
+        .pointer("/dashboardIngress/operatorJourneyReady")
+        .and_then(Value::as_bool);
+    let dashboard_ingress_state = live_dashboard_runtime
+        .pointer("/dashboardIngress/state")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
     let live_dashboard_stale = live_dashboard_available
         && !live_dashboard_ready
         && live_dashboard_state == "stale_executable";
-    let manual_review_required = live_dashboard_available
+    let manual_review_required = (live_dashboard_available
         && !live_dashboard_ready
-        && live_dashboard_state != "stale_executable";
+        && live_dashboard_state != "stale_executable")
+        || dashboard_ingress_ready == Some(false)
+        || (live_dashboard_available && operator_journey_ready == Some(false));
     let status = if manual_review_required {
         "manual_review_required"
     } else if stale_runtime_count > 0 || live_dashboard_stale {
@@ -2514,6 +2559,9 @@ fn runtime_convergence_summary(
         "liveDashboardAvailable": live_dashboard_available,
         "liveDashboardReady": live_dashboard_ready,
         "liveDashboardState": live_dashboard_state,
+        "dashboardIngressReady": dashboard_ingress_ready,
+        "operatorJourneyReady": operator_journey_ready,
+        "dashboardIngressState": dashboard_ingress_state,
     })
 }
 
@@ -4276,6 +4324,16 @@ mod tests {
             "ready": false,
             "state": "unreadable_manifest"
         });
+        let pending_operator_journey = json!({
+            "available": true,
+            "ready": true,
+            "state": "ready",
+            "dashboardIngress": {
+                "dashboardIngressReady": true,
+                "operatorJourneyReady": false,
+                "state": "converging"
+            }
+        });
         let diagnostic_inventory = json!({
             "staleCount": 0,
             "runtimes": [{"state": "diagnostic"}]
@@ -4306,6 +4364,53 @@ mod tests {
             runtime_convergence_summary(&unreadable_dashboard, &empty_inventory)["status"],
             "manual_review_required"
         );
+        let pending = runtime_convergence_summary(&pending_operator_journey, &empty_inventory);
+        assert_eq!(pending["status"], "manual_review_required");
+        assert_eq!(pending["dashboardIngressReady"], true);
+        assert_eq!(pending["operatorJourneyReady"], false);
+    }
+
+    #[test]
+    fn install_doctor_flags_a_live_dashboard_without_operator_journey_proof() {
+        let launch_config = json!({
+            "stealthCdpChromiumRequired": false,
+            "stealthCdpChromiumReady": true,
+        });
+        let current_executable = fingerprint(Some("/same/agent-browser"), Some("aaa"));
+        let path_command = fingerprint(Some("/same/agent-browser"), Some("aaa"));
+        let pnpm_package_binary = fingerprint(Some("/pnpm/agent-browser"), Some("aaa"));
+        let workspace_binary = fingerprint(Some("/workspace/agent-browser"), Some("aaa"));
+        let service = json!({"ready": true});
+        let service_resources = json!({"readinessImpactingCandidates": 0});
+        let live_dashboard_runtime = json!({
+            "available": true,
+            "ready": true,
+            "state": "ready",
+            "dashboardIngress": {
+                "dashboardIngressReady": true,
+                "operatorJourneyReady": false,
+                "state": "converging"
+            }
+        });
+        let runtime_inventory = empty_runtime_inventory();
+        let remote_view_privileges = ready_remote_view_privileges();
+        let issues = install_doctor_issues(InstallDoctorIssueInputs {
+            current_executable: &current_executable,
+            path_command: &path_command,
+            pnpm_package_binary: &pnpm_package_binary,
+            workspace_binary: &workspace_binary,
+            launch_config: &launch_config,
+            remote_view_privileges: &remote_view_privileges,
+            service: &service,
+            service_resources: &service_resources,
+            live_dashboard_runtime: &live_dashboard_runtime,
+            runtime_inventory: &runtime_inventory,
+            daemon_listener_inventory: &empty_daemon_listener_inventory(),
+        });
+
+        assert!(issues
+            .iter()
+            .any(|issue| issue["code"] == "dashboard_operator_journey_not_ready"));
     }
 
     #[test]
@@ -4662,7 +4767,7 @@ mod tests {
         assert_eq!(status["installedBinary"]["exists"], true);
         assert_eq!(status["installedBinaryProvenanceMatches"], true);
         assert_eq!(status["controllerAssets"]["ready"], true);
-        assert_eq!(status["units"].as_array().unwrap().len(), 5);
+        assert_eq!(status["units"].as_array().unwrap().len(), 6);
         assert!(status["units"].as_array().unwrap().iter().all(|unit| {
             unit["exists"].as_bool() == Some(true)
                 && unit["sourceFree"].as_bool() == Some(true)

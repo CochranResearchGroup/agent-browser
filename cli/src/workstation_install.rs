@@ -29,11 +29,12 @@ const MIN_WORKSTATION_FREE_DISK_BYTES: u64 = 6 * 1024 * 1024 * 1024;
 // A reconcile may run as agent-browser-runtime-interlock.service, so stopping
 // that service here would terminate the active reconciler before reactivation.
 const WORKSTATION_RECONCILE_QUIESCE_UNITS: [&str; 3] = [
-    "agent-browser-dashboard.service",
+    "agent-browser-dashboard-backend.service",
     "agent-browser-runtime-interlock.timer",
     "agent-browser-guacamole-postgres-backup.timer",
 ];
-const WORKSTATION_GENERATION_UNITS: [&str; 5] = [
+const WORKSTATION_GENERATION_UNITS: [&str; 6] = [
+    "agent-browser-dashboard-backend.service",
     "agent-browser-dashboard.service",
     "agent-browser-runtime-interlock.service",
     "agent-browser-runtime-interlock.timer",
@@ -1636,6 +1637,7 @@ fn activate_user_units(
             "--user",
             "enable",
             "--now",
+            "agent-browser-dashboard-backend.service",
             "agent-browser-dashboard.service",
             "agent-browser-runtime-interlock.timer",
             "agent-browser-guacamole-postgres-backup.timer",
@@ -1646,6 +1648,7 @@ fn activate_user_units(
         "activate workstation user services",
     )?;
     for unit in [
+        "agent-browser-dashboard-backend.service",
         "agent-browser-dashboard.service",
         "agent-browser-runtime-interlock.timer",
         "agent-browser-guacamole-postgres-backup.timer",
@@ -2241,6 +2244,16 @@ fn parse_workstation_install_args(args: &[String]) -> Result<WorkstationInstallA
     let mode = mode.ok_or_else(|| {
         "Choose exactly one of --dry-run or --apply for workstation installation".to_string()
     })?;
+    let dashboard_backend_port = dashboard_port.checked_add(1).ok_or_else(|| {
+        "--dashboard-port must leave the next TCP port available for the dashboard backend"
+            .to_string()
+    })?;
+    if dashboard_port == guacamole_port || dashboard_backend_port == guacamole_port {
+        return Err(
+            "dashboard ingress, dashboard backend, and Guacamole ports must be distinct"
+                .to_string(),
+        );
+    }
     Ok(WorkstationInstallArgs {
         mode,
         json,
@@ -3102,6 +3115,9 @@ fn render_units(
 ) -> Vec<(&'static str, String)> {
     let script_root = support_dir.join("scripts");
     let guacamole_dir = support_dir.join("guacamole");
+    let dashboard_backend_port = dashboard_port
+        .checked_add(1)
+        .expect("validated workstation dashboard port must reserve a backend port");
     let runtime_environment = format!(
         "EnvironmentFile=-%h/.agent-browser/.env\nEnvironment=AGENT_BROWSER_BIN={binary}\nEnvironment=AGENT_BROWSER_REMOTE_VIEW_SCRIPT_ROOT={}\nEnvironment=AGENT_BROWSER_GUACAMOLE_DIR={}\nEnvironment=AGENT_BROWSER_GUACAMOLE_SECRET_FILE={}\n",
         script_root.display(),
@@ -3110,9 +3126,15 @@ fn render_units(
     );
     vec![
         (
+            "agent-browser-dashboard-backend.service",
+            format!(
+                "[Unit]\nDescription=agent-browser dashboard generation backend\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=simple\nEnvironmentFile=-%h/.agent-browser/.env\nEnvironment=AGENT_BROWSER_DASHBOARD=1\nEnvironment=AGENT_BROWSER_DASHBOARD_BACKEND_ONLY=1\nEnvironment=AGENT_BROWSER_DASHBOARD_PORT={dashboard_backend_port}\nExecStart={binary}\nRestart=on-failure\nRestartSec=3\n\n[Install]\nWantedBy=default.target\n"
+            ),
+        ),
+        (
             "agent-browser-dashboard.service",
             format!(
-                "[Unit]\nDescription=agent-browser dashboard\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=simple\nEnvironmentFile=-%h/.agent-browser/.env\nEnvironment=AGENT_BROWSER_DASHBOARD=1\nEnvironment=AGENT_BROWSER_DASHBOARD_PORT={dashboard_port}\nExecStart={binary}\nRestart=on-failure\nRestartSec=3\n\n[Install]\nWantedBy=default.target\n"
+                "[Unit]\nDescription=agent-browser stable dashboard ingress\nAfter=agent-browser-dashboard-backend.service network-online.target\nWants=agent-browser-dashboard-backend.service network-online.target\n\n[Service]\nType=simple\nEnvironmentFile=-%h/.agent-browser/.env\nEnvironment=AGENT_BROWSER_DASHBOARD_INGRESS=1\nEnvironment=AGENT_BROWSER_DASHBOARD_PORT={dashboard_port}\nEnvironment=AGENT_BROWSER_DASHBOARD_BACKEND_PORT={dashboard_backend_port}\nExecStart={binary}\nRestart=on-failure\nRestartSec=3\n\n[Install]\nWantedBy=default.target\n"
             ),
         ),
         (
@@ -3318,6 +3340,31 @@ mod tests {
         assert!(parse_workstation_install_args(&conflicting)
             .unwrap_err()
             .contains("mutually exclusive"));
+    }
+
+    #[test]
+    fn dashboard_port_must_reserve_a_distinct_backend_port() {
+        let exhausted = vec![
+            "install".to_string(),
+            "workstation".to_string(),
+            "--dry-run".to_string(),
+            "--dashboard-port".to_string(),
+            u16::MAX.to_string(),
+        ];
+        assert!(parse_workstation_install_args(&exhausted)
+            .unwrap_err()
+            .contains("next TCP port"));
+
+        let collision = vec![
+            "install".to_string(),
+            "workstation".to_string(),
+            "--dry-run".to_string(),
+            "--dashboard-port".to_string(),
+            (DEFAULT_GUACAMOLE_PORT - 1).to_string(),
+        ];
+        assert!(parse_workstation_install_args(&collision)
+            .unwrap_err()
+            .contains("must be distinct"));
     }
 
     #[test]
@@ -3716,7 +3763,9 @@ mod tests {
 
     #[test]
     fn systemd_reconcile_quiesce_set_preserves_its_running_service() {
-        assert!(WORKSTATION_RECONCILE_QUIESCE_UNITS.contains(&"agent-browser-dashboard.service"));
+        assert!(WORKSTATION_RECONCILE_QUIESCE_UNITS
+            .contains(&"agent-browser-dashboard-backend.service"));
+        assert!(!WORKSTATION_RECONCILE_QUIESCE_UNITS.contains(&"agent-browser-dashboard.service"));
         assert!(
             WORKSTATION_RECONCILE_QUIESCE_UNITS.contains(&"agent-browser-runtime-interlock.timer")
         );
@@ -3759,7 +3808,7 @@ mod tests {
     #[test]
     fn reconciliation_restoration_returns_units_to_their_exact_prior_state() {
         let snapshot = QuiescedUserUnits::from_states([
-            ("agent-browser-dashboard.service", true),
+            ("agent-browser-dashboard-backend.service", true),
             ("agent-browser-runtime-interlock.timer", true),
             ("agent-browser-guacamole-postgres-backup.timer", false),
         ]);
@@ -3767,7 +3816,7 @@ mod tests {
         assert_eq!(
             snapshot.units_to_start(),
             vec![
-                "agent-browser-dashboard.service",
+                "agent-browser-dashboard-backend.service",
                 "agent-browser-runtime-interlock.timer"
             ]
         );

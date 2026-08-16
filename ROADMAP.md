@@ -1,7 +1,7 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-08-15
+Updated: 2026-08-16
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
@@ -65,6 +65,16 @@ launch or navigation. Named-supervisor restarts rehydrate from the registry as
 current or observation-only bindings, and the development publisher joins
 active supervisor manifests with socket discovery. The orphan red seam is
 closed. Payload commit before runtime preservation remains intentionally red.
+Slice E is implemented at the source and isolated-fixture boundary with stable
+ingress, generation backends, revision-fenced candidate selection, manifest
+revalidation, retained fallback, production `PresentationReceipt` derivation,
+doctor axes, and no-replay mutation failure behavior. The isolated transaction
+continued serving from the old backend after candidate termination. Slice E
+is not accepted yet because early diagnostic processes inherited user-scoped
+dashboard auth and service-state paths: the auth store was rewritten through
+normal startup, and the shared service-state mtime advanced while lock
+contention was observed. The source now has explicit auth-directory,
+backend-only, and relay-skip isolation for fixtures.
 
 ### Plan
 
@@ -72,8 +82,9 @@ closed. Payload commit before runtime preservation remains intentionally red.
 
 ### Next Recommendation
 
-Continue with Slice E's stable dashboard ingress and presentation commit at the
-source and isolated-fixture boundary. Do not replace the installed payload,
+Keep Slice E acceptance withheld until the user-scoped boundary incident is
+adjudicated or independently reconciled. The next authorized source packet is
+Slice F durable-handoff self-healing; do not replace the installed payload,
 enable the recurring interlock, or touch a live browser. Slice I remains a
 separate explicit authorization gate.
 

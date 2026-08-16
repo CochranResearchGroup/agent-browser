@@ -5,6 +5,7 @@ mod chat;
 mod color;
 mod commands;
 mod connection;
+mod dashboard_ingress;
 mod flags;
 mod install;
 mod mcp;
@@ -1160,6 +1161,10 @@ fn get_dashboard_pid_path() -> std::path::PathBuf {
     get_socket_dir().join("dashboard.pid")
 }
 
+fn get_dashboard_backend_pid_path() -> std::path::PathBuf {
+    get_socket_dir().join("dashboard-backend.pid")
+}
+
 fn is_pid_alive(pid: u32) -> bool {
     #[cfg(unix)]
     {
@@ -1179,8 +1184,21 @@ fn is_pid_alive(pid: u32) -> bool {
     }
 }
 
+fn fail_dashboard_start(error: impl AsRef<str>, json_mode: bool) -> ! {
+    if json_mode {
+        print_json_error(error.as_ref());
+    } else {
+        eprintln!("{} {}", color::error_indicator(), error.as_ref());
+    }
+    exit(1);
+}
+
 fn run_dashboard_start(port: u16, json_mode: bool) {
     let pid_path = get_dashboard_pid_path();
+    let backend_pid_path = get_dashboard_backend_pid_path();
+    let Some(backend_port) = port.checked_add(1) else {
+        fail_dashboard_start("Dashboard port cannot reserve a backend port", json_mode);
+    };
 
     // Check if already running
     if let Ok(pid_str) = fs::read_to_string(&pid_path) {
@@ -1221,10 +1239,101 @@ fn run_dashboard_start(port: u16, json_mode: bool) {
         }
     };
 
-    let mut cmd = std::process::Command::new(&exe_path);
-    cmd.env("AGENT_BROWSER_DASHBOARD", "1")
-        .env("AGENT_BROWSER_DASHBOARD_PORT", port.to_string());
+    let repository = dashboard_ingress::DashboardIngressRepository::new(
+        dashboard_ingress::DashboardIngressRepository::default_path(),
+    );
+    let registry =
+        match repository.initialize(dashboard_ingress::current_dashboard_backend(backend_port)) {
+            Ok(registry) => registry,
+            Err(error) => {
+                fail_dashboard_start(error, json_mode);
+            }
+        };
+    if registry.selected_backend().port != backend_port {
+        fail_dashboard_start(
+            format!(
+                "Dashboard ingress already selects backend port {}; requested start would launch port {backend_port}",
+                registry.selected_backend().port
+            ),
+            json_mode,
+        );
+    }
 
+    let mut backend_cmd = std::process::Command::new(&exe_path);
+    backend_cmd
+        .env("AGENT_BROWSER_DASHBOARD", "1")
+        .env("AGENT_BROWSER_DASHBOARD_BACKEND_ONLY", "1")
+        .env("AGENT_BROWSER_DASHBOARD_PORT", backend_port.to_string());
+    configure_detached_process(&mut backend_cmd);
+    let backend = match backend_cmd
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+    {
+        Ok(child) => child,
+        Err(error) => {
+            fail_dashboard_start(
+                format!("Failed to start dashboard backend: {error}"),
+                json_mode,
+            );
+        }
+    };
+    let backend_pid = backend.id();
+    let _ = fs::write(&backend_pid_path, backend_pid.to_string());
+
+    let mut cmd = std::process::Command::new(&exe_path);
+    cmd.env("AGENT_BROWSER_DASHBOARD_INGRESS", "1")
+        .env("AGENT_BROWSER_DASHBOARD_PORT", port.to_string())
+        .env(
+            "AGENT_BROWSER_DASHBOARD_BACKEND_PORT",
+            backend_port.to_string(),
+        );
+    configure_detached_process(&mut cmd);
+
+    match cmd
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+    {
+        Ok(child) => {
+            let pid = child.id();
+            let _ = fs::write(&pid_path, pid.to_string());
+
+            if json_mode {
+                print_json_value(json!({
+                    "success": true,
+                    "data": {
+                        "port": port,
+                        "pid": pid,
+                        "backendPort": backend_port,
+                        "backendPid": backend_pid,
+                        "ingress": "stable",
+                    },
+                }));
+            } else {
+                println!("Dashboard started at http://localhost:{}", port);
+            }
+        }
+        Err(error) => {
+            terminate_process(backend_pid);
+            let _ = fs::remove_file(&backend_pid_path);
+            if json_mode {
+                print_json_error(format!("Failed to start dashboard ingress: {error}"));
+            } else {
+                eprintln!(
+                    "{} Failed to start dashboard ingress: {}",
+                    color::error_indicator(),
+                    error
+                );
+            }
+            exit(1);
+        }
+    }
+}
+
+fn configure_detached_process(cmd: &mut std::process::Command) {
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
@@ -1243,97 +1352,135 @@ fn run_dashboard_start(port: u16, json_mode: bool) {
         const DETACHED_PROCESS: u32 = 0x00000008;
         cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS);
     }
+}
 
-    match cmd
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-    {
-        Ok(child) => {
-            let pid = child.id();
-            let _ = fs::write(&pid_path, pid.to_string());
-
-            if json_mode {
-                print_json_value(json!({
-                    "success": true,
-                    "data": { "port": port, "pid": pid },
-                }));
-            } else {
-                println!("Dashboard started at http://localhost:{}", port);
-            }
-        }
-        Err(e) => {
-            if json_mode {
-                print_json_error(format!("Failed to start dashboard: {}", e));
-            } else {
-                eprintln!(
-                    "{} Failed to start dashboard: {}",
-                    color::error_indicator(),
-                    e
-                );
-            }
-            exit(1);
+fn terminate_process(pid: u32) {
+    #[cfg(unix)]
+    unsafe {
+        libc::kill(pid as i32, libc::SIGTERM);
+    }
+    #[cfg(windows)]
+    unsafe {
+        let handle = OpenProcess(1, 0, pid);
+        if handle != 0 {
+            windows_sys::Win32::System::Threading::TerminateProcess(handle, 0);
+            CloseHandle(handle);
         }
     }
 }
 
 fn run_dashboard_stop(json_mode: bool) {
     let pid_path = get_dashboard_pid_path();
-
-    let pid_str = match fs::read_to_string(&pid_path) {
-        Ok(s) => s,
-        Err(_) => {
-            if json_mode {
-                print_json_value(
-                    json!({ "success": true, "data": { "stopped": false, "reason": "not running" } }),
-                );
-            } else {
-                println!("Dashboard is not running");
-            }
-            return;
-        }
-    };
-
-    let pid: u32 = match pid_str.trim().parse() {
-        Ok(p) => p,
-        Err(_) => {
-            let _ = fs::remove_file(&pid_path);
-            if json_mode {
-                print_json_value(
-                    json!({ "success": true, "data": { "stopped": false, "reason": "invalid pid" } }),
-                );
-            } else {
-                println!("Dashboard is not running");
-            }
-            return;
-        }
-    };
-
-    #[cfg(unix)]
-    {
-        unsafe {
-            libc::kill(pid as i32, libc::SIGTERM);
-        }
+    let backend_pid_path = get_dashboard_backend_pid_path();
+    let ingress_pid = fs::read_to_string(&pid_path)
+        .ok()
+        .and_then(|value| value.trim().parse::<u32>().ok());
+    let backend_pid = fs::read_to_string(&backend_pid_path)
+        .ok()
+        .and_then(|value| value.trim().parse::<u32>().ok());
+    if let Some(pid) = ingress_pid {
+        terminate_process(pid);
     }
-    #[cfg(windows)]
-    {
-        unsafe {
-            let handle = OpenProcess(1, 0, pid); // PROCESS_TERMINATE = 1
-            if handle != 0 {
-                windows_sys::Win32::System::Threading::TerminateProcess(handle, 0);
-                CloseHandle(handle);
-            }
-        }
+    if let Some(backend_pid) = backend_pid {
+        terminate_process(backend_pid);
     }
 
     let _ = fs::remove_file(&pid_path);
+    let _ = fs::remove_file(&backend_pid_path);
 
+    let stopped = ingress_pid.is_some() || backend_pid.is_some();
     if json_mode {
-        print_json_value(json!({ "success": true, "data": { "stopped": true } }));
-    } else {
+        print_json_value(json!({
+            "success": true,
+            "data": {
+                "stopped": stopped,
+                "ingressStopped": ingress_pid.is_some(),
+                "backendStopped": backend_pid.is_some(),
+                "reason": (!stopped).then_some("not running"),
+            }
+        }));
+    } else if stopped {
         println!("{} Dashboard stopped", color::green("✓"));
+    } else {
+        println!("Dashboard is not running");
     }
+}
+
+fn dashboard_argument<'a>(args: &'a [String], flag: &str) -> Result<&'a str, String> {
+    let index = args
+        .iter()
+        .position(|argument| argument == flag)
+        .ok_or_else(|| format!("Missing required dashboard ingress flag: {flag}"))?;
+    args.get(index + 1)
+        .map(String::as_str)
+        .filter(|value| !value.trim().is_empty() && !value.starts_with('-'))
+        .ok_or_else(|| format!("Missing value for dashboard ingress flag: {flag}"))
+}
+
+fn print_dashboard_ingress_result(result: Result<serde_json::Value, String>, json_mode: bool) {
+    match result {
+        Ok(data) => {
+            if json_mode {
+                print_json_value(json!({ "success": true, "data": data }));
+            } else {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&data).unwrap_or_default()
+                );
+            }
+        }
+        Err(error) => {
+            if json_mode {
+                print_json_error(&error);
+            } else {
+                eprintln!("{} {}", color::error_indicator(), error);
+            }
+            exit(1);
+        }
+    }
+}
+
+fn run_dashboard_ingress_command(args: &[String], json_mode: bool) {
+    let action = args.get(2).map(String::as_str).unwrap_or("status");
+    let result = match action {
+        "status" => Ok(dashboard_ingress::dashboard_ingress_status_json()),
+        "stage" => (|| {
+            let expected_revision = dashboard_argument(args, "--expected-revision")?
+                .parse::<u64>()
+                .map_err(|_| "Invalid --expected-revision value".to_string())?;
+            let generation = dashboard_argument(args, "--generation")?;
+            let port = dashboard_argument(args, "--port")?
+                .parse::<u16>()
+                .map_err(|_| "Invalid --port value".to_string())?;
+            let manifest_sha256 = dashboard_argument(args, "--manifest-sha256")?;
+            dashboard_ingress::stage_dashboard_candidate(
+                expected_revision,
+                dashboard_ingress::DashboardBackend::new(generation, port, manifest_sha256),
+            )
+        })(),
+        "commit" => (|| {
+            let expected_revision = dashboard_argument(args, "--expected-revision")?
+                .parse::<u64>()
+                .map_err(|_| "Invalid --expected-revision value".to_string())?;
+            let evidence_path = dashboard_argument(args, "--evidence")?;
+            let body = fs::read(evidence_path).map_err(|error| {
+                format!("Unable to read presentation evidence {evidence_path}: {error}")
+            })?;
+            let evidence = serde_json::from_slice(&body).map_err(|error| {
+                format!("Unable to parse presentation evidence {evidence_path}: {error}")
+            })?;
+            dashboard_ingress::commit_dashboard_candidate(expected_revision, evidence)
+        })(),
+        "rollback" => (|| {
+            let expected_revision = dashboard_argument(args, "--expected-revision")?
+                .parse::<u64>()
+                .map_err(|_| "Invalid --expected-revision value".to_string())?;
+            let generation = dashboard_argument(args, "--generation")?;
+            dashboard_ingress::rollback_dashboard_candidate(expected_revision, generation)
+        })(),
+        unknown => Err(format!("Unknown dashboard ingress action: {unknown}")),
+    };
+    print_dashboard_ingress_result(result, json_mode);
 }
 
 fn run_close_all(flags: &Flags) {
@@ -1579,7 +1726,27 @@ fn main() {
         return;
     }
 
-    // Standalone dashboard server mode
+    // Stable dashboard ingress mode. The ingress process survives backend
+    // generation changes and resolves the selected backend per connection.
+    if env::var("AGENT_BROWSER_DASHBOARD_INGRESS").is_ok() {
+        let port: u16 = env::var("AGENT_BROWSER_DASHBOARD_PORT")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(4848);
+        let backend_port: u16 = env::var("AGENT_BROWSER_DASHBOARD_BACKEND_PORT")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .or_else(|| port.checked_add(1))
+            .unwrap_or(4849);
+        let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+        rt.block_on(dashboard_ingress::run_dashboard_ingress_server(
+            port,
+            backend_port,
+        ));
+        return;
+    }
+
+    // Generation-specific dashboard backend mode.
     if env::var("AGENT_BROWSER_DASHBOARD").is_ok() {
         let port: u16 = env::var("AGENT_BROWSER_DASHBOARD_PORT")
             .ok()
@@ -1667,6 +1834,10 @@ fn main() {
             }
             Some("stop") => {
                 run_dashboard_stop(flags.json);
+                return;
+            }
+            Some("ingress") => {
+                run_dashboard_ingress_command(&clean, flags.json);
                 return;
             }
             Some(unknown) => {

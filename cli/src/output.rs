@@ -5492,7 +5492,7 @@ Examples:
             r##"
 agent-browser dashboard - Observability dashboard
 
-Usage: agent-browser dashboard [start|stop] [options]
+Usage: agent-browser dashboard [start|stop|ingress] [options]
 
 Manage the observability dashboard, a local web UI that shows live
 browser viewports and command activity feeds for all sessions.
@@ -5541,6 +5541,10 @@ recovery, timeout, and cancellation signals.
 Subcommands:
   start [--port <n>]   Start the dashboard server (default port: 4848)
   stop                 Stop the dashboard server
+  ingress status       Show selected, candidate, fallback, and presentation state
+  ingress stage        Validate and stage one shadow dashboard backend
+  ingress commit       Select the staged backend from authenticated journey evidence
+  ingress rollback     Discard the matching staged backend before commit
 
 Running 'agent-browser dashboard' with no subcommand is equivalent to 'dashboard start'.
 
@@ -5563,8 +5567,12 @@ Options:
   --port <n>           Port for the dashboard server (default: 4848)
 
 Environment:
+  AGENT_BROWSER_DASHBOARD_AUTH_DIR
+                       Override the dashboard auth directory for an isolated runtime
   AGENT_BROWSER_DASHBOARD_AUTH_FILE
                        Override the dashboard auth store path
+  AGENT_BROWSER_DASHBOARD_INGRESS_STATE
+                       Override the private dashboard ingress registry path
 
 Global Options:
   --json               Output as JSON
@@ -5572,6 +5580,10 @@ Global Options:
 Examples:
   agent-browser dashboard start
   agent-browser dashboard start --port 8080
+  agent-browser dashboard ingress status
+  agent-browser dashboard ingress stage --expected-revision 1 --generation candidate-1 --port 4850 --manifest-sha256 <sha256>
+  agent-browser dashboard ingress commit --expected-revision 2 --evidence <presentation-evidence.json>
+  agent-browser dashboard ingress rollback --expected-revision 2 --generation candidate-1
   agent-browser dashboard stop
 "##
         }
@@ -6752,6 +6764,7 @@ Chat (AI):
 Dashboard:
   dashboard [start]          Start the dashboard server (default port: 4848)
   dashboard start --port <n> Start on a specific port
+  dashboard ingress status  Show stable-ingress and presentation readiness
   dashboard stop             Stop the dashboard server
   Linux repo installs can run bash scripts/install-dashboard-user-service.sh
   to enable the dashboard, recurring runtime-health interlock, and daily

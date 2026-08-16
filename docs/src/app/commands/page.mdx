@@ -1189,8 +1189,22 @@ runtime-state ports are visible before an attach attempt.
 ```bash
 agent-browser dashboard [start]       # Start the dashboard server (default port: 4848)
 agent-browser dashboard start --port <n>  # Start on a specific port
+agent-browser dashboard ingress status   # Show selection and presentation readiness
 agent-browser dashboard stop          # Stop the dashboard server
 ```
+
+`dashboard start` reserves the next TCP port for a generation-specific
+backend and keeps the requested port as stable ingress. Upgrade coordinators
+can validate and stage a shadow endpoint with `dashboard ingress stage`,
+select it with `dashboard ingress commit --evidence <path>`, or discard it
+before commit with `dashboard ingress rollback`. Every mutation requires the
+current `--expected-revision`. Stage and commit both probe the candidate
+runtime manifest; commit also requires ready authenticated operator-journey
+evidence. `dashboard ingress status` reports selected, candidate, fallback,
+`dashboardIngressReady`, `operatorJourneyReady`, and the matching presentation
+receipt. Set `AGENT_BROWSER_DASHBOARD_INGRESS_STATE` only to isolate the
+private registry for a dedicated runtime. Set
+`AGENT_BROWSER_DASHBOARD_AUTH_DIR` for fixture-owned authentication files.
 
 For Linux hosts where an ingress route depends on the dashboard being
 available after login or restart, install the user-scoped systemd unit:
@@ -1199,8 +1213,8 @@ available after login or restart, install the user-scoped systemd unit:
 bash scripts/install-dashboard-user-service.sh
 ```
 
-Set `AGENT_BROWSER_DASHBOARD_PORT` before running the script to use a port
-other than `4848`.
+Set `AGENT_BROWSER_DASHBOARD_PORT` before running the script to use an ingress
+port other than `4848`. The next port must remain available for the backend.
 
 The installer also enables the user-scoped
 <code>agent-browser-runtime-interlock.timer</code>. It runs after boot and
