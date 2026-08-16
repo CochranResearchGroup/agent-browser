@@ -1,6 +1,7 @@
 use rust_embed::Embed;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
+use std::path::Path;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
@@ -63,6 +64,23 @@ pub(crate) fn runtime_manifest_json() -> Value {
     RUNTIME_MANIFEST
         .get_or_init(runtime_manifest_json_uncached)
         .clone()
+}
+
+pub(crate) fn runtime_manifest_json_for_executable(path: &Path) -> Result<Value, String> {
+    let bytes = std::fs::read(path).map_err(|error| {
+        format!(
+            "Unable to read dashboard runtime executable {}: {error}",
+            path.display()
+        )
+    })?;
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    let mut manifest = runtime_manifest_json();
+    manifest["executable"] = json!({
+        "path": path.display().to_string(),
+        "sha256": format!("{:x}", hasher.finalize()),
+    });
+    Ok(manifest)
 }
 
 fn runtime_manifest_json_uncached() -> Value {
@@ -5697,7 +5715,8 @@ fn content_type_for_dashboard_asset(ext: &str) -> &'static str {
 #[cfg(test)]
 mod dashboard_asset_tests {
     use super::{
-        content_type_for_dashboard_asset, runtime_manifest_json, serve_embedded_file,
+        content_type_for_dashboard_asset, runtime_manifest_json,
+        runtime_manifest_json_for_executable, serve_embedded_file,
         try_acquire_frame_snapshot_permit,
     };
 
@@ -5783,6 +5802,31 @@ mod dashboard_asset_tests {
             .unwrap()
             .iter()
             .any(|feature| feature.as_str() == Some("workspace.noRetainedLiveRail")));
+    }
+
+    #[test]
+    fn runtime_manifest_can_bind_a_staged_candidate_executable() {
+        let candidate = std::env::temp_dir().join(format!(
+            "agent-browser-runtime-manifest-candidate-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::write(&candidate, b"staged candidate bytes").unwrap();
+
+        let manifest = runtime_manifest_json_for_executable(&candidate).unwrap();
+
+        assert_eq!(
+            manifest["executable"]["path"],
+            candidate.display().to_string()
+        );
+        assert_eq!(
+            manifest["executable"]["sha256"]
+                .as_str()
+                .unwrap_or_default()
+                .len(),
+            64
+        );
+        assert_ne!(manifest, runtime_manifest_json());
+        std::fs::remove_file(candidate).unwrap();
     }
 
     #[test]

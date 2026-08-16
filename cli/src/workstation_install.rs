@@ -3735,12 +3735,14 @@ fn prepare_dashboard_candidate_for_transaction(
         .dashboard_port
         .checked_add(2)
         .ok_or_else(|| "dashboard candidate shadow port is unavailable".to_string())?;
+    let candidate_binary = prepared.staged.generation_path.join("bin/agent-browser");
     let backend = crate::dashboard_ingress::DashboardBackend::new(
         prepared.transaction.candidate_generation_id.clone(),
         shadow_port,
-        crate::dashboard_ingress::dashboard_runtime_manifest_sha256(),
+        crate::dashboard_ingress::dashboard_runtime_manifest_sha256_for_executable(
+            &candidate_binary,
+        )?,
     );
-    let candidate_binary = prepared.staged.generation_path.join("bin/agent-browser");
     let child = Command::new(&candidate_binary)
         .env("AGENT_BROWSER_DASHBOARD", "1")
         .env("AGENT_BROWSER_DASHBOARD_BACKEND_ONLY", "1")

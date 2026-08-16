@@ -558,6 +558,16 @@ pub(crate) fn dashboard_runtime_manifest_sha256() -> String {
     format!("{:x}", Sha256::digest(manifest.to_string().as_bytes()))
 }
 
+pub(crate) fn dashboard_runtime_manifest_sha256_for_executable(
+    executable: &Path,
+) -> Result<String, String> {
+    let manifest = crate::native::stream::runtime_manifest_json_for_executable(executable)?;
+    Ok(format!(
+        "{:x}",
+        Sha256::digest(manifest.to_string().as_bytes())
+    ))
+}
+
 /// Projects public-safe selector and presentation readiness for status and doctor.
 pub(crate) fn dashboard_ingress_status_json() -> serde_json::Value {
     dashboard_ingress_status_for_path(&DashboardIngressRepository::default_path())

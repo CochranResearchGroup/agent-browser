@@ -18,7 +18,10 @@ pub(crate) use dashboard::{
     dashboard_service_status_with_transports, service_status_dashboard_cli_fallback_fixture,
     service_status_handler_fixture, service_status_http_body_fixture,
 };
-pub(crate) use http::{runtime_manifest_json, service_profile_lookup_response_for_state};
+pub(crate) use http::{
+    runtime_manifest_json, runtime_manifest_json_for_executable,
+    service_profile_lookup_response_for_state,
+};
 #[cfg(test)]
 pub(crate) use http::{
     service_request_adapter_fixture, service_status_http_fixture, service_status_http_with_relay,
