@@ -1393,7 +1393,7 @@ fn presentation_readback(
     {
         let mut aliases = vec![format!("browser:{}", browser.id)];
         for stream in &browser.view_streams {
-            aliases.push(format!("view-stream:{}", stream.id));
+            aliases.push(scoped_view_stream_alias(&browser.id, &stream.id));
             if let Some(route_id) = stream.route_id.as_deref() {
                 aliases.push(format!("route:{route_id}"));
             }
@@ -1500,6 +1500,12 @@ fn presentation_readback(
         source_revision: service_revision.to_string(),
         observations,
     }
+}
+
+fn scoped_view_stream_alias(browser_id: &str, stream_id: &str) -> String {
+    let payload = serde_json::to_string(&(browser_id, stream_id))
+        .expect("browser and view-stream identifiers must serialize");
+    format!("view-stream:{}", sha256_text(&payload))
 }
 
 fn value_readback(
@@ -2280,6 +2286,56 @@ mod tests {
             classify_runtime(&candidate.evidence).classification,
             RuntimeClassification::CooperativeLiveOwner
         );
+    }
+
+    #[test]
+    fn presentation_stream_aliases_are_scoped_to_their_browser() {
+        use crate::native::service_model::{BrowserProcess, ServiceState, ViewStream};
+
+        let mut state = ServiceState::default();
+        for browser_id in ["session:p116-alpha", "session:p116-beta"] {
+            state.browsers.insert(
+                browser_id.to_string(),
+                BrowserProcess {
+                    id: browser_id.to_string(),
+                    view_streams: vec![ViewStream {
+                        id: "remote-headed-view".to_string(),
+                        ..ViewStream::default()
+                    }],
+                    ..BrowserProcess::default()
+                },
+            );
+        }
+
+        let readback = presentation_readback(&state, "service-revision");
+        let alpha = readback
+            .observations
+            .iter()
+            .find(|observation| {
+                observation.logical_browser_id_hint.as_deref() == Some("session:p116-alpha")
+            })
+            .expect("alpha presentation observation");
+        let beta = readback
+            .observations
+            .iter()
+            .find(|observation| {
+                observation.logical_browser_id_hint.as_deref() == Some("session:p116-beta")
+            })
+            .expect("beta presentation observation");
+
+        assert!(alpha.aliases.contains(&scoped_view_stream_alias(
+            "session:p116-alpha",
+            "remote-headed-view"
+        )));
+        assert!(beta.aliases.contains(&scoped_view_stream_alias(
+            "session:p116-beta",
+            "remote-headed-view"
+        )));
+        assert!(alpha
+            .aliases
+            .iter()
+            .filter(|alias| alias.starts_with("view-stream:"))
+            .all(|alias| !beta.aliases.contains(alias)));
     }
 
     #[test]
