@@ -1130,6 +1130,41 @@ This is a partial Slice C checkpoint, not Slice C acceptance. The read-only
 adapters for the ten current sources and the installer ordering gate before
 payload materialization remain open.
 
+### 2026-08-15 | Slice C Source Acceptance
+
+Slice C is accepted at the source and isolated-fixture boundary:
+
+- ten observation-only adapters now read service browser records,
+  runtime-profile state, legacy profile-owner references, named supervisor
+  health, daemon metadata, operating-system process identity, profile-lock and
+  DevTools evidence, bounded CDP browser and target identity, display proof
+  records, and view-stream, route-pool, Guacamole, and handoff records;
+- opaque browser, profile, session, PID, CDP, display, route, stream, and
+  handoff aliases join duplicated observations into one candidate, while
+  conflicting profile digests or logical owners remain one blocked candidate;
+- P108 process assessment is reused directly. The shared P111 and P116 profile
+  identity seam canonicalizes symlinks and missing leaves before hashing, and
+  no private path is retained in a transaction;
+- a cooperative live daemon requires exactly one owner generation. Current
+  source does not yet have P111's owner registry, so live cooperative transfer
+  remains `insufficient_evidence` rather than receiving interim authority;
+- real-host workstation apply collects two rounds and atomically persists the
+  transaction before user-unit quiescence or payload staging. Incomplete,
+  changing, conflicting, or owner-generation-poor evidence stops with the old
+  selected generation untouched;
+- successful workstation JSON exposes the private
+  `runtimeCensusTransaction` receipt path.
+
+Validation includes ten runtime-adoption tests, canonical-profile and bounded
+CDP digest tests, a private receipt ordering test proving no payload path exists
+at census commit, focused workstation tests, strict Clippy, Rust formatting,
+the source-free workstation and host fixtures, fresh-VM harness, Guacamole and
+PostgreSQL fixtures, route-user sync, documentation contract check, and docs
+production build. No installed or live runtime state was changed.
+
+The next source packet is Slice D two-phase transfer and orphan adoption. It
+must consume P111 owner generations rather than creating a competing registry.
+
 ## Planning Evidence
 
 - CodeGraph was healthy on 2026-08-15 with 553 files, 19,654 nodes, and 68,296

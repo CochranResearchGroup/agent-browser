@@ -4,6 +4,52 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 160 | 2026-08-15
+
+Scope: complete Plan 0116 Slice C at the source and isolated-fixture boundary
+without changing installed or live runtime state.
+
+Actions:
+
+- added observation-only adapters for all ten frozen census sources and joined
+  duplicate browser, profile, session, PID, CDP, display, route, stream, and
+  handoff aliases into one exact runtime candidate;
+- reused P108 process ownership assessment and added a shared P111-compatible
+  canonical profile identity digest that converges existing symlinks and
+  not-yet-created leaves without persisting private paths;
+- added bounded `/json/version` and `/json/list` probes that retain only browser
+  identity and target-set digests;
+- required one owner generation before classifying a cooperative live daemon,
+  so current source remains fail-closed until P111 lands its owner registry;
+- inserted the stable two-round census before user-unit quiescence and payload
+  materialization, with a private atomic transaction receipt for both stable
+  and blocked outcomes;
+- exposed `runtimeCensusTransaction` in successful workstation JSON and updated
+  CLI help, README, the repository skill, and installation docs.
+
+Validation:
+
+- ten focused runtime-adoption tests pass, including all-source join,
+  duplicate-PID ambiguity, two-round drift, exact-once classification, and
+  source ordering;
+- canonical profile identity and bounded CDP digest tests pass;
+- the pre-payload private transaction test passes and proves no generation,
+  selector, or binary path exists when the census receipt is committed;
+- focused workstation tests, strict Clippy, Rust formatting, source-free
+  workstation install, host-provision, fresh-VM harness, Guacamole asset,
+  PostgreSQL durability, route-user sync, remote-view handoff docs, and docs
+  production build pass;
+- no installed payload, live daemon, browser, profile, route, display,
+  dashboard, supervisor, or external state was changed.
+
+Result:
+
+- Slice C is accepted at the source and isolated-fixture boundary;
+- current live cooperative owners remain blocked until P111 supplies canonical
+  owner generations, which is a safe `insufficient_evidence` outcome;
+- the next packet is Slice D provider-free two-phase transfer and orphan
+  adoption.
+
 ## Turn 159 | 2026-08-15
 
 Scope: begin Plan 0116 Slice C with a provider-free stable-census engine and no

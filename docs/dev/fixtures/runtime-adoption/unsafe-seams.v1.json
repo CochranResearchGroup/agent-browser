@@ -4,13 +4,14 @@
     {
       "fixtureId": "workstation-payload-before-runtime-preservation",
       "sourceAnchors": [
-        "cli/src/workstation_install.rs:233 run_workstation_install apply branch",
-        "cli/src/workstation_install.rs:240 materialize_payload before reconciliation",
-        "cli/src/workstation_install.rs:2189 support commit",
-        "cli/src/workstation_install.rs:2193 stable binary replacement"
+        "cli/src/workstation_install.rs require_stable_runtime_census before quiesce",
+        "cli/src/workstation_install.rs materialize_payload after census",
+        "cli/src/workstation_install.rs generation commit before runtime transfer",
+        "cli/src/workstation_install.rs stable selector replacement"
       ],
       "currentSequence": [
         "plan_validated",
+        "runtime_census_stable",
         "selected_units_quiesced",
         "payload_commit",
         "host_preparation",
@@ -22,7 +23,7 @@
         "runtime_preservation_proven",
         "payload_commit"
       ],
-      "expectedRedReason": "payload_commit_precedes_runtime_preservation"
+      "expectedRedReason": "payload_commit_lacks_runtime_preservation"
     },
     {
       "fixtureId": "verified-orphan-requires-prepared-handoff",

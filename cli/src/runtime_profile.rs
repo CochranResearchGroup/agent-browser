@@ -175,6 +175,54 @@ pub fn runtime_profile_user_data_dir(name: &str) -> Result<PathBuf, String> {
     Ok(runtime_profile_root(name)?.join(USER_DATA_DIR))
 }
 
+/// Resolve the shared P111 and P116 canonical writable-profile identity.
+///
+/// Existing symlinks are resolved. A not-yet-created leaf is anchored to its
+/// nearest existing canonical ancestor. Only the SHA-256 digest leaves this
+/// function, so private profile paths do not enter census transactions.
+pub(crate) fn canonical_profile_identity_digest(path: &Path) -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+
+    if path.as_os_str().is_empty() {
+        return Err("profile identity path is empty".to_string());
+    }
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map_err(|error| format!("Could not resolve profile identity base: {error}"))?
+            .join(path)
+    };
+    let mut existing = absolute.as_path();
+    let mut missing = Vec::new();
+    let canonical_base = loop {
+        match fs::canonicalize(existing) {
+            Ok(canonical) => break canonical,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                let name = existing.file_name().ok_or_else(|| {
+                    "profile identity has no canonical existing ancestor".to_string()
+                })?;
+                missing.push(name.to_os_string());
+                existing = existing.parent().ok_or_else(|| {
+                    "profile identity has no canonical existing ancestor".to_string()
+                })?;
+            }
+            Err(error) => return Err(format!("Could not canonicalize profile identity: {error}")),
+        }
+    };
+    let mut canonical = canonical_base;
+    for component in missing.iter().rev() {
+        canonical.push(component);
+    }
+    let identity = canonical.to_string_lossy().to_string();
+    #[cfg(windows)]
+    let identity = identity.to_lowercase();
+    Ok(format!(
+        "{:x}",
+        Sha256::digest(format!("agent-browser.profile-identity.v1\n{identity}").as_bytes())
+    ))
+}
+
 pub fn runtime_profile_state_path(name: &str) -> Result<PathBuf, String> {
     Ok(runtime_profile_root(name)?.join(RUNTIME_STATE_FILENAME))
 }
@@ -615,6 +663,26 @@ fn fetch_runtime_targets(port: u16) -> Result<Vec<RuntimeTarget>, String> {
         .collect())
 }
 
+/// Return opaque, bounded CDP browser-identity and target-set digests for
+/// runtime census comparison. Raw endpoints, URLs, titles, and page data are
+/// never returned to the adoption transaction.
+pub(crate) fn bounded_cdp_identity_and_target_digest(
+    port: u16,
+) -> Result<(String, String), String> {
+    use sha2::{Digest, Sha256};
+
+    let version = http_get_json(port, "/json/version")?;
+    let targets = http_get_json(port, "/json/list")?;
+    let version_bytes = serde_json::to_vec(&version)
+        .map_err(|error| format!("Failed to serialize CDP identity: {error}"))?;
+    let target_bytes = serde_json::to_vec(&targets)
+        .map_err(|error| format!("Failed to serialize CDP target set: {error}"))?;
+    Ok((
+        format!("{:x}", Sha256::digest(version_bytes)),
+        format!("{:x}", Sha256::digest(target_bytes)),
+    ))
+}
+
 fn http_get_json(port: u16, path: &str) -> Result<Value, String> {
     let mut stream = TcpStream::connect_timeout(
         &format!("127.0.0.1:{port}")
@@ -747,6 +815,27 @@ mod tests {
         assert!(validate_runtime_profile_name("").is_err());
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn canonical_profile_identity_converges_symlink_and_missing_leaf_aliases() {
+        use std::os::unix::fs::symlink;
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-profile-identity-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let canonical_root = root.join("canonical");
+        let alias_root = root.join("alias");
+        fs::create_dir_all(&canonical_root).unwrap();
+        symlink(&canonical_root, &alias_root).unwrap();
+        let canonical =
+            canonical_profile_identity_digest(&canonical_root.join("user-data")).unwrap();
+        let alias = canonical_profile_identity_digest(&alias_root.join("user-data")).unwrap();
+        assert_eq!(canonical, alias);
+        assert_eq!(canonical.len(), 64);
+        fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn test_legacy_runtime_state_without_process_identity_deserializes() {
         let state: RuntimeState = serde_json::from_value(serde_json::json!({
@@ -785,6 +874,38 @@ mod tests {
 
         let json = http_get_json(port, "/json/list").unwrap();
         assert_eq!(json[0]["id"], "page-1");
+    }
+
+    #[test]
+    fn bounded_cdp_census_probe_returns_only_identity_digests() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        thread::spawn(move || {
+            for _ in 0..2 {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut request = [0u8; 1024];
+                let count = stream.read(&mut request).unwrap();
+                let request = String::from_utf8_lossy(&request[..count]);
+                let body = if request.contains("/json/version") {
+                    r#"{"Browser":"Chrome/140","webSocketDebuggerUrl":"ws://127.0.0.1/devtools/browser/private"}"#
+                } else {
+                    r#"[{"id":"page-1","type":"page","title":"Private","url":"https://example.com/private"}]"#
+                };
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\nContent-Type: application/json\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                stream.write_all(response.as_bytes()).unwrap();
+            }
+        });
+
+        let (browser_digest, target_digest) = bounded_cdp_identity_and_target_digest(port).unwrap();
+        assert_eq!(browser_digest.len(), 64);
+        assert_eq!(target_digest.len(), 64);
+        assert_ne!(browser_digest, target_digest);
+        assert!(!browser_digest.contains("private"));
+        assert!(!target_digest.contains("private"));
     }
 
     #[test]

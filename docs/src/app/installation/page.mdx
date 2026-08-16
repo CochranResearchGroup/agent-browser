@@ -97,7 +97,18 @@ The first apply uses one <code>sudo -v</code> authorization boundary for host
 preparation. Before authorization or payload staging, real-host preflight
 requires at least 6 GiB of free disk capacity. JSON output exposes
 <code>hostPlan.availableDiskBytes</code>, <code>minimumDiskBytes</code>, and
-<code>diskSpaceReady</code>. If preparation adds the <code>agent-browser</code> or
+<code>diskSpaceReady</code>. Real-host apply then records two matching read-only
+runtime census rounds before stopping user units or staging a payload. The
+census joins service state, runtime-profile state, named supervisors, daemon
+and process-instance evidence, bounded CDP browser and target digests,
+displays, routes, streams, and durable handoffs. Missing, changing, or
+conflicting evidence fails closed without replacing the selected generation.
+Successful JSON output exposes <code>runtimeCensusTransaction</code>, the private
+receipt under
+<code>~/.agent-browser/runtime-adoption/transactions/</code> that contains the
+census digest and per-runtime classifications. Until the shared profile-owner
+registry supplies an owner generation, a live managed browser is deliberately
+insufficient evidence and blocks apply; the installer never kills it. If preparation adds the <code>agent-browser</code> or
 <code>docker</code> group to the current user, the command exits with status 75
 and a <code>relogin_required</code> JSON state. Log out and back in or reboot,
 then rerun the same apply command. With both groups effective, apply starts the

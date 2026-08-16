@@ -7,8 +7,9 @@
 //! runtime. Host provisioning stops with a resumable status when a fresh login
 //! is required. Runtime reconciliation consumes the selected generation and
 //! activates services only after canonical route projection and final doctor
-//! readiness. Real-host preflight also requires enough free disk capacity
-//! before sudo or payload mutation begins. Failed reconciliation restores the
+//! readiness. Real-host apply requires a stable two-round runtime census before
+//! unit quiescence or payload staging. Preflight also requires enough free disk
+//! capacity before sudo or payload mutation begins. Failed reconciliation restores the
 //! exact prior active state of managed user units and writes a private
 //! diagnostic receipt.
 
@@ -161,6 +162,7 @@ struct WorkstationInstallReport {
     phases: Vec<&'static str>,
     host_prepared: bool,
     session_refresh_required: bool,
+    runtime_census_transaction: Option<String>,
     reconcile_receipt: Option<String>,
     next_action: String,
 }
@@ -239,6 +241,15 @@ fn run_workstation_install(args: &[String]) {
         None
     };
     let mut apply_quiesced_user_units = None;
+    let mut runtime_census_transaction = None;
+
+    if parsed.mode == InstallMode::Apply && !isolated_root {
+        match require_stable_runtime_census(&root, &paths, &parsed) {
+            Ok(path) => runtime_census_transaction = Some(path.display().to_string()),
+            Err(error) => fail(&error, parsed.json),
+        }
+        phases.push("runtime-census-stable");
+    }
 
     let mutated = if parsed.mode == InstallMode::Apply {
         if !isolated_root {
@@ -350,6 +361,7 @@ fn run_workstation_install(args: &[String]) {
         phases,
         host_prepared,
         session_refresh_required,
+        runtime_census_transaction,
         reconcile_receipt,
         next_action,
     };
@@ -2004,6 +2016,145 @@ fn write_private_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String
     set_private_file(path)
 }
 
+fn require_stable_runtime_census(
+    root: &Path,
+    paths: &InstallPaths,
+    args: &WorkstationInstallArgs,
+) -> Result<PathBuf, String> {
+    require_stable_runtime_census_with(
+        root,
+        paths,
+        args,
+        crate::runtime_adoption::collect_host_runtime_census_round,
+    )
+}
+
+fn require_stable_runtime_census_with(
+    root: &Path,
+    paths: &InstallPaths,
+    args: &WorkstationInstallArgs,
+    mut collect_round: impl FnMut() -> Result<crate::runtime_adoption::RuntimeCensusRound, String>,
+) -> Result<PathBuf, String> {
+    use crate::runtime_adoption::{
+        build_stable_runtime_census, persist_runtime_census, UpgradeCheckpoint, UpgradeTransaction,
+        UpgradeTransactionState, RUNTIME_ADOPTION_SCHEMA_VERSION,
+    };
+
+    let current_exe = env::current_exe()
+        .map_err(|error| format!("Unable to resolve candidate executable: {error}"))?;
+    let binary_sha256 = workstation_file_sha256(&current_exe)?;
+    let rendered_units = render_units(
+        &paths.binary.display().to_string(),
+        &paths.current_selector.join("support"),
+        &paths.guacamole_secret_file,
+        args.dashboard_port,
+    );
+    let support_manifest = render_manifest(args, &binary_sha256, &rendered_units);
+    let support_manifest_sha256 = workstation_bytes_sha256(support_manifest.as_bytes());
+    let candidate_generation_id = format!(
+        "{}-{}-{}",
+        env!("CARGO_PKG_VERSION"),
+        &binary_sha256[..12],
+        &support_manifest_sha256[..12]
+    );
+    let transaction_id = format!("upgrade-{}", uuid::Uuid::new_v4());
+    let transaction_path = root
+        .join(".agent-browser/runtime-adoption/transactions")
+        .join(format!("{transaction_id}.json"));
+    let recorded_at = runtime_adoption_timestamp();
+    let mut transaction = UpgradeTransaction {
+        schema_version: RUNTIME_ADOPTION_SCHEMA_VERSION.to_string(),
+        transaction_id,
+        requested_by: "workstation-installer".to_string(),
+        old_generation_id: selected_generation_id(paths),
+        candidate_generation_id,
+        candidate_binary_sha256: binary_sha256,
+        candidate_support_manifest_sha256: support_manifest_sha256,
+        runtime_census_digest: None,
+        runtime_migrations: Vec::new(),
+        state: UpgradeTransactionState::Planned,
+        revision: 0,
+        checkpoints: vec![UpgradeCheckpoint {
+            name: "census_planned".to_string(),
+            transaction_revision: 0,
+            recorded_at: recorded_at.clone(),
+        }],
+        dashboard_validation_summary: None,
+        presentation_validation_summary: None,
+        terminal_result: None,
+        stop_reason: None,
+    };
+
+    let census_result = collect_round().and_then(|first| {
+        collect_round().and_then(|second| build_stable_runtime_census(&first, &second))
+    });
+    let census = match census_result {
+        Ok(census) => census,
+        Err(error) => {
+            block_incomplete_runtime_census(&mut transaction, &recorded_at);
+            write_private_json_atomic(&transaction_path, &transaction)?;
+            return Err(format!(
+                "runtime census is incomplete; payload was not changed; transaction {}: {error}",
+                transaction_path.display()
+            ));
+        }
+    };
+    persist_runtime_census(&mut transaction, &census, &recorded_at);
+    write_private_json_atomic(&transaction_path, &transaction)?;
+    if !census.activation_allowed {
+        return Err(format!(
+            "runtime census is ambiguous; payload was not changed; inspect transaction {}",
+            transaction_path.display()
+        ));
+    }
+    Ok(transaction_path)
+}
+
+fn block_incomplete_runtime_census(
+    transaction: &mut crate::runtime_adoption::UpgradeTransaction,
+    recorded_at: &str,
+) {
+    transaction.revision = transaction.revision.saturating_add(1);
+    transaction.state = crate::runtime_adoption::UpgradeTransactionState::BlockedAmbiguousRuntime;
+    transaction.stop_reason = Some("runtime_census_incomplete".to_string());
+    transaction
+        .checkpoints
+        .push(crate::runtime_adoption::UpgradeCheckpoint {
+            name: "census_blocked_incomplete".to_string(),
+            transaction_revision: transaction.revision,
+            recorded_at: recorded_at.to_string(),
+        });
+}
+
+fn selected_generation_id(paths: &InstallPaths) -> Option<String> {
+    fs::read_link(&paths.current_selector)
+        .ok()
+        .and_then(|target| {
+            target
+                .file_name()
+                .map(|name| name.to_string_lossy().to_string())
+        })
+}
+
+fn runtime_adoption_timestamp() -> String {
+    time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_else(|_| "timestamp-unavailable".to_string())
+}
+
+fn write_private_json_atomic<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(display_io("create receipt directory", parent))?;
+        set_private_directory(parent)?;
+    }
+    let staged = path.with_extension(format!("tmp-{}", uuid::Uuid::new_v4()));
+    let body = serde_json::to_vec_pretty(value)
+        .map_err(|error| format!("Unable to serialize runtime adoption transaction: {error}"))?;
+    fs::write(&staged, body).map_err(display_io("stage runtime adoption transaction", &staged))?;
+    set_private_file(&staged)?;
+    fs::rename(&staged, path).map_err(display_io("commit runtime adoption transaction", path))
+}
+
 struct WorkstationLock {
     path: PathBuf,
 }
@@ -3212,6 +3363,65 @@ mod tests {
         assert!(manifest.contains(r#""controllerAssets""#));
         assert!(manifest.contains(r#""guacamoleBundleManifestSha256""#));
         assert!(manifest.contains(r#""agent-browser-runtime-interlock.timer""#));
+    }
+
+    #[test]
+    fn stable_census_receipt_commits_before_any_payload_path_exists() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-census-gate-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let paths = install_paths(&root);
+        let args = WorkstationInstallArgs {
+            mode: InstallMode::Apply,
+            json: true,
+            dashboard_port: 4848,
+            guacamole_port: 8092,
+        };
+        let round = crate::runtime_adoption::collect_runtime_census_round(
+            11,
+            crate::runtime_adoption::runtime_census_sources()
+                .into_iter()
+                .map(
+                    |source| crate::runtime_adoption::RuntimeCensusSourceSnapshot {
+                        source,
+                        source_revision: format!("{source:?}-stable"),
+                        logical_browser_ids: Vec::new(),
+                    },
+                )
+                .collect(),
+            Vec::new(),
+        )
+        .unwrap();
+        let mut calls = 0usize;
+        let receipt = require_stable_runtime_census_with(&root, &paths, &args, || {
+            calls += 1;
+            Ok(round.clone())
+        })
+        .unwrap();
+
+        assert_eq!(calls, 2);
+        assert!(receipt.is_file());
+        assert!(!paths.generations_dir.exists());
+        assert!(!paths.current_selector.exists());
+        assert!(!paths.binary.exists());
+        let transaction: Value = serde_json::from_slice(&fs::read(&receipt).unwrap()).unwrap();
+        assert_eq!(transaction["state"], "census_stable");
+        assert_eq!(transaction["runtimeMigrations"], serde_json::json!([]));
+        assert_eq!(
+            transaction["runtimeCensusDigest"].as_str().unwrap().len(),
+            64
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                fs::metadata(&receipt).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

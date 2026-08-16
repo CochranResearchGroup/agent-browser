@@ -231,16 +231,17 @@ pub(crate) struct RuntimeCensusSourceEntry {
     pub(crate) authority_limit: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum EvidenceAgreement {
     Match,
     Mismatch,
     Missing,
+    #[default]
     NotApplicable,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct RuntimeEvidenceSummary {
     pub(crate) browser_live: bool,
@@ -285,6 +286,29 @@ pub(crate) struct RuntimeCensusSourceSnapshot {
     pub(crate) logical_browser_ids: Vec<String>,
 }
 
+/// One source-specific, observation-only view of a possible runtime.
+///
+/// Aliases are opaque join keys such as logical browser, runtime profile,
+/// session, process-instance, or CDP endpoint digests. Raw profile paths,
+/// provider URLs, tokens, and page data must never enter this structure.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct RuntimeCensusObservation {
+    pub(crate) logical_browser_id_hint: Option<String>,
+    pub(crate) aliases: Vec<String>,
+    pub(crate) profile_identity_digest: Option<String>,
+    pub(crate) evidence: RuntimeEvidenceSummary,
+}
+
+/// Stable readback from exactly one frozen census source.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct RuntimeCensusSourceReadback {
+    pub(crate) source: RuntimeCensusSource,
+    pub(crate) source_revision: String,
+    pub(crate) observations: Vec<RuntimeCensusObservation>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct RuntimeCensusCandidate {
@@ -321,6 +345,967 @@ pub(crate) struct StableRuntimeCensus {
     pub(crate) registry_revision: u64,
     pub(crate) activation_allowed: bool,
     pub(crate) records: Vec<RuntimeCensusRecord>,
+}
+
+/// Join the ten source adapters without treating any one adapter as global
+/// runtime authority. Duplicate aliases converge to one candidate. Conflicting
+/// profile identities remain one candidate with mismatch evidence, so the
+/// later classification blocks activation rather than granting ownership.
+pub(crate) fn adapt_runtime_census_readbacks(
+    registry_revision: u64,
+    readbacks: Vec<RuntimeCensusSourceReadback>,
+) -> Result<RuntimeCensusRound, String> {
+    let expected_sources = runtime_census_sources()
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    let actual_sources = readbacks
+        .iter()
+        .map(|readback| readback.source)
+        .collect::<BTreeSet<_>>();
+    if readbacks.len() != expected_sources.len() || actual_sources != expected_sources {
+        return Err("runtime census source readback set is not closed".to_string());
+    }
+
+    let mut flattened = Vec::<(RuntimeCensusSource, RuntimeCensusObservation)>::new();
+    let mut source_revisions = BTreeMap::new();
+    for readback in readbacks {
+        if readback.source_revision.trim().is_empty() {
+            return Err("runtime census source revision is missing".to_string());
+        }
+        source_revisions.insert(readback.source, readback.source_revision);
+        for mut observation in readback.observations {
+            observation.aliases.sort();
+            observation.aliases.dedup();
+            if observation.aliases.is_empty()
+                || observation
+                    .aliases
+                    .iter()
+                    .any(|alias| alias.trim().is_empty())
+                || observation
+                    .profile_identity_digest
+                    .as_deref()
+                    .is_some_and(|digest| !is_sha256(digest))
+                || observation
+                    .logical_browser_id_hint
+                    .as_deref()
+                    .is_some_and(|hint| hint.trim().is_empty())
+            {
+                return Err("runtime census observation contains invalid join evidence".to_string());
+            }
+            flattened.push((readback.source, observation));
+        }
+    }
+
+    let mut parent = (0..flattened.len()).collect::<Vec<_>>();
+    let mut aliases = BTreeMap::<String, usize>::new();
+    for (index, (_, observation)) in flattened.iter().enumerate() {
+        let mut join_keys = observation.aliases.clone();
+        if let Some(hint) = observation.logical_browser_id_hint.as_deref() {
+            join_keys.push(format!("logical:{hint}"));
+        }
+        for alias in join_keys {
+            if let Some(other) = aliases.insert(alias, index) {
+                union_observations(&mut parent, index, other);
+            }
+        }
+    }
+
+    let mut grouped = BTreeMap::<usize, Vec<usize>>::new();
+    for index in 0..flattened.len() {
+        let root = find_observation_root(&mut parent, index);
+        grouped.entry(root).or_default().push(index);
+    }
+
+    let mut candidates = Vec::with_capacity(grouped.len());
+    let mut sources_by_runtime = BTreeMap::<String, BTreeSet<RuntimeCensusSource>>::new();
+    for indexes in grouped.values() {
+        let hints = indexes
+            .iter()
+            .filter_map(|index| flattened[*index].1.logical_browser_id_hint.clone())
+            .collect::<BTreeSet<_>>();
+        let group_aliases = indexes
+            .iter()
+            .flat_map(|index| flattened[*index].1.aliases.iter().cloned())
+            .collect::<BTreeSet<_>>();
+        let logical_browser_id = hints.iter().next().cloned().unwrap_or_else(|| {
+            let payload = group_aliases.iter().cloned().collect::<Vec<_>>().join("\n");
+            format!("observed-{}", &sha256_text(&payload)[..16])
+        });
+        let observed_sources = indexes
+            .iter()
+            .map(|index| flattened[*index].0)
+            .collect::<BTreeSet<_>>();
+        let profile_digests = indexes
+            .iter()
+            .filter_map(|index| flattened[*index].1.profile_identity_digest.clone())
+            .collect::<BTreeSet<_>>();
+        let profile_identity_digest = match profile_digests.len() {
+            1 => profile_digests.iter().next().cloned().expect("one digest"),
+            0 => sha256_text(&format!("unidentified-profile:{logical_browser_id}")),
+            _ => sha256_text(
+                &profile_digests
+                    .iter()
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            ),
+        };
+        let mut evidence =
+            merge_evidence(indexes.iter().map(|index| &flattened[*index].1.evidence));
+        if profile_digests.len() > 1 || hints.len() > 1 {
+            evidence.profile_identity = EvidenceAgreement::Mismatch;
+        } else if profile_digests.is_empty() && evidence.browser_live {
+            evidence.profile_identity = EvidenceAgreement::Missing;
+        }
+        sources_by_runtime.insert(logical_browser_id.clone(), observed_sources.clone());
+        candidates.push(RuntimeCensusCandidate {
+            logical_browser_id,
+            profile_identity_digest,
+            observed_sources: observed_sources.into_iter().collect(),
+            evidence,
+        });
+    }
+
+    let source_snapshots = runtime_census_sources()
+        .into_iter()
+        .map(|source| RuntimeCensusSourceSnapshot {
+            source,
+            source_revision: source_revisions
+                .remove(&source)
+                .expect("closed source set was checked"),
+            logical_browser_ids: sources_by_runtime
+                .iter()
+                .filter_map(|(runtime_id, sources)| {
+                    sources.contains(&source).then_some(runtime_id.clone())
+                })
+                .collect(),
+        })
+        .collect();
+    collect_runtime_census_round(registry_revision, source_snapshots, candidates)
+}
+
+fn find_observation_root(parent: &mut [usize], index: usize) -> usize {
+    if parent[index] != index {
+        parent[index] = find_observation_root(parent, parent[index]);
+    }
+    parent[index]
+}
+
+fn union_observations(parent: &mut [usize], left: usize, right: usize) {
+    let left_root = find_observation_root(parent, left);
+    let right_root = find_observation_root(parent, right);
+    if left_root != right_root {
+        parent[right_root] = left_root;
+    }
+}
+
+fn merge_evidence<'a>(
+    evidence: impl Iterator<Item = &'a RuntimeEvidenceSummary>,
+) -> RuntimeEvidenceSummary {
+    let mut merged = RuntimeEvidenceSummary {
+        observation_rounds_agree: true,
+        registry_revision_stable: true,
+        ..RuntimeEvidenceSummary::default()
+    };
+    let mut live_daemon_observations = 0usize;
+    let mut cooperative_daemon_observations = 0usize;
+    for item in evidence {
+        merged.browser_live |= item.browser_live;
+        merged.daemon_live |= item.daemon_live;
+        if item.daemon_live {
+            live_daemon_observations += 1;
+            cooperative_daemon_observations += usize::from(item.daemon_cooperative);
+        }
+        merged.manual_browser |= item.manual_browser;
+        merged.externally_owned |= item.externally_owned;
+        merged.metadata_present |= item.metadata_present;
+        merged.observation_rounds_agree &= item.observation_rounds_agree;
+        merged.registry_revision_stable &= item.registry_revision_stable;
+        merged.owner_generations.extend(&item.owner_generations);
+        merged.process_identity = merge_agreement(merged.process_identity, item.process_identity);
+        merged.profile_identity = merge_agreement(merged.profile_identity, item.profile_identity);
+        merged.browser_family = merge_agreement(merged.browser_family, item.browser_family);
+        merged.cdp_endpoint = merge_agreement(merged.cdp_endpoint, item.cdp_endpoint);
+        merged.target_set = merge_agreement(merged.target_set, item.target_set);
+    }
+    merged.owner_generations.sort_unstable();
+    merged.owner_generations.dedup();
+    merged.daemon_cooperative =
+        live_daemon_observations > 0 && live_daemon_observations == cooperative_daemon_observations;
+    merged
+}
+
+fn merge_agreement(left: EvidenceAgreement, right: EvidenceAgreement) -> EvidenceAgreement {
+    use EvidenceAgreement::{Match, Mismatch, Missing, NotApplicable};
+    match (left, right) {
+        (Mismatch, _) | (_, Mismatch) => Mismatch,
+        (Missing, _) | (_, Missing) => Missing,
+        (Match, _) | (_, Match) => Match,
+        (NotApplicable, NotApplicable) => NotApplicable,
+    }
+}
+
+fn sha256_text(value: &str) -> String {
+    format!("{:x}", Sha256::digest(value.as_bytes()))
+}
+
+/// Collect one read-only host census round from the ten frozen Plan 0116
+/// sources. The adapters retain only opaque join keys and digests. A caller
+/// must collect a second round and pass both to `build_stable_runtime_census`
+/// before admission drain or payload mutation.
+pub(crate) fn collect_host_runtime_census_round() -> Result<RuntimeCensusRound, String> {
+    use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
+
+    let service_path = JsonServiceStateStore::default_path()?;
+    let service_state = JsonServiceStateStore::new(service_path).load()?;
+    let runtime_profiles = crate::runtime_profile::list_runtime_profiles(&[], None)?;
+    let supervisor_health = crate::session_supervisor::session_supervisor_health_json();
+    let daemon_inventory = crate::install::active_runtime_inventory(None);
+
+    let service_revision = source_revision(&service_state)?;
+    let registry_revision = u64::from_str_radix(&service_revision[..16], 16)
+        .map_err(|error| format!("invalid service registry revision: {error}"))?;
+    let readbacks = vec![
+        service_browser_readback(&service_state, &service_revision)?,
+        runtime_profile_readback(&runtime_profiles)?,
+        profile_owner_readback(&service_state, &service_revision)?,
+        value_readback(
+            RuntimeCensusSource::NamedSessionSupervisors,
+            &supervisor_health,
+            supervisor_observations(&supervisor_health),
+        )?,
+        value_readback(
+            RuntimeCensusSource::DaemonMetadata,
+            &daemon_inventory,
+            daemon_observations(&daemon_inventory),
+        )?,
+        process_identity_readback(
+            &service_state,
+            &runtime_profiles,
+            &supervisor_health,
+            &daemon_inventory,
+        )?,
+        profile_lock_readback(&runtime_profiles)?,
+        cdp_target_readback(&runtime_profiles)?,
+        display_readback(&service_state, &service_revision),
+        presentation_readback(&service_state, &service_revision),
+    ];
+    adapt_runtime_census_readbacks(registry_revision, readbacks)
+}
+
+fn service_browser_readback(
+    state: &crate::native::service_model::ServiceState,
+    service_revision: &str,
+) -> Result<RuntimeCensusSourceReadback, String> {
+    use crate::native::service_model::{BrowserHealth, BrowserHost};
+
+    let observations = state
+        .browsers
+        .values()
+        .map(|browser| -> Result<_, String> {
+            let process = state.browser_process_identities.get(&browser.id);
+            let profile = browser
+                .profile_id
+                .as_deref()
+                .and_then(|profile_id| state.profiles.get(profile_id));
+            let profile_path = process
+                .and_then(|identity| identity.user_data_dir.as_deref())
+                .or_else(|| profile.and_then(|profile| profile.user_data_dir.as_deref()));
+            let profile_digest = profile_path.map(canonical_profile_digest).transpose()?;
+            let mut aliases = vec![format!("browser:{}", browser.id)];
+            aliases.extend(
+                browser
+                    .active_session_ids
+                    .iter()
+                    .map(|session| format!("session:{session}")),
+            );
+            if let Some(pid) = browser.pid {
+                aliases.push(format!("pid:{pid}"));
+            }
+            if let Some(profile_id) = browser.profile_id.as_deref() {
+                aliases.push(format!("service-profile:{profile_id}"));
+            }
+            if let Some(digest) = profile_digest.as_deref() {
+                aliases.push(format!("profile-digest:{digest}"));
+            }
+            if let Some(runtime_profile) =
+                process.and_then(|identity| identity.runtime_profile.as_deref())
+            {
+                aliases.push(format!("runtime-profile:{runtime_profile}"));
+            }
+            if let Some(endpoint) = browser.cdp_endpoint.as_deref() {
+                aliases.push(format!("cdp-endpoint:{}", sha256_text(endpoint)));
+            }
+            let family_known = process
+                .and_then(|identity| identity.process_identity.browser_family.as_deref())
+                .is_some()
+                || profile.and_then(|profile| profile.browser_build).is_some();
+            let browser_live = matches!(
+                browser.health,
+                BrowserHealth::Ready
+                    | BrowserHealth::Degraded
+                    | BrowserHealth::Unreachable
+                    | BrowserHealth::CdpDisconnected
+                    | BrowserHealth::Reconnecting
+                    | BrowserHealth::Closing
+            );
+            let mut evidence = base_fragment();
+            evidence.browser_live = browser_live;
+            evidence.manual_browser = browser_live
+                && browser.cdp_endpoint.is_none()
+                && matches!(
+                    browser.host,
+                    BrowserHost::LocalHeaded | BrowserHost::AttachedExisting
+                );
+            evidence.externally_owned = matches!(
+                browser.host,
+                BrowserHost::AttachedExisting | BrowserHost::CloudProvider
+            );
+            evidence.metadata_present = true;
+            evidence.profile_identity = profile_digest
+                .as_ref()
+                .map_or(EvidenceAgreement::Missing, |_| EvidenceAgreement::Match);
+            evidence.browser_family = if family_known {
+                EvidenceAgreement::Match
+            } else if browser_live && !evidence.manual_browser {
+                EvidenceAgreement::Missing
+            } else {
+                EvidenceAgreement::NotApplicable
+            };
+            Ok(RuntimeCensusObservation {
+                logical_browser_id_hint: Some(browser.id.clone()),
+                aliases,
+                profile_identity_digest: profile_digest,
+                evidence,
+            })
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    Ok(RuntimeCensusSourceReadback {
+        source: RuntimeCensusSource::ServiceBrowserRecords,
+        source_revision: service_revision.to_string(),
+        observations,
+    })
+}
+
+fn runtime_profile_readback(
+    profiles: &[crate::runtime_profile::RuntimeProfileSummary],
+) -> Result<RuntimeCensusSourceReadback, String> {
+    let observations = profiles
+        .iter()
+        .map(|profile| -> Result<_, String> {
+            let profile_digest = canonical_profile_digest(&profile.user_data_dir)?;
+            let mut aliases = vec![
+                format!("runtime-profile:{}", profile.runtime_profile),
+                format!("profile-digest:{profile_digest}"),
+            ];
+            if let Some(pid) = profile.browser_pid {
+                aliases.push(format!("pid:{pid}"));
+            }
+            if let Some(port) = profile.devtools_port {
+                aliases.push(format!("cdp-port:{port}"));
+            }
+            let mut evidence = base_fragment();
+            evidence.browser_live = profile.browser_alive;
+            evidence.manual_browser = profile.browser_alive && profile.devtools_port.is_none();
+            evidence.metadata_present = profile.configured
+                || profile.browser_pid.is_some()
+                || profile.launch_record.is_some();
+            evidence.profile_identity = EvidenceAgreement::Match;
+            evidence.browser_family = if profile
+                .launch_record
+                .as_ref()
+                .and_then(|record| record.browser_family.as_ref())
+                .is_some()
+            {
+                EvidenceAgreement::Match
+            } else if profile.browser_alive && !evidence.manual_browser {
+                EvidenceAgreement::Missing
+            } else {
+                EvidenceAgreement::NotApplicable
+            };
+            Ok(RuntimeCensusObservation {
+                logical_browser_id_hint: None,
+                aliases,
+                profile_identity_digest: Some(profile_digest),
+                evidence,
+            })
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    Ok(RuntimeCensusSourceReadback {
+        source: RuntimeCensusSource::RuntimeProfileState,
+        source_revision: source_revision(&profiles)?,
+        observations,
+    })
+}
+
+fn profile_owner_readback(
+    state: &crate::native::service_model::ServiceState,
+    service_revision: &str,
+) -> Result<RuntimeCensusSourceReadback, String> {
+    let observations = state
+        .sessions
+        .values()
+        .filter(|session| session.profile_id.is_some() || !session.browser_ids.is_empty())
+        .map(|session| -> Result<_, String> {
+            let profile_path = session.profile_id.as_deref().and_then(|profile_id| {
+                state
+                    .profiles
+                    .get(profile_id)
+                    .and_then(|profile| profile.user_data_dir.as_deref())
+            });
+            let profile_digest = profile_path.map(canonical_profile_digest).transpose()?;
+            let mut aliases = vec![format!("session:{}", session.id)];
+            aliases.extend(
+                session
+                    .browser_ids
+                    .iter()
+                    .map(|browser_id| format!("browser:{browser_id}")),
+            );
+            if let Some(profile_id) = session.profile_id.as_deref() {
+                aliases.push(format!("service-profile:{profile_id}"));
+            }
+            if let Some(digest) = profile_digest.as_deref() {
+                aliases.push(format!("profile-digest:{digest}"));
+            }
+            let mut evidence = base_fragment();
+            evidence.metadata_present = true;
+            evidence.profile_identity = profile_digest
+                .as_ref()
+                .map_or(EvidenceAgreement::Missing, |_| EvidenceAgreement::Match);
+            Ok(RuntimeCensusObservation {
+                logical_browser_id_hint: (session.browser_ids.len() == 1)
+                    .then(|| session.browser_ids[0].clone()),
+                aliases,
+                profile_identity_digest: profile_digest,
+                evidence,
+            })
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    Ok(RuntimeCensusSourceReadback {
+        source: RuntimeCensusSource::ProfileOwnerReservations,
+        source_revision: service_revision.to_string(),
+        observations,
+    })
+}
+
+fn supervisor_observations(value: &serde_json::Value) -> Vec<RuntimeCensusObservation> {
+    value
+        .get("sessions")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|session| {
+            let name = session.get("session")?.as_str()?;
+            let mut aliases = vec![format!("session:{name}")];
+            if let Some(pid) = session.get("mainPid").and_then(serde_json::Value::as_u64) {
+                aliases.push(format!("pid:{pid}"));
+            }
+            let runtime_profile = session
+                .get("manifest")
+                .and_then(|manifest| manifest.get("runtimeProfile"))
+                .and_then(serde_json::Value::as_str);
+            if let Some(profile) = runtime_profile {
+                aliases.push(format!("runtime-profile:{profile}"));
+            }
+            let ready = session
+                .get("ready")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false);
+            let mut evidence = base_fragment();
+            evidence.daemon_live = session
+                .get("mainPid")
+                .and_then(serde_json::Value::as_u64)
+                .is_some();
+            evidence.daemon_cooperative = ready;
+            evidence.metadata_present = true;
+            Some(RuntimeCensusObservation {
+                logical_browser_id_hint: None,
+                aliases,
+                profile_identity_digest: None,
+                evidence,
+            })
+        })
+        .collect()
+}
+
+fn daemon_observations(value: &serde_json::Value) -> Vec<RuntimeCensusObservation> {
+    value
+        .get("runtimes")
+        .or_else(|| value.get("sessions"))
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|runtime| {
+            let session = runtime.get("session")?.as_str()?;
+            let mut aliases = vec![format!("session:{session}")];
+            if let Some(pid) = runtime.get("pid").and_then(serde_json::Value::as_u64) {
+                aliases.push(format!("pid:{pid}"));
+            }
+            let live = runtime
+                .get("pidRunning")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false);
+            let mut evidence = base_fragment();
+            evidence.daemon_live = live;
+            evidence.daemon_cooperative = live
+                && runtime.get("state").and_then(serde_json::Value::as_str) == Some("converged");
+            evidence.metadata_present = true;
+            Some(RuntimeCensusObservation {
+                logical_browser_id_hint: None,
+                aliases,
+                profile_identity_digest: None,
+                evidence,
+            })
+        })
+        .collect()
+}
+
+#[derive(Default)]
+struct ProcessCensusSeed {
+    aliases: BTreeSet<String>,
+    profile_digests: BTreeSet<String>,
+    expected: Vec<crate::process_identity::RecordedProcessIdentity>,
+    browser_pid: bool,
+}
+
+fn process_identity_readback(
+    state: &crate::native::service_model::ServiceState,
+    profiles: &[crate::runtime_profile::RuntimeProfileSummary],
+    supervisors: &serde_json::Value,
+    daemons: &serde_json::Value,
+) -> Result<RuntimeCensusSourceReadback, String> {
+    let mut seeds = BTreeMap::<u32, ProcessCensusSeed>::new();
+    for browser in state.browsers.values() {
+        let Some(pid) = browser.pid else {
+            continue;
+        };
+        let seed = seeds.entry(pid).or_default();
+        seed.browser_pid = true;
+        seed.aliases.insert(format!("pid:{pid}"));
+        seed.aliases.insert(format!("browser:{}", browser.id));
+        seed.aliases.extend(
+            browser
+                .active_session_ids
+                .iter()
+                .map(|session| format!("session:{session}")),
+        );
+        if let Some(identity) = state.browser_process_identities.get(&browser.id) {
+            seed.expected.push(identity.process_identity.clone());
+            if let Some(runtime_profile) = identity.runtime_profile.as_deref() {
+                seed.aliases
+                    .insert(format!("runtime-profile:{runtime_profile}"));
+            }
+            if let Some(user_data_dir) = identity.user_data_dir.as_deref() {
+                let digest = canonical_profile_digest(user_data_dir)?;
+                seed.aliases.insert(format!("profile-digest:{digest}"));
+                seed.profile_digests.insert(digest);
+            }
+        }
+    }
+    for profile in profiles {
+        let Some(pid) = profile.browser_pid else {
+            continue;
+        };
+        let seed = seeds.entry(pid).or_default();
+        seed.browser_pid = true;
+        seed.aliases.insert(format!("pid:{pid}"));
+        seed.aliases
+            .insert(format!("runtime-profile:{}", profile.runtime_profile));
+        let digest = canonical_profile_digest(&profile.user_data_dir)?;
+        seed.aliases.insert(format!("profile-digest:{digest}"));
+        seed.profile_digests.insert(digest);
+        if let Some(identity) =
+            crate::runtime_profile::read_runtime_state(&profile.runtime_profile)?
+                .and_then(|runtime| runtime.process_identity)
+        {
+            seed.expected.push(identity);
+        }
+    }
+    add_value_process_aliases(supervisors.get("sessions"), &mut seeds);
+    add_value_process_aliases(daemons.get("runtimes"), &mut seeds);
+
+    let mut observations = Vec::with_capacity(seeds.len());
+    for (pid, seed) in seeds {
+        let observation = crate::process_identity::observe_process(pid);
+        let mut evidence = base_fragment();
+        evidence.metadata_present = true;
+        let mut profile_identity_digest = match seed.profile_digests.len() {
+            1 => seed.profile_digests.iter().next().cloned(),
+            0 => None,
+            _ => Some(sha256_text(
+                &seed
+                    .profile_digests
+                    .iter()
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            )),
+        };
+        if seed.profile_digests.len() > 1 {
+            evidence.profile_identity = EvidenceAgreement::Mismatch;
+        } else if profile_identity_digest.is_some() {
+            evidence.profile_identity = EvidenceAgreement::Match;
+        }
+        if seed.browser_pid {
+            match &observation {
+                crate::process_identity::ProcessObservation::Observed(observed) => {
+                    evidence.browser_live = true;
+                    evidence.browser_family = if observed.browser_family.is_some() {
+                        EvidenceAgreement::Match
+                    } else {
+                        EvidenceAgreement::Missing
+                    };
+                    evidence.process_identity = if seed.expected.is_empty() {
+                        EvidenceAgreement::Missing
+                    } else if seed.expected.iter().all(|expected| {
+                        crate::process_identity::assess_process_ownership(
+                            Some(expected),
+                            observation.clone(),
+                            crate::process_identity::LegacyProfileProof::Unproven,
+                        )
+                        .ownership
+                            == crate::process_identity::RuntimeProcessOwnership::MatchingBrowser
+                    }) {
+                        EvidenceAgreement::Match
+                    } else {
+                        EvidenceAgreement::Mismatch
+                    };
+                }
+                crate::process_identity::ProcessObservation::Missing
+                | crate::process_identity::ProcessObservation::Failed { .. } => {
+                    evidence.process_identity = EvidenceAgreement::Missing;
+                    evidence.browser_family = EvidenceAgreement::Missing;
+                }
+            }
+        }
+        let logical_browser_id_hint = seed.aliases.iter().find_map(|alias| {
+            alias
+                .strip_prefix("browser:")
+                .map(std::string::ToString::to_string)
+        });
+        if profile_identity_digest.is_none() && evidence.browser_live {
+            evidence.profile_identity = EvidenceAgreement::Missing;
+        }
+        observations.push(RuntimeCensusObservation {
+            logical_browser_id_hint,
+            aliases: seed.aliases.into_iter().collect(),
+            profile_identity_digest: profile_identity_digest.take(),
+            evidence,
+        });
+    }
+    Ok(RuntimeCensusSourceReadback {
+        source: RuntimeCensusSource::OperatingSystemProcessIdentity,
+        source_revision: source_revision(&observations)?,
+        observations,
+    })
+}
+
+fn add_value_process_aliases(
+    rows: Option<&serde_json::Value>,
+    seeds: &mut BTreeMap<u32, ProcessCensusSeed>,
+) {
+    for row in rows
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let pid = row
+            .get("pid")
+            .or_else(|| row.get("mainPid"))
+            .and_then(serde_json::Value::as_u64)
+            .and_then(|pid| u32::try_from(pid).ok());
+        let Some(pid) = pid else {
+            continue;
+        };
+        let seed = seeds.entry(pid).or_default();
+        seed.aliases.insert(format!("pid:{pid}"));
+        if let Some(session) = row.get("session").and_then(serde_json::Value::as_str) {
+            seed.aliases.insert(format!("session:{session}"));
+        }
+    }
+}
+
+fn profile_lock_readback(
+    profiles: &[crate::runtime_profile::RuntimeProfileSummary],
+) -> Result<RuntimeCensusSourceReadback, String> {
+    let observations = profiles
+        .iter()
+        .map(|profile| -> Result<_, String> {
+            let digest = canonical_profile_digest(&profile.user_data_dir)?;
+            let mut aliases = vec![
+                format!("runtime-profile:{}", profile.runtime_profile),
+                format!("profile-digest:{digest}"),
+            ];
+            if let Some(pid) = profile.browser_pid {
+                aliases.push(format!("pid:{pid}"));
+            }
+            if let Some(port) = profile.devtools_port {
+                aliases.push(format!("cdp-port:{port}"));
+            }
+            let mut evidence = base_fragment();
+            evidence.metadata_present =
+                profile.browser_pid.is_some() || profile.devtools_port.is_some();
+            evidence.profile_identity = EvidenceAgreement::Match;
+            evidence.manual_browser = profile.browser_alive && profile.devtools_port.is_none();
+            evidence.cdp_endpoint = if profile.devtools_reachable {
+                EvidenceAgreement::Match
+            } else if profile.browser_alive && !evidence.manual_browser {
+                EvidenceAgreement::Missing
+            } else {
+                EvidenceAgreement::NotApplicable
+            };
+            Ok(RuntimeCensusObservation {
+                logical_browser_id_hint: None,
+                aliases,
+                profile_identity_digest: Some(digest),
+                evidence,
+            })
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    Ok(RuntimeCensusSourceReadback {
+        source: RuntimeCensusSource::ProfileLockAndDevtools,
+        source_revision: source_revision(&observations)?,
+        observations,
+    })
+}
+
+fn cdp_target_readback(
+    profiles: &[crate::runtime_profile::RuntimeProfileSummary],
+) -> Result<RuntimeCensusSourceReadback, String> {
+    let mut observations = Vec::with_capacity(profiles.len());
+    for profile in profiles {
+        let status = crate::runtime_profile::runtime_status_with_user_data_dir(
+            &profile.runtime_profile,
+            Some(std::path::Path::new(&profile.user_data_dir)),
+        )?;
+        let digest = canonical_profile_digest(&profile.user_data_dir)?;
+        let mut aliases = vec![
+            format!("runtime-profile:{}", profile.runtime_profile),
+            format!("profile-digest:{digest}"),
+        ];
+        if let Some(pid) = profile.browser_pid {
+            aliases.push(format!("pid:{pid}"));
+        }
+        if let Some(port) = status.devtools_port {
+            aliases.push(format!("cdp-port:{port}"));
+        }
+        let mut evidence = base_fragment();
+        evidence.metadata_present = status.devtools_port.is_some();
+        if let Some(port) = status.devtools_port.filter(|_| status.devtools_reachable) {
+            match crate::runtime_profile::bounded_cdp_identity_and_target_digest(port) {
+                Ok((browser_digest, target_digest)) => {
+                    aliases.push(format!("cdp-browser:{browser_digest}"));
+                    aliases.push(format!("target-set:{target_digest}"));
+                    evidence.cdp_endpoint = EvidenceAgreement::Match;
+                    evidence.target_set = EvidenceAgreement::Match;
+                }
+                Err(_) => {
+                    evidence.cdp_endpoint = EvidenceAgreement::Missing;
+                    evidence.target_set = EvidenceAgreement::Missing;
+                }
+            }
+        } else if status.browser_alive && status.devtools_port.is_some() {
+            evidence.cdp_endpoint = EvidenceAgreement::Missing;
+            evidence.target_set = EvidenceAgreement::Missing;
+        }
+        observations.push(RuntimeCensusObservation {
+            logical_browser_id_hint: None,
+            aliases,
+            profile_identity_digest: Some(digest),
+            evidence,
+        });
+    }
+    Ok(RuntimeCensusSourceReadback {
+        source: RuntimeCensusSource::CdpBrowserAndTargets,
+        source_revision: source_revision(&observations)?,
+        observations,
+    })
+}
+
+fn display_readback(
+    state: &crate::native::service_model::ServiceState,
+    service_revision: &str,
+) -> RuntimeCensusSourceReadback {
+    let observations = state
+        .display_allocations
+        .values()
+        .map(|display| {
+            let mut aliases = vec![format!("display:{}", display.id)];
+            if let Some(browser_id) = display.owner_browser_id.as_deref() {
+                aliases.push(format!("browser:{browser_id}"));
+            }
+            if let Some(session_id) = display.owner_session_id.as_deref() {
+                aliases.push(format!("session:{session_id}"));
+            }
+            if let Some(profile_id) = display.profile_id.as_deref() {
+                aliases.push(format!("service-profile:{profile_id}"));
+            }
+            let mut evidence = base_fragment();
+            evidence.metadata_present = true;
+            RuntimeCensusObservation {
+                logical_browser_id_hint: display.owner_browser_id.clone(),
+                aliases,
+                profile_identity_digest: None,
+                evidence,
+            }
+        })
+        .collect();
+    RuntimeCensusSourceReadback {
+        source: RuntimeCensusSource::DisplayAllocationsAndVisibleWindowProof,
+        source_revision: service_revision.to_string(),
+        observations,
+    }
+}
+
+fn presentation_readback(
+    state: &crate::native::service_model::ServiceState,
+    service_revision: &str,
+) -> RuntimeCensusSourceReadback {
+    let mut observations = Vec::new();
+    for browser in state
+        .browsers
+        .values()
+        .filter(|browser| !browser.view_streams.is_empty())
+    {
+        let mut aliases = vec![format!("browser:{}", browser.id)];
+        for stream in &browser.view_streams {
+            aliases.push(format!("view-stream:{}", stream.id));
+            if let Some(route_id) = stream.route_id.as_deref() {
+                aliases.push(format!("route:{route_id}"));
+            }
+            if let Some(display_id) = stream.display_allocation_id.as_deref() {
+                aliases.push(format!("display:{display_id}"));
+            }
+        }
+        let mut evidence = base_fragment();
+        evidence.metadata_present = true;
+        observations.push(RuntimeCensusObservation {
+            logical_browser_id_hint: Some(browser.id.clone()),
+            aliases,
+            profile_identity_digest: None,
+            evidence,
+        });
+    }
+    for route in state.remote_view_routes.values() {
+        let mut aliases = vec![format!("route:{}", route.id)];
+        if let Some(browser_id) = route.browser_id.as_deref() {
+            aliases.push(format!("browser:{browser_id}"));
+        }
+        if let Some(session_id) = route.session_id.as_deref() {
+            aliases.push(format!("session:{session_id}"));
+        }
+        if let Some(display_id) = route.display_allocation_id.as_deref() {
+            aliases.push(format!("display:{display_id}"));
+        }
+        let mut evidence = base_fragment();
+        evidence.metadata_present = true;
+        observations.push(RuntimeCensusObservation {
+            logical_browser_id_hint: route.browser_id.clone(),
+            aliases,
+            profile_identity_digest: None,
+            evidence,
+        });
+    }
+    for handoff in state.remote_view_handoffs.values() {
+        let mut aliases = vec![format!("handoff:{}", handoff.id)];
+        if let Some(browser_id) = handoff.browser_id.as_deref() {
+            aliases.push(format!("browser:{browser_id}"));
+        }
+        if let Some(session) = handoff.session_name.as_deref() {
+            aliases.push(format!("session:{session}"));
+        }
+        if let Some(profile_id) = handoff.profile_id.as_deref() {
+            aliases.push(format!("service-profile:{profile_id}"));
+        }
+        if let Some(route_id) = handoff.last_route_id.as_deref() {
+            aliases.push(format!("route:{route_id}"));
+        }
+        if let Some(display_id) = handoff.last_display_allocation_id.as_deref() {
+            aliases.push(format!("display:{display_id}"));
+        }
+        let mut evidence = base_fragment();
+        evidence.metadata_present = true;
+        observations.push(RuntimeCensusObservation {
+            logical_browser_id_hint: handoff.browser_id.clone(),
+            aliases,
+            profile_identity_digest: None,
+            evidence,
+        });
+    }
+    for entry in state.route_pool.values() {
+        let mut aliases = vec![
+            format!("route-pool:{}", entry.id),
+            format!("route:{}", entry.route_id),
+        ];
+        if let Some(browser_id) = entry
+            .target
+            .get("browserId")
+            .and_then(serde_json::Value::as_str)
+        {
+            aliases.push(format!("browser:{browser_id}"));
+        }
+        if let Some(session_id) = entry
+            .target
+            .get("sessionId")
+            .and_then(serde_json::Value::as_str)
+        {
+            aliases.push(format!("session:{session_id}"));
+        }
+        if let Some(display_id) = entry
+            .target
+            .get("displayAllocationId")
+            .and_then(serde_json::Value::as_str)
+        {
+            aliases.push(format!("display:{display_id}"));
+        }
+        let mut evidence = base_fragment();
+        evidence.metadata_present = true;
+        observations.push(RuntimeCensusObservation {
+            logical_browser_id_hint: entry
+                .target
+                .get("browserId")
+                .and_then(serde_json::Value::as_str)
+                .map(std::string::ToString::to_string),
+            aliases,
+            profile_identity_digest: None,
+            evidence,
+        });
+    }
+    RuntimeCensusSourceReadback {
+        source: RuntimeCensusSource::ViewStreamsRoutePoolGuacamoleAndHandoffs,
+        source_revision: service_revision.to_string(),
+        observations,
+    }
+}
+
+fn value_readback(
+    source: RuntimeCensusSource,
+    value: &serde_json::Value,
+    observations: Vec<RuntimeCensusObservation>,
+) -> Result<RuntimeCensusSourceReadback, String> {
+    Ok(RuntimeCensusSourceReadback {
+        source,
+        source_revision: source_revision(value)?,
+        observations,
+    })
+}
+
+fn base_fragment() -> RuntimeEvidenceSummary {
+    RuntimeEvidenceSummary {
+        observation_rounds_agree: true,
+        registry_revision_stable: true,
+        ..RuntimeEvidenceSummary::default()
+    }
+}
+
+fn canonical_profile_digest(value: &str) -> Result<String, String> {
+    crate::runtime_profile::canonical_profile_identity_digest(std::path::Path::new(value))
+}
+
+fn source_revision(value: &(impl Serialize + ?Sized)) -> Result<String, String> {
+    serde_json::to_vec(value)
+        .map(|bytes| format!("{:x}", Sha256::digest(bytes)))
+        .map_err(|error| format!("could not serialize runtime census source: {error}"))
 }
 
 pub(crate) fn collect_runtime_census_round(
@@ -551,7 +1536,7 @@ fn disposition_for_classification(classification: RuntimeClassification) -> Runt
     }
 }
 
-fn runtime_census_sources() -> [RuntimeCensusSource; 10] {
+pub(crate) fn runtime_census_sources() -> [RuntimeCensusSource; 10] {
     [
         RuntimeCensusSource::ServiceBrowserRecords,
         RuntimeCensusSource::RuntimeProfileState,
@@ -657,7 +1642,11 @@ pub(crate) fn classify_runtime(evidence: &RuntimeEvidenceSummary) -> RuntimeClas
             &["required_identity_evidence_missing"],
         );
     }
-    if evidence.browser_live && evidence.daemon_live && evidence.daemon_cooperative {
+    if evidence.browser_live
+        && evidence.daemon_live
+        && evidence.daemon_cooperative
+        && unique_owner_generations.len() == 1
+    {
         return decision(
             RuntimeClassification::CooperativeLiveOwner,
             &["cooperative_owner_verified"],
@@ -889,6 +1878,66 @@ mod tests {
         }));
     }
 
+    #[test]
+    fn source_adapters_join_one_runtime_across_all_ten_readbacks() {
+        let profile_digest = digest_text("profile-a");
+        let aliases = vec!["browser:browser-a", "profile:profile-a", "pid:41"];
+        let readbacks = runtime_census_sources()
+            .into_iter()
+            .map(|source| RuntimeCensusSourceReadback {
+                source,
+                source_revision: format!("{source:?}-revision"),
+                observations: vec![RuntimeCensusObservation {
+                    logical_browser_id_hint: Some("browser-a".to_string()),
+                    aliases: aliases.iter().map(|value| (*value).to_string()).collect(),
+                    profile_identity_digest: Some(profile_digest.clone()),
+                    evidence: cooperative_fragment(source),
+                }],
+            })
+            .collect();
+
+        let round = adapt_runtime_census_readbacks(23, readbacks).unwrap();
+        assert_eq!(round.candidates.len(), 1);
+        let candidate = &round.candidates[0];
+        assert_eq!(candidate.logical_browser_id, "browser-a");
+        assert_eq!(candidate.profile_identity_digest, profile_digest);
+        assert_eq!(candidate.observed_sources.len(), 10);
+        assert_eq!(
+            classify_runtime(&candidate.evidence).classification,
+            RuntimeClassification::CooperativeLiveOwner
+        );
+    }
+
+    #[test]
+    fn source_adapters_merge_duplicate_pid_evidence_without_granting_authority() {
+        let mut readbacks = empty_source_readbacks();
+        readbacks[0].observations = vec![
+            RuntimeCensusObservation {
+                logical_browser_id_hint: Some("browser-a".to_string()),
+                aliases: vec!["pid:41".to_string()],
+                profile_identity_digest: Some(digest_text("profile-a")),
+                evidence: live_identity_fragment(),
+            },
+            RuntimeCensusObservation {
+                logical_browser_id_hint: Some("browser-b".to_string()),
+                aliases: vec!["pid:41".to_string()],
+                profile_identity_digest: Some(digest_text("profile-b")),
+                evidence: live_identity_fragment(),
+            },
+        ];
+
+        let round = adapt_runtime_census_readbacks(23, readbacks).unwrap();
+        assert_eq!(round.candidates.len(), 1);
+        assert_eq!(
+            classify_runtime(&round.candidates[0].evidence).classification,
+            RuntimeClassification::InsufficientEvidence
+        );
+        assert_eq!(
+            round.candidates[0].evidence.profile_identity,
+            EvidenceAgreement::Mismatch
+        );
+    }
+
     fn census_round_from_corpus(
         corpus: &RuntimeCensusCorpus,
         registry_revision: u64,
@@ -934,6 +1983,66 @@ mod tests {
             .collect()
     }
 
+    fn empty_source_readbacks() -> Vec<RuntimeCensusSourceReadback> {
+        runtime_census_sources()
+            .into_iter()
+            .map(|source| RuntimeCensusSourceReadback {
+                source,
+                source_revision: format!("{source:?}-revision"),
+                observations: Vec::new(),
+            })
+            .collect()
+    }
+
+    fn cooperative_fragment(source: RuntimeCensusSource) -> RuntimeEvidenceSummary {
+        let mut evidence = RuntimeEvidenceSummary::default();
+        evidence.observation_rounds_agree = true;
+        evidence.registry_revision_stable = true;
+        match source {
+            RuntimeCensusSource::ServiceBrowserRecords => {
+                evidence.browser_live = true;
+                evidence.profile_identity = EvidenceAgreement::Match;
+                evidence.browser_family = EvidenceAgreement::Match;
+            }
+            RuntimeCensusSource::NamedSessionSupervisors | RuntimeCensusSource::DaemonMetadata => {
+                evidence.daemon_live = true;
+                evidence.daemon_cooperative = true;
+            }
+            RuntimeCensusSource::ProfileOwnerReservations => {
+                evidence.owner_generations.push(7);
+            }
+            RuntimeCensusSource::OperatingSystemProcessIdentity => {
+                evidence.process_identity = EvidenceAgreement::Match;
+            }
+            RuntimeCensusSource::ProfileLockAndDevtools => {
+                evidence.cdp_endpoint = EvidenceAgreement::Match;
+            }
+            RuntimeCensusSource::CdpBrowserAndTargets => {
+                evidence.target_set = EvidenceAgreement::Match;
+            }
+            _ => {}
+        }
+        evidence
+    }
+
+    fn live_identity_fragment() -> RuntimeEvidenceSummary {
+        RuntimeEvidenceSummary {
+            browser_live: true,
+            observation_rounds_agree: true,
+            registry_revision_stable: true,
+            process_identity: EvidenceAgreement::Match,
+            profile_identity: EvidenceAgreement::Match,
+            browser_family: EvidenceAgreement::Match,
+            cdp_endpoint: EvidenceAgreement::Match,
+            target_set: EvidenceAgreement::Match,
+            ..RuntimeEvidenceSummary::default()
+        }
+    }
+
+    fn digest_text(value: &str) -> String {
+        format!("{:x}", Sha256::digest(value.as_bytes()))
+    }
+
     #[test]
     fn current_upgrade_and_orphan_paths_are_intentionally_red() {
         let corpus: UnsafeSeamCorpus = serde_json::from_str(UNSAFE_SEAMS).unwrap();
@@ -956,6 +2065,8 @@ mod tests {
         assert_source_order(
             workstation,
             &[
+                "require_stable_runtime_census(&root, &paths, &parsed)",
+                "quiesce_existing_user_units(&paths)",
                 "match materialize_payload(&paths, &parsed)",
                 "crate::install::install_remote_view_privileges(true, parsed.json)",
                 "reconcile_workstation_locked(&root, &paths)",

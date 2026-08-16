@@ -5404,6 +5404,15 @@ requires at least 6 GiB free before sudo, payload staging, or package mutation.
 
 Workstation apply reruns stop the managed dashboard, runtime interlock, and
 backup timer during reconciliation, then reactivate them after final readiness.
+Before stopping those units or staging a payload, real-host apply joins two
+read-only runtime census rounds across service state, runtime profiles,
+supervisors, daemon and process identity, bounded CDP identity and target
+evidence, displays, routes, streams, and durable handoffs. Incomplete or
+ambiguous evidence fails closed without changing the payload. Successful JSON
+output includes runtimeCensusTransaction, the private transaction receipt that
+binds the census digest and per-runtime classifications. Until the shared
+profile-owner registry supplies an owner generation, a live managed browser is
+insufficient evidence and blocks apply; the installer never kills it.
 If reconciliation fails, their exact prior active states are restored and a
 private workstation-last-failure.json diagnostic receipt is written.
 Duplicate-profile pressure and inactive optional-supervisor drift remain

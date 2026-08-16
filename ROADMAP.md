@@ -35,12 +35,19 @@ templates; stable command and unit links resolve through an atomically replaced
 `current` selector. Seven injected staging and selector failures preserve the
 selected generation byte-for-byte, selector-commit failure restores the prior
 selection, changed payloads retain the old generation, and standalone
-reconciliation cannot mutate or select payload generations. Slice C now has a
-provider-free closed-world census engine that joins all ten source snapshots,
-classifies the observed runtime union exactly once across two stable rounds,
-persists a canonical digest and migration records, and blocks ambiguous
-transactions. Live-source adapters and the pre-mutation installer gate remain
-open, so Slice C is not yet accepted.
+reconciliation cannot mutate or select payload generations. Slice C is
+accepted at the source and isolated-fixture boundary. Ten read-only adapters
+join service browser records, canonical profile identity, legacy owner
+references, named supervisors, daemon metadata, P108 process identity,
+profile-lock and DevTools evidence, bounded CDP browser and target digests,
+display proof records, and presentation records. Real-host apply requires two
+matching rounds, writes a private transaction containing the census digest and
+per-runtime classifications, and blocks before unit quiescence or payload
+staging on incomplete, changing, conflicting, or owner-generation-poor
+evidence. P111 owner generations remain absent in current source, so a live
+cooperative daemon cannot be granted transfer authority yet; that fail-closed
+result is deliberate and compatible with P111 rather than a competing owner
+registry.
 
 ### Plan
 
@@ -48,9 +55,10 @@ open, so Slice C is not yet accepted.
 
 ### Next Recommendation
 
-Continue Slice C with read-only adapters for the ten frozen sources and bind
-the stable census transaction before payload materialization. Do not replace
-the installed payload, enable the recurring interlock, or touch a live browser.
+Begin Slice D with provider-free two-phase transfer and orphan-adoption
+fixtures. Consume the canonical profile identity and future P111 owner
+generation seam without creating a competing registry. Do not replace the
+installed payload, enable the recurring interlock, or touch a live browser.
 
 ## P114 | Terminal Route Quarantine Recovery
 

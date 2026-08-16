@@ -1756,7 +1756,9 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
     issues
 }
 
-fn active_runtime_inventory(expected_sha256: Option<&str>) -> serde_json::Value {
+/// Read daemon socket, PID, executable, and stream metadata without mutating
+/// any runtime. Runtime adoption uses this as one bounded census source.
+pub(crate) fn active_runtime_inventory(expected_sha256: Option<&str>) -> serde_json::Value {
     let socket_dir = get_socket_dir();
     let mut sessions: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     if let Ok(entries) = fs::read_dir(&socket_dir) {

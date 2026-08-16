@@ -93,6 +93,17 @@ closed instead of falling back to an interactive sudo prompt.
 Before acquiring that authorization or staging the payload, the real-host
 preflight requires at least 6 GiB of free disk capacity. JSON output exposes
 `hostPlan.availableDiskBytes`, `minimumDiskBytes`, and `diskSpaceReady`.
+Real-host apply then records two read-only runtime census rounds before it
+stops user units or stages the payload. The census joins service browser and
+profile reservations, runtime-profile state, named supervisors, daemon and
+process-instance evidence, bounded CDP browser and target digests, displays,
+routes, streams, and durable handoffs. Missing, changing, or conflicting
+evidence fails closed without replacing the selected generation. A successful
+JSON report exposes `runtimeCensusTransaction`, the private transaction receipt
+under `~/.agent-browser/runtime-adoption/transactions/` containing the census
+digest and per-runtime classifications. Until the shared profile-owner
+registry supplies an owner generation, a live managed browser is deliberately
+insufficient evidence and blocks apply; the installer never kills it.
 If that adds the `agent-browser` or `docker` group to the current user, the
 command exits with status 75 and a `relogin_required` JSON state. Log out and
 back in or reboot, then rerun the same apply command. With both groups
