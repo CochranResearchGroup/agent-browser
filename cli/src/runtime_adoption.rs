@@ -855,6 +855,7 @@ fn runtime_profile_readback(
 ) -> Result<RuntimeCensusSourceReadback, String> {
     let observations = profiles
         .iter()
+        .filter(|profile| runtime_profile_has_observation(profile))
         .map(|profile| -> Result<_, String> {
             let profile_digest = canonical_profile_digest(&profile.user_data_dir)?;
             let mut aliases = vec![
@@ -896,9 +897,24 @@ fn runtime_profile_readback(
         .collect::<Result<Vec<_>, String>>()?;
     Ok(RuntimeCensusSourceReadback {
         source: RuntimeCensusSource::RuntimeProfileState,
-        source_revision: source_revision(&profiles)?,
+        source_revision: source_revision(&observations)?,
         observations,
     })
+}
+
+fn runtime_profile_has_observation(
+    profile: &crate::runtime_profile::RuntimeProfileSummary,
+) -> bool {
+    // `list_runtime_profiles` always projects the default namespace entry.
+    // Only retained runtime metadata makes that profile part of the live census.
+    profile.browser_pid.is_some()
+        || profile.browser_alive
+        || profile.headed.is_some()
+        || profile.launch_mode.is_some()
+        || profile.devtools_port.is_some()
+        || profile.devtools_reachable
+        || profile.ws_url.is_some()
+        || profile.launch_record.is_some()
 }
 
 fn profile_owner_readback(
@@ -1234,6 +1250,7 @@ fn profile_lock_readback(
 ) -> Result<RuntimeCensusSourceReadback, String> {
     let observations = profiles
         .iter()
+        .filter(|profile| runtime_profile_has_observation(profile))
         .map(|profile| -> Result<_, String> {
             let digest = canonical_profile_digest(&profile.user_data_dir)?;
             let mut aliases = vec![
@@ -1277,7 +1294,10 @@ fn cdp_target_readback(
     profiles: &[crate::runtime_profile::RuntimeProfileSummary],
 ) -> Result<RuntimeCensusSourceReadback, String> {
     let mut observations = Vec::with_capacity(profiles.len());
-    for profile in profiles {
+    for profile in profiles
+        .iter()
+        .filter(|profile| runtime_profile_has_observation(profile))
+    {
         let status = crate::runtime_profile::runtime_status_with_user_data_dir(
             &profile.runtime_profile,
             Some(std::path::Path::new(&profile.user_data_dir)),
@@ -2290,6 +2310,108 @@ mod tests {
             round.candidates[0].evidence.profile_identity,
             EvidenceAgreement::Mismatch
         );
+    }
+
+    #[test]
+    fn inactive_profile_namespace_entry_is_not_a_runtime_observation() {
+        let profile = crate::runtime_profile::RuntimeProfileSummary {
+            runtime_profile: format!("inactive-census-profile-{}", uuid::Uuid::new_v4()),
+            user_data_dir: std::env::temp_dir()
+                .join("agent-browser-inactive-census-profile")
+                .display()
+                .to_string(),
+            state_path: std::env::temp_dir()
+                .join("agent-browser-inactive-census-profile-state.json")
+                .display()
+                .to_string(),
+            configured: false,
+            default: true,
+            browser_pid: None,
+            browser_alive: false,
+            headed: None,
+            launch_mode: None,
+            devtools_port: None,
+            devtools_reachable: false,
+            ws_url: None,
+            launch_record: None,
+        };
+
+        let readbacks = [
+            runtime_profile_readback(std::slice::from_ref(&profile)).unwrap(),
+            profile_lock_readback(std::slice::from_ref(&profile)).unwrap(),
+            cdp_target_readback(std::slice::from_ref(&profile)).unwrap(),
+        ];
+
+        assert!(readbacks
+            .iter()
+            .all(|readback| readback.observations.is_empty()));
+    }
+
+    #[test]
+    fn inactive_profile_configuration_does_not_change_runtime_source_revision() {
+        let mut profile = crate::runtime_profile::RuntimeProfileSummary {
+            runtime_profile: format!("configured-census-profile-{}", uuid::Uuid::new_v4()),
+            user_data_dir: std::env::temp_dir()
+                .join("agent-browser-configured-census-profile")
+                .display()
+                .to_string(),
+            state_path: std::env::temp_dir()
+                .join("agent-browser-configured-census-profile-state.json")
+                .display()
+                .to_string(),
+            configured: false,
+            default: false,
+            browser_pid: None,
+            browser_alive: false,
+            headed: None,
+            launch_mode: None,
+            devtools_port: None,
+            devtools_reachable: false,
+            ws_url: None,
+            launch_record: None,
+        };
+        let unconfigured = runtime_profile_readback(std::slice::from_ref(&profile)).unwrap();
+        profile.configured = true;
+        let configured = runtime_profile_readback(std::slice::from_ref(&profile)).unwrap();
+
+        assert!(unconfigured.observations.is_empty());
+        assert!(configured.observations.is_empty());
+        assert_eq!(unconfigured.source_revision, configured.source_revision);
+    }
+
+    #[test]
+    fn retained_profile_runtime_metadata_remains_observable() {
+        let profile = crate::runtime_profile::RuntimeProfileSummary {
+            runtime_profile: format!("retained-census-profile-{}", uuid::Uuid::new_v4()),
+            user_data_dir: std::env::temp_dir()
+                .join("agent-browser-retained-census-profile")
+                .display()
+                .to_string(),
+            state_path: std::env::temp_dir()
+                .join("agent-browser-retained-census-profile-state.json")
+                .display()
+                .to_string(),
+            configured: false,
+            default: false,
+            browser_pid: Some(424_242),
+            browser_alive: false,
+            headed: None,
+            launch_mode: None,
+            devtools_port: None,
+            devtools_reachable: false,
+            ws_url: None,
+            launch_record: None,
+        };
+
+        let readbacks = [
+            runtime_profile_readback(std::slice::from_ref(&profile)).unwrap(),
+            profile_lock_readback(std::slice::from_ref(&profile)).unwrap(),
+            cdp_target_readback(std::slice::from_ref(&profile)).unwrap(),
+        ];
+
+        assert!(readbacks
+            .iter()
+            .all(|readback| readback.observations.len() == 1));
     }
 
     fn census_round_from_corpus(

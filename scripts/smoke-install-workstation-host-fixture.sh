@@ -304,6 +304,7 @@ fi
 
 first_command_count="$(wc -l <"$LOG" | tr -d ' ')"
 printf '\n# compatible local policy annotation\n' >>"$APPARMOR_PROFILE_PATH"
+chmod 000 "$APPARMOR_PROFILES_PATH"
 run_installer >"$WORKDIR/second.out"
 second_command_count="$(wc -l <"$LOG" | tr -d ' ')"
 
@@ -312,18 +313,20 @@ if [[ "$(grep -c '^SUDO -v$' "$LOG" || true)" != "1" ]]; then
   cat "$LOG" >&2
   exit 1
 fi
-if [[ "$second_command_count" != "$((first_command_count + 2))" ]]; then
-  echo "Idempotent rerun should add only the two noninteractive helper capability checks." >&2
+if [[ "$second_command_count" != "$((first_command_count + 3))" ]]; then
+  echo "Idempotent rerun should add only bounded noninteractive helper checks." >&2
   cat "$LOG" >&2
   exit 1
 fi
-if [[ "$(tail -n 2 "$LOG" | head -n 1)" != "SUDO -n $HELPER_PATH check" \
-   || "$(tail -n 1 "$LOG")" != "SUDO -n $HELPER_PATH status-json" ]]; then
+if [[ "$(tail -n 3 "$LOG" | head -n 1)" != "SUDO -n $HELPER_PATH check" \
+   || "$(tail -n 3 "$LOG" | tail -n 2 | head -n 1)" != "SUDO -n $HELPER_PATH status-json" \
+   || "$(tail -n 1 "$LOG")" != "SUDO -n $HELPER_PATH verify-install --group $GROUP_NAME --sudoers $SUDOERS_PATH --sha256 $(sha256sum "$HELPER_PATH" | awk '{print $1}') --apparmor-profile-name agent-browser-managed-chrome" ]]; then
   echo "Unexpected idempotent rerun command." >&2
-  tail -n 3 "$LOG" >&2
+  tail -n 4 "$LOG" >&2
   exit 1
 fi
 
+chmod 600 "$APPARMOR_PROFILES_PATH"
 printf 'N\n' >"$APPARMOR_ENABLED_PATH"
 rm "$APPARMOR_PROFILE_PATH"
 : >"$APPARMOR_PROFILES_PATH"

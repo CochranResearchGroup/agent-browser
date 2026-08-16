@@ -156,8 +156,23 @@ apparmor_profile_ready() {
   profile_header="profile $APPARMOR_PROFILE_NAME \"$chrome_path\" flags=(unconfined) {"
   grep -Fqx "$profile_header" "$APPARMOR_PROFILE_PATH" || return 1
   grep -Eq '^[[:space:]]*userns,[[:space:]]*$' "$APPARMOR_PROFILE_PATH" || return 1
-  [[ -r "$APPARMOR_PROFILES_PATH" ]] || return 1
-  grep -Fqx "$APPARMOR_PROFILE_NAME (unconfined)" "$APPARMOR_PROFILES_PATH"
+  if [[ -r "$APPARMOR_PROFILES_PATH" ]]; then
+    grep -Fqx "$APPARMOR_PROFILE_NAME (unconfined)" "$APPARMOR_PROFILES_PATH"
+    return
+  fi
+
+  # Ubuntu protects the loaded-profile registry from unprivileged readers.
+  # Reuse the already-authorized narrow helper to verify that root-only fact
+  # without turning an idempotent rerun into another interactive sudo prompt.
+  [[ -x "$HELPER_PATH" ]] || return 1
+  local installed_helper_sha256
+  installed_helper_sha256="$(sha256sum "$HELPER_PATH" | awk '{print $1}')"
+  [[ "$installed_helper_sha256" =~ ^[a-f0-9]{64}$ ]] || return 1
+  sudo -n "$HELPER_PATH" verify-install \
+    --group "$GROUP_NAME" \
+    --sudoers "$SUDOERS_PATH" \
+    --sha256 "$installed_helper_sha256" \
+    --apparmor-profile-name "$APPARMOR_PROFILE_NAME" >/dev/null 2>&1
 }
 
 workstation_packages() {
