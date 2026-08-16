@@ -617,9 +617,18 @@ pub(crate) fn adapt_runtime_census_readbacks(
             .iter()
             .flat_map(|index| flattened[*index].1.aliases.iter().cloned())
             .collect::<BTreeSet<_>>();
+        let session_aliases = group_aliases
+            .iter()
+            .filter(|alias| alias.starts_with("session:"))
+            .cloned()
+            .collect::<Vec<_>>();
         let logical_browser_id = hints.iter().next().cloned().unwrap_or_else(|| {
-            let payload = group_aliases.iter().cloned().collect::<Vec<_>>().join("\n");
-            format!("observed-{}", &sha256_text(&payload)[..16])
+            if session_aliases.len() == 1 {
+                session_aliases[0].clone()
+            } else {
+                let payload = group_aliases.iter().cloned().collect::<Vec<_>>().join("\n");
+                format!("observed-{}", &sha256_text(&payload)[..16])
+            }
         });
         let observed_sources = indexes
             .iter()
@@ -855,10 +864,11 @@ fn service_browser_readback(
                     browser.host,
                     BrowserHost::LocalHeaded | BrowserHost::AttachedExisting
                 );
-            evidence.externally_owned = matches!(
-                browser.host,
-                BrowserHost::AttachedExisting | BrowserHost::CloudProvider
-            );
+            // `AttachedExisting` describes how this daemon connected to the
+            // browser, not whether the browser lacks a cooperative owner. A
+            // receipted handoff necessarily becomes attached-existing and
+            // must remain eligible for the next cooperative upgrade.
+            evidence.externally_owned = matches!(browser.host, BrowserHost::CloudProvider);
             evidence.metadata_present = true;
             evidence.profile_identity = profile_digest
                 .as_ref()
@@ -2339,6 +2349,63 @@ mod tests {
         assert_eq!(
             classify_runtime(&candidate.evidence).classification,
             RuntimeClassification::CooperativeLiveOwner
+        );
+    }
+
+    #[test]
+    fn attached_existing_browser_with_cooperative_daemon_is_not_external() {
+        use crate::native::service_model::{
+            BrowserHealth, BrowserHost, BrowserProcess, ServiceState,
+        };
+
+        let mut state = ServiceState::default();
+        state.browsers.insert(
+            "session:handoff-browser".to_string(),
+            BrowserProcess {
+                id: "session:handoff-browser".to_string(),
+                host: BrowserHost::AttachedExisting,
+                health: BrowserHealth::Ready,
+                ..BrowserProcess::default()
+            },
+        );
+
+        let readback = service_browser_readback(&state).unwrap();
+        assert_eq!(readback.observations.len(), 1);
+        assert!(!readback.observations[0].evidence.externally_owned);
+    }
+
+    #[test]
+    fn idle_daemon_without_browser_uses_its_session_as_logical_identity() {
+        let readbacks = runtime_census_sources()
+            .into_iter()
+            .map(|source| {
+                let mut evidence = base_fragment();
+                if source == RuntimeCensusSource::DaemonMetadata {
+                    evidence.daemon_live = true;
+                    evidence.daemon_cooperative = true;
+                }
+                RuntimeCensusSourceReadback {
+                    source,
+                    source_revision: format!("{source:?}-revision"),
+                    observations: vec![RuntimeCensusObservation {
+                        logical_browser_id_hint: None,
+                        aliases: vec!["session:idle-daemon".to_string()],
+                        profile_identity_digest: None,
+                        evidence,
+                    }],
+                }
+            })
+            .collect();
+
+        let round = adapt_runtime_census_readbacks(24, readbacks).unwrap();
+        assert_eq!(round.candidates.len(), 1);
+        assert_eq!(
+            round.candidates[0].logical_browser_id,
+            "session:idle-daemon"
+        );
+        assert_eq!(
+            classify_runtime(&round.candidates[0].evidence).classification,
+            RuntimeClassification::IdleDaemon
         );
     }
 

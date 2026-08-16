@@ -1015,10 +1015,17 @@ fn run_workstation_install(args: &[String]) {
         phases.push("post-commit-validating");
 
         let validation = if !isolated_root {
+            let transitional_source_sessions = prepared
+                .runtime_handoffs
+                .iter()
+                .filter(|handoff| handoff.committed && !handoff.source_finalized)
+                .map(|handoff| handoff.source_session.clone())
+                .collect::<Vec<_>>();
             let reconcile = match reconcile_workstation_locked_for_upgrade(
                 &root,
                 &paths,
                 Some(&prepared.transaction),
+                &transitional_source_sessions,
             ) {
                 Ok(reconcile) => reconcile,
                 Err(error) => {
@@ -1242,13 +1249,14 @@ fn reconcile_workstation_locked(
     root: &Path,
     paths: &InstallPaths,
 ) -> Result<WorkstationReconcileReport, String> {
-    reconcile_workstation_locked_for_upgrade(root, paths, None)
+    reconcile_workstation_locked_for_upgrade(root, paths, None, &[])
 }
 
 fn reconcile_workstation_locked_for_upgrade(
     root: &Path,
     paths: &InstallPaths,
     expected_upgrade: Option<&crate::runtime_adoption::UpgradeTransaction>,
+    transitional_source_sessions: &[String],
 ) -> Result<WorkstationReconcileReport, String> {
     require_installed_payload(paths)?;
     require_effective_groups()?;
@@ -1271,6 +1279,7 @@ fn reconcile_workstation_locked_for_upgrade(
         support_root,
         command_env.clone(),
         expected_upgrade,
+        transitional_source_sessions,
     );
     complete_reconcile_with_unit_restore(reconcile_result, || {
         restore_previously_active_user_units(
@@ -1288,6 +1297,7 @@ fn reconcile_workstation_after_quiesce(
     support_root: &Path,
     command_env: Vec<(String, String)>,
     expected_upgrade: Option<&crate::runtime_adoption::UpgradeTransaction>,
+    transitional_source_sessions: &[String],
 ) -> Result<WorkstationReconcileReport, String> {
     let scripts_dir = support_root.join("scripts");
     let guacamole_dir = support_root.join("guacamole");
@@ -1487,7 +1497,13 @@ fn reconcile_workstation_after_quiesce(
         success: true,
     });
 
-    verify_final_doctors(paths, support_root, &command_env, expected_upgrade)?;
+    verify_final_doctors(
+        paths,
+        support_root,
+        &command_env,
+        expected_upgrade,
+        transitional_source_sessions,
+    )?;
     steps.push(ReconcileStep {
         name: "final-doctors-ready",
         success: true,
@@ -2745,6 +2761,7 @@ fn verify_final_doctors(
     support_root: &Path,
     command_env: &[(String, String)],
     expected_upgrade: Option<&crate::runtime_adoption::UpgradeTransaction>,
+    transitional_source_sessions: &[String],
 ) -> Result<(), String> {
     for (label, args, readiness_pointer) in [
         (
@@ -2772,8 +2789,21 @@ fn verify_final_doctors(
         let ready = if label == "install doctor" {
             expected_upgrade.map_or_else(
                 || install_doctor_reports_workstation_ready(&payload),
-                |transaction| install_doctor_reports_expected_upgrade_ready(&payload, transaction),
+                |transaction| {
+                    install_doctor_reports_expected_upgrade_ready(
+                        &payload,
+                        transaction,
+                        transitional_source_sessions,
+                    )
+                },
             )
+        } else if let Some(transaction) = expected_upgrade {
+            output.status.success()
+                && remote_view_doctor_reports_expected_upgrade_ready(
+                    &payload,
+                    transaction,
+                    transitional_source_sessions,
+                )
         } else {
             final_doctor_reports_ready(label, &payload, output.status.success(), readiness_pointer)
         };
@@ -2855,6 +2885,7 @@ fn install_doctor_issues_are_advisory(data: &Value, issues: &[Value]) -> bool {
 fn install_doctor_reports_expected_upgrade_ready(
     payload: &Value,
     expected: &crate::runtime_adoption::UpgradeTransaction,
+    transitional_source_sessions: &[String],
 ) -> bool {
     use crate::runtime_adoption::UpgradeTransactionState;
 
@@ -2892,18 +2923,61 @@ fn install_doctor_reports_expected_upgrade_ready(
                 == Some("workstation_upgrade_transaction_not_terminal")
         })
         .count();
-    transaction_issue_count == 1
-        && install_doctor_issues_are_advisory(
-            data,
-            &issues
-                .iter()
-                .filter(|issue| {
-                    issue.get("code").and_then(Value::as_str)
-                        != Some("workstation_upgrade_transaction_not_terminal")
-                })
-                .cloned()
-                .collect::<Vec<_>>(),
-        )
+    let remaining_issues = issues
+        .iter()
+        .filter(|issue| {
+            let code = issue.get("code").and_then(Value::as_str);
+            if code == Some("workstation_upgrade_transaction_not_terminal") {
+                return false;
+            }
+            !(code == Some("active_runtime_stale_executable")
+                && issue
+                    .get("session")
+                    .and_then(Value::as_str)
+                    .is_some_and(|session| {
+                        transitional_source_sessions
+                            .iter()
+                            .any(|expected| expected == session)
+                    }))
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    transaction_issue_count == 1 && install_doctor_issues_are_advisory(data, &remaining_issues)
+}
+
+/// Remote-view doctor derives `remoteControl.ready` from install-doctor
+/// readiness plus its route, gateway, display, and launch axes. During the
+/// reversible handoff window, accept only the exact embedded transaction-aware
+/// install result while every independent remote-control axis is already true.
+fn remote_view_doctor_reports_expected_upgrade_ready(
+    payload: &Value,
+    expected: &crate::runtime_adoption::UpgradeTransaction,
+    transitional_source_sessions: &[String],
+) -> bool {
+    let Some(install) = payload.pointer("/data/install/data") else {
+        return false;
+    };
+    if !install_doctor_reports_expected_upgrade_ready(
+        install,
+        expected,
+        transitional_source_sessions,
+    ) {
+        return false;
+    }
+    let Some(remote_control) = payload.pointer("/data/remoteControl") else {
+        return false;
+    };
+    [
+        "rdpGatewayReady",
+        "privateDisplayAllocatorReady",
+        "routePoolReady",
+        "routeUrlReady",
+        "routeDisplayReady",
+        "routeDisplayAccessReady",
+        "browserLaunchReady",
+    ]
+    .iter()
+    .all(|axis| remote_control.get(*axis).and_then(Value::as_bool) == Some(true))
 }
 
 fn write_private_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
@@ -3365,7 +3439,7 @@ fn transfer_discovered_runtimes(
     handoffs: &mut Vec<PreparedRuntimeHandoff>,
 ) -> Result<(), String> {
     use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
-    use crate::runtime_adoption::{BrowserAdoptionMode, RuntimeDisposition};
+    use crate::runtime_adoption::{BrowserAdoptionMode, RuntimeClassification, RuntimeDisposition};
 
     let service_state =
         JsonServiceStateStore::new(JsonServiceStateStore::default_path()?).load()?;
@@ -3514,7 +3588,21 @@ fn transfer_discovered_runtimes(
                 handoffs[handoff_index].committed = true;
                 migration.adoption_receipt_id = Some(owner_transfer_receipt_id(&resumed)?);
             }
-            RuntimeDisposition::ManualPreservation | RuntimeDisposition::RetiredIdle => {}
+            RuntimeDisposition::ManualPreservation => {}
+            RuntimeDisposition::RetiredIdle => {
+                if migration.classification == RuntimeClassification::IdleDaemon {
+                    let source_session = source_session.ok_or_else(|| {
+                        format!(
+                            "idle_daemon_source_session_missing:{}",
+                            migration.logical_browser_id
+                        )
+                    })?;
+                    retire_idle_daemon(&source_session)?;
+                    migration
+                        .reason_codes
+                        .push("idle_daemon_retired".to_string());
+                }
+            }
             RuntimeDisposition::RejectedAmbiguity => {
                 return Err(format!(
                     "runtime_transfer_rejected_ambiguity:{}",
@@ -3522,6 +3610,32 @@ fn transfer_discovered_runtimes(
                 ));
             }
         }
+    }
+    Ok(())
+}
+
+/// Stops a census-proven browserless daemon while the admission drain prevents
+/// new effect work. The recorded process identity prevents PID-reuse signals;
+/// no browser process is signaled or closed.
+fn retire_idle_daemon(session: &str) -> Result<(), String> {
+    let identity = crate::connection::load_daemon_process_identity(session)?;
+    let Some(process) = crate::process_identity::VerifiedProcessTermination::open(&identity)?
+    else {
+        if crate::connection::daemon_ready(session) {
+            return Err(format!("idle_daemon_identity_changed:{session}"));
+        }
+        return Ok(());
+    };
+    process.signal(crate::process_identity::VerifiedProcessSignal::Terminate)?;
+    let deadline = std::time::Instant::now() + LEGACY_DAEMON_EXIT_TIMEOUT;
+    while process.is_running()? {
+        if std::time::Instant::now() >= deadline {
+            return Err(format!("idle_daemon_exit_timeout:{session}"));
+        }
+        std::thread::sleep(LEGACY_DAEMON_EXIT_POLL_INTERVAL);
+    }
+    if crate::connection::daemon_ready(session) {
+        return Err(format!("idle_daemon_session_rebound:{session}"));
     }
     Ok(())
 }
@@ -6739,7 +6853,8 @@ mod tests {
 
         assert!(install_doctor_reports_expected_upgrade_ready(
             &report,
-            &transaction
+            &transaction,
+            &[]
         ));
         assert!(!install_doctor_reports_workstation_ready(&report));
 
@@ -6748,7 +6863,83 @@ mod tests {
             ["transactionId"] = Value::String("another-transaction".to_string());
         assert!(!install_doctor_reports_expected_upgrade_ready(
             &wrong,
-            &transaction
+            &transaction,
+            &[]
+        ));
+    }
+
+    #[test]
+    fn transaction_validation_allows_only_exact_transitional_source_sessions() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-upgrade-source-doctor-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "generation-new".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.state = crate::runtime_adoption::UpgradeTransactionState::PostCommitValidating;
+        let report = serde_json::json!({
+            "success": false,
+            "data": {
+                "issues": [
+                    {"code": "workstation_upgrade_transaction_not_terminal"},
+                    {"code": "active_runtime_stale_executable", "session": "source-owner"},
+                ],
+                "sessionSupervisors": {"sessions": [], "issues": []},
+                "liveDashboardRuntime": {
+                    "workstationUpgrade": {
+                        "selectedGenerationId": "generation-new",
+                        "admissionDraining": true,
+                        "latestTransaction": {
+                            "transactionId": transaction.transaction_id.clone(),
+                            "state": "post_commit_validating",
+                        }
+                    }
+                }
+            }
+        });
+
+        assert!(install_doctor_reports_expected_upgrade_ready(
+            &report,
+            &transaction,
+            &["source-owner".to_string()]
+        ));
+        assert!(!install_doctor_reports_expected_upgrade_ready(
+            &report,
+            &transaction,
+            &["another-source".to_string()]
+        ));
+
+        let remote_report = serde_json::json!({
+            "data": {
+                "install": {"data": report},
+                "remoteControl": {
+                    "ready": false,
+                    "rdpGatewayReady": true,
+                    "privateDisplayAllocatorReady": true,
+                    "routePoolReady": true,
+                    "routeUrlReady": true,
+                    "routeDisplayReady": true,
+                    "routeDisplayAccessReady": true,
+                    "browserLaunchReady": true,
+                }
+            }
+        });
+        assert!(remote_view_doctor_reports_expected_upgrade_ready(
+            &remote_report,
+            &transaction,
+            &["source-owner".to_string()]
+        ));
+        let mut route_blocked = remote_report;
+        route_blocked["data"]["remoteControl"]["routePoolReady"] = Value::Bool(false);
+        assert!(!remote_view_doctor_reports_expected_upgrade_ready(
+            &route_blocked,
+            &transaction,
+            &["source-owner".to_string()]
         ));
     }
 
