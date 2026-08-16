@@ -7,6 +7,7 @@ use super::proof::remote_view_open_visible_window_proof;
 use super::route_lifecycle::handle_service_remote_view_route_checkout;
 pub(crate) use super::runtime_model::*;
 use super::shared::*;
+use crate::native::action_runtime::runtime::handle_runtime_handoff_resume;
 use crate::native::service_store::JsonServiceStateStore;
 /// Raw browser facts observed by the coordinator. The runtime adapter does
 /// not decide whether a browser or target is reusable.
@@ -25,6 +26,10 @@ pub(crate) struct RouteBoundBrowserObservation {
 #[derive(Debug, Clone)]
 pub(crate) struct LaunchBrowserRequest {
     pub(crate) command: LaunchBrowserCommand,
+}
+#[derive(Debug, Clone)]
+pub(crate) struct AdoptRetainedBrowserRequest {
+    pub(crate) source_session: String,
 }
 #[derive(Debug, Clone)]
 pub(crate) struct SwitchTargetRequest {
@@ -70,6 +75,12 @@ pub(crate) struct OperatorAccessRequest {
 /// execute command or daemon-state escape hatch.
 pub(crate) trait RouteBoundOpenRuntime {
     fn observe_browser(&mut self) -> RouteBoundOpenFuture<'_, RouteBoundBrowserObservation>;
+    /// Attach this daemon to a verified surviving browser through the runtime
+    /// owner registry. Durable resolution never substitutes a browser launch.
+    fn adopt_retained_browser(
+        &mut self,
+        request: AdoptRetainedBrowserRequest,
+    ) -> RouteBoundOpenFuture<'_, RouteBoundBrowserObservation>;
     fn launch_browser(
         &mut self,
         request: LaunchBrowserRequest,
@@ -263,6 +274,22 @@ pub(crate) fn route_bound_runtime_issue(
 impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
     fn observe_browser(&mut self) -> RouteBoundOpenFuture<'_, RouteBoundBrowserObservation> {
         Box::pin(observe_daemon_browser(self.state))
+    }
+    fn adopt_retained_browser(
+        &mut self,
+        request: AdoptRetainedBrowserRequest,
+    ) -> RouteBoundOpenFuture<'_, RouteBoundBrowserObservation> {
+        Box::pin(async move {
+            handle_runtime_handoff_resume(
+                &json!({ "sourceSession": request.source_session }),
+                self.state,
+            )
+            .await
+            .map_err(|message| {
+                route_bound_runtime_issue("adopt_retained_browser", message, None)
+            })?;
+            observe_daemon_browser(self.state).await
+        })
     }
     fn launch_browser(
         &mut self,

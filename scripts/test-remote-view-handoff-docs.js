@@ -52,6 +52,22 @@ assert.match(
   /Reconnect without opening another browser[\s\S]*Open the same `handoffUrl` again/,
   'the guide must tell agents to reuse the durable handoff during provider churn',
 );
+for (const [name, contents] of Object.entries({
+  readme: files.readme,
+  skill: files.skill,
+  guide: files.guide,
+})) {
+  assert.match(
+    contents,
+    /presentation(?:Generation|Receipt| (?:generation|receipt))[\s\S]*(?:converging|retry)/i,
+    `${name} must document the authenticated presentation gate and retryable convergence`,
+  );
+  assert.match(
+    contents,
+    /(?:does not|without)[^\n]*(?:navigate|navigation)[\s\S]*(?:replacement target|relaunch)/i,
+    `${name} must forbid navigation replay and replacement browser work during normal resolution`,
+  );
+}
 assert.match(
   files.navigation,
   /RDP Remote View[\s\S]*href: "\/remote-view"/,

@@ -2345,6 +2345,29 @@ pub struct RemoteViewHandoff {
     pub updated_at: Option<String>,
     pub last_resolved_at: Option<String>,
     pub last_resolution: Option<Value>,
+    /// Latest end-to-end presentation generation. A resolver may render only
+    /// when this receipt matches the requested provider and retained target.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub presentation_receipt: Option<DurableHandoffPresentationReceipt>,
+}
+
+/// Browser-specific proof consumed by the authenticated durable handoff gate.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DurableHandoffPresentationReceipt {
+    pub schema_version: String,
+    pub generation: u64,
+    pub dashboard_deployment_generation: String,
+    pub logical_browser_id: String,
+    pub daemon_owner_generation: Option<u64>,
+    pub process_instance_digest: Option<String>,
+    pub target_id: String,
+    pub required_stream_provider: ViewStreamProvider,
+    pub observed_stream_provider: ViewStreamProvider,
+    pub route_id: String,
+    pub display_allocation_id: String,
+    pub observed_at: String,
+    pub state: String,
 }
 
 /// Top-level snapshot of the browser service control plane.
@@ -8318,6 +8341,7 @@ mod tests {
             updated_at: Some("2026-08-07T12:01:00Z".to_string()),
             last_resolved_at: Some("2026-08-07T12:01:00Z".to_string()),
             last_resolution: Some(json!({"status": "ready"})),
+            presentation_receipt: None,
         };
         let state = ServiceState {
             remote_view_handoffs: BTreeMap::from([(handoff.id.clone(), handoff)]),

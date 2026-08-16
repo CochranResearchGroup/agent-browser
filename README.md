@@ -236,7 +236,10 @@ agent-browser --json remote-view open https://example.com/secure \
 Require `operatorVisible.state` to be `ready`. Give the operator only the
 returned `handoffUrl`, shaped as `/remote-view/<handoff-id>`. Reopen that same
 URL after route, display, or viewer changes so agent-browser can reacquire the
-current provider route.
+current provider route. Normal resolution adopts the exact retained browser and
+target without navigating, opening a replacement target, relaunching the
+browser, or changing providers. The dashboard stays on the durable URL and
+waits for a matching authenticated presentation generation before rendering.
 
 Do not hand off `providerExternalUrl`, a raw Guacamole URL, or any URL under
 `routeBinding`. Those URLs describe the current provider connection and can
@@ -3172,9 +3175,17 @@ Successful non-dry-run opens return an authenticated durable URL in
 current provider connection. Opening the durable URL after dashboard login
 queues `service_remote_view_handoff_resolve`, prefers the originally retained
 browser tab, and reacquires expired Guacamole route state with the original view
-stream and control-input posture. Missing targets remain recoverable. A tab
-recorded as deliberately closed stays closed until the operator explicitly
-chooses **Reopen tab**.
+stream and control-input posture. If the original daemon is gone, the resolver
+requests adoption of the exact retained browser identity. It never substitutes
+a raw provider URL, launches a replacement browser, opens a replacement target,
+or replays navigation during ordinary resolution. The dashboard renders only
+after the resulting presentation receipt matches the dashboard deployment,
+logical browser, daemon owner generation, process identity, target, and
+requested provider. Until then it reports a
+retryable converging state on the same durable URL. A missing target fails
+closed. A tab recorded as deliberately closed stays closed until the operator
+explicitly chooses **Reopen tab**; that explicit action is the separate path
+that may open and navigate a replacement target.
 Software clients should call `requestServiceRemoteViewHandoff()` when they
 need a link for a user. It returns only `handoffId` and `handoffUrl`, so callers
 cannot accidentally publish the current Guacamole connection URL.

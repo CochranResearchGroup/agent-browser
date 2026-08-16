@@ -31,6 +31,8 @@ struct ScriptedRuntime {
     observation: RouteBoundBrowserObservation,
     launch_issue: Option<RouteBoundRuntimeIssue>,
     operator_access: Option<Value>,
+    adoption_observation: Option<RouteBoundBrowserObservation>,
+    adoption_issue: Option<RouteBoundRuntimeIssue>,
 }
 
 impl ScriptedRuntime {
@@ -50,6 +52,11 @@ impl ScriptedRuntime {
             },
             launch_issue: None,
             operator_access: Some(json!({ "state": "ready" })),
+            adoption_observation: None,
+            adoption_issue: Some(RouteBoundRuntimeIssue::EffectFailed {
+                operation: "adopt_retained_browser",
+                message: "scripted retained browser is unavailable".to_string(),
+            }),
         }
     }
 
@@ -66,6 +73,26 @@ impl RouteBoundOpenRuntime for ScriptedRuntime {
         Box::pin(async move {
             self.events.lock().unwrap().push("observe_browser");
             Ok(self.observation.clone())
+        })
+    }
+
+    fn adopt_retained_browser(
+        &mut self,
+        _request: AdoptRetainedBrowserRequest,
+    ) -> RouteBoundOpenFuture<'_, RouteBoundBrowserObservation> {
+        Box::pin(async move {
+            self.events.lock().unwrap().push("adopt_retained_browser");
+            if let Some(issue) = self.adoption_issue.clone() {
+                return Err(issue);
+            }
+            let observation = self.adoption_observation.clone().ok_or_else(|| {
+                RouteBoundRuntimeIssue::EffectFailed {
+                    operation: "adopt_retained_browser",
+                    message: "scripted retained browser observation is missing".to_string(),
+                }
+            })?;
+            self.observation = observation.clone();
+            Ok(observation)
         })
     }
 
@@ -433,307 +460,6 @@ async fn scripted_runtime_success_records_only_completed_effects() {
     );
 }
 
-fn fallback_snapshot() -> RouteBoundResolutionSnapshot {
-    let handoff = RemoteViewHandoff {
-        id: "handoff-a".to_string(),
-        browser_id: Some("session:im-receipts".to_string()),
-        session_name: Some("im-receipts".to_string()),
-        tab_id: Some("target:tab-a".to_string()),
-        target_id: Some("tab-a".to_string()),
-        profile_id: Some("im-receipts-main".to_string()),
-        handoff_url: Some("/remote-view/handoff-a".to_string()),
-        view_stream_provider: Some(ViewStreamProvider::RdpGateway),
-        last_route_id: Some("guacamole:2".to_string()),
-        ..RemoteViewHandoff::default()
-    };
-    RouteBoundResolutionSnapshot {
-        state: ServiceState {
-            remote_view_handoffs: BTreeMap::from([(handoff.id.clone(), handoff.clone())]),
-            remote_view_routes: BTreeMap::from([(
-                "guacamole:2".to_string(),
-                RemoteViewRoute {
-                    id: "guacamole:2".to_string(),
-                    provider: ViewStreamProvider::RdpGateway,
-                    browser_id: handoff.browser_id.clone(),
-                    session_id: handoff.session_name.clone(),
-                    external_url: Some(
-                        "https://dashboard.example/guacamole/#/client/route-b".to_string(),
-                    ),
-                    ..RemoteViewRoute::default()
-                },
-            )]),
-            ..ServiceState::default()
-        },
-        handoff,
-        loaded_at: "2026-08-10T09:00:00Z".to_string(),
-    }
-}
-
-fn profile_conflict_issue() -> RouteBoundRuntimeIssue {
-    RouteBoundRuntimeIssue::RequestedProfileInUseByPid {
-        profile_id: "im-receipts-main".to_string(),
-        pid: 42,
-        owner_browser_id: Some("session:im-receipts".to_string()),
-        owner_session_id: Some("im-receipts".to_string()),
-        compatibility_message: "profile is already in use by PID 42".to_string(),
-    }
-}
-
-#[test]
-fn fallback_eligibility_requires_each_of_the_nine_closed_predicates() {
-    for predicate in 0..9 {
-        let mut eligibility = RouteBoundFallbackEligibility {
-            immutable_snapshot_exists: true,
-            explicit_close_allows_resolution: true,
-            exact_opaque_rdp_identity: true,
-            typed_retained_owner_conflict: true,
-            current_bounded_route: true,
-            operator_access_succeeded: true,
-            best_effort_result: true,
-            no_new_ownership: true,
-            retained_browser_and_unrelated_tabs_unchanged: true,
-        };
-        match predicate {
-            0 => eligibility.immutable_snapshot_exists = false,
-            1 => eligibility.explicit_close_allows_resolution = false,
-            2 => eligibility.exact_opaque_rdp_identity = false,
-            3 => eligibility.typed_retained_owner_conflict = false,
-            4 => eligibility.current_bounded_route = false,
-            5 => eligibility.operator_access_succeeded = false,
-            6 => eligibility.best_effort_result = false,
-            7 => eligibility.no_new_ownership = false,
-            _ => eligibility.retained_browser_and_unrelated_tabs_unchanged = false,
-        }
-        assert!(
-            !eligibility.is_eligible(),
-            "predicate {predicate} must fail closed"
-        );
-    }
-}
-
-#[tokio::test]
-async fn provider_fallback_uses_one_immutable_snapshot_and_preserves_the_browser_lane() {
-    let snapshot = fallback_snapshot();
-    let before = serde_json::to_value((&snapshot.state, &snapshot.handoff)).unwrap();
-    let supervisor = RouteBoundOpenSupervisor::system(Some(1_000), None);
-    let mut runtime = ScriptedRuntime::new();
-    let issue = profile_conflict_issue();
-
-    let fallback = remote_view_handoff_provider_fallback_if_eligible(
-        &snapshot,
-        &snapshot.state,
-        false,
-        Some(&issue),
-        RouteBoundOpenAuthorization::AuthenticatedDaemonCommand,
-        &mut runtime,
-        &supervisor,
-    )
-    .await
-    .unwrap()
-    .into_value();
-
-    assert_eq!(fallback["providerFallback"], true);
-    assert_eq!(fallback["fallbackMode"], "best_effort");
-    assert_eq!(fallback["resolutionSnapshotLoadedAt"], snapshot.loaded_at);
-    assert!(fallback["fallbackEligibility"]
-        .as_object()
-        .unwrap()
-        .values()
-        .all(|value| value.as_bool() == Some(true)));
-    assert_eq!(
-        *runtime.events.lock().unwrap(),
-        vec!["observe_operator_access"]
-    );
-    assert_eq!(
-        before,
-        serde_json::to_value((&snapshot.state, &snapshot.handoff)).unwrap()
-    );
-}
-
-#[tokio::test]
-async fn provider_fallback_rejects_unauthorized_ingress_before_any_runtime_effect() {
-    let snapshot = fallback_snapshot();
-    let supervisor = RouteBoundOpenSupervisor::system(Some(1_000), None);
-    let mut runtime = ScriptedRuntime::new();
-    let issue = profile_conflict_issue();
-
-    let fallback = remote_view_handoff_provider_fallback_if_eligible(
-        &snapshot,
-        &snapshot.state,
-        false,
-        Some(&issue),
-        RouteBoundOpenAuthorization::Rejected,
-        &mut runtime,
-        &supervisor,
-    )
-    .await;
-
-    assert!(fallback.is_none());
-    assert!(runtime.events.lock().unwrap().is_empty());
-}
-
-#[tokio::test]
-async fn provider_fallback_derives_snapshot_ownership_and_operator_predicates() {
-    let supervisor = RouteBoundOpenSupervisor::system(Some(1_000), None);
-    let issue = profile_conflict_issue();
-
-    let mut missing_snapshot = fallback_snapshot();
-    missing_snapshot.state.remote_view_handoffs.clear();
-    let mut runtime = ScriptedRuntime::new();
-    assert!(remote_view_handoff_provider_fallback_if_eligible(
-        &missing_snapshot,
-        &missing_snapshot.state,
-        false,
-        Some(&issue),
-        RouteBoundOpenAuthorization::AuthenticatedDaemonCommand,
-        &mut runtime,
-        &supervisor,
-    )
-    .await
-    .is_none());
-
-    let mut explicitly_closed = fallback_snapshot();
-    explicitly_closed.state.tabs.insert(
-        "target:tab-a".to_string(),
-        BrowserTab {
-            id: "target:tab-a".to_string(),
-            target_id: Some("tab-a".to_string()),
-            lifecycle: TabLifecycle::Closed,
-            ..BrowserTab::default()
-        },
-    );
-    explicitly_closed.state.remote_view_handoffs.insert(
-        explicitly_closed.handoff.id.clone(),
-        explicitly_closed.handoff.clone(),
-    );
-    let mut runtime = ScriptedRuntime::new();
-    assert!(remote_view_handoff_provider_fallback_if_eligible(
-        &explicitly_closed,
-        &explicitly_closed.state,
-        false,
-        Some(&issue),
-        RouteBoundOpenAuthorization::AuthenticatedDaemonCommand,
-        &mut runtime,
-        &supervisor,
-    )
-    .await
-    .is_none());
-
-    let wrong_identity = {
-        let mut snapshot = fallback_snapshot();
-        snapshot.handoff.handoff_url = None;
-        snapshot
-            .state
-            .remote_view_handoffs
-            .insert(snapshot.handoff.id.clone(), snapshot.handoff.clone());
-        snapshot
-    };
-    let mut runtime = ScriptedRuntime::new();
-    assert!(remote_view_handoff_provider_fallback_if_eligible(
-        &wrong_identity,
-        &wrong_identity.state,
-        false,
-        Some(&issue),
-        RouteBoundOpenAuthorization::AuthenticatedDaemonCommand,
-        &mut runtime,
-        &supervisor,
-    )
-    .await
-    .is_none());
-
-    let snapshot = fallback_snapshot();
-    let wrong_issue = RouteBoundRuntimeIssue::EffectFailed {
-        operation: "launch_browser",
-        message: "not a typed retained-owner conflict".to_string(),
-    };
-    let mut runtime = ScriptedRuntime::new();
-    assert!(remote_view_handoff_provider_fallback_if_eligible(
-        &snapshot,
-        &snapshot.state,
-        false,
-        Some(&wrong_issue),
-        RouteBoundOpenAuthorization::AuthenticatedDaemonCommand,
-        &mut runtime,
-        &supervisor,
-    )
-    .await
-    .is_none());
-
-    let snapshot = fallback_snapshot();
-    let mut stale_route_state = snapshot.state.clone();
-    stale_route_state.remote_view_routes.clear();
-    let mut runtime = ScriptedRuntime::new();
-    assert!(remote_view_handoff_provider_fallback_if_eligible(
-        &snapshot,
-        &stale_route_state,
-        false,
-        Some(&issue),
-        RouteBoundOpenAuthorization::AuthenticatedDaemonCommand,
-        &mut runtime,
-        &supervisor,
-    )
-    .await
-    .is_none());
-
-    let snapshot = fallback_snapshot();
-    let mut runtime = ScriptedRuntime::new();
-    runtime.operator_access = Some(json!({ "state": "not_ready" }));
-    assert!(remote_view_handoff_provider_fallback_if_eligible(
-        &snapshot,
-        &snapshot.state,
-        false,
-        Some(&issue),
-        RouteBoundOpenAuthorization::AuthenticatedDaemonCommand,
-        &mut runtime,
-        &supervisor,
-    )
-    .await
-    .is_none());
-
-    let snapshot = fallback_snapshot();
-    let mut new_ownership = snapshot.state.clone();
-    new_ownership.profiles.insert(
-        "unexpected-profile".to_string(),
-        BrowserProfile {
-            id: "unexpected-profile".to_string(),
-            ..BrowserProfile::default()
-        },
-    );
-    let mut runtime = ScriptedRuntime::new();
-    assert!(remote_view_handoff_provider_fallback_if_eligible(
-        &snapshot,
-        &new_ownership,
-        false,
-        Some(&issue),
-        RouteBoundOpenAuthorization::AuthenticatedDaemonCommand,
-        &mut runtime,
-        &supervisor,
-    )
-    .await
-    .is_none());
-
-    let mut changed_tabs = snapshot.state.clone();
-    changed_tabs.tabs.insert(
-        "unrelated".to_string(),
-        BrowserTab {
-            id: "unrelated".to_string(),
-            ..BrowserTab::default()
-        },
-    );
-    let mut runtime = ScriptedRuntime::new();
-    assert!(remote_view_handoff_provider_fallback_if_eligible(
-        &snapshot,
-        &changed_tabs,
-        false,
-        Some(&issue),
-        RouteBoundOpenAuthorization::AuthenticatedDaemonCommand,
-        &mut runtime,
-        &supervisor,
-    )
-    .await
-    .is_none());
-}
-
 struct StaticRepository {
     state: ServiceState,
 }
@@ -804,6 +530,7 @@ fn authorized_attribution() -> RouteBoundOpenAttribution {
     RouteBoundOpenAttribution {
         caller_id: Some("operator-a".to_string()),
         service_job_id: Some("job-a".to_string()),
+        dashboard_deployment_generation: Some("dashboard-test".to_string()),
         authorization: RouteBoundOpenAuthorization::AuthenticatedDaemonCommand,
     }
 }
@@ -1027,7 +754,7 @@ async fn coordinator_returns_typed_planned_outcome_without_launching_a_browser()
 }
 
 #[tokio::test]
-async fn coordinator_returns_provider_fallback_without_creating_a_duplicate_lane() {
+async fn durable_resolution_adopts_the_exact_browser_without_provider_redirect() {
     let root = std::env::temp_dir().join(format!(
         "agent-browser-route-open-fallback-{}-{}",
         std::process::id(),
@@ -1055,6 +782,23 @@ async fn coordinator_returns_provider_fallback_without_creating_a_duplicate_lane
         last_route_id: Some("route-a".to_string()),
         last_route_pool_entry_id: Some("pool-a".to_string()),
         last_display_allocation_id: Some("display-a".to_string()),
+        presentation_receipt: Some(
+            crate::native::service_model::DurableHandoffPresentationReceipt {
+                schema_version: "agent-browser.durable-handoff-presentation.v1".to_string(),
+                generation: 4,
+                dashboard_deployment_generation: "dashboard-old".to_string(),
+                logical_browser_id: "session:im-receipts".to_string(),
+                daemon_owner_generation: Some(7),
+                process_instance_digest: Some("process-old".to_string()),
+                target_id: "tab-a".to_string(),
+                required_stream_provider: ViewStreamProvider::RdpGateway,
+                observed_stream_provider: ViewStreamProvider::RdpGateway,
+                route_id: "route-old".to_string(),
+                display_allocation_id: "display-old".to_string(),
+                observed_at: "2026-08-15T12:00:00Z".to_string(),
+                state: "ready".to_string(),
+            },
+        ),
         ..RemoteViewHandoff::default()
     };
     let initial = ServiceState {
@@ -1104,6 +848,22 @@ async fn coordinator_returns_provider_fallback_without_creating_a_duplicate_lane
                 ..RoutePoolEntry::default()
             },
         )]),
+        runtime_owner_registry: crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(
+            crate::runtime_owner_transfer::ProfileOwner {
+                owner_id: "owner-current".to_string(),
+                profile_identity_digest: "profile-digest".to_string(),
+                state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+                owner_generation: 8,
+                browser_id: "session:im-receipts".to_string(),
+                daemon_session_route: "im-receipts".to_string(),
+                process_instance_digest: "process-digest".to_string(),
+                browser_family: "chrome".to_string(),
+                cdp_endpoint_identity_digest: "cdp-digest".to_string(),
+                target_set_digest: "target-digest".to_string(),
+                pending_transfer: None,
+                last_transition: None,
+            },
+        ),
         ..ServiceState::default()
     };
     let store = JsonServiceStateStore::new(&state_path);
@@ -1113,8 +873,6 @@ async fn coordinator_returns_provider_fallback_without_creating_a_duplicate_lane
     };
     let supervisor = RouteBoundOpenSupervisor::system(Some(10_000), None);
     let mut runtime = ScriptedRuntime::new();
-    runtime.launch_issue = Some(profile_conflict_issue());
-
     let outcome = RouteBoundOpenCoordinator::open(
         RouteBoundOpenInvocation::durable_resolution(
             "handoff-a".to_string(),
@@ -1129,18 +887,10 @@ async fn coordinator_returns_provider_fallback_without_creating_a_duplicate_lane
     .await
     .unwrap();
 
-    assert!(matches!(
-        outcome,
-        RouteBoundOpenOutcome::ProviderFallback { .. }
-    ));
+    assert!(matches!(outcome, RouteBoundOpenOutcome::Converging { .. }));
     assert_eq!(
         *runtime.events.lock().unwrap(),
-        vec![
-            "observe_browser",
-            "ensure_display_access",
-            "launch_browser",
-            "observe_operator_access"
-        ]
+        vec!["observe_browser", "adopt_retained_browser"]
     );
     let retained = store.load().unwrap();
     assert_eq!(
@@ -1149,7 +899,81 @@ async fn coordinator_returns_provider_fallback_without_creating_a_duplicate_lane
     );
     assert!(retained.browsers.is_empty());
 
-    runtime.launch_issue = None;
+    runtime.adoption_issue = None;
+    runtime.adoption_observation = Some(RouteBoundBrowserObservation {
+        browser_present: true,
+        browser_pid: Some(4242),
+        browser_id: "session:im-receipts".to_string(),
+        session_id: "im-receipts".to_string(),
+        runtime_profile: Some("im-receipts-main".to_string()),
+        active_target_id: Some("tab-a".to_string()),
+        active_url: Some("https://retained.example/changed-without-navigation".to_string()),
+        active_title: Some("Retained".to_string()),
+        pages: vec![PageInfo {
+            target_id: "tab-a".to_string(),
+            session_id: "page-session".to_string(),
+            url: "https://retained.example/changed-without-navigation".to_string(),
+            title: "Retained".to_string(),
+            target_type: "page".to_string(),
+        }],
+    });
+    runtime.events.lock().unwrap().clear();
+    let adopted = RouteBoundOpenCoordinator::open(
+        RouteBoundOpenInvocation::durable_resolution(
+            "handoff-a".to_string(),
+            false,
+            authorized_attribution(),
+        )
+        .unwrap(),
+        &mut runtime,
+        &repository,
+        &supervisor,
+    )
+    .await
+    .unwrap();
+    assert!(
+        matches!(adopted, RouteBoundOpenOutcome::Opened { .. }),
+        "unexpected adopted resolution: {adopted:?}"
+    );
+    let adoption_events = runtime.events.lock().unwrap().clone();
+    assert!(adoption_events.contains(&"adopt_retained_browser"));
+    assert!(!adoption_events.contains(&"launch_browser"));
+    assert!(!adoption_events.contains(&"open_target"));
+    assert!(!adoption_events.contains(&"navigate_target"));
+    let adopted_value = adopted.clone().into_compatibility_result().unwrap();
+    assert_eq!(adopted_value["presentationGeneration"], 5);
+    assert_eq!(adopted_value["targetId"], "tab-a");
+    assert_eq!(
+        adopted_value["presentationReceipt"]["dashboardDeploymentGeneration"],
+        "dashboard-test"
+    );
+    assert_eq!(
+        adopted_value["presentationReceipt"]["requiredStreamProvider"],
+        "rdp_gateway"
+    );
+    assert_eq!(
+        adopted_value["presentationReceipt"]["observedStreamProvider"],
+        "rdp_gateway"
+    );
+    let adopted_state = store.load().unwrap();
+    let adopted_receipt = adopted_state.remote_view_handoffs["handoff-a"]
+        .presentation_receipt
+        .as_ref()
+        .unwrap();
+    assert_eq!(adopted_receipt.generation, 5);
+    assert_eq!(adopted_receipt.target_id, "tab-a");
+    assert_eq!(
+        adopted_receipt.dashboard_deployment_generation,
+        "dashboard-test"
+    );
+    assert_eq!(adopted_receipt.route_id, "route-a");
+    assert_eq!(adopted_receipt.display_allocation_id, "display-a");
+    assert_eq!(adopted_receipt.daemon_owner_generation, Some(8));
+    assert_eq!(
+        adopted_receipt.process_instance_digest.as_deref(),
+        Some("process-digest")
+    );
+
     runtime.events.lock().unwrap().clear();
     runtime.observation.browser_present = true;
     runtime.observation.browser_id = "session:im-receipts".to_string();
@@ -1178,6 +1002,15 @@ async fn coordinator_returns_provider_fallback_without_creating_a_duplicate_lane
     .await
     .unwrap();
     assert!(matches!(reopened, RouteBoundOpenOutcome::Reopened { .. }));
+    let reopened_state = store.load().unwrap();
+    assert_eq!(
+        reopened_state.remote_view_handoffs["handoff-a"]
+            .presentation_receipt
+            .as_ref()
+            .unwrap()
+            .generation,
+        6
+    );
     let _ = std::fs::remove_dir_all(root);
 }
 
@@ -1344,6 +1177,7 @@ fn every_ingress_uses_the_same_transport_neutral_authorization_fact() {
     let rejected_attribution = RouteBoundOpenAttribution {
         caller_id: None,
         service_job_id: None,
+        dashboard_deployment_generation: None,
         authorization: RouteBoundOpenAuthorization::Rejected,
     };
     let rejected_direct = RouteBoundDirectOpenRequest::from_compatibility_command(

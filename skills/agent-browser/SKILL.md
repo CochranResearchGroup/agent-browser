@@ -95,7 +95,11 @@ browser:
    `localEmbedUrl`, `dashboardEmbedUrl`, or `healthUrl` as the handoff.
 5. Reopen the same handoff URL after provider, route, display, or viewer-lease
    churn. Do not launch a replacement browser merely to reconnect the viewer.
-6. Treat `allowRawProviderUrl: true` as an infrastructure diagnostic escape
+6. Require a ready `presentationReceipt` whose generation, dashboard
+   deployment, logical browser, daemon owner generation, process identity,
+   target, and requested provider match the resolution.
+   Treat `status=converging` as retryable on the same durable URL.
+7. Treat `allowRawProviderUrl: true` as an infrastructure diagnostic escape
    hatch, never as an ordinary agent workflow.
 
 Do not confuse this remote-view link with `agent-browser handoff
@@ -197,10 +201,15 @@ links. They use `/remote-view/<handoff-id>` and survive dashboard authentication
 plus Guacamole route replacement. `providerExternalUrl` and route-binding URLs
 describe only the current provider connection. Resolve a stored link with
 service request action `service_remote_view_handoff_resolve` and
-`params.handoffId`. Resolution prefers the original retained target, falls back
-to compatible recovery when that target is stale, and preserves the original
-view stream and control-input posture. Do not send `allowReopenClosed: true`
-unless the operator explicitly asked to reopen a tab recorded as closed.
+`params.handoffId`. Normal resolution requests adoption of the exact retained
+browser when its original daemon is gone and reacquires only its requested
+presentation. It does not navigate, open a replacement target, relaunch the
+browser, change providers, or redirect to a raw provider URL. A ready result
+includes `presentationGeneration` and a matching `presentationReceipt`; keep
+retrying the same durable URL while status is `converging`. A missing target
+fails closed. Do not send `allowReopenClosed: true` unless the operator
+explicitly asked to reopen a tab recorded as closed. Explicit reopen is the
+separate path that may open and navigate a replacement target.
 Use service request action `service_remote_view_route_preflight`, HTTP
 `GET /api/service/remote-view/route-preflight`, MCP
 `service_remote_view_route_preflight`, or

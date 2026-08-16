@@ -11,8 +11,9 @@ use super::remote_view_proof::{
     remote_view_operator_visible_state, remote_view_target_component_state,
 };
 use super::service_model::{
-    ControlInputProvider, DisplayAllocation, RemoteViewAcquisitionLease, RemoteViewHandoff,
-    RemoteViewRoute, RoutePoolEntry, ServiceState, TabLifecycle, ViewStreamProvider,
+    ControlInputProvider, DisplayAllocation, DurableHandoffPresentationReceipt,
+    RemoteViewAcquisitionLease, RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry, ServiceState,
+    TabLifecycle, ViewStreamProvider,
 };
 use super::service_store::{
     JsonServiceStateStore, LockedServiceStateRepository, ServiceStateRepository,
@@ -78,6 +79,7 @@ pub struct CompleteRouteBoundHandoffOpenInput<'a> {
     pub display_access_grant: &'a Value,
     pub reused_current_browser: bool,
     pub visible_window_proof: &'a Value,
+    pub dashboard_deployment_generation: Option<&'a str>,
 }
 
 pub struct RouteBoundHandoffRecordInput<'a> {
@@ -505,6 +507,7 @@ pub fn remote_view_handoff_resolution_command(
         .cloned()
         .ok_or_else(|| "remote_view_handoff_intent_must_be_an_object".to_string())?;
     for key in [
+        "url",
         "routePoolEntryId",
         "routeId",
         "displayAllocationId",
@@ -534,12 +537,22 @@ pub fn remote_view_handoff_resolution_command(
         );
     }
     if !allow_reopen_closed {
+        command.insert(
+            "durableResolutionMode".to_string(),
+            Value::String("reacquire_only".to_string()),
+        );
         if let Some(target_id) = handoff.target_id.as_ref() {
             command.insert(
                 "preferredTargetId".to_string(),
                 Value::String(target_id.clone()),
             );
         }
+    } else if let Some(desired_url) = handoff.desired_url.as_ref() {
+        command.insert(
+            "durableResolutionMode".to_string(),
+            Value::String("explicit_reopen".to_string()),
+        );
+        command.insert("url".to_string(), Value::String(desired_url.clone()));
     }
     Ok(Value::Object(command))
 }
@@ -1067,7 +1080,9 @@ pub fn route_bound_handoff_tab_command(cmd: &Value, browser_id: &str, session_id
         "sessionName".to_string(),
         Value::String(session_id.to_string()),
     );
-    if !command.contains_key("url") {
+    let reacquire_only =
+        command.get("durableResolutionMode").and_then(Value::as_str) == Some("reacquire_only");
+    if !reacquire_only && !command.contains_key("url") {
         command.insert("url".to_string(), Value::String("about:blank".to_string()));
     }
     Value::Object(command)
@@ -1687,6 +1702,7 @@ pub fn complete_route_bound_handoff_open(
                 session_name: input.session_name,
                 tab: input.tab,
                 observed_at: input.observed_at,
+                dashboard_deployment_generation: input.dashboard_deployment_generation,
             }),
     )?;
     let acquisition_lease = serde_json::to_value(acquisition_lease)
@@ -1728,6 +1744,7 @@ struct PersistRemoteViewHandoffInput<'a> {
     session_name: &'a str,
     tab: &'a Value,
     observed_at: &'a str,
+    dashboard_deployment_generation: Option<&'a str>,
 }
 
 fn finalize_route_bound_handoff_atomic(
@@ -1748,11 +1765,48 @@ fn finalize_route_bound_handoff_atomic(
         let acquisition_lease =
             finalize_route_bound_acquisition(state, &lease.id, checkout, observed_at)?;
         if let Some((handoff_id, mut handoff)) = handoff {
-            handoff.created_at = state
-                .remote_view_handoffs
-                .get(&handoff_id)
+            let existing = state.remote_view_handoffs.get(&handoff_id);
+            handoff.created_at = existing
                 .and_then(|existing| existing.created_at.clone())
                 .or(handoff.created_at);
+            if let Some(existing) = existing {
+                handoff.intent = existing.intent.clone();
+                handoff.desired_url = existing
+                    .desired_url
+                    .clone()
+                    .or_else(|| {
+                        existing
+                            .intent
+                            .get("url")
+                            .and_then(Value::as_str)
+                            .map(str::to_string)
+                    })
+                    .or_else(|| handoff.desired_url.clone());
+            }
+            if let Some(receipt) = handoff.presentation_receipt.as_mut() {
+                receipt.generation = existing
+                    .and_then(|existing| existing.presentation_receipt.as_ref())
+                    .map(|receipt| receipt.generation.saturating_add(1))
+                    .unwrap_or(1);
+                if let Some(owner) = state.runtime_owner_registry.owners.values().find(|owner| {
+                    owner.browser_id == receipt.logical_browser_id
+                        && owner.daemon_session_route
+                            == handoff.session_name.as_deref().unwrap_or("")
+                }) {
+                    receipt.daemon_owner_generation = Some(owner.owner_generation);
+                    receipt.process_instance_digest = Some(owner.process_instance_digest.clone());
+                }
+                handoff.last_resolution = Some(json!({
+                    "status": "ready",
+                    "browserId": handoff.browser_id,
+                    "sessionName": handoff.session_name,
+                    "tabId": handoff.tab_id,
+                    "targetId": handoff.target_id,
+                    "routeId": handoff.last_route_id,
+                    "presentationGeneration": receipt.generation,
+                    "presentationReceipt": receipt,
+                }));
+            }
             state.remote_view_handoffs.insert(handoff_id, handoff);
         }
         Ok(acquisition_lease)
@@ -1791,6 +1845,26 @@ fn remote_view_handoff_for_persistence(
         .or_else(|| input.intent.profile.clone());
     let control_input =
         route_bound_handoff_default_control_input_provider(input.intent.view_stream_provider);
+    let presentation_receipt = input
+        .dashboard_deployment_generation
+        .zip(target_id.as_deref())
+        .map(
+            |(dashboard_deployment_generation, target_id)| DurableHandoffPresentationReceipt {
+                schema_version: "agent-browser.durable-handoff-presentation.v1".to_string(),
+                generation: 0,
+                dashboard_deployment_generation: dashboard_deployment_generation.to_string(),
+                logical_browser_id: input.browser_id.to_string(),
+                daemon_owner_generation: None,
+                process_instance_digest: None,
+                target_id: target_id.to_string(),
+                required_stream_provider: input.intent.view_stream_provider,
+                observed_stream_provider: input.route_binding.provider,
+                route_id: input.route_binding.route_id.clone(),
+                display_allocation_id: input.route_binding.display_allocation_id.clone(),
+                observed_at: input.observed_at.to_string(),
+                state: "ready".to_string(),
+            },
+        );
 
     Ok((
         input.handoff_id.to_string(),
@@ -1821,6 +1895,7 @@ fn remote_view_handoff_for_persistence(
                 "targetId": input.tab.get("targetId"),
                 "routeId": input.route_binding.route_id,
             })),
+            presentation_receipt,
         },
     ))
 }
@@ -2727,7 +2802,7 @@ mod tests {
     }
 
     #[test]
-    fn handoff_resolution_replays_intent_without_ephemeral_route_selectors() {
+    fn handoff_resolution_reacquires_without_navigation_or_ephemeral_route_selectors() {
         let handoff = RemoteViewHandoff {
             id: "job-handoff-a".to_string(),
             intent: json!({
@@ -2757,12 +2832,17 @@ mod tests {
         assert_eq!(command["browserId"], "session:browser-a");
         assert_eq!(command["sessionName"], "session-a");
         assert_eq!(command["preferredTargetId"], "target-a");
+        assert_eq!(command["durableResolutionMode"], "reacquire_only");
+        assert!(command.get("url").is_none());
         assert!(command.get("routePoolEntryId").is_none());
         assert!(command.get("routeId").is_none());
         assert!(command.get("displayAllocationId").is_none());
         assert!(command.get("remoteHeadedDisplay").is_none());
         assert_eq!(command["viewStreamProvider"], "rdp_gateway");
         assert_eq!(command["controlInput"], "manual_attached_desktop");
+        let tab_command =
+            route_bound_handoff_tab_command(&command, "session:browser-a", "session-a");
+        assert!(tab_command.get("url").is_none());
     }
 
     #[test]
@@ -3673,6 +3753,7 @@ mod tests {
             display_access_grant: &json!({ "state": "already_ready" }),
             reused_current_browser: true,
             visible_window_proof: &json!({ "state": "ready" }),
+            dashboard_deployment_generation: Some("dashboard-a"),
         })
         .unwrap();
 
@@ -3703,6 +3784,18 @@ mod tests {
         let handoff = &state.remote_view_handoffs["job-handoff-a"];
         assert_eq!(handoff.browser_id.as_deref(), Some("session:a"));
         assert_eq!(handoff.target_id.as_deref(), Some("target-2"));
+        let presentation = handoff.presentation_receipt.as_ref().unwrap();
+        assert_eq!(presentation.generation, 1);
+        assert_eq!(presentation.dashboard_deployment_generation, "dashboard-a");
+        assert_eq!(presentation.target_id, "target-2");
+        assert_eq!(
+            presentation.required_stream_provider,
+            ViewStreamProvider::RdpGateway
+        );
+        assert_eq!(
+            presentation.observed_stream_provider,
+            ViewStreamProvider::RdpGateway
+        );
         assert_eq!(
             handoff.handoff_url.as_deref(),
             Some("https://guac.example/remote-view/job-handoff-a")

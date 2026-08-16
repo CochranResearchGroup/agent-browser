@@ -5,6 +5,9 @@ import { readFileSync } from 'node:fs';
 
 const dashboardPage = readFileSync('packages/dashboard/src/app/page.tsx', 'utf8');
 const viewport = readFileSync('packages/dashboard/src/components/workspace-remote-viewport.tsx', 'utf8');
+const viewPreferences = readFileSync('packages/dashboard/src/hooks/use-workspace-view-preferences.ts', 'utf8');
+const coordinator = readFileSync('cli/src/native/remote_view/open/coordinator.rs', 'utf8');
+const handoff = readFileSync('cli/src/native/remote_view_handoff.rs', 'utf8');
 
 assert.match(
   dashboardPage,
@@ -38,14 +41,44 @@ assert.match(
 
 assert.match(
   dashboardPage,
-  /nextResolution\.providerFallbackUrl[\s\S]*window\.location\.assign\(nextResolution\.providerFallbackUrl\)/,
-  'a retained RDP provider fallback must remain reachable when the original browser daemon is gone',
+  /durableHandoffPresentationReady\([\s\S]*presentationGeneration[\s\S]*dashboardDeploymentGeneration[\s\S]*logicalBrowserId[\s\S]*daemonOwnerGeneration[\s\S]*processInstanceDigest[\s\S]*requiredStreamProvider[\s\S]*observedStreamProvider[\s\S]*state === "ready"/,
+  'the dashboard must require a matching authenticated presentation generation before rendering',
+);
+
+assert.doesNotMatch(
+  dashboardPage,
+  /providerFallbackUrl[\s\S]*window\.location\.assign/,
+  'durable handoff resolution must never redirect to an unverified provider route',
+);
+
+assert.doesNotMatch(
+  coordinator,
+  /providerFallbackUrl|ProviderFallback|provider_fallback/,
+  'the durable resolver must not expose a raw-provider fallback outcome',
 );
 
 assert.match(
-  viewport,
-  /params\?\.get\("view-provider"\)[\s\S]*stream\.provider\?\.trim\(\)\.toLowerCase\(\) === intendedProvider/,
-  'workspace control must prefer the provider encoded by the durable handoff route',
+  handoff,
+  /durableResolutionMode[\s\S]*reacquire_only[\s\S]*preferredTargetId/,
+  'normal durable resolution must select the retained target in reacquire-only mode',
+);
+
+assert.match(
+  handoff,
+  /for key in \[[\s\S]*"url"[\s\S]*"routePoolEntryId"/,
+  'normal durable resolution must remove stored navigation and ephemeral route selectors',
+);
+
+assert.match(
+  dashboardPage,
+  /status: "converging"[\s\S]*window\.setTimeout\(\(\) => void resolveHandoff\(false\), 1_000\)/,
+  'a missing or stale presentation receipt must remain on the durable URL and retry convergence',
+);
+
+assert.match(
+  viewPreferences,
+  /get\("view-provider"\)[\s\S]*selectedProvider[\s\S]*readSelectedProvider/,
+  'workspace control must carry the provider encoded by the durable handoff route into view preferences',
 );
 
 console.log('dashboard durable remote-view handoff checks passed');

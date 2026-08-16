@@ -75,6 +75,20 @@ dashboard auth and service-state paths: the auth store was rewritten through
 normal startup, and the shared service-state mtime advanced while lock
 contention was observed. The source now has explicit auth-directory,
 backend-only, and relay-skip isolation for fixtures.
+Slice F is accepted at the source and isolated-fixture boundary. Ordinary
+durable resolution strips stored navigation and ephemeral route selectors,
+requires the exact retained target, requests the existing two-phase orphan
+adoption path when its daemon is gone, and never falls back to browser launch,
+target creation, navigation, provider substitution, or a raw provider redirect.
+The persisted presentation receipt advances monotonically and binds the stable
+dashboard deployment, logical browser, daemon owner generation, process
+identity, target, route, display, and requested and observed provider. Both the
+resolver and dashboard fail closed as retryable `converging` until that exact
+receipt is ready. One isolated fixture now proves the same opaque handoff across
+daemon loss, owner and process generation replacement, route and display
+replacement, and dashboard generation change without duplicate-browser or
+navigation events. Explicit reopen remains the only path that restores the
+stored URL and may create or navigate a target.
 
 ### Plan
 
@@ -83,10 +97,10 @@ backend-only, and relay-skip isolation for fixtures.
 ### Next Recommendation
 
 Keep Slice E acceptance withheld until the user-scoped boundary incident is
-adjudicated or independently reconciled. The next authorized source packet is
-Slice F durable-handoff self-healing; do not replace the installed payload,
-enable the recurring interlock, or touch a live browser. Slice I remains a
-separate explicit authorization gate.
+adjudicated or independently reconciled. The next source packet is Slice G
+transactional installer integration. Keep it source and isolated-fixture only:
+do not replace the installed payload, enable the recurring interlock, or touch
+a live browser. Slice I remains a separate explicit authorization gate.
 
 ## P114 | Terminal Route Quarantine Recovery
 

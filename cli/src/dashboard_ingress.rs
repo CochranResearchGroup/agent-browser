@@ -512,6 +512,13 @@ pub(crate) fn dashboard_ingress_status_json() -> serde_json::Value {
     }
 }
 
+/// Returns the generation currently selected behind the stable authenticated
+/// ingress. Durable handoff receipts bind to this value before rendering.
+pub(crate) fn selected_dashboard_generation() -> Result<String, String> {
+    let repository = DashboardIngressRepository::new(DashboardIngressRepository::default_path());
+    Ok(repository.load()?.selected_backend().generation_id.clone())
+}
+
 pub(crate) fn stage_dashboard_candidate(
     expected_revision: u64,
     candidate: DashboardBackend,

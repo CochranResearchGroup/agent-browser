@@ -4,6 +4,58 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 164 | 2026-08-16
+
+Scope: implement Plan 0116 Slice F durable-handoff self-healing at the source
+and isolated-fixture boundary without installed-payload or browser mutation.
+
+Actions:
+
+- changed ordinary durable resolution to remove stored navigation and
+  ephemeral route selectors, require the exact retained target, and prohibit
+  replacement target creation;
+- routed missing-daemon recovery through the existing two-phase retained
+  browser adoption seam without launch or navigation;
+- removed the resolver and dashboard raw-provider fallback and made requested
+  provider mismatch fail closed;
+- added a monotonic durable presentation receipt bound to dashboard
+  deployment, logical browser, daemon owner generation, process identity,
+  target, route, display, and requested and observed provider;
+- made the resolver and dashboard remain on the opaque durable URL with a
+  retryable `converging` state until the exact receipt is ready;
+- kept explicit reopen separate as the only path that restores the stored URL
+  and may create or navigate a target;
+- aligned CLI help, README, repository skill, docs site, inline comments, and
+  source contract guards.
+
+Validation:
+
+- the focused retained-browser fixture proves the same opaque handoff across
+  daemon loss, owner and process generation replacement, route and display
+  replacement, and dashboard generation change with no launch, target-open,
+  or navigation event;
+- all fifteen coordinator tests and forty-five remote-view handoff tests pass
+  serially, and thirty-four service-model contract tests pass;
+- the broad parallel Rust sweep passed 2,058 tests with one unrelated
+  control-plane monitor interval failure; that test passed immediately when
+  rerun alone with one test thread;
+- strict Clippy, Rust formatting, route-confusion gates, dashboard and docs
+  production builds, service API and MCP parity, generated client checks, and
+  handoff documentation guards pass.
+
+Result:
+
+- Slice F is accepted at the source and isolated-fixture boundary;
+- one early positive fixture attempted the default user-scoped service-state
+  process lock through the legacy tab-persistence path. The lock timed out and
+  no state write succeeded. Reacquire-only target handling now bypasses that
+  global persistence path, and the accepted rerun uses only its fixture
+  repository;
+- this source acceptance is not installed or live acceptance and does not
+  adjudicate Slice E's earlier user-scoped file mutations;
+- Slice G source work is next. Slice I still requires separate explicit live
+  authorization.
+
 ## Turn 163 | 2026-08-16
 
 Scope: implement Plan 0116 Slice E at the source and isolated-fixture boundary

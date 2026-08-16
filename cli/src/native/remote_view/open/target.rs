@@ -84,6 +84,8 @@ pub(crate) async fn route_bound_open_acquire_target<R: RouteBoundOpenRuntime>(
     session_id: &str,
     prefer_active_existing_target: bool,
 ) -> Result<Value, RouteBoundRuntimeIssue> {
+    let reacquire_only =
+        cmd.get("durableResolutionMode").and_then(Value::as_str) == Some("reacquire_only");
     let expected_url = cmd.get("url").and_then(Value::as_str);
     let desired_origin = expected_url.and_then(origin_for_url);
     let observation = supervisor
@@ -165,6 +167,12 @@ pub(crate) async fn route_bound_open_acquire_target<R: RouteBoundOpenRuntime>(
             decision,
         )
         .map_err(|message| route_bound_runtime_issue("observe_browser", message, Some(cmd)))?
+    } else if reacquire_only {
+        return Err(route_bound_runtime_issue(
+            "validate_retained_browser",
+            "durable_handoff_target_unavailable: the exact retained target disappeared during presentation reacquisition".to_string(),
+            Some(cmd),
+        ));
     } else {
         let mut opened = supervisor
             .forward(
@@ -186,16 +194,18 @@ pub(crate) async fn route_bound_open_acquire_target<R: RouteBoundOpenRuntime>(
     };
     route_bound_open_wait_for_target(cmd, runtime, supervisor, &mut tab).await;
     tab["duplicateTargetCleanup"] = no_duplicate_target_cleanup();
-    if let Some(service_tab_handle) = tab.get("serviceTabHandle").cloned() {
-        persist_service_owned_tab_new(
-            cmd,
-            session_id,
-            tab.get("targetId").and_then(Value::as_str),
-            tab.get("url").and_then(Value::as_str),
-            tab.get("title").and_then(Value::as_str),
-            &service_tab_handle,
-        )
-        .map_err(|message| route_bound_runtime_issue("open_target", message, Some(cmd)))?;
+    if !reacquire_only {
+        if let Some(service_tab_handle) = tab.get("serviceTabHandle").cloned() {
+            persist_service_owned_tab_new(
+                cmd,
+                session_id,
+                tab.get("targetId").and_then(Value::as_str),
+                tab.get("url").and_then(Value::as_str),
+                tab.get("title").and_then(Value::as_str),
+                &service_tab_handle,
+            )
+            .map_err(|message| route_bound_runtime_issue("open_target", message, Some(cmd)))?;
+        }
     }
     Ok(tab)
 }

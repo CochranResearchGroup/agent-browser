@@ -83,11 +83,44 @@ type RemoteViewHandoffResolution = {
   tabId?: string | null;
   targetId?: string | null;
   viewStreamProvider?: string | null;
-  providerFallbackUrl?: string | null;
+  requiredViewStreamProvider?: string | null;
+  presentationGeneration?: number | null;
+  presentationReceipt?: {
+    generation?: number | null;
+    dashboardDeploymentGeneration?: string | null;
+    logicalBrowserId?: string | null;
+    daemonOwnerGeneration?: number | null;
+    processInstanceDigest?: string | null;
+    targetId?: string | null;
+    requiredStreamProvider?: string | null;
+    observedStreamProvider?: string | null;
+    state?: string | null;
+  } | null;
   message?: string | null;
   tab?: Record<string, unknown> | null;
   open?: Record<string, unknown> | null;
 };
+
+function durableHandoffPresentationReady(resolution: RemoteViewHandoffResolution): boolean {
+  const receipt = resolution.presentationReceipt;
+  if (!receipt) return false;
+  return resolution.resolved === true
+    && resolution.status === "ready"
+    && Number.isInteger(resolution.presentationGeneration)
+    && Number(resolution.presentationGeneration) > 0
+    && receipt.generation === resolution.presentationGeneration
+    && Boolean(receipt.dashboardDeploymentGeneration)
+    && receipt.logicalBrowserId === resolution.browserId
+    && Number.isInteger(receipt.daemonOwnerGeneration)
+    && Number(receipt.daemonOwnerGeneration) > 0
+    && Boolean(receipt.processInstanceDigest)
+    && Boolean(resolution.targetId)
+    && receipt.targetId === resolution.targetId
+    && Boolean(resolution.viewStreamProvider)
+    && receipt.requiredStreamProvider === resolution.viewStreamProvider
+    && receipt.observedStreamProvider === receipt.requiredStreamProvider
+    && receipt.state === "ready";
+}
 
 type RemoteViewHandoffApiResponse = {
   success: boolean;
@@ -351,13 +384,17 @@ function RemoteViewHandoffGate({
       if (!response.ok || !payload.success || !payload.data) {
         throw new Error(payload.error || "The remote-view handoff could not be resolved.");
       }
-      const nextResolution = payload.data;
+      let nextResolution = payload.data;
+      if (nextResolution.resolved && !durableHandoffPresentationReady(nextResolution)) {
+        nextResolution = {
+          ...nextResolution,
+          status: "converging",
+          resolved: false,
+          message: "The retained browser is attached, but its authenticated presentation generation is still converging.",
+        };
+      }
       setResolution(nextResolution);
       if (!nextResolution.resolved || nextResolution.status !== "ready") return;
-      if (nextResolution.providerFallbackUrl) {
-        window.location.assign(nextResolution.providerFallbackUrl);
-        return;
-      }
 
       const tab = nextResolution.tab ?? null;
       const open = nextResolution.open ?? null;
@@ -418,6 +455,12 @@ function RemoteViewHandoffGate({
     if (handoffId) void resolveHandoff(false);
   }, [handoffId, resolveHandoff]);
 
+  useEffect(() => {
+    if (resolution?.status !== "converging") return;
+    const retry = window.setTimeout(() => void resolveHandoff(false), 1_000);
+    return () => window.clearTimeout(retry);
+  }, [resolution?.status, resolveHandoff]);
+
   if (!handoffId) {
     return <DashboardExperience initialSection={initialSection} user={user} onLogout={onLogout} />;
   }
@@ -437,6 +480,23 @@ function RemoteViewHandoffGate({
           </p>
           <div className="flex gap-3">
             <Button onClick={() => void resolveHandoff(true)}>Reopen tab</Button>
+            <Button variant="outline" onClick={onLogout}>Sign out</Button>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (resolution?.status === "converging") {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background p-6">
+        <section className="w-full max-w-lg space-y-4 rounded-xl border bg-card p-6 shadow-sm">
+          <h1 className="text-xl font-semibold">Restoring remote view</h1>
+          <p className="text-sm text-muted-foreground">
+            {resolution.message || "The requested presentation is still converging."}
+          </p>
+          <div className="flex gap-3">
+            <Button onClick={() => void resolveHandoff(false)}>Retry now</Button>
             <Button variant="outline" onClick={onLogout}>Sign out</Button>
           </div>
         </section>

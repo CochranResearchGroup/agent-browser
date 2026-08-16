@@ -1298,6 +1298,50 @@ so the accepted fixture no longer touches those user-scoped paths. Do not call
 Slice E accepted or infer semantic equivalence of the rewritten files without
 operator adjudication or independent before-and-after evidence.
 
+### 2026-08-16 | Slice F Source Acceptance
+
+Slice F is accepted at the source and isolated-fixture boundary:
+
+- ordinary durable resolution strips the stored URL and all ephemeral route
+  and display selectors, selects `reacquire_only`, and requires the recorded
+  target without opening or navigating a replacement;
+- when the daemon is absent, the coordinator requests the existing two-phase
+  orphan-adoption seam and validates the exact logical browser, session,
+  profile, and target observation before proceeding;
+- browser launch, provider substitution, and the raw-provider fallback outcome
+  are absent from ordinary resolution. A missing retained browser or target is
+  retryable `converging`, never an alternate provider redirect;
+- each completed presentation advances one receipt generation and binds the
+  dashboard deployment, logical browser, current daemon owner generation,
+  process-instance digest, target, route, display, and requested and observed
+  provider;
+- the resolver reloads persisted state and accepts ready only when that receipt
+  advances from the prior generation and still matches the current owner
+  registry, handoff identity, target, dashboard generation, and provider;
+- the dashboard applies the same receipt gate before rendering and retries
+  `converging` on the same opaque URL;
+- explicit reopen restores the saved URL through `explicit_reopen` and remains
+  the separate operator-authorized path that may create and navigate a target.
+
+The focused fixture begins with a generation-4 receipt from an old dashboard,
+owner generation, process, route, and display. After a missing-daemon adoption
+it returns generation 5 for the same opaque handoff and target using the new
+owner, process, route, display, and dashboard generation. Its event log contains
+no browser launch, target open, or navigation. Explicit reopen then advances to
+generation 6. All fifteen coordinator tests and forty-five handoff tests pass
+serially; service-model tests, strict Clippy, formatting, dashboard and docs
+production builds, route-confusion gates, API and MCP parity, generated client
+checks, and documentation guards pass. The broad parallel Rust sweep passed
+2,058 tests and exposed one unrelated control-plane monitor interval failure;
+that test passed immediately when rerun alone with one test thread.
+
+Boundary note: the first positive fixture reached the legacy global
+service-state tab-persistence path and attempted the user-scoped process lock.
+The lock timed out before a write. Reacquire-only target handling now skips that
+global persistence path, and the accepted rerun is fixture-repository only.
+This does not adjudicate Slice E's earlier user-scoped file mutations and does
+not constitute installed or live acceptance.
+
 ## Planning Evidence
 
 - CodeGraph was healthy on 2026-08-15 with 553 files, 19,654 nodes, and 68,296

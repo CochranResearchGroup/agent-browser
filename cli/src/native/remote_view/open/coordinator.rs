@@ -1,4 +1,3 @@
-#![allow(unused_imports)]
 use super::compensation::{
     remote_view_open_rollback_failure_after_cleanup, RemoteViewOpenFailureCleanupInput,
 };
@@ -18,14 +17,16 @@ use super::planner::{
 };
 use super::route_lifecycle::service_remote_view_timestamp;
 use super::runtime::{
-    CheckoutRouteRequest, DaemonRouteBoundOpenRepository, DaemonRouteBoundOpenRuntime,
-    DisplayAccessRequest, FocusTargetRequest, LaunchBrowserRequest, OperatorAccessRequest,
-    OperatorAccessResult, RouteBoundOpenRepository, RouteBoundOpenRuntime, VisibleWindowRequest,
+    AdoptRetainedBrowserRequest, CheckoutRouteRequest, DaemonRouteBoundOpenRepository,
+    DaemonRouteBoundOpenRuntime, DisplayAccessRequest, FocusTargetRequest, LaunchBrowserRequest,
+    OperatorAccessRequest, OperatorAccessResult, RouteBoundBrowserObservation,
+    RouteBoundOpenRepository, RouteBoundOpenRuntime, VisibleWindowRequest,
 };
 use super::runtime_model::*;
 use super::shared::*;
 use super::target::route_bound_open_acquire_target;
 use crate::native::remote_view::RemoteViewOpenIntent;
+use crate::runtime_owner_transfer::ProfileOwnerState;
 /// Transport-neutral attribution supplied after the ingress has authorized a
 /// route-bound open. Cookies, headers, and transport sessions never cross this
 /// seam.
@@ -45,6 +46,7 @@ impl RouteBoundOpenAuthorization {
 pub(crate) struct RouteBoundOpenAttribution {
     pub(crate) caller_id: Option<String>,
     pub(crate) service_job_id: Option<String>,
+    pub(crate) dashboard_deployment_generation: Option<String>,
     pub(crate) authorization: RouteBoundOpenAuthorization,
 }
 
@@ -57,49 +59,12 @@ pub(crate) fn route_bound_open_attribution_from_authenticated_dispatch(
     RouteBoundOpenAttribution {
         caller_id: optional_command_string(cmd, "callerId"),
         service_job_id: optional_command_string(cmd, "serviceJobId"),
+        dashboard_deployment_generation: optional_command_string(
+            cmd,
+            "dashboardDeploymentGeneration",
+        ),
         authorization: RouteBoundOpenAuthorization::AuthenticatedDaemonCommand,
     }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct RouteBoundResolutionSnapshot {
-    pub(crate) state: ServiceState,
-    pub(crate) handoff: RemoteViewHandoff,
-    pub(crate) loaded_at: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct RouteBoundFallbackEligibility {
-    pub(crate) immutable_snapshot_exists: bool,
-    pub(crate) explicit_close_allows_resolution: bool,
-    pub(crate) exact_opaque_rdp_identity: bool,
-    pub(crate) typed_retained_owner_conflict: bool,
-    pub(crate) current_bounded_route: bool,
-    pub(crate) operator_access_succeeded: bool,
-    pub(crate) best_effort_result: bool,
-    pub(crate) no_new_ownership: bool,
-    pub(crate) retained_browser_and_unrelated_tabs_unchanged: bool,
-}
-
-impl RouteBoundFallbackEligibility {
-    pub(crate) fn is_eligible(&self) -> bool {
-        self.immutable_snapshot_exists
-            && self.explicit_close_allows_resolution
-            && self.exact_opaque_rdp_identity
-            && self.typed_retained_owner_conflict
-            && self.current_bounded_route
-            && self.operator_access_succeeded
-            && self.best_effort_result
-            && self.no_new_ownership
-            && self.retained_browser_and_unrelated_tabs_unchanged
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum RouteBoundFallbackMode {
-    BestEffort,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -164,6 +129,8 @@ pub(crate) struct RouteBoundDirectOpenRequest {
     handoff_id: Option<String>,
     prefer_existing_browser: bool,
     retained_handoff: Option<RemoteViewHandoff>,
+    require_retained_browser: bool,
+    dashboard_deployment_generation: Option<String>,
 }
 
 impl RouteBoundDirectOpenRequest {
@@ -194,12 +161,19 @@ impl RouteBoundDirectOpenRequest {
             handoff_id,
             prefer_existing_browser: false,
             retained_handoff: None,
+            require_retained_browser: false,
+            dashboard_deployment_generation: attribution.dashboard_deployment_generation,
         })
     }
 
     fn prefer_existing_browser(mut self, handoff: RemoteViewHandoff) -> Self {
         self.prefer_existing_browser = true;
         self.retained_handoff = Some(handoff);
+        self
+    }
+
+    fn require_retained_browser(mut self) -> Self {
+        self.require_retained_browser = true;
         self
     }
 
@@ -280,13 +254,13 @@ pub(crate) enum RouteBoundOpenOutcome {
     Opened {
         opened: RouteBoundOpenDocument,
     },
+    Converging {
+        result: RouteBoundOpenDocument,
+    },
     RolledBack {
         blocker: RouteBoundOpenBlocker,
         compensation: RouteBoundOpenCompensation,
         compatibility_error: String,
-    },
-    ProviderFallback {
-        fallback: RouteBoundOpenDocument,
     },
 }
 impl RouteBoundOpenOutcome {
@@ -295,9 +269,9 @@ impl RouteBoundOpenOutcome {
             Self::Planned { plan }
             | Self::NotFound { result: plan }
             | Self::ExplicitlyClosed { result: plan }
+            | Self::Converging { result: plan }
             | Self::Reopened { opened: plan }
-            | Self::Opened { opened: plan }
-            | Self::ProviderFallback { fallback: plan } => Ok(plan.into_value()),
+            | Self::Opened { opened: plan } => Ok(plan.into_value()),
             Self::RolledBack {
                 compatibility_error,
                 ..
@@ -392,13 +366,17 @@ pub(crate) async fn handle_remote_view_open(
 pub(crate) async fn handle_service_remote_view_handoff_resolve(
     cmd: &Value,
     state: &mut DaemonState,
-    attribution: RouteBoundOpenAttribution,
+    mut attribution: RouteBoundOpenAttribution,
 ) -> Result<Value, String> {
     let handoff_id = optional_command_or_params_string(cmd, "handoffId")
         .or_else(|| optional_command_or_params_string(cmd, "remoteViewHandoffId"))
         .ok_or_else(|| "service_remote_view_handoff_resolve requires handoffId".to_string())?;
     let allow_reopen_closed =
         optional_command_or_params_bool(cmd, "allowReopenClosed").unwrap_or(false);
+    if attribution.dashboard_deployment_generation.is_none() {
+        attribution.dashboard_deployment_generation =
+            crate::dashboard_ingress::selected_dashboard_generation().ok();
+    }
     let invocation =
         RouteBoundOpenInvocation::durable_resolution(handoff_id, allow_reopen_closed, attribution)?;
     let supervisor = RouteBoundOpenSupervisor::system(
@@ -427,9 +405,47 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
     let handoff_id = request.handoff_id;
     let prefer_existing_browser = request.prefer_existing_browser;
     let retained_handoff = request.retained_handoff;
-    let initial_browser = supervisor
+    let require_retained_browser = request.require_retained_browser;
+    let dashboard_deployment_generation = request.dashboard_deployment_generation;
+    let mut initial_browser = supervisor
         .forward("observe_browser", runtime.observe_browser())
         .await?;
+    if require_retained_browser && !initial_browser.browser_present {
+        let source_session = retained_handoff
+            .as_ref()
+            .and_then(|handoff| handoff.session_name.clone())
+            .ok_or_else(|| {
+                RouteBoundRuntimeIssue::EffectFailed {
+                    operation: "adopt_retained_browser",
+                    message: "durable_handoff_session_missing: retained browser adoption requires the original daemon lane".to_string(),
+                }
+            })?;
+        initial_browser = supervisor
+            .forward(
+                "adopt_retained_browser",
+                runtime.adopt_retained_browser(AdoptRetainedBrowserRequest { source_session }),
+            )
+            .await?;
+    }
+    if require_retained_browser {
+        let handoff =
+            retained_handoff
+                .as_ref()
+                .ok_or_else(|| RouteBoundRuntimeIssue::EffectFailed {
+                    operation: "validate_retained_browser",
+                    message:
+                        "durable_handoff_identity_missing: retained browser identity is required"
+                            .to_string(),
+                })?;
+        if !durable_handoff_observation_matches(&initial_browser, handoff) {
+            return Err(RouteBoundRuntimeIssue::EffectFailed {
+                operation: "validate_retained_browser",
+                message: "durable_handoff_target_unavailable: the exact retained browser target is not attached"
+                    .to_string(),
+            }
+            .into());
+        }
+    }
     let browser_id = intent
         .browser_id
         .clone()
@@ -945,6 +961,7 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
                         display_access_grant: &display_access_grant,
                         reused_current_browser,
                         visible_window_proof: &visible_window_proof,
+                        dashboard_deployment_generation: dashboard_deployment_generation.as_deref(),
                     })
                 },
             ),
@@ -954,8 +971,8 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
         RouteBoundOpenDocument::from_compatibility(opened)?,
     ))
 }
-/// Resolve an opaque remote-view handoff by reacquiring ephemeral route state
-/// and preferring the originally retained browser target when it still exists.
+/// Resolve an opaque remote-view handoff by adopting the exact retained browser
+/// and reacquiring presentation without navigation or provider substitution.
 pub(crate) async fn execute_durable_resolution<
     R: RouteBoundOpenRuntime,
     P: RouteBoundOpenRepository,
@@ -981,14 +998,8 @@ pub(crate) async fn execute_durable_resolution<
             ))?,
         });
     };
-    let resolution_snapshot = RouteBoundResolutionSnapshot {
-        state: service_state,
-        handoff: handoff.clone(),
-        loaded_at: service_remote_view_timestamp(),
-    };
-    let service_state = &resolution_snapshot.state;
-    let handoff = &resolution_snapshot.handoff;
-    if !allow_reopen_closed && remote_view_handoff_was_explicitly_closed(service_state, handoff) {
+    let service_state = &service_state;
+    if !allow_reopen_closed && remote_view_handoff_was_explicitly_closed(service_state, &handoff) {
         return Ok(RouteBoundOpenOutcome::ExplicitlyClosed {
             result: RouteBoundOpenDocument::from_compatibility(json!(
             { "status" : "closed", "resolved" : false, "reopenRequired" : true,
@@ -1006,54 +1017,128 @@ pub(crate) async fn execute_durable_resolution<
         .service_job_id
         .clone()
         .unwrap_or_else(|| format!("resolve:{}", handoff.id));
+    let required_dashboard_generation = attribution.dashboard_deployment_generation.clone();
+    let previous_presentation_generation = handoff
+        .presentation_receipt
+        .as_ref()
+        .map(|receipt| receipt.generation)
+        .unwrap_or(0);
     let mut resolution_command =
-        remote_view_handoff_resolution_command(handoff, &service_job_id, allow_reopen_closed)?;
-    apply_retained_remote_view_route(service_state, handoff, &mut resolution_command);
-    let authorization = attribution.authorization;
-    let direct_request = RouteBoundDirectOpenRequest::from_compatibility_command(
+        remote_view_handoff_resolution_command(&handoff, &service_job_id, allow_reopen_closed)?;
+    apply_retained_remote_view_route(service_state, &handoff, &mut resolution_command);
+    let mut direct_request = RouteBoundDirectOpenRequest::from_compatibility_command(
         resolution_command,
         Some(handoff.id.clone()),
         attribution,
     )?
     .prefer_existing_browser(handoff.clone());
+    if !allow_reopen_closed {
+        direct_request = direct_request.require_retained_browser();
+    }
     let opened = match execute_direct_open(direct_request, runtime, repository, supervisor).await {
         Ok(RouteBoundDirectOpenResult::Planned(plan)) => {
             return Ok(RouteBoundOpenOutcome::Planned { plan });
         }
         Ok(RouteBoundDirectOpenResult::Opened(opened)) => opened.into_value(),
-        Err(error) => {
-            if let Ok(post_attempt_state) = supervisor
-                .forward(
-                    "repository_load_fallback_post_attempt_snapshot",
-                    repository.snapshot(supervisor.forward_repository_lock_timeout()),
+        Err(error)
+            if error.runtime_issue.as_ref().is_some_and(|issue| {
+                matches!(
+                    issue,
+                    RouteBoundRuntimeIssue::EffectFailed {
+                        operation: "adopt_retained_browser" | "validate_retained_browser",
+                        ..
+                    }
                 )
-                .await
-            {
-                if let Some(fallback) = remote_view_handoff_provider_fallback_if_eligible(
-                    &resolution_snapshot,
-                    &post_attempt_state,
-                    allow_reopen_closed,
-                    error.runtime_issue.as_ref(),
-                    authorization,
-                    runtime,
-                    supervisor,
-                )
-                .await
-                {
-                    return Ok(RouteBoundOpenOutcome::ProviderFallback { fallback });
-                }
-            }
-            return Err(error);
+            }) =>
+        {
+            return Ok(RouteBoundOpenOutcome::Converging {
+                result: RouteBoundOpenDocument::from_compatibility(json!({
+                    "status": "converging",
+                    "resolved": false,
+                    "handoffId": handoff.id,
+                    "handoffUrl": handoff.handoff_url,
+                    "browserId": handoff.browser_id,
+                    "sessionName": handoff.session_name,
+                    "message": error.message,
+                    "retryable": true,
+                    "requiredViewStreamProvider": handoff.view_stream_provider,
+                }))?,
+            });
         }
+        Err(error) => return Err(error),
     };
+    let presentation_state = supervisor
+        .forward(
+            "repository_load_presentation_receipt",
+            repository.snapshot(supervisor.forward_repository_lock_timeout()),
+        )
+        .await?;
+    let presentation = presentation_state
+        .remote_view_handoffs
+        .get(&handoff.id)
+        .and_then(|handoff| handoff.presentation_receipt.clone());
+    let presentation_owner_matches = presentation.as_ref().is_some_and(|receipt| {
+        presentation_state
+            .runtime_owner_registry
+            .owners
+            .values()
+            .any(|owner| {
+                owner.state == ProfileOwnerState::Ready
+                    && owner.browser_id == receipt.logical_browser_id
+                    && owner.daemon_session_route
+                        == handoff.session_name.as_deref().unwrap_or_default()
+                    && Some(owner.owner_generation) == receipt.daemon_owner_generation
+                    && receipt.process_instance_digest.as_deref()
+                        == Some(owner.process_instance_digest.as_str())
+            })
+    });
+    let presentation_matches = presentation_owner_matches
+        && presentation.as_ref().is_some_and(|receipt| {
+            receipt.state == "ready"
+                && receipt.generation > previous_presentation_generation
+                && required_dashboard_generation.as_deref()
+                    == Some(receipt.dashboard_deployment_generation.as_str())
+                && Some(receipt.logical_browser_id.as_str()) == handoff.browser_id.as_deref()
+                && (allow_reopen_closed
+                    || Some(receipt.target_id.as_str()) == handoff.target_id.as_deref())
+                && Some(receipt.required_stream_provider) == handoff.view_stream_provider
+                && receipt.observed_stream_provider == receipt.required_stream_provider
+        });
+    if !presentation_matches {
+        return Ok(RouteBoundOpenOutcome::Converging {
+            result: RouteBoundOpenDocument::from_compatibility(json!({
+                "status": "converging",
+                "resolved": false,
+                "handoffId": handoff.id,
+                "handoffUrl": handoff.handoff_url,
+                "browserId": handoff.browser_id,
+                "sessionName": handoff.session_name,
+                "message": "The retained browser is attached, but its authenticated presentation generation is still converging.",
+                "retryable": true,
+                "requiredViewStreamProvider": handoff.view_stream_provider,
+                "presentationReceipt": presentation,
+            }))?,
+        });
+    }
+    let presentation_generation = presentation
+        .as_ref()
+        .map(|receipt| receipt.generation)
+        .unwrap_or(0);
+    let presentation_target_id = presentation
+        .as_ref()
+        .map(|receipt| receipt.target_id.clone())
+        .or_else(|| handoff.target_id.clone());
     let opened = RouteBoundOpenDocument::from_compatibility(json!(
         { "status" : "ready", "resolved" : true, "reopenedClosedTab" :
         allow_reopen_closed, "handoffId" : handoff.id, "handoffUrl" : opened
         .get("handoffUrl"), "externalUrl" : opened.get("externalUrl"),
         "providerExternalUrl" : opened.get("providerExternalUrl"), "browserId" :
-        opened.get("browserId"), "sessionName" : opened.get("sessionName"), "tab" :
-        opened.get("tab"), "viewStreamProvider" : handoff.view_stream_provider,
-        "controlInput" : handoff.control_input, "open" : opened, }
+        opened.get("browserId"), "sessionName" : opened.get("sessionName"), "tabId":
+        handoff.tab_id, "targetId": presentation_target_id, "tab" : opened.get("tab"),
+        "viewStreamProvider" : handoff.view_stream_provider,
+        "requiredViewStreamProvider" : handoff.view_stream_provider,
+        "controlInput" : handoff.control_input, "presentationGeneration":
+        presentation_generation, "presentationReceipt": presentation, "open" : opened, }
     ))?;
     if allow_reopen_closed {
         Ok(RouteBoundOpenOutcome::Reopened { opened })
@@ -1061,186 +1146,24 @@ pub(crate) async fn execute_durable_resolution<
         Ok(RouteBoundOpenOutcome::Opened { opened })
     }
 }
-pub(crate) async fn remote_view_handoff_provider_fallback_if_eligible<R: RouteBoundOpenRuntime>(
-    snapshot: &RouteBoundResolutionSnapshot,
-    post_attempt_state: &ServiceState,
-    allow_reopen_closed: bool,
-    issue: Option<&RouteBoundRuntimeIssue>,
-    authorization: RouteBoundOpenAuthorization,
-    runtime: &mut R,
-    supervisor: &RouteBoundOpenSupervisor,
-) -> Option<RouteBoundOpenDocument> {
-    if !authorization.is_authorized() {
-        return None;
-    }
-    let service_state = &snapshot.state;
-    let handoff = &snapshot.handoff;
-    let RouteBoundRuntimeIssue::RequestedProfileInUseByPid {
-        profile_id,
-        owner_browser_id,
-        owner_session_id,
-        ..
-    } = issue?
-    else {
-        return None;
-    };
-    let route = handoff
-        .last_route_id
-        .as_ref()
-        .and_then(|route_id| service_state.remote_view_routes.get(route_id));
-    let exact_owner = handoff.profile_id.as_deref() == Some(profile_id.as_str())
-        && owner_browser_id.as_deref() == handoff.browser_id.as_deref()
-        && owner_session_id.as_deref() == handoff.session_name.as_deref();
-    let current_bounded_route = route.is_some_and(|route| {
-        route.provider == ViewStreamProvider::RdpGateway
-            && route.browser_id.as_deref() == handoff.browser_id.as_deref()
-            && route.session_id.as_deref() == handoff.session_name.as_deref()
-            && route.state != "released"
-            && (route
-                .external_url
-                .as_deref()
-                .is_some_and(|url| !url.trim().is_empty())
-                || route
-                    .route_descriptor
-                    .as_ref()
-                    .and_then(|descriptor| descriptor.get("publicOperatorUrl"))
-                    .and_then(Value::as_str)
-                    .is_some_and(|url| !url.trim().is_empty()))
-            && post_attempt_state.remote_view_routes.get(&route.id) == Some(route)
-    });
-    let fallback_mode = RouteBoundFallbackMode::BestEffort;
-    let mut eligibility = RouteBoundFallbackEligibility {
-        immutable_snapshot_exists: !snapshot.loaded_at.is_empty()
-            && service_state.remote_view_handoffs.get(&handoff.id) == Some(handoff),
-        explicit_close_allows_resolution: !remote_view_handoff_was_explicitly_closed(
-            service_state,
-            handoff,
-        ) || allow_reopen_closed,
-        exact_opaque_rdp_identity: handoff.view_stream_provider
-            == Some(ViewStreamProvider::RdpGateway)
-            && !handoff.id.trim().is_empty()
-            && handoff
-                .handoff_url
-                .as_deref()
-                .is_some_and(|url| !url.trim().is_empty())
-            && handoff.last_route_id.is_some()
-            && handoff.browser_id.is_some()
-            && handoff.session_name.is_some()
-            && handoff.profile_id.is_some(),
-        typed_retained_owner_conflict: exact_owner,
-        current_bounded_route,
-        operator_access_succeeded: false,
-        best_effort_result: fallback_mode == RouteBoundFallbackMode::BestEffort,
-        no_new_ownership: service_state.profiles == post_attempt_state.profiles
-            && service_state.browsers == post_attempt_state.browsers
-            && service_state.sessions == post_attempt_state.sessions
-            && service_state.viewer_leases == post_attempt_state.viewer_leases,
-        retained_browser_and_unrelated_tabs_unchanged: service_state.browsers
-            == post_attempt_state.browsers
-            && service_state.tabs == post_attempt_state.tabs,
-    };
-    if !eligibility.immutable_snapshot_exists
-        || !eligibility.explicit_close_allows_resolution
-        || !eligibility.exact_opaque_rdp_identity
-        || !eligibility.typed_retained_owner_conflict
-        || !eligibility.current_bounded_route
-        || !eligibility.best_effort_result
-        || !eligibility.no_new_ownership
-        || !eligibility.retained_browser_and_unrelated_tabs_unchanged
-    {
-        return None;
-    }
-    let route = route?;
-    let display_allocation_id = route
-        .display_allocation_id
-        .clone()
-        .or_else(|| handoff.last_display_allocation_id.clone())
-        .unwrap_or_default();
-    let allocation = service_state
-        .display_allocations
-        .get(&display_allocation_id);
-    let binding = RemoteViewRouteBinding {
-        route_id: route.id.clone(),
-        route_pool_entry_id: handoff.last_route_pool_entry_id.clone(),
-        display_allocation_id,
-        route_pool_entry_state: None,
-        current_route_allocation_id: None,
-        display_name: allocation.and_then(|allocation| allocation.display_name.clone()),
-        launch_display_name: allocation.and_then(|allocation| allocation.display_name.clone()),
-        display_isolation: allocation
-            .map(|allocation| allocation.display_isolation.clone())
-            .unwrap_or_default(),
-        route_user: None,
-        display_access: None,
-        provider: route.provider,
-        provider_mode: route.provider_mode.clone(),
-        connection_id: route.connection_id.clone(),
-        connection_name: route.connection_name.clone(),
-        frame_url: route.frame_url.clone(),
-        external_url: route.external_url.clone(),
-        route_descriptor: route.route_descriptor.clone(),
-        readiness: route.readiness.clone(),
-    };
-    let operator_access = supervisor
-        .forward(
-            "observe_operator_access",
-            runtime.observe_operator_access(OperatorAccessRequest { binding }),
-        )
-        .await
-        .ok()
-        .flatten()?
-        .into_value();
-    if readiness_state(&operator_access).as_deref() != Some("ready") {
-        return None;
-    }
-    eligibility.operator_access_succeeded = true;
-    if !eligibility.is_eligible() {
-        return None;
-    }
-    let mut fallback = remote_view_handoff_provider_fallback_response(service_state, handoff)?;
-    fallback["fallbackMode"] = serde_json::to_value(fallback_mode).ok()?;
-    fallback["resolutionSnapshotLoadedAt"] = Value::String(snapshot.loaded_at.clone());
-    fallback["fallbackEligibility"] = serde_json::to_value(eligibility).ok()?;
-    RouteBoundOpenDocument::from_compatibility(fallback).ok()
-}
-pub(crate) fn remote_view_handoff_provider_fallback_response(
-    service_state: &ServiceState,
+
+fn durable_handoff_observation_matches(
+    observation: &RouteBoundBrowserObservation,
     handoff: &RemoteViewHandoff,
-) -> Option<Value> {
-    let route = handoff
-        .last_route_id
-        .as_ref()
-        .and_then(|route_id| service_state.remote_view_routes.get(route_id))?;
-    let provider_url = route
-        .external_url
-        .as_deref()
-        .or_else(|| {
-            route
-                .route_descriptor
-                .as_ref()
-                .and_then(|descriptor| descriptor.get("publicOperatorUrl"))
-                .and_then(Value::as_str)
-        })
-        .map(str::trim)
-        .filter(|url| !url.is_empty())?;
-    let tab = json!(
-        { "id" : handoff.tab_id, "tabId" : handoff.tab_id, "targetId" : handoff
-        .target_id, "browserId" : handoff.browser_id, "sessionId" : handoff.session_name,
-        "profileId" : handoff.profile_id, }
-    );
-    Some(json!(
-        { "status" : "ready", "resolved" : true, "bestEffort" : true,
-        "providerFallback" : true, "providerFallbackUrl" : provider_url, "handoffId"
-        : handoff.id, "handoffUrl" : handoff.handoff_url, "browserId" : handoff
-        .browser_id, "sessionName" : handoff.session_name, "tabId" : handoff.tab_id,
-        "targetId" : handoff.target_id, "tab" : tab, "viewStreamProvider" : handoff
-        .view_stream_provider, "controlInput" : handoff.control_input, "externalUrl"
-        : provider_url, "providerExternalUrl" : provider_url, "message" :
-        "The original browser daemon is unavailable, but its retained RDP provider route is still available for a best-effort reconnect.",
-        "open" : { "browserId" : handoff.browser_id, "sessionName" : handoff
-        .session_name, "tab" : tab, "externalUrl" : provider_url,
-        "providerExternalUrl" : provider_url, "route" : route, "intent" : handoff
-        .intent, "operatorVisible" : { "state" : "best_effort", "reason" :
-        "live_profile_owned_outside_original_daemon", }, }, }
-    ))
+) -> bool {
+    let target_matches = handoff.target_id.as_deref().is_some_and(|target_id| {
+        observation.active_target_id.as_deref() == Some(target_id)
+            || observation
+                .pages
+                .iter()
+                .any(|page| page.target_id == target_id)
+    });
+    observation.browser_present
+        && handoff.browser_id.as_deref() == Some(observation.browser_id.as_str())
+        && handoff.session_name.as_deref() == Some(observation.session_id.as_str())
+        && handoff
+            .profile_id
+            .as_deref()
+            .is_none_or(|profile_id| observation.runtime_profile.as_deref() == Some(profile_id))
+        && target_matches
 }

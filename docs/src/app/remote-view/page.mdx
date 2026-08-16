@@ -78,8 +78,18 @@ explicit infrastructure diagnostic.
 ## Reconnect without opening another browser
 
 Open the same `handoffUrl` again. The authenticated dashboard resolves the
-handoff ID, prefers the original retained target, and reacquires compatible
-route, display, and viewer state when needed.
+handoff ID, requests adoption of the exact retained browser if its original
+daemon is gone, and reacquires compatible route, display, and viewer state for
+the recorded target. Normal resolution does not navigate, open a replacement
+target, relaunch the browser, change providers, or redirect to a raw provider
+URL.
+
+The dashboard waits for a ready presentation receipt whose generation,
+dashboard deployment, logical browser, daemon owner generation, process
+identity, target, and requested provider match the current resolution. A
+missing or stale receipt returns a retryable `converging` state, and the
+dashboard retries on the same durable URL. A missing retained target fails
+closed.
 
 Do not run another `remote-view open` only because:
 
@@ -91,7 +101,8 @@ Do not run another `remote-view open` only because:
 
 For a single-viewer disconnect, use **Take control** from the durable handoff
 surface. If the tab was deliberately closed, the handoff remains closed until
-the operator selects **Reopen tab**.
+the operator selects **Reopen tab**. That explicit action is the separate path
+that may open and navigate a replacement target.
 
 Dashboard reconnect selects the browser's service-owned RDP stream for viewer
 lease authority, even when a CDP stream is currently selected for presentation.
