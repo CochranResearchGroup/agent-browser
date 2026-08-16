@@ -752,13 +752,9 @@ pub(crate) fn collect_host_runtime_census_round() -> Result<RuntimeCensusRound, 
     let supervisor_health = crate::session_supervisor::session_supervisor_health_json();
     let daemon_inventory = crate::install::active_runtime_inventory(None);
 
-    let service_revision = source_revision(&service_state)?;
-    let registry_revision = u64::from_str_radix(&service_revision[..16], 16)
-        .map_err(|error| format!("invalid service registry revision: {error}"))?;
-    let readbacks = vec![
-        service_browser_readback(&service_state, &service_revision)?,
+    let (registry_revision, mut readbacks) = service_census_readbacks(&service_state)?;
+    readbacks.extend([
         runtime_profile_readback(&runtime_profiles)?,
-        profile_owner_readback(&service_state, &service_revision)?,
         value_readback(
             RuntimeCensusSource::NamedSessionSupervisors,
             &supervisor_health,
@@ -777,15 +773,27 @@ pub(crate) fn collect_host_runtime_census_round() -> Result<RuntimeCensusRound, 
         )?,
         profile_lock_readback(&runtime_profiles)?,
         cdp_target_readback(&runtime_profiles)?,
-        display_readback(&service_state, &service_revision),
-        presentation_readback(&service_state, &service_revision),
-    ];
+    ]);
     adapt_runtime_census_readbacks(registry_revision, readbacks)
+}
+
+fn service_census_readbacks(
+    state: &crate::native::service_model::ServiceState,
+) -> Result<(u64, Vec<RuntimeCensusSourceReadback>), String> {
+    let readbacks = vec![
+        service_browser_readback(state)?,
+        profile_owner_readback(state)?,
+        display_readback(state)?,
+        presentation_readback(state)?,
+    ];
+    let revision = source_revision(&readbacks)?;
+    let registry_revision = u64::from_str_radix(&revision[..16], 16)
+        .map_err(|error| format!("invalid service census revision: {error}"))?;
+    Ok((registry_revision, readbacks))
 }
 
 fn service_browser_readback(
     state: &crate::native::service_model::ServiceState,
-    service_revision: &str,
 ) -> Result<RuntimeCensusSourceReadback, String> {
     use crate::native::service_model::{BrowserHealth, BrowserHost};
 
@@ -872,7 +880,7 @@ fn service_browser_readback(
         .collect::<Result<Vec<_>, String>>()?;
     Ok(RuntimeCensusSourceReadback {
         source: RuntimeCensusSource::ServiceBrowserRecords,
-        source_revision: service_revision.to_string(),
+        source_revision: source_revision(&observations)?,
         observations,
     })
 }
@@ -944,7 +952,6 @@ fn runtime_profile_has_observation(
 
 fn profile_owner_readback(
     state: &crate::native::service_model::ServiceState,
-    service_revision: &str,
 ) -> Result<RuntimeCensusSourceReadback, String> {
     let mut observations = state
         .runtime_owner_registry
@@ -1024,10 +1031,7 @@ fn profile_owner_readback(
         })
         .collect::<Result<Vec<_>, String>>()?;
     observations.extend(legacy_observations);
-    let source_revision = sha256_text(&format!(
-        "{service_revision}:runtime-owner-registry:{}",
-        state.runtime_owner_registry.revision
-    ));
+    let source_revision = source_revision(&(state.runtime_owner_registry.revision, &observations))?;
     Ok(RuntimeCensusSourceReadback {
         source: RuntimeCensusSource::ProfileOwnerReservations,
         source_revision,
@@ -1375,8 +1379,7 @@ fn cdp_target_readback(
 
 fn display_readback(
     state: &crate::native::service_model::ServiceState,
-    service_revision: &str,
-) -> RuntimeCensusSourceReadback {
+) -> Result<RuntimeCensusSourceReadback, String> {
     let observations = state
         .display_allocations
         .values()
@@ -1401,17 +1404,16 @@ fn display_readback(
             }
         })
         .collect();
-    RuntimeCensusSourceReadback {
+    Ok(RuntimeCensusSourceReadback {
         source: RuntimeCensusSource::DisplayAllocationsAndVisibleWindowProof,
-        source_revision: service_revision.to_string(),
+        source_revision: source_revision(&observations)?,
         observations,
-    }
+    })
 }
 
 fn presentation_readback(
     state: &crate::native::service_model::ServiceState,
-    service_revision: &str,
-) -> RuntimeCensusSourceReadback {
+) -> Result<RuntimeCensusSourceReadback, String> {
     let mut observations = Vec::new();
     for browser in state
         .browsers
@@ -1522,11 +1524,11 @@ fn presentation_readback(
             evidence,
         });
     }
-    RuntimeCensusSourceReadback {
+    Ok(RuntimeCensusSourceReadback {
         source: RuntimeCensusSource::ViewStreamsRoutePoolGuacamoleAndHandoffs,
-        source_revision: service_revision.to_string(),
+        source_revision: source_revision(&observations)?,
         observations,
-    }
+    })
 }
 
 fn scoped_view_stream_alias(browser_id: &str, stream_id: &str) -> String {
@@ -2359,7 +2361,7 @@ mod tests {
             );
         }
 
-        let readback = presentation_readback(&state, "service-revision");
+        let readback = presentation_readback(&state).unwrap();
         let alpha = readback
             .observations
             .iter()
@@ -2391,6 +2393,35 @@ mod tests {
     }
 
     #[test]
+    fn service_census_revision_ignores_reconciliation_audit_churn() {
+        use crate::native::service_model::{
+            BrowserProcess, ServiceReconciliationSnapshot, ServiceState,
+        };
+
+        let mut state = ServiceState::default();
+        state.browsers.insert(
+            "browser-a".to_string(),
+            BrowserProcess {
+                id: "browser-a".to_string(),
+                ..BrowserProcess::default()
+            },
+        );
+        let baseline = service_census_readbacks(&state).unwrap();
+
+        state.reconciliation = Some(ServiceReconciliationSnapshot {
+            last_reconciled_at: Some("2026-08-16T22:44:19Z".to_string()),
+            browser_count: 1,
+            ..ServiceReconciliationSnapshot::default()
+        });
+        let after_audit_churn = service_census_readbacks(&state).unwrap();
+        assert_eq!(after_audit_churn, baseline);
+
+        state.browsers.get_mut("browser-a").unwrap().pid = Some(41);
+        let after_runtime_change = service_census_readbacks(&state).unwrap();
+        assert_ne!(after_runtime_change, baseline);
+    }
+
+    #[test]
     fn profileless_legacy_session_alias_is_neutral_identity_evidence() {
         use crate::native::service_model::{BrowserSession, ServiceState};
 
@@ -2404,7 +2435,7 @@ mod tests {
             },
         );
 
-        let readback = profile_owner_readback(&state, "service-revision").unwrap();
+        let readback = profile_owner_readback(&state).unwrap();
         assert_eq!(readback.observations.len(), 1);
         assert_eq!(
             readback.observations[0].evidence.profile_identity,
