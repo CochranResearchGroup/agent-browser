@@ -4,6 +4,39 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 157 | 2026-08-15
+
+Scope: reconcile the Plan 0116 baseline failures and decide Slice A
+acceptance without changing installer behavior or live runtime state.
+
+Actions:
+
+- classified `confirm` and `deny` as control-plane actions that skip browser
+  launch, so confirmation decisions execute without starting Chrome;
+- added denial coverage proving the pending confirmation is cleared with no
+  browser present;
+- repaired two legacy service-status fixtures with explicit ready-stream
+  evidence so current reconciliation retains the browser rows whose URL
+  compatibility behavior the tests exercise;
+- preserved the current runtime-evidence rule that prunes unsupported legacy
+  `ready` browser placeholders.
+
+Validation:
+
+- focused confirmation tests pass, including the new denial case;
+- both previously failing service-status compatibility tests pass;
+- Rust formatting, `git diff --check`, and strict Clippy pass;
+- `scripts/ci/rust-tests.sh` passes the 1,194-test parallel-safe partition,
+  all integration tests in that phase, and every environment-sensitive serial
+  partition with no failures.
+
+Result:
+
+- P116 Slice A is accepted;
+- installer, daemon, browser, profile, route, display, dashboard, installed
+  payload, supervisor, and external state remain unchanged;
+- the next authorized packet is Slice B immutable generation staging.
+
 ## Turn 156 | 2026-08-15
 
 Scope: execute Plan 0116 Slice A without changing installer behavior or live

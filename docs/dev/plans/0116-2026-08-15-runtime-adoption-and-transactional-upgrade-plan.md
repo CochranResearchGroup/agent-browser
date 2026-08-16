@@ -975,7 +975,7 @@ handoff during Slice A.
 
 ### 2026-08-15 | Slice A Source Implementation
 
-Acceptance state: `IMPLEMENTED_NOT_ACCEPTED`
+Acceptance state: `ACCEPTED`
 
 Implemented:
 
@@ -1022,9 +1022,36 @@ Validation:
   - `test_service_status_leaves_guacamole_root_without_route`;
   - `test_service_status_repairs_stale_guacamole_view_url`.
 
-No live or installed validation was authorized or attempted. Slice A remains
-not accepted until the three baseline failures are reconciled and the broad
-source gate is green.
+No live or installed validation was authorized or attempted during the source
+implementation.
+
+### 2026-08-15 | Slice A Baseline Repair And Acceptance
+
+The three baseline failures were reconciled without changing installer or
+runtime-adoption behavior:
+
+- `confirm` and `deny` now skip browser launch as confirmation control-plane
+  actions; the existing confirmation replay test and a new denial test prove
+  successful completion with no browser present;
+- the two legacy service-status URL compatibility fixtures now declare ready
+  view-stream evidence, which keeps their browser rows within the current
+  runtime-evidence reconciliation contract rather than weakening that
+  contract.
+
+Acceptance validation:
+
+- focused confirmation tests: 2 passed;
+- both focused service-status compatibility tests: passed;
+- `git diff --check`: passed;
+- Rust formatting: passed;
+- strict Clippy with warnings denied: passed;
+- `scripts/ci/rust-tests.sh`: the 1,194-test parallel-safe partition, its
+  integration tests, and every environment-sensitive serial partition passed
+  with no failures.
+
+No installer, daemon, browser, profile, route, display, dashboard, installed
+payload, supervisor, or external state was changed. Slice A is accepted. The
+next authorized implementation packet is Slice B immutable generation staging.
 
 ## Planning Evidence
 

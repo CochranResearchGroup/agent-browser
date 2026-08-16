@@ -194,10 +194,12 @@ async fn test_service_status_repairs_stale_guacamole_view_url() {
         "session:odollo-carrier-ups", "host" : "remote_headed", "health" : "ready",
         "viewStreams" : [{ "id" : "remote-headed-view", "provider" : "rdp_gateway",
         "controlInput" : "manual_attached_desktop", "url" :
-        "https://agent-browser.example/guacamole/", "readOnly" : false }] },
+        "https://agent-browser.example/guacamole/", "readOnly" : false,
+        "readiness" : { "state" : "ready" } }] },
         "browser-cdp" : { "id" : "browser-cdp", "host" : "remote_headed", "health" :
         "ready", "viewStreams" : [{ "id" : "cdp", "provider" : "cdp_screencast", "url" :
-        "https://agent-browser.example/guacamole/", "readOnly" : false }] } } } }
+        "https://agent-browser.example/guacamole/", "readOnly" : false,
+        "readiness" : { "state" : "ready" } }] } } } }
     );
     let result = execute_command(&cmd, &mut state).await;
     assert_eq!(result["success"], true);
@@ -222,7 +224,8 @@ async fn test_service_status_leaves_guacamole_root_without_route() {
         "session:odollo-carrier-ups", "host" : "remote_headed", "health" : "ready",
         "viewStreams" : [{ "id" : "remote-headed-view", "provider" : "rdp_gateway",
         "controlInput" : "manual_attached_desktop", "url" :
-        "https://agent-browser.example/guacamole/", "readOnly" : false }] } } } }
+        "https://agent-browser.example/guacamole/", "readOnly" : false,
+        "readiness" : { "state" : "ready" } }] } } } }
     );
     let result = execute_command(&cmd, &mut state).await;
     assert_eq!(result["success"], true);

@@ -210,6 +210,8 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "desktop_interact"
             | "probe"
             | "close"
+            | "confirm"
+            | "deny"
             | "har_stop"
             | "credentials_set"
             | "credentials_get"

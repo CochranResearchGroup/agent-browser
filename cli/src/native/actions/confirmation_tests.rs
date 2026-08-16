@@ -136,3 +136,21 @@ async fn test_confirm_executes_once_and_restores_confirmation_gate() {
         .as_ref()
         .is_some_and(|actions| actions.requires_confirmation("close")));
 }
+
+#[tokio::test]
+async fn test_deny_clears_confirmation_without_launching_browser() {
+    let mut state = DaemonState::new();
+    state.confirm_actions = Some(ConfirmActions {
+        categories: HashSet::from(["close".to_string()]),
+    });
+
+    let pending = execute_command(&json!({ "id": "close-1", "action": "close" }), &mut state).await;
+    assert_eq!(pending["data"]["confirmation_required"], true);
+
+    let denied = execute_command(&json!({ "id": "deny-1", "action": "deny" }), &mut state).await;
+    assert_eq!(denied["success"], true);
+    assert_eq!(denied["data"]["denied"], true);
+    assert_eq!(denied["data"]["action"], "close");
+    assert!(state.pending_confirmation.is_none());
+    assert!(state.browser.is_none());
+}

@@ -21,13 +21,15 @@ freezes immutable generation staging, closed-world runtime census, verified
 orphan adoption, two-phase owner transfer, continuous dashboard ingress,
 read-mostly durable handoff recovery, hard provider requirements, end-to-end
 presentation receipts, and rollback that proves the operator journey rather
-than only restoring files or units. Slice A is source-implemented with a
+than only restoring files or units. Slice A is accepted with a
 closed ten-source census ledger, thirteen deterministic runtime fixtures
 covering all eight classifications, frozen generation, transaction, adoption,
 and presentation schemas, and source-bound red proofs for the two current
-unsafe seams. Focused tests, formatting, and strict Clippy pass. Broad source
-acceptance remains incomplete because three pre-existing unit tests fail both
-with and without the Slice A module registered.
+unsafe seams. The three pre-existing baseline failures discovered during Slice
+A were reconciled: confirmation control actions no longer launch Chrome, and
+legacy service-status fixtures now carry the ready-stream evidence required by
+current reconciliation. Focused tests, formatting, strict Clippy, and the
+CI-partitioned Rust suite pass.
 
 ### Plan
 
@@ -35,10 +37,8 @@ with and without the Slice A module registered.
 
 ### Next Recommendation
 
-Reconcile the three current baseline unit-test failures recorded in Plan 0116,
-then accept Slice A without changing installer or runtime behavior. After that
-gate is green, begin Slice B immutable generation staging. Do not replace the
-installed payload, enable the recurring interlock, or touch a live browser.
+Begin Slice B immutable generation staging. Do not replace the installed
+payload, enable the recurring interlock, or touch a live browser.
 
 ## P114 | Terminal Route Quarantine Recovery
 
