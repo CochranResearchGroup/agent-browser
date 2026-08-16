@@ -1599,6 +1599,109 @@ fn test_service_profile_lease_guard_allows_same_session_reuse() {
     );
     assert!(conflict_session_ids.is_empty());
 }
+
+fn legacy_retained_profile_route_state() -> ServiceState {
+    ServiceState {
+        profiles: BTreeMap::from([(
+            "managed-one-time-route".to_string(),
+            BrowserProfile {
+                id: "managed-one-time-route".to_string(),
+                name: "Managed one-time route".to_string(),
+                user_data_dir: Some("/tmp/agent-browser-managed-one-time-route".to_string()),
+                ..BrowserProfile::default()
+            },
+        )]),
+        browsers: BTreeMap::from([(
+            "session:carrier-evidence".to_string(),
+            BrowserProcess {
+                id: "session:carrier-evidence".to_string(),
+                profile_id: Some("managed-one-time-route".to_string()),
+                health: ServiceBrowserHealth::Ready,
+                pid: Some(4242),
+                cdp_endpoint: Some("http://127.0.0.1:39111/devtools/browser/current".to_string()),
+                active_session_ids: vec!["carrier-evidence".to_string()],
+                ..BrowserProcess::default()
+            },
+        )]),
+        sessions: BTreeMap::from([(
+            "carrier-evidence".to_string(),
+            BrowserSession {
+                id: "carrier-evidence".to_string(),
+                profile_id: Some("managed-one-time-route".to_string()),
+                browser_ids: vec!["session:carrier-evidence".to_string()],
+                ..BrowserSession::default()
+            },
+        )]),
+        ..ServiceState::default()
+    }
+}
+
+#[test]
+fn test_legacy_retained_profile_route_accepts_exact_current_owner() {
+    let state = legacy_retained_profile_route_state();
+    let command = json!({
+        "action": "tab_new",
+        "runtimeProfile": "managed-one-time-route",
+        "profile": "/tmp/agent-browser-managed-one-time-route",
+        "browserId": "session:carrier-evidence",
+        "sessionName": "carrier-evidence"
+    });
+    assert!(legacy_retained_route_matches_selected_profile(
+        &command,
+        "carrier-evidence",
+        Some(4242),
+        "ws://127.0.0.1:39111/devtools/browser/current",
+        &state,
+    ));
+}
+
+#[test]
+fn test_legacy_retained_profile_route_rejects_unproven_owner() {
+    let state = legacy_retained_profile_route_state();
+    let command = json!({
+        "action": "tab_new",
+        "runtimeProfile": "managed-one-time-route",
+        "profile": "/tmp/agent-browser-managed-one-time-route",
+        "browserId": "session:carrier-evidence",
+        "sessionName": "carrier-evidence"
+    });
+    for (field, value) in [
+        ("browserId", "session:other-browser"),
+        ("sessionName", "other-session"),
+        ("runtimeProfile", "other-profile"),
+        ("profile", "/tmp/other-profile"),
+    ] {
+        let mut mismatched = command.clone();
+        mismatched[field] = json!(value);
+        assert!(!legacy_retained_route_matches_selected_profile(
+            &mismatched,
+            "carrier-evidence",
+            Some(4242),
+            "ws://127.0.0.1:39111/devtools/browser/current",
+            &state,
+        ));
+    }
+    assert!(!legacy_retained_route_matches_selected_profile(
+        &command,
+        "carrier-evidence",
+        Some(9999),
+        "ws://127.0.0.1:49999/devtools/browser/wrong",
+        &state,
+    ));
+    let mut stale = state;
+    stale
+        .browsers
+        .get_mut("session:carrier-evidence")
+        .expect("fixture browser should exist")
+        .health = ServiceBrowserHealth::Unreachable;
+    assert!(!legacy_retained_route_matches_selected_profile(
+        &command,
+        "carrier-evidence",
+        Some(4242),
+        "ws://127.0.0.1:39111/devtools/browser/current",
+        &stale,
+    ));
+}
 #[test]
 fn test_cdp_screencast_view_stream_ready_for_non_remote_cdp_browser() {
     let stream = cdp_screencast_view_stream(

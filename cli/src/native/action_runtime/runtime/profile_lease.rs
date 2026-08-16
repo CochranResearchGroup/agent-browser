@@ -298,13 +298,118 @@ pub(crate) fn active_browser_profile_mismatch(
     state: &DaemonState,
 ) -> Option<String> {
     let browser = state.browser.as_ref()?;
-    active_browser_profile_mismatch_message(
+    let active_runtime_profile = browser.runtime_profile_name();
+    let active_user_data_dir = browser.browser_user_data_dir();
+    let mismatch = active_browser_profile_mismatch_message(
         optional_command_string(command, "runtimeProfile").as_deref(),
         optional_command_string(command, "profile").as_deref(),
-        browser.runtime_profile_name(),
-        browser.browser_user_data_dir(),
+        active_runtime_profile,
+        active_user_data_dir,
         &state.session_id,
-    )
+    );
+    mismatch.as_ref()?;
+    if active_runtime_profile.is_none() && active_user_data_dir.is_none() {
+        if let Ok(repository) = LockedServiceStateRepository::default_json() {
+            if let Ok(service_state) = repository.load_snapshot() {
+                if legacy_retained_route_matches_selected_profile(
+                    command,
+                    &state.session_id,
+                    browser.browser_pid(),
+                    browser.get_cdp_url(),
+                    &service_state,
+                ) {
+                    return None;
+                }
+            }
+        }
+    }
+    mismatch
+}
+
+pub(crate) fn legacy_retained_route_matches_selected_profile(
+    command: &Value,
+    daemon_session_id: &str,
+    active_browser_pid: Option<u32>,
+    active_cdp_url: &str,
+    service_state: &ServiceState,
+) -> bool {
+    let Some(session_name) = optional_command_string(command, "sessionName") else {
+        return false;
+    };
+    if session_name != daemon_session_id {
+        return false;
+    }
+    let Some(browser_id) = optional_command_string(command, "browserId") else {
+        return false;
+    };
+    if browser_id != service_browser_id(daemon_session_id) {
+        return false;
+    }
+    let requested_runtime_profile = optional_command_string(command, "runtimeProfile");
+    let requested_profile_path = optional_command_string(command, "profile");
+    let selected_profile_id = requested_runtime_profile.clone().or_else(|| {
+        let requested_path = requested_profile_path.as_deref()?;
+        let mut matching_profiles = service_state.profiles.values().filter(|profile| {
+            profile
+                .user_data_dir
+                .as_deref()
+                .is_some_and(|path| pathish_eq(requested_path, Path::new(path)))
+        });
+        let profile_id = matching_profiles.next()?.id.clone();
+        matching_profiles.next().is_none().then_some(profile_id)
+    });
+    let Some(selected_profile_id) = selected_profile_id else {
+        return false;
+    };
+    let Some(profile) = service_state.profiles.get(&selected_profile_id) else {
+        return false;
+    };
+    if requested_profile_path.as_deref().is_some_and(|requested| {
+        !profile
+            .user_data_dir
+            .as_deref()
+            .is_some_and(|persisted| pathish_eq(requested, Path::new(persisted)))
+    }) {
+        return false;
+    }
+    let Some(session) = service_state.sessions.get(daemon_session_id) else {
+        return false;
+    };
+    if session.profile_id.as_deref() != Some(selected_profile_id.as_str())
+        || !session.browser_ids.iter().any(|id| id == &browser_id)
+    {
+        return false;
+    }
+    let Some(retained_browser) = service_state.browsers.get(&browser_id) else {
+        return false;
+    };
+    if retained_browser.id != browser_id
+        || retained_browser.profile_id.as_deref() != Some(selected_profile_id.as_str())
+        || retained_browser.health != ServiceBrowserHealth::Ready
+        || !retained_browser
+            .active_session_ids
+            .iter()
+            .any(|id| id == daemon_session_id)
+    {
+        return false;
+    }
+    let pid_matches = active_browser_pid
+        .zip(retained_browser.pid)
+        .is_some_and(|(active, persisted)| active == persisted);
+    let cdp_matches = retained_browser
+        .cdp_endpoint
+        .as_deref()
+        .is_some_and(|persisted| cdp_identity(persisted) == cdp_identity(active_cdp_url));
+    pid_matches || cdp_matches
+}
+
+fn cdp_identity(value: &str) -> &str {
+    value
+        .strip_prefix("ws://")
+        .or_else(|| value.strip_prefix("wss://"))
+        .or_else(|| value.strip_prefix("http://"))
+        .or_else(|| value.strip_prefix("https://"))
+        .unwrap_or(value)
 }
 pub(crate) fn active_browser_profile_mismatch_message(
     requested_runtime_profile: Option<&str>,
