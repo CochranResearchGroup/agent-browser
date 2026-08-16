@@ -1757,6 +1757,23 @@ fn service_request_command_with_state_and_principal(
     Ok(command)
 }
 
+pub(super) fn service_request_command_with_dashboard_generation(
+    body: &str,
+    service_state: Option<&ServiceState>,
+    authenticated_dashboard_user: &str,
+    effective_session: &str,
+    dashboard_deployment_generation: Option<&str>,
+) -> Result<Value, String> {
+    let mut command = service_request_command_with_state_and_principal(
+        body,
+        service_state,
+        Some(authenticated_dashboard_user),
+        effective_session,
+    )?;
+    apply_dashboard_deployment_generation(&mut command, dashboard_deployment_generation);
+    Ok(command)
+}
+
 fn apply_dashboard_deployment_generation(command: &mut Value, generation_id: Option<&str>) {
     if let Some(generation_id) = generation_id.filter(|value| !value.trim().is_empty()) {
         command["dashboardDeploymentGeneration"] = json!(generation_id);

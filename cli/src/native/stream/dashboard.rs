@@ -28,7 +28,8 @@ use super::dashboard_auth;
 use super::discovery::discover_sessions;
 use super::foreign_cdp_control;
 use super::http::{
-    relay_command_to_daemon, runtime_manifest_json, serve_embedded_file, CORS_HEADERS,
+    relay_command_to_daemon, runtime_manifest_json, serve_embedded_file,
+    service_request_command_with_dashboard_generation, CORS_HEADERS,
 };
 
 const DASHBOARD_SERVICE_BACKEND_SESSION: &str = "dashboard-service-backend";
@@ -226,9 +227,9 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
         return;
     }
 
-    if path.starts_with("/api/") {
+    let authenticated_dashboard_user = if path.starts_with("/api/") {
         match dashboard_auth::authenticate_headers(&headers) {
-            Ok(Some(_)) => {}
+            Ok(Some(identity)) => Some(identity.username),
             Ok(None) => {
                 let response = dashboard_auth::unauthorized_api_response(secure_cookie);
                 let _ = stream.write_all(&response.into_http_bytes()).await;
@@ -239,7 +240,9 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
                 return;
             }
         }
-    }
+    } else {
+        None
+    };
 
     if method == "GET" && path == "/api/runtime/health" {
         write_json_value(&mut stream, "200 OK", crate::install::runtime_health_json()).await;
@@ -350,7 +353,19 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
         } else {
             String::new()
         };
-        handle_service_api_request(&mut stream, method, raw_path, &body_str).await;
+        let Some(authenticated_dashboard_user) = authenticated_dashboard_user.as_deref() else {
+            let response = dashboard_auth::unauthorized_api_response(secure_cookie);
+            let _ = stream.write_all(&response.into_http_bytes()).await;
+            return;
+        };
+        handle_service_api_request(
+            &mut stream,
+            method,
+            raw_path,
+            &body_str,
+            authenticated_dashboard_user,
+        )
+        .await;
         return;
     }
 
@@ -496,6 +511,7 @@ async fn handle_service_api_request(
     method: &str,
     path: &str,
     body: &str,
+    authenticated_dashboard_user: &str,
 ) {
     if method == "POST" {
         if let Some((session_name, command_body)) = service_request_focus_command_body(path, body) {
@@ -537,13 +553,22 @@ async fn handle_service_api_request(
             }
         }
 
-        if let Some(session_name) = service_request_handoff_target_session_name(path, body) {
+        if let Some(command) =
+            service_request_handoff_proxy_command_body(path, body, authenticated_dashboard_user)
+        {
+            let (session_name, command_body) = match command {
+                Ok(command) => command,
+                Err(err) => {
+                    write_json_error(stream, "400 Bad Request", &err).await;
+                    return;
+                }
+            };
             if let Some(port) = session_port_for_name(&session_name) {
                 match proxy_dashboard_service_api_request(
                     port,
                     "POST",
-                    path,
-                    body,
+                    "/api/command",
+                    &command_body,
                     DASHBOARD_REMOTE_VIEW_HANDOFF_PROXY_TIMEOUT,
                 )
                 .await
@@ -795,10 +820,46 @@ fn service_request_target_session_name(path: &str, body: &str) -> Option<String>
     None
 }
 
-fn service_request_handoff_target_session_name(path: &str, body: &str) -> Option<String> {
+fn service_request_handoff_proxy_command_body(
+    path: &str,
+    body: &str,
+    authenticated_dashboard_user: &str,
+) -> Option<Result<(String, String), String>> {
     let state_path = JsonServiceStateStore::default_path().ok()?;
     let state = JsonServiceStateStore::new(state_path).load().ok()?;
-    service_request_handoff_target_session_name_from_state(path, body, &state)
+    service_request_handoff_proxy_command_body_from_state(
+        path,
+        body,
+        authenticated_dashboard_user,
+        &state,
+        std::env::var("AGENT_BROWSER_DASHBOARD_GENERATION")
+            .ok()
+            .as_deref(),
+    )
+}
+
+fn service_request_handoff_proxy_command_body_from_state(
+    path: &str,
+    body: &str,
+    authenticated_dashboard_user: &str,
+    state: &ServiceState,
+    dashboard_deployment_generation: Option<&str>,
+) -> Option<Result<(String, String), String>> {
+    let session_name = service_request_handoff_target_session_name_from_state(path, body, state)?;
+    Some(
+        service_request_command_with_dashboard_generation(
+            body,
+            Some(state),
+            authenticated_dashboard_user,
+            &session_name,
+            dashboard_deployment_generation,
+        )
+        .and_then(|command| {
+            serde_json::to_string(&command)
+                .map(|command_body| (session_name, command_body))
+                .map_err(|err| format!("Failed to serialize service request command: {err}"))
+        }),
+    )
 }
 
 fn service_request_handoff_target_session_name_from_state(
@@ -3183,6 +3244,70 @@ mod tests {
             ),
             Some("im-receipts-google-messages-stock-v4".to_string())
         );
+    }
+
+    #[test]
+    fn dashboard_durable_handoff_proxy_stamps_authenticated_candidate_generation() {
+        let state = crate::native::service_model::ServiceState {
+            remote_view_handoffs: std::collections::BTreeMap::from([(
+                "handoff-a".to_string(),
+                crate::native::service_model::RemoteViewHandoff {
+                    id: "handoff-a".to_string(),
+                    session_name: Some("retained-owner".to_string()),
+                    ..crate::native::service_model::RemoteViewHandoff::default()
+                },
+            )]),
+            ..crate::native::service_model::ServiceState::default()
+        };
+        let body = r##"{"action":"service_remote_view_handoff_resolve","serviceName":"agent-browser-dashboard","agentName":"codex","taskName":"durable-remote-view-handoff","params":{"handoffId":"handoff-a"}}"##;
+
+        let (session_name, command_body) = service_request_handoff_proxy_command_body_from_state(
+            "/api/service/request",
+            body,
+            "codex",
+            &state,
+            Some("generation-candidate"),
+        )
+        .unwrap()
+        .unwrap();
+        let command: Value = serde_json::from_str(&command_body).unwrap();
+
+        assert_eq!(session_name, "retained-owner");
+        assert_eq!(command["action"], "service_remote_view_handoff_resolve");
+        assert_eq!(command["handoffId"], "handoff-a");
+        assert_eq!(command["sessionName"], "retained-owner");
+        assert_eq!(
+            command["dashboardDeploymentGeneration"],
+            "generation-candidate"
+        );
+        assert_eq!(command["requestPrincipalSource"], "explicit_labels");
+    }
+
+    #[test]
+    fn dashboard_durable_handoff_proxy_rejects_public_generation_metadata() {
+        let state = crate::native::service_model::ServiceState {
+            remote_view_handoffs: std::collections::BTreeMap::from([(
+                "handoff-a".to_string(),
+                crate::native::service_model::RemoteViewHandoff {
+                    id: "handoff-a".to_string(),
+                    session_name: Some("retained-owner".to_string()),
+                    ..crate::native::service_model::RemoteViewHandoff::default()
+                },
+            )]),
+            ..crate::native::service_model::ServiceState::default()
+        };
+        let body = r##"{"action":"service_remote_view_handoff_resolve","serviceName":"agent-browser-dashboard","agentName":"codex","taskName":"durable-remote-view-handoff","dashboardDeploymentGeneration":"forged","params":{"handoffId":"handoff-a"}}"##;
+
+        let result = service_request_handoff_proxy_command_body_from_state(
+            "/api/service/request",
+            body,
+            "codex",
+            &state,
+            Some("generation-candidate"),
+        )
+        .unwrap();
+
+        assert!(result.is_err());
     }
 
     #[test]
