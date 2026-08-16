@@ -3598,10 +3598,12 @@ fn resolve_runtime_source_session(
     if let Some(browser) = service_state.browsers.get(&migration.logical_browser_id) {
         candidates.extend(browser.active_session_ids.iter().cloned());
     }
-    if let Some(session) = migration.logical_browser_id.strip_prefix("session:") {
-        candidates.insert(session.to_string());
-    }
     candidates.retain(|value| !value.trim().is_empty());
+    if candidates.is_empty() {
+        if let Some(session) = migration.logical_browser_id.strip_prefix("session:") {
+            candidates.insert(session.to_string());
+        }
+    }
     if candidates.len() > 1 {
         return Err(format!(
             "runtime_transfer_source_session_ambiguous:{}",
@@ -5474,6 +5476,95 @@ fn fail(message: &str, json: bool) -> ! {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn runtime_migration(
+        logical_browser_id: &str,
+    ) -> crate::runtime_adoption::RuntimeMigrationRecord {
+        crate::runtime_adoption::RuntimeMigrationRecord {
+            logical_browser_id: logical_browser_id.to_string(),
+            profile_identity_digest: "profile-digest".to_string(),
+            classification: crate::runtime_adoption::RuntimeClassification::ExternalObserved,
+            disposition: crate::runtime_adoption::RuntimeDisposition::ManualPreservation,
+            adoption_receipt_id: None,
+            reason_codes: vec!["external_owner_preserved".to_string()],
+        }
+    }
+
+    #[test]
+    fn transferred_owner_route_supersedes_legacy_logical_session_alias() {
+        let logical_browser_id = "session:p116-alpha";
+        let candidate_session = "handoff-candidate";
+        let mut service_state = crate::native::service_model::ServiceState::default();
+        service_state.runtime_owner_registry =
+            crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(
+                crate::runtime_owner_transfer::ProfileOwner {
+                    owner_id: "owner-candidate".to_string(),
+                    profile_identity_digest: "profile-digest".to_string(),
+                    state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+                    owner_generation: 2,
+                    browser_id: logical_browser_id.to_string(),
+                    daemon_session_route: candidate_session.to_string(),
+                    process_instance_digest: "process-digest".to_string(),
+                    browser_family: "chrome".to_string(),
+                    cdp_endpoint_identity_digest: "cdp-digest".to_string(),
+                    target_set_digest: "target-digest".to_string(),
+                    pending_transfer: None,
+                    last_transition: None,
+                },
+            );
+        service_state.browsers.insert(
+            logical_browser_id.to_string(),
+            crate::native::service_model::BrowserProcess {
+                active_session_ids: vec![candidate_session.to_string()],
+                ..Default::default()
+            },
+        );
+
+        let source =
+            resolve_runtime_source_session(&service_state, &runtime_migration(logical_browser_id))
+                .unwrap();
+
+        assert_eq!(source.as_deref(), Some(candidate_session));
+    }
+
+    #[test]
+    fn transferred_owner_route_still_rejects_conflicting_active_session() {
+        let logical_browser_id = "session:p116-alpha";
+        let mut service_state = crate::native::service_model::ServiceState::default();
+        service_state.runtime_owner_registry =
+            crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(
+                crate::runtime_owner_transfer::ProfileOwner {
+                    owner_id: "owner-candidate".to_string(),
+                    profile_identity_digest: "profile-digest".to_string(),
+                    state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+                    owner_generation: 2,
+                    browser_id: logical_browser_id.to_string(),
+                    daemon_session_route: "handoff-candidate".to_string(),
+                    process_instance_digest: "process-digest".to_string(),
+                    browser_family: "chrome".to_string(),
+                    cdp_endpoint_identity_digest: "cdp-digest".to_string(),
+                    target_set_digest: "target-digest".to_string(),
+                    pending_transfer: None,
+                    last_transition: None,
+                },
+            );
+        service_state.browsers.insert(
+            logical_browser_id.to_string(),
+            crate::native::service_model::BrowserProcess {
+                active_session_ids: vec!["different-session".to_string()],
+                ..Default::default()
+            },
+        );
+
+        let error =
+            resolve_runtime_source_session(&service_state, &runtime_migration(logical_browser_id))
+                .unwrap_err();
+
+        assert_eq!(
+            error,
+            "runtime_transfer_source_session_ambiguous:session:p116-alpha"
+        );
+    }
 
     #[test]
     fn parses_explicit_dry_run() {
