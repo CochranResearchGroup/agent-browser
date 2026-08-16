@@ -2316,7 +2316,7 @@ fn reconcile_authoritative_route_pool(
     let mut reconcile_env = command_env.to_vec();
     reconcile_env.push((
         "AGENT_BROWSER_IDLE_TIMEOUT_MS".to_string(),
-        "2000".to_string(),
+        "30000".to_string(),
     ));
     let output = run_status(
         binary
