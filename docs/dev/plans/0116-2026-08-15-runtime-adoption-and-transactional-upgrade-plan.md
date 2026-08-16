@@ -1104,6 +1104,32 @@ supervisor, or external state was changed. Slice B is accepted at the source
 and isolated-fixture boundary. The next authorized implementation packet is
 Slice C closed-world runtime census and adoption decisions.
 
+### 2026-08-15 | Slice C Census Engine Checkpoint
+
+The first Slice C packet adds the provider-free closed-world join and
+transaction seam:
+
+- all ten frozen sources must provide one uniquely attributed snapshot;
+- the normalized candidate set must equal the union of runtime IDs observed by
+  those sources, with every runtime classified exactly once;
+- two rounds must agree on source revisions, candidates, evidence, and registry
+  revision or the affected census blocks as insufficient evidence;
+- the stable report contains only opaque logical identity, SHA-256 profile
+  identity, source categories, classification, disposition, and reason codes;
+- a canonical census digest and per-runtime migration records advance the
+  transaction to `census_stable` or `blocked_ambiguous_runtime` with a monotonic
+  checkpoint.
+
+Validation:
+
+- focused `runtime_adoption::tests`: 8 passed;
+- Rust formatting and strict Clippy: passed;
+- no installed payload or live runtime state was read or changed.
+
+This is a partial Slice C checkpoint, not Slice C acceptance. The read-only
+adapters for the ten current sources and the installer ordering gate before
+payload materialization remain open.
+
 ## Planning Evidence
 
 - CodeGraph was healthy on 2026-08-15 with 553 files, 19,654 nodes, and 68,296

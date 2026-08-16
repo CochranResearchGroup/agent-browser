@@ -35,7 +35,12 @@ templates; stable command and unit links resolve through an atomically replaced
 `current` selector. Seven injected staging and selector failures preserve the
 selected generation byte-for-byte, selector-commit failure restores the prior
 selection, changed payloads retain the old generation, and standalone
-reconciliation cannot mutate or select payload generations.
+reconciliation cannot mutate or select payload generations. Slice C now has a
+provider-free closed-world census engine that joins all ten source snapshots,
+classifies the observed runtime union exactly once across two stable rounds,
+persists a canonical digest and migration records, and blocks ambiguous
+transactions. Live-source adapters and the pre-mutation installer gate remain
+open, so Slice C is not yet accepted.
 
 ### Plan
 
@@ -43,9 +48,9 @@ reconciliation cannot mutate or select payload generations.
 
 ### Next Recommendation
 
-Begin Slice C closed-world runtime census and adoption decisions. Do not
-replace the installed payload, enable the recurring interlock, or touch a live
-browser.
+Continue Slice C with read-only adapters for the ten frozen sources and bind
+the stable census transaction before payload materialization. Do not replace
+the installed payload, enable the recurring interlock, or touch a live browser.
 
 ## P114 | Terminal Route Quarantine Recovery
 

@@ -4,6 +4,41 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 159 | 2026-08-15
+
+Scope: begin Plan 0116 Slice C with a provider-free stable-census engine and no
+live runtime observation or mutation.
+
+Actions:
+
+- introduced typed source snapshots, normalized runtime candidates, census
+  rounds, persisted records, and stable census reports;
+- required the exact ten-source ledger, rejected duplicate or missing source
+  attribution, and required the candidate set to equal the union observed by
+  every source;
+- compared two rounds and registry revisions, classified every runtime exactly
+  once, and converted any round or revision drift to insufficient evidence;
+- generated a canonical SHA-256 census digest and persisted migration records,
+  transaction revision, checkpoint, state, and typed stop reason;
+- rejected non-digest profile identity input so transactions cannot persist a
+  raw profile path.
+
+Validation:
+
+- eight focused `runtime_adoption::tests` pass;
+- Rust formatting and strict Clippy pass;
+- Graphiti returned only advisory prior profile and foreign-CDP context; the
+  current plan, fixtures, and source remained authoritative;
+- no installed payload or live runtime state was read or changed.
+
+Result:
+
+- Slice C has a tested provider-free census and transaction foundation;
+- Slice C is not accepted because the ten source read adapters and the
+  pre-payload installer block are not implemented;
+- the next packet is read-only source adaptation followed by two-round
+  installer ordering proof.
+
 ## Turn 158 | 2026-08-15
 
 Scope: execute Plan 0116 Slice B without changing the installed payload or live
