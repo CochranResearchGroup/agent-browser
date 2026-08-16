@@ -882,8 +882,6 @@ fn runtime_profile_readback(
                 .is_some()
             {
                 EvidenceAgreement::Match
-            } else if profile.browser_alive && !evidence.manual_browser {
-                EvidenceAgreement::Missing
             } else {
                 EvidenceAgreement::NotApplicable
             };
@@ -2461,6 +2459,38 @@ mod tests {
         assert!(unconfigured.observations.is_empty());
         assert!(configured.observations.is_empty());
         assert_eq!(unconfigured.source_revision, configured.source_revision);
+    }
+
+    #[test]
+    fn runtime_profile_without_launch_record_is_neutral_browser_family_evidence() {
+        let profile = crate::runtime_profile::RuntimeProfileSummary {
+            runtime_profile: "p116-alpha".to_string(),
+            user_data_dir: std::env::temp_dir()
+                .join("agent-browser-runtime-profile-neutral-family")
+                .display()
+                .to_string(),
+            state_path: std::env::temp_dir()
+                .join("agent-browser-runtime-profile-neutral-family-state.json")
+                .display()
+                .to_string(),
+            configured: false,
+            default: false,
+            browser_pid: Some(424_242),
+            browser_alive: true,
+            headed: Some(true),
+            launch_mode: None,
+            devtools_port: Some(42_424),
+            devtools_reachable: true,
+            ws_url: None,
+            launch_record: None,
+        };
+
+        let readback = runtime_profile_readback(std::slice::from_ref(&profile)).unwrap();
+        assert_eq!(readback.observations.len(), 1);
+        assert_eq!(
+            readback.observations[0].evidence.browser_family,
+            EvidenceAgreement::NotApplicable
+        );
     }
 
     #[test]
