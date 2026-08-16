@@ -55,6 +55,10 @@ const GUACAMOLE_ENVIRONMENT_EXAMPLE: &str =
     include_str!("../assets/workstation/guacamole/environment.example");
 const GUACAMOLE_SCHEMA_GENERATOR: &str =
     include_str!("../assets/workstation/guacamole/generate-initdb.sh");
+/// Rehydrates the sealed Guacamole template into container-local writable
+/// storage before the upstream entrypoint installs generated extensions.
+const GUACAMOLE_START_WRAPPER: &str =
+    include_str!("../assets/workstation/guacamole/start-guacamole.sh");
 const GUACAMOLE_BUNDLE_MANIFEST: &str =
     include_str!("../assets/workstation/guacamole/manifest.json");
 const GUACAMOLE_INITDB: &str = include_str!("../assets/workstation/guacamole/init/001-initdb.sql");
@@ -5025,6 +5029,7 @@ fn materialize_guacamole_assets(staged_support: &Path) -> Result<(), String> {
         ("compose.yml", GUACAMOLE_COMPOSE, false),
         ("environment.example", GUACAMOLE_ENVIRONMENT_EXAMPLE, false),
         ("generate-initdb.sh", GUACAMOLE_SCHEMA_GENERATOR, true),
+        ("start-guacamole.sh", GUACAMOLE_START_WRAPPER, true),
         ("manifest.json", GUACAMOLE_BUNDLE_MANIFEST, false),
         ("init/001-initdb.sql", GUACAMOLE_INITDB, false),
         (
@@ -6354,11 +6359,24 @@ mod tests {
 
         materialize_guacamole_assets(&root).unwrap();
         for relative in [
+            "guacamole/start-guacamole.sh",
             "guacamole/extensions/guac-manifest.json",
             "guacamole/extensions/agent-browser-defaults.js",
             "guacamole/extensions/agent-browser-defaults.jar",
         ] {
             assert!(root.join(relative).is_file(), "missing {relative}");
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_ne!(
+                fs::metadata(root.join("guacamole/start-guacamole.sh"))
+                    .unwrap()
+                    .permissions()
+                    .mode()
+                    & 0o111,
+                0
+            );
         }
 
         fs::remove_dir_all(&root).unwrap();

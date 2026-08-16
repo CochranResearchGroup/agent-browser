@@ -52,6 +52,7 @@ services:
     platform: linux/amd64
     container_name: agent-browser-guacamole
     restart: unless-stopped
+    entrypoint: ["/bin/bash", "/opt/agent-browser/start-guacamole.sh"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -71,6 +72,7 @@ services:
       HTTP_AUTH_HEADER: Remote-User
     volumes:
       - ./extensions:/etc/guacamole/extensions:ro
+      - ./start-guacamole.sh:/opt/agent-browser/start-guacamole.sh:ro
 
 volumes:
   agent-browser-guacamole-postgres-data:

@@ -34,7 +34,7 @@
   "files": [
     {
       "path": "compose.yml",
-      "sha256": "8dc1dc96ed573dc5d74c7327214678c2715e2c92ef36fe657125e9dd5df0ecd2"
+      "sha256": "06b719b3ec6c727214b9287fa7899d4ae352fb77218608709ef181c15da3b2b3"
     },
     {
       "path": "environment.example",
@@ -43,6 +43,10 @@
     {
       "path": "generate-initdb.sh",
       "sha256": "94705152dd0f7f2ae608ca517b6fb676aa43134d151a89e685ddddef379988fa"
+    },
+    {
+      "path": "start-guacamole.sh",
+      "sha256": "029f935c44568202d9ef24e61c5ae6bb102428e7b9233c387aeac0ba6d3faa2d"
     },
     {
       "path": "init/001-initdb.sql",

@@ -132,6 +132,9 @@ The pinned Guacamole web app loads an agent-browser defaults extension. It
 migrates each browser origin once to the `text` input method so existing and
 new connections default to text input, then preserves later user-selected
 input-method changes.
+The packaged container entrypoint copies the sealed extension template into
+container-local writable storage before Guacamole generates its authentication
+extensions. The immutable host generation remains read-only.
 Host preparation includes `x11-utils`, ImageMagick, Tesseract, and a
 path-scoped AppArmor policy that permits managed Chrome to create the user
 namespace required by its sandbox on Ubuntu 24.04. The policy is required only

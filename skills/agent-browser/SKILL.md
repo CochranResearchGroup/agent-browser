@@ -73,7 +73,10 @@ protected PostgreSQL password with any retained database container, preserves
 the other protected values and private file mode, and leaves the database
 unchanged. It reuses the retained Compose project label so existing containers
 are reconciled in place. A retained container without a usable password or
-project label fails closed. Duplicate-profile pressure and executable drift in
+project label fails closed. The packaged container entrypoint copies the
+sealed Guacamole extension template into container-local writable storage
+before the upstream image generates authentication extensions. The immutable
+host generation remains read-only. Duplicate-profile pressure and executable drift in
 an inactive optional session supervisor remain visible as install-doctor
 advisories without failing workstation route reconciliation. Active supervisor
 drift remains blocking. Use `agent-browser install workstation reconcile

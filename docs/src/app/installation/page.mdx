@@ -137,6 +137,9 @@ The Guacamole web container loads the packaged agent-browser defaults
 extension. It performs a one-time browser-origin migration to the
 <code>text</code> input method, making text input the default for existing and
 new connections while preserving later user overrides.
+The packaged container entrypoint copies the sealed extension template into
+container-local writable storage before Guacamole generates its authentication
+extensions. The immutable host generation remains read-only.
 Host preparation includes <code>x11-utils</code>, ImageMagick, Tesseract, and
 a path-scoped AppArmor policy that permits managed Chrome to create the user
 namespace required by its sandbox on Ubuntu 24.04. The policy is required only
