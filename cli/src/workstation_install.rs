@@ -2312,24 +2312,46 @@ fn reconcile_authoritative_route_pool(
 ) -> Result<(), String> {
     let route_json = serde_json::to_string(route_pool)
         .map_err(|error| format!("Unable to serialize authoritative route pool: {error}"))?;
+    let reconcile_session = workstation_reconcile_session(command_env);
+    let mut reconcile_env = command_env.to_vec();
+    reconcile_env.push((
+        "AGENT_BROWSER_IDLE_TIMEOUT_MS".to_string(),
+        "2000".to_string(),
+    ));
     let output = run_status(
         binary
             .to_str()
             .ok_or_else(|| "invalid installed agent-browser path".to_string())?,
         &[
             "--json",
+            "--session",
+            &reconcile_session,
             "service",
             "reconcile",
             "--authoritative-route-pool-json",
             &route_json,
         ],
         support_root,
-        command_env,
+        &reconcile_env,
         false,
     )?;
     let payload: Value = serde_json::from_slice(&output.stdout)
         .map_err(|error| format!("Service reconcile JSON parse failed: {error}"))?;
     validate_service_reconcile_payload(&payload)
+}
+
+fn workstation_reconcile_session(command_env: &[(String, String)]) -> String {
+    let transaction_id = command_env.iter().find_map(|(key, value)| {
+        (key == crate::runtime_adoption::RUNTIME_ADMISSION_TRANSACTION_ID_ENV)
+            .then_some(value.as_str())
+    });
+    transaction_id.map_or_else(
+        || "workstation-reconcile".to_string(),
+        |transaction_id| {
+            let digest = workstation_bytes_sha256(transaction_id.as_bytes());
+            format!("workstation-reconcile-{}", &digest[..12])
+        },
+    )
 }
 
 fn validate_service_reconcile_payload(payload: &Value) -> Result<(), String> {
@@ -6303,6 +6325,31 @@ mod tests {
         assert!(validate_service_reconcile_payload(&rejected)
             .unwrap_err()
             .contains("rejected"));
+    }
+
+    #[test]
+    fn service_reconcile_uses_a_transaction_scoped_daemon_session() {
+        let transaction_env = vec![(
+            crate::runtime_adoption::RUNTIME_ADMISSION_TRANSACTION_ID_ENV.to_string(),
+            "upgrade-test-a".to_string(),
+        )];
+        let same_transaction_env = transaction_env.clone();
+        let other_transaction_env = vec![(
+            crate::runtime_adoption::RUNTIME_ADMISSION_TRANSACTION_ID_ENV.to_string(),
+            "upgrade-test-b".to_string(),
+        )];
+
+        let session = workstation_reconcile_session(&transaction_env);
+        assert!(session.starts_with("workstation-reconcile-"));
+        assert_eq!(
+            session,
+            workstation_reconcile_session(&same_transaction_env)
+        );
+        assert_ne!(
+            session,
+            workstation_reconcile_session(&other_transaction_env)
+        );
+        assert_eq!(workstation_reconcile_session(&[]), "workstation-reconcile");
     }
 
     #[test]
