@@ -25,18 +25,21 @@ session.
 Real-host preflight requires at least 6 GiB free before sudo, payload staging,
 or package mutation; inspect `hostPlan.availableDiskBytes`,
 `minimumDiskBytes`, and `diskSpaceReady` in JSON output.
-Before stopping user units or staging a payload, real-host apply also requires
-two matching read-only runtime census rounds. It joins service state,
+Fresh install and upgrade share one durable transaction engine. Before
+stopping user units or staging a candidate, real-host apply requires two
+matching read-only runtime census rounds. It joins service state,
 runtime-profile state, supervisor and daemon metadata, process-instance
 identity, bounded CDP identity and target digests, and presentation records.
 Treat an incomplete, changing, or ambiguous census as a hard stop and do not
 retry by killing or detaching a browser. Successful JSON output includes
 `runtimeCensusTransaction`, a private receipt under
 `~/.agent-browser/runtime-adoption/transactions/` with the census digest and
-per-runtime classifications. Until the shared profile-owner registry supplies
-an owner generation, a live managed browser is deliberately insufficient
-evidence and blocks apply. Do not work around that stop by killing, detaching,
-or rehoming the browser.
+per-runtime classifications. Host prerequisites must succeed before admission
+drain or owner transfer. Cooperative and verified orphan browsers move through
+receipt-bearing owner generations; manual and external browsers remain
+preserved without effect authority. The selector changes only after every
+runtime has a proven disposition. Do not work around a transaction stop by
+killing, detaching, or rehoming the browser.
 Treat every non-ready result as a hard stop. The installer activates user units
 only after readiness-authoritative routes are projected and both final doctors
 pass. Host preparation includes `x11-utils`, ImageMagick, Tesseract, and a
@@ -68,7 +71,13 @@ advisories without failing workstation route reconciliation. Active supervisor
 drift remains blocking. Use `agent-browser install workstation reconcile
 --json` for an
 explicit installed-controller recovery pass and `agent-browser install
-workstation backup --json` for the protected PostgreSQL backup operation. This
+workstation backup --json` for the protected PostgreSQL backup operation. Use
+`agent-browser install workstation status --json` for a redacted view of the
+selected generation, latest transaction, runtime dispositions, blocker, and
+rollback state. Use `agent-browser install workstation gc --dry-run --json`
+before any reviewed cleanup. Apply mode must retain the selected generation and
+every generation referenced by a live process, named supervisor, failed or
+unclosed transaction, or rollback state. This
 branch remains a release no-go until the disposable Ubuntu and release gates
 pass.
 

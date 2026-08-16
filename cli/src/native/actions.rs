@@ -437,6 +437,15 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
         }
     }
     if crate::runtime_owner_transfer::action_requires_owner_effect_authority(action) {
+        let admission_drain = match crate::runtime_adoption::runtime_admission_drain_path() {
+            Ok(path) => path,
+            Err(error) => return error_response(&id, &error),
+        };
+        if let Err(error) =
+            crate::runtime_adoption::require_runtime_admission(&admission_drain, action)
+        {
+            return error_response(&id, &error);
+        }
         if state.runtime_owner_binding.is_none() {
             let repository =
                 match crate::native::service_store::LockedServiceStateRepository::default_json() {

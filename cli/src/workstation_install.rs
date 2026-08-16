@@ -9,9 +9,12 @@
 //! activates services only after canonical route projection and final doctor
 //! readiness. Real-host apply requires a stable two-round runtime census before
 //! unit quiescence or payload staging. Preflight also requires enough free disk
-//! capacity before sudo or payload mutation begins. Failed reconciliation restores the
-//! exact prior active state of managed user units and writes a private
-//! diagnostic receipt.
+//! capacity before sudo or payload mutation begins. Fresh install and upgrade
+//! share one durable transaction: census precedes candidate staging, host gates
+//! precede admission drain, runtime ownership is receipted before selector
+//! commit, and failures reverse to the prior selected generation when proven.
+//! Failed reconciliation restores the exact prior active state of managed user
+//! units and writes a private diagnostic receipt.
 
 use serde::Serialize;
 use serde_json::Value;
@@ -193,8 +196,342 @@ pub fn run_workstation_command(args: &[String]) {
     match operation {
         Some("reconcile") => run_workstation_reconcile(json),
         Some("backup") => run_workstation_backup(json),
+        Some("status") => run_workstation_upgrade_status(json),
+        Some("gc") => run_workstation_generation_gc(args, json),
         _ => run_workstation_install(args),
     }
+}
+
+fn run_workstation_upgrade_status(json: bool) {
+    let result = workstation_upgrade_status_json();
+    match result {
+        Ok(report) if json => println!(
+            "{}",
+            serde_json::to_string_pretty(&report)
+                .unwrap_or_else(|_| r#"{"success":false,"error":"serialization failed"}"#.into())
+        ),
+        Ok(report) => {
+            let selected = report
+                .get("selectedGenerationId")
+                .and_then(Value::as_str)
+                .unwrap_or("none");
+            let state = report
+                .pointer("/latestTransaction/state")
+                .and_then(Value::as_str)
+                .unwrap_or("none");
+            println!("Selected generation: {selected}");
+            println!("Latest transaction: {state}");
+        }
+        Err(error) => fail(&error, json),
+    }
+}
+
+pub(crate) fn workstation_upgrade_status_json() -> Result<Value, String> {
+    let root = workstation_root()?;
+    let paths = install_paths(&root);
+    let transaction_dir = root.join(".agent-browser/runtime-adoption/transactions");
+    let latest = latest_upgrade_transaction(&transaction_dir)?;
+    let active_drain = root
+        .join(".agent-browser/runtime-adoption/admission-drain.json")
+        .is_file();
+    let summary = latest.as_ref().map(|transaction| {
+        serde_json::json!({
+            "transactionId": transaction.transaction_id,
+            "state": transaction.state,
+            "revision": transaction.revision,
+            "oldGenerationId": transaction.old_generation_id,
+            "candidateGenerationId": transaction.candidate_generation_id,
+            "runtimeMigrations": transaction.runtime_migrations.iter().map(|migration| serde_json::json!({
+                "logicalBrowserId": migration.logical_browser_id,
+                "classification": migration.classification,
+                "disposition": migration.disposition,
+                "receipted": migration.adoption_receipt_id.is_some(),
+                "reasonCodes": migration.reason_codes,
+            })).collect::<Vec<_>>(),
+            "dashboardValidationSummary": transaction.dashboard_validation_summary,
+            "presentationValidationSummary": transaction.presentation_validation_summary,
+            "terminalResult": transaction.terminal_result,
+            "stopReason": transaction.stop_reason,
+        })
+    });
+    Ok(serde_json::json!({
+        "schemaVersion": "agent-browser.workstation-upgrade-status.v1",
+        "success": true,
+        "selectedGenerationId": selected_generation_id(&paths),
+        "admissionDraining": active_drain,
+        "latestTransaction": summary,
+    }))
+}
+
+fn latest_upgrade_transaction(
+    transaction_dir: &Path,
+) -> Result<Option<crate::runtime_adoption::UpgradeTransaction>, String> {
+    let entries = match fs::read_dir(transaction_dir) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(format!(
+                "Unable to read runtime transaction directory {}: {error}",
+                transaction_dir.display()
+            ));
+        }
+    };
+    let mut candidates = entries
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().extension().and_then(|value| value.to_str()) == Some("json"))
+        .filter_map(|entry| {
+            entry
+                .metadata()
+                .ok()
+                .and_then(|metadata| metadata.modified().ok())
+                .map(|modified| (modified, entry.path()))
+        })
+        .collect::<Vec<_>>();
+    candidates.sort_by(|left, right| right.0.cmp(&left.0));
+    let Some((_, path)) = candidates.first() else {
+        return Ok(None);
+    };
+    let body = fs::read(path).map_err(display_io("read latest runtime transaction", path))?;
+    serde_json::from_slice(&body)
+        .map(Some)
+        .map_err(|error| format!("Latest runtime transaction is invalid: {error}"))
+}
+
+fn run_workstation_generation_gc(args: &[String], json: bool) {
+    let result = (|| {
+        let mode = if args.iter().any(|arg| arg == "--apply") {
+            if args.iter().any(|arg| arg == "--dry-run") {
+                return Err("workstation gc modes are mutually exclusive".to_string());
+            }
+            InstallMode::Apply
+        } else if args.iter().any(|arg| arg == "--dry-run") {
+            InstallMode::DryRun
+        } else {
+            return Err(
+                "Choose exactly one of --dry-run or --apply for workstation gc".to_string(),
+            );
+        };
+        let root = workstation_root()?;
+        let paths = install_paths(&root);
+        let _lock = if mode == InstallMode::Apply {
+            Some(WorkstationLock::acquire(&root)?)
+        } else {
+            None
+        };
+        let references = generation_references(&root, &paths)?;
+        let mut retained = Vec::new();
+        let mut candidates = Vec::new();
+        let entries = match fs::read_dir(&paths.generations_dir) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                return Ok(serde_json::json!({
+                    "schemaVersion": "agent-browser.workstation-generation-gc.v1",
+                    "success": true,
+                    "mode": if mode == InstallMode::Apply { "apply" } else { "dry-run" },
+                    "selectedGenerationId": selected_generation_id(&paths),
+                    "candidates": [],
+                    "retained": [],
+                    "removed": [],
+                }));
+            }
+            Err(error) => {
+                return Err(format!(
+                    "Unable to read runtime generations {}: {error}",
+                    paths.generations_dir.display()
+                ));
+            }
+        };
+        for entry in entries.filter_map(Result::ok) {
+            if !entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false) {
+                continue;
+            }
+            let generation_id = entry.file_name().to_string_lossy().to_string();
+            if let Some(reasons) = references.get(&generation_id) {
+                retained.push(serde_json::json!({
+                    "generationId": generation_id,
+                    "reasonCodes": reasons,
+                }));
+            } else {
+                validate_sealed_generation_tree(&entry.path())?;
+                candidates.push(generation_id);
+            }
+        }
+        candidates.sort();
+        retained.sort_by(|left, right| {
+            left.get("generationId")
+                .and_then(Value::as_str)
+                .cmp(&right.get("generationId").and_then(Value::as_str))
+        });
+        let mut removed = Vec::new();
+        if mode == InstallMode::Apply {
+            if root
+                .join(".agent-browser/runtime-adoption/admission-drain.json")
+                .exists()
+            {
+                return Err("generation_gc_blocked_by_active_admission_drain".to_string());
+            }
+            for generation_id in &candidates {
+                let generation_path = paths.generations_dir.join(generation_id);
+                remove_generation_tree(&generation_path)?;
+                removed.push(generation_id.clone());
+            }
+        }
+        Ok(serde_json::json!({
+            "schemaVersion": "agent-browser.workstation-generation-gc.v1",
+            "success": true,
+            "mode": if mode == InstallMode::Apply { "apply" } else { "dry-run" },
+            "selectedGenerationId": selected_generation_id(&paths),
+            "candidates": candidates,
+            "retained": retained,
+            "removed": removed,
+        }))
+    })();
+    match result {
+        Ok(report) if json => println!(
+            "{}",
+            serde_json::to_string_pretty(&report)
+                .unwrap_or_else(|_| r#"{"success":false,"error":"serialization failed"}"#.into())
+        ),
+        Ok(report) => println!(
+            "Generation GC {}: {} candidate(s), {} removed.",
+            report
+                .get("mode")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown"),
+            report
+                .get("candidates")
+                .and_then(Value::as_array)
+                .map(Vec::len)
+                .unwrap_or(0),
+            report
+                .get("removed")
+                .and_then(Value::as_array)
+                .map(Vec::len)
+                .unwrap_or(0)
+        ),
+        Err(error) => fail(&error, json),
+    }
+}
+
+fn generation_references(
+    root: &Path,
+    paths: &InstallPaths,
+) -> Result<std::collections::BTreeMap<String, Vec<String>>, String> {
+    use crate::runtime_adoption::UpgradeTransactionState;
+
+    let mut references = std::collections::BTreeMap::<String, Vec<String>>::new();
+    if let Some(selected) = selected_generation_id(paths) {
+        references
+            .entry(selected)
+            .or_default()
+            .push("selected_generation".to_string());
+    }
+    let transaction_dir = root.join(".agent-browser/runtime-adoption/transactions");
+    if let Ok(entries) = fs::read_dir(&transaction_dir) {
+        for entry in entries.filter_map(Result::ok).filter(|entry| {
+            entry.path().extension().and_then(|value| value.to_str()) == Some("json")
+        }) {
+            let path = entry.path();
+            let transaction: crate::runtime_adoption::UpgradeTransaction =
+                serde_json::from_slice(&fs::read(&path).map_err(display_io(
+                    "read runtime transaction for generation gc",
+                    &path,
+                ))?)
+                .map_err(|error| format!("Runtime transaction blocks generation gc: {error}"))?;
+            if transaction.state == UpgradeTransactionState::OldGenerationRetirable {
+                continue;
+            }
+            if let Some(old) = transaction.old_generation_id {
+                references
+                    .entry(old)
+                    .or_default()
+                    .push("transaction_old_generation".to_string());
+            }
+            references
+                .entry(transaction.candidate_generation_id)
+                .or_default()
+                .push("transaction_candidate_generation".to_string());
+        }
+    }
+    collect_process_generation_references(paths, &mut references);
+    collect_supervisor_generation_references(root, paths, &mut references)?;
+    for reasons in references.values_mut() {
+        reasons.sort();
+        reasons.dedup();
+    }
+    Ok(references)
+}
+
+fn collect_process_generation_references(
+    paths: &InstallPaths,
+    references: &mut std::collections::BTreeMap<String, Vec<String>>,
+) {
+    let Ok(entries) = fs::read_dir("/proc") else {
+        return;
+    };
+    for entry in entries.filter_map(Result::ok).filter(|entry| {
+        entry
+            .file_name()
+            .to_string_lossy()
+            .bytes()
+            .all(|byte| byte.is_ascii_digit())
+    }) {
+        let Ok(executable) = fs::read_link(entry.path().join("exe")) else {
+            continue;
+        };
+        if let Some(generation) = generation_id_from_path(&executable, &paths.generations_dir) {
+            references
+                .entry(generation)
+                .or_default()
+                .push("live_process".to_string());
+        }
+    }
+}
+
+fn collect_supervisor_generation_references(
+    root: &Path,
+    paths: &InstallPaths,
+    references: &mut std::collections::BTreeMap<String, Vec<String>>,
+) -> Result<(), String> {
+    let manifests = root.join(".config/agent-browser/session-supervisors");
+    let entries = match fs::read_dir(&manifests) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(format!(
+                "Unable to read session supervisor manifests {}: {error}",
+                manifests.display()
+            ));
+        }
+    };
+    for entry in entries
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().extension().and_then(|value| value.to_str()) == Some("json"))
+    {
+        let path = entry.path();
+        let manifest: Value = serde_json::from_slice(
+            &fs::read(&path).map_err(display_io("read session supervisor manifest", &path))?,
+        )
+        .map_err(|error| format!("Session supervisor manifest blocks generation gc: {error}"))?;
+        if let Some(executable) = manifest.get("executablePath").and_then(Value::as_str) {
+            if let Some(generation) =
+                generation_id_from_path(Path::new(executable), &paths.generations_dir)
+            {
+                references
+                    .entry(generation)
+                    .or_default()
+                    .push("session_supervisor".to_string());
+            }
+        }
+    }
+    Ok(())
+}
+
+fn generation_id_from_path(path: &Path, generations_dir: &Path) -> Option<String> {
+    path.strip_prefix(generations_dir)
+        .ok()
+        .and_then(|relative| relative.components().next())
+        .map(|component| component.as_os_str().to_string_lossy().to_string())
 }
 
 fn run_workstation_install(args: &[String]) {
@@ -218,71 +555,93 @@ fn run_workstation_install(args: &[String]) {
     let isolated_root = env::var_os("AGENT_BROWSER_WORKSTATION_ROOT").is_some();
     let host_plan = build_host_plan(isolated_root, &root);
     if !host_plan.disk_space_ready {
-        fail(
-            &format!(
+        let mut error = format!(
                 "workstation installation requires at least {} bytes of free disk space; {} bytes are available",
                 host_plan.minimum_disk_bytes,
                 host_plan.available_disk_bytes.unwrap_or(0)
-            ),
-            parsed.json,
-        );
+            );
+        if parsed.mode == InstallMode::Apply {
+            if let Ok(path) = record_blocked_upgrade_transaction(
+                &root,
+                &paths,
+                &parsed,
+                crate::runtime_adoption::UpgradeTransactionState::BlockedCandidateIncompatible,
+                "host_disk_precondition_failed",
+            ) {
+                error.push_str(&format!("; transaction: {}", path.display()));
+            }
+        }
+        fail(&error, parsed.json);
     }
     if !host_plan.supported {
-        fail(
-            "workstation installation requires Ubuntu 24.04 x86_64 with apt-get, apt-cache, bash, sudo, and systemctl",
-            parsed.json,
-        );
+        let mut error = "workstation installation requires Ubuntu 24.04 x86_64 with apt-get, apt-cache, bash, sudo, and systemctl".to_string();
+        if parsed.mode == InstallMode::Apply {
+            if let Ok(path) = record_blocked_upgrade_transaction(
+                &root,
+                &paths,
+                &parsed,
+                crate::runtime_adoption::UpgradeTransactionState::BlockedCandidateIncompatible,
+                "host_platform_precondition_failed",
+            ) {
+                error.push_str(&format!("; transaction: {}", path.display()));
+            }
+        }
+        fail(&error, parsed.json);
     }
     let _install_lock = if parsed.mode == InstallMode::Apply {
         match WorkstationLock::acquire(&root) {
             Ok(lock) => Some(lock),
-            Err(error) => fail(&error, parsed.json),
+            Err(error) => {
+                let message = record_blocked_upgrade_transaction(
+                    &root,
+                    &paths,
+                    &parsed,
+                    crate::runtime_adoption::UpgradeTransactionState::BlockedInflightEffect,
+                    "installer_lock_busy",
+                )
+                .map(|path| format!("{error}; transaction: {}", path.display()))
+                .unwrap_or(error);
+                fail(&message, parsed.json)
+            }
         }
     } else {
         None
     };
     let mut apply_quiesced_user_units = None;
     let mut runtime_census_transaction = None;
-
-    if parsed.mode == InstallMode::Apply && !isolated_root {
-        match require_stable_runtime_census(&root, &paths, &parsed) {
-            Ok(path) => runtime_census_transaction = Some(path.display().to_string()),
-            Err(error) => fail(&error, parsed.json),
-        }
-        phases.push("runtime-census-stable");
-    }
-
-    let mutated = if parsed.mode == InstallMode::Apply {
-        if !isolated_root {
-            match quiesce_existing_user_units(&paths) {
-                Ok(quiesced) => apply_quiesced_user_units = Some(quiesced),
-                Err(error) => fail(&error, parsed.json),
-            }
-        }
-        match materialize_payload(&paths, &parsed) {
-            Ok(()) => {
-                phases.extend(["payload-staged", "units-staged", "payload-committed"]);
-                paths = install_paths(&root);
-                true
-            }
-            Err(error) => fail_with_user_unit_restoration(
-                &error,
-                parsed.json,
-                &paths,
-                apply_quiesced_user_units.as_ref(),
-            ),
-        }
-    } else {
-        false
-    };
     let mut host_prepared = false;
     let mut session_refresh_required = false;
     let mut reconcile_receipt = None;
     let mut workstation_ready = false;
     let mut next_action =
         "workstation substrate provisioning is required before service activation".to_string();
+    let mut prepared_payload = if parsed.mode == InstallMode::Apply {
+        let prepared = match prepare_payload_transaction(&root, &paths, &parsed, isolated_root) {
+            Ok(prepared) => prepared,
+            Err(error) => fail(&error, parsed.json),
+        };
+        runtime_census_transaction = Some(prepared.transaction_path.display().to_string());
+        phases.extend([
+            "payload-staged",
+            "units-staged",
+            "candidate-preflight-ready",
+            "runtime-census-stable",
+        ]);
+        Some(prepared)
+    } else {
+        None
+    };
+
     if parsed.mode == InstallMode::Apply && !isolated_root {
         if let Err(error) = crate::install::install_remote_view_privileges(true, parsed.json) {
+            if let Some(prepared) = prepared_payload.as_mut() {
+                let _ = rollback_prepared_payload_transaction(
+                    &paths,
+                    prepared,
+                    false,
+                    "host_dependency_precondition_failed",
+                );
+            }
             fail_with_user_unit_restoration(
                 &error,
                 parsed.json,
@@ -294,39 +653,121 @@ fn run_workstation_install(args: &[String]) {
         host_prepared = true;
         session_refresh_required =
             !current_process_has_group("agent-browser") || !current_process_has_group("docker");
-        next_action = if session_refresh_required {
-            "log out and back in or reboot, then rerun workstation installation".to_string()
-        } else {
+        if session_refresh_required {
+            if let Some(prepared) = prepared_payload.as_mut() {
+                if let Err(error) = rollback_prepared_payload_transaction(
+                    &paths,
+                    prepared,
+                    false,
+                    "operator_login_refresh_required",
+                ) {
+                    fail(&error, parsed.json);
+                }
+            }
+            next_action =
+                "log out and back in or reboot, then rerun workstation installation".to_string();
+        }
+    }
+
+    if parsed.mode == InstallMode::Apply && !session_refresh_required {
+        let prepared = prepared_payload
+            .as_mut()
+            .expect("apply always prepares one payload transaction");
+        if let Err(error) = activate_prepared_payload_transaction(prepared, &paths, isolated_root) {
+            let rollback_error = rollback_prepared_payload_transaction(
+                &paths,
+                prepared,
+                false,
+                "candidate_activation_failed",
+            )
+            .err();
+            fail(
+                &rollback_error.map_or(error.clone(), |rollback| format!("{error}; {rollback}")),
+                parsed.json,
+            );
+        }
+        phases.extend([
+            "admission-draining",
+            "runtimes-transferred",
+            "presentations-rebound",
+            "candidate-ready",
+        ]);
+        if !isolated_root {
+            match quiesce_existing_user_units(&paths) {
+                Ok(quiesced) => apply_quiesced_user_units = Some(quiesced),
+                Err(error) => {
+                    let _ = rollback_prepared_payload_transaction(
+                        &paths,
+                        prepared,
+                        false,
+                        "user_unit_quiesce_failed",
+                    );
+                    fail(&error, parsed.json);
+                }
+            }
+        }
+        if let Err(error) = commit_prepared_payload_transaction(&paths, &parsed, prepared) {
+            let _ = rollback_prepared_payload_transaction(
+                &paths,
+                prepared,
+                false,
+                "generation_commit_failed",
+            );
+            fail_with_user_unit_restoration(
+                &error,
+                parsed.json,
+                &paths,
+                apply_quiesced_user_units.as_ref(),
+            );
+        }
+        phases.push("payload-committed");
+        paths = install_paths(&root);
+
+        if !isolated_root {
             let reconcile = match reconcile_workstation_locked(&root, &paths) {
                 Ok(reconcile) => reconcile,
-                Err(error) => fail_with_user_unit_restoration(
-                    &error,
-                    parsed.json,
-                    &paths,
-                    apply_quiesced_user_units.as_ref(),
-                ),
+                Err(error) => {
+                    let rollback = rollback_prepared_payload_transaction(
+                        &paths,
+                        prepared,
+                        true,
+                        "post_commit_reconciliation_failed",
+                    );
+                    let message = rollback
+                        .err()
+                        .map_or(error.clone(), |rollback| format!("{error}; {rollback}"));
+                    fail_with_user_unit_restoration(
+                        &message,
+                        parsed.json,
+                        &paths,
+                        apply_quiesced_user_units.as_ref(),
+                    );
+                }
             };
             phases.push("workstation-reconciled");
             workstation_ready = true;
             reconcile_receipt = Some(reconcile.receipt_path);
-            "run agent-browser install doctor --json and review the installed workstation state"
-                .to_string()
-        };
-    }
-    if session_refresh_required {
-        if let Some(quiesced) = apply_quiesced_user_units.as_ref() {
-            if let Err(error) =
-                restore_previously_active_user_units(&paths, &paths.root, &[], quiesced)
-            {
-                fail(
-                    &format!(
-                        "workstation installation requires a fresh login; failed to restore previously active workstation user units: {error}"
-                    ),
-                    parsed.json,
-                );
-            }
+            next_action =
+                "run agent-browser install doctor --json and review the installed workstation state"
+                    .to_string();
+        }
+        if let Err(error) = accept_prepared_payload_transaction(prepared) {
+            let rollback = rollback_prepared_payload_transaction(
+                &paths,
+                prepared,
+                true,
+                "transaction_acceptance_failed",
+            );
+            fail(
+                &rollback
+                    .err()
+                    .map_or(error.clone(), |rollback| format!("{error}; {rollback}")),
+                parsed.json,
+            );
         }
     }
+
+    let mutated = parsed.mode == InstallMode::Apply;
 
     let report = WorkstationInstallReport {
         schema_version: INSTALL_SCHEMA_VERSION,
@@ -2019,19 +2460,7 @@ fn write_private_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String
     set_private_file(path)
 }
 
-fn require_stable_runtime_census(
-    root: &Path,
-    paths: &InstallPaths,
-    args: &WorkstationInstallArgs,
-) -> Result<PathBuf, String> {
-    require_stable_runtime_census_with(
-        root,
-        paths,
-        args,
-        crate::runtime_adoption::collect_host_runtime_census_round,
-    )
-}
-
+#[cfg(test)]
 fn require_stable_runtime_census_with(
     root: &Path,
     paths: &InstallPaths,
@@ -2156,6 +2585,628 @@ fn write_private_json_atomic<T: Serialize>(path: &Path, value: &T) -> Result<(),
     fs::write(&staged, body).map_err(display_io("stage runtime adoption transaction", &staged))?;
     set_private_file(&staged)?;
     fs::rename(&staged, path).map_err(display_io("commit runtime adoption transaction", path))
+}
+
+fn candidate_generation_identity(
+    paths: &InstallPaths,
+    args: &WorkstationInstallArgs,
+) -> Result<(String, String, String), String> {
+    let current_exe = env::current_exe()
+        .map_err(|error| format!("Unable to resolve candidate executable: {error}"))?;
+    let binary_sha256 = workstation_file_sha256(&current_exe)?;
+    let rendered_units = render_units(
+        &paths.binary.display().to_string(),
+        &paths.current_selector.join("support"),
+        &paths.guacamole_secret_file,
+        args.dashboard_port,
+    );
+    let support_manifest = render_manifest(args, &binary_sha256, &rendered_units);
+    let support_manifest_sha256 = workstation_bytes_sha256(support_manifest.as_bytes());
+    let generation_id = format!(
+        "{}-{}-{}",
+        env!("CARGO_PKG_VERSION"),
+        &binary_sha256[..12],
+        &support_manifest_sha256[..12]
+    );
+    Ok((generation_id, binary_sha256, support_manifest_sha256))
+}
+
+fn new_upgrade_transaction(
+    paths: &InstallPaths,
+    candidate_generation_id: String,
+    candidate_binary_sha256: String,
+    candidate_support_manifest_sha256: String,
+) -> crate::runtime_adoption::UpgradeTransaction {
+    use crate::runtime_adoption::{
+        UpgradeCheckpoint, UpgradeTransaction, UpgradeTransactionState,
+        RUNTIME_ADOPTION_SCHEMA_VERSION,
+    };
+
+    let recorded_at = runtime_adoption_timestamp();
+    UpgradeTransaction {
+        schema_version: RUNTIME_ADOPTION_SCHEMA_VERSION.to_string(),
+        transaction_id: format!("upgrade-{}", uuid::Uuid::new_v4()),
+        requested_by: "workstation-installer".to_string(),
+        old_generation_id: selected_generation_id(paths),
+        candidate_generation_id,
+        candidate_binary_sha256,
+        candidate_support_manifest_sha256,
+        runtime_census_digest: None,
+        runtime_migrations: Vec::new(),
+        state: UpgradeTransactionState::Planned,
+        revision: 0,
+        checkpoints: vec![UpgradeCheckpoint {
+            name: "transaction_planned".to_string(),
+            transaction_revision: 0,
+            recorded_at,
+        }],
+        dashboard_validation_summary: None,
+        presentation_validation_summary: None,
+        terminal_result: None,
+        stop_reason: None,
+    }
+}
+
+fn record_blocked_upgrade_transaction(
+    root: &Path,
+    paths: &InstallPaths,
+    args: &WorkstationInstallArgs,
+    state: crate::runtime_adoption::UpgradeTransactionState,
+    stop_reason: &str,
+) -> Result<PathBuf, String> {
+    let (generation_id, binary_sha256, support_manifest_sha256) =
+        candidate_generation_identity(paths, args)?;
+    let mut transaction =
+        new_upgrade_transaction(paths, generation_id, binary_sha256, support_manifest_sha256);
+    transaction.stop_reason = Some(stop_reason.to_string());
+    let path = transaction_path(root, &transaction.transaction_id);
+    write_private_json_atomic(&path, &transaction)?;
+    persist_upgrade_transition(&path, &mut transaction, state, stop_reason)?;
+    Ok(path)
+}
+
+fn transaction_path(root: &Path, transaction_id: &str) -> PathBuf {
+    root.join(".agent-browser/runtime-adoption/transactions")
+        .join(format!("{transaction_id}.json"))
+}
+
+fn persist_upgrade_transition(
+    path: &Path,
+    transaction: &mut crate::runtime_adoption::UpgradeTransaction,
+    next_state: crate::runtime_adoption::UpgradeTransactionState,
+    checkpoint_name: &str,
+) -> Result<(), String> {
+    let revision = transaction.revision;
+    crate::runtime_adoption::transition_upgrade_transaction(
+        transaction,
+        revision,
+        next_state,
+        checkpoint_name,
+        &runtime_adoption_timestamp(),
+    )?;
+    write_private_json_atomic(path, transaction)
+}
+
+fn persist_admission_drain(
+    path: &Path,
+    transaction: &crate::runtime_adoption::UpgradeTransaction,
+) -> Result<(), String> {
+    write_private_json_atomic(
+        path,
+        &crate::runtime_adoption::RuntimeAdmissionDrain {
+            schema_version: crate::runtime_adoption::RUNTIME_ADOPTION_SCHEMA_VERSION.to_string(),
+            transaction_id: transaction.transaction_id.clone(),
+            candidate_generation_id: transaction.candidate_generation_id.clone(),
+            transaction_revision: transaction.revision,
+            recorded_at: runtime_adoption_timestamp(),
+        },
+    )
+}
+
+fn clear_admission_drain(path: &Path) -> Result<(), String> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!(
+            "Unable to close runtime admission drain {}: {error}",
+            path.display()
+        )),
+    }
+}
+
+fn isolated_runtime_census() -> Result<crate::runtime_adoption::StableRuntimeCensus, String> {
+    let round = crate::runtime_adoption::collect_runtime_census_round(
+        0,
+        crate::runtime_adoption::runtime_census_sources()
+            .into_iter()
+            .map(
+                |source| crate::runtime_adoption::RuntimeCensusSourceSnapshot {
+                    source,
+                    source_revision: "isolated-fixture".to_string(),
+                    logical_browser_ids: Vec::new(),
+                },
+            )
+            .collect(),
+        Vec::new(),
+    )?;
+    crate::runtime_adoption::build_stable_runtime_census(&round, &round)
+}
+
+fn prepare_payload_transaction(
+    root: &Path,
+    paths: &InstallPaths,
+    args: &WorkstationInstallArgs,
+    isolated_root: bool,
+) -> Result<PreparedPayloadTransaction, String> {
+    use crate::runtime_adoption::{
+        build_stable_runtime_census, persist_runtime_census, UpgradeTransactionState,
+    };
+
+    let (generation_id, binary_sha256, support_manifest_sha256) =
+        candidate_generation_identity(paths, args)?;
+    let mut transaction =
+        new_upgrade_transaction(paths, generation_id, binary_sha256, support_manifest_sha256);
+    let transaction_path = transaction_path(root, &transaction.transaction_id);
+    write_private_json_atomic(&transaction_path, &transaction)?;
+    let admission_drain_path = root
+        .join(".agent-browser/runtime-adoption")
+        .join("admission-drain.json");
+    if admission_drain_path.exists() {
+        transaction.stop_reason = Some("existing_admission_drain".to_string());
+        persist_upgrade_transition(
+            &transaction_path,
+            &mut transaction,
+            UpgradeTransactionState::BlockedInflightEffect,
+            "blocked_existing_admission_drain",
+        )?;
+        return Err(format!(
+            "an earlier workstation transaction still owns runtime admission; selected generation was not changed; inspect transaction status before retrying: {}",
+            transaction_path.display()
+        ));
+    }
+
+    let census = if isolated_root {
+        isolated_runtime_census()
+    } else {
+        (|| {
+            let first = crate::runtime_adoption::collect_host_runtime_census_round()?;
+            let second = crate::runtime_adoption::collect_host_runtime_census_round()?;
+            build_stable_runtime_census(&first, &second)
+        })()
+    };
+    let census = match census {
+        Ok(census) => census,
+        Err(error) => {
+            block_incomplete_runtime_census(&mut transaction, &runtime_adoption_timestamp());
+            write_private_json_atomic(&transaction_path, &transaction)?;
+            return Err(format!(
+                "runtime census is incomplete; payload and selected generation were not changed; transaction {}: {error}",
+                transaction_path.display()
+            ));
+        }
+    };
+    if !census.activation_allowed {
+        persist_runtime_census(&mut transaction, &census, &runtime_adoption_timestamp());
+        write_private_json_atomic(&transaction_path, &transaction)?;
+        return Err(format!(
+            "runtime census is ambiguous; payload and selected generation were not changed; inspect transaction {}",
+            transaction_path.display()
+        ));
+    }
+
+    let staged = match stage_payload_generation(paths, args) {
+        Ok(staged) => staged,
+        Err(error) => {
+            transaction.stop_reason = Some("candidate_staging_failed".to_string());
+            let _ = persist_upgrade_transition(
+                &transaction_path,
+                &mut transaction,
+                UpgradeTransactionState::RollbackBeforeCommit,
+                "rollback_before_commit",
+            );
+            transaction.terminal_result = Some("old_generation_preserved".to_string());
+            let _ = persist_upgrade_transition(
+                &transaction_path,
+                &mut transaction,
+                UpgradeTransactionState::FailedPreservedOldGeneration,
+                "failed_preserved_old_generation",
+            );
+            return Err(format!(
+                "{error}; transaction: {}",
+                transaction_path.display()
+            ));
+        }
+    };
+    if staged.generation_id != transaction.candidate_generation_id
+        || staged.binary_sha256 != transaction.candidate_binary_sha256
+        || staged.support_manifest_sha256 != transaction.candidate_support_manifest_sha256
+    {
+        return Err("candidate_generation_identity_changed_during_staging".to_string());
+    }
+    persist_upgrade_transition(
+        &transaction_path,
+        &mut transaction,
+        UpgradeTransactionState::CandidateStaged,
+        "candidate_staged",
+    )?;
+    persist_upgrade_transition(
+        &transaction_path,
+        &mut transaction,
+        UpgradeTransactionState::CandidatePreflightReady,
+        "candidate_preflight_ready",
+    )?;
+    persist_runtime_census(&mut transaction, &census, &runtime_adoption_timestamp());
+    write_private_json_atomic(&transaction_path, &transaction)?;
+
+    Ok(PreparedPayloadTransaction {
+        staged,
+        transaction_path,
+        transaction,
+        previous_selector: fs::read_link(&paths.current_selector).ok(),
+        admission_drain_path,
+        runtime_handoffs: Vec::new(),
+    })
+}
+
+fn activate_prepared_payload_transaction(
+    prepared: &mut PreparedPayloadTransaction,
+    paths: &InstallPaths,
+    isolated_root: bool,
+) -> Result<(), String> {
+    use crate::runtime_adoption::UpgradeTransactionState;
+
+    persist_upgrade_transition(
+        &prepared.transaction_path,
+        &mut prepared.transaction,
+        UpgradeTransactionState::AdmissionDraining,
+        "admission_draining",
+    )?;
+    persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)?;
+    persist_upgrade_transition(
+        &prepared.transaction_path,
+        &mut prepared.transaction,
+        UpgradeTransactionState::RuntimesTransferring,
+        "runtimes_transferring",
+    )?;
+    persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)?;
+    if !isolated_root {
+        transfer_discovered_runtimes(
+            paths,
+            &prepared.staged,
+            &mut prepared.transaction.runtime_migrations,
+            &mut prepared.runtime_handoffs,
+        )?;
+        write_private_json_atomic(&prepared.transaction_path, &prepared.transaction)?;
+    }
+    persist_upgrade_transition(
+        &prepared.transaction_path,
+        &mut prepared.transaction,
+        UpgradeTransactionState::PresentationsRebinding,
+        "presentations_rebinding",
+    )?;
+    prepared.transaction.presentation_validation_summary =
+        Some(if prepared.transaction.runtime_migrations.is_empty() {
+            "no_live_presentations".to_string()
+        } else {
+            "runtime_presentations_preserved_for_candidate".to_string()
+        });
+    write_private_json_atomic(&prepared.transaction_path, &prepared.transaction)?;
+    persist_upgrade_transition(
+        &prepared.transaction_path,
+        &mut prepared.transaction,
+        UpgradeTransactionState::CandidateReady,
+        "candidate_ready",
+    )?;
+    persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)
+}
+
+fn transfer_discovered_runtimes(
+    paths: &InstallPaths,
+    staged: &StagedWorkstationGeneration,
+    migrations: &mut [crate::runtime_adoption::RuntimeMigrationRecord],
+    handoffs: &mut Vec<PreparedRuntimeHandoff>,
+) -> Result<(), String> {
+    use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
+    use crate::runtime_adoption::RuntimeDisposition;
+
+    let service_state =
+        JsonServiceStateStore::new(JsonServiceStateStore::default_path()?).load()?;
+    let old_binary = paths.current_selector.join("bin/agent-browser");
+    let candidate_binary = staged.generation_path.join("bin/agent-browser");
+    for migration in migrations {
+        let source_session = resolve_runtime_source_session(&service_state, migration)?;
+        match migration.disposition {
+            RuntimeDisposition::CooperativeTransfer => {
+                let source_session = source_session.ok_or_else(|| {
+                    format!(
+                        "runtime_transfer_source_session_missing:{}",
+                        migration.logical_browser_id
+                    )
+                })?;
+                let prepared =
+                    run_agent_json(&old_binary, &source_session, &["handoff", "prepare"])?;
+                let candidate_session = prepared
+                    .pointer("/data/candidateSessionName")
+                    .and_then(Value::as_str)
+                    .filter(|value| !value.trim().is_empty())
+                    .ok_or_else(|| {
+                        format!("runtime_transfer_candidate_session_missing:{source_session}")
+                    })?
+                    .to_string();
+                let resumed = match run_agent_json(
+                    &candidate_binary,
+                    &candidate_session,
+                    &["handoff", "resume", "--source-session", &source_session],
+                ) {
+                    Ok(resumed) => resumed,
+                    Err(error) => {
+                        let _ = run_agent_json(&old_binary, &source_session, &["handoff", "abort"]);
+                        return Err(error);
+                    }
+                };
+                migration.adoption_receipt_id = Some(owner_transfer_receipt_id(&resumed)?);
+                handoffs.push(PreparedRuntimeHandoff {
+                    source_session,
+                    candidate_session,
+                    committed: true,
+                });
+            }
+            RuntimeDisposition::OrphanAdoption => {
+                let source_session = source_session.ok_or_else(|| {
+                    format!(
+                        "runtime_orphan_source_session_missing:{}",
+                        migration.logical_browser_id
+                    )
+                })?;
+                if migration.logical_browser_id != format!("session:{source_session}") {
+                    return Err(format!(
+                        "runtime_orphan_logical_browser_not_session_bound:{}",
+                        migration.logical_browser_id
+                    ));
+                }
+                let candidate_session = format!(
+                    "orphan-{}",
+                    &workstation_bytes_sha256(migration.logical_browser_id.as_bytes())[..16]
+                );
+                let resumed = run_agent_json(
+                    &candidate_binary,
+                    &candidate_session,
+                    &["handoff", "resume", "--source-session", &source_session],
+                )?;
+                migration.adoption_receipt_id = Some(owner_transfer_receipt_id(&resumed)?);
+                handoffs.push(PreparedRuntimeHandoff {
+                    source_session,
+                    candidate_session,
+                    committed: true,
+                });
+            }
+            RuntimeDisposition::ManualPreservation | RuntimeDisposition::RetiredIdle => {}
+            RuntimeDisposition::RejectedAmbiguity => {
+                return Err(format!(
+                    "runtime_transfer_rejected_ambiguity:{}",
+                    migration.logical_browser_id
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn resolve_runtime_source_session(
+    service_state: &crate::native::service_model::ServiceState,
+    migration: &crate::runtime_adoption::RuntimeMigrationRecord,
+) -> Result<Option<String>, String> {
+    let mut candidates = std::collections::BTreeSet::new();
+    if let Some(owner) = service_state
+        .runtime_owner_registry
+        .owner(&migration.profile_identity_digest)
+    {
+        candidates.insert(owner.daemon_session_route.clone());
+    }
+    if let Some(browser) = service_state.browsers.get(&migration.logical_browser_id) {
+        candidates.extend(browser.active_session_ids.iter().cloned());
+    }
+    if let Some(session) = migration.logical_browser_id.strip_prefix("session:") {
+        candidates.insert(session.to_string());
+    }
+    candidates.retain(|value| !value.trim().is_empty());
+    if candidates.len() > 1 {
+        return Err(format!(
+            "runtime_transfer_source_session_ambiguous:{}",
+            migration.logical_browser_id
+        ));
+    }
+    Ok(candidates.into_iter().next())
+}
+
+fn run_agent_json(binary: &Path, session: &str, command_args: &[&str]) -> Result<Value, String> {
+    let output = Command::new(binary)
+        .args(["--json", "--session", session])
+        .args(command_args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|error| {
+            format!(
+                "Unable to run runtime transaction client {} for session '{session}': {error}",
+                binary.display()
+            )
+        })?;
+    let payload: Value = serde_json::from_slice(&output.stdout).map_err(|error| {
+        format!(
+            "Runtime transaction client returned invalid JSON for session '{session}': {error}; {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )
+    })?;
+    if !output.status.success() || payload.get("success").and_then(Value::as_bool) != Some(true) {
+        let message = payload
+            .get("error")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .unwrap_or_else(|| String::from_utf8_lossy(&output.stderr).trim().to_string());
+        return Err(format!(
+            "Runtime transaction command failed for session '{session}': {message}"
+        ));
+    }
+    Ok(payload)
+}
+
+fn owner_transfer_receipt_id(payload: &Value) -> Result<String, String> {
+    payload
+        .pointer("/data/ownerTransferReceipt/receiptId")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| "runtime_transfer_receipt_missing".to_string())
+}
+
+fn commit_prepared_payload_transaction(
+    paths: &InstallPaths,
+    args: &WorkstationInstallArgs,
+    prepared: &mut PreparedPayloadTransaction,
+) -> Result<(), String> {
+    commit_staged_payload_generation(paths, args, &prepared.staged)?;
+    persist_upgrade_transition(
+        &prepared.transaction_path,
+        &mut prepared.transaction,
+        crate::runtime_adoption::UpgradeTransactionState::GenerationCommitted,
+        "generation_committed",
+    )?;
+    persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)
+}
+
+fn accept_prepared_payload_transaction(
+    prepared: &mut PreparedPayloadTransaction,
+) -> Result<(), String> {
+    use crate::runtime_adoption::UpgradeTransactionState;
+
+    persist_upgrade_transition(
+        &prepared.transaction_path,
+        &mut prepared.transaction,
+        UpgradeTransactionState::PostCommitValidating,
+        "post_commit_validating",
+    )?;
+    finalize_runtime_handoffs(prepared)?;
+    prepared.transaction.dashboard_validation_summary =
+        Some("selected_generation_and_operator_journey_validated".to_string());
+    prepared.transaction.terminal_result = Some("accepted".to_string());
+    write_private_json_atomic(&prepared.transaction_path, &prepared.transaction)?;
+    clear_admission_drain(&prepared.admission_drain_path)?;
+    persist_upgrade_transition(
+        &prepared.transaction_path,
+        &mut prepared.transaction,
+        UpgradeTransactionState::Accepted,
+        "accepted",
+    )?;
+    let _ = persist_upgrade_transition(
+        &prepared.transaction_path,
+        &mut prepared.transaction,
+        UpgradeTransactionState::OldGenerationRetirable,
+        "old_generation_retirable",
+    );
+    Ok(())
+}
+
+fn finalize_runtime_handoffs(prepared: &PreparedPayloadTransaction) -> Result<(), String> {
+    let candidate_binary = prepared.staged.generation_path.join("bin/agent-browser");
+    for handoff in &prepared.runtime_handoffs {
+        if handoff.committed {
+            run_agent_json(
+                &candidate_binary,
+                &handoff.source_session,
+                &["handoff", "finalize"],
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn rollback_prepared_payload_transaction(
+    paths: &InstallPaths,
+    prepared: &mut PreparedPayloadTransaction,
+    after_generation_commit: bool,
+    stop_reason: &str,
+) -> Result<(), String> {
+    use crate::runtime_adoption::UpgradeTransactionState;
+
+    prepared.transaction.stop_reason = Some(stop_reason.to_string());
+    let rollback_state = if after_generation_commit {
+        UpgradeTransactionState::RollbackAfterCommit
+    } else {
+        UpgradeTransactionState::RollbackBeforeCommit
+    };
+    persist_upgrade_transition(
+        &prepared.transaction_path,
+        &mut prepared.transaction,
+        rollback_state,
+        if after_generation_commit {
+            "rollback_after_commit"
+        } else {
+            "rollback_before_commit"
+        },
+    )?;
+
+    let selector_result = if after_generation_commit {
+        restore_generation_selector(paths, prepared.previous_selector.as_deref())
+    } else {
+        Ok(())
+    };
+    let handoff_result = rollback_runtime_handoffs(prepared);
+    if selector_result.is_ok() && handoff_result.is_ok() {
+        prepared.transaction.terminal_result = Some("old_generation_preserved".to_string());
+        clear_admission_drain(&prepared.admission_drain_path)?;
+        persist_upgrade_transition(
+            &prepared.transaction_path,
+            &mut prepared.transaction,
+            UpgradeTransactionState::FailedPreservedOldGeneration,
+            "failed_preserved_old_generation",
+        )
+    } else {
+        prepared.transaction.terminal_result = Some("operator_recovery_required".to_string());
+        persist_upgrade_transition(
+            &prepared.transaction_path,
+            &mut prepared.transaction,
+            UpgradeTransactionState::OperatorRecoveryRequired,
+            "operator_recovery_required",
+        )?;
+        Err(format!(
+            "runtime transaction rollback requires operator recovery: selector={}, handoffs={}",
+            selector_result
+                .err()
+                .unwrap_or_else(|| "restored".to_string()),
+            handoff_result
+                .err()
+                .unwrap_or_else(|| "restored".to_string())
+        ))
+    }
+}
+
+fn rollback_runtime_handoffs(prepared: &PreparedPayloadTransaction) -> Result<(), String> {
+    let candidate_binary = prepared.staged.generation_path.join("bin/agent-browser");
+    let mut failures = Vec::new();
+    for handoff in prepared.runtime_handoffs.iter().rev() {
+        if !handoff.committed {
+            continue;
+        }
+        if let Err(error) = run_agent_json(
+            &candidate_binary,
+            &handoff.candidate_session,
+            &[
+                "handoff",
+                "rollback",
+                "--source-session",
+                &handoff.source_session,
+            ],
+        ) {
+            failures.push(error);
+        }
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(failures.join("; "))
+    }
 }
 
 struct WorkstationLock {
@@ -2299,6 +3350,32 @@ struct InstallPaths {
     guacamole_secret_file: PathBuf,
 }
 
+#[derive(Debug)]
+struct StagedWorkstationGeneration {
+    generation_id: String,
+    generation_path: PathBuf,
+    binary_sha256: String,
+    support_manifest_sha256: String,
+    rendered_units: Vec<(&'static str, String)>,
+}
+
+#[derive(Debug)]
+struct PreparedPayloadTransaction {
+    staged: StagedWorkstationGeneration,
+    transaction_path: PathBuf,
+    transaction: crate::runtime_adoption::UpgradeTransaction,
+    previous_selector: Option<PathBuf>,
+    admission_drain_path: PathBuf,
+    runtime_handoffs: Vec<PreparedRuntimeHandoff>,
+}
+
+#[derive(Debug)]
+struct PreparedRuntimeHandoff {
+    source_session: String,
+    candidate_session: String,
+    committed: bool,
+}
+
 fn workstation_root() -> Result<PathBuf, String> {
     if let Some(root) = env::var_os("AGENT_BROWSER_WORKSTATION_ROOT") {
         let path = PathBuf::from(root);
@@ -2333,7 +3410,10 @@ fn install_paths(root: &Path) -> InstallPaths {
     }
 }
 
-fn materialize_payload(paths: &InstallPaths, args: &WorkstationInstallArgs) -> Result<(), String> {
+fn stage_payload_generation(
+    paths: &InstallPaths,
+    args: &WorkstationInstallArgs,
+) -> Result<StagedWorkstationGeneration, String> {
     validate_generation_install_preconditions(paths)?;
     let staging = paths
         .root
@@ -2407,8 +3487,8 @@ fn materialize_payload(paths: &InstallPaths, args: &WorkstationInstallArgs) -> R
             "schemaVersion": "agent-browser.runtime-generation.v1",
             "generationId": generation_id,
             "packageVersion": env!("CARGO_PKG_VERSION"),
-            "binarySha256": binary_sha256,
-            "supportManifestSha256": support_manifest_sha256,
+            "binarySha256": binary_sha256.clone(),
+            "supportManifestSha256": support_manifest_sha256.clone(),
             "controllerCompatibilityVersion": 1,
             "schemaCompatibilityVersion": 1,
             "immutableInstallationPath": generation_path,
@@ -2426,16 +3506,31 @@ fn materialize_payload(paths: &InstallPaths, args: &WorkstationInstallArgs) -> R
 
         commit_immutable_generation(&staging, &generation_path)?;
         inject_failure("generation-staged")?;
-        ensure_workstation_state(paths, args)?;
-        let created_links = prepare_stable_generation_links(paths, &rendered_units)?;
-        if let Err(error) = select_generation(paths, &generation_id) {
-            remove_created_links(&created_links);
-            return Err(error);
-        }
-        Ok(())
+        Ok(StagedWorkstationGeneration {
+            generation_id,
+            generation_path,
+            binary_sha256,
+            support_manifest_sha256,
+            rendered_units,
+        })
     })();
     let _ = remove_generation_tree(&staging);
     result
+}
+
+fn commit_staged_payload_generation(
+    paths: &InstallPaths,
+    args: &WorkstationInstallArgs,
+    staged: &StagedWorkstationGeneration,
+) -> Result<(), String> {
+    validate_sealed_generation_tree(&staged.generation_path)?;
+    ensure_workstation_state(paths, args)?;
+    let created_links = prepare_stable_generation_links(paths, &staged.rendered_units)?;
+    if let Err(error) = select_generation(paths, &staged.generation_id) {
+        remove_created_links(&created_links);
+        return Err(error);
+    }
+    Ok(())
 }
 
 fn validate_generation_install_preconditions(paths: &InstallPaths) -> Result<(), String> {
@@ -3468,6 +4563,44 @@ mod tests {
                 0o600
             );
         }
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn blocked_precondition_records_one_transaction_without_staging_payload() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-blocked-upgrade-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let paths = install_paths(&root);
+        let args = WorkstationInstallArgs {
+            mode: InstallMode::Apply,
+            json: true,
+            dashboard_port: 4848,
+            guacamole_port: 8092,
+        };
+        let receipt = record_blocked_upgrade_transaction(
+            &root,
+            &paths,
+            &args,
+            crate::runtime_adoption::UpgradeTransactionState::BlockedInflightEffect,
+            "installer_lock_busy",
+        )
+        .unwrap();
+        let transaction: crate::runtime_adoption::UpgradeTransaction =
+            serde_json::from_slice(&fs::read(receipt).unwrap()).unwrap();
+
+        assert_eq!(
+            transaction.state,
+            crate::runtime_adoption::UpgradeTransactionState::BlockedInflightEffect
+        );
+        assert_eq!(
+            transaction.stop_reason.as_deref(),
+            Some("installer_lock_busy")
+        );
+        assert!(!paths.generations_dir.exists());
+        assert!(!paths.current_selector.exists());
         fs::remove_dir_all(root).unwrap();
     }
 

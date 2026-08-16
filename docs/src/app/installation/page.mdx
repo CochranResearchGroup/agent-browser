@@ -16,6 +16,8 @@ agent-browser install doctor  # Check binary drift and launch readiness
 agent-browser install --with-deps --with-remote-view-privileges  # Linux RDP/Guacamole desktop setup
 agent-browser install workstation --dry-run --json  # Preview source-free workstation payload
 agent-browser install workstation --apply --json  # Install and reconcile a fresh Ubuntu workstation
+agent-browser install workstation status --json  # Read the latest redacted upgrade transaction
+agent-browser install workstation gc --dry-run --json  # Preview safe old-generation cleanup
 ```
 
 This is the fastest option. Commands run through the native Rust CLI directly
@@ -91,14 +93,17 @@ checkout or pnpm reference:
 ```bash
 agent-browser install workstation --dry-run --json
 agent-browser install workstation --apply --json
+agent-browser install workstation status --json
+agent-browser install workstation gc --dry-run --json
 ```
 
 The first apply uses one <code>sudo -v</code> authorization boundary for host
 preparation. Before authorization or payload staging, real-host preflight
 requires at least 6 GiB of free disk capacity. JSON output exposes
 <code>hostPlan.availableDiskBytes</code>, <code>minimumDiskBytes</code>, and
-<code>diskSpaceReady</code>. Real-host apply then records two matching read-only
-runtime census rounds before stopping user units or staging a payload. The
+<code>diskSpaceReady</code>. Fresh install and upgrade share one durable
+transaction engine. Real-host apply records two matching read-only runtime
+census rounds before stopping user units or staging a candidate. The
 census joins service state, runtime-profile state, named supervisors, daemon
 and process-instance evidence, bounded CDP browser and target digests,
 displays, routes, streams, and durable handoffs. Missing, changing, or
@@ -106,9 +111,11 @@ conflicting evidence fails closed without replacing the selected generation.
 Successful JSON output exposes <code>runtimeCensusTransaction</code>, the private
 receipt under
 <code>~/.agent-browser/runtime-adoption/transactions/</code> that contains the
-census digest and per-runtime classifications. Until the shared profile-owner
-registry supplies an owner generation, a live managed browser is deliberately
-insufficient evidence and blocks apply; the installer never kills it. If preparation adds the <code>agent-browser</code> or
+census digest and per-runtime classifications. Host prerequisites succeed
+before admission drain or ownership transfer. Cooperative and verified orphan
+browsers move through receipt-bearing owner generations; manual and external
+browsers remain preserved without effect authority. The selector changes only
+after every discovered runtime has a proven disposition. If preparation adds the <code>agent-browser</code> or
 <code>docker</code> group to the current user, the command exits with status 75
 and a <code>relogin_required</code> JSON state. Log out and back in or reboot,
 then rerun the same apply command. With both groups effective, apply starts the
@@ -154,7 +161,13 @@ a usable password or project label fails closed.
 Use <code>agent-browser install workstation reconcile --json</code> to rerun
 the installed convergence controller without reinstalling the payload. Use
 <code>agent-browser install workstation backup --json</code> for the same
-protected PostgreSQL backup operation invoked by the installed timer.
+protected PostgreSQL backup operation invoked by the installed timer. Use
+<code>agent-browser install workstation status --json</code> for a redacted
+selected-generation, migration, blocker, admission, and terminal-state view.
+Use <code>agent-browser install workstation gc --dry-run --json</code> to
+preview reviewed old-generation cleanup. Apply retains the selected generation
+and every generation referenced by a live process, named supervisor, failed or
+unclosed transaction, or rollback state.
 
 <code>agent-browser install doctor --json</code> verifies the installed
 binary, controller assets, Guacamole manifest, and Guacamole files against the
@@ -176,11 +189,11 @@ receipt under
 systemd duration such as <code>5min</code> to change the cadence.
 
 During development, run <code>pnpm publish:local-dashboard</code> to rebuild
-and replace the user-scoped executable. The publisher transfers active sessions
-to replacement daemons while preserving browser PIDs, CDP endpoints, profiles,
-and open tabs. It inventories active named supervisors as well as daemon
-sockets. An older relinquish-first daemon enters verified orphan adoption,
-while ambiguous evidence fails closed.
+the dashboard and candidate executable. The publisher is a thin client of the
+canonical workstation transaction: closed-world census, admission drain,
+receipt-bearing owner transfer, selector commit, rollback, and dashboard
+reconciliation remain installer-owned. It never directly replaces the stable
+binary or maintains a second socket-only handoff algorithm.
 
 ## Stealth CDP Chromium
 

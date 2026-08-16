@@ -181,6 +181,25 @@ type RuntimeHealth = {
   staleSessions?: string[];
   sessionSupervisors?: SessionSupervisorHealth;
   issues?: RuntimeHealthIssue[];
+  workstationUpgrade?: {
+    selectedGenerationId?: string | null;
+    admissionDraining?: boolean;
+    latestTransaction?: {
+      transactionId?: string;
+      state?: string;
+      oldGenerationId?: string | null;
+      candidateGenerationId?: string;
+      runtimeMigrations?: Array<{
+        logicalBrowserId?: string;
+        classification?: string;
+        disposition?: string;
+        receipted?: boolean;
+        reasonCodes?: string[];
+      }>;
+      terminalResult?: string | null;
+      stopReason?: string | null;
+    } | null;
+  };
 };
 
 type RuntimeHealthState = {
@@ -196,6 +215,20 @@ const REQUIRED_RUNTIME_FEATURES = [
 ] as const;
 
 const REQUIRED_RUNTIME_CONTRACT = "service-ui-runtime.v1";
+
+function workstationUpgradeIssue(health: RuntimeHealth): string | null {
+  const upgrade = health.workstationUpgrade;
+  const transaction = upgrade?.latestTransaction;
+  if (!transaction?.state) return null;
+  const quietStates = new Set(["accepted", "old_generation_retirable"]);
+  if (!upgrade?.admissionDraining && quietStates.has(transaction.state)) return null;
+  const selected = upgrade?.selectedGenerationId || "none";
+  const candidate = transaction.candidateGenerationId || "unknown";
+  const migrationCount = transaction.runtimeMigrations?.length ?? 0;
+  const rollback = transaction.oldGenerationId ? "old generation retained" : "no prior generation";
+  const blocker = transaction.stopReason ? ` Blocker: ${transaction.stopReason}.` : "";
+  return `Workstation transaction ${transaction.state}: selected ${selected}, candidate ${candidate}, ${migrationCount} runtime dispositions, ${rollback}.${blocker}`;
+}
 
 function dashboardSectionFromPath(pathname: string): DashboardSection {
   const segments = pathname.split("/").filter(Boolean);
@@ -743,9 +776,9 @@ function DashboardExperience({
           throw new Error(`HTTP ${response.status}`);
         }
         const health = await response.json() as RuntimeHealth;
-        const issue = health.ready === false
+        const issue = workstationUpgradeIssue(health) || (health.ready === false
           ? health.issues?.[0]?.message || "Active daemon sessions are out of sync with the installed runtime."
-          : null;
+          : null);
         if (!cancelled) {
           setRuntimeHealth({ loading: false, health, issue });
         }

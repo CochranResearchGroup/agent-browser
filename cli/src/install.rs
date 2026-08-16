@@ -1088,6 +1088,15 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
     );
     live_dashboard_runtime["dashboardIngress"] =
         crate::dashboard_ingress::dashboard_ingress_status_json();
+    live_dashboard_runtime["workstationUpgrade"] =
+        crate::workstation_install::workstation_upgrade_status_json().unwrap_or_else(|error| {
+            json!({
+                "schemaVersion": "agent-browser.workstation-upgrade-status.v1",
+                "success": false,
+                "state": "unavailable",
+                "error": error,
+            })
+        });
     install_doctor_trace("service_status");
     let service = service_status_probe();
     install_doctor_trace("service_resources");
@@ -1670,6 +1679,42 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
         }
     }
 
+    if let Some(upgrade) = live_dashboard_runtime
+        .get("workstationUpgrade")
+        .and_then(Value::as_object)
+    {
+        let state = upgrade
+            .get("latestTransaction")
+            .and_then(|transaction| transaction.get("state"))
+            .and_then(Value::as_str);
+        let admission_draining = upgrade
+            .get("admissionDraining")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let transaction_stranded = state.is_some_and(|state| {
+            !matches!(
+                state,
+                "accepted" | "old_generation_retirable" | "failed_preserved_old_generation"
+            )
+        });
+        if admission_draining || transaction_stranded {
+            issues.push(json!({
+                "code": "workstation_upgrade_transaction_not_terminal",
+                "message": "the workstation upgrade transaction is still active, blocked, or requires recovery",
+                "state": state,
+                "admissionDraining": admission_draining,
+                "nextAction": "inspect_workstation_upgrade_status",
+                "remedy": {
+                    "kind": "operator_command",
+                    "command": "agent-browser install workstation status --json",
+                    "argv": ["agent-browser", "install", "workstation", "status", "--json"],
+                    "requiresInteractiveSudo": false,
+                    "why": "Review the redacted transaction, blocker, runtime dispositions, and rollback state before retrying."
+                }
+            }));
+        }
+    }
+
     if let Some(rows) = runtime_inventory
         .get("runtimes")
         .and_then(|value| value.as_array())
@@ -1931,6 +1976,28 @@ pub(crate) fn runtime_health_json() -> serde_json::Value {
         crate::session_supervisor::session_supervisor_health_json(),
     );
     health["dashboardIngress"] = crate::dashboard_ingress::dashboard_ingress_status_json();
+    #[cfg(not(test))]
+    {
+        health["workstationUpgrade"] =
+            crate::workstation_install::workstation_upgrade_status_json().unwrap_or_else(|error| {
+                json!({
+                    "schemaVersion": "agent-browser.workstation-upgrade-status.v1",
+                    "success": false,
+                    "state": "unavailable",
+                    "error": error,
+                })
+            });
+    }
+    #[cfg(test)]
+    {
+        health["workstationUpgrade"] = json!({
+            "schemaVersion": "agent-browser.workstation-upgrade-status.v1",
+            "success": true,
+            "selectedGenerationId": null,
+            "admissionDraining": false,
+            "latestTransaction": null,
+        });
+    }
     health
 }
 

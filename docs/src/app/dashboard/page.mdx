@@ -100,9 +100,10 @@ pnpm publish:local-dashboard -- --expect-marker "Stream port"
 ```
 
 The command builds <code>packages/dashboard/out</code>, rebuilds the local CLI,
-backs up and replaces <code>~/.local/bin/agent-browser</code>, preserves the
-stable ingress, restarts only the generation backend when the split units are
-installed, and smokes the live dashboard URL.
+and submits that candidate to the canonical workstation transaction. The
+installer owns census, admission drain, runtime transfer, selector commit,
+rollback, and stable-ingress reconciliation. The publisher never directly
+replaces <code>~/.local/bin/agent-browser</code> and then smokes the live URL.
 The smoke reads <code>/api/runtime/manifest</code> from the running service and
 records the served package version, service UI contract, embedded dashboard
 SHA-256, supported UI features, current executable path, and current executable

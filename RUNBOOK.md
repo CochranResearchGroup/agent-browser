@@ -4,6 +4,53 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 165 | 2026-08-16
+
+Scope: complete Plan 0116 Slices G and H at the source and isolated-fixture
+boundary without installed-payload, browser, or generation-GC mutation.
+
+Actions:
+
+- made fresh install and upgrade enter one durable, revision-fenced transaction
+  before candidate staging;
+- separated immutable candidate staging from selector commit and required two
+  stable census rounds, host gates, admission drain, exact runtime-owner
+  transfer receipts, and `CandidateReady` before commit;
+- added deterministic precommit and postcommit rollback, explicit operator
+  recovery when reversal cannot be proved, and typed blocked transactions for
+  failed apply preconditions;
+- added reviewed generation GC with separate dry-run and apply modes that retain
+  selected, live-process, supervisor, failed, unclosed, and rollback-referenced
+  generations;
+- reduced the development publisher to a builder and canonical installer
+  client;
+- projected one redacted workstation-upgrade status through the CLI, runtime
+  health, dashboard, and install doctor;
+- aligned CLI help, README, repository skill, docs site, inline comments,
+  fixtures, architectural guards, plan, roadmap, and runbook.
+
+Validation:
+
+- strict Clippy and Rust formatting pass;
+- all twelve runtime-adoption tests and twenty-six workstation installer tests
+  pass serially;
+- dashboard and docs production builds, publisher guards, host and VM harness
+  fixtures, Guacamole durability and route-user fixtures, route-confusion
+  gates, and remote-view documentation guards pass;
+- an exact-revision optimized build and source-free workstation fixture pass.
+  The fixture covers transaction cardinality, selector preservation across
+  injected failures, redacted status, stale admission drain, lock contention,
+  and safe GC preview retention.
+
+Result:
+
+- Slices G and H are accepted at the source and isolated-fixture boundary;
+- no installed payload, unit, daemon, browser, profile, route, display,
+  dashboard, supervisor, or external state changed, and GC apply did not run;
+- Slice E remains `IMPLEMENTED_NOT_ACCEPTED` because its earlier user-scoped
+  boundary incident is not adjudicated;
+- Slice I remains unexecuted and requires separate explicit live authorization.
+
 ## Turn 164 | 2026-08-16
 
 Scope: implement Plan 0116 Slice F durable-handoff self-healing at the source

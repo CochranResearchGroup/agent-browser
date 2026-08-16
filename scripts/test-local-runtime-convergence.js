@@ -155,56 +155,32 @@ assert.match(
 
 assert.match(
   publisher,
-  /prepareRuntimeHandoffs\(installBin\)[\s\S]*installBinaryAtomically\(builtBin, installBin[\s\S]*resumeRuntimeHandoffs\(installBin\)[\s\S]*finalizeRuntimeHandoffs\(installBin\)/,
-  'local publishing must bracket executable replacement with daemon handoff',
+  /spawnSync\([\s\S]*builtBin,[\s\S]*\['install', 'workstation', '--apply', '--json'\]/,
+  'local publishing must submit the built candidate to the canonical workstation transaction',
 );
 
 assert.doesNotMatch(
   publisher,
-  /systemctl', \['--user', 'stop', 'agent-browser-dashboard\.service'/,
-  'local publishing must never stop the stable dashboard ingress',
+  /copyFileSync|renameSync|installBinaryAtomically|prepareRuntimeHandoffs|resumeRuntimeHandoffs|finalizeRuntimeHandoffs/,
+  'local publishing must not retain a private overwrite or runtime handoff lifecycle',
 );
 
 assert.match(
   publisher,
-  /restart', 'agent-browser-dashboard-backend\.service'/,
-  'local publishing may restart the generation backend without restarting stable ingress',
+  /report\.transaction = \{[\s\S]*runtimeCensusTransaction[\s\S]*installReport\.phases/,
+  'local publishing must report the canonical durable transaction and its phases',
 );
 
-assert.match(
+assert.doesNotMatch(
   publisher,
-  /for \(const session of activeSupervisorSessionNames\(\)\)[\s\S]*function activeSupervisorSessionNames\(\)[\s\S]*agent-browser\.session-supervisor\.v1[\s\S]*systemctl[\s\S]*is-active/,
-  'publisher inventory must include active named supervisors instead of relying on sockets alone',
+  /\.sock|activeSupervisorSessionNames|runtimeSocketDir/,
+  'publisher must leave closed-world runtime discovery to the canonical census',
 );
 
-assert.match(
+assert.doesNotMatch(
   publisher,
-  /data\.browserPid !== prepared\.browserPid[\s\S]*data\.cdpUrl !== prepared\.cdpUrl/,
-  'local publishing must verify browser PID and CDP endpoint continuity',
-);
-
-assert.match(
-  publisher,
-  /function runAgentJson[\s\S]*maxBuffer: 16 \* 1024 \* 1024,[\s\S]*timeout: 30_000/,
-  'local publishing must bound compatibility probes while retaining large structured responses',
-);
-
-assert.match(
-  publisher,
-  /unsupportedActiveSessions[\s\S]*publish was stopped before replacing the executable/,
-  'local publishing must fail closed when an old daemon cannot hand off an active browser',
-);
-
-assert.match(
-  publisher,
-  /const daemonClientBin = runtimeDaemonClientBinary\(daemonPid, rollbackBin\)[\s\S]*serviceBrowserForSession\(daemonClientBin[\s\S]*runAgentJson\(daemonClientBin, sessionName, \['close'\]\)/,
-  'publisher inventory and idle retirement must use the running daemon executable without triggering hash replacement',
-);
-
-assert.match(
-  publisher,
-  /function runtimeDaemonClientBinary\(daemonPid, fallbackBin\)[\s\S]*`\/proc\/\$\{daemonPid\}\/exe`/,
-  'Linux publisher preflight must resolve the running daemon executable through procfs',
+  /systemctl', \['--user', '(?:stop|restart)', 'agent-browser-dashboard\.service'/,
+  'local publishing must never stop or privately restart the stable dashboard ingress',
 );
 
 assert.match(

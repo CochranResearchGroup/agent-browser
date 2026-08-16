@@ -1,25 +1,14 @@
 #!/usr/bin/env node
 
-import { execFileSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import {
-  chmodSync,
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  renameSync,
-  rmSync,
-  statSync,
-} from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 
 const rootDir = new URL('..', import.meta.url).pathname;
 const args = process.argv.slice(2);
 const options = {
-  allowOutsideHome: false,
   dashboardUrl: process.env.AGENT_BROWSER_DASHBOARD_URL || 'http://127.0.0.1:4848/',
   expectMarkers: [],
   installBin: process.env.AGENT_BROWSER_INSTALL_BIN || '',
@@ -27,19 +16,14 @@ const options = {
   browserProfile: '',
   release: false,
   skipSmoke: false,
-  syncReferenceBinaries: true,
   smokeBrowser: true,
-  startIfMissing: false,
   workspaceSession: '',
 };
 
 for (let index = 0; index < args.length; index += 1) {
   const arg = args[index];
-  if (arg === '--') {
-    continue;
-  } else if (arg === '--allow-outside-home') {
-    options.allowOutsideHome = true;
-  } else if (arg === '--dashboard-url') {
+  if (arg === '--') continue;
+  if (arg === '--dashboard-url') {
     options.dashboardUrl = requiredValue(args, ++index, arg);
   } else if (arg === '--expect-marker') {
     options.expectMarkers.push(requiredValue(args, ++index, arg));
@@ -53,14 +37,12 @@ for (let index = 0; index < args.length; index += 1) {
     options.release = true;
   } else if (arg === '--skip-browser') {
     options.smokeBrowser = false;
-  } else if (arg === '--skip-reference-sync') {
-    options.syncReferenceBinaries = false;
   } else if (arg === '--skip-smoke') {
     options.skipSmoke = true;
-  } else if (arg === '--start-if-missing') {
-    options.startIfMissing = true;
   } else if (arg === '--workspace-session') {
     options.workspaceSession = requiredValue(args, ++index, arg);
+  } else if (['--allow-outside-home', '--skip-reference-sync', '--start-if-missing'].includes(arg)) {
+    fail(`${arg} is no longer supported because publication uses the canonical workstation transaction`);
   } else if (arg === '--help' || arg === '-h') {
     printHelp();
     process.exit(0);
@@ -74,30 +56,11 @@ const report = {
   mode: options.release ? 'release' : 'debug',
   installBin: null,
   builtBin: null,
-  backupPath: null,
-  service: {
-    before: null,
-    backendBefore: null,
-    after: null,
-    backendAfter: null,
-    action: 'none',
-    quiesced: false,
-  },
+  transaction: null,
+  service: { before: null, after: null },
   smoke: null,
   runtimeManifest: null,
-  referenceBinaries: [],
-  handoffs: {
-    prepared: [],
-    resumed: [],
-    aborted: [],
-    rolledBack: [],
-    finalized: [],
-    activeSupervisorSessions: [],
-    retiredIdleSessions: [],
-    unsupportedActiveSessions: [],
-  },
 };
-let handoffFinalizeStarted = false;
 
 try {
   await run();
@@ -113,507 +76,86 @@ try {
 
 async function run() {
   const installBin = resolveInstallBin();
+  const canonicalInstallBin = resolve(homedir(), '.local', 'bin', 'agent-browser');
+  if (resolve(installBin) !== canonicalInstallBin) {
+    throw new Error(
+      `The canonical workstation transaction owns ${canonicalInstallBin}; ` +
+      `refusing private binary replacement at ${installBin}`,
+    );
+  }
   report.installBin = installBin;
-  guardInstallPath(installBin);
 
-  runCommand('pnpm', ['build:dashboard']);
-
+  runBuildCommand('pnpm', ['build:dashboard']);
   const cargoArgs = ['build', '--manifest-path', 'cli/Cargo.toml'];
   if (options.release) cargoArgs.push('--release');
-  runCommand(join(rootDir, 'scripts', 'ci', 'cargo-safe.sh'), cargoArgs);
+  runBuildCommand(resolve(rootDir, 'scripts', 'ci', 'cargo-safe.sh'), cargoArgs);
 
-  const builtBin = resolve(rootDir, 'cli', 'target', options.release ? 'release' : 'debug', 'agent-browser');
-  if (!existsSync(builtBin)) {
-    throw new Error(`Built binary was not found: ${builtBin}`);
-  }
+  const builtBin = resolve(
+    rootDir,
+    'cli',
+    'target',
+    options.release ? 'release' : 'debug',
+    'agent-browser',
+  );
+  if (!existsSync(builtBin)) throw new Error(`Built binary was not found: ${builtBin}`);
   report.builtBin = builtBin;
-
   report.service.before = serviceStatus();
-  report.service.backendBefore = dashboardBackendServiceStatus();
-  const beforeStat = existsSync(installBin) ? statSync(installBin) : null;
-  const backupPath = `${installBin}.pre-local-dashboard-${timestamp()}`;
-  if (beforeStat) {
-    copyFileSync(installBin, backupPath);
-    chmodSync(backupPath, beforeStat.mode & 0o777);
-    report.backupPath = backupPath;
-  }
 
-  quiesceDashboardForRuntimeHandoff();
-  try {
-    prepareRuntimeHandoffs(installBin);
-    installBinaryAtomically(builtBin, installBin, beforeStat ? beforeStat.mode & 0o777 : 0o755);
-    if (options.syncReferenceBinaries) {
-      report.referenceBinaries = syncReferenceBinaries(builtBin);
-    }
-
-    resumeRuntimeHandoffs(installBin);
-    await restartOrStartDashboard(installBin);
-
-    if (!options.skipSmoke) {
-      report.smoke = runSmoke(installBin);
-      report.runtimeManifest = verifyRuntimeManifestReadback(installBin, report.smoke.runtimeManifest);
-    }
-    handoffFinalizeStarted = true;
-    finalizeRuntimeHandoffs(installBin);
-  } catch (error) {
-    const transferRestored = handoffFinalizeStarted
-      ? false
-      : restoreRuntimeHandoffs(installBin);
-    if (!handoffFinalizeStarted && transferRestored && backupPath && existsSync(backupPath)) {
-      installBinaryAtomically(backupPath, installBin, beforeStat ? beforeStat.mode & 0o777 : 0o755);
-      report.restoredBackup = true;
-    }
-    try {
-      await restartOrStartDashboard(installBin, { restoring: true });
-    } catch (restoreError) {
-      report.restoreRestartError = restoreError instanceof Error ? restoreError.message : String(restoreError);
-    }
-    throw error;
-  } finally {
-    report.service.after = serviceStatus();
-    report.service.backendAfter = dashboardBackendServiceStatus();
-  }
-}
-
-function syncReferenceBinaries(builtBin) {
-  const references = [];
-  const seen = new Set([resolve(builtBin), resolve(report.installBin || '')]);
-  for (const target of referenceBinaryCandidates()) {
-    const resolved = resolve(target);
-    if (seen.has(resolved)) continue;
-    seen.add(resolved);
-    if (!existsSync(resolved)) {
-      references.push({
-        path: resolved,
-        synced: false,
-        reason: 'missing',
-      });
-      continue;
-    }
-    guardInstallPath(resolved);
-    const before = sha256File(resolved);
-    const mode = statSync(resolved).mode & 0o777;
-    installBinaryAtomically(builtBin, resolved, mode);
-    references.push({
-      path: resolved,
-      synced: true,
-      beforeSha256: before,
-      afterSha256: sha256File(resolved),
-    });
-  }
-  return references;
-}
-
-function referenceBinaryCandidates() {
-  const candidates = [
-    resolve(rootDir, 'bin', platformBinaryName()),
-  ];
-  const pnpmRoot = commandOutput('pnpm', ['root', '-g']).trim();
-  if (pnpmRoot) {
-    candidates.push(resolve(pnpmRoot, 'agent-browser', 'bin', platformBinaryName()));
-  }
-  return candidates;
-}
-
-function platformBinaryName() {
-  const platform = process.platform === 'win32' ? 'windows' : process.platform;
-  const arch = process.arch === 'x64' ? 'x64' : process.arch;
-  const extension = process.platform === 'win32' ? '.exe' : '';
-  return `agent-browser-${platform}-${arch}${extension}`;
-}
-
-function installBinaryAtomically(source, target, mode) {
-  mkdirSync(dirname(target), { recursive: true });
-  const staged = `${target}.next-${timestamp()}-${process.pid}`;
-  try {
-    copyFileSync(source, staged);
-    chmodSync(staged, mode);
-    renameSync(staged, target);
-  } catch (error) {
-    rmSync(staged, { force: true });
-    throw error;
-  }
-}
-
-function runtimeSocketDir() {
-  if (process.env.AGENT_BROWSER_SOCKET_DIR) return resolve(process.env.AGENT_BROWSER_SOCKET_DIR);
-  if (process.env.XDG_RUNTIME_DIR) return resolve(process.env.XDG_RUNTIME_DIR, 'agent-browser');
-  return resolve(homedir(), '.agent-browser');
-}
-
-function runtimeSessionNames() {
-  const socketDir = runtimeSocketDir();
-  const sessions = new Set();
-  const suffix = process.platform === 'win32' ? '.port' : '.sock';
-  if (existsSync(socketDir)) {
-    for (const name of readdirSync(socketDir)) {
-      if (!name.endsWith(suffix)) continue;
-      const session = name.slice(0, -suffix.length);
-      if (/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(session)) sessions.add(session);
-    }
-  }
-  for (const session of activeSupervisorSessionNames()) sessions.add(session);
-  return [...sessions].sort();
-}
-
-function activeSupervisorSessionNames() {
-  const root = process.env.AGENT_BROWSER_SESSION_SUPERVISOR_ROOT
-    ? resolve(process.env.AGENT_BROWSER_SESSION_SUPERVISOR_ROOT, 'manifests')
-    : resolve(homedir(), '.config', 'agent-browser', 'session-supervisors');
-  if (!existsSync(root) || process.platform !== 'linux') return [];
-  const sessions = [];
-  for (const name of readdirSync(root).filter((entry) => entry.endsWith('.json')).sort()) {
-    try {
-      const manifest = JSON.parse(readFileSync(join(root, name), 'utf8'));
-      const session = manifest?.session;
-      if (
-        manifest?.schemaVersion !== 'agent-browser.session-supervisor.v1'
-        || typeof session !== 'string'
-        || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(session)
-      ) continue;
-      const active = spawnSync(
-        'systemctl',
-        ['--user', 'is-active', `agent-browser-session@${session}.service`],
-        { cwd: rootDir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
-      );
-      if (active.status === 0 && active.stdout.trim() === 'active') sessions.push(session);
-    } catch {
-      continue;
-    }
-  }
-  report.handoffs.activeSupervisorSessions = sessions;
-  return sessions;
-}
-
-function prepareRuntimeHandoffs(rollbackBin) {
-  for (const sessionName of runtimeSessionNames()) {
-      const daemonPid = readRuntimePid(sessionName);
-      const daemonClientBin = runtimeDaemonClientBinary(daemonPid, rollbackBin);
-      const serviceReadback = serviceBrowserForSession(daemonClientBin, sessionName);
-      if (!serviceReadback.success) {
-        throw new Error(
-          `Could not prove whether daemon session '${sessionName}' owns a browser before executable replacement: ` +
-          serviceReadback.error,
-        );
-      }
-      const browser = serviceReadback.browser;
-      const browserAppearsActive = browser
-        && (
-          browserProcessIsLive(browser.pid)
-          || (
-            typeof browser.cdpEndpoint === 'string'
-            && browser.cdpEndpoint.length > 0
-            && !['closed', 'not_started'].includes(browser.health)
-          )
-        );
-      if (!browserAppearsActive) {
-        const closed = runAgentJson(daemonClientBin, sessionName, ['close']);
-        if (closed.status !== 0 || closed.json?.success !== true) {
-          throw new Error(
-            `Could not retire idle daemon session '${sessionName}' before executable replacement: ${closed.error}`,
-          );
-        }
-        waitForDaemonExit(sessionName, daemonPid);
-        report.handoffs.retiredIdleSessions.push({
-          sessionName,
-          daemonPid,
-          compatibilityClose: true,
-        });
-        continue;
-      }
-
-      const prepared = runAgentJson(daemonClientBin, sessionName, ['handoff', 'prepare']);
-      if (prepared.status === 0 && prepared.json?.success === true) {
-        const data = prepared.json.data || {};
-        if (data.prepared === true) {
-          const candidateSessionName = typeof data.candidateSessionName === 'string'
-            ? data.candidateSessionName
-            : `orphan-${createHash('sha256')
-              .update(`${sessionName}:${data.browserPid ?? 'unknown'}`)
-              .digest('hex')
-              .slice(0, 16)}`;
-          const legacyOrphan = typeof data.candidateSessionName !== 'string';
-          report.handoffs.prepared.push({
-            sessionName,
-            daemonPid,
-            browserPid: data.browserPid ?? null,
-            cdpUrl: data.cdpUrl ?? null,
-            runtimeProfile: data.runtimeProfile ?? null,
-            handoffPath: data.handoffPath ?? null,
-            candidateSessionName,
-            legacyOrphan,
-          });
-          if (legacyOrphan) waitForDaemonExit(sessionName, daemonPid);
-        } else {
-          throw new Error(
-            `Active browser session '${sessionName}' disappeared during handoff preparation.`,
-          );
-        }
-        continue;
-      }
-
-      report.handoffs.unsupportedActiveSessions.push({
-        sessionName,
-        daemonPid,
-        browserPid: browser.pid ?? null,
-        cdpUrl: browser.cdpEndpoint ?? null,
-        error: prepared.error,
-      });
-      throw new Error(
-        `Installed daemon cannot hand off active browser session '${sessionName}'. ` +
-        'The publish was stopped before replacing the executable.',
-      );
-  }
-}
-
-function resumeRuntimeHandoffs(installBin) {
-  for (const prepared of report.handoffs.prepared) {
-    let resumed;
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
-      resumed = runAgentJson(
-        installBin,
-        prepared.candidateSessionName,
-        ['handoff', 'resume', '--source-session', prepared.sessionName],
-      );
-      if (resumed.status === 0 && resumed.json?.success === true) break;
-      if (attempt < 3) sleep(250);
-    }
-    if (resumed.status !== 0 || resumed.json?.success !== true) {
-      throw new Error(
-        `Candidate daemon could not resume browser session '${prepared.sessionName}'. ` +
-        `The browser and retry record remain available: ${resumed.error}`,
-      );
-    }
-    const data = resumed.json.data || {};
-    report.handoffs.resumed.push({
-      sessionName: prepared.sessionName,
-      candidateSessionName: prepared.candidateSessionName,
-      browserPid: data.browserPid ?? null,
-      cdpUrl: data.cdpUrl ?? null,
-      runtimeProfile: data.runtimeProfile ?? null,
-      targetsReattached: data.targetsReattached ?? null,
-      retryRecordRemoved: data.retryRecordRemoved === true,
-      daemonPid: readRuntimePid(prepared.candidateSessionName),
-    });
-    if (prepared.browserPid !== null && data.browserPid !== prepared.browserPid) {
-      throw new Error(
-        `Runtime handoff changed browser PID for session '${prepared.sessionName}': ` +
-        `${prepared.browserPid} -> ${data.browserPid}`,
-      );
-    }
-    if (prepared.cdpUrl && data.cdpUrl !== prepared.cdpUrl) {
-      throw new Error(
-        `Runtime handoff changed CDP endpoint for session '${prepared.sessionName}': ` +
-        `${prepared.cdpUrl} -> ${data.cdpUrl}`,
-      );
-    }
-  }
-}
-
-function abortPreparedRuntimeHandoffs(fallbackBin, preparedHandoffs) {
-  for (const prepared of preparedHandoffs) {
-    const daemonBin = runtimeDaemonClientBinary(prepared.daemonPid, fallbackBin);
-    const aborted = runAgentJson(daemonBin, prepared.sessionName, ['handoff', 'abort']);
-    report.handoffs.aborted.push({
-      sessionName: prepared.sessionName,
-      success: aborted.status === 0 && aborted.json?.success === true,
-      error: aborted.status === 0 && aborted.json?.success === true ? null : aborted.error,
-    });
-  }
-}
-
-function restoreRuntimeHandoffs(installBin) {
-  const resumedBySource = new Map(
-    report.handoffs.resumed.map((handoff) => [handoff.sessionName, handoff]),
+  const install = spawnSync(
+    builtBin,
+    ['install', 'workstation', '--apply', '--json'],
+    {
+      cwd: rootDir,
+      env: process.env,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      maxBuffer: 16 * 1024 * 1024,
+    },
   );
-  let restored = true;
-  for (const prepared of report.handoffs.prepared) {
-    const resumed = resumedBySource.get(prepared.sessionName);
-    if (!resumed) continue;
-    const rollback = runAgentJson(
+  const installReport = parseJson(install.stdout, 'canonical workstation transaction');
+  report.transaction = {
+    path: installReport.runtimeCensusTransaction ?? null,
+    state: installReport.state ?? null,
+    ready: installReport.ready === true,
+    phases: installReport.phases ?? [],
+  };
+  if (install.status !== 0 || installReport.success !== true) {
+    throw new Error(
+      `Canonical workstation transaction failed: ` +
+      `${installReport.error || install.stderr || install.stdout}`,
+    );
+  }
+
+  report.service.after = serviceStatus();
+  if (!options.skipSmoke) {
+    report.smoke = runSmoke(installBin);
+    report.runtimeManifest = verifyRuntimeManifestReadback(
       installBin,
-      resumed.candidateSessionName,
-      ['handoff', 'rollback', '--source-session', prepared.sessionName],
+      report.smoke.runtimeManifest,
     );
-    const success = rollback.status === 0 && rollback.json?.success === true;
-    restored = restored && success;
-    report.handoffs.rolledBack.push({
-      sessionName: prepared.sessionName,
-      candidateSessionName: resumed.candidateSessionName,
-      success,
-      error: success ? null : rollback.error,
-    });
   }
-  const uncommitted = report.handoffs.prepared.filter(
-    (prepared) => !resumedBySource.has(prepared.sessionName),
-  );
-  abortPreparedRuntimeHandoffs(installBin, uncommitted);
-  restored = restored && report.handoffs.aborted.every((handoff) => handoff.success);
-  return restored;
-}
-
-function finalizeRuntimeHandoffs(fallbackBin) {
-  for (const prepared of report.handoffs.prepared) {
-    const daemonBin = runtimeDaemonClientBinary(prepared.daemonPid, fallbackBin);
-    const finalized = runAgentJson(daemonBin, prepared.sessionName, ['handoff', 'finalize']);
-    const success = finalized.status === 0 && finalized.json?.success === true;
-    report.handoffs.finalized.push({
-      sessionName: prepared.sessionName,
-      success,
-      error: success ? null : finalized.error,
-    });
-    if (!success) {
-      throw new Error(
-        `Old daemon session '${prepared.sessionName}' could not acknowledge candidate commit. ` +
-        'The candidate remains authoritative and operator recovery is required.',
-      );
-    }
-    waitForDaemonExit(prepared.sessionName, prepared.daemonPid);
-  }
-}
-
-function runtimeDaemonClientBinary(daemonPid, fallbackBin) {
-  if (process.platform === 'linux' && Number.isInteger(daemonPid) && daemonPid > 0) {
-    const procExecutable = `/proc/${daemonPid}/exe`;
-    if (existsSync(procExecutable)) return procExecutable;
-  }
-  return fallbackBin;
-}
-
-function runAgentJson(binary, sessionName, commandArgs) {
-  const result = spawnSync(binary, ['--json', '--session', sessionName, ...commandArgs], {
-    cwd: rootDir,
-    env: process.env,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-    maxBuffer: 16 * 1024 * 1024,
-    timeout: 30_000,
-  });
-  let json = null;
-  try {
-    json = JSON.parse(String(result.stdout || '').trim());
-  } catch {
-    // The compatibility path uses the structured error below.
-  }
-  return {
-    status: result.status,
-    json,
-    error: json?.error || result.error?.message || result.stderr?.trim() || result.stdout?.trim() || 'unknown error',
-  };
-}
-
-function serviceBrowserForSession(binary, sessionName) {
-  const result = runAgentJson(binary, sessionName, ['service', 'browsers']);
-  const browsers = result.json?.data?.browsers || [];
-  return {
-    success: result.status === 0 && result.json?.success === true,
-    browser: browsers.find((browser) => browser?.id === `session:${sessionName}`) || null,
-    error: result.error,
-  };
-}
-
-function readRuntimePid(sessionName) {
-  try {
-    const value = Number.parseInt(
-      readFileSync(join(runtimeSocketDir(), `${sessionName}.pid`), 'utf8').trim(),
-      10,
-    );
-    return Number.isInteger(value) && value > 0 ? value : null;
-  } catch {
-    return null;
-  }
-}
-
-function browserProcessIsLive(pid) {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function waitForDaemonExit(sessionName, priorPid) {
-  const deadline = Date.now() + 5000;
-  while (Date.now() < deadline) {
-    const currentPid = readRuntimePid(sessionName);
-    if (currentPid === null && !browserProcessIsLive(priorPid)) return;
-    sleep(50);
-  }
-  throw new Error(`Daemon session '${sessionName}' did not exit for executable handoff`);
-}
-
-function sleep(milliseconds) {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
 }
 
 function resolveInstallBin() {
-  if (options.installBin) return resolve(options.installBin);
-  const defaultPath = resolve(homedir(), '.local/bin/agent-browser');
-  if (existsSync(defaultPath)) return defaultPath;
-  const pathValue = commandOutput('sh', ['-lc', 'command -v agent-browser']).trim();
-  if (pathValue) return resolve(pathValue);
-  return defaultPath;
-}
-
-function guardInstallPath(path) {
-  if (options.allowOutsideHome) return;
-  const home = resolve(homedir());
-  const resolved = resolve(path);
-  if (resolved !== home && !resolved.startsWith(`${home}/`)) {
-    throw new Error(`Refusing to replace a binary outside the current user's home without --allow-outside-home: ${resolved}`);
-  }
-}
-
-function quiesceDashboardForRuntimeHandoff() {
-  if (report.service.before?.loadState === 'loaded') {
-    report.service.action = 'preserve-stable-ingress';
-  }
-}
-
-async function restartOrStartDashboard(installBin, { restoring = false } = {}) {
-  const backendStatus = dashboardBackendServiceStatus();
-  if (backendStatus.loadState === 'loaded') {
-    report.service.action = restoring ? 'restart-backend-after-restore' : 'restart-backend';
-    runCommand('systemctl', ['--user', 'restart', 'agent-browser-dashboard-backend.service']);
-    return;
-  }
-  const ingressStatus = serviceStatus();
-  if (ingressStatus.loadState === 'loaded') {
-    report.service.action = restoring ? 'restart-legacy-dashboard-after-restore' : 'restart-legacy-dashboard';
-    runCommand('systemctl', ['--user', 'restart', 'agent-browser-dashboard.service']);
-    return;
-  }
-  if (!options.startIfMissing) {
-    report.service.action = 'not-installed';
-    return;
-  }
-  report.service.action = restoring ? 'start-after-restore' : 'start';
-  runCommand(installBin, ['dashboard', 'start']);
-}
-
-function dashboardBackendServiceStatus() {
-  return userServiceStatus('agent-browser-dashboard-backend.service');
+  return options.installBin
+    ? resolve(options.installBin)
+    : resolve(homedir(), '.local', 'bin', 'agent-browser');
 }
 
 function serviceStatus() {
-  return userServiceStatus('agent-browser-dashboard.service');
-}
-
-function userServiceStatus(unit) {
-  const result = spawnSync('systemctl', [
-    '--user',
-    'show',
-    unit,
-    '--property=LoadState',
-    '--property=ActiveState',
-    '--property=MainPID',
-    '--property=ActiveEnterTimestamp',
-  ], {
-    cwd: rootDir,
-    encoding: 'utf8',
-  });
+  const result = spawnSync(
+    'systemctl',
+    [
+      '--user',
+      'show',
+      'agent-browser-dashboard.service',
+      '--property=LoadState',
+      '--property=ActiveState',
+      '--property=MainPID',
+      '--property=ActiveEnterTimestamp',
+    ],
+    { cwd: rootDir, encoding: 'utf8' },
+  );
   if (result.status !== 0) {
     return {
       loadState: 'unknown',
@@ -626,8 +168,7 @@ function userServiceStatus(unit) {
   const values = {};
   for (const line of result.stdout.split(/\r?\n/)) {
     const index = line.indexOf('=');
-    if (index <= 0) continue;
-    values[line.slice(0, index)] = line.slice(index + 1);
+    if (index > 0) values[line.slice(0, index)] = line.slice(index + 1);
   }
   return {
     loadState: values.LoadState || 'unknown',
@@ -646,9 +187,7 @@ function runSmoke(installBin) {
     installBin,
     '--json',
   ];
-  for (const marker of options.expectMarkers) {
-    smokeArgs.push('--expect-marker', marker);
-  }
+  for (const marker of options.expectMarkers) smokeArgs.push('--expect-marker', marker);
   if (!options.smokeBrowser) smokeArgs.push('--skip-browser');
   if (options.browserProfile) smokeArgs.push('--browser-profile', options.browserProfile);
   if (options.workspaceSession) smokeArgs.push('--workspace-session', options.workspaceSession);
@@ -660,7 +199,9 @@ function runSmoke(installBin) {
   });
   const parsed = parseJson(result.stdout, 'local dashboard runtime smoke');
   if (result.status !== 0 || !parsed.success) {
-    throw new Error(`Local dashboard runtime smoke failed: ${parsed.error || result.stderr || result.stdout}`);
+    throw new Error(
+      `Local dashboard runtime smoke failed: ${parsed.error || result.stderr || result.stdout}`,
+    );
   }
   return parsed;
 }
@@ -675,16 +216,13 @@ function verifyRuntimeManifestReadback(installBin, manifest) {
   const installedSha = sha256File(installBin);
   const manifestSha = manifest.executable?.sha256;
   if (manifestSha !== installedSha) {
-    throw new Error(`Live runtime manifest executable sha mismatch: manifest=${manifestSha || 'missing'} installed=${installedSha}`);
+    throw new Error(
+      `Live runtime manifest executable sha mismatch: ` +
+      `manifest=${manifestSha || 'missing'} installed=${installedSha}`,
+    );
   }
   if (typeof manifest.dashboard?.sha256 !== 'string' || manifest.dashboard.sha256.length !== 64) {
-    throw new Error(`Live runtime manifest dashboard sha is missing: ${JSON.stringify(manifest.dashboard)}`);
-  }
-  const features = new Set(Array.isArray(manifest.supportedUiFeatures) ? manifest.supportedUiFeatures : []);
-  for (const feature of ['workspace.detectedBrowsers', 'workspace.foreignCdpBorrow', 'workspace.noRetainedLiveRail']) {
-    if (!features.has(feature)) {
-      throw new Error(`Live runtime manifest missing feature ${feature}`);
-    }
+    throw new Error('Live runtime manifest dashboard sha is missing');
   }
   return {
     schemaVersion: manifest.schemaVersion,
@@ -695,7 +233,7 @@ function verifyRuntimeManifestReadback(installBin, manifest) {
     executablePath: manifest.executable?.path ?? null,
     executableSha256: manifestSha,
     installedSha256: installedSha,
-    supportedUiFeatures: [...features].sort(),
+    supportedUiFeatures: [...(manifest.supportedUiFeatures || [])].sort(),
   };
 }
 
@@ -703,7 +241,7 @@ function sha256File(path) {
   return createHash('sha256').update(readFileSync(path)).digest('hex');
 }
 
-function runCommand(command, commandArgs) {
+function runBuildCommand(command, commandArgs) {
   log(`$ ${command} ${commandArgs.join(' ')}`);
   const result = spawnSync(command, commandArgs, {
     cwd: rootDir,
@@ -718,35 +256,19 @@ function runCommand(command, commandArgs) {
   }
 }
 
-function commandOutput(command, commandArgs, extra = {}) {
-  try {
-    return execFileSync(command, commandArgs, {
-      cwd: rootDir,
-      encoding: 'utf8',
-      ...extra,
-    });
-  } catch {
-    return '';
-  }
-}
-
 function parseJson(text, label) {
   try {
     return JSON.parse(String(text).trim());
   } catch (error) {
-    throw new Error(`Failed to parse ${label} JSON: ${error instanceof Error ? error.message : String(error)}\n${text}`);
+    throw new Error(
+      `Failed to parse ${label} JSON: ` +
+      `${error instanceof Error ? error.message : String(error)}\n${text}`,
+    );
   }
-}
-
-function timestamp() {
-  const now = new Date();
-  return now.toISOString().replace(/[-:]/g, '').replace(/\..+/, '').replace('T', '');
 }
 
 function log(message) {
-  if (options.json) {
-    process.stderr.write(`${message}\n`);
-  }
+  if (options.json) process.stderr.write(`${message}\n`);
 }
 
 function output(payload) {
@@ -758,13 +280,9 @@ function output(payload) {
     console.error(payload.error);
     return;
   }
-  console.log(`Published local dashboard runtime to ${payload.installBin}`);
-  console.log(`Backup: ${payload.backupPath ?? 'none'}`);
+  console.log(`Published local dashboard runtime through ${payload.transaction.path}`);
   console.log(`Dashboard: ${payload.dashboardUrl}`);
   console.log(`Service PID: ${payload.service?.after?.mainPid ?? 'none'}`);
-  if (payload.smoke?.browser) {
-    console.log(`Browser smoke: ${payload.smoke.browser.smokeUrl}`);
-  }
 }
 
 function requiredValue(values, index, flag) {
@@ -781,21 +299,18 @@ function fail(message) {
 function printHelp() {
   console.log(`Usage: node scripts/publish-local-dashboard-runtime.js [options]
 
-Build and install the dashboard-embedded local agent-browser binary, restart the
-user dashboard service, hand active browser sessions to replacement daemons
-without changing their browser PIDs or CDP endpoints, and verify the externally
-visible dashboard runtime.
+Build the local dashboard and candidate binary, then submit that candidate to
+the canonical workstation transaction. The publisher never replaces a stable
+binary or runs a separate browser handoff lifecycle.
 
 Options:
   --dashboard-url <url>       Dashboard URL to smoke. Default: http://127.0.0.1:4848/
-  --expect-marker <text>      Require served HTML or JS bundle to contain text. Repeatable.
+  --expect-marker <text>      Require served HTML or JS bundle text. Repeatable.
   --browser-profile <path>    Use an isolated runtime profile for browser smoke.
-  --install-bin <path>        Installed binary path. Default: ~/.local/bin/agent-browser.
-  --release                   Build cli/target/release/agent-browser instead of debug.
-  --skip-browser              Skip browser smoke, keep HTTP and bundle marker smoke.
-  --skip-reference-sync        Do not sync ignored workspace and pnpm package binaries.
-  --skip-smoke                Build, install, and restart without smoke.
-  --start-if-missing          Start dashboard if the user service is not installed.
+  --install-bin <path>        Must name the canonical ~/.local/bin/agent-browser link.
+  --release                   Build the release candidate instead of debug.
+  --skip-browser              Skip browser smoke.
+  --skip-smoke                Build and transact without the final smoke.
   --workspace-session <name>  Smoke a workspace viewport route for a daemon session.
   --json                      Print structured JSON.
 `);

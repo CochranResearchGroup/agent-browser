@@ -2,20 +2,24 @@
   "schemaVersion": "agent-browser.runtime-adoption.v1",
   "fixtures": [
     {
-      "fixtureId": "workstation-payload-before-runtime-preservation",
+      "fixtureId": "workstation-runtime-preservation-before-payload",
       "sourceAnchors": [
-        "cli/src/workstation_install.rs require_stable_runtime_census before quiesce",
-        "cli/src/workstation_install.rs materialize_payload after census",
-        "cli/src/workstation_install.rs generation commit before runtime transfer",
-        "cli/src/workstation_install.rs stable selector replacement"
+        "cli/src/workstation_install.rs prepare_payload_transaction persists candidate and census",
+        "cli/src/workstation_install.rs host dependencies precede admission and ownership transfer",
+        "cli/src/workstation_install.rs activate_prepared_payload_transaction proves dispositions",
+        "cli/src/workstation_install.rs commit_prepared_payload_transaction selects only CandidateReady"
       ],
       "currentSequence": [
         "plan_validated",
+        "candidate_staged",
         "runtime_census_stable",
+        "host_preparation",
+        "admission_drain",
+        "runtime_preservation_proven",
         "selected_units_quiesced",
         "payload_commit",
-        "host_preparation",
-        "runtime_reconciliation"
+        "runtime_reconciliation",
+        "transaction_accepted"
       ],
       "requiredSequence": [
         "plan_validated",

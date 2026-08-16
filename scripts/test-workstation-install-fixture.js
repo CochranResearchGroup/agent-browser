@@ -27,6 +27,7 @@ const commandLog = join(fixtureRoot, 'commands.jsonl');
 const installRoot = join(fixtureRoot, 'workstation');
 const failedInstallRoot = join(fixtureRoot, 'failed-workstation');
 const lockedInstallRoot = join(fixtureRoot, 'locked-workstation');
+const drainBlockedRoot = join(fixtureRoot, 'drain-blocked-workstation');
 const home = join(fixtureRoot, 'home');
 const xdgRoot = join(fixtureRoot, 'xdg');
 const agentBrowser = resolveAgentBrowser();
@@ -91,6 +92,12 @@ try {
     'current',
   );
   const stableBinary = join(installRoot, '.local', 'bin', 'agent-browser');
+  const transactionStore = join(
+    installRoot,
+    '.agent-browser',
+    'runtime-adoption',
+    'transactions',
+  );
   assert.equal(
     lstatSync(currentSelector).isSymbolicLink(),
     true,
@@ -124,7 +131,23 @@ try {
     );
   }
 
-  const firstManifest = treeManifest(installRoot);
+  assert.equal(readdirSync(transactionStore).length, 1, 'first apply must write one transaction');
+  assertTransactionTerminal(transactionStore, 'old_generation_retirable');
+  const transactionStatus = runInstaller(installRoot, ['status', '--json']);
+  assert.equal(transactionStatus.status, 0, transactionStatus.stderr);
+  const transactionStatusPayload = JSON.parse(transactionStatus.stdout);
+  assert.equal(
+    transactionStatusPayload.latestTransaction.state,
+    'old_generation_retirable',
+  );
+  assert.equal(transactionStatusPayload.admissionDraining, false);
+  assert.equal(transactionStatusPayload.selectedGenerationId, generationIds[0]);
+  assert.doesNotMatch(
+    transactionStatus.stdout,
+    /profileIdentityDigest|cdpEndpoint|immutableInstallationPath|transactionPath/,
+    'public transaction status must omit private runtime and filesystem evidence',
+  );
+  const firstManifest = treeManifest(installRoot, new Set([transactionStore]));
   const installedLinks = firstManifest.filter((entry) => entry.type === 'symlink');
   assert.ok(installedLinks.length > 0, 'immutable generation selection must use stable links');
   for (const entry of installedLinks) {
@@ -403,10 +426,12 @@ try {
   );
   assertJsonSuccess(secondApply.stdout, 'second apply');
   assert.deepEqual(
-    treeManifest(installRoot),
+    treeManifest(installRoot, new Set([transactionStore])),
     firstManifest,
-    'a second apply must leave byte content and file modes unchanged',
+    'a second apply must leave payload byte content and file modes unchanged',
   );
+  assert.equal(readdirSync(transactionStore).length, 2, 'second apply must write one new transaction');
+  assertTransactionTerminal(transactionStore, 'old_generation_retirable');
   assert.equal(
     statSync(installedBinary).ino,
     installedBinaryInode,
@@ -458,6 +483,12 @@ try {
       `${phase} failure must preserve the stable command link`,
     );
     assertGenerationStoreHealthy(generationStore);
+    assert.equal(
+      readdirSync(transactionStore).length,
+      3 + index,
+      `${phase} failure must write exactly one durable transaction`,
+    );
+    assertTransactionTerminal(transactionStore, 'failed_preserved_old_generation');
   }
 
   const upgradedApply = runInstaller(
@@ -489,6 +520,27 @@ try {
     'the selected generation must contain the changed unit payload',
   );
   assertGenerationStoreHealthy(generationStore);
+
+  const gcPreview = runInstaller(installRoot, ['gc', '--dry-run', '--json']);
+  assert.equal(gcPreview.status, 0, gcPreview.stderr);
+  const gcPreviewPayload = JSON.parse(gcPreview.stdout);
+  assert.ok(
+    gcPreviewPayload.retained.some(
+      (entry) =>
+        entry.generationId === baselineSelectorTarget.split('/').at(-1) &&
+        entry.reasonCodes.includes('transaction_old_generation'),
+    ),
+    'generation gc must retain an old generation referenced by rollback evidence',
+  );
+  assert.ok(
+    gcPreviewPayload.retained.some(
+      (entry) =>
+        entry.generationId === upgradedSelectorTarget.split('/').at(-1) &&
+        entry.reasonCodes.includes('selected_generation'),
+    ),
+    'generation gc must retain the selected generation',
+  );
+  assert.ok(existsSync(baselineGenerationRoot), 'gc dry-run must not delete candidates');
 
   const generationStoreBeforeReconcile = treeManifest(generationStore);
   const selectorBeforeReconcile = readlinkSync(currentSelector);
@@ -563,12 +615,18 @@ try {
     0,
     'failure injection after units-staged must return a nonzero status',
   );
+  const failedRegularFiles = regularFiles(failedInstallRoot).filter(
+    (path) => basename(path) !== 'workstation.lock',
+  );
   assert.equal(
-    regularFiles(failedInstallRoot).filter(
-      (path) => basename(path) !== 'workstation.lock',
-    ).length,
-    0,
-    'a failed first apply must roll back all staged payload files',
+    failedRegularFiles.length,
+    1,
+    'a failed first apply must retain only its durable transaction',
+  );
+  assert.match(failedRegularFiles[0], /runtime-adoption\/transactions\/upgrade-.*\.json$/);
+  assertTransactionTerminal(
+    join(failedInstallRoot, '.agent-browser', 'runtime-adoption', 'transactions'),
+    'failed_preserved_old_generation',
   );
   assert.equal(
     readFileSync(commandLog, 'utf8')
@@ -577,6 +635,30 @@ try {
       .length,
     0,
     'a failed apply must not activate systemd units',
+  );
+
+  const staleDrainPath = join(
+    drainBlockedRoot,
+    '.agent-browser',
+    'runtime-adoption',
+    'admission-drain.json',
+  );
+  mkdirSync(dirname(staleDrainPath), { recursive: true });
+  writeFileSync(staleDrainPath, '{}');
+  const drainBlockedApply = runInstaller(drainBlockedRoot, ['--apply', '--json']);
+  assert.notEqual(drainBlockedApply.status, 0);
+  assert.match(
+    `${drainBlockedApply.stdout}${drainBlockedApply.stderr}`,
+    /earlier workstation transaction still owns runtime admission/,
+  );
+  assert.equal(
+    existsSync(join(drainBlockedRoot, '.local', 'lib', 'agent-browser', 'generations')),
+    false,
+    'an existing admission drain must block before candidate staging',
+  );
+  assertTransactionTerminal(
+    join(drainBlockedRoot, '.agent-browser', 'runtime-adoption', 'transactions'),
+    'blocked_inflight_effect',
   );
 
   const lockDir = join(lockedInstallRoot, '.agent-browser', 'convergence');
@@ -590,8 +672,12 @@ try {
     regularFiles(lockedInstallRoot).filter(
       (path) => basename(path) !== 'workstation.lock',
     ).length,
-    0,
-    'a lock-rejected apply must not stage payload files',
+    1,
+    'a lock-rejected apply must retain only its blocked transaction',
+  );
+  assertTransactionTerminal(
+    join(lockedInstallRoot, '.agent-browser', 'runtime-adoption', 'transactions'),
+    'blocked_inflight_effect',
   );
   assert.equal(
     readFileSync(commandLog, 'utf8'),
@@ -768,6 +854,30 @@ function assertGenerationStoreHealthy(generationStore) {
       );
     }
   }
+}
+
+function assertTransactionTerminal(transactionStore, expectedState) {
+  const transactions = readdirSync(transactionStore)
+    .map((name) => {
+      const path = join(transactionStore, name);
+      return {
+        path,
+        modifiedAt: statSync(path).mtimeMs,
+        payload: JSON.parse(readFileSync(path, 'utf8')),
+      };
+    })
+    .sort((left, right) => right.modifiedAt - left.modifiedAt);
+  assert.ok(transactions.length > 0, 'installer must retain at least one transaction');
+  assert.equal(
+    transactions[0].payload.state,
+    expectedState,
+    `latest transaction must end in ${expectedState}`,
+  );
+  assert.ok(
+    Array.isArray(transactions[0].payload.checkpoints) &&
+      transactions[0].payload.checkpoints.length > 0,
+    'latest transaction must retain checkpoint history',
+  );
 }
 
 function ignoredFixturePaths() {

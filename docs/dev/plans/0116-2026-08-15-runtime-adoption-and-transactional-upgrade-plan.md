@@ -1342,6 +1342,53 @@ global persistence path, and the accepted rerun is fixture-repository only.
 This does not adjudicate Slice E's earlier user-scoped file mutations and does
 not constitute installed or live acceptance.
 
+### 2026-08-16 | Slices G And H Source Acceptance
+
+Slices G and H are accepted at the source and isolated-fixture boundary:
+
+- fresh install and upgrade now enter one durable transaction before candidate
+  staging. Real-host census is collected in two matching rounds before payload
+  files change, and apply preconditions record a typed blocked, rollback,
+  failed-preserved, accepted, or retirable checkpoint;
+- immutable candidate staging and selector commit are separate. Host privilege
+  and dependency gates run before admission drain or runtime-owner transfer,
+  and a required login refresh leaves the old selector and ownership unchanged;
+- one durable admission receipt blocks ordinary browser effects while keeping
+  observation plus exact prepare, resume, abort, rollback, and finalize actions
+  available. A stale drain blocks a new apply before candidate staging;
+- cooperative and verified orphan classifications resolve an exact source
+  session and persist an owner-transfer receipt before `CandidateReady`. Manual
+  and external browsers remain preserved, while ambiguity fails closed;
+- selector commit occurs only after candidate readiness. Precommit failure
+  reverses committed owners; postcommit failure restores the prior selector and
+  reverses owners. An unproved reversal becomes explicit operator recovery;
+- generation GC is a separate reviewed dry-run or apply operation. It retains
+  the selected generation and every generation referenced by a live process,
+  named supervisor, failed or unclosed transaction, or rollback record;
+- the development publisher only builds the dashboard and candidate binary,
+  submits `install workstation --apply --json`, and performs the final smoke;
+- `install workstation status --json`, runtime health, the dashboard warning,
+  and install doctor share one redacted transaction model. Status omits private
+  paths, profile digests, CDP endpoints, URLs, and transfer evidence;
+- CLI help, README, repository skill, docs site, inline comments, fixtures,
+  architectural guards, ROADMAP, and RUNBOOK describe the same transaction.
+
+Twelve runtime-adoption tests, twenty-six workstation tests, strict Clippy,
+Rust formatting, dashboard and docs builds, publisher guards, host and VM
+harness fixtures, Guacamole durability and route-user fixtures,
+route-confusion gates, remote-view documentation guards, and the optimized
+source-free workstation failure matrix pass. The matrix proves one transaction
+per apply, unchanged selection through staging and selector failures, redacted
+status, stale-drain blocking, and GC retention of selected and
+rollback-referenced generations.
+
+No installed payload, unit, daemon, browser, profile, route, display,
+dashboard, supervisor, or external state was changed. GC apply and the
+production transfer path were not run. Slice E remains
+`IMPLEMENTED_NOT_ACCEPTED` because its prior boundary incident is not
+adjudicated. Slice I remains unexecuted and requires separate explicit live
+authorization.
+
 ## Planning Evidence
 
 - CodeGraph was healthy on 2026-08-15 with 553 files, 19,654 nodes, and 68,296

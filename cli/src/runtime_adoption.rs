@@ -7,6 +7,8 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::path::{Path, PathBuf};
 
 pub(crate) const RUNTIME_ADOPTION_SCHEMA_VERSION: &str = "agent-browser.runtime-adoption.v1";
 
@@ -124,6 +126,166 @@ pub(crate) struct UpgradeTransaction {
     pub(crate) presentation_validation_summary: Option<String>,
     pub(crate) terminal_result: Option<String>,
     pub(crate) stop_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct RuntimeAdmissionDrain {
+    pub(crate) schema_version: String,
+    pub(crate) transaction_id: String,
+    pub(crate) candidate_generation_id: String,
+    pub(crate) transaction_revision: u64,
+    pub(crate) recorded_at: String,
+}
+
+pub(crate) fn runtime_admission_drain_path() -> Result<PathBuf, String> {
+    dirs::home_dir()
+        .map(|home| {
+            home.join(".agent-browser/runtime-adoption")
+                .join("admission-drain.json")
+        })
+        .ok_or_else(|| "runtime_admission_home_unavailable".to_string())
+}
+
+/// Rejects ordinary browser effects while an upgrade owns the admission
+/// drain. Exact handoff lifecycle commands remain available so the installer
+/// can transfer or reverse ownership without reopening general admission.
+pub(crate) fn require_runtime_admission(drain_path: &Path, action: &str) -> Result<(), String> {
+    if runtime_admission_action_allowed(action) || !drain_path.exists() {
+        return Ok(());
+    }
+    let payload = fs::read(drain_path).map_err(|error| {
+        format!(
+            "runtime_admission_drain_unreadable: cannot read {}: {error}",
+            drain_path.display()
+        )
+    })?;
+    let drain: RuntimeAdmissionDrain = serde_json::from_slice(&payload).map_err(|error| {
+        format!(
+            "runtime_admission_drain_invalid: cannot parse {}: {error}",
+            drain_path.display()
+        )
+    })?;
+    Err(format!(
+        "runtime_admission_draining: transaction '{}' is transferring runtime ownership at revision {}",
+        drain.transaction_id, drain.transaction_revision
+    ))
+}
+
+fn runtime_admission_action_allowed(action: &str) -> bool {
+    matches!(
+        action,
+        "runtime_handoff_abort"
+            | "runtime_handoff_finalize"
+            | "runtime_handoff_prepare"
+            | "runtime_handoff_resume"
+            | "runtime_handoff_rollback"
+    ) || !crate::runtime_owner_transfer::action_requires_owner_effect_authority(action)
+}
+
+/// Advances one durable upgrade transaction through the frozen state machine.
+/// The caller must persist the transaction after every successful transition.
+pub(crate) fn transition_upgrade_transaction(
+    transaction: &mut UpgradeTransaction,
+    expected_revision: u64,
+    next_state: UpgradeTransactionState,
+    checkpoint_name: &str,
+    recorded_at: &str,
+) -> Result<(), String> {
+    if transaction.revision != expected_revision {
+        return Err("upgrade_transaction_revision_mismatch".to_string());
+    }
+    if checkpoint_name.trim().is_empty() || recorded_at.trim().is_empty() {
+        return Err("upgrade_transaction_checkpoint_invalid".to_string());
+    }
+    if !upgrade_transition_allowed(transaction.state, next_state) {
+        return Err(format!(
+            "upgrade_transaction_transition_invalid:{:?}->{next_state:?}",
+            transaction.state
+        ));
+    }
+    if next_state == UpgradeTransactionState::CandidateReady
+        && !upgrade_runtime_preservation_proven(transaction)
+    {
+        return Err("upgrade_runtime_preservation_unproven".to_string());
+    }
+
+    transaction.revision = transaction
+        .revision
+        .checked_add(1)
+        .ok_or_else(|| "upgrade_transaction_revision_exhausted".to_string())?;
+    transaction.state = next_state;
+    transaction.checkpoints.push(UpgradeCheckpoint {
+        name: checkpoint_name.to_string(),
+        transaction_revision: transaction.revision,
+        recorded_at: recorded_at.to_string(),
+    });
+    Ok(())
+}
+
+pub(crate) fn upgrade_runtime_preservation_proven(transaction: &UpgradeTransaction) -> bool {
+    transaction.runtime_census_digest.is_some()
+        && transaction
+            .runtime_migrations
+            .iter()
+            .all(|migration| match migration.disposition {
+                RuntimeDisposition::CooperativeTransfer | RuntimeDisposition::OrphanAdoption => {
+                    migration
+                        .adoption_receipt_id
+                        .as_deref()
+                        .is_some_and(|receipt| !receipt.trim().is_empty())
+                }
+                RuntimeDisposition::ManualPreservation | RuntimeDisposition::RetiredIdle => {
+                    !migration.reason_codes.is_empty()
+                }
+                RuntimeDisposition::RejectedAmbiguity => false,
+            })
+}
+
+fn upgrade_transition_allowed(
+    current: UpgradeTransactionState,
+    next: UpgradeTransactionState,
+) -> bool {
+    use UpgradeTransactionState::*;
+    matches!(
+        (current, next),
+        (Planned, CandidateStaged)
+            | (CandidateStaged, CandidatePreflightReady)
+            | (CandidatePreflightReady, CensusStable)
+            | (CensusStable, AdmissionDraining)
+            | (AdmissionDraining, RuntimesTransferring)
+            | (RuntimesTransferring, PresentationsRebinding)
+            | (PresentationsRebinding, CandidateReady)
+            | (CandidateReady, GenerationCommitted)
+            | (GenerationCommitted, PostCommitValidating)
+            | (PostCommitValidating, Accepted)
+            | (Accepted, OldGenerationRetirable)
+            | (
+                Planned
+                    | CandidateStaged
+                    | CandidatePreflightReady
+                    | CensusStable
+                    | AdmissionDraining
+                    | RuntimesTransferring
+                    | PresentationsRebinding
+                    | CandidateReady,
+                RollbackBeforeCommit
+            )
+            | (
+                GenerationCommitted | PostCommitValidating,
+                RollbackAfterCommit
+            )
+            | (RollbackBeforeCommit, FailedPreservedOldGeneration)
+            | (RollbackBeforeCommit, OperatorRecoveryRequired)
+            | (RollbackAfterCommit, FailedPreservedOldGeneration)
+            | (RollbackAfterCommit, OperatorRecoveryRequired)
+            | (
+                Planned | CandidatePreflightReady,
+                BlockedCandidateIncompatible
+            )
+            | (Planned | CensusStable, BlockedInflightEffect)
+            | (Planned | CandidatePreflightReady, BlockedAmbiguousRuntime)
+    )
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1875,6 +2037,125 @@ mod tests {
     }
 
     #[test]
+    fn upgrade_transaction_rejects_commit_until_runtime_preservation_is_receipted() {
+        let samples: Value = serde_json::from_str(SCHEMA_SAMPLES).unwrap();
+        let mut transaction: UpgradeTransaction =
+            serde_json::from_value(samples["upgradeTransaction"].clone()).unwrap();
+        transaction.runtime_migrations[0].adoption_receipt_id = None;
+
+        let stale_revision = transaction.revision.saturating_sub(1);
+        assert_eq!(
+            transition_upgrade_transaction(
+                &mut transaction,
+                stale_revision,
+                UpgradeTransactionState::AdmissionDraining,
+                "admission_draining",
+                "2026-08-16T15:00:00Z",
+            )
+            .unwrap_err(),
+            "upgrade_transaction_revision_mismatch"
+        );
+
+        let revision = transaction.revision;
+        transition_upgrade_transaction(
+            &mut transaction,
+            revision,
+            UpgradeTransactionState::AdmissionDraining,
+            "admission_draining",
+            "2026-08-16T15:00:01Z",
+        )
+        .unwrap();
+        let revision = transaction.revision;
+        transition_upgrade_transaction(
+            &mut transaction,
+            revision,
+            UpgradeTransactionState::RuntimesTransferring,
+            "runtimes_transferring",
+            "2026-08-16T15:00:02Z",
+        )
+        .unwrap();
+        let revision = transaction.revision;
+        transition_upgrade_transaction(
+            &mut transaction,
+            revision,
+            UpgradeTransactionState::PresentationsRebinding,
+            "presentations_rebinding",
+            "2026-08-16T15:00:03Z",
+        )
+        .unwrap();
+        let revision = transaction.revision;
+        assert_eq!(
+            transition_upgrade_transaction(
+                &mut transaction,
+                revision,
+                UpgradeTransactionState::CandidateReady,
+                "candidate_ready",
+                "2026-08-16T15:00:04Z",
+            )
+            .unwrap_err(),
+            "upgrade_runtime_preservation_unproven"
+        );
+        assert_eq!(
+            transaction.state,
+            UpgradeTransactionState::PresentationsRebinding
+        );
+
+        transaction.runtime_migrations[0].adoption_receipt_id =
+            Some("adoption-receipt-1".to_string());
+        transition_upgrade_transaction(
+            &mut transaction,
+            revision,
+            UpgradeTransactionState::CandidateReady,
+            "candidate_ready",
+            "2026-08-16T15:00:05Z",
+        )
+        .unwrap();
+        let revision = transaction.revision;
+        transition_upgrade_transaction(
+            &mut transaction,
+            revision,
+            UpgradeTransactionState::GenerationCommitted,
+            "generation_committed",
+            "2026-08-16T15:00:06Z",
+        )
+        .unwrap();
+        assert_eq!(
+            transaction.state,
+            UpgradeTransactionState::GenerationCommitted
+        );
+    }
+
+    #[test]
+    fn admission_drain_blocks_effects_but_keeps_transfer_and_observation_available() {
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-admission-drain-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("admission-drain.json");
+        fs::write(
+            &path,
+            serde_json::to_vec(&RuntimeAdmissionDrain {
+                schema_version: RUNTIME_ADOPTION_SCHEMA_VERSION.to_string(),
+                transaction_id: "upgrade-test".to_string(),
+                candidate_generation_id: "candidate-test".to_string(),
+                transaction_revision: 4,
+                recorded_at: "2026-08-16T15:05:00Z".to_string(),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert!(require_runtime_admission(&path, "navigate")
+            .unwrap_err()
+            .contains("upgrade-test"));
+        require_runtime_admission(&path, "runtime_handoff_prepare").unwrap();
+        require_runtime_admission(&path, "runtime_handoff_resume").unwrap();
+        require_runtime_admission(&path, "snapshot").unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn census_requires_every_source_and_every_observed_runtime() {
         let corpus: RuntimeCensusCorpus = serde_json::from_str(CENSUS_CORPUS).unwrap();
         let mut snapshots = census_source_snapshots(&corpus);
@@ -2085,31 +2366,29 @@ mod tests {
     }
 
     #[test]
-    fn current_payload_commit_path_remains_intentionally_red() {
+    fn payload_commit_path_requires_runtime_preservation() {
         let corpus: UnsafeSeamCorpus = serde_json::from_str(UNSAFE_SEAMS).unwrap();
         assert_eq!(corpus.schema_version, RUNTIME_ADOPTION_SCHEMA_VERSION);
         assert_eq!(corpus.fixtures.len(), 1);
         for fixture in corpus.fixtures {
             assert!(!fixture.source_anchors.is_empty(), "{}", fixture.fixture_id);
             let decision = evaluate_unsafe_seam(&fixture);
-            assert!(!decision.passes_required_sequence, "{}", fixture.fixture_id);
-            assert_eq!(
-                decision.reason.as_deref(),
-                Some(fixture.expected_red_reason.as_str())
-            );
+            assert!(decision.passes_required_sequence, "{}", fixture.fixture_id);
+            assert_eq!(decision.reason, None);
         }
     }
 
     #[test]
-    fn red_seam_sequences_remain_bound_to_current_source_ordering() {
+    fn transaction_sequences_remain_bound_to_current_source_ordering() {
         let workstation = include_str!("workstation_install.rs");
         assert_source_order(
             workstation,
             &[
-                "require_stable_runtime_census(&root, &paths, &parsed)",
-                "quiesce_existing_user_units(&paths)",
-                "match materialize_payload(&paths, &parsed)",
+                "prepare_payload_transaction(&root, &paths, &parsed, isolated_root)",
                 "crate::install::install_remote_view_privileges(true, parsed.json)",
+                "activate_prepared_payload_transaction(prepared, &paths, isolated_root)",
+                "quiesce_existing_user_units(&paths)",
+                "commit_prepared_payload_transaction(&paths, &parsed, prepared)",
                 "reconcile_workstation_locked(&root, &paths)",
             ],
         );

@@ -20,6 +20,8 @@ agent-browser install doctor  # Check user-scoped binary drift and launch readin
 agent-browser install --with-deps --with-remote-view-privileges  # Linux RDP/Guacamole desktop setup
 agent-browser install workstation --dry-run --json  # Preview source-free workstation payload
 agent-browser install workstation --apply --json  # Install and reconcile a fresh Ubuntu workstation
+agent-browser install workstation status --json  # Read the latest redacted upgrade transaction
+agent-browser install workstation gc --dry-run --json  # Preview safe old-generation cleanup
 pnpm test:wsl-windows-chromium-profile-live  # Validate WSL Windows profile writes when doctor says available
 ```
 
@@ -82,6 +84,8 @@ pnpm reference:
 ```bash
 agent-browser install workstation --dry-run --json
 agent-browser install workstation --apply --json
+agent-browser install workstation status --json
+agent-browser install workstation gc --dry-run --json
 ```
 
 The first apply uses one `sudo -v` authorization boundary for host preparation.
@@ -93,17 +97,20 @@ closed instead of falling back to an interactive sudo prompt.
 Before acquiring that authorization or staging the payload, the real-host
 preflight requires at least 6 GiB of free disk capacity. JSON output exposes
 `hostPlan.availableDiskBytes`, `minimumDiskBytes`, and `diskSpaceReady`.
-Real-host apply then records two read-only runtime census rounds before it
-stops user units or stages the payload. The census joins service browser and
+Fresh install and upgrade use one durable transaction engine. Real-host apply
+records two read-only runtime census rounds before it stages a candidate or
+stops user units. The census joins service browser and
 profile reservations, runtime-profile state, named supervisors, daemon and
 process-instance evidence, bounded CDP browser and target digests, displays,
 routes, streams, and durable handoffs. Missing, changing, or conflicting
 evidence fails closed without replacing the selected generation. A successful
 JSON report exposes `runtimeCensusTransaction`, the private transaction receipt
 under `~/.agent-browser/runtime-adoption/transactions/` containing the census
-digest and per-runtime classifications. Until the shared profile-owner
-registry supplies an owner generation, a live managed browser is deliberately
-insufficient evidence and blocks apply; the installer never kills it.
+digest and per-runtime classifications. Host prerequisites are reconciled
+before admission drain or ownership transfer. Cooperative and verified orphan
+runtimes move through receipt-bearing owner generations; manual and external
+browsers remain preserved without effect authority. The sealed candidate is
+selected only after every discovered runtime has a proven disposition.
 If that adds the `agent-browser` or `docker` group to the current user, the
 command exits with status 75 and a `relogin_required` JSON state. Log out and
 back in or reboot, then rerun the same apply command. With both groups
@@ -146,6 +153,13 @@ the database unchanged. It also reuses the retained Compose project label so
 the existing containers are reconciled in place. A retained container without
 a usable password or project label fails closed.
 
+`agent-browser install workstation status --json` reports the selected and
+candidate generations, migration dispositions, blockers, admission state, and
+terminal result without exposing private paths, endpoints, or profile evidence.
+`agent-browser install workstation gc --dry-run --json` previews old-generation
+cleanup. A later explicit `--apply` retains the selected generation plus every
+generation referenced by a live process, named supervisor, failed or unclosed
+transaction, or rollback state.
 `agent-browser install workstation reconcile --json` reruns the installed
 convergence controller without reinstalling the payload.
 `agent-browser install workstation backup --json` performs the same protected
@@ -1701,20 +1715,16 @@ QA on `http://127.0.0.1:4848` needs the local publish command:
 pnpm publish:local-dashboard -- --expect-marker "Stream port"
 ```
 
-That command builds the dashboard, rebuilds the local CLI, backs up and replaces
-the user-scoped binary, hands active browser sessions to replacement daemons,
-preserves the stable ingress, restarts the split generation backend when
-installed, and smokes the live dashboard URL. Older unsplit installs retain a
-single-unit compatibility restart.
-Browser PIDs, CDP endpoints, profiles, and tabs remain unchanged across the
-replacement. The publisher inventories active named supervisors as well as
-daemon sockets. An older relinquish-first daemon enters verified orphan
-adoption, while ambiguous evidence fails closed. The smoke reads
+That command builds the dashboard and candidate CLI, then submits the candidate
+to the canonical workstation transaction. Census, admission drain,
+receipt-bearing owner transfer, selector commit, rollback, and stable-ingress
+reconciliation remain installer-owned. The publisher does not directly replace
+the stable binary or keep a second socket-only handoff algorithm. The smoke reads
 `/api/runtime/manifest` from the
 running service and records the served package version, service UI contract,
 embedded dashboard asset SHA-256, supported UI features, current executable
 path, and current executable SHA-256. The publish command fails when that live
-manifest does not match the installed binary it just wrote. Use
+manifest does not match the selected installed generation. Use
 `pnpm smoke:local-dashboard-runtime -- --expect-marker "Stream port"` when you
 only need to verify what the currently installed service is serving. If the
 dashboard detects a stale or missing runtime manifest, it renders a `Runtime

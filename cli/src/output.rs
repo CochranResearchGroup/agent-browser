@@ -4603,7 +4603,7 @@ Subcommands:
   rollback   Reverse a committed candidate to the old owner at a new generation
   finalize   Relinquish and stop the old daemon after candidate commit
 
-This command is used by the local development publisher and runtime interlock.
+This command is used by the canonical workstation transaction and runtime interlock.
 The browser process, DevTools port, profile, and open tabs remain live during
 the changeover. A later normal `close` still shuts down an owned browser.
 
@@ -5396,6 +5396,8 @@ agent-browser install - Install browser binaries
 
 Usage: agent-browser install [--with-deps] [--with-remote-view-privileges]
        agent-browser install workstation <--dry-run|--apply> [--json] [--dashboard-port <port>] [--guacamole-port <port>]
+       agent-browser install workstation status [--json]
+       agent-browser install workstation gc <--dry-run|--apply> [--json]
        agent-browser install workstation reconcile [--json]
        agent-browser install workstation backup [--json]
        agent-browser install stealthcdp-chromium [--force]
@@ -5407,17 +5409,21 @@ remote-view privilege readiness. Workstation payload checks bind the installed
 binary and support assets to recorded SHA-256 provenance. Real-host preflight
 requires at least 6 GiB free before sudo, payload staging, or package mutation.
 
-Workstation apply reruns stop the managed dashboard, runtime interlock, and
-backup timer during reconciliation, then reactivate them after final readiness.
-Before stopping those units or staging a payload, real-host apply joins two
-read-only runtime census rounds across service state, runtime profiles,
-supervisors, daemon and process identity, bounded CDP identity and target
-evidence, displays, routes, streams, and durable handoffs. Incomplete or
-ambiguous evidence fails closed without changing the payload. Successful JSON
-output includes runtimeCensusTransaction, the private transaction receipt that
-binds the census digest and per-runtime classifications. Until the shared
-profile-owner registry supplies an owner generation, a live managed browser is
-insufficient evidence and blocks apply; the installer never kills it.
+Fresh install and upgrade use one durable transaction engine. Before candidate
+staging, real-host apply joins two read-only runtime census rounds across
+service state, runtime profiles, supervisors, daemon and process identity,
+bounded CDP identity and target evidence, displays, routes, streams, and
+durable handoffs. It installs host prerequisites before admission drain or
+ownership transfer, transfers cooperative and verified orphan runtimes through
+receipt-bearing owner generations, then selects the sealed candidate only
+after every runtime has a proven disposition. Failure restores the old
+selector and reverses committed owner transfers when that can be proved.
+Successful JSON output includes runtimeCensusTransaction. Use workstation
+status for a redacted selected-generation, migration, blocker, and terminal
+state projection without private paths or endpoint evidence. Workstation gc
+is a separate reviewed operation. It retains the selected generation and every
+generation referenced by a live process, supervisor, rollback-capable, failed,
+or unclosed transaction. Dry run reports candidates without deleting them.
 If reconciliation fails, their exact prior active states are restored and a
 private workstation-last-failure.json diagnostic receipt is written.
 Duplicate-profile pressure and inactive optional-supervisor drift remain
@@ -5466,6 +5472,8 @@ Examples:
   agent-browser install --with-deps --with-remote-view-privileges
   agent-browser install workstation --dry-run --json
   agent-browser install workstation --apply --json
+  agent-browser install workstation status --json
+  agent-browser install workstation gc --dry-run --json
   agent-browser install workstation reconcile --json
   agent-browser install workstation backup --json
 "##

@@ -89,6 +89,16 @@ daemon loss, owner and process generation replacement, route and display
 replacement, and dashboard generation change without duplicate-browser or
 navigation events. Explicit reopen remains the only path that restores the
 stored URL and may create or navigate a target.
+Slices G and H are accepted at the source and isolated-fixture boundary. Fresh
+install and upgrade now use one durable transaction with census before
+candidate staging, host gates before admission, receipt-bearing cooperative
+and orphan transfer, `CandidateReady` before selector commit, and deterministic
+precommit and postcommit rollback. Reviewed generation GC retains selected,
+live-process, supervisor, failed, unclosed, and rollback-referenced
+generations. The development publisher is a thin builder and canonical
+installer client. Redacted workstation status is shared through CLI, runtime
+health, dashboard warning, and doctor. Source and isolated validation pass;
+neither GC apply nor production transfer was executed.
 
 ### Plan
 
@@ -97,10 +107,11 @@ stored URL and may create or navigate a target.
 ### Next Recommendation
 
 Keep Slice E acceptance withheld until the user-scoped boundary incident is
-adjudicated or independently reconciled. The next source packet is Slice G
-transactional installer integration. Keep it source and isolated-fixture only:
-do not replace the installed payload, enable the recurring interlock, or touch
-a live browser. Slice I remains a separate explicit authorization gate.
+adjudicated or independently reconciled. Slices G and H need no further source
+work before the live gate. Do not replace the installed payload, enable the
+recurring interlock, run generation GC apply, or touch a live browser without
+new authority. Slice I is the next gate and requires separate explicit live
+authorization.
 
 ## P114 | Terminal Route Quarantine Recovery
 
