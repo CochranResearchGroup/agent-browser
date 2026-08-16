@@ -297,6 +297,50 @@ impl RuntimeOwnerRegistry {
             })
     }
 
+    pub(crate) fn revoke_legacy_daemon_owner(
+        &mut self,
+        profile_identity_digest: &str,
+        logical_browser_id: &str,
+        expected_daemon_session_route: &str,
+        expected_owner_id: &str,
+        expected_owner_generation: u64,
+    ) -> Result<ProfileOwner, OwnerTransferError> {
+        if !is_sha256(profile_identity_digest)
+            || logical_browser_id.trim().is_empty()
+            || expected_daemon_session_route.trim().is_empty()
+            || expected_owner_id.trim().is_empty()
+            || expected_owner_generation == 0
+        {
+            return Err(transfer_error(OwnerTransferFailureCode::InvalidEvidence));
+        }
+        let owner = self
+            .owners
+            .get_mut(profile_identity_digest)
+            .ok_or_else(|| transfer_error(OwnerTransferFailureCode::OwnerMissing))?;
+        if owner.state != ProfileOwnerState::Ready || owner.pending_transfer.is_some() {
+            return Err(transfer_error(
+                OwnerTransferFailureCode::UnsupportedOwnerState,
+            ));
+        }
+        if owner.browser_id != logical_browser_id
+            || owner.daemon_session_route != expected_daemon_session_route
+            || owner.owner_id != expected_owner_id
+            || owner.owner_generation != expected_owner_generation
+        {
+            return Err(transfer_error(
+                OwnerTransferFailureCode::OwnerCompareAndSwapMismatch,
+            ));
+        }
+        owner.owner_generation = owner
+            .owner_generation
+            .checked_add(1)
+            .ok_or_else(|| transfer_error(OwnerTransferFailureCode::GenerationExhausted))?;
+        owner.state = ProfileOwnerState::Orphaned;
+        owner.pending_transfer = None;
+        self.revision = self.revision.saturating_add(1);
+        Ok(owner.clone())
+    }
+
     fn binding_for_session(&self, session_id: &str) -> Result<Option<RuntimeOwnerBinding>, String> {
         let logical_browser_id = format!("session:{session_id}");
         let matches = self
@@ -635,6 +679,30 @@ pub(crate) fn begin_owner_transfer(
         state
             .runtime_owner_registry
             .begin_transfer(request)
+            .map_err(owner_transfer_error_text)
+    })
+}
+
+/// Marks one exact ready owner as orphaned only after the caller has proved
+/// the legacy daemon process can no longer exercise effect authority.
+pub(crate) fn revoke_legacy_daemon_owner(
+    repository: &impl ServiceStateRepository,
+    profile_identity_digest: &str,
+    logical_browser_id: &str,
+    expected_daemon_session_route: &str,
+    expected_owner_id: &str,
+    expected_owner_generation: u64,
+) -> Result<ProfileOwner, String> {
+    repository.mutate(|state| {
+        state
+            .runtime_owner_registry
+            .revoke_legacy_daemon_owner(
+                profile_identity_digest,
+                logical_browser_id,
+                expected_daemon_session_route,
+                expected_owner_id,
+                expected_owner_generation,
+            )
             .map_err(owner_transfer_error_text)
     })
 }
@@ -1173,6 +1241,74 @@ mod tests {
         let restored = registry.owner(&digest("profile")).unwrap();
         assert_eq!(restored.state, ProfileOwnerState::Orphaned);
         assert!(!registry.authorizes(&OwnerAuthorityClaim::from_owner(restored)));
+    }
+
+    #[test]
+    fn verified_legacy_daemon_revocation_advances_to_orphan_before_adoption() {
+        let mut registry = RuntimeOwnerRegistry::from_owner(owner());
+        let stale_claim =
+            OwnerAuthorityClaim::from_owner(registry.owner(&digest("profile")).unwrap());
+
+        let mismatch = registry
+            .revoke_legacy_daemon_owner(
+                &digest("profile"),
+                "browser-a",
+                "wrong-session",
+                "owner-old",
+                7,
+            )
+            .unwrap_err();
+        assert_eq!(
+            mismatch.code,
+            OwnerTransferFailureCode::OwnerCompareAndSwapMismatch
+        );
+        assert!(registry.authorizes(&stale_claim));
+
+        let generation_mismatch = registry
+            .revoke_legacy_daemon_owner(
+                &digest("profile"),
+                "browser-a",
+                "session-old",
+                "owner-old",
+                8,
+            )
+            .unwrap_err();
+        assert_eq!(
+            generation_mismatch.code,
+            OwnerTransferFailureCode::OwnerCompareAndSwapMismatch
+        );
+        assert!(registry.authorizes(&stale_claim));
+
+        let orphan = registry
+            .revoke_legacy_daemon_owner(
+                &digest("profile"),
+                "browser-a",
+                "session-old",
+                "owner-old",
+                7,
+            )
+            .unwrap();
+        assert_eq!(orphan.state, ProfileOwnerState::Orphaned);
+        assert_eq!(orphan.owner_generation, 8);
+        assert!(!registry.authorizes(&stale_claim));
+
+        let mut request = cooperative_request();
+        request.mode = BrowserAdoptionMode::OrphanAdoption;
+        request.expected_owner_id = Some(orphan.owner_id.clone());
+        request.expected_owner_generation = orphan.owner_generation;
+        request.candidate_owner_id = "owner-adopter".to_string();
+        request.candidate_daemon_session_route = "session-adopter".to_string();
+        request.transfer_nonce_digest = digest("legacy-orphan-transfer");
+
+        let proposal = registry.begin_transfer(request.clone()).unwrap();
+        assert_eq!(proposal.previous_owner_generation, 8);
+        assert_eq!(proposal.candidate_owner_generation, 9);
+        let receipt = registry
+            .commit_candidate(CandidateOwnerAttachment::from_request(&request, 9))
+            .unwrap();
+        assert_eq!(receipt.mode, BrowserAdoptionMode::OrphanAdoption);
+        assert_eq!(receipt.previous_owner_generation, 8);
+        assert_eq!(receipt.candidate_owner_generation, 9);
     }
 
     #[test]

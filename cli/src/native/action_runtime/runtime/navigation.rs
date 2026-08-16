@@ -566,13 +566,15 @@ async fn handle_runtime_handoff_orphan_adoption(
     }
     let manager = BrowserManager::connect_cdp_for_handoff(&cdp_url, None).await?;
     let profile_identity_digest = runtime_handoff_profile_digest(&runtime_profile)?;
-    if snapshot
+    let prior_orphan = snapshot
         .runtime_owner_registry
         .owner(&profile_identity_digest)
-        .is_some()
-    {
+        .cloned();
+    if prior_orphan.as_ref().is_some_and(|owner| {
+        owner.state != crate::runtime_owner_transfer::ProfileOwnerState::Orphaned
+    }) {
         return Err(
-            "runtime_handoff_orphan_owner_present: direct adoption requires an ownerless registry"
+            "runtime_handoff_orphan_owner_present: direct adoption requires an ownerless or explicitly orphaned registry owner"
                 .to_string(),
         );
     }
@@ -588,8 +590,11 @@ async fn handle_runtime_handoff_orphan_adoption(
             mode: crate::runtime_adoption::BrowserAdoptionMode::OrphanAdoption,
             logical_browser_id: logical_browser_id.clone(),
             profile_identity_digest: profile_identity_digest.clone(),
-            expected_owner_id: None,
-            expected_owner_generation: 0,
+            expected_owner_id: prior_orphan.as_ref().map(|owner| owner.owner_id.clone()),
+            expected_owner_generation: prior_orphan
+                .as_ref()
+                .map(|owner| owner.owner_generation)
+                .unwrap_or(0),
             candidate_owner_id: format!("owner-{}", &transfer_nonce_digest[16..36]),
             candidate_daemon_session_route: state.session_id.clone(),
             process_instance_digest,

@@ -4,6 +4,56 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 167 | 2026-08-16
+
+Scope: close the remaining Plan 0116 deterministic legacy-daemon adoption gap
+at the source and isolated-fixture boundary without changing installed or live
+state.
+
+Actions:
+
+- classified only typed or exact textual unknown handoff commands as legacy
+  protocol absence, while retaining fail-closed behavior for every other
+  transaction failure;
+- bound the recorded daemon process identity to the selected old-generation
+  executable before revoking that exact process through the verified process
+  handle;
+- advanced only the exact registry owner ID and generation from `ready` to
+  `orphaned` after daemon loss, preserving compare-and-swap protection against
+  concurrent owner replacement;
+- preserved the browser process and required the candidate to enter the
+  existing process, profile, endpoint, target, and logical-identity orphan
+  adoption proof seam without launch or navigation;
+- skipped source finalization for orphan adoption and made rollback after
+  irreversible legacy-daemon revocation or completed cooperative source
+  finalization enter explicit operator recovery;
+- aligned help, README, repository skill, docs site, plan, roadmap, and this
+  runbook with the corrected legacy boundary.
+
+Validation:
+
+- all thirty-four workstation tests pass, including exact-daemon revocation,
+  retained browser survival, protocol classification, orphan finalization, and
+  recovery-state semantics;
+- all fourteen owner-transfer tests pass, including exact owner-ID and
+  generation fencing for the `ready` to `orphaned` transition;
+- the repository Rust cadence passes 1,294 parallel-safe tests and every
+  serialized environment-mutating partition;
+- strict Clippy, Rust formatting, diff hygiene, the production docs build,
+  remote-view and route-confusion guards, the optimized source-free workstation
+  matrix, host and fresh-VM harnesses, Guacamole assets, PostgreSQL durability,
+  and route-user synchronization pass.
+
+Result:
+
+- the deterministic legacy-daemon source gap is accepted at the source and
+  isolated-fixture boundary;
+- no installed payload, unit, daemon, browser, profile, route, display,
+  dashboard, supervisor, finalization, generation-GC apply, or external state
+  changed;
+- Slice I remains unexecuted and requires separate explicit live
+  authorization.
+
 ## Turn 166 | 2026-08-16
 
 Scope: reopen and remediate the Plan 0116 Slices G and H source acceptance

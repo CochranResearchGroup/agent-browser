@@ -33,6 +33,8 @@ const DASHBOARD_CANDIDATE_START_TIMEOUT: std::time::Duration = std::time::Durati
 const DASHBOARD_PRESENTATION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
 const DASHBOARD_CANDIDATE_POLL_INTERVAL: std::time::Duration =
     std::time::Duration::from_millis(250);
+const LEGACY_DAEMON_EXIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+const LEGACY_DAEMON_EXIT_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(25);
 // A reconcile may run as agent-browser-runtime-interlock.service, so stopping
 // that service here would terminate the active reconciler before reactivation.
 const WORKSTATION_RECONCILE_QUIESCE_UNITS: [&str; 3] = [
@@ -3327,7 +3329,7 @@ fn transfer_discovered_runtimes(
     handoffs: &mut Vec<PreparedRuntimeHandoff>,
 ) -> Result<(), String> {
     use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
-    use crate::runtime_adoption::RuntimeDisposition;
+    use crate::runtime_adoption::{BrowserAdoptionMode, RuntimeDisposition};
 
     let service_state =
         JsonServiceStateStore::new(JsonServiceStateStore::default_path()?).load()?;
@@ -3343,8 +3345,77 @@ fn transfer_discovered_runtimes(
                         migration.logical_browser_id
                     )
                 })?;
-                let prepared =
-                    run_agent_json(&old_binary, &source_session, &["handoff", "prepare"])?;
+                let prepared = match run_agent_json_detailed(
+                    &old_binary,
+                    &source_session,
+                    &["handoff", "prepare"],
+                ) {
+                    Ok(prepared) => prepared,
+                    Err(error)
+                        if error.kind
+                            == RuntimeTransactionCommandFailureKind::ProtocolUnavailable =>
+                    {
+                        if migration.logical_browser_id != format!("session:{source_session}") {
+                            return Err(format!(
+                                "runtime_orphan_logical_browser_not_session_bound:{}",
+                                migration.logical_browser_id
+                            ));
+                        }
+                        let candidate_session = orphan_candidate_session(migration);
+                        let expected_owner = service_state
+                            .runtime_owner_registry
+                            .owner(&migration.profile_identity_digest)
+                            .cloned()
+                            .ok_or_else(|| {
+                                format!(
+                                    "legacy_daemon_owner_missing:{}",
+                                    migration.logical_browser_id
+                                )
+                            })?;
+                        handoffs.push(PreparedRuntimeHandoff {
+                            source_session: source_session.clone(),
+                            candidate_session: candidate_session.clone(),
+                            mode: BrowserAdoptionMode::OrphanAdoption,
+                            committed: false,
+                            source_finalized: false,
+                            irreversible_source_revocation: false,
+                        });
+                        let handoff_index = handoffs.len() - 1;
+                        let revocation = revoke_legacy_daemon_effect_authority(
+                            &old_binary,
+                            &source_session,
+                            &migration.logical_browser_id,
+                            &migration.profile_identity_digest,
+                            &expected_owner.owner_id,
+                            expected_owner.owner_generation,
+                            &mut handoffs[handoff_index].irreversible_source_revocation,
+                        );
+                        if let Err(error) = revocation {
+                            if handoffs[handoff_index].irreversible_source_revocation {
+                                migration.disposition = RuntimeDisposition::OrphanAdoption;
+                                let reason = "legacy_daemon_effect_authority_revocation_incomplete";
+                                if !migration.reason_codes.iter().any(|value| value == reason) {
+                                    migration.reason_codes.push(reason.to_string());
+                                }
+                            }
+                            return Err(error);
+                        }
+                        migration.disposition = RuntimeDisposition::OrphanAdoption;
+                        let reason = "legacy_daemon_protocol_unavailable_effect_authority_revoked";
+                        if !migration.reason_codes.iter().any(|value| value == reason) {
+                            migration.reason_codes.push(reason.to_string());
+                        }
+                        let resumed = run_agent_json(
+                            &candidate_binary,
+                            &candidate_session,
+                            &["handoff", "resume", "--source-session", &source_session],
+                        )?;
+                        handoffs[handoff_index].committed = true;
+                        migration.adoption_receipt_id = Some(owner_transfer_receipt_id(&resumed)?);
+                        continue;
+                    }
+                    Err(error) => return Err(error.message),
+                };
                 let candidate_session = prepared
                     .pointer("/data/candidateSessionName")
                     .and_then(Value::as_str)
@@ -3353,6 +3424,15 @@ fn transfer_discovered_runtimes(
                         format!("runtime_transfer_candidate_session_missing:{source_session}")
                     })?
                     .to_string();
+                handoffs.push(PreparedRuntimeHandoff {
+                    source_session: source_session.clone(),
+                    candidate_session: candidate_session.clone(),
+                    mode: BrowserAdoptionMode::CooperativeTransfer,
+                    committed: false,
+                    source_finalized: false,
+                    irreversible_source_revocation: false,
+                });
+                let handoff_index = handoffs.len() - 1;
                 let resumed = match run_agent_json(
                     &candidate_binary,
                     &candidate_session,
@@ -3364,12 +3444,8 @@ fn transfer_discovered_runtimes(
                         return Err(error);
                     }
                 };
+                handoffs[handoff_index].committed = true;
                 migration.adoption_receipt_id = Some(owner_transfer_receipt_id(&resumed)?);
-                handoffs.push(PreparedRuntimeHandoff {
-                    source_session,
-                    candidate_session,
-                    committed: true,
-                });
             }
             RuntimeDisposition::OrphanAdoption => {
                 let source_session = source_session.ok_or_else(|| {
@@ -3384,21 +3460,23 @@ fn transfer_discovered_runtimes(
                         migration.logical_browser_id
                     ));
                 }
-                let candidate_session = format!(
-                    "orphan-{}",
-                    &workstation_bytes_sha256(migration.logical_browser_id.as_bytes())[..16]
-                );
+                let candidate_session = orphan_candidate_session(migration);
+                handoffs.push(PreparedRuntimeHandoff {
+                    source_session: source_session.clone(),
+                    candidate_session: candidate_session.clone(),
+                    mode: BrowserAdoptionMode::OrphanAdoption,
+                    committed: false,
+                    source_finalized: false,
+                    irreversible_source_revocation: false,
+                });
+                let handoff_index = handoffs.len() - 1;
                 let resumed = run_agent_json(
                     &candidate_binary,
                     &candidate_session,
                     &["handoff", "resume", "--source-session", &source_session],
                 )?;
+                handoffs[handoff_index].committed = true;
                 migration.adoption_receipt_id = Some(owner_transfer_receipt_id(&resumed)?);
-                handoffs.push(PreparedRuntimeHandoff {
-                    source_session,
-                    candidate_session,
-                    committed: true,
-                });
             }
             RuntimeDisposition::ManualPreservation | RuntimeDisposition::RetiredIdle => {}
             RuntimeDisposition::RejectedAmbiguity => {
@@ -3408,6 +3486,96 @@ fn transfer_discovered_runtimes(
                 ));
             }
         }
+    }
+    Ok(())
+}
+
+fn orphan_candidate_session(migration: &crate::runtime_adoption::RuntimeMigrationRecord) -> String {
+    format!(
+        "orphan-{}",
+        &workstation_bytes_sha256(migration.logical_browser_id.as_bytes())[..16]
+    )
+}
+
+/// Revokes one legacy daemon only after its recorded process identity proves it
+/// is the selected old-generation executable. The browser process is not
+/// signaled; the candidate must independently prove and adopt that orphan.
+fn revoke_legacy_daemon_effect_authority(
+    old_binary: &Path,
+    source_session: &str,
+    logical_browser_id: &str,
+    profile_identity_digest: &str,
+    expected_owner_id: &str,
+    expected_owner_generation: u64,
+    source_authority_unavailable: &mut bool,
+) -> Result<(), String> {
+    let identity = crate::connection::load_daemon_process_identity(source_session)?;
+    revoke_verified_legacy_daemon_process(
+        &identity,
+        old_binary,
+        LEGACY_DAEMON_EXIT_TIMEOUT,
+        source_authority_unavailable,
+    )?;
+
+    let deadline = std::time::Instant::now() + LEGACY_DAEMON_EXIT_TIMEOUT;
+    while crate::connection::daemon_ready(source_session) {
+        if std::time::Instant::now() >= deadline {
+            return Err(format!(
+                "legacy_daemon_effect_authority_still_reachable:{source_session}"
+            ));
+        }
+        std::thread::sleep(LEGACY_DAEMON_EXIT_POLL_INTERVAL);
+    }
+    std::thread::sleep(std::time::Duration::from_millis(150));
+    if crate::connection::daemon_ready(source_session) {
+        return Err(format!(
+            "legacy_daemon_effect_authority_reappeared:{source_session}"
+        ));
+    }
+    let repository = crate::native::service_store::LockedServiceStateRepository::default_json()?;
+    crate::runtime_owner_transfer::revoke_legacy_daemon_owner(
+        &repository,
+        profile_identity_digest,
+        logical_browser_id,
+        source_session,
+        expected_owner_id,
+        expected_owner_generation,
+    )?;
+    Ok(())
+}
+
+fn revoke_verified_legacy_daemon_process(
+    identity: &crate::process_identity::RecordedProcessIdentity,
+    old_binary: &Path,
+    exit_timeout: std::time::Duration,
+    source_authority_unavailable: &mut bool,
+) -> Result<(), String> {
+    let recorded_executable = identity
+        .executable_path
+        .as_deref()
+        .ok_or_else(|| "legacy_daemon_executable_identity_unavailable".to_string())?;
+    let expected = old_binary
+        .canonicalize()
+        .map_err(|error| format!("legacy_daemon_selected_binary_unavailable:{error}"))?;
+    let recorded = Path::new(recorded_executable)
+        .canonicalize()
+        .map_err(|error| format!("legacy_daemon_recorded_binary_unavailable:{error}"))?;
+    if recorded != expected {
+        return Err("legacy_daemon_executable_identity_mismatch".to_string());
+    }
+
+    let Some(process) = crate::process_identity::VerifiedProcessTermination::open(identity)? else {
+        *source_authority_unavailable = true;
+        return Ok(());
+    };
+    process.signal(crate::process_identity::VerifiedProcessSignal::Kill)?;
+    *source_authority_unavailable = true;
+    let deadline = std::time::Instant::now() + exit_timeout;
+    while process.is_running()? {
+        if std::time::Instant::now() >= deadline {
+            return Err("legacy_daemon_exact_process_exit_timeout".to_string());
+        }
+        std::thread::sleep(LEGACY_DAEMON_EXIT_POLL_INTERVAL);
     }
     Ok(())
 }
@@ -3439,7 +3607,44 @@ fn resolve_runtime_source_session(
     Ok(candidates.into_iter().next())
 }
 
-fn run_agent_json(binary: &Path, session: &str, command_args: &[&str]) -> Result<Value, String> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeTransactionCommandFailureKind {
+    ProtocolUnavailable,
+    CommandFailed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RuntimeTransactionCommandFailure {
+    kind: RuntimeTransactionCommandFailureKind,
+    message: String,
+}
+
+fn runtime_transaction_failure_kind(
+    payload: Option<&Value>,
+    diagnostic: &str,
+    command_args: &[&str],
+) -> RuntimeTransactionCommandFailureKind {
+    let handoff_command = command_args.first().copied() == Some("handoff");
+    let typed_unknown = payload
+        .and_then(|value| value.get("type"))
+        .and_then(Value::as_str)
+        .is_some_and(|value| matches!(value, "unknown_command" | "unknown_subcommand"));
+    let normalized = diagnostic.to_ascii_lowercase();
+    let textual_unknown = handoff_command
+        && (normalized.contains("unknown command") || normalized.contains("unknown subcommand"))
+        && normalized.contains("handoff");
+    if handoff_command && (typed_unknown || textual_unknown) {
+        RuntimeTransactionCommandFailureKind::ProtocolUnavailable
+    } else {
+        RuntimeTransactionCommandFailureKind::CommandFailed
+    }
+}
+
+fn run_agent_json_detailed(
+    binary: &Path,
+    session: &str,
+    command_args: &[&str],
+) -> Result<Value, RuntimeTransactionCommandFailure> {
     let output = Command::new(binary)
         .args(["--json", "--session", session])
         .args(command_args)
@@ -3447,29 +3652,42 @@ fn run_agent_json(binary: &Path, session: &str, command_args: &[&str]) -> Result
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()
-        .map_err(|error| {
-            format!(
+        .map_err(|error| RuntimeTransactionCommandFailure {
+            kind: RuntimeTransactionCommandFailureKind::CommandFailed,
+            message: format!(
                 "Unable to run runtime transaction client {} for session '{session}': {error}",
                 binary.display()
-            )
+            ),
         })?;
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
     let payload: Value = serde_json::from_slice(&output.stdout).map_err(|error| {
-        format!(
-            "Runtime transaction client returned invalid JSON for session '{session}': {error}; {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        )
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let diagnostic = format!("{stdout}\n{stderr}");
+        RuntimeTransactionCommandFailure {
+            kind: runtime_transaction_failure_kind(None, &diagnostic, command_args),
+            message: format!(
+                "Runtime transaction client returned invalid JSON for session '{session}': {error}; {stderr}"
+            ),
+        }
     })?;
     if !output.status.success() || payload.get("success").and_then(Value::as_bool) != Some(true) {
         let message = payload
             .get("error")
             .and_then(Value::as_str)
             .map(str::to_string)
-            .unwrap_or_else(|| String::from_utf8_lossy(&output.stderr).trim().to_string());
-        return Err(format!(
-            "Runtime transaction command failed for session '{session}': {message}"
-        ));
+            .unwrap_or(stderr);
+        return Err(RuntimeTransactionCommandFailure {
+            kind: runtime_transaction_failure_kind(Some(&payload), &message, command_args),
+            message: format!(
+                "Runtime transaction command failed for session '{session}': {message}"
+            ),
+        });
     }
     Ok(payload)
+}
+
+fn run_agent_json(binary: &Path, session: &str, command_args: &[&str]) -> Result<Value, String> {
+    run_agent_json_detailed(binary, session, command_args).map_err(|error| error.message)
 }
 
 fn owner_transfer_receipt_id(payload: &Value) -> Result<String, String> {
@@ -3827,15 +4045,16 @@ fn accept_prepared_payload_transaction(
     Ok(())
 }
 
-fn finalize_runtime_handoffs(prepared: &PreparedPayloadTransaction) -> Result<(), String> {
+fn finalize_runtime_handoffs(prepared: &mut PreparedPayloadTransaction) -> Result<(), String> {
     let candidate_binary = prepared.staged.generation_path.join("bin/agent-browser");
-    for handoff in &prepared.runtime_handoffs {
-        if handoff.committed {
+    for handoff in &mut prepared.runtime_handoffs {
+        if handoff.should_finalize_source() {
             run_agent_json(
                 &candidate_binary,
                 &handoff.source_session,
                 &["handoff", "finalize"],
             )?;
+            handoff.source_finalized = true;
         }
     }
     Ok(())
@@ -3972,20 +4191,33 @@ fn rollback_runtime_handoffs(prepared: &PreparedPayloadTransaction) -> Result<()
     let candidate_binary = prepared.staged.generation_path.join("bin/agent-browser");
     let mut failures = Vec::new();
     for handoff in prepared.runtime_handoffs.iter().rev() {
-        if !handoff.committed {
-            continue;
+        if handoff.committed {
+            if let Err(error) = run_agent_json(
+                &candidate_binary,
+                &handoff.candidate_session,
+                &[
+                    "handoff",
+                    "rollback",
+                    "--source-session",
+                    &handoff.source_session,
+                ],
+            ) {
+                failures.push(error);
+            }
         }
-        if let Err(error) = run_agent_json(
-            &candidate_binary,
-            &handoff.candidate_session,
-            &[
-                "handoff",
-                "rollback",
-                "--source-session",
-                &handoff.source_session,
-            ],
-        ) {
-            failures.push(error);
+        if handoff.rollback_requires_operator_recovery() {
+            if handoff.source_finalized {
+                failures.push(format!(
+                    "runtime_handoff_source_already_finalized:{}",
+                    handoff.source_session
+                ));
+            }
+            if handoff.irreversible_source_revocation {
+                failures.push(format!(
+                    "legacy_daemon_effect_authority_was_revoked:{}",
+                    handoff.source_session
+                ));
+            }
         }
     }
     if failures.is_empty() {
@@ -4187,7 +4419,21 @@ impl Drop for PreparedDashboardCandidate {
 struct PreparedRuntimeHandoff {
     source_session: String,
     candidate_session: String,
+    mode: crate::runtime_adoption::BrowserAdoptionMode,
     committed: bool,
+    source_finalized: bool,
+    irreversible_source_revocation: bool,
+}
+
+impl PreparedRuntimeHandoff {
+    fn should_finalize_source(&self) -> bool {
+        self.committed
+            && self.mode == crate::runtime_adoption::BrowserAdoptionMode::CooperativeTransfer
+    }
+
+    fn rollback_requires_operator_recovery(&self) -> bool {
+        self.source_finalized || self.irreversible_source_revocation
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -6336,5 +6582,132 @@ mod tests {
             &wrong,
             &transaction
         ));
+    }
+
+    #[test]
+    fn runtime_transaction_failure_classifies_only_handoff_protocol_absence() {
+        let typed = serde_json::json!({"type": "unknown_command"});
+        assert_eq!(
+            runtime_transaction_failure_kind(Some(&typed), "", &["handoff", "prepare"]),
+            RuntimeTransactionCommandFailureKind::ProtocolUnavailable
+        );
+        assert_eq!(
+            runtime_transaction_failure_kind(
+                None,
+                "Unknown subcommand 'handoff'",
+                &["handoff", "prepare"]
+            ),
+            RuntimeTransactionCommandFailureKind::ProtocolUnavailable
+        );
+        assert_eq!(
+            runtime_transaction_failure_kind(Some(&typed), "", &["service", "resource", "list"]),
+            RuntimeTransactionCommandFailureKind::CommandFailed
+        );
+        let runtime_failure = serde_json::json!({"type": "cdp_error"});
+        assert_eq!(
+            runtime_transaction_failure_kind(
+                Some(&runtime_failure),
+                "handoff target verification failed",
+                &["handoff", "prepare"]
+            ),
+            RuntimeTransactionCommandFailureKind::CommandFailed
+        );
+    }
+
+    #[test]
+    fn orphan_handoffs_skip_source_finalize_and_legacy_revocation_requires_recovery() {
+        use crate::runtime_adoption::BrowserAdoptionMode;
+
+        let cooperative = PreparedRuntimeHandoff {
+            source_session: "source".to_string(),
+            candidate_session: "candidate".to_string(),
+            mode: BrowserAdoptionMode::CooperativeTransfer,
+            committed: true,
+            source_finalized: false,
+            irreversible_source_revocation: false,
+        };
+        assert!(cooperative.should_finalize_source());
+        assert!(!cooperative.rollback_requires_operator_recovery());
+
+        let finalized = PreparedRuntimeHandoff {
+            source_finalized: true,
+            ..cooperative
+        };
+        assert!(finalized.rollback_requires_operator_recovery());
+
+        let orphan = PreparedRuntimeHandoff {
+            mode: BrowserAdoptionMode::OrphanAdoption,
+            source_finalized: false,
+            ..finalized
+        };
+        assert!(!orphan.should_finalize_source());
+        assert!(!orphan.rollback_requires_operator_recovery());
+
+        let legacy = PreparedRuntimeHandoff {
+            irreversible_source_revocation: true,
+            ..orphan
+        };
+        assert!(!legacy.should_finalize_source());
+        assert!(legacy.rollback_requires_operator_recovery());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn legacy_daemon_revocation_kills_only_the_exact_recorded_process() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-legacy-daemon-revocation-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let old_binary = root.join("old-agent-browser");
+        let wrong_binary = root.join("wrong-agent-browser");
+        let browser_binary = root.join("retained-browser");
+        fs::copy("/bin/sleep", &old_binary).unwrap();
+        fs::copy("/bin/sleep", &wrong_binary).unwrap();
+        fs::copy("/bin/sleep", &browser_binary).unwrap();
+
+        let mut daemon = Command::new(&old_binary).arg("30").spawn().unwrap();
+        let daemon_identity = (0..50)
+            .find_map(|_| {
+                let identity = crate::process_identity::capture_process_identity(
+                    daemon.id(),
+                    Some(&old_binary),
+                    None,
+                );
+                if identity.is_none() {
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                identity
+            })
+            .expect("copied daemon fixture should reach its expected executable identity");
+        let mut browser = Command::new(&browser_binary).arg("30").spawn().unwrap();
+
+        let mut source_authority_unavailable = false;
+        let mismatch = revoke_verified_legacy_daemon_process(
+            &daemon_identity,
+            &wrong_binary,
+            std::time::Duration::from_secs(1),
+            &mut source_authority_unavailable,
+        )
+        .unwrap_err();
+        assert_eq!(mismatch, "legacy_daemon_executable_identity_mismatch");
+        assert!(!source_authority_unavailable);
+        assert!(daemon.try_wait().unwrap().is_none());
+        assert!(browser.try_wait().unwrap().is_none());
+
+        revoke_verified_legacy_daemon_process(
+            &daemon_identity,
+            &old_binary,
+            std::time::Duration::from_secs(2),
+            &mut source_authority_unavailable,
+        )
+        .unwrap();
+        assert!(source_authority_unavailable);
+        assert!(daemon.wait().unwrap().code().is_none());
+        assert!(browser.try_wait().unwrap().is_none());
+
+        browser.kill().unwrap();
+        browser.wait().unwrap();
+        fs::remove_dir_all(&root).unwrap();
     }
 }

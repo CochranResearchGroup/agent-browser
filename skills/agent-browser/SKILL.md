@@ -40,6 +40,14 @@ receipt-bearing owner generations; manual and external browsers remain
 preserved without effect authority. The selector changes only after every
 runtime has a proven disposition. Do not work around a transaction stop by
 killing, detaching, or rehoming the browser.
+If an exact old-generation daemon reports that `handoff` is unavailable, the
+installer verifies the recorded daemon executable and revokes only that exact
+daemon, then advances the exact registry owner to an orphaned generation before
+using the normal process, profile, endpoint, target, and logical identity
+checks for orphan adoption. It does not signal the browser process.
+Do not imitate this manually. A rollback after this irreversible daemon
+revocation must remain `operator_recovery_required`; it cannot claim the old
+runtime owner was restored.
 Treat every non-ready result as a hard stop. The installer activates user units
 only after readiness-authoritative routes are projected and both final doctors
 pass. Host preparation includes `x11-utils`, ImageMagick, Tesseract, and a

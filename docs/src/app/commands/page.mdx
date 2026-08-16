@@ -126,9 +126,14 @@ path without an old daemon proposal.
 The local development publisher inventories daemon sockets and active named
 supervisors, runs this protocol around executable replacement, and finalizes
 the old daemon only after candidate validation. Browser PIDs, DevTools ports,
-profiles, and tabs remain live during the changeover. A legacy daemon that
-relinquishes first enters the verified orphan-adoption path. A later normal
-`close` still terminates an owned browser.
+profiles, and tabs remain live during the changeover. During a workstation
+transaction, an exact old-generation daemon that reports the handoff command
+as unavailable is bound to its recorded executable and revoked through its
+verified process handle. The exact registry owner advances to an orphaned
+generation before the candidate enters the normal verified orphan-adoption
+path. The browser process is not signaled, and a later rollback requires
+explicit operator recovery because the old daemon cannot be restored
+automatically. A later normal `close` still terminates an owned browser.
 
 Use service request `action: "probe"` for generic identity, account, readiness,
 or compact page-state checks against a leased service tab. A probe request

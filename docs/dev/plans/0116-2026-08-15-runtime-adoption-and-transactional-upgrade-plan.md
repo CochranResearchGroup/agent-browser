@@ -1446,6 +1446,45 @@ dashboard, supervisor, finalization, GC apply, or external state was changed.
 Slice E remains `IMPLEMENTED_NOT_ACCEPTED`. Slice I remains unexecuted and
 requires separate explicit live authorization.
 
+### 2026-08-16 | Legacy Protocol Orphan-Adoption Correction
+
+A later source audit reopened the Slices G and H boundary because required
+deterministic test 7 was not represented in the production workstation path.
+An old daemon that lacked the cooperative handoff command stopped the
+transaction rather than yielding through verified orphan adoption.
+
+The correction is source-only:
+
+- only a typed or exact textual unknown handoff command selects the legacy
+  fallback. Invalid runtime evidence and ordinary command failures remain
+  blocking;
+- the recorded daemon process identity must resolve to the selected
+  old-generation executable before the verified process handle revokes that
+  exact daemon;
+- the registry transition compares the exact owner ID, generation, browser,
+  profile, and daemon session before advancing that owner from `ready` to
+  `orphaned` at the next generation;
+- the browser process is never signaled. Candidate resume must independently
+  pass the existing process-instance, canonical-profile, endpoint, target-set,
+  selected-target, and logical-browser proof seam without launch or navigation;
+- orphan adoption does not run source-daemon finalization because no source
+  daemon remains;
+- rollback after the irreversible daemon revocation enters
+  `operator_recovery_required`, even when candidate owner reversal succeeds,
+  rather than claiming the old runtime owner was restored. A rollback after a
+  cooperative source has already finalized uses the same recovery-only result.
+
+The workstation suite passes thirty-four tests, including exact process
+targeting, retained browser survival, protocol classification, orphan
+finalization, and recovery-state semantics. All fourteen owner-transfer tests,
+the 1,294-test parallel-safe Rust partition, every serialized Rust partition,
+strict Clippy, formatting, diff hygiene, the production docs build, route and
+remote-view guards, the optimized source-free workstation matrix, host and
+fresh-VM harnesses, Guacamole assets, PostgreSQL durability, and route-user
+synchronization pass. The correction is accepted at the source and
+isolated-fixture boundary. No installed or live state was changed. Slice I
+remains separately authorization-gated.
+
 ## Planning Evidence
 
 - CodeGraph was healthy on 2026-08-15 with 553 files, 19,654 nodes, and 68,296

@@ -113,6 +113,14 @@ before admission drain or ownership transfer. Cooperative and verified orphan
 runtimes move through receipt-bearing owner generations; manual and external
 browsers remain preserved without effect authority. The sealed candidate is
 selected only after every discovered runtime has a proven disposition.
+When an exact old-generation daemon reports that the cooperative handoff
+command is unavailable, apply verifies the recorded daemon executable, revokes
+only that daemon's effect authority, advances the exact registry owner to an
+orphaned generation, and sends the retained browser through the same process,
+profile, endpoint, target, and logical-identity checks used for orphan
+adoption. It never signals the browser process. If the transaction later rolls
+back, that irreversible daemon revocation produces an explicit
+operator-recovery state rather than a false old-owner restoration claim.
 If that adds the `agent-browser` or `docker` group to the current user, the
 command exits with status 75 and a `relogin_required` JSON state. Log out and
 back in or reboot, then rerun the same apply command. With both groups

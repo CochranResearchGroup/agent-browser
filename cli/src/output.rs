@@ -5419,6 +5419,15 @@ ownership transfer, transfers cooperative and verified orphan runtimes through
 receipt-bearing owner generations, then selects the sealed candidate only
 after every runtime has a proven disposition. Failure restores the old
 selector and reverses committed owner transfers when that can be proved.
+If an exact old-generation daemon reports that the cooperative handoff command
+is unavailable, apply verifies its recorded executable identity, revokes only
+that daemon's effect authority, advances the exact registry owner to an
+orphaned generation, and sends the retained browser through the same
+process, profile, endpoint, and target-verified orphan adoption path. The
+browser process is not signaled. A later rollback after this irreversible
+daemon revocation records operator recovery required instead of claiming the
+old runtime owner was restored. A rollback after source finalization uses the
+same recovery-only result.
 Successful JSON output includes runtimeCensusTransaction. Use workstation
 status for a redacted selected-generation, migration, blocker, terminal, and
 seven-axis readiness projection without private paths or endpoint evidence.

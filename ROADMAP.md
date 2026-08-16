@@ -107,6 +107,19 @@ transition. Generation GC now has direct deterministic coverage for selected,
 live-process, supervisor, unclosed-transaction, and rollback references. The
 repository Rust cadence, strict Clippy, formatting, focused transaction and
 ingress tests, production docs build, and source-free workstation matrix pass.
+One later source audit found that workstation transfer still stopped when an
+old daemon lacked the cooperative handoff command. The transaction now treats
+only an exact unknown-command response as that legacy case, binds the recorded
+daemon to the selected old-generation executable, revokes only that verified
+daemon process, advances only the exact owner ID and generation from `ready`
+to `orphaned`, and requires the candidate to pass the existing orphan process,
+profile, endpoint, target, and logical-identity proof seam. The browser process
+remains untouched. Orphan adoption skips source-daemon finalization, and
+rollback after irreversible legacy-daemon revocation or completed cooperative
+source finalization enters `operator_recovery_required` instead of claiming
+the old owner was restored. Focused tests prove exact-process targeting,
+browser survival, protocol classification, owner-generation fencing, and
+rollback semantics.
 Neither finalization, GC apply, installed-payload replacement, nor production
 transfer was executed.
 
