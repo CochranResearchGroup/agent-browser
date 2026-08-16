@@ -611,11 +611,25 @@ pub(crate) fn dashboard_ingress_status_for_path(path: &Path) -> serde_json::Valu
     }
 }
 
-/// Returns the generation currently selected behind the stable authenticated
-/// ingress. Durable handoff receipts bind to this value before rendering.
+/// Returns the generation serving the authenticated dashboard request.
+///
+/// A shadow candidate must bind its pre-commit presentation receipt to its
+/// own generation, while an ordinary backend can fall back to the generation
+/// selected behind the stable ingress.
 pub(crate) fn selected_dashboard_generation() -> Result<String, String> {
+    if let Some(generation_id) =
+        dashboard_generation_override(std::env::var("AGENT_BROWSER_DASHBOARD_GENERATION"))
+    {
+        return Ok(generation_id);
+    }
     let repository = DashboardIngressRepository::new(DashboardIngressRepository::default_path());
     Ok(repository.load()?.selected_backend().generation_id.clone())
+}
+
+fn dashboard_generation_override(configured: Result<String, std::env::VarError>) -> Option<String> {
+    configured
+        .ok()
+        .filter(|generation_id| !generation_id.trim().is_empty())
 }
 
 pub(crate) fn stage_dashboard_candidate(
@@ -947,6 +961,19 @@ mod tests {
             authenticated_ingress_probe_at: "2026-08-15T12:00:00Z".to_string(),
             operator_surface_load_result: "ready".to_string(),
         }
+    }
+
+    #[test]
+    fn shadow_dashboard_generation_overrides_the_precommit_selected_backend() {
+        assert_eq!(
+            dashboard_generation_override(Ok("generation-candidate".to_string())),
+            Some("generation-candidate".to_string())
+        );
+        assert_eq!(dashboard_generation_override(Ok("   ".to_string())), None);
+        assert_eq!(
+            dashboard_generation_override(Err(std::env::VarError::NotPresent)),
+            None
+        );
     }
 
     #[test]
