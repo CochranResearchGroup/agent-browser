@@ -3477,7 +3477,7 @@ mod tests {
             "GET",
             "/api/empty",
             "",
-            Duration::from_millis(100),
+            Duration::from_secs(1),
         )
         .await
         .unwrap_err();
@@ -3495,13 +3495,15 @@ mod tests {
 
     #[tokio::test]
     async fn dashboard_gateway_proxy_normalizes_invalid_http_response() {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        use std::io::{Read as _, Write as _};
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
-        tokio::spawn(async move {
-            let (mut socket, _) = listener.accept().await.unwrap();
+        let backend = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
             let mut buffer = [0_u8; 1024];
-            let _ = socket.read(&mut buffer).await;
-            let _ = socket.write_all(b"not an http response").await;
+            let _ = socket.read(&mut buffer);
+            let _ = socket.write_all(b"not an http response");
         });
 
         let err = proxy_local_http_api_request_with_timeout(
@@ -3513,6 +3515,7 @@ mod tests {
         )
         .await
         .unwrap_err();
+        backend.join().unwrap();
 
         assert_eq!(err.code, "backend_invalid_http");
         assert_eq!(

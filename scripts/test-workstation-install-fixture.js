@@ -132,16 +132,31 @@ try {
   }
 
   assert.equal(readdirSync(transactionStore).length, 1, 'first apply must write one transaction');
-  assertTransactionTerminal(transactionStore, 'old_generation_retirable');
+  assertTransactionTerminal(transactionStore, 'accepted');
   const transactionStatus = runInstaller(installRoot, ['status', '--json']);
   assert.equal(transactionStatus.status, 0, transactionStatus.stderr);
   const transactionStatusPayload = JSON.parse(transactionStatus.stdout);
   assert.equal(
     transactionStatusPayload.latestTransaction.state,
-    'old_generation_retirable',
+    'accepted',
   );
   assert.equal(transactionStatusPayload.admissionDraining, false);
   assert.equal(transactionStatusPayload.selectedGenerationId, generationIds[0]);
+  assert.deepEqual(transactionStatusPayload.readiness, {
+    payloadReady: true,
+    selectedGenerationReady: true,
+    runtimeConvergenceReady: true,
+    upgradeTransactionState: 'accepted',
+    dashboardIngressReady: false,
+    operatorJourneyReady: false,
+    rollbackReady: true,
+    ready: false,
+  });
+  assert.equal(
+    transactionStatusPayload.ready,
+    false,
+    'an isolated payload fixture must not claim installed operator-journey acceptance',
+  );
   assert.doesNotMatch(
     transactionStatus.stdout,
     /profileIdentityDigest|cdpEndpoint|immutableInstallationPath|transactionPath/,
@@ -431,7 +446,7 @@ try {
     'a second apply must leave payload byte content and file modes unchanged',
   );
   assert.equal(readdirSync(transactionStore).length, 2, 'second apply must write one new transaction');
-  assertTransactionTerminal(transactionStore, 'old_generation_retirable');
+  assertTransactionTerminal(transactionStore, 'accepted');
   assert.equal(
     statSync(installedBinary).ino,
     installedBinaryInode,

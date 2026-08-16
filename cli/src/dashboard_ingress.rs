@@ -69,6 +69,36 @@ pub(crate) struct PresentationEvidence {
     pub(crate) operator_surface_load_result: String,
 }
 
+impl PresentationEvidence {
+    pub(crate) fn from_ready_receipt(
+        receipt: &crate::runtime_adoption::PresentationReceipt,
+    ) -> Result<Self, String> {
+        if receipt.state != crate::runtime_adoption::PresentationState::Ready
+            || !receipt.reason_codes.is_empty()
+        {
+            return Err("dashboard presentation receipt is not ready".to_string());
+        }
+        Ok(Self {
+            receipt_id: receipt.receipt_id.clone(),
+            dashboard_deployment_generation: receipt.dashboard_deployment_generation.clone(),
+            coordinator_generation: receipt.coordinator_generation.clone(),
+            daemon_generation: receipt.daemon_generation.clone(),
+            logical_browser_id: receipt.logical_browser_id.clone(),
+            process_instance_digest: receipt.process_instance_digest.clone(),
+            selected_target_generation: receipt.selected_target_generation,
+            selected_target_identity_digest: receipt.selected_target_identity_digest.clone(),
+            required_stream_provider: receipt.required_stream_provider.clone(),
+            observed_stream_provider: receipt.required_stream_provider.clone(),
+            display_allocation_id: receipt.display_allocation_id.clone(),
+            geometry_epoch: receipt.geometry_epoch.clone(),
+            route_generation: receipt.route_generation,
+            guacamole_connection_generation: receipt.guacamole_connection_generation,
+            authenticated_ingress_probe_at: receipt.authenticated_ingress_probe_at.clone(),
+            operator_surface_load_result: receipt.operator_surface_load_result.clone(),
+        })
+    }
+}
+
 impl CandidateOperatorJourney {
     #[cfg(test)]
     fn blocked(generation_id: impl Into<String>) -> Self {
@@ -102,7 +132,13 @@ pub(crate) struct DashboardIngressRegistry {
     #[serde(default)]
     fallback_backend: Option<DashboardBackend>,
     #[serde(default)]
+    rollback_backend: Option<DashboardBackend>,
+    #[serde(default)]
     last_presentation_receipt: Option<crate::runtime_adoption::PresentationReceipt>,
+    #[serde(default)]
+    fallback_presentation_receipt: Option<crate::runtime_adoption::PresentationReceipt>,
+    #[serde(default)]
+    rollback_presentation_receipt: Option<crate::runtime_adoption::PresentationReceipt>,
 }
 
 impl DashboardIngressRegistry {
@@ -113,7 +149,10 @@ impl DashboardIngressRegistry {
             selected_backend,
             candidate_backend: None,
             fallback_backend: None,
+            rollback_backend: None,
             last_presentation_receipt: None,
+            fallback_presentation_receipt: None,
+            rollback_presentation_receipt: None,
         }
     }
 
@@ -143,6 +182,9 @@ impl DashboardIngressRegistry {
             return Err("dashboard candidate identity is incomplete".to_string());
         }
         if candidate == self.selected_backend {
+            return Ok(());
+        }
+        if self.candidate_backend.as_ref() == Some(&candidate) {
             return Ok(());
         }
         self.candidate_backend = Some(candidate);
@@ -228,11 +270,38 @@ impl DashboardIngressRegistry {
             reason_codes: Vec::new(),
         };
         let prior = std::mem::replace(&mut self.selected_backend, candidate.clone());
+        if prior.generation_id != candidate.generation_id {
+            self.rollback_backend = Some(prior.clone());
+            self.rollback_presentation_receipt = self.last_presentation_receipt.clone();
+        }
         self.fallback_backend = Some(prior);
         self.candidate_backend = None;
+        self.fallback_presentation_receipt = self.last_presentation_receipt.take();
         self.last_presentation_receipt = Some(receipt.clone());
         self.revision = self.revision.saturating_add(1);
         Ok(receipt)
+    }
+
+    fn rollback_selected_candidate(&mut self, expected_generation: &str) -> Result<(), String> {
+        if self.selected_backend.generation_id != expected_generation {
+            return Err("dashboard selected generation changed before rollback".to_string());
+        }
+        let rollback = self
+            .rollback_backend
+            .take()
+            .or_else(|| self.fallback_backend.take())
+            .ok_or_else(|| "dashboard rollback backend is missing".to_string())?;
+        let failed_candidate = std::mem::replace(&mut self.selected_backend, rollback);
+        self.fallback_backend = Some(failed_candidate);
+        self.candidate_backend = None;
+        let failed_candidate_receipt = self.last_presentation_receipt.take();
+        self.last_presentation_receipt = self
+            .rollback_presentation_receipt
+            .take()
+            .or_else(|| self.fallback_presentation_receipt.take());
+        self.fallback_presentation_receipt = failed_candidate_receipt;
+        self.revision = self.revision.saturating_add(1);
+        Ok(())
     }
 }
 
@@ -318,6 +387,16 @@ impl DashboardIngressRepository {
             registry.candidate_backend = None;
             registry.revision = registry.revision.saturating_add(1);
             Ok(())
+        })
+    }
+
+    pub(crate) fn rollback_selected_candidate(
+        &self,
+        expected_revision: u64,
+        expected_generation: &str,
+    ) -> Result<DashboardIngressRegistry, String> {
+        self.mutate(expected_revision, |registry| {
+            registry.rollback_selected_candidate(expected_generation)
         })
     }
 
@@ -469,16 +548,26 @@ fn set_private_file(_path: &Path) -> Result<(), String> {
 }
 
 pub(crate) fn current_dashboard_backend(port: u16) -> DashboardBackend {
-    let manifest = crate::native::stream::runtime_manifest_json();
-    let manifest_sha256 = format!("{:x}", Sha256::digest(manifest.to_string().as_bytes()));
     let generation_id = std::env::var("AGENT_BROWSER_DASHBOARD_GENERATION")
         .unwrap_or_else(|_| format!("dashboard-{}", env!("CARGO_PKG_VERSION")));
-    DashboardBackend::new(generation_id, port, manifest_sha256)
+    DashboardBackend::new(generation_id, port, dashboard_runtime_manifest_sha256())
+}
+
+pub(crate) fn dashboard_runtime_manifest_sha256() -> String {
+    let manifest = crate::native::stream::runtime_manifest_json();
+    format!("{:x}", Sha256::digest(manifest.to_string().as_bytes()))
 }
 
 /// Projects public-safe selector and presentation readiness for status and doctor.
 pub(crate) fn dashboard_ingress_status_json() -> serde_json::Value {
-    let repository = DashboardIngressRepository::new(DashboardIngressRepository::default_path());
+    dashboard_ingress_status_for_path(&DashboardIngressRepository::default_path())
+}
+
+/// Projects a specific private ingress repository without falling back to the
+/// ambient user-scoped path. Workstation fixtures and transaction validation
+/// use this seam so an isolated root cannot inspect or mutate live state.
+pub(crate) fn dashboard_ingress_status_for_path(path: &Path) -> serde_json::Value {
+    let repository = DashboardIngressRepository::new(path);
     match repository.load() {
         Ok(registry) => {
             let receipt_ready = registry.last_presentation_receipt().is_some_and(|receipt| {
@@ -669,7 +758,7 @@ fn request_with_connection_close(request: &[u8]) -> Vec<u8> {
     rewritten
 }
 
-fn validate_dashboard_backend(backend: &DashboardBackend) -> Result<(), String> {
+pub(crate) fn validate_dashboard_backend(backend: &DashboardBackend) -> Result<(), String> {
     let address = SocketAddr::from(([127, 0, 0, 1], backend.port));
     let mut stream =
         StdTcpStream::connect_timeout(&address, Duration::from_secs(2)).map_err(|error| {
@@ -890,6 +979,42 @@ mod tests {
             registry.fallback_backend().unwrap().generation_id,
             "generation-old"
         );
+    }
+
+    #[test]
+    fn post_commit_rollback_restores_the_authenticated_old_generation_receipt() {
+        let bootstrap = DashboardBackend::new("generation-bootstrap", 4849, "bootstrap-manifest");
+        let old = DashboardBackend::new("generation-old", 4850, "old-manifest");
+        let candidate = DashboardBackend::new("generation-new", 4851, "new-manifest");
+        let managed_candidate = DashboardBackend::new("generation-new", 4852, "new-manifest");
+        let mut registry = DashboardIngressRegistry::new(bootstrap);
+        registry.stage_candidate(old.clone()).unwrap();
+        let mut old_evidence = ready_evidence(&old.generation_id);
+        old_evidence.receipt_id = "presentation-old".to_string();
+        let old_receipt = registry
+            .commit_candidate(CandidateOperatorJourney::ready(old_evidence))
+            .unwrap();
+        registry.stage_candidate(candidate.clone()).unwrap();
+        let mut candidate_evidence = ready_evidence(&candidate.generation_id);
+        candidate_evidence.receipt_id = "presentation-new".to_string();
+        registry
+            .commit_candidate(CandidateOperatorJourney::ready(candidate_evidence))
+            .unwrap();
+        registry.stage_candidate(managed_candidate.clone()).unwrap();
+        let mut managed_evidence = ready_evidence(&managed_candidate.generation_id);
+        managed_evidence.receipt_id = "presentation-new-managed".to_string();
+        registry
+            .commit_candidate(CandidateOperatorJourney::ready(managed_evidence))
+            .unwrap();
+
+        registry
+            .rollback_selected_candidate(&managed_candidate.generation_id)
+            .unwrap();
+
+        assert_eq!(registry.selected_backend(), &old);
+        assert_eq!(registry.last_presentation_receipt(), Some(&old_receipt));
+        assert!(registry.candidate_backend().is_none());
+        assert_eq!(registry.fallback_backend(), Some(&managed_candidate));
     }
 
     #[test]

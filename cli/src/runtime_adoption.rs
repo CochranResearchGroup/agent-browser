@@ -279,6 +279,7 @@ fn upgrade_transition_allowed(
             | (RollbackBeforeCommit, OperatorRecoveryRequired)
             | (RollbackAfterCommit, FailedPreservedOldGeneration)
             | (RollbackAfterCommit, OperatorRecoveryRequired)
+            | (Accepted, OperatorRecoveryRequired)
             | (
                 Planned | CandidatePreflightReady,
                 BlockedCandidateIncompatible
@@ -2123,6 +2124,37 @@ mod tests {
             transaction.state,
             UpgradeTransactionState::GenerationCommitted
         );
+        let revision = transaction.revision;
+        transition_upgrade_transaction(
+            &mut transaction,
+            revision,
+            UpgradeTransactionState::PostCommitValidating,
+            "post_commit_validating",
+            "2026-08-16T15:00:07Z",
+        )
+        .unwrap();
+        let revision = transaction.revision;
+        transition_upgrade_transaction(
+            &mut transaction,
+            revision,
+            UpgradeTransactionState::Accepted,
+            "accepted",
+            "2026-08-16T15:00:08Z",
+        )
+        .unwrap();
+        let revision = transaction.revision;
+        transition_upgrade_transaction(
+            &mut transaction,
+            revision,
+            UpgradeTransactionState::OperatorRecoveryRequired,
+            "accepted_admission_recovery",
+            "2026-08-16T15:00:09Z",
+        )
+        .unwrap();
+        assert_eq!(
+            transaction.state,
+            UpgradeTransactionState::OperatorRecoveryRequired
+        );
     }
 
     #[test]
@@ -2389,7 +2421,10 @@ mod tests {
                 "activate_prepared_payload_transaction(prepared, &paths, isolated_root)",
                 "quiesce_existing_user_units(&paths)",
                 "commit_prepared_payload_transaction(&paths, &parsed, prepared)",
-                "reconcile_workstation_locked(&root, &paths)",
+                "begin_post_commit_validation(prepared)",
+                "reconcile_workstation_locked_for_upgrade(",
+                "validate_post_commit_transaction(&root, &paths, prepared)",
+                "accept_prepared_payload_transaction(prepared, validation)",
             ],
         );
 

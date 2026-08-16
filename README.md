@@ -21,6 +21,7 @@ agent-browser install --with-deps --with-remote-view-privileges  # Linux RDP/Gua
 agent-browser install workstation --dry-run --json  # Preview source-free workstation payload
 agent-browser install workstation --apply --json  # Install and reconcile a fresh Ubuntu workstation
 agent-browser install workstation status --json  # Read the latest redacted upgrade transaction
+agent-browser install workstation finalize --json  # Retire rollback only after accepted readiness review
 agent-browser install workstation gc --dry-run --json  # Preview safe old-generation cleanup
 pnpm test:wsl-windows-chromium-profile-live  # Validate WSL Windows profile writes when doctor says available
 ```
@@ -85,6 +86,7 @@ pnpm reference:
 agent-browser install workstation --dry-run --json
 agent-browser install workstation --apply --json
 agent-browser install workstation status --json
+agent-browser install workstation finalize --json
 agent-browser install workstation gc --dry-run --json
 ```
 
@@ -136,11 +138,19 @@ Standalone doctor runs discover their helper scripts from the installed
 versioned support root, so no checkout or ambient script-root override is
 required.
 
-On rerun, apply first stops the managed dashboard, runtime interlock, and
-backup timer while it reconciles the installed payload and routes. It
-reactivates those units after final readiness succeeds. If reconciliation
-fails, it restores each previously installed unit to its exact prior active
-state and writes a private diagnostic receipt to
+On real-host apply, the installer starts the candidate dashboard backend on
+the second port after the stable ingress port and stages it in the ingress
+registry before admission drain. After runtime transfer reaches candidate
+readiness, apply waits up to five minutes for an authenticated candidate
+journey to be committed with `agent-browser dashboard ingress commit
+--expected-revision <revision> --evidence <presentation-evidence.json>`. The
+stable ingress continues serving the selected backend while that proof is
+pending. Reconciliation then quiesces only the generation backend, runtime
+interlock, and backup timer. It starts the managed candidate backend on the
+next port, atomically moves ingress from the shadow endpoint, and stops the
+shadow process. If reconciliation fails, it restores each previously installed
+unit and authenticated ingress receipt to its exact prior state and writes a
+private diagnostic receipt to
 `~/.agent-browser/convergence/workstation-last-failure.json`.
 Duplicate-profile pressure and executable drift in an inactive optional
 session supervisor remain visible as install-doctor advisories, but they do not
@@ -156,6 +166,14 @@ a usable password or project label fails closed.
 `agent-browser install workstation status --json` reports the selected and
 candidate generations, migration dispositions, blockers, admission state, and
 terminal result without exposing private paths, endpoints, or profile evidence.
+Its `readiness` object separates `payloadReady`, `selectedGenerationReady`,
+`runtimeConvergenceReady`, `upgradeTransactionState`,
+`dashboardIngressReady`, `operatorJourneyReady`, and `rollbackReady`. Overall
+`ready` remains false while a transaction or admission drain is active or any
+axis is unproved. An accepted generation retains its rollback authority until
+a later reviewed `agent-browser install workstation finalize --json` confirms
+the same readiness model and marks the old generation retirable. Run GC dry
+run again after finalization before any `gc --apply` deletion.
 `agent-browser install workstation gc --dry-run --json` previews old-generation
 cleanup. A later explicit `--apply` retains the selected generation plus every
 generation referenced by a live process, named supervisor, failed or unclosed

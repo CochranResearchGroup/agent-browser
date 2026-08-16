@@ -74,7 +74,19 @@ explicit installed-controller recovery pass and `agent-browser install
 workstation backup --json` for the protected PostgreSQL backup operation. Use
 `agent-browser install workstation status --json` for a redacted view of the
 selected generation, latest transaction, runtime dispositions, blocker, and
-rollback state. Use `agent-browser install workstation gc --dry-run --json`
+seven readiness axes. The axes are `payloadReady`,
+`selectedGenerationReady`, `runtimeConvergenceReady`,
+`upgradeTransactionState`, `dashboardIngressReady`, `operatorJourneyReady`,
+and `rollbackReady`; overall `ready` stays false until all axes agree and the
+admission drain is closed. Real-host apply starts a candidate dashboard on the
+second port after ingress, then waits up to five minutes after runtime transfer
+for `dashboard ingress commit --expected-revision <revision> --evidence
+<presentation-evidence.json>`. Do not synthesize that evidence. The stable
+ingress remains on the old backend until the authenticated candidate journey
+is committed. Keep the accepted rollback generation until the operator runs
+`agent-browser install workstation finalize --json`; finalization fails closed
+unless all seven axes still agree. Then rerun `agent-browser install
+workstation gc --dry-run --json`
 before any reviewed cleanup. Apply mode must retain the selected generation and
 every generation referenced by a live process, named supervisor, failed or
 unclosed transaction, or rollback state. This

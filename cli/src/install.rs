@@ -1179,7 +1179,18 @@ fn workstation_payload_status() -> serde_json::Value {
 /// provenance without reading or returning protected secret values.
 fn workstation_payload_status_for_root(root: &Path) -> serde_json::Value {
     let version = env!("CARGO_PKG_VERSION");
-    let support_dir = root.join(".local/lib/agent-browser").join(version);
+    let runtime_store = root.join(".local/lib/agent-browser");
+    let current_selector = runtime_store.join("current");
+    let selected_generation_id = fs::read_link(&current_selector).ok().and_then(|target| {
+        target
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string())
+    });
+    let support_dir = if selected_generation_id.is_some() {
+        current_selector.join("support")
+    } else {
+        runtime_store.join(version)
+    };
     let manifest_path = support_dir.join("manifest.json");
     let installed_binary_path = root.join(".local/bin/agent-browser");
     let unit_dir = root.join(".config/systemd/user");
@@ -1321,6 +1332,8 @@ fn workstation_payload_status_for_root(root: &Path) -> serde_json::Value {
         "state": state,
         "ready": ready,
         "expectedVersion": version,
+        "selectedGenerationId": selected_generation_id,
+        "currentSelector": current_selector.display().to_string(),
         "supportPath": support_dir.display().to_string(),
         "manifest": {
             "path": manifest_path.display().to_string(),
@@ -1710,6 +1723,43 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
                     "argv": ["agent-browser", "install", "workstation", "status", "--json"],
                     "requiresInteractiveSudo": false,
                     "why": "Review the redacted transaction, blocker, runtime dispositions, and rollback state before retrying."
+                }
+            }));
+        }
+        let workstation_managed = upgrade
+            .get("selectedGenerationId")
+            .and_then(Value::as_str)
+            .is_some()
+            || upgrade
+                .get("latestTransaction")
+                .is_some_and(Value::is_object);
+        let readiness = upgrade.get("readiness").unwrap_or(&Value::Null);
+        let readiness_axes = [
+            "payloadReady",
+            "selectedGenerationReady",
+            "runtimeConvergenceReady",
+            "dashboardIngressReady",
+            "operatorJourneyReady",
+            "rollbackReady",
+        ];
+        let unready_axes = readiness_axes
+            .iter()
+            .filter(|axis| readiness.get(**axis).and_then(Value::as_bool) != Some(true))
+            .copied()
+            .collect::<Vec<_>>();
+        if workstation_managed && !unready_axes.is_empty() {
+            issues.push(json!({
+                "code": "workstation_upgrade_readiness_not_ready",
+                "message": "the selected workstation generation does not satisfy every Plan 0116 readiness axis",
+                "unreadyAxes": unready_axes,
+                "readiness": readiness,
+                "nextAction": "inspect_workstation_upgrade_status",
+                "remedy": {
+                    "kind": "operator_command",
+                    "command": "agent-browser install workstation status --json",
+                    "argv": ["agent-browser", "install", "workstation", "status", "--json"],
+                    "requiresInteractiveSudo": false,
+                    "why": "Resolve the payload, generation, runtime, ingress, operator-journey, and rollback axes before accepting the workstation generation."
                 }
             }));
         }
@@ -4481,6 +4531,69 @@ mod tests {
     }
 
     #[test]
+    fn install_doctor_flags_each_managed_workstation_readiness_axis() {
+        let launch_config = json!({
+            "stealthCdpChromiumRequired": false,
+            "stealthCdpChromiumReady": true,
+        });
+        let current_executable = fingerprint(Some("/same/agent-browser"), Some("aaa"));
+        let path_command = fingerprint(Some("/same/agent-browser"), Some("aaa"));
+        let pnpm_package_binary = fingerprint(Some("/pnpm/agent-browser"), Some("aaa"));
+        let workspace_binary = fingerprint(Some("/workspace/agent-browser"), Some("aaa"));
+        let service = json!({"ready": true});
+        let service_resources = json!({"readinessImpactingCandidates": 0});
+        let live_dashboard_runtime = json!({
+            "available": true,
+            "ready": true,
+            "state": "ready",
+            "dashboardIngress": {
+                "dashboardIngressReady": true,
+                "operatorJourneyReady": true,
+                "state": "ready"
+            },
+            "workstationUpgrade": {
+                "selectedGenerationId": "generation-new",
+                "admissionDraining": false,
+                "latestTransaction": {"state": "accepted"},
+                "readiness": {
+                    "payloadReady": true,
+                    "selectedGenerationReady": true,
+                    "runtimeConvergenceReady": false,
+                    "upgradeTransactionState": "accepted",
+                    "dashboardIngressReady": true,
+                    "operatorJourneyReady": true,
+                    "rollbackReady": true,
+                    "ready": false
+                }
+            }
+        });
+        let runtime_inventory = empty_runtime_inventory();
+        let remote_view_privileges = ready_remote_view_privileges();
+        let issues = install_doctor_issues(InstallDoctorIssueInputs {
+            current_executable: &current_executable,
+            path_command: &path_command,
+            pnpm_package_binary: &pnpm_package_binary,
+            workspace_binary: &workspace_binary,
+            launch_config: &launch_config,
+            remote_view_privileges: &remote_view_privileges,
+            service: &service,
+            service_resources: &service_resources,
+            live_dashboard_runtime: &live_dashboard_runtime,
+            runtime_inventory: &runtime_inventory,
+            daemon_listener_inventory: &empty_daemon_listener_inventory(),
+        });
+
+        let readiness_issue = issues
+            .iter()
+            .find(|issue| issue["code"] == "workstation_upgrade_readiness_not_ready")
+            .expect("managed workstation readiness must be blocking");
+        assert_eq!(
+            readiness_issue["unreadyAxes"],
+            json!(["runtimeConvergenceReady"])
+        );
+    }
+
+    #[test]
     fn install_doctor_flags_stale_runtime_inventory() {
         let launch_config = json!({
             "stealthCdpChromiumRequired": false,
@@ -4747,6 +4860,50 @@ mod tests {
         assert_eq!(status["ready"], false);
         assert_eq!(status["installedBinary"]["exists"], true);
         assert!(workstation_payload_issues(&status).is_empty());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn workstation_payload_status_follows_the_atomic_generation_selector() {
+        use std::os::unix::fs::symlink;
+
+        let dir = std::env::temp_dir().join(format!(
+            "agent-browser-workstation-doctor-selector-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        let runtime_store = dir.join(".local/lib/agent-browser");
+        let generation_id = "generation-selector-fixture";
+        let generation_root = runtime_store.join("generations").join(generation_id);
+        let support_dir = generation_root.join("support");
+        fs::create_dir_all(&support_dir).unwrap();
+        fs::write(
+            support_dir.join("manifest.json"),
+            serde_json::to_vec(&json!({
+                "version": env!("CARGO_PKG_VERSION"),
+                "sourceCheckoutRequired": false,
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        symlink(
+            PathBuf::from("generations").join(generation_id),
+            runtime_store.join("current"),
+        )
+        .unwrap();
+
+        let status = workstation_payload_status_for_root(&dir);
+
+        assert_eq!(status["selectedGenerationId"], generation_id);
+        assert_eq!(
+            status["supportPath"],
+            runtime_store.join("current/support").display().to_string()
+        );
+        assert_eq!(status["manifest"]["exists"], true);
+        assert_eq!(status["manifest"]["parsed"], true);
         let _ = fs::remove_dir_all(&dir);
     }
 

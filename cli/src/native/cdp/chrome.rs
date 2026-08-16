@@ -82,10 +82,21 @@ pub struct ChromeProcess {
 /// Result of waiting for Chrome to exit, including whether force kill was needed.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ProcessShutdownOutcome {
+    pub pid: Option<u32>,
     pub graceful_exit: bool,
+    pub exact_process_exited: bool,
+    pub profile_lock_released: bool,
     pub force_kill_attempted: bool,
     pub force_kill_succeeded: bool,
     pub errors: Vec<String>,
+}
+
+impl ProcessShutdownOutcome {
+    /// A controlled restart may relaunch this profile only after both halves of
+    /// the shutdown barrier are proven.
+    pub fn controlled_relaunch_ready(&self) -> bool {
+        self.exact_process_exited && self.profile_lock_released
+    }
 }
 
 /// Non-blocking child-process exit evidence captured from `try_wait()`.
@@ -152,7 +163,9 @@ impl ChromeProcess {
     }
 
     pub fn kill_with_outcome(&mut self) -> ProcessShutdownOutcome {
+        let pid = self.child.id();
         let mut outcome = ProcessShutdownOutcome {
+            pid: Some(pid),
             force_kill_attempted: true,
             ..ProcessShutdownOutcome::default()
         };
@@ -208,6 +221,7 @@ impl ChromeProcess {
                 false
             }
         };
+        outcome.exact_process_exited = wait_ok;
         outcome.force_kill_succeeded = child_kill_ok && process_group_kill_ok && wait_ok;
         let aux_ok = kill_aux_processes(&mut self.aux_processes, &mut outcome);
         outcome.force_kill_succeeded = outcome.force_kill_succeeded && aux_ok;
@@ -281,6 +295,7 @@ impl ChromeProcess {
     /// falling back to kill() if it doesn't exit within the timeout.
     /// This allows Chrome to flush cookies and other state to the user-data-dir.
     pub fn wait_or_kill(&mut self, timeout: Duration) -> ProcessShutdownOutcome {
+        let pid = self.child.id();
         let start = std::time::Instant::now();
         let poll_interval = Duration::from_millis(50);
 
@@ -288,16 +303,13 @@ impl ChromeProcess {
             match self.child.try_wait() {
                 Ok(Some(_)) => {
                     let mut outcome = ProcessShutdownOutcome {
+                        pid: Some(pid),
                         graceful_exit: true,
+                        exact_process_exited: true,
                         ..ProcessShutdownOutcome::default()
                     };
                     kill_aux_processes(&mut self.aux_processes, &mut outcome);
-                    return ProcessShutdownOutcome {
-                        graceful_exit: outcome.graceful_exit,
-                        force_kill_attempted: outcome.force_kill_attempted,
-                        force_kill_succeeded: outcome.force_kill_succeeded,
-                        errors: outcome.errors,
-                    };
+                    return complete_controlled_shutdown(outcome, &self.user_data_dir, timeout);
                 }
                 Ok(None) => std::thread::sleep(poll_interval),
                 Err(err) => {
@@ -309,13 +321,61 @@ impl ChromeProcess {
                     let force = self.kill_with_outcome();
                     outcome.force_kill_attempted = force.force_kill_attempted;
                     outcome.force_kill_succeeded = force.force_kill_succeeded;
+                    outcome.pid = force.pid;
+                    outcome.exact_process_exited = force.exact_process_exited;
                     outcome.errors.extend(force.errors);
-                    return outcome;
+                    return complete_controlled_shutdown(outcome, &self.user_data_dir, timeout);
                 }
             }
         }
 
-        self.kill_with_outcome()
+        let outcome = self.kill_with_outcome();
+        complete_controlled_shutdown(outcome, &self.user_data_dir, timeout)
+    }
+}
+
+/// Completes the fail-closed controlled-restart barrier. Relaunch is safe only
+/// after the exact child has been reaped and Chrome has removed its canonical
+/// profile lock. This function observes the lock and never deletes it.
+fn complete_controlled_shutdown(
+    mut outcome: ProcessShutdownOutcome,
+    user_data_dir: &Path,
+    timeout: Duration,
+) -> ProcessShutdownOutcome {
+    if !outcome.exact_process_exited {
+        outcome.errors.push(
+            "Controlled browser shutdown did not prove that the exact process exited".to_string(),
+        );
+        return outcome;
+    }
+
+    let lock_path = user_data_dir.join("SingletonLock");
+    let start = std::time::Instant::now();
+    let poll_interval = Duration::from_millis(50);
+    loop {
+        match std::fs::symlink_metadata(&lock_path) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                outcome.profile_lock_released = true;
+                return outcome;
+            }
+            Err(error) => {
+                outcome.errors.push(format!(
+                    "Failed to inspect Chrome profile lock {} after PID {} exited: {error}",
+                    lock_path.display(),
+                    outcome.pid.unwrap_or_default()
+                ));
+                return outcome;
+            }
+            Ok(_) if start.elapsed() < timeout => std::thread::sleep(poll_interval),
+            Ok(_) => {
+                outcome.errors.push(format!(
+                    "Chrome profile lock {} remained after PID {} exited",
+                    lock_path.display(),
+                    outcome.pid.unwrap_or_default()
+                ));
+                return outcome;
+            }
+        }
     }
 }
 
@@ -3243,6 +3303,45 @@ mod tests {
         .unwrap();
 
         assert_eq!(singleton_lock_pid(&dir), Some(std::process::id()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn controlled_shutdown_waits_for_exact_exit_and_profile_lock_release() {
+        let dir = TempDir::new("controlled-shutdown-barrier");
+        std::fs::create_dir_all(&*dir).unwrap();
+        let child = spawn_noop_child();
+        let pid = child.id();
+        std::os::unix::fs::symlink(format!("host-{pid}"), dir.join("SingletonLock")).unwrap();
+        let lock_path = dir.join("SingletonLock");
+        let remover = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(125));
+            std::fs::remove_file(lock_path).unwrap();
+        });
+        let mut process = ChromeProcess {
+            child,
+            aux_processes: Vec::new(),
+            ws_url: String::new(),
+            owns_process: true,
+            temp_user_data_dir: None,
+            user_data_dir: dir.to_path_buf(),
+            runtime_profile: None,
+            display_name: None,
+            stderr_log_path: None,
+            stderr_drainer: None,
+            pgid: None,
+        };
+
+        let started = std::time::Instant::now();
+        let outcome = process.wait_or_kill(Duration::from_secs(1));
+        remover.join().unwrap();
+
+        assert_eq!(outcome.pid, Some(pid));
+        assert!(outcome.exact_process_exited);
+        assert!(outcome.profile_lock_released);
+        assert!(outcome.controlled_relaunch_ready());
+        assert!(started.elapsed() >= Duration::from_millis(100));
+        assert!(outcome.errors.is_empty(), "{:?}", outcome.errors);
     }
 
     #[cfg(unix)]

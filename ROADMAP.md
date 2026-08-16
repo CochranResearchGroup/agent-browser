@@ -89,16 +89,26 @@ daemon loss, owner and process generation replacement, route and display
 replacement, and dashboard generation change without duplicate-browser or
 navigation events. Explicit reopen remains the only path that restores the
 stored URL and may create or navigate a target.
-Slices G and H are accepted at the source and isolated-fixture boundary. Fresh
-install and upgrade now use one durable transaction with census before
-candidate staging, host gates before admission, receipt-bearing cooperative
-and orphan transfer, `CandidateReady` before selector commit, and deterministic
-precommit and postcommit rollback. Reviewed generation GC retains selected,
-live-process, supervisor, failed, unclosed, and rollback-referenced
-generations. The development publisher is a thin builder and canonical
-installer client. Redacted workstation status is shared through CLI, runtime
-health, dashboard warning, and doctor. Source and isolated validation pass;
-neither GC apply nor production transfer was executed.
+The initial Slices G and H acceptance was reopened after a closed-world audit
+found that postcommit doctor rejected its own active transaction, candidate
+presentation summaries were synthesized instead of independently receipted,
+payload status ignored the atomic selector, dashboard rollback could not
+restore the authenticated old generation, and controlled shutdown lacked exact
+process-exit plus profile-lock proof. Those defects are now remediated at the
+source and isolated-fixture boundary. Production apply launches a sealed
+generation-specific shadow backend, stages it behind stable ingress, and waits
+for an independently authenticated candidate presentation receipt before
+selector commit. Postcommit validation checks that exact live receipt;
+rollback restores the prior dashboard backend and its authenticated receipt.
+Status and doctor share seven readiness axes, shutdown proves both exact child
+exit and read-only lock disappearance, and accepted transactions retain the
+rollback generation until an explicit reviewed `install workstation finalize`
+transition. Generation GC now has direct deterministic coverage for selected,
+live-process, supervisor, unclosed-transaction, and rollback references. The
+repository Rust cadence, strict Clippy, formatting, focused transaction and
+ingress tests, production docs build, and source-free workstation matrix pass.
+Neither finalization, GC apply, installed-payload replacement, nor production
+transfer was executed.
 
 ### Plan
 
@@ -107,11 +117,11 @@ neither GC apply nor production transfer was executed.
 ### Next Recommendation
 
 Keep Slice E acceptance withheld until the user-scoped boundary incident is
-adjudicated or independently reconciled. Slices G and H need no further source
-work before the live gate. Do not replace the installed payload, enable the
-recurring interlock, run generation GC apply, or touch a live browser without
-new authority. Slice I is the next gate and requires separate explicit live
-authorization.
+adjudicated or independently reconciled. The remediated Slices G and H source
+boundary is accepted, but Plan 0116 remains open. Do not replace the installed
+payload, enable the recurring interlock, finalize a live transaction, run
+generation GC apply, or touch a live browser without new authority. Slice I is
+the next gate and requires separate explicit live authorization.
 
 ## P114 | Terminal Route Quarantine Recovery
 

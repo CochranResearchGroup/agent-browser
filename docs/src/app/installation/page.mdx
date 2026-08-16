@@ -17,6 +17,7 @@ agent-browser install --with-deps --with-remote-view-privileges  # Linux RDP/Gua
 agent-browser install workstation --dry-run --json  # Preview source-free workstation payload
 agent-browser install workstation --apply --json  # Install and reconcile a fresh Ubuntu workstation
 agent-browser install workstation status --json  # Read the latest redacted upgrade transaction
+agent-browser install workstation finalize --json  # Retire rollback only after accepted readiness review
 agent-browser install workstation gc --dry-run --json  # Preview safe old-generation cleanup
 ```
 
@@ -94,6 +95,7 @@ checkout or pnpm reference:
 agent-browser install workstation --dry-run --json
 agent-browser install workstation --apply --json
 agent-browser install workstation status --json
+agent-browser install workstation finalize --json
 agent-browser install workstation gc --dry-run --json
 ```
 
@@ -141,10 +143,17 @@ Standalone doctor runs discover their helper scripts from the installed
 versioned support root, so no checkout or ambient script-root override is
 required.
 
-On rerun, apply first stops the managed dashboard, runtime interlock, and
-backup timer while it reconciles the installed payload and routes. It
-reactivates those units after final readiness succeeds. If reconciliation
-fails, it restores every installed unit to its exact prior active state and
+On real-host apply, the installer starts the candidate dashboard backend on
+the second port after stable ingress and stages it before admission drain.
+After runtime transfer reaches candidate readiness, apply waits up to five
+minutes for an authenticated candidate journey to be committed with
+<code>agent-browser dashboard ingress commit --expected-revision
+&lt;revision&gt; --evidence &lt;presentation-evidence.json&gt;</code>. Stable ingress
+continues serving the selected backend while proof is pending. Reconciliation
+then quiesces only the generation backend, runtime interlock, and backup timer,
+starts the managed candidate backend on the next port, atomically selects it,
+and stops the shadow process. If reconciliation fails, it restores every
+installed unit and authenticated ingress receipt to its exact prior state and
 writes a private diagnostic receipt to
 <code>~/.agent-browser/convergence/workstation-last-failure.json</code>.
 Duplicate-profile pressure and executable drift in an inactive optional
@@ -164,6 +173,18 @@ the installed convergence controller without reinstalling the payload. Use
 protected PostgreSQL backup operation invoked by the installed timer. Use
 <code>agent-browser install workstation status --json</code> for a redacted
 selected-generation, migration, blocker, admission, and terminal-state view.
+The <code>readiness</code> object separates
+<code>payloadReady</code>, <code>selectedGenerationReady</code>,
+<code>runtimeConvergenceReady</code>,
+<code>upgradeTransactionState</code>,
+<code>dashboardIngressReady</code>, <code>operatorJourneyReady</code>, and
+<code>rollbackReady</code>. Overall <code>ready</code> remains false while a
+transaction or admission drain is active or any axis is unproved. Accepted
+generations keep rollback authority until later reviewed cleanup.
+Run <code>agent-browser install workstation finalize --json</code> only after
+reviewing the accepted result. It rechecks the same readiness model and marks
+the old generation retirable without deleting it. Run GC dry run again after
+finalization before any apply deletion.
 Use <code>agent-browser install workstation gc --dry-run --json</code> to
 preview reviewed old-generation cleanup. Apply retains the selected generation
 and every generation referenced by a live process, named supervisor, failed or

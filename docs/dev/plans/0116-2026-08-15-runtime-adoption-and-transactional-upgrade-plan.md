@@ -1389,6 +1389,63 @@ production transfer path were not run. Slice E remains
 adjudicated. Slice I remains unexecuted and requires separate explicit live
 authorization.
 
+### 2026-08-16 | Slices G And H Acceptance Reopened And Remediated
+
+The preceding Slices G and H acceptance entry is superseded. A closed-world
+audit found five acceptance defects:
+
+- postcommit doctor rejected the active transaction it was supposed to
+  validate, so a real apply would always roll back;
+- isolated apply synthesized dashboard and operator summaries instead of
+  requiring an independently authenticated candidate presentation receipt;
+- payload status inspected the legacy support path rather than the atomic
+  generation selector and did not expose the complete seven-axis readiness
+  model;
+- dashboard rollback retained an operational fallback but could not restore
+  the authenticated old-generation selection and receipt;
+- controlled shutdown did not prove exact child exit and profile-lock
+  disappearance before relaunch.
+
+The correction is accepted at the source and isolated-fixture boundary:
+
+- production apply launches the staged candidate binary as a sealed shadow
+  dashboard backend on the second reserved backend port, proves its runtime
+  manifest, and stages it behind stable ingress before admission drain;
+- after runtime transfer reaches `CandidateReady`, apply waits up to five
+  minutes for an independently authenticated `dashboard ingress commit` whose
+  presentation evidence binds the exact candidate generation. It does not
+  fabricate evidence or move stable ingress on URL presence alone;
+- postcommit validation requires that exact live receipt. A successful managed
+  backend promotion preserves the receipt across same-generation endpoint
+  rotation, while rollback restores the authenticated old backend and receipt;
+- payload status resolves the atomic selector, status and doctor share seven
+  readiness axes, and doctor ignores only the exact transaction currently in
+  postcommit validation;
+- controlled shutdown proves the exact child was reaped and waits read-only
+  for `SingletonLock` disappearance. It never removes the lock;
+- `accepted` retains rollback authority. An explicit reviewed
+  `agent-browser install workstation finalize` command requires all readiness
+  axes before transitioning to `old_generation_retirable`; GC remains a
+  separate reviewed dry-run and apply operation;
+- deterministic GC coverage now proves retention for the selected generation,
+  live process executables, supervisor manifests, unclosed transactions, and
+  rollback evidence.
+
+Validation passes for the repository's 1,290-test parallel-safe Rust partition
+and every serialized environment-mutating partition, thirty-one workstation
+tests, eight dashboard-ingress tests, runtime-adoption and owner-transfer
+fixtures, focused shutdown and doctor guards, strict Clippy, Rust formatting,
+diff hygiene, the production docs build, route-confusion and remote-view
+documentation guards, and the optimized source-free workstation matrix. A
+dashboard malformed-response fixture was changed from a sibling Tokio task to
+a dedicated OS thread after the full partition proved that scheduler starvation
+could misclassify its deliberately malformed response as a read timeout.
+
+No installed payload, unit, daemon, browser, profile, route, display,
+dashboard, supervisor, finalization, GC apply, or external state was changed.
+Slice E remains `IMPLEMENTED_NOT_ACCEPTED`. Slice I remains unexecuted and
+requires separate explicit live authorization.
+
 ## Planning Evidence
 
 - CodeGraph was healthy on 2026-08-15 with 553 files, 19,654 nodes, and 68,296

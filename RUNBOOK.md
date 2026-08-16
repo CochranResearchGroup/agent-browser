@@ -4,6 +4,63 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 166 | 2026-08-16
+
+Scope: reopen and remediate the Plan 0116 Slices G and H source acceptance
+after a closed-world audit, without changing installed or live state.
+
+Actions:
+
+- corrected postcommit validation so install doctor recognizes only its exact
+  in-flight transaction while still rejecting every other stranded upgrade;
+- replaced synthesized dashboard and operator summaries with an independently
+  authenticated candidate `PresentationReceipt` gathered while a sealed
+  generation-specific shadow backend runs behind stable ingress;
+- preserved independent operational fallback and rollback dashboard authority,
+  including the authenticated old-generation receipt, and made rollback stop
+  and reap the shadow process explicitly;
+- made payload status resolve the atomic `current` selector and aligned status
+  plus doctor on seven readiness axes;
+- made controlled shutdown prove exact child exit and wait read-only for the
+  profile lock to disappear before relaunch;
+- retained accepted rollback material until the explicit reviewed
+  `install workstation finalize` transition, with GC still a separate dry-run
+  and apply action;
+- added direct deterministic coverage for postcommit presentation, dashboard
+  receipt restoration, candidate commit concurrency, shutdown barriers, and
+  every required generation-reference class;
+- made the malformed-backend proxy fixture use a dedicated OS thread so its
+  result tests HTTP normalization rather than Tokio scheduling latency;
+- aligned help, README, repository skill, docs site, inline comments, plan,
+  roadmap, and this runbook with the corrected lifecycle.
+
+Validation:
+
+- the repository Rust cadence passes 1,290 parallel-safe tests and every
+  serialized environment-mutating partition;
+- strict Clippy, Rust formatting, diff hygiene, thirty-one workstation tests,
+  eight dashboard-ingress tests, runtime adoption and owner-transfer tests,
+  focused shutdown and doctor guards, route-confusion gates, and remote-view
+  documentation guards pass;
+- the production docs build and the optimized source-free workstation matrix
+  pass;
+- the first broad raw Rust sweep exposed two parallel-only failures that
+  passed serially. The prescribed partitioned cadence later exposed the
+  dashboard fixture starvation repaired in this turn and then passed fully.
+
+Result:
+
+- Turn 165's source-acceptance evidence is superseded by this correction;
+- Slices G and H are accepted at the remediated source and isolated-fixture
+  boundary;
+- Slice E remains `IMPLEMENTED_NOT_ACCEPTED` because its earlier user-scoped
+  boundary incident is not adjudicated;
+- no installed payload, unit, daemon, browser, profile, route, display,
+  dashboard, supervisor, finalization, generation-GC apply, or external state
+  changed;
+- Slice I remains unexecuted and requires separate explicit live
+  authorization.
+
 ## Turn 165 | 2026-08-16
 
 Scope: complete Plan 0116 Slices G and H at the source and isolated-fixture

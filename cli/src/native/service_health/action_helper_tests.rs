@@ -769,6 +769,7 @@ fn test_close_health_marks_polite_close_failure_degraded() {
         force_kill_succeeded: true,
         force_kill_failed: false,
         errors: vec!["CDP connection closed".to_string()],
+        ..BrowserShutdownOutcome::default()
     };
     let (health, last_error) = close_health_from_outcome(Some(&outcome));
     assert_eq!(health, ServiceBrowserHealth::Degraded);

@@ -345,9 +345,12 @@ async fn apply_cdp_bootstrap(
 /// Shutdown remedy outcome used to classify browser health after close.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct BrowserShutdownOutcome {
+    pub pid: Option<u32>,
     pub polite_close_attempted: bool,
     pub polite_close_succeeded: bool,
     pub polite_close_failed: bool,
+    pub exact_process_exited: bool,
+    pub profile_lock_released: bool,
     pub force_kill_attempted: bool,
     pub force_kill_succeeded: bool,
     pub force_kill_failed: bool,
@@ -355,6 +358,10 @@ pub struct BrowserShutdownOutcome {
 }
 
 impl BrowserShutdownOutcome {
+    pub fn controlled_relaunch_ready(&self) -> bool {
+        self.exact_process_exited && self.profile_lock_released
+    }
+
     pub fn browser_degraded(&self) -> bool {
         self.polite_close_failed
     }
@@ -364,6 +371,9 @@ impl BrowserShutdownOutcome {
     }
 
     fn merge_process_outcome(&mut self, outcome: ProcessShutdownOutcome) {
+        self.pid = outcome.pid;
+        self.exact_process_exited |= outcome.exact_process_exited;
+        self.profile_lock_released |= outcome.profile_lock_released;
         self.force_kill_attempted |= outcome.force_kill_attempted;
         if outcome.force_kill_succeeded {
             self.force_kill_succeeded = true;
@@ -1264,6 +1274,9 @@ impl BrowserManager {
                 tokio::task::spawn_blocking(move || process.wait_or_kill(timeout))
                     .await
                     .map_err(|err| format!("Failed to join browser shutdown task: {}", err))?;
+            outcome.pid = process_outcome.pid;
+            outcome.exact_process_exited |= process_outcome.exact_process_exited;
+            outcome.profile_lock_released |= process_outcome.profile_lock_released;
             outcome.force_kill_attempted |= process_outcome.force_kill_attempted;
             if process_outcome.force_kill_succeeded {
                 outcome.force_kill_succeeded = true;

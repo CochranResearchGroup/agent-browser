@@ -5397,6 +5397,7 @@ agent-browser install - Install browser binaries
 Usage: agent-browser install [--with-deps] [--with-remote-view-privileges]
        agent-browser install workstation <--dry-run|--apply> [--json] [--dashboard-port <port>] [--guacamole-port <port>]
        agent-browser install workstation status [--json]
+       agent-browser install workstation finalize [--json]
        agent-browser install workstation gc <--dry-run|--apply> [--json]
        agent-browser install workstation reconcile [--json]
        agent-browser install workstation backup [--json]
@@ -5419,8 +5420,13 @@ receipt-bearing owner generations, then selects the sealed candidate only
 after every runtime has a proven disposition. Failure restores the old
 selector and reverses committed owner transfers when that can be proved.
 Successful JSON output includes runtimeCensusTransaction. Use workstation
-status for a redacted selected-generation, migration, blocker, and terminal
-state projection without private paths or endpoint evidence. Workstation gc
+status for a redacted selected-generation, migration, blocker, terminal, and
+seven-axis readiness projection without private paths or endpoint evidence.
+Real-host apply starts a shadow candidate dashboard on the second port after
+ingress. After runtime transfer it waits up to five minutes for an authenticated
+candidate journey committed with dashboard ingress commit. Stable ingress stays
+on the old backend until that receipt exists, then moves to the managed
+candidate backend on the next port. Workstation gc
 is a separate reviewed operation. It retains the selected generation and every
 generation referenced by a live process, supervisor, rollback-capable, failed,
 or unclosed transaction. Dry run reports candidates without deleting them.
@@ -5473,6 +5479,7 @@ Examples:
   agent-browser install workstation --dry-run --json
   agent-browser install workstation --apply --json
   agent-browser install workstation status --json
+  agent-browser install workstation finalize --json
   agent-browser install workstation gc --dry-run --json
   agent-browser install workstation reconcile --json
   agent-browser install workstation backup --json
