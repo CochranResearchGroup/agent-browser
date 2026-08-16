@@ -1643,6 +1643,48 @@ impl BrowserManager {
         }))
     }
 
+    /// Close one service-owned target without reinitializing another tab.
+    ///
+    /// Handle release is cleanup, not a tab switch. Existing attached pages
+    /// already have their domains enabled, and re-enabling them here can outlive
+    /// the service job after the selected target has successfully closed.
+    pub async fn tab_close_target_id_for_release(
+        &mut self,
+        target_id: &str,
+    ) -> Result<Value, String> {
+        let target_index = page_index_for_target_id(&self.pages, target_id).ok_or_else(|| {
+            format!("Target ID {target_id} was not found in the attached tab list")
+        })?;
+        if self.pages.len() <= 1 {
+            return Err("Cannot close the last tab".to_string());
+        }
+        let page = self.pages.remove(target_index);
+        let close_command = self
+            .client
+            .send_command_typed::<_, Value>(
+                "Target.closeTarget",
+                &CloseTargetParams {
+                    target_id: page.target_id,
+                },
+                None,
+            )
+            .await;
+        if self.active_page_index >= self.pages.len() {
+            self.active_page_index = self.pages.len() - 1;
+        }
+        let (close_command_acknowledged, close_command_error) = match close_command {
+            Ok(_) => (true, Value::Null),
+            Err(error) => (false, json!(error)),
+        };
+        Ok(json!({
+            "targetId": target_id,
+            "closed": target_index,
+            "activeIndex": self.active_page_index,
+            "closeCommandAcknowledged": close_command_acknowledged,
+            "closeCommandError": close_command_error,
+        }))
+    }
+
     // -----------------------------------------------------------------------
     // Emulation
     // -----------------------------------------------------------------------

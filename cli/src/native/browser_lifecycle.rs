@@ -527,7 +527,7 @@ pub(crate) mod action_commands {
                 "no_live_browser", "error" : Value::Null, "result" : Value::Null, }
             );
         };
-        match mgr.tab_close_target_id(target_id).await {
+        match mgr.tab_close_target_id_for_release(target_id).await {
             Ok(result) => {
                 json!(
                     { "attempted" : true, "closed" : true, "skippedReason" : Value::Null,
