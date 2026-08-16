@@ -4,6 +4,52 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 162 | 2026-08-15
+
+Scope: accept the bounded Roof Reset carrier-service repair, reconcile it with
+the committed Plan 0116 architecture line, and leave the installed browser
+runtime stable without widening the live pilot.
+
+Actions:
+
+- retained the proven legacy profile owner only for an exact current
+  browser/session/profile/process match;
+- allowed attributed service tab handles to reach their dedicated identity
+  gate instead of the generic profile lane and released only the selected
+  physical target;
+- merged those three fixes with the committed Slice D owner-transfer source
+  and pushed the combined feature branch without importing the still-open
+  architecture series into canonical `main`;
+- removed one exact inactive `im-receipts` supervisor whose manifest pinned an
+  obsolete executable, while preserving runtime profiles, browser storage,
+  service state, and unrelated units;
+- left remote-view privileges ready and five live daemon listeners on the same
+  installed executable;
+- disabled the recurring workstation interlock after its supported apply
+  remained fail-closed on an ambiguous live runtime census. The unit remains
+  installed but inactive so it cannot repeatedly quiesce and restore healthy
+  carrier daemons before Slice D provides accepted owner generations.
+
+Validation:
+
+- two legacy-owner, six service-profile-lease, three active-profile-mismatch,
+  one exact tab-release, and ten owner-transfer tests pass;
+- Rust formatting and strict binary Clippy pass;
+- the live dashboard manifest and all five socket listeners read back on the
+  installed executable; the privileged helper, group, and sudoers contracts
+  are ready;
+- workstation install changed no payload because the census remained
+  ambiguous, and its transaction failed closed before replacement.
+
+Result:
+
+- the Roof Reset hidden-browser carrier path is operational and protected from
+  the failing recurring reconciler;
+- workstation provenance remains partial and Plan 0116 must resolve the stable
+  census before the interlock is re-enabled;
+- no browser profile, retained browser, customer session, or unrelated service
+  was deleted.
+
 ## Turn 161 | 2026-08-15
 
 Scope: begin Plan 0116 Slice D with a provider-neutral two-phase owner-transfer
