@@ -4,6 +4,49 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 161 | 2026-08-15
+
+Scope: begin Plan 0116 Slice D with a provider-neutral two-phase owner-transfer
+foundation and no installed or live runtime mutation.
+
+Actions:
+
+- added the single locked service-state runtime owner registry using the P111
+  profile identity, owner state, owner generation, process identity, browser,
+  and daemon-route vocabulary;
+- implemented observation-only candidate attachment followed by exact
+  owner-generation compare-and-swap, with old-owner authority preserved until
+  commit;
+- added same-nonce idempotent replay, verified ownerless-orphan adoption
+  through a generation-zero observation, and receipt-bearing reverse transfer
+  at a new generation to prevent ABA;
+- rejected manual preservation at the transfer boundary and retained existing
+  manual and external no-automation classifications;
+- added a transfer-bound daemon effect fence before stream broadcast, browser
+  recovery, auto-launch, or action dispatch;
+- changed the census profile-owner source to prefer canonical registry owners
+  and use legacy session references only when no authoritative owner exists;
+- froze seven cooperative, orphan, rollback, manual, external, and mismatch
+  authority timelines in a provider-free JSON corpus.
+
+Validation:
+
+- ten owner-transfer tests pass for commit boundaries, replay, orphan adoption,
+  reverse transfer, mismatch preservation, repository persistence, effect
+  fencing, manual preservation, source ordering, and the frozen corpus;
+- the ten runtime-adoption tests pass after owner-source integration;
+- strict Clippy and Rust formatting pass;
+- no installed payload, daemon, browser, profile, route, display, dashboard,
+  supervisor, or external state was changed.
+
+Result:
+
+- Slice D has a coherent source foundation but is not accepted;
+- current handoff prepare and resume remain descriptor-bound and
+  relinquish-first, so their red source guards remain valid;
+- the next packet must bind active supervisors plus old and candidate daemons
+  to the registry protocol and turn those guards green.
+
 ## Turn 160 | 2026-08-15
 
 Scope: complete Plan 0116 Slice C at the source and isolated-fixture boundary

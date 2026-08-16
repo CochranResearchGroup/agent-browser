@@ -15,6 +15,8 @@ mod remote_view_doctor;
 mod remote_view_helper_contract;
 #[allow(dead_code)]
 mod runtime_adoption;
+#[allow(dead_code)]
+mod runtime_owner_transfer;
 mod runtime_profile;
 mod session_supervisor;
 #[cfg(test)]

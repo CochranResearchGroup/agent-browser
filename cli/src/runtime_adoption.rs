@@ -742,18 +742,54 @@ fn profile_owner_readback(
     state: &crate::native::service_model::ServiceState,
     service_revision: &str,
 ) -> Result<RuntimeCensusSourceReadback, String> {
-    let observations = state
+    let mut observations = state
+        .runtime_owner_registry
+        .owners
+        .values()
+        .map(|owner| {
+            let mut evidence = base_fragment();
+            evidence.metadata_present = true;
+            evidence.profile_identity = EvidenceAgreement::Match;
+            evidence.owner_generations.push(owner.owner_generation);
+            RuntimeCensusObservation {
+                logical_browser_id_hint: Some(owner.browser_id.clone()),
+                aliases: vec![
+                    format!("browser:{}", owner.browser_id),
+                    format!("session:{}", owner.daemon_session_route),
+                    format!("profile-digest:{}", owner.profile_identity_digest),
+                ],
+                profile_identity_digest: Some(owner.profile_identity_digest.clone()),
+                evidence,
+            }
+        })
+        .collect::<Vec<_>>();
+    let authoritative_profiles = state
+        .runtime_owner_registry
+        .owners
+        .keys()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let legacy_observations = state
         .sessions
         .values()
         .filter(|session| session.profile_id.is_some() || !session.browser_ids.is_empty())
-        .map(|session| -> Result<_, String> {
+        .filter_map(|session| {
             let profile_path = session.profile_id.as_deref().and_then(|profile_id| {
                 state
                     .profiles
                     .get(profile_id)
                     .and_then(|profile| profile.user_data_dir.as_deref())
             });
-            let profile_digest = profile_path.map(canonical_profile_digest).transpose()?;
+            let profile_digest = match profile_path.map(canonical_profile_digest).transpose() {
+                Ok(digest) => digest,
+                Err(error) => return Some(Err(error)),
+            };
+            if profile_digest
+                .as_ref()
+                .is_some_and(|digest| authoritative_profiles.contains(digest))
+            {
+                return None;
+            }
             let mut aliases = vec![format!("session:{}", session.id)];
             aliases.extend(
                 session
@@ -772,18 +808,23 @@ fn profile_owner_readback(
             evidence.profile_identity = profile_digest
                 .as_ref()
                 .map_or(EvidenceAgreement::Missing, |_| EvidenceAgreement::Match);
-            Ok(RuntimeCensusObservation {
+            Some(Ok(RuntimeCensusObservation {
                 logical_browser_id_hint: (session.browser_ids.len() == 1)
                     .then(|| session.browser_ids[0].clone()),
                 aliases,
                 profile_identity_digest: profile_digest,
                 evidence,
-            })
+            }))
         })
         .collect::<Result<Vec<_>, String>>()?;
+    observations.extend(legacy_observations);
+    let source_revision = sha256_text(&format!(
+        "{service_revision}:runtime-owner-registry:{}",
+        state.runtime_owner_registry.revision
+    ));
     Ok(RuntimeCensusSourceReadback {
         source: RuntimeCensusSource::ProfileOwnerReservations,
-        source_revision: service_revision.to_string(),
+        source_revision,
         observations,
     })
 }
