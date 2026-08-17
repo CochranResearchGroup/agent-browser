@@ -1574,12 +1574,15 @@ fn scoped_view_stream_alias(browser_id: &str, stream_id: &str) -> String {
 
 fn value_readback(
     source: RuntimeCensusSource,
-    value: &serde_json::Value,
+    _value: &serde_json::Value,
     observations: Vec<RuntimeCensusObservation>,
 ) -> Result<RuntimeCensusSourceReadback, String> {
     Ok(RuntimeCensusSourceReadback {
         source,
-        source_revision: source_revision(value)?,
+        // Health payloads contain diagnostic fields outside this adapter's
+        // frozen census authority. Only normalized observations may change
+        // the source revision used by the two-round stability gate.
+        source_revision: source_revision(&observations)?,
         observations,
     })
 }
@@ -2578,6 +2581,41 @@ mod tests {
         state.browsers.get_mut("browser-a").unwrap().pid = Some(41);
         let after_runtime_change = service_census_readbacks(&state).unwrap();
         assert_ne!(after_runtime_change, baseline);
+    }
+
+    #[test]
+    fn value_readback_revision_ignores_unmodeled_health_payload_churn() {
+        let observations = vec![RuntimeCensusObservation {
+            logical_browser_id_hint: None,
+            aliases: vec!["session:stable-a".to_string(), "pid:41".to_string()],
+            profile_identity_digest: None,
+            evidence: RuntimeEvidenceSummary {
+                daemon_live: true,
+                daemon_cooperative: true,
+                metadata_present: true,
+                ..base_fragment()
+            },
+        }];
+        let first = value_readback(
+            RuntimeCensusSource::NamedSessionSupervisors,
+            &serde_json::json!({
+                "observedAt": "2026-08-17T12:00:00Z",
+                "diagnostic": "first"
+            }),
+            observations.clone(),
+        )
+        .unwrap();
+        let second = value_readback(
+            RuntimeCensusSource::NamedSessionSupervisors,
+            &serde_json::json!({
+                "observedAt": "2026-08-17T12:00:01Z",
+                "diagnostic": "second"
+            }),
+            observations,
+        )
+        .unwrap();
+
+        assert_eq!(second, first);
     }
 
     #[test]
