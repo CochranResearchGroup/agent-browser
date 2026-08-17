@@ -1478,12 +1478,6 @@ fn presentation_readback(
         if let Some(session) = handoff.session_name.as_deref() {
             aliases.push(format!("session:{session}"));
         }
-        if let Some(route_id) = handoff.last_route_id.as_deref() {
-            aliases.push(format!("route:{route_id}"));
-        }
-        if let Some(display_id) = handoff.last_display_allocation_id.as_deref() {
-            aliases.push(format!("display:{display_id}"));
-        }
         let mut evidence = base_fragment();
         evidence.metadata_present = true;
         observations.push(RuntimeCensusObservation {
@@ -2530,9 +2524,9 @@ mod tests {
                 target_id: None,
                 view_stream_provider: None,
                 control_input: None,
-                last_route_id: None,
+                last_route_id: Some("guacamole:reused".to_string()),
                 last_route_pool_entry_id: None,
-                last_display_allocation_id: None,
+                last_display_allocation_id: Some("display:reused".to_string()),
                 created_at: None,
                 updated_at: None,
                 last_resolved_at: None,
@@ -2558,6 +2552,12 @@ mod tests {
         assert!(handoff
             .aliases
             .contains(&"browser:session:p116-alpha".to_string()));
+        assert!(!handoff
+            .aliases
+            .contains(&"route:guacamole:reused".to_string()));
+        assert!(!handoff
+            .aliases
+            .contains(&"display:display:reused".to_string()));
     }
 
     #[test]
