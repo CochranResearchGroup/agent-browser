@@ -2303,8 +2303,10 @@ fn main() {
         cdp: flags.cdp.as_deref().or(live_runtime_cdp.as_deref()),
         runtime_attach_managed: live_runtime_status.is_some(),
         no_auto_dialog: flags.no_auto_dialog,
-        allow_stale_daemon_handoff: cmd.get("action").and_then(|value| value.as_str())
-            == Some("runtime_handoff_prepare"),
+        allow_stale_daemon_handoff: cmd
+            .get("action")
+            .and_then(|value| value.as_str())
+            .is_some_and(action_allows_stale_daemon_handoff),
     };
 
     let daemon_result = match ensure_daemon(&flags.session, &daemon_opts) {
@@ -2986,6 +2988,16 @@ fn main() {
     }
 }
 
+fn action_allows_stale_daemon_handoff(action: &str) -> bool {
+    matches!(
+        action,
+        "runtime_handoff_prepare"
+            | "runtime_handoff_abort"
+            | "runtime_handoff_rollback"
+            | "runtime_handoff_finalize"
+    )
+}
+
 fn apply_runtime_admission_claim_from_sources(
     command: &mut serde_json::Value,
     transaction_id: Option<String>,
@@ -3623,5 +3635,25 @@ mod tests {
             runtime_profile_name_for_launch_parts(None, Some("work"), true, false, None).as_deref(),
             Some("work")
         );
+    }
+
+    #[test]
+    fn stale_daemon_reuse_is_limited_to_source_handoff_control_actions() {
+        for action in [
+            "runtime_handoff_prepare",
+            "runtime_handoff_abort",
+            "runtime_handoff_rollback",
+            "runtime_handoff_finalize",
+        ] {
+            assert!(action_allows_stale_daemon_handoff(action), "{action}");
+        }
+        for action in [
+            "runtime_handoff_resume",
+            "navigate",
+            "click",
+            "service_request",
+        ] {
+            assert!(!action_allows_stale_daemon_handoff(action), "{action}");
+        }
     }
 }
