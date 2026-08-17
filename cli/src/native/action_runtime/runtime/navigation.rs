@@ -1048,6 +1048,59 @@ fn rebind_runtime_handoff_service_projection_in_state(
     prior_session_ids: &std::collections::BTreeSet<String>,
     next_session_id: &str,
 ) -> Result<(), String> {
+    let mut browser_session_ids = prior_session_ids.clone();
+    if let Some(browser) = service_state.browsers.get(logical_browser_id) {
+        browser_session_ids.extend(browser.active_session_ids.iter().cloned());
+        for tab in &browser.tab_handles {
+            browser_session_ids.extend(tab.session_name.iter().cloned());
+            browser_session_ids.extend(tab.owner_session_id.iter().cloned());
+            browser_session_ids.extend(tab.trace_filter.session_id.iter().cloned());
+        }
+    }
+    for tab in service_state
+        .tabs
+        .values()
+        .filter(|tab| tab.browser_id == logical_browser_id)
+    {
+        browser_session_ids.extend(tab.session_id.iter().cloned());
+        browser_session_ids.extend(tab.owner_session_id.iter().cloned());
+        if let Some(handle) = tab.service_tab_handle.as_ref() {
+            browser_session_ids.extend(handle.session_name.iter().cloned());
+            browser_session_ids.extend(handle.owner_session_id.iter().cloned());
+            browser_session_ids.extend(handle.trace_filter.session_id.iter().cloned());
+        }
+    }
+    browser_session_ids.extend(
+        service_state
+            .remote_view_routes
+            .values()
+            .filter(|route| route.browser_id.as_deref() == Some(logical_browser_id))
+            .filter_map(|route| route.session_id.clone()),
+    );
+    browser_session_ids.extend(
+        service_state
+            .display_allocations
+            .values()
+            .filter(|allocation| allocation.owner_browser_id.as_deref() == Some(logical_browser_id))
+            .filter_map(|allocation| allocation.owner_session_id.clone()),
+    );
+    for handoff in service_state
+        .remote_view_handoffs
+        .values()
+        .filter(|handoff| handoff.browser_id.as_deref() == Some(logical_browser_id))
+    {
+        browser_session_ids.extend(handoff.session_name.iter().cloned());
+        browser_session_ids.extend(
+            handoff
+                .last_resolution
+                .as_ref()
+                .and_then(|resolution| resolution.get("sessionName"))
+                .and_then(Value::as_str)
+                .map(str::to_string),
+        );
+    }
+    browser_session_ids.remove(next_session_id);
+
     let browser = service_state
         .browsers
         .get_mut(logical_browser_id)
@@ -1060,21 +1113,21 @@ fn rebind_runtime_handoff_service_projection_in_state(
         if tab
             .session_name
             .as_ref()
-            .is_some_and(|session| prior_session_ids.contains(session))
+            .is_some_and(|session| browser_session_ids.contains(session))
         {
             tab.session_name = Some(next_session_id.to_string());
         }
         if tab
             .owner_session_id
             .as_ref()
-            .is_some_and(|session| prior_session_ids.contains(session))
+            .is_some_and(|session| browser_session_ids.contains(session))
         {
             tab.owner_session_id = Some(next_session_id.to_string());
         }
         if tab
             .lease_id
             .as_ref()
-            .is_some_and(|session| prior_session_ids.contains(session))
+            .is_some_and(|session| browser_session_ids.contains(session))
         {
             tab.lease_id = Some(next_session_id.to_string());
         }
@@ -1082,7 +1135,7 @@ fn rebind_runtime_handoff_service_projection_in_state(
             .trace_filter
             .session_id
             .as_ref()
-            .is_some_and(|session| prior_session_ids.contains(session))
+            .is_some_and(|session| browser_session_ids.contains(session))
         {
             tab.trace_filter.session_id = Some(next_session_id.to_string());
         }
@@ -1095,14 +1148,14 @@ fn rebind_runtime_handoff_service_projection_in_state(
         if tab
             .session_id
             .as_ref()
-            .is_some_and(|session| prior_session_ids.contains(session))
+            .is_some_and(|session| browser_session_ids.contains(session))
         {
             tab.session_id = Some(next_session_id.to_string());
         }
         if tab
             .owner_session_id
             .as_ref()
-            .is_some_and(|session| prior_session_ids.contains(session))
+            .is_some_and(|session| browser_session_ids.contains(session))
         {
             tab.owner_session_id = Some(next_session_id.to_string());
         }
@@ -1110,21 +1163,21 @@ fn rebind_runtime_handoff_service_projection_in_state(
             if handle
                 .session_name
                 .as_ref()
-                .is_some_and(|session| prior_session_ids.contains(session))
+                .is_some_and(|session| browser_session_ids.contains(session))
             {
                 handle.session_name = Some(next_session_id.to_string());
             }
             if handle
                 .owner_session_id
                 .as_ref()
-                .is_some_and(|session| prior_session_ids.contains(session))
+                .is_some_and(|session| browser_session_ids.contains(session))
             {
                 handle.owner_session_id = Some(next_session_id.to_string());
             }
             if handle
                 .lease_id
                 .as_ref()
-                .is_some_and(|session| prior_session_ids.contains(session))
+                .is_some_and(|session| browser_session_ids.contains(session))
             {
                 handle.lease_id = Some(next_session_id.to_string());
             }
@@ -1132,7 +1185,7 @@ fn rebind_runtime_handoff_service_projection_in_state(
                 .trace_filter
                 .session_id
                 .as_ref()
-                .is_some_and(|session| prior_session_ids.contains(session))
+                .is_some_and(|session| browser_session_ids.contains(session))
             {
                 handle.trace_filter.session_id = Some(next_session_id.to_string());
             }
@@ -1146,7 +1199,7 @@ fn rebind_runtime_handoff_service_projection_in_state(
                 && route
                     .session_id
                     .as_ref()
-                    .is_some_and(|session| prior_session_ids.contains(session))
+                    .is_some_and(|session| browser_session_ids.contains(session))
         })
     {
         route.session_id = Some(next_session_id.to_string());
@@ -1159,7 +1212,7 @@ fn rebind_runtime_handoff_service_projection_in_state(
                 && allocation
                     .owner_session_id
                     .as_ref()
-                    .is_some_and(|session| prior_session_ids.contains(session))
+                    .is_some_and(|session| browser_session_ids.contains(session))
         })
     {
         allocation.owner_session_id = Some(next_session_id.to_string());
@@ -1172,7 +1225,7 @@ fn rebind_runtime_handoff_service_projection_in_state(
         if handoff
             .session_name
             .as_ref()
-            .is_some_and(|session| prior_session_ids.contains(session))
+            .is_some_and(|session| browser_session_ids.contains(session))
         {
             handoff.session_name = Some(next_session_id.to_string());
         }
@@ -1183,7 +1236,7 @@ fn rebind_runtime_handoff_service_projection_in_state(
                 .map(str::to_string);
             if resolution_session
                 .as_ref()
-                .is_some_and(|session| prior_session_ids.contains(session))
+                .is_some_and(|session| browser_session_ids.contains(session))
             {
                 last_resolution["sessionName"] = Value::String(next_session_id.to_string());
             }
@@ -1539,7 +1592,7 @@ mod tests {
                 RemoteViewRoute {
                     id: "route-a".to_string(),
                     browser_id: Some("browser-a".to_string()),
-                    session_id: Some("candidate-session".to_string()),
+                    session_id: Some("legacy-session".to_string()),
                     ..RemoteViewRoute::default()
                 },
             )]),
@@ -1548,7 +1601,7 @@ mod tests {
                 DisplayAllocation {
                     id: "display-a".to_string(),
                     owner_browser_id: Some("browser-a".to_string()),
-                    owner_session_id: Some("candidate-session".to_string()),
+                    owner_session_id: Some("legacy-session".to_string()),
                     ..DisplayAllocation::default()
                 },
             )]),
@@ -1557,9 +1610,9 @@ mod tests {
                 RemoteViewHandoff {
                     id: "handoff-a".to_string(),
                     browser_id: Some("browser-a".to_string()),
-                    session_name: Some("candidate-session".to_string()),
+                    session_name: Some("legacy-session".to_string()),
                     last_resolution: Some(json!({
-                        "sessionName": "candidate-session",
+                        "sessionName": "legacy-session",
                         "status": "ready"
                     })),
                     ..RemoteViewHandoff::default()
