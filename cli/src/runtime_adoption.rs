@@ -1552,11 +1552,10 @@ fn canonical_handoff_browser_id(
     handoff: &crate::native::service_model::RemoteViewHandoff,
 ) -> Option<String> {
     let browser_id = handoff.browser_id.as_ref()?;
-    let session_name = handoff.session_name.as_deref()?;
-    if browser_id.strip_prefix("session:") != Some(session_name) {
+    let legacy_session = browser_id.strip_prefix("session:")?;
+    let Some(session) = state.sessions.get(legacy_session) else {
         return Some(browser_id.clone());
-    }
-    let session = state.sessions.get(session_name)?;
+    };
     let [current_browser_id] = session.browser_ids.as_slice() else {
         return Some(browser_id.clone());
     };
@@ -2517,7 +2516,7 @@ mod tests {
                 desired_url: None,
                 profile_id: None,
                 browser_id: Some("session:p116-alpha-daemon".to_string()),
-                session_name: Some("p116-alpha-daemon".to_string()),
+                session_name: Some("p116-alpha".to_string()),
                 tab_id: None,
                 target_id: None,
                 view_stream_provider: None,
