@@ -18,6 +18,7 @@ use super::service_model::{
 use super::service_store::{
     JsonServiceStateStore, LockedServiceStateRepository, ServiceStateRepository,
 };
+use crate::runtime_owner_transfer::ProfileOwnerState;
 
 pub struct RouteBoundHandoffPlannedResponseInput<'a> {
     pub intent: &'a RemoteViewOpenIntent,
@@ -557,6 +558,48 @@ pub fn remote_view_handoff_resolution_command(
         command.insert("url".to_string(), Value::String(desired_url.clone()));
     }
     Ok(Value::Object(command))
+}
+
+/// Resolve a durable handoff's effect lane through the unique ready owner of
+/// the same logical browser process. Owner generations may advance across a
+/// transactional runtime transfer, while the retained process identity must
+/// remain unchanged.
+pub(crate) fn remote_view_handoff_ready_owner_session(
+    state: &ServiceState,
+    handoff: &RemoteViewHandoff,
+) -> Option<String> {
+    let browser_id = handoff.browser_id.as_deref()?;
+    let receipt = handoff.presentation_receipt.as_ref()?;
+    let process_instance_digest = receipt.process_instance_digest.as_deref()?;
+    if receipt.state != "ready"
+        || receipt.logical_browser_id != browser_id
+        || handoff
+            .target_id
+            .as_deref()
+            .is_some_and(|target_id| receipt.target_id != target_id)
+        || handoff
+            .view_stream_provider
+            .is_some_and(|provider| receipt.required_stream_provider != provider)
+    {
+        return None;
+    }
+
+    let mut owners = state
+        .runtime_owner_registry
+        .owners
+        .values()
+        .filter(|owner| {
+            owner.state == ProfileOwnerState::Ready
+                && owner.pending_transfer.is_none()
+                && owner.browser_id == browser_id
+                && owner.process_instance_digest == process_instance_digest
+                && !owner.daemon_session_route.trim().is_empty()
+        });
+    let owner = owners.next()?;
+    if owners.next().is_some() {
+        return None;
+    }
+    Some(owner.daemon_session_route.clone())
 }
 
 /// Reapply a retained remote-view route only when current service state proves

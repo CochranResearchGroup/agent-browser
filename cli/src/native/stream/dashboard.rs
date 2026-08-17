@@ -11,6 +11,7 @@ use tokio::time::{timeout, Duration, Instant};
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::connection::get_socket_dir;
+use crate::native::remote_view_handoff::remote_view_handoff_ready_owner_session;
 use crate::native::service_model::ServiceState;
 use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
 
@@ -885,10 +886,14 @@ fn service_request_handoff_target_session_name_from_state(
         return None;
     }
     let handoff = state.remote_view_handoffs.get(handoff_id)?;
-    handoff
-        .session_name
-        .as_deref()
-        .and_then(normalize_service_request_session_name)
+    remote_view_handoff_ready_owner_session(state, handoff)
+        .and_then(|session_name| normalize_service_request_session_name(&session_name))
+        .or_else(|| {
+            handoff
+                .session_name
+                .as_deref()
+                .and_then(normalize_service_request_session_name)
+        })
         .or_else(|| service_request_session_candidate(handoff.intent.get("sessionName")))
 }
 
@@ -3243,6 +3248,71 @@ mod tests {
                 &state,
             ),
             Some("im-receipts-google-messages-stock-v4".to_string())
+        );
+    }
+
+    #[test]
+    fn dashboard_durable_handoff_resolution_targets_transferred_ready_owner_session() {
+        let logical_browser_id = "session:im-receipts";
+        let process_digest = "process-digest";
+        let handoff = crate::native::service_model::RemoteViewHandoff {
+            id: "handoff-a".to_string(),
+            session_name: Some("retained-owner".to_string()),
+            browser_id: Some(logical_browser_id.to_string()),
+            target_id: Some("target-a".to_string()),
+            presentation_receipt: Some(
+                crate::native::service_model::DurableHandoffPresentationReceipt {
+                    schema_version: "agent-browser.durable-handoff-presentation.v1".to_string(),
+                    generation: 4,
+                    dashboard_deployment_generation: "dashboard-old".to_string(),
+                    logical_browser_id: logical_browser_id.to_string(),
+                    daemon_owner_generation: Some(7),
+                    process_instance_digest: Some(process_digest.to_string()),
+                    target_id: "target-a".to_string(),
+                    required_stream_provider:
+                        crate::native::service_model::ViewStreamProvider::RdpGateway,
+                    observed_stream_provider:
+                        crate::native::service_model::ViewStreamProvider::RdpGateway,
+                    route_id: "route-a".to_string(),
+                    display_allocation_id: "display-a".to_string(),
+                    observed_at: "2026-08-16T12:00:00Z".to_string(),
+                    state: "ready".to_string(),
+                },
+            ),
+            view_stream_provider: Some(
+                crate::native::service_model::ViewStreamProvider::RdpGateway,
+            ),
+            ..crate::native::service_model::RemoteViewHandoff::default()
+        };
+        let state = crate::native::service_model::ServiceState {
+            remote_view_handoffs: std::collections::BTreeMap::from([(handoff.id.clone(), handoff)]),
+            runtime_owner_registry: crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(
+                crate::runtime_owner_transfer::ProfileOwner {
+                    owner_id: "owner-current".to_string(),
+                    profile_identity_digest: "profile-digest".to_string(),
+                    state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+                    owner_generation: 11,
+                    browser_id: logical_browser_id.to_string(),
+                    daemon_session_route: "current-owner".to_string(),
+                    process_instance_digest: process_digest.to_string(),
+                    browser_family: "chrome".to_string(),
+                    cdp_endpoint_identity_digest: "cdp-digest".to_string(),
+                    target_set_digest: "target-set-digest".to_string(),
+                    pending_transfer: None,
+                    last_transition: None,
+                },
+            ),
+            ..crate::native::service_model::ServiceState::default()
+        };
+        let body = r##"{"action":"service_remote_view_handoff_resolve","params":{"handoffId":"handoff-a"}}"##;
+
+        assert_eq!(
+            service_request_handoff_target_session_name_from_state(
+                "/api/service/request",
+                body,
+                &state,
+            ),
+            Some("current-owner".to_string())
         );
     }
 

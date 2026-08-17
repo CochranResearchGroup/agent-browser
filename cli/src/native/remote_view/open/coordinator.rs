@@ -1023,15 +1023,24 @@ pub(crate) async fn execute_durable_resolution<
         .as_ref()
         .map(|receipt| receipt.generation)
         .unwrap_or(0);
-    let mut resolution_command =
-        remote_view_handoff_resolution_command(&handoff, &service_job_id, allow_reopen_closed)?;
-    apply_retained_remote_view_route(service_state, &handoff, &mut resolution_command);
+    let mut effective_handoff = handoff.clone();
+    if let Some(owner_session) =
+        remote_view_handoff_ready_owner_session(service_state, &effective_handoff)
+    {
+        effective_handoff.session_name = Some(owner_session);
+    }
+    let mut resolution_command = remote_view_handoff_resolution_command(
+        &effective_handoff,
+        &service_job_id,
+        allow_reopen_closed,
+    )?;
+    apply_retained_remote_view_route(service_state, &effective_handoff, &mut resolution_command);
     let mut direct_request = RouteBoundDirectOpenRequest::from_compatibility_command(
         resolution_command,
         Some(handoff.id.clone()),
         attribution,
     )?
-    .prefer_existing_browser(handoff.clone());
+    .prefer_existing_browser(effective_handoff.clone());
     if !allow_reopen_closed {
         direct_request = direct_request.require_retained_browser();
     }
@@ -1086,7 +1095,10 @@ pub(crate) async fn execute_durable_resolution<
                 owner.state == ProfileOwnerState::Ready
                     && owner.browser_id == receipt.logical_browser_id
                     && owner.daemon_session_route
-                        == handoff.session_name.as_deref().unwrap_or_default()
+                        == effective_handoff
+                            .session_name
+                            .as_deref()
+                            .unwrap_or_default()
                     && Some(owner.owner_generation) == receipt.daemon_owner_generation
                     && receipt.process_instance_digest.as_deref()
                         == Some(owner.process_instance_digest.as_str())
