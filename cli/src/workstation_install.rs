@@ -3792,8 +3792,10 @@ fn transfer_discovered_runtimes(
 }
 
 /// Stops a census-proven browserless daemon while the admission drain prevents
-/// new effect work. The recorded process identity prevents PID-reuse signals;
-/// no browser process is signaled or closed.
+/// new effect work. The recorded process identity prevents PID-reuse signals.
+/// A daemon that does not complete graceful shutdown within the bounded grace
+/// period is force-stopped through the same verified process handle. No browser
+/// process is signaled or closed.
 fn retire_idle_daemon(session: &str) -> Result<(), String> {
     let identity = crate::connection::load_daemon_process_identity(session)?;
     let Some(process) = crate::process_identity::VerifiedProcessTermination::open(&identity)?
@@ -3803,16 +3805,40 @@ fn retire_idle_daemon(session: &str) -> Result<(), String> {
         }
         return Ok(());
     };
+    retire_verified_idle_daemon_process(
+        &process,
+        LEGACY_DAEMON_EXIT_TIMEOUT,
+        LEGACY_DAEMON_EXIT_TIMEOUT,
+    )?;
+    if crate::connection::daemon_ready(session) {
+        return Err(format!("idle_daemon_session_rebound:{session}"));
+    }
+    Ok(())
+}
+
+fn retire_verified_idle_daemon_process(
+    process: &crate::process_identity::VerifiedProcessTermination,
+    graceful_timeout: std::time::Duration,
+    forced_timeout: std::time::Duration,
+) -> Result<(), String> {
     process.signal(crate::process_identity::VerifiedProcessSignal::Terminate)?;
-    let deadline = std::time::Instant::now() + LEGACY_DAEMON_EXIT_TIMEOUT;
+    let deadline = std::time::Instant::now() + graceful_timeout;
     while process.is_running()? {
         if std::time::Instant::now() >= deadline {
-            return Err(format!("idle_daemon_exit_timeout:{session}"));
+            break;
         }
         std::thread::sleep(LEGACY_DAEMON_EXIT_POLL_INTERVAL);
     }
-    if crate::connection::daemon_ready(session) {
-        return Err(format!("idle_daemon_session_rebound:{session}"));
+    if !process.is_running()? {
+        return Ok(());
+    }
+    process.signal(crate::process_identity::VerifiedProcessSignal::Kill)?;
+    let deadline = std::time::Instant::now() + forced_timeout;
+    while process.is_running()? {
+        if std::time::Instant::now() >= deadline {
+            return Err("idle_daemon_forced_exit_timeout".to_string());
+        }
+        std::thread::sleep(LEGACY_DAEMON_EXIT_POLL_INTERVAL);
     }
     Ok(())
 }
@@ -6908,6 +6934,37 @@ mod tests {
             "matching-sha",
         )
         .is_none());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn verified_idle_daemon_retirement_escalates_after_grace_timeout() {
+        use std::io::BufRead;
+
+        let mut child = Command::new("sh")
+            .args(["-c", "trap '' TERM; printf 'ready\\n'; while :; do :; done"])
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut ready = String::new();
+        std::io::BufReader::new(child.stdout.take().unwrap())
+            .read_line(&mut ready)
+            .unwrap();
+        assert_eq!(ready, "ready\n");
+        let identity = crate::process_identity::capture_process_identity(child.id(), None, None)
+            .expect("fixture process identity");
+        let process = crate::process_identity::VerifiedProcessTermination::open(&identity)
+            .unwrap()
+            .expect("fixture process must be live");
+
+        retire_verified_idle_daemon_process(
+            &process,
+            std::time::Duration::from_millis(25),
+            std::time::Duration::from_secs(1),
+        )
+        .unwrap();
+        assert!(!process.is_running().unwrap());
+        child.wait().unwrap();
     }
 
     #[cfg(unix)]

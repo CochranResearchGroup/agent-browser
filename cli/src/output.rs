@@ -5420,6 +5420,8 @@ generation before replacing stable entrypoints with generation-backed links.
 Units introduced after the legacy install remain inert until the candidate is
 selected. On Linux, a daemon identity affected by that controlled relocation
 is repaired only when its exact start token and imported binary digest match.
+If a census-proven browserless daemon does not finish graceful shutdown, apply
+force-stops only that exact verified daemon process after the bounded grace.
 Any conversion failure restores the original files and selector. It
 installs host prerequisites before admission drain or ownership transfer,
 transfers cooperative and verified orphan runtimes through receipt-bearing
