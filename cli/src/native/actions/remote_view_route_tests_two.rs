@@ -830,6 +830,78 @@ async fn test_remote_view_route_checkout_rejects_pool_target_mismatch_and_conten
         .contains("route_pool_not_ready"));
     let _ = fs::remove_dir_all(&home);
 }
+
+#[tokio::test]
+async fn test_remote_view_route_checkout_rejects_active_shared_route_identity_overwrite() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("remote-view-shared-route-identity-home");
+    fs::create_dir_all(&home).unwrap();
+    guard.set("HOME", home.to_str().unwrap());
+    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+    store
+        .save(&ServiceState {
+            display_allocations: BTreeMap::from([
+                (
+                    "display-existing".to_string(),
+                    DisplayAllocation {
+                        id: "display-existing".to_string(),
+                        display_name: Some(":10".to_string()),
+                        display_isolation: "shared_display".to_string(),
+                        state: "ready".to_string(),
+                        ..DisplayAllocation::default()
+                    },
+                ),
+                (
+                    "display-requested".to_string(),
+                    DisplayAllocation {
+                        id: "display-requested".to_string(),
+                        display_name: Some(":10".to_string()),
+                        display_isolation: "shared_display".to_string(),
+                        state: "ready".to_string(),
+                        ..DisplayAllocation::default()
+                    },
+                ),
+            ]),
+            remote_view_routes: BTreeMap::from([(
+                "route-shared".to_string(),
+                RemoteViewRoute {
+                    id: "route-shared".to_string(),
+                    display_allocation_id: Some("display-existing".to_string()),
+                    browser_id: Some("session:existing".to_string()),
+                    state: "ready".to_string(),
+                    ..RemoteViewRoute::default()
+                },
+            )]),
+            ..ServiceState::default()
+        })
+        .unwrap();
+    let mut state = DaemonState::new();
+    let result = execute_command(
+        &json!({
+            "action": "service_remote_view_route_checkout",
+            "displayAllocationId": "display-requested",
+            "routeId": "route-shared",
+            "browserId": "session:requested",
+            "sessionName": "requested"
+        }),
+        &mut state,
+    )
+    .await;
+
+    assert_eq!(result["success"], false);
+    assert!(result["error"]
+        .as_str()
+        .unwrap()
+        .contains("route_pool_contention"));
+    let persisted = store.load().unwrap();
+    assert_eq!(
+        persisted.remote_view_routes["route-shared"]
+            .browser_id
+            .as_deref(),
+        Some("session:existing")
+    );
+    let _ = fs::remove_dir_all(&home);
+}
 #[tokio::test]
 async fn test_remote_view_route_checkout_reuses_checked_out_same_owner() {
     let guard = EnvGuard::new(&["HOME"]);

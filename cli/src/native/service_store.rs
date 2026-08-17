@@ -19,6 +19,8 @@ const SERVICE_DIR: &str = "service";
 const SERVICE_STATE_FILENAME: &str = "state.json";
 const REMOTE_VIEW_HANDOFFS_FILENAME: &str = "remote-view-handoffs.json";
 const REMOTE_VIEW_HANDOFFS_SCHEMA_VERSION: &str = "agent-browser.remote-view-handoffs.v1";
+const REMOTE_VIEW_PRESENTATIONS_FILENAME: &str = "remote-view-presentations.json";
+const REMOTE_VIEW_PRESENTATIONS_SCHEMA_VERSION: &str = "agent-browser.remote-view-presentations.v1";
 const RUNTIME_OWNER_REGISTRY_FILENAME: &str = "runtime-owner-registry.json";
 const RUNTIME_OWNER_REGISTRY_SCHEMA_VERSION: &str = "agent-browser.runtime-owner-registry.v1";
 static SERVICE_STATE_MUTATION_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -179,14 +181,24 @@ impl ServiceStateStore for JsonServiceStateStore {
         };
 
         let handoff_registry = load_remote_view_handoff_registry(&self.path)?;
+        let presentation_registry = load_remote_view_presentation_registry(&self.path)?;
         let owner_registry = load_runtime_owner_registry(&self.path)?;
         if state_file_missing
             && handoff_registry.handoffs.is_empty()
+            && presentation_registry.handoffs.is_empty()
             && owner_registry.schema_version.is_empty()
         {
             return Ok(ServiceState::default());
         }
         state.remote_view_handoffs.extend(handoff_registry.handoffs);
+        state.remote_view_handoffs = merge_remote_view_handoff_registries(
+            presentation_registry,
+            RemoteViewHandoffRegistry {
+                schema_version: REMOTE_VIEW_HANDOFFS_SCHEMA_VERSION.to_string(),
+                handoffs: state.remote_view_handoffs,
+            },
+        )
+        .handoffs;
         if !owner_registry.schema_version.is_empty() {
             state.runtime_owner_registry = owner_registry.registry;
         }
@@ -384,6 +396,10 @@ fn remote_view_handoff_registry_path(state_path: &Path) -> PathBuf {
     state_path.with_file_name(REMOTE_VIEW_HANDOFFS_FILENAME)
 }
 
+fn remote_view_presentation_registry_path(state_path: &Path) -> PathBuf {
+    state_path.with_file_name(REMOTE_VIEW_PRESENTATIONS_FILENAME)
+}
+
 fn runtime_owner_registry_path(state_path: &Path) -> PathBuf {
     state_path.with_file_name(RUNTIME_OWNER_REGISTRY_FILENAME)
 }
@@ -414,6 +430,32 @@ fn load_remote_view_handoff_registry(
     })
 }
 
+fn load_remote_view_presentation_registry(
+    state_path: &Path,
+) -> Result<RemoteViewHandoffRegistry, String> {
+    let path = remote_view_presentation_registry_path(state_path);
+    let raw = match fs::read_to_string(&path) {
+        Ok(raw) => raw,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(RemoteViewHandoffRegistry::default())
+        }
+        Err(err) => {
+            return Err(format!(
+                "Failed to read remote-view presentation registry {}: {}",
+                path.display(),
+                err
+            ))
+        }
+    };
+    serde_json::from_str(&raw).map_err(|err| {
+        format!(
+            "Invalid remote-view presentation registry JSON {}: {}",
+            path.display(),
+            err
+        )
+    })
+}
+
 fn remote_view_handoff_registry_payload(
     handoffs: &BTreeMap<String, RemoteViewHandoff>,
 ) -> Result<String, String> {
@@ -426,6 +468,84 @@ fn remote_view_handoff_registry_payload(
         serde_json::to_string_pretty(&registry)
             .map_err(|err| format!("Failed to serialize remote-view handoff registry: {err}"))?
     ))
+}
+
+/// Preserve the highest durable presentation generation when a writer prepared
+/// its state snapshot before another process completed handoff resolution.
+fn merge_remote_view_handoff_registries(
+    current: RemoteViewHandoffRegistry,
+    mut incoming: RemoteViewHandoffRegistry,
+) -> RemoteViewHandoffRegistry {
+    for (handoff_id, current_handoff) in current.handoffs {
+        let current_generation = current_handoff
+            .presentation_receipt
+            .as_ref()
+            .map_or(0, |receipt| receipt.generation);
+        let incoming_generation = incoming
+            .handoffs
+            .get(&handoff_id)
+            .and_then(|handoff| handoff.presentation_receipt.as_ref())
+            .map_or(0, |receipt| receipt.generation);
+        if !incoming.handoffs.contains_key(&handoff_id) || current_generation > incoming_generation
+        {
+            incoming.handoffs.insert(handoff_id, current_handoff);
+        }
+    }
+    if incoming.schema_version.is_empty() {
+        incoming.schema_version = REMOTE_VIEW_HANDOFFS_SCHEMA_VERSION.to_string();
+    }
+    incoming
+}
+
+fn merge_current_remote_view_handoff_registry(
+    state_path: &Path,
+    transaction: &mut ServiceStateTransaction,
+) -> Result<(), String> {
+    let current = load_remote_view_handoff_registry(state_path)?;
+    let incoming: RemoteViewHandoffRegistry = serde_json::from_str(&transaction.handoff_payload)
+        .map_err(|error| format!("Invalid prepared remote-view handoff registry JSON: {error}"))?;
+    let merged = merge_remote_view_handoff_registries(current, incoming);
+    transaction.handoff_payload = format!(
+        "{}\n",
+        serde_json::to_string_pretty(&merged).map_err(|error| {
+            format!("Failed to serialize merged remote-view handoff registry: {error}")
+        })?
+    );
+    Ok(())
+}
+
+/// Persist ready presentation generations in a sidecar unknown to older
+/// binaries. The registry is monotonic by generation, so a legacy writer can
+/// rewrite the compatibility handoff file without erasing newer ready proof.
+fn persist_durable_remote_view_presentations(
+    state_path: &Path,
+    transaction: &ServiceStateTransaction,
+) -> Result<(), String> {
+    let current = load_remote_view_presentation_registry(state_path)?;
+    let incoming: RemoteViewHandoffRegistry = serde_json::from_str(&transaction.handoff_payload)
+        .map_err(|error| format!("Invalid prepared remote-view handoff registry JSON: {error}"))?;
+    let receipted = RemoteViewHandoffRegistry {
+        schema_version: REMOTE_VIEW_PRESENTATIONS_SCHEMA_VERSION.to_string(),
+        handoffs: incoming
+            .handoffs
+            .into_iter()
+            .filter(|(_, handoff)| handoff.presentation_receipt.is_some())
+            .collect(),
+    };
+    let mut merged = merge_remote_view_handoff_registries(current, receipted);
+    if merged.handoffs.is_empty() {
+        return Ok(());
+    }
+    merged.schema_version = REMOTE_VIEW_PRESENTATIONS_SCHEMA_VERSION.to_string();
+    let payload = format!(
+        "{}\n",
+        serde_json::to_string_pretty(&merged).map_err(|error| {
+            format!("Failed to serialize remote-view presentation registry: {error}")
+        })?
+    );
+    let path = remote_view_presentation_registry_path(state_path);
+    let temporary = write_temporary(&path, &payload, "remote-view presentation registry")?;
+    replace_from_temporary(&temporary, &path, "remote-view presentation registry")
 }
 
 fn load_runtime_owner_registry(state_path: &Path) -> Result<DurableRuntimeOwnerRegistry, String> {
@@ -578,6 +698,8 @@ fn commit_service_state_transaction(
         })?;
     }
     recover_service_state_transaction(&store.path)?;
+    let mut transaction = transaction.clone();
+    merge_current_remote_view_handoff_registry(&store.path, &mut transaction)?;
     let handoff_path = remote_view_handoff_registry_path(&store.path);
     let owner_registry_path = runtime_owner_registry_path(&store.path);
     let transaction_path = service_state_transaction_path(&store.path);
@@ -585,6 +707,7 @@ fn commit_service_state_transaction(
     let prior_owner_registry = fs::read(&owner_registry_path).ok();
 
     store.fail_at(ServiceStateSaveBoundary::HandoffWrite)?;
+    persist_durable_remote_view_presentations(&store.path, &transaction)?;
     let handoff_temp = write_temporary(
         &handoff_path,
         &transaction.handoff_payload,
@@ -616,7 +739,7 @@ fn commit_service_state_transaction(
     let state_temp = write_temporary(&store.path, &transaction.state_payload, "service state")?;
     let transaction_payload = format!(
         "{}\n",
-        serde_json::to_string_pretty(transaction)
+        serde_json::to_string_pretty(&transaction)
             .map_err(|error| format!("Failed to serialize service state transaction: {error}"))?
     );
     let transaction_temp = write_temporary(
@@ -1064,6 +1187,71 @@ mod tests {
             .expect("state should load after legacy rewrite");
 
         assert_eq!(loaded.remote_view_handoffs["handoff-a"].id, "handoff-a");
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn newer_handoff_presentation_generation_survives_a_stale_state_save() {
+        let path = unique_state_path("stale-writer-remote-view-presentation");
+        let store = JsonServiceStateStore::new(&path);
+        let mut current_handoff = RemoteViewHandoff {
+            id: "handoff-a".to_string(),
+            state: "ready".to_string(),
+            browser_id: Some("browser-a".to_string()),
+            target_id: Some("target-new".to_string()),
+            ..RemoteViewHandoff::default()
+        };
+        current_handoff.presentation_receipt = Some(
+            crate::native::service_model::DurableHandoffPresentationReceipt {
+                schema_version: "agent-browser.durable-handoff-presentation.v1".to_string(),
+                generation: 2,
+                dashboard_deployment_generation: "generation-new".to_string(),
+                logical_browser_id: "browser-a".to_string(),
+                daemon_owner_generation: Some(2),
+                process_instance_digest: Some("process-new".to_string()),
+                target_id: "target-new".to_string(),
+                required_stream_provider:
+                    crate::native::service_model::ViewStreamProvider::RdpGateway,
+                observed_stream_provider:
+                    crate::native::service_model::ViewStreamProvider::RdpGateway,
+                route_id: "route-new".to_string(),
+                display_allocation_id: "display-new".to_string(),
+                observed_at: "2026-08-17T00:00:00Z".to_string(),
+                state: "ready".to_string(),
+            },
+        );
+        store
+            .save(&ServiceState {
+                remote_view_handoffs: BTreeMap::from([(
+                    current_handoff.id.clone(),
+                    current_handoff.clone(),
+                )]),
+                ..ServiceState::default()
+            })
+            .expect("newer presentation should save");
+
+        let stale_handoff = RemoteViewHandoff {
+            id: "handoff-a".to_string(),
+            state: "resolving".to_string(),
+            browser_id: Some("browser-a".to_string()),
+            target_id: Some("target-old".to_string()),
+            ..RemoteViewHandoff::default()
+        };
+        let stale_transaction = prepare_service_state_transaction(&ServiceState {
+            remote_view_handoffs: BTreeMap::from([(stale_handoff.id.clone(), stale_handoff)]),
+            ..ServiceState::default()
+        })
+        .expect("stale legacy payload should prepare");
+        fs::write(&path, stale_transaction.state_payload)
+            .expect("legacy writer should replace primary state");
+        fs::write(
+            remote_view_handoff_registry_path(&path),
+            stale_transaction.handoff_payload,
+        )
+        .expect("legacy writer should replace the known handoff sidecar");
+
+        let loaded = store.load().expect("merged handoff should load");
+        assert_eq!(loaded.remote_view_handoffs["handoff-a"], current_handoff);
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 

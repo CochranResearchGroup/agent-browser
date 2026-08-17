@@ -1478,6 +1478,39 @@ struct InstallDoctorIssueInputs<'a> {
     daemon_listener_inventory: &'a serde_json::Value,
 }
 
+fn accepted_manual_preservation_sessions(
+    live_dashboard_runtime: &serde_json::Value,
+) -> BTreeSet<String> {
+    let transaction = live_dashboard_runtime.pointer("/workstationUpgrade/latestTransaction");
+    if transaction
+        .and_then(|value| value.get("state"))
+        .and_then(Value::as_str)
+        != Some("accepted")
+        || transaction
+            .and_then(|value| value.get("terminalResult"))
+            .and_then(Value::as_str)
+            != Some("accepted")
+    {
+        return BTreeSet::new();
+    }
+    transaction
+        .and_then(|value| value.get("runtimeMigrations"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|migration| {
+            migration.get("disposition").and_then(Value::as_str) == Some("manual_preservation")
+        })
+        .filter_map(|migration| {
+            migration
+                .get("logicalBrowserId")
+                .and_then(Value::as_str)
+                .and_then(|browser_id| browser_id.strip_prefix("session:"))
+                .map(str::to_string)
+        })
+        .collect()
+}
+
 fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json::Value> {
     let mut issues = Vec::new();
     let current_executable = inputs.current_executable;
@@ -1491,6 +1524,8 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
     let live_dashboard_runtime = inputs.live_dashboard_runtime;
     let runtime_inventory = inputs.runtime_inventory;
     let daemon_listener_inventory = inputs.daemon_listener_inventory;
+    let manual_preservation_sessions =
+        accepted_manual_preservation_sessions(live_dashboard_runtime);
 
     if path_command
         .get("path")
@@ -1789,7 +1824,15 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
                         matches!(reason, "stream_unreachable" | "stream_metadata_invalid")
                     })
                 });
-                if stale_stream_backend {
+                if manual_preservation_sessions.contains(session) {
+                    issues.push(json!({
+                        "code": "active_runtime_manual_preservation",
+                        "message": format!("active daemon session {session} retains stale executable provenance under the accepted workstation migration ledger"),
+                        "session": session,
+                        "severity": "warning",
+                        "nextAction": "preserve_external_runtime_until_operator_close",
+                    }));
+                } else if stale_stream_backend {
                     issues.push(json!({
                         "code": "active_runtime_stale_stream_backend",
                         "message": format!("active daemon session {session} advertises stale or unreachable stream backend metadata"),
@@ -4655,6 +4698,80 @@ mod tests {
             json!(["agent-browser", "close", "--session", "default"])
         );
         assert_eq!(issue["remedy"]["requiresInteractiveSudo"], false);
+    }
+
+    #[test]
+    fn install_doctor_preserves_accepted_manual_runtime_as_warning() {
+        let launch_config = json!({
+            "stealthCdpChromiumRequired": false,
+            "stealthCdpChromiumReady": true,
+        });
+        let current_executable = fingerprint(Some("/same/agent-browser"), Some("aaa"));
+        let path_command = fingerprint(Some("/same/agent-browser"), Some("aaa"));
+        let pnpm_package_binary = fingerprint(Some("/pnpm/agent-browser"), Some("aaa"));
+        let workspace_binary = fingerprint(Some("/workspace/agent-browser"), Some("aaa"));
+        let service = json!({"ready": true});
+        let service_resources = json!({"readinessImpactingCandidates": 0});
+        let live_dashboard_runtime = json!({
+            "available": false,
+            "ready": true,
+            "state": "not_running",
+            "workstationUpgrade": {
+                "readiness": {
+                    "payloadReady": true,
+                    "selectedGenerationReady": true,
+                    "runtimeConvergenceReady": true,
+                    "dashboardIngressReady": true,
+                    "operatorJourneyReady": true,
+                    "rollbackReady": true,
+                    "ready": true
+                },
+                "latestTransaction": {
+                    "state": "accepted",
+                    "terminalResult": "accepted",
+                    "runtimeMigrations": [{
+                        "logicalBrowserId": "session:p0417-preflight",
+                        "disposition": "manual_preservation"
+                    }]
+                }
+            }
+        });
+        let runtime_inventory = json!({
+            "schemaVersion": "agent-browser.runtime-inventory.v1",
+            "status": "stale",
+            "runtimes": [{
+                "kind": "daemon_session",
+                "session": "p0417-preflight",
+                "state": "stale",
+                "driftReasons": ["executable_sha256_mismatch"]
+            }]
+        });
+        let remote_view_privileges = ready_remote_view_privileges();
+        let issues = install_doctor_issues(InstallDoctorIssueInputs {
+            current_executable: &current_executable,
+            path_command: &path_command,
+            pnpm_package_binary: &pnpm_package_binary,
+            workspace_binary: &workspace_binary,
+            launch_config: &launch_config,
+            remote_view_privileges: &remote_view_privileges,
+            service: &service,
+            service_resources: &service_resources,
+            live_dashboard_runtime: &live_dashboard_runtime,
+            runtime_inventory: &runtime_inventory,
+            daemon_listener_inventory: &empty_daemon_listener_inventory(),
+        });
+
+        assert_eq!(
+            issue_codes(issues.clone()),
+            vec!["active_runtime_manual_preservation"]
+        );
+        assert_eq!(issues[0]["session"], "p0417-preflight");
+        assert_eq!(issues[0]["severity"], "warning");
+        assert_eq!(
+            issues[0]["nextAction"],
+            "preserve_external_runtime_until_operator_close"
+        );
+        assert!(issues[0].get("remedy").is_none());
     }
 
     #[test]

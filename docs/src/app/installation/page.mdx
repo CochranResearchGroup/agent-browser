@@ -95,6 +95,7 @@ checkout or pnpm reference:
 agent-browser install workstation --dry-run --json
 agent-browser install workstation --apply --json
 agent-browser install workstation status --json
+agent-browser install workstation recover --transaction-id upgrade-... --json
 agent-browser install workstation finalize --json
 agent-browser install workstation gc --dry-run --json
 ```
@@ -124,6 +125,9 @@ installer repairs a daemon identity affected by this controlled relocation
 only when its exact process start token and imported binary digest match. If a
 census-proven browserless daemon does not finish graceful shutdown, the installer
 force-stops only that exact verified daemon process after the bounded grace. For a
+Linux idle daemon whose executable was replaced after launch, the installer repairs
+the deleted proc-executable identity only when the PID, start token, original path,
+and recorded executable digest match the live inode exactly. For a
 schema-v1 live daemon with no owner record, exact census evidence permits the
 candidate to create the first receipted owner only after daemon revocation.
 Historical route, display, and stream identifiers are scoped to their browser
@@ -146,7 +150,11 @@ or daemon that rewrites <code>state.json</code> cannot erase candidate ownership
 during the shadow interval. The selector changes only
 after every discovered runtime has a proven disposition. Verified live
 browsers without a session route remain preserve-only because
-orphan resume has no safe source session to bind. If an exact
+orphan resume has no safe source session to bind. After acceptance, install
+and remote-view doctors retain an exact session with ledger disposition
+<code>manual_preservation</code> as the nonblocking
+<code>active_runtime_manual_preservation</code> warning until its operator
+closes it. If an exact
 old-generation daemon reports that the cooperative handoff command is
 unavailable, apply verifies its recorded executable identity, revokes only
 that daemon's effect authority, advances the exact registry owner to an
@@ -188,7 +196,11 @@ the second port after stable ingress and stages it before admission drain.
 After runtime transfer reaches candidate readiness, apply waits up to five
 minutes for an authenticated candidate journey to be committed with
 <code>agent-browser dashboard ingress commit --expected-revision
-&lt;revision&gt; --evidence &lt;presentation-evidence.json&gt;</code>. Stable ingress
+&lt;revision&gt; --handoff-id &lt;id&gt;</code> after the candidate dashboard resolves
+that opaque durable handoff to a ready operator surface. Commit rechecks the
+candidate-bound receipt against the current runtime owner, route, display,
+target, provider, and deployment generation. The file-based evidence form
+remains available for externally receipted integrations. Stable ingress
 continues serving the selected backend while proof is pending. Reconciliation
 then quiesces only the generation backend, runtime interlock, and backup timer,
 starts the managed candidate backend on the next port, atomically selects it,
@@ -213,6 +225,13 @@ the installed convergence controller without reinstalling the payload. Use
 protected PostgreSQL backup operation invoked by the installed timer. Use
 <code>agent-browser install workstation status --json</code> for a redacted
 selected-generation, migration, blocker, admission, and terminal-state view.
+If a rollback reports <code>operator_recovery_required</code>, run
+<code>agent-browser install workstation recover --transaction-id &lt;id&gt;
+--json</code> with the exact admission-owning transaction ID from the failure.
+Recovery fails closed unless the sealed old generation is selected, no
+candidate executable is live, no candidate dashboard route remains, and a
+fresh two-round runtime census is stable. It preserves the transaction ledger,
+appends a recovery checkpoint, and only then reopens runtime admission.
 The <code>readiness</code> object separates
 <code>payloadReady</code>, <code>selectedGenerationReady</code>,
 <code>runtimeConvergenceReady</code>,

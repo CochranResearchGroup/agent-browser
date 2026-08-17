@@ -199,6 +199,7 @@ pub fn to_ai_friendly_error(error: &str) -> String {
             .to_string();
     }
     if lower.contains("display_access_grant_timeout")
+        || lower.contains("service_state_lock_timeout")
         || lower.contains("display_access_grant_failed")
         || lower.contains("route_display_unavailable")
         || lower.contains("route_pool_unavailable")
@@ -3192,6 +3193,12 @@ mod tests {
             to_ai_friendly_error("Timeout waiting for element"),
             "Operation timed out. The page may still be loading or the element may not exist."
         );
+    }
+
+    #[test]
+    fn test_to_ai_friendly_error_preserves_service_state_lock_timeout() {
+        let error = "service_state_lock_timeout: /tmp/state.json.lock";
+        assert_eq!(to_ai_friendly_error(error), error);
     }
 
     #[test]

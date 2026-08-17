@@ -84,17 +84,23 @@ explicit infrastructure diagnostic.
 
 Open the same `handoffUrl` again. The authenticated dashboard resolves the
 handoff ID, requests adoption of the exact retained browser if its original
-daemon is gone, and reacquires compatible route, display, and viewer state for
-the recorded target. Normal resolution does not navigate, open a replacement
-target, relaunch the browser, change providers, or redirect to a raw provider
-URL.
+daemon is gone, and reacquires compatible route, display, and viewer state. If
+the recorded CDP target ID expired, it may bind the current tab whose URL still
+matches the recorded intent. Normal resolution does not navigate, open a
+replacement target, relaunch the browser, change providers, or redirect to a
+raw provider URL.
 
 The dashboard waits for a ready presentation receipt whose generation,
 dashboard deployment, logical browser, daemon owner generation, process
 identity, target, and requested provider match the current resolution. A
 missing or stale receipt returns a retryable `converging` state, and the
 dashboard retries on the same durable URL. A missing retained target fails
-closed.
+closed unless the exact retained browser has a current tab that still matches
+the recorded URL intent.
+
+The durable handoff sidecar preserves the highest recorded presentation
+generation when an older service writer saves stale state. Concurrent runtime
+updates therefore cannot erase newer ready presentation evidence.
 
 Do not run another `remote-view open` only because:
 

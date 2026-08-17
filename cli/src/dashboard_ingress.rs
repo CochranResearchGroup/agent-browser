@@ -674,6 +674,153 @@ pub(crate) fn commit_dashboard_candidate(
     }))
 }
 
+/// Selects a staged candidate from the candidate dashboard's durable handoff
+/// receipt after rechecking the exact runtime owner, route, display, target,
+/// provider, and deployment generation recorded by service state.
+pub(crate) fn commit_dashboard_candidate_from_handoff(
+    expected_revision: u64,
+    handoff_id: &str,
+) -> Result<serde_json::Value, String> {
+    use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
+
+    let repository = DashboardIngressRepository::new(DashboardIngressRepository::default_path());
+    let registry = repository.load()?;
+    require_revision(&registry, expected_revision)?;
+    let state = JsonServiceStateStore::new(JsonServiceStateStore::default_path()?).load()?;
+    let evidence = presentation_evidence_from_durable_handoff(&registry, &state, handoff_id)?;
+    commit_dashboard_candidate(expected_revision, evidence)
+}
+
+fn presentation_evidence_from_durable_handoff(
+    registry: &DashboardIngressRegistry,
+    state: &crate::native::service_model::ServiceState,
+    handoff_id: &str,
+) -> Result<PresentationEvidence, String> {
+    use crate::native::service_model::ViewStreamProvider;
+
+    let candidate = registry
+        .candidate_backend()
+        .ok_or_else(|| "dashboard candidate is not staged".to_string())?;
+    let handoff = state
+        .remote_view_handoffs
+        .get(handoff_id)
+        .filter(|handoff| handoff.state == "ready")
+        .ok_or_else(|| "dashboard candidate durable handoff is not ready".to_string())?;
+    let receipt = handoff
+        .presentation_receipt
+        .as_ref()
+        .filter(|receipt| receipt.state == "ready" && receipt.generation > 0)
+        .ok_or_else(|| {
+            "dashboard candidate durable presentation receipt is not ready".to_string()
+        })?;
+    if receipt.dashboard_deployment_generation != candidate.generation_id
+        || handoff.browser_id.as_deref() != Some(receipt.logical_browser_id.as_str())
+        || handoff.target_id.as_deref() != Some(receipt.target_id.as_str())
+        || handoff.last_route_id.as_deref() != Some(receipt.route_id.as_str())
+        || handoff.last_display_allocation_id.as_deref()
+            != Some(receipt.display_allocation_id.as_str())
+        || receipt.required_stream_provider != receipt.observed_stream_provider
+        || receipt.observed_at.trim().is_empty()
+        || receipt.target_id.trim().is_empty()
+    {
+        return Err("dashboard candidate durable presentation evidence changed".to_string());
+    }
+    let owner_generation = receipt
+        .daemon_owner_generation
+        .filter(|generation| *generation > 0)
+        .ok_or_else(|| "dashboard candidate durable receipt lacks owner generation".to_string())?;
+    let process_instance_digest = receipt
+        .process_instance_digest
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "dashboard candidate durable receipt lacks process identity".to_string())?;
+    let handoff_session = handoff
+        .session_name
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "dashboard candidate durable handoff lacks a session".to_string())?;
+    let owner = state
+        .runtime_owner_registry
+        .owners
+        .values()
+        .find(|owner| {
+            owner.browser_id == receipt.logical_browser_id
+                && owner.daemon_session_route == handoff_session
+        })
+        .ok_or_else(|| "dashboard candidate durable handoff owner is unavailable".to_string())?;
+    if owner.owner_generation != owner_generation
+        || owner.process_instance_digest != process_instance_digest
+    {
+        return Err("dashboard candidate durable handoff owner changed".to_string());
+    }
+    let route = state
+        .remote_view_routes
+        .get(&receipt.route_id)
+        .filter(|route| route.state == "ready")
+        .ok_or_else(|| "dashboard candidate durable handoff route is not ready".to_string())?;
+    if route.provider != receipt.observed_stream_provider
+        || route.display_allocation_id.as_deref() != Some(receipt.display_allocation_id.as_str())
+        || route.browser_id.as_deref() != Some(receipt.logical_browser_id.as_str())
+        || route.session_id.as_deref() != Some(handoff_session)
+    {
+        return Err("dashboard candidate durable handoff route changed".to_string());
+    }
+    let display = state
+        .display_allocations
+        .get(&receipt.display_allocation_id)
+        .filter(|display| display.state == "ready")
+        .ok_or_else(|| "dashboard candidate durable handoff display is not ready".to_string())?;
+    if display.owner_browser_id.as_deref() != Some(receipt.logical_browser_id.as_str())
+        || display.owner_session_id.as_deref() != Some(handoff_session)
+        || !display
+            .route_ids
+            .iter()
+            .any(|route_id| route_id == &receipt.route_id)
+    {
+        return Err("dashboard candidate durable handoff display changed".to_string());
+    }
+
+    let required_stream_provider = serde_json::to_value(receipt.required_stream_provider)
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_string))
+        .ok_or_else(|| "dashboard candidate stream provider is invalid".to_string())?;
+    let receipt_body = serde_json::to_vec(receipt)
+        .map_err(|error| format!("Unable to encode durable presentation receipt: {error}"))?;
+    let display_body = serde_json::to_vec(display)
+        .map_err(|error| format!("Unable to encode durable display evidence: {error}"))?;
+    let receipt_id = format!(
+        "durable-handoff-{}",
+        hex_sha256(&[&receipt_body, candidate.runtime_manifest_sha256.as_bytes()].concat())
+    );
+    let geometry_epoch = format!("display-{}", hex_sha256(&display_body));
+    let selected_target_identity_digest = hex_sha256(receipt.target_id.as_bytes());
+
+    Ok(PresentationEvidence {
+        receipt_id,
+        dashboard_deployment_generation: candidate.generation_id.clone(),
+        coordinator_generation: candidate.generation_id.clone(),
+        daemon_generation: format!("owner-generation-{owner_generation}"),
+        logical_browser_id: receipt.logical_browser_id.clone(),
+        process_instance_digest: process_instance_digest.to_string(),
+        selected_target_generation: receipt.generation,
+        selected_target_identity_digest,
+        required_stream_provider: required_stream_provider.clone(),
+        observed_stream_provider: required_stream_provider,
+        display_allocation_id: receipt.display_allocation_id.clone(),
+        geometry_epoch,
+        route_generation: receipt.generation,
+        guacamole_connection_generation: (receipt.required_stream_provider
+            == ViewStreamProvider::RdpGateway)
+            .then_some(receipt.generation),
+        authenticated_ingress_probe_at: receipt.observed_at.clone(),
+        operator_surface_load_result: "ready".to_string(),
+    })
+}
+
+fn hex_sha256(bytes: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(bytes))
+}
+
 pub(crate) fn rollback_dashboard_candidate(
     expected_revision: u64,
     generation_id: &str,
@@ -1048,6 +1195,112 @@ mod tests {
         assert_eq!(
             registry.fallback_backend().unwrap().generation_id,
             "generation-old"
+        );
+    }
+
+    #[test]
+    fn durable_handoff_receipt_derives_candidate_evidence_from_current_authority() {
+        use crate::native::service_model::{
+            DisplayAllocation, DurableHandoffPresentationReceipt, RemoteViewHandoff,
+            RemoteViewRoute, ServiceState, ViewStreamProvider,
+        };
+        use crate::runtime_owner_transfer::{
+            ProfileOwner, ProfileOwnerState, RuntimeOwnerRegistry,
+        };
+
+        let mut registry = DashboardIngressRegistry::new(DashboardBackend::new(
+            "generation-old",
+            4849,
+            "old-manifest",
+        ));
+        registry
+            .stage_candidate(DashboardBackend::new(
+                "generation-new",
+                4850,
+                "candidate-manifest",
+            ))
+            .unwrap();
+        let mut state = ServiceState {
+            runtime_owner_registry: RuntimeOwnerRegistry::from_owner(ProfileOwner {
+                owner_id: "owner-new".to_string(),
+                profile_identity_digest: "profile-digest".to_string(),
+                state: ProfileOwnerState::Ready,
+                owner_generation: 4,
+                browser_id: "browser-1".to_string(),
+                daemon_session_route: "candidate-session".to_string(),
+                process_instance_digest: "process-digest".to_string(),
+                browser_family: "chrome".to_string(),
+                cdp_endpoint_identity_digest: "cdp-digest".to_string(),
+                target_set_digest: "target-set-digest".to_string(),
+                pending_transfer: None,
+                last_transition: None,
+            }),
+            ..ServiceState::default()
+        };
+        state.remote_view_handoffs.insert(
+            "r1".to_string(),
+            RemoteViewHandoff {
+                id: "r1".to_string(),
+                state: "ready".to_string(),
+                browser_id: Some("browser-1".to_string()),
+                session_name: Some("candidate-session".to_string()),
+                target_id: Some("target-1".to_string()),
+                last_route_id: Some("route-1".to_string()),
+                last_display_allocation_id: Some("display-1".to_string()),
+                presentation_receipt: Some(DurableHandoffPresentationReceipt {
+                    schema_version: "agent-browser.durable-handoff-presentation.v1".to_string(),
+                    generation: 3,
+                    dashboard_deployment_generation: "generation-new".to_string(),
+                    logical_browser_id: "browser-1".to_string(),
+                    daemon_owner_generation: Some(4),
+                    process_instance_digest: Some("process-digest".to_string()),
+                    target_id: "target-1".to_string(),
+                    required_stream_provider: ViewStreamProvider::RdpGateway,
+                    observed_stream_provider: ViewStreamProvider::RdpGateway,
+                    route_id: "route-1".to_string(),
+                    display_allocation_id: "display-1".to_string(),
+                    observed_at: "2026-08-17T18:30:00Z".to_string(),
+                    state: "ready".to_string(),
+                }),
+                ..RemoteViewHandoff::default()
+            },
+        );
+        state.remote_view_routes.insert(
+            "route-1".to_string(),
+            RemoteViewRoute {
+                id: "route-1".to_string(),
+                provider: ViewStreamProvider::RdpGateway,
+                display_allocation_id: Some("display-1".to_string()),
+                browser_id: Some("browser-1".to_string()),
+                session_id: Some("candidate-session".to_string()),
+                state: "ready".to_string(),
+                ..RemoteViewRoute::default()
+            },
+        );
+        state.display_allocations.insert(
+            "display-1".to_string(),
+            DisplayAllocation {
+                id: "display-1".to_string(),
+                owner_browser_id: Some("browser-1".to_string()),
+                owner_session_id: Some("candidate-session".to_string()),
+                state: "ready".to_string(),
+                route_ids: vec!["route-1".to_string()],
+                ..DisplayAllocation::default()
+            },
+        );
+
+        let evidence = presentation_evidence_from_durable_handoff(&registry, &state, "r1").unwrap();
+
+        assert_eq!(evidence.dashboard_deployment_generation, "generation-new");
+        assert_eq!(evidence.daemon_generation, "owner-generation-4");
+        assert_eq!(evidence.selected_target_generation, 3);
+        assert_eq!(evidence.required_stream_provider, "rdp_gateway");
+        assert!(evidence.receipt_id.starts_with("durable-handoff-"));
+
+        state.remote_view_routes.get_mut("route-1").unwrap().state = "orphaned".to_string();
+        assert_eq!(
+            presentation_evidence_from_durable_handoff(&registry, &state, "r1").unwrap_err(),
+            "dashboard candidate durable handoff route is not ready"
         );
     }
 

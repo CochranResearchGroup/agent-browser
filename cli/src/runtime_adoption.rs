@@ -307,6 +307,7 @@ fn upgrade_transition_allowed(
             | (RollbackAfterCommit, FailedPreservedOldGeneration)
             | (RollbackAfterCommit, OperatorRecoveryRequired)
             | (Accepted, OperatorRecoveryRequired)
+            | (OperatorRecoveryRequired, FailedPreservedOldGeneration)
             | (
                 Planned | CandidatePreflightReady,
                 BlockedCandidateIncompatible
@@ -1028,14 +1029,24 @@ fn profile_owner_readback(
             let mut evidence = base_fragment();
             evidence.metadata_present = true;
             evidence.profile_identity = EvidenceAgreement::Match;
-            evidence.owner_generations.push(owner.owner_generation);
+            if owner.state != crate::runtime_owner_transfer::ProfileOwnerState::Orphaned {
+                evidence.owner_generations.push(owner.owner_generation);
+            }
+            let mut aliases = vec![
+                format!("browser:{}", owner.browser_id),
+                format!("profile-digest:{}", owner.profile_identity_digest),
+            ];
+            // An orphaned owner's daemon route is historical metadata, not an
+            // effect-capable session identity. Multiple preserved orphans may
+            // legitimately carry the same placeholder route.
+            if owner.state == crate::runtime_owner_transfer::ProfileOwnerState::Ready
+                && !owner.daemon_session_route.trim().is_empty()
+            {
+                aliases.push(format!("session:{}", owner.daemon_session_route));
+            }
             RuntimeCensusObservation {
                 logical_browser_id_hint: Some(owner.browser_id.clone()),
-                aliases: vec![
-                    format!("browser:{}", owner.browser_id),
-                    format!("session:{}", owner.daemon_session_route),
-                    format!("profile-digest:{}", owner.profile_identity_digest),
-                ],
+                aliases,
                 profile_identity_digest: Some(owner.profile_identity_digest.clone()),
                 evidence,
             }
@@ -2337,6 +2348,30 @@ mod tests {
     }
 
     #[test]
+    fn operator_recovery_can_close_as_preserved_old_generation() {
+        let samples: Value = serde_json::from_str(SCHEMA_SAMPLES).unwrap();
+        let mut transaction: UpgradeTransaction =
+            serde_json::from_value(samples["upgradeTransaction"].clone()).unwrap();
+        transaction.state = UpgradeTransactionState::OperatorRecoveryRequired;
+        let revision = transaction.revision;
+
+        transition_upgrade_transaction(
+            &mut transaction,
+            revision,
+            UpgradeTransactionState::FailedPreservedOldGeneration,
+            "operator_recovery_verified_old_generation",
+            "2026-08-17T18:00:00Z",
+        )
+        .unwrap();
+
+        assert_eq!(
+            transaction.state,
+            UpgradeTransactionState::FailedPreservedOldGeneration
+        );
+        assert_eq!(transaction.revision, revision + 1);
+    }
+
+    #[test]
     fn admission_drain_blocks_effects_but_keeps_transfer_and_observation_available() {
         let root = std::env::temp_dir().join(format!(
             "agent-browser-admission-drain-{}",
@@ -3082,6 +3117,48 @@ mod tests {
             .aliases
             .iter()
             .all(|alias| !alias.starts_with("profile-digest:")));
+    }
+
+    #[test]
+    fn orphan_owner_placeholder_routes_do_not_join_distinct_profiles() {
+        use crate::native::service_model::ServiceState;
+        use crate::runtime_owner_transfer::{ProfileOwner, ProfileOwnerState};
+
+        let mut state = ServiceState::default();
+        for (browser_id, profile_digest) in [
+            ("browser-a", digest_text("profile-a")),
+            ("browser-b", digest_text("profile-b")),
+        ] {
+            state.runtime_owner_registry.owners.insert(
+                profile_digest.clone(),
+                ProfileOwner {
+                    owner_id: format!("owner-{browser_id}"),
+                    profile_identity_digest: profile_digest,
+                    state: ProfileOwnerState::Orphaned,
+                    owner_generation: 2,
+                    browser_id: browser_id.to_string(),
+                    daemon_session_route: "orphan-observation".to_string(),
+                    process_instance_digest: digest_text(&format!("process-{browser_id}")),
+                    browser_family: "chrome".to_string(),
+                    cdp_endpoint_identity_digest: digest_text(&format!("cdp-{browser_id}")),
+                    target_set_digest: digest_text(&format!("targets-{browser_id}")),
+                    pending_transfer: None,
+                    last_transition: None,
+                },
+            );
+        }
+
+        let readback = profile_owner_readback(&state).unwrap();
+
+        assert_eq!(readback.observations.len(), 2);
+        assert!(readback.observations.iter().all(|observation| observation
+            .aliases
+            .iter()
+            .all(|alias| alias != "session:orphan-observation")));
+        assert!(readback
+            .observations
+            .iter()
+            .all(|observation| observation.evidence.owner_generations.is_empty()));
     }
 
     #[test]

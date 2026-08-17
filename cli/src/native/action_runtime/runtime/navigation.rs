@@ -43,7 +43,20 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
+
+const RUNTIME_HANDOFF_SERVICE_STATE_LOCK_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Upgrade handoffs share the durable service-state lock with active runtimes.
+/// Their owner transfer is bounded by the outer transaction, so tolerate a
+/// short writer burst instead of failing at the ordinary interactive budget.
+fn runtime_handoff_service_repository(
+) -> Result<LockedServiceStateRepository<crate::native::service_store::JsonServiceStateStore>, String>
+{
+    Ok(LockedServiceStateRepository::default_json()?
+        .with_lock_timeout(RUNTIME_HANDOFF_SERVICE_STATE_LOCK_TIMEOUT))
+}
 pub(crate) async fn handle_navigate(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
     let cancellation = state.current_cancellation.clone();
     let url = cmd
@@ -177,7 +190,7 @@ pub(crate) async fn handle_runtime_handoff_prepare(
                 "runtime_handoff_owner_transfer_missing: prepared descriptor has no owner proposal"
                     .to_string()
             })?;
-            let repository = LockedServiceStateRepository::default_json()?;
+            let repository = runtime_handoff_service_repository()?;
             let current_owner = repository
                 .load_snapshot()?
                 .runtime_owner_registry
@@ -244,7 +257,7 @@ pub(crate) async fn handle_runtime_handoff_prepare(
             state.session_id
         ))[..20]
     );
-    let repository = LockedServiceStateRepository::default_json()?;
+    let repository = runtime_handoff_service_repository()?;
     let current_owner = if let Some(owner) = repository
         .load_snapshot()?
         .runtime_owner_registry
@@ -367,6 +380,7 @@ pub(crate) async fn handle_runtime_handoff_resume(
         .and_then(Value::as_str)
         .unwrap_or(&state.session_id)
         .to_string();
+    let logical_browser_id_hint = cmd.get("logicalBrowserId").and_then(Value::as_str);
     if !crate::validation::is_valid_session_name(&source_session) {
         return Err(crate::validation::session_name_error(&source_session));
     }
@@ -377,7 +391,7 @@ pub(crate) async fn handle_runtime_handoff_resume(
                 state.session_id
             )
         })?;
-        let repository = LockedServiceStateRepository::default_json()?;
+        let repository = runtime_handoff_service_repository()?;
         if !crate::runtime_owner_transfer::owner_authority_is_current(&repository, &binding.claim)?
         {
             return Err(format!(
@@ -401,12 +415,23 @@ pub(crate) async fn handle_runtime_handoff_resume(
     }
     let descriptor_path = runtime_handoff_path(&source_session);
     if !descriptor_path.exists() {
-        return handle_runtime_handoff_orphan_adoption(&source_session, None, state).await;
+        return handle_runtime_handoff_orphan_adoption(
+            &source_session,
+            logical_browser_id_hint,
+            None,
+            state,
+        )
+        .await;
     }
     let descriptor = read_runtime_handoff(&source_session)?;
     if descriptor.schema_version == 1 {
-        return handle_runtime_handoff_orphan_adoption(&source_session, Some(descriptor), state)
-            .await;
+        return handle_runtime_handoff_orphan_adoption(
+            &source_session,
+            logical_browser_id_hint,
+            Some(descriptor),
+            state,
+        )
+        .await;
     }
     if descriptor.schema_version != 2 || descriptor.session_name != source_session {
         return Err(format!(
@@ -459,7 +484,7 @@ pub(crate) async fn handle_runtime_handoff_resume(
         transfer_nonce_digest: proposal.request.transfer_nonce_digest.clone(),
         effect_capable: false,
     };
-    let repository = LockedServiceStateRepository::default_json()?;
+    let repository = runtime_handoff_service_repository()?;
     let owner_receipt =
         crate::runtime_owner_transfer::commit_candidate_owner(&repository, attachment)?;
     let candidate_owner = repository
@@ -517,12 +542,14 @@ pub(crate) fn runtime_engine_accepts_browser_family(engine: &str, browser_family
 
 async fn handle_runtime_handoff_orphan_adoption(
     source_session: &str,
+    logical_browser_id_hint: Option<&str>,
     legacy_descriptor: Option<RuntimeHandoffDescriptor>,
     state: &mut DaemonState,
 ) -> Result<Value, String> {
-    let repository = LockedServiceStateRepository::default_json()?;
+    let repository = runtime_handoff_service_repository()?;
     let snapshot = repository.load_snapshot()?;
-    let logical_browser_id = orphan_logical_browser_id(&snapshot, source_session)?;
+    let logical_browser_id =
+        orphan_logical_browser_id_with_hint(&snapshot, source_session, logical_browser_id_hint)?;
     let browser = snapshot
         .browsers
         .get(&logical_browser_id)
@@ -825,6 +852,42 @@ pub(crate) fn orphan_logical_browser_id(
         .unwrap_or_else(|| service_browser_id(source_session)))
 }
 
+/// Resolves a stale transaction alias only when the service session and
+/// retained browser projection both bind it to the exact logical browser.
+fn orphan_logical_browser_id_with_hint(
+    snapshot: &crate::native::service_model::ServiceState,
+    source_session: &str,
+    logical_browser_id_hint: Option<&str>,
+) -> Result<String, String> {
+    let Some(logical_browser_id) = logical_browser_id_hint else {
+        return orphan_logical_browser_id(snapshot, source_session);
+    };
+    let session_bound = snapshot
+        .sessions
+        .get(source_session)
+        .is_some_and(|session| {
+            session
+                .browser_ids
+                .iter()
+                .any(|browser_id| browser_id == logical_browser_id)
+        });
+    let owner_bound = snapshot
+        .runtime_owner_registry
+        .owners
+        .values()
+        .any(|owner| {
+            owner.state == crate::runtime_owner_transfer::ProfileOwnerState::Orphaned
+                && owner.daemon_session_route == source_session
+                && owner.browser_id == logical_browser_id
+        });
+    if (!session_bound && !owner_bound) || !snapshot.browsers.contains_key(logical_browser_id) {
+        return Err(format!(
+            "runtime_handoff_orphan_browser_hint_mismatch: source session '{source_session}' is not bound to '{logical_browser_id}'"
+        ));
+    }
+    Ok(logical_browser_id.to_string())
+}
+
 fn persist_adopted_logical_browser_health(
     state: &DaemonState,
     logical_browser_id: &str,
@@ -849,7 +912,7 @@ fn persist_adopted_logical_browser_health(
             }
         })
     });
-    LockedServiceStateRepository::default_json()?.mutate(|service_state| {
+    runtime_handoff_service_repository()?.mutate(|service_state| {
         let prior_session_ids = service_state
             .browsers
             .get(logical_browser_id)
@@ -927,7 +990,7 @@ pub(crate) async fn handle_runtime_handoff_finalize(
                 .to_string(),
         );
     }
-    let repository = LockedServiceStateRepository::default_json()?;
+    let repository = runtime_handoff_service_repository()?;
     if crate::runtime_owner_transfer::owner_authority_is_current(&repository, &binding.claim)? {
         return Err(
             "runtime_handoff_finalize_before_commit: old daemon remains effect-capable".to_string(),
@@ -976,7 +1039,7 @@ pub(crate) fn handle_runtime_handoff_abort(state: &mut DaemonState) -> Result<Va
             "runtime_handoff_abort_evidence_mismatch: old owner and descriptor differ".to_string(),
         );
     }
-    let repository = LockedServiceStateRepository::default_json()?;
+    let repository = runtime_handoff_service_repository()?;
     if !crate::runtime_owner_transfer::owner_authority_is_current(&repository, &binding.claim)? {
         return Err(
             "runtime_handoff_abort_after_commit: candidate owner already committed".to_string(),
@@ -1039,7 +1102,7 @@ pub(crate) async fn handle_runtime_handoff_rollback(
                 .to_string(),
         );
     }
-    let repository = LockedServiceStateRepository::default_json()?;
+    let repository = runtime_handoff_service_repository()?;
     if !crate::runtime_owner_transfer::owner_authority_is_current(&repository, &binding.claim)? {
         return Err(
             "runtime_handoff_rollback_owner_stale: candidate is no longer authoritative"
@@ -1611,6 +1674,40 @@ pub(crate) fn write_runtime_handoff(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn orphan_logical_browser_hint_requires_exact_session_and_browser_binding() {
+        let source_session = "orphan-prior";
+        let logical_browser_id = "session:work";
+        let mut state = crate::native::service_model::ServiceState::default();
+        state.sessions.insert(
+            source_session.to_string(),
+            crate::native::service_model::BrowserSession {
+                id: source_session.to_string(),
+                browser_ids: vec![logical_browser_id.to_string()],
+                ..Default::default()
+            },
+        );
+        state.browsers.insert(
+            logical_browser_id.to_string(),
+            crate::native::service_model::BrowserProcess {
+                id: logical_browser_id.to_string(),
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(
+            orphan_logical_browser_id_with_hint(&state, source_session, Some(logical_browser_id))
+                .unwrap(),
+            logical_browser_id
+        );
+        assert!(orphan_logical_browser_id_with_hint(
+            &state,
+            source_session,
+            Some("session:different")
+        )
+        .is_err());
+    }
     use crate::native::service_model::{
         BrowserProcess, BrowserTab, DisplayAllocation, RemoteViewHandoff, RemoteViewRoute,
         ServiceState, ServiceTabHandle,

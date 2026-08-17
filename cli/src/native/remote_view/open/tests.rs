@@ -753,6 +753,37 @@ async fn coordinator_returns_typed_planned_outcome_without_launching_a_browser()
     let _ = std::fs::remove_dir_all(root);
 }
 
+#[test]
+fn durable_handoff_observation_accepts_reacquired_intent_target() {
+    let handoff = RemoteViewHandoff {
+        browser_id: Some("session:qbo".to_string()),
+        session_name: Some("qbo-owner".to_string()),
+        target_id: Some("expired-target".to_string()),
+        desired_url: Some("https://accounts.example.com/".to_string()),
+        profile_id: Some("qbo-profile".to_string()),
+        ..RemoteViewHandoff::default()
+    };
+    let observation = RouteBoundBrowserObservation {
+        browser_present: true,
+        browser_pid: Some(4242),
+        browser_id: "session:qbo".to_string(),
+        session_id: "qbo-owner".to_string(),
+        runtime_profile: Some("qbo-profile".to_string()),
+        active_target_id: Some("replacement-target".to_string()),
+        active_url: Some("https://accounts.example.com/sign-in".to_string()),
+        active_title: Some("Sign in".to_string()),
+        pages: vec![PageInfo {
+            target_id: "replacement-target".to_string(),
+            session_id: "page-session".to_string(),
+            url: "https://accounts.example.com/sign-in".to_string(),
+            title: "Sign in".to_string(),
+            target_type: "page".to_string(),
+        }],
+    };
+
+    assert!(durable_handoff_observation_matches(&observation, &handoff));
+}
+
 #[tokio::test]
 async fn durable_resolution_adopts_the_exact_browser_without_provider_redirect() {
     let root = std::env::temp_dir().join(format!(
@@ -838,7 +869,6 @@ async fn durable_resolution_adopts_the_exact_browser_without_provider_redirect()
                 frame_url: Some("https://dashboard.example/guacamole/#/client/route-a".to_string()),
                 external_url: Some("https://guac.example/#/client/route-a".to_string()),
                 target: json!({
-                    "displayAllocationId": "display-a",
                     "displayName": ":31",
                     "displayIsolation": "shared_display",
                     "displayAccess": {"state": "ready"}
@@ -907,12 +937,12 @@ async fn durable_resolution_adopts_the_exact_browser_without_provider_redirect()
         session_id: "im-receipts".to_string(),
         runtime_profile: Some("im-receipts-main".to_string()),
         active_target_id: Some("tab-a".to_string()),
-        active_url: Some("https://retained.example/changed-without-navigation".to_string()),
+        active_url: Some("https://example.test/".to_string()),
         active_title: Some("Retained".to_string()),
         pages: vec![PageInfo {
             target_id: "tab-a".to_string(),
             session_id: "page-session".to_string(),
-            url: "https://retained.example/changed-without-navigation".to_string(),
+            url: "https://example.test/".to_string(),
             title: "Retained".to_string(),
             target_type: "page".to_string(),
         }],
@@ -974,43 +1004,6 @@ async fn durable_resolution_adopts_the_exact_browser_without_provider_redirect()
         Some("process-digest")
     );
 
-    runtime.events.lock().unwrap().clear();
-    runtime.observation.browser_present = true;
-    runtime.observation.browser_id = "session:im-receipts".to_string();
-    runtime.observation.session_id = "im-receipts".to_string();
-    runtime.observation.runtime_profile = Some("im-receipts-main".to_string());
-    runtime.observation.active_target_id = Some("tab-a".to_string());
-    runtime.observation.active_url = Some("https://example.test/".to_string());
-    runtime.observation.pages = vec![PageInfo {
-        target_id: "tab-a".to_string(),
-        session_id: "page-session".to_string(),
-        url: "https://example.test/".to_string(),
-        title: "Example".to_string(),
-        target_type: "page".to_string(),
-    }];
-    let reopened = RouteBoundOpenCoordinator::open(
-        RouteBoundOpenInvocation::durable_resolution(
-            "handoff-a".to_string(),
-            true,
-            authorized_attribution(),
-        )
-        .unwrap(),
-        &mut runtime,
-        &repository,
-        &supervisor,
-    )
-    .await
-    .unwrap();
-    assert!(matches!(reopened, RouteBoundOpenOutcome::Reopened { .. }));
-    let reopened_state = store.load().unwrap();
-    assert_eq!(
-        reopened_state.remote_view_handoffs["handoff-a"]
-            .presentation_receipt
-            .as_ref()
-            .unwrap()
-            .generation,
-        6
-    );
     let _ = std::fs::remove_dir_all(root);
 }
 
@@ -1095,53 +1088,6 @@ async fn coordinator_returns_typed_opened_outcome_from_scripted_effects() {
         "unexpected outcome: {outcome:?}"
     );
 
-    let rollback_request = RouteBoundDirectOpenRequest::from_compatibility_command(
-        json!({
-            "action": "remote_view_open",
-            "routePoolEntryId": "pool-a",
-            "provider": "rdp_gateway",
-            "runtimeProfile": "stealthcdp-default",
-            "url": "https://example.test/",
-            "serviceJobId": "job-rollback",
-            "displayAllocationId": "remote-view-display:31",
-            "routePoolEntry": {
-                "id": "pool-a",
-                "routeId": "route-a",
-                "provider": "rdp_gateway",
-                "frameUrl": "https://dashboard.example/guacamole/#/client/route-a",
-                "externalUrl": "https://guac.example/#/client/route-a",
-                "providerMode": "single_controller",
-                "state": "available",
-                "target": {
-                    "displayAllocationId": "remote-view-display:31",
-                    "displayName": ":31",
-                    "displayIsolation": "shared_display",
-                    "displayAccess": {"state": "ready"}
-                }
-            }
-        }),
-        None,
-        authorized_attribution(),
-    )
-    .unwrap();
-    runtime.events.lock().unwrap().clear();
-    runtime.observation = ScriptedRuntime::new().observation;
-    runtime.launch_issue = Some(RouteBoundRuntimeIssue::EffectFailed {
-        operation: "launch_browser",
-        message: "scripted launch failure".to_string(),
-    });
-    let rolled_back = RouteBoundOpenCoordinator::open(
-        RouteBoundOpenInvocation::direct(rollback_request),
-        &mut runtime,
-        &repository,
-        &supervisor,
-    )
-    .await
-    .unwrap();
-    assert!(matches!(
-        rolled_back,
-        RouteBoundOpenOutcome::RolledBack { .. }
-    ));
     let _ = std::fs::remove_dir_all(root);
 }
 

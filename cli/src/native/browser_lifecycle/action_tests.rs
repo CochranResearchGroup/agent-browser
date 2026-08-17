@@ -644,6 +644,62 @@ fn test_remote_view_open_reusable_live_target_prefers_handoff_target() {
     .unwrap();
     assert_eq!(target.target_id, "handoff-target");
 }
+
+#[test]
+fn test_remote_view_open_reacquires_active_intent_target_when_retained_id_expired() {
+    let pages = vec![
+        PageInfo {
+            target_id: "compatible-first".to_string(),
+            session_id: "session-first".to_string(),
+            url: "https://accounts.example.com/sign-in/first".to_string(),
+            title: "First".to_string(),
+            target_type: "page".to_string(),
+        },
+        PageInfo {
+            target_id: "compatible-active".to_string(),
+            session_id: "session-active".to_string(),
+            url: "https://accounts.example.com/sign-in/active".to_string(),
+            title: "Active".to_string(),
+            target_type: "page".to_string(),
+        },
+        PageInfo {
+            target_id: "wrong-intent".to_string(),
+            session_id: "session-wrong".to_string(),
+            url: "https://other.example.com/".to_string(),
+            title: "Other".to_string(),
+            target_type: "page".to_string(),
+        },
+    ];
+
+    let target = remote_view_open_reacquired_live_target(
+        &pages,
+        Some("expired-target"),
+        Some("compatible-active"),
+        Some("https://accounts.example.com/"),
+    )
+    .unwrap();
+
+    assert_eq!(target.target_id, "compatible-active");
+}
+
+#[test]
+fn test_remote_view_open_reacquisition_rejects_same_origin_wrong_path() {
+    let pages = vec![PageInfo {
+        target_id: "wrong-article".to_string(),
+        session_id: "session-wrong".to_string(),
+        url: "https://example.com/other".to_string(),
+        title: "Other".to_string(),
+        target_type: "page".to_string(),
+    }];
+
+    assert!(remote_view_open_reacquired_live_target(
+        &pages,
+        Some("expired-target"),
+        Some("wrong-article"),
+        Some("https://example.com/article"),
+    )
+    .is_none());
+}
 #[test]
 fn test_remote_view_open_creates_blank_target_before_destination_navigation() {
     let command = json!(

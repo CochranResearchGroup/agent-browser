@@ -25,6 +25,9 @@
 //! remain scoped to their browser owner during census joins.
 //! Failed reconciliation restores the exact prior active state of managed user
 //! units and writes a private diagnostic receipt.
+//! Operator recovery closes an exact retained admission drain only after the
+//! old selector, candidate process absence, dashboard route, and stable census
+//! prove that the failed transaction preserved its rollback generation.
 
 use serde::Serialize;
 use serde_json::Value;
@@ -219,10 +222,208 @@ pub fn run_workstation_command(args: &[String]) {
         Some("reconcile") => run_workstation_reconcile(json),
         Some("backup") => run_workstation_backup(json),
         Some("status") => run_workstation_upgrade_status(json),
+        Some("recover") => run_workstation_upgrade_recover(args, json),
         Some("finalize") => run_workstation_upgrade_finalize(json),
         Some("gc") => run_workstation_generation_gc(args, json),
         _ => run_workstation_install(args),
     }
+}
+
+fn run_workstation_upgrade_recover(args: &[String], json: bool) {
+    let result = (|| {
+        if !cfg!(target_os = "linux") {
+            return Err("workstation upgrade recovery is only supported on Linux".to_string());
+        }
+        let transaction_id = parse_recovery_transaction_id(args)?;
+        let root = workstation_root()?;
+        let _lock = WorkstationLock::acquire(&root)?;
+        recover_operator_required_upgrade_for_root(
+            &root,
+            &transaction_id,
+            env::var_os("AGENT_BROWSER_WORKSTATION_ROOT").is_some(),
+        )
+    })();
+    match result {
+        Ok(report) if json => println!(
+            "{}",
+            serde_json::to_string_pretty(&report)
+                .unwrap_or_else(|_| r#"{"success":false,"error":"serialization failed"}"#.into())
+        ),
+        Ok(report) => println!(
+            "Workstation transaction {} was recovered to the preserved generation; runtime admission is open.",
+            report
+                .get("transactionId")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown")
+        ),
+        Err(error) => fail(&error, json),
+    }
+}
+
+fn parse_recovery_transaction_id(args: &[String]) -> Result<String, String> {
+    let mut transaction_id = None;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "install" | "workstation" | "recover" | "--json" => {}
+            "--transaction-id" => {
+                if transaction_id.is_some() {
+                    return Err("--transaction-id may be specified only once".to_string());
+                }
+                index += 1;
+                transaction_id = Some(
+                    args.get(index)
+                        .filter(|value| valid_upgrade_transaction_id(value))
+                        .cloned()
+                        .ok_or_else(|| {
+                            "--transaction-id requires an exact upgrade transaction ID".to_string()
+                        })?,
+                );
+            }
+            unknown => return Err(format!("Unknown workstation recovery argument: {unknown}")),
+        }
+        index += 1;
+    }
+    transaction_id.ok_or_else(|| "workstation recovery requires --transaction-id <id>".to_string())
+}
+
+fn valid_upgrade_transaction_id(value: &str) -> bool {
+    value.starts_with("upgrade-")
+        && value.len() > "upgrade-".len()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+}
+
+/// Closes one exact admission drain only after proving that its failed
+/// transaction has returned to the sealed old generation and no candidate
+/// executable or dashboard ingress retains effect authority.
+fn recover_operator_required_upgrade_for_root(
+    root: &Path,
+    expected_transaction_id: &str,
+    isolated_root: bool,
+) -> Result<Value, String> {
+    use crate::runtime_adoption::UpgradeTransactionState;
+
+    if !valid_upgrade_transaction_id(expected_transaction_id) {
+        return Err("workstation_recovery_transaction_id_invalid".to_string());
+    }
+    let paths = install_paths(root);
+    let adoption_root = root.join(".agent-browser/runtime-adoption");
+    let drain_path = adoption_root.join("admission-drain.json");
+    let drain: Value = serde_json::from_slice(
+        &fs::read(&drain_path).map_err(display_io("read runtime admission drain", &drain_path))?,
+    )
+    .map_err(|error| format!("Runtime admission drain is invalid: {error}"))?;
+    let drain_transaction_id = drain
+        .get("transactionId")
+        .and_then(Value::as_str)
+        .filter(|value| valid_upgrade_transaction_id(value))
+        .ok_or_else(|| "runtime_admission_drain_transaction_invalid".to_string())?;
+    if drain_transaction_id != expected_transaction_id {
+        return Err("workstation_recovery_transaction_does_not_own_admission".to_string());
+    }
+    let transaction_path = adoption_root
+        .join("transactions")
+        .join(format!("{expected_transaction_id}.json"));
+    let mut transaction: crate::runtime_adoption::UpgradeTransaction =
+        serde_json::from_slice(&fs::read(&transaction_path).map_err(display_io(
+            "read operator recovery transaction",
+            &transaction_path,
+        ))?)
+        .map_err(|error| format!("Operator recovery transaction is invalid: {error}"))?;
+    if transaction.transaction_id != expected_transaction_id
+        || drain.get("candidateGenerationId").and_then(Value::as_str)
+            != Some(transaction.candidate_generation_id.as_str())
+        || drain
+            .get("transactionRevision")
+            .and_then(Value::as_u64)
+            .is_none_or(|revision| revision > transaction.revision)
+    {
+        return Err("workstation_recovery_transaction_evidence_mismatch".to_string());
+    }
+    let recovery_checkpoint_present = transaction
+        .checkpoints
+        .iter()
+        .any(|checkpoint| checkpoint.name == "operator_recovery_verified_old_generation");
+    if transaction.state != UpgradeTransactionState::OperatorRecoveryRequired
+        && !(transaction.state == UpgradeTransactionState::FailedPreservedOldGeneration
+            && recovery_checkpoint_present)
+    {
+        return Err(format!(
+            "workstation_recovery_requires_operator_recovery_state:{:?}",
+            transaction.state
+        ));
+    }
+    let old_generation_id = transaction
+        .old_generation_id
+        .as_deref()
+        .ok_or_else(|| "workstation_recovery_old_generation_missing".to_string())?
+        .to_string();
+    if selected_generation_id(&paths).as_deref() != Some(old_generation_id.as_str()) {
+        return Err("workstation_recovery_old_generation_not_selected".to_string());
+    }
+    validate_sealed_generation_tree(&paths.generations_dir.join(&old_generation_id))?;
+
+    let mut live_process_references = std::collections::BTreeMap::new();
+    collect_process_generation_references(&paths, &mut live_process_references);
+    if live_process_references.contains_key(&transaction.candidate_generation_id) {
+        return Err("workstation_recovery_candidate_process_still_live".to_string());
+    }
+
+    let dashboard_ingress_path = env::var_os("AGENT_BROWSER_DASHBOARD_INGRESS_STATE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| root.join(".agent-browser/dashboard-ingress.json"));
+    let dashboard_ingress =
+        crate::dashboard_ingress::dashboard_ingress_status_for_path(&dashboard_ingress_path);
+    let candidate_selected = dashboard_ingress
+        .pointer("/selectedBackend/generationId")
+        .and_then(Value::as_str)
+        == Some(transaction.candidate_generation_id.as_str());
+    let candidate_staged = dashboard_ingress
+        .pointer("/candidateBackend/generationId")
+        .and_then(Value::as_str)
+        == Some(transaction.candidate_generation_id.as_str());
+    if candidate_selected || candidate_staged {
+        return Err("workstation_recovery_candidate_dashboard_still_routed".to_string());
+    }
+
+    let census = if isolated_root {
+        isolated_runtime_census()
+    } else {
+        collect_stable_runtime_census_with(
+            crate::runtime_adoption::collect_host_runtime_census_round,
+        )
+    }
+    .map_err(|error| format!("workstation_recovery_runtime_census_unstable:{error}"))?;
+    if !census.activation_allowed {
+        return Err("workstation_recovery_runtime_census_ambiguous".to_string());
+    }
+
+    let changed = transaction.state == UpgradeTransactionState::OperatorRecoveryRequired;
+    if changed {
+        transaction.stop_reason = Some("operator_recovery_verified_old_generation".to_string());
+        transaction.terminal_result = Some("old_generation_preserved".to_string());
+        persist_upgrade_transition(
+            &transaction_path,
+            &mut transaction,
+            UpgradeTransactionState::FailedPreservedOldGeneration,
+            "operator_recovery_verified_old_generation",
+        )?;
+    }
+    clear_admission_drain(&drain_path)?;
+    Ok(serde_json::json!({
+        "schemaVersion": "agent-browser.workstation-upgrade-recovery.v1",
+        "success": true,
+        "changed": changed,
+        "transactionId": transaction.transaction_id,
+        "state": transaction.state,
+        "selectedGenerationId": old_generation_id,
+        "candidateProcessAbsent": true,
+        "candidateDashboardRouteAbsent": true,
+        "runtimeCensusStable": true,
+        "admissionDraining": false,
+    }))
 }
 
 fn run_workstation_upgrade_status(json: bool) {
@@ -1027,12 +1228,10 @@ fn run_workstation_install(args: &[String]) {
         phases.push("post-commit-validating");
 
         let validation = if !isolated_root {
-            let transitional_source_sessions = prepared
-                .runtime_handoffs
-                .iter()
-                .filter(|handoff| handoff.committed && !handoff.source_finalized)
-                .map(|handoff| handoff.source_session.clone())
-                .collect::<Vec<_>>();
+            let transitional_source_sessions = permitted_stale_source_sessions(
+                &prepared.runtime_handoffs,
+                &prepared.transaction.runtime_migrations,
+            );
             let reconcile = match reconcile_workstation_locked_for_upgrade(
                 &root,
                 &paths,
@@ -2972,6 +3171,8 @@ fn install_doctor_issues_are_advisory(data: &Value, issues: &[Value]) -> bool {
 
     issues.iter().all(|issue| {
         issue.get("code").and_then(Value::as_str) == Some("service_duplicate_profile_pressure")
+            || issue.get("code").and_then(Value::as_str)
+                == Some("active_runtime_manual_preservation")
             || (inactive_supervisors && supervisor_issues.contains(issue))
     })
 }
@@ -3748,11 +3949,20 @@ fn transfer_discovered_runtimes(
                         migration.logical_browser_id
                     )
                 })?;
-                if migration.logical_browser_id != format!("session:{source_session}") {
+                if !runtime_source_session_is_bound(
+                    &service_state,
+                    &migration.logical_browser_id,
+                    &source_session,
+                ) {
                     return Err(format!(
                         "runtime_orphan_logical_browser_not_session_bound:{}",
                         migration.logical_browser_id
                     ));
+                }
+                if migration.logical_browser_id != format!("session:{source_session}") {
+                    migration
+                        .reason_codes
+                        .push("prior_transaction_session_alias_rebound".to_string());
                 }
                 let candidate_session = orphan_candidate_session(migration, transaction_id);
                 handoffs.push(PreparedRuntimeHandoff {
@@ -3767,7 +3977,14 @@ fn transfer_discovered_runtimes(
                 let resumed = run_agent_json(
                     &candidate_binary,
                     &candidate_session,
-                    &["handoff", "resume", "--source-session", &source_session],
+                    &[
+                        "handoff",
+                        "resume",
+                        "--source-session",
+                        &source_session,
+                        "--logical-browser-id",
+                        &migration.logical_browser_id,
+                    ],
                 )?;
                 handoffs[handoff_index].committed = true;
                 migration.adoption_receipt_id = Some(owner_transfer_receipt_id(&resumed)?);
@@ -3800,13 +4017,26 @@ fn transfer_discovered_runtimes(
 
 /// Stops a census-proven browserless daemon while the admission drain prevents
 /// new effect work. The recorded process identity prevents PID-reuse signals.
+/// A Linux daemon whose executable was replaced after launch is reconciled
+/// only when its PID, start token, original path, and recorded digest match the
+/// live deleted proc inode exactly.
 /// A daemon that does not complete graceful shutdown within the bounded grace
 /// period is force-stopped through the same verified process handle. No browser
 /// process is signaled or closed.
 fn retire_idle_daemon(session: &str) -> Result<(), String> {
-    let identity = crate::connection::load_daemon_process_identity(session)?;
-    let Some(process) = crate::process_identity::VerifiedProcessTermination::open(&identity)?
-    else {
+    let mut identity = crate::connection::load_daemon_process_identity(session)?;
+    let process = match crate::process_identity::VerifiedProcessTermination::open(&identity) {
+        Ok(process) => process,
+        Err(original_error) => {
+            let Some(reconciled) = reconcile_deleted_idle_daemon_identity(session, &identity)?
+            else {
+                return Err(original_error);
+            };
+            identity = reconciled;
+            crate::process_identity::VerifiedProcessTermination::open(&identity)?
+        }
+    };
+    let Some(process) = process else {
         if crate::connection::daemon_ready(session) {
             return Err(format!("idle_daemon_identity_changed:{session}"));
         }
@@ -3821,6 +4051,67 @@ fn retire_idle_daemon(session: &str) -> Result<(), String> {
         return Err(format!("idle_daemon_session_rebound:{session}"));
     }
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn reconcile_deleted_idle_daemon_identity(
+    session: &str,
+    recorded: &crate::process_identity::RecordedProcessIdentity,
+) -> Result<Option<crate::process_identity::RecordedProcessIdentity>, String> {
+    use crate::process_identity::ProcessObservation;
+
+    let observed = match crate::process_identity::observe_process(recorded.pid) {
+        ProcessObservation::Observed(observed) => observed,
+        ProcessObservation::Missing | ProcessObservation::Failed { .. } => return Ok(None),
+    };
+    let recorded_sha_path = crate::connection::get_socket_dir().join(format!("{session}.sha256"));
+    let recorded_sha256 = fs::read_to_string(&recorded_sha_path).map_err(display_io(
+        "read idle daemon executable digest",
+        &recorded_sha_path,
+    ))?;
+    let proc_executable = PathBuf::from(format!("/proc/{}/exe", recorded.pid));
+    let observed_sha256 = workstation_file_sha256(&proc_executable)?;
+    let Some(reconciled) = reconciled_deleted_idle_daemon_identity(
+        recorded,
+        &observed,
+        recorded_sha256.trim(),
+        &observed_sha256,
+    ) else {
+        return Ok(None);
+    };
+    crate::connection::write_daemon_process_identity(session, &reconciled)?;
+    Ok(Some(reconciled))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn reconcile_deleted_idle_daemon_identity(
+    _session: &str,
+    _recorded: &crate::process_identity::RecordedProcessIdentity,
+) -> Result<Option<crate::process_identity::RecordedProcessIdentity>, String> {
+    Ok(None)
+}
+
+fn reconciled_deleted_idle_daemon_identity(
+    recorded: &crate::process_identity::RecordedProcessIdentity,
+    observed: &crate::process_identity::ObservedProcessIdentity,
+    recorded_sha256: &str,
+    observed_sha256: &str,
+) -> Option<crate::process_identity::RecordedProcessIdentity> {
+    let recorded_executable = recorded.executable_path.as_deref()?;
+    let observed_executable = observed.executable_path.as_deref()?;
+    let relocated = observed_executable.strip_suffix(" (deleted)")?;
+    if recorded.pid != observed.pid
+        || observed.start_token.as_deref() != Some(recorded.start_token.as_str())
+        || relocated != recorded_executable
+        || recorded_sha256.len() != 64
+        || recorded_sha256 != observed_sha256
+        || recorded.browser_family != observed.browser_family
+    {
+        return None;
+    }
+    let mut reconciled = recorded.clone();
+    reconciled.executable_path = Some(observed_executable.to_string());
+    Some(reconciled)
 }
 
 fn retire_verified_idle_daemon_process(
@@ -4111,7 +4402,14 @@ fn adopt_runtime_via_verified_orphan_fallback(
     let resumed = run_agent_json(
         candidate_binary,
         &candidate_session,
-        &["handoff", "resume", "--source-session", source_session],
+        &[
+            "handoff",
+            "resume",
+            "--source-session",
+            source_session,
+            "--logical-browser-id",
+            &migration.logical_browser_id,
+        ],
     )?;
     handoffs[handoff_index].committed = true;
     migration.adoption_receipt_id = Some(owner_transfer_receipt_id(&resumed)?);
@@ -4136,6 +4434,10 @@ fn runtime_source_session_is_bound(
     logical_browser_id: &str,
     source_session: &str,
 ) -> bool {
+    // A failed transaction may leave its transaction-scoped candidate session
+    // as the retained browser alias after the owner registry has rolled back.
+    // The service session's exact browser binding authorizes a new candidate
+    // to re-adopt that browser without reusing the prior candidate daemon.
     logical_browser_id == format!("session:{source_session}")
         || service_state
             .sessions
@@ -4308,7 +4610,9 @@ fn resolve_runtime_source_session_with_probe(
         .runtime_owner_registry
         .owner(&migration.profile_identity_digest)
     {
-        candidates.insert(owner.daemon_session_route.clone());
+        if owner.state != crate::runtime_owner_transfer::ProfileOwnerState::Orphaned {
+            candidates.insert(owner.daemon_session_route.clone());
+        }
     }
     if let Some(browser) = service_state.browsers.get(&migration.logical_browser_id) {
         candidates.extend(browser.active_session_ids.iter().cloned());
@@ -5135,7 +5439,7 @@ fn parse_port(value: Option<&String>, flag: &str) -> Result<u16, String> {
 }
 
 fn workstation_usage() -> &'static str {
-    "Usage: agent-browser install workstation <--dry-run|--apply> [--json] [--dashboard-port <port>] [--guacamole-port <port>]\n       agent-browser install workstation status [--json]\n       agent-browser install workstation finalize [--json]\n       agent-browser install workstation gc <--dry-run|--apply> [--json]"
+    "Usage: agent-browser install workstation <--dry-run|--apply> [--json] [--dashboard-port <port>] [--guacamole-port <port>]\n       agent-browser install workstation status [--json]\n       agent-browser install workstation recover --transaction-id <id> [--json]\n       agent-browser install workstation finalize [--json]\n       agent-browser install workstation gc <--dry-run|--apply> [--json]"
 }
 
 #[derive(Debug)]
@@ -5207,6 +5511,34 @@ impl PreparedRuntimeHandoff {
     fn rollback_requires_operator_recovery(&self) -> bool {
         self.source_finalized || self.irreversible_source_revocation
     }
+}
+
+fn permitted_stale_source_sessions(
+    runtime_handoffs: &[PreparedRuntimeHandoff],
+    runtime_migrations: &[crate::runtime_adoption::RuntimeMigrationRecord],
+) -> Vec<String> {
+    let mut sessions = runtime_handoffs
+        .iter()
+        .filter(|handoff| handoff.committed && !handoff.source_finalized)
+        .map(|handoff| handoff.source_session.clone())
+        .chain(
+            runtime_migrations
+                .iter()
+                .filter(|migration| {
+                    migration.disposition
+                        == crate::runtime_adoption::RuntimeDisposition::ManualPreservation
+                })
+                .filter_map(|migration| {
+                    migration
+                        .logical_browser_id
+                        .strip_prefix("session:")
+                        .map(str::to_string)
+                }),
+        )
+        .collect::<Vec<_>>();
+    sessions.sort();
+    sessions.dedup();
+    sessions
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -6688,6 +7020,45 @@ mod tests {
     }
 
     #[test]
+    fn orphan_owner_placeholder_route_defers_to_the_bound_browser_session() {
+        let logical_browser_id = "session:p116-alpha";
+        let mut service_state = crate::native::service_model::ServiceState::default();
+        service_state.runtime_owner_registry =
+            crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(
+                crate::runtime_owner_transfer::ProfileOwner {
+                    owner_id: "owner-orphan".to_string(),
+                    profile_identity_digest: "profile-digest".to_string(),
+                    state: crate::runtime_owner_transfer::ProfileOwnerState::Orphaned,
+                    owner_generation: 2,
+                    browser_id: logical_browser_id.to_string(),
+                    daemon_session_route: "orphan-observation".to_string(),
+                    process_instance_digest: "process-digest".to_string(),
+                    browser_family: "chrome".to_string(),
+                    cdp_endpoint_identity_digest: "cdp-digest".to_string(),
+                    target_set_digest: "target-digest".to_string(),
+                    pending_transfer: None,
+                    last_transition: None,
+                },
+            );
+        service_state.browsers.insert(
+            logical_browser_id.to_string(),
+            crate::native::service_model::BrowserProcess {
+                active_session_ids: vec!["orphan-verified".to_string()],
+                ..Default::default()
+            },
+        );
+
+        let source = resolve_runtime_source_session_with_probe(
+            &service_state,
+            &runtime_migration(logical_browser_id),
+            |_| false,
+        )
+        .unwrap();
+
+        assert_eq!(source.as_deref(), Some("orphan-verified"));
+    }
+
+    #[test]
     fn live_owner_route_supersedes_a_retained_inactive_browser_alias() {
         let logical_browser_id = "session:p116-alpha";
         let mut service_state = crate::native::service_model::ServiceState::default();
@@ -6742,6 +7113,32 @@ mod tests {
     }
 
     #[test]
+    fn prior_transaction_orphan_alias_remains_bound_to_its_exact_browser() {
+        let logical_browser_id = "session:p116-alpha";
+        let prior_candidate = "orphan-prior-transaction";
+        let mut service_state = crate::native::service_model::ServiceState::default();
+        service_state.sessions.insert(
+            prior_candidate.to_string(),
+            crate::native::service_model::BrowserSession {
+                id: prior_candidate.to_string(),
+                browser_ids: vec![logical_browser_id.to_string()],
+                ..Default::default()
+            },
+        );
+
+        assert!(runtime_source_session_is_bound(
+            &service_state,
+            logical_browser_id,
+            prior_candidate
+        ));
+        assert!(!runtime_source_session_is_bound(
+            &service_state,
+            "session:p116-beta",
+            prior_candidate
+        ));
+    }
+
+    #[test]
     fn parses_explicit_dry_run() {
         let args = vec![
             "install".to_string(),
@@ -6756,6 +7153,29 @@ mod tests {
         assert!(parsed.json);
         assert_eq!(parsed.dashboard_port, 4949);
         assert_eq!(parsed.guacamole_port, DEFAULT_GUACAMOLE_PORT);
+    }
+
+    #[test]
+    fn recovery_requires_one_exact_transaction_id() {
+        let args = vec![
+            "install".to_string(),
+            "workstation".to_string(),
+            "recover".to_string(),
+            "--transaction-id".to_string(),
+            "upgrade-fixture-42".to_string(),
+            "--json".to_string(),
+        ];
+        assert_eq!(
+            parse_recovery_transaction_id(&args).unwrap(),
+            "upgrade-fixture-42"
+        );
+        assert!(parse_recovery_transaction_id(&args[..3])
+            .unwrap_err()
+            .contains("requires --transaction-id"));
+
+        let mut traversal = args;
+        traversal[4] = "upgrade-../../state".to_string();
+        assert!(parse_recovery_transaction_id(&traversal).is_err());
     }
 
     #[test]
@@ -6922,6 +7342,69 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn operator_recovery_closes_only_a_verified_matching_drain() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-operator-recovery-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        fs::create_dir_all(paths.binary.parent().unwrap()).unwrap();
+        fs::create_dir_all(&paths.legacy_support_dir).unwrap();
+        fs::create_dir_all(&paths.unit_dir).unwrap();
+        fs::write(&paths.binary, b"legacy-binary").unwrap();
+        set_executable(&paths.binary).unwrap();
+        fs::write(paths.legacy_support_dir.join("manifest.json"), b"{}\n").unwrap();
+        for unit in WORKSTATION_GENERATION_UNITS {
+            if unit != "agent-browser-dashboard-backend.service" {
+                fs::write(paths.unit_dir.join(unit), format!("legacy {unit}\n")).unwrap();
+            }
+        }
+        let old_generation_id = migrate_legacy_payload_to_generation(&paths).unwrap();
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "generation-candidate".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.old_generation_id = Some(old_generation_id.clone());
+        transaction.state =
+            crate::runtime_adoption::UpgradeTransactionState::OperatorRecoveryRequired;
+        transaction.revision = 7;
+        transaction.stop_reason = Some("candidate_dashboard_presentation_unproven".to_string());
+        transaction.terminal_result = Some("operator_recovery_required".to_string());
+        let transaction_path = transaction_path(&root, &transaction.transaction_id);
+        write_private_json_atomic(&transaction_path, &transaction).unwrap();
+        let drain_path = root.join(".agent-browser/runtime-adoption/admission-drain.json");
+        persist_admission_drain(&drain_path, &transaction).unwrap();
+
+        let report =
+            recover_operator_required_upgrade_for_root(&root, &transaction.transaction_id, true)
+                .unwrap();
+
+        assert_eq!(report["changed"], true);
+        assert_eq!(report["selectedGenerationId"], old_generation_id);
+        assert!(!drain_path.exists());
+        let recovered: crate::runtime_adoption::UpgradeTransaction =
+            serde_json::from_slice(&fs::read(transaction_path).unwrap()).unwrap();
+        assert_eq!(
+            recovered.state,
+            crate::runtime_adoption::UpgradeTransactionState::FailedPreservedOldGeneration
+        );
+        assert_eq!(
+            recovered.terminal_result.as_deref(),
+            Some("old_generation_preserved")
+        );
+        assert!(recovered
+            .checkpoints
+            .iter()
+            .any(|checkpoint| checkpoint.name == "operator_recovery_verified_old_generation"));
+
+        remove_generation_tree(&paths.generations_dir.join(old_generation_id)).unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
     #[cfg(target_os = "linux")]
     #[test]
     fn relocated_legacy_daemon_identity_requires_exact_start_path_and_binary_digest() {
@@ -6983,6 +7466,49 @@ mod tests {
             &wrong_path,
             "matching-sha",
             "matching-sha",
+        )
+        .is_none());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn deleted_idle_daemon_identity_requires_exact_start_path_family_and_binary_digest() {
+        let recorded = crate::process_identity::RecordedProcessIdentity {
+            pid: 73587,
+            start_token: "linux:boot:44070287".to_string(),
+            executable_path: Some("/workspace/cli/target/release/agent-browser".to_string()),
+            browser_family: None,
+        };
+        let observed = crate::process_identity::ObservedProcessIdentity {
+            pid: 73587,
+            start_token: Some("linux:boot:44070287".to_string()),
+            executable_path: Some(
+                "/workspace/cli/target/release/agent-browser (deleted)".to_string(),
+            ),
+            browser_family: None,
+            command_line: None,
+        };
+        let digest = "a".repeat(64);
+
+        let reconciled =
+            reconciled_deleted_idle_daemon_identity(&recorded, &observed, &digest, &digest)
+                .expect("exact deleted idle daemon identity should reconcile");
+        assert_eq!(
+            reconciled.executable_path.as_deref(),
+            Some("/workspace/cli/target/release/agent-browser (deleted)")
+        );
+
+        let mut wrong_start = observed.clone();
+        wrong_start.start_token = Some("linux:boot:other".to_string());
+        assert!(
+            reconciled_deleted_idle_daemon_identity(&recorded, &wrong_start, &digest, &digest,)
+                .is_none()
+        );
+        assert!(reconciled_deleted_idle_daemon_identity(
+            &recorded,
+            &observed,
+            &digest,
+            &"b".repeat(64),
         )
         .is_none());
     }
@@ -8216,6 +8742,39 @@ mod tests {
             &transaction,
             &["source-owner".to_string()]
         ));
+    }
+
+    #[test]
+    fn transaction_validation_includes_only_exact_manual_preservation_sessions() {
+        let handoffs = vec![PreparedRuntimeHandoff {
+            source_session: "cooperative-source".to_string(),
+            candidate_session: "cooperative-candidate".to_string(),
+            mode: crate::runtime_adoption::BrowserAdoptionMode::CooperativeTransfer,
+            committed: true,
+            source_finalized: false,
+            irreversible_source_revocation: false,
+        }];
+        let migrations = vec![
+            runtime_migration("session:manual-source"),
+            runtime_migration("browser-without-session-prefix"),
+        ];
+
+        assert_eq!(
+            permitted_stale_source_sessions(&handoffs, &migrations),
+            vec![
+                "cooperative-source".to_string(),
+                "manual-source".to_string(),
+            ]
+        );
+
+        let finalized_handoffs = vec![PreparedRuntimeHandoff {
+            source_finalized: true,
+            ..handoffs.into_iter().next().unwrap()
+        }];
+        assert_eq!(
+            permitted_stale_source_sessions(&finalized_handoffs, &migrations),
+            vec!["manual-source".to_string()]
+        );
     }
 
     #[test]

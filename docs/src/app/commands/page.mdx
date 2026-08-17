@@ -123,6 +123,12 @@ abort` for pre-commit failure and candidate `handoff rollback --source-session
 <old>` for post-commit failure. Verified ownerless browsers use the same resume
 path without an old daemon proposal.
 
+Transactional retry recovery may add
+`--logical-browser-id session:<original>` when a failed orphan adoption retained
+a different source-session alias. The candidate rejects the hint unless the
+current service session and browser records bind that alias to the exact
+logical browser.
+
 The local development publisher inventories daemon sockets and active named
 supervisors, runs this protocol around executable replacement, and finalizes
 the old daemon only after candidate validation. Browser PIDs, DevTools ports,

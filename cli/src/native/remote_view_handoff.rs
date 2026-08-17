@@ -499,7 +499,9 @@ pub fn durable_remote_view_handoff_url(
 }
 
 /// Rebuild a `remote_view_open` request from durable intent while discarding
-/// route and display selectors that are expected to expire between opens.
+/// route and display selectors that are expected to expire between opens. The
+/// recorded URL remains a non-mutating selector for reacquiring a live target
+/// when its historical CDP target ID expired.
 pub fn remote_view_handoff_resolution_command(
     handoff: &RemoteViewHandoff,
     service_job_id: &str,
@@ -545,6 +547,13 @@ pub fn remote_view_handoff_resolution_command(
             "durableResolutionMode".to_string(),
             Value::String("reacquire_only".to_string()),
         );
+        if let Some(desired_url) = handoff
+            .desired_url
+            .as_deref()
+            .or_else(|| handoff.intent.get("url").and_then(Value::as_str))
+        {
+            command.insert("url".to_string(), Value::String(desired_url.to_string()));
+        }
         if let Some(target_id) = handoff.target_id.as_ref() {
             command.insert(
                 "preferredTargetId".to_string(),
@@ -2923,7 +2932,7 @@ mod tests {
         assert_eq!(command["sessionName"], "session-a");
         assert_eq!(command["preferredTargetId"], "target-a");
         assert_eq!(command["durableResolutionMode"], "reacquire_only");
-        assert!(command.get("url").is_none());
+        assert_eq!(command["url"], "https://example.com/article");
         assert!(command.get("routePoolEntryId").is_none());
         assert!(command.get("routeId").is_none());
         assert!(command.get("displayAllocationId").is_none());
@@ -2932,7 +2941,7 @@ mod tests {
         assert_eq!(command["controlInput"], "manual_attached_desktop");
         let tab_command =
             route_bound_handoff_tab_command(&command, "session:browser-a", "session-a");
-        assert!(tab_command.get("url").is_none());
+        assert_eq!(tab_command["url"], "https://example.com/article");
     }
 
     #[test]
@@ -2956,6 +2965,8 @@ mod tests {
                 "display-a".to_string(),
                 DisplayAllocation {
                     id: "display-a".to_string(),
+                    display_name: Some(":31".to_string()),
+                    display_isolation: "shared_display".to_string(),
                     owner_browser_id: Some("session:browser-a".to_string()),
                     owner_session_id: Some("session-a".to_string()),
                     state: "ready".to_string(),
@@ -3322,15 +3333,16 @@ mod tests {
         LockedServiceStateRepository<JsonServiceStateStore>,
         RemoteViewAcquisitionLease,
     ) {
-        let path = std::env::temp_dir().join(format!(
-            "agent-browser-handoff-rollback-{}-{}.json",
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-handoff-rollback-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos()
         ));
-        let store = JsonServiceStateStore::new(path.clone());
+        let path = root.join("state.json");
+        let store = JsonServiceStateStore::new(path);
         store
             .save(&ServiceState {
                 route_pool: BTreeMap::from([(
@@ -3408,7 +3420,7 @@ mod tests {
             ..RemoteViewAcquisitionLease::default()
         };
 
-        (path, store, repository, lease)
+        (root, store, repository, lease)
     }
 
     #[test]
@@ -3788,7 +3800,7 @@ mod tests {
 
     #[test]
     fn failure_recovery_begins_with_rollback_and_cleanup_plan() {
-        let (path, store, repository, lease) = rollback_test_repository();
+        let (root, store, repository, lease) = rollback_test_repository();
         let rollback_cleanup = route_bound_handoff_pending_rollback_cleanup("proof_failed");
         let launch = json!({
             "reused": true,
@@ -3830,12 +3842,12 @@ mod tests {
         let state = store.load().unwrap();
         assert_eq!(state.route_pool["pool-a"].state, "quarantined");
 
-        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
     fn immediate_failure_rolls_back_and_returns_summary() {
-        let (path, store, repository, lease) = rollback_test_repository();
+        let (root, store, repository, lease) = rollback_test_repository();
         let cleanup = route_bound_handoff_launch_failure_cleanup("browser_launch_failed");
 
         let failure = route_bound_handoff_immediate_failure(
@@ -3857,12 +3869,12 @@ mod tests {
         let state = store.load().unwrap();
         assert_eq!(state.display_allocations["display-a"].state, "ready");
 
-        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
     fn complete_open_finalizes_lease_and_returns_opened_response() {
-        let (path, store, repository, mut lease) = rollback_test_repository();
+        let (root, store, repository, mut lease) = rollback_test_repository();
         lease.state = "pending".to_string();
         lease.phase = "reserved".to_string();
         let mut planned_route_binding = command_test_route_binding();
@@ -3976,7 +3988,7 @@ mod tests {
             Some("https://dashboard.example/remote-view/job-handoff-a")
         );
 
-        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

@@ -1404,6 +1404,7 @@ fn remote_control_install_readiness(install: &Value) -> RemoteControlInstallRead
                 .map(|issue| {
                     let code = issue.get("code").and_then(Value::as_str)?;
                     if code == "service_duplicate_profile_pressure"
+                        || code == "active_runtime_manual_preservation"
                         || (inactive_supervisors && supervisor_issues.contains(issue))
                     {
                         Some(code.to_string())
@@ -3473,6 +3474,30 @@ MaxSessions=50
         install["data"]["data"]["sessionSupervisors"]["sessions"][0]["activeState"] =
             json!("active");
         assert!(!remote_control_install_readiness(&install).ready);
+    }
+
+    #[test]
+    fn accepted_manual_runtime_preservation_is_nonblocking_for_remote_control() {
+        let mut install = duplicate_pressure_only_install();
+        install["data"]["data"]["issues"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({
+                "code": "active_runtime_manual_preservation",
+                "session": "p0417-preflight",
+                "severity": "warning"
+            }));
+
+        let readiness = remote_control_install_readiness(&install);
+        assert!(!readiness.doctor_ready);
+        assert!(readiness.ready);
+        assert_eq!(
+            readiness.non_blocking_issue_codes,
+            vec![
+                "service_duplicate_profile_pressure".to_string(),
+                "active_runtime_manual_preservation".to_string(),
+            ]
+        );
     }
 
     #[test]

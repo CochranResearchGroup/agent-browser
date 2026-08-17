@@ -4594,6 +4594,7 @@ Examples:
 agent-browser handoff - Transfer a live browser to a replacement daemon
 
 Usage: agent-browser handoff <prepare|resume|abort|rollback|finalize>
+       agent-browser handoff resume --source-session <session> [--logical-browser-id session:<session>]
 
 Subcommands:
   prepare    Keep the old daemon authoritative and propose a candidate session
@@ -4614,6 +4615,7 @@ Global Options:
 Examples:
   agent-browser --session work handoff prepare
   agent-browser --session <candidate> handoff resume --source-session work
+  agent-browser --session <candidate> handoff resume --source-session orphan-prior --logical-browser-id session:work
   agent-browser --session work handoff abort
   agent-browser --session <candidate> handoff rollback --source-session work
   agent-browser --session work handoff finalize
@@ -5397,6 +5399,7 @@ agent-browser install - Install browser binaries
 Usage: agent-browser install [--with-deps] [--with-remote-view-privileges]
        agent-browser install workstation <--dry-run|--apply> [--json] [--dashboard-port <port>] [--guacamole-port <port>]
        agent-browser install workstation status [--json]
+       agent-browser install workstation recover --transaction-id <id> [--json]
        agent-browser install workstation finalize [--json]
        agent-browser install workstation gc <--dry-run|--apply> [--json]
        agent-browser install workstation reconcile [--json]
@@ -5422,6 +5425,9 @@ selected. On Linux, a daemon identity affected by that controlled relocation
 is repaired only when its exact start token and imported binary digest match.
 If a census-proven browserless daemon does not finish graceful shutdown, apply
 force-stops only that exact verified daemon process after the bounded grace.
+For a Linux idle daemon whose executable was replaced after launch, apply
+repairs the deleted proc-executable identity only when the PID, start token,
+original path, and recorded executable digest match the live inode exactly.
 For a schema-v1 live daemon with no owner record, exact census evidence permits
 the candidate to create the first receipted owner only after daemon revocation.
 Historical route, display, and stream identifiers are scoped to their browser
@@ -5446,6 +5452,9 @@ after every runtime has a proven disposition. Failure restores the old
 selector and reverses committed owner transfers when that can be proved.
 Verified live browsers without a session route remain preserve-only because
 orphan resume has no source session to bind.
+After acceptance, an exact ledger-backed manual-preservation session remains a
+nonblocking active_runtime_manual_preservation doctor warning until its operator
+closes it.
 If an exact old-generation daemon reports that the cooperative handoff command
 is unavailable, apply verifies its recorded executable identity, revokes only
 that daemon's effect authority, advances the exact registry owner to an
@@ -5507,6 +5516,8 @@ Options:
                        Set the workstation dashboard port (default: 4848)
   --guacamole-port <port>
                        Set the loopback Guacamole port (default: 8092)
+  --transaction-id <id>
+                       Acknowledge the exact operator-recovery transaction that owns admission
   --json               Output install or doctor results as JSON
 
 Examples:
@@ -5519,6 +5530,7 @@ Examples:
   agent-browser install workstation --dry-run --json
   agent-browser install workstation --apply --json
   agent-browser install workstation status --json
+  agent-browser install workstation recover --transaction-id upgrade-... --json
   agent-browser install workstation finalize --json
   agent-browser install workstation gc --dry-run --json
   agent-browser install workstation reconcile --json
@@ -5598,7 +5610,7 @@ Subcommands:
   stop                 Stop the dashboard server
   ingress status       Show selected, candidate, fallback, and presentation state
   ingress stage        Validate and stage one shadow dashboard backend
-  ingress commit       Select the staged backend from authenticated journey evidence
+  ingress commit       Select the staged backend from authenticated journey evidence or a durable handoff receipt
   ingress rollback     Discard the matching staged backend before commit
 
 Running 'agent-browser dashboard' with no subcommand is equivalent to 'dashboard start'.
@@ -5638,6 +5650,7 @@ Examples:
   agent-browser dashboard ingress status
   agent-browser dashboard ingress stage --expected-revision 1 --generation candidate-1 --port 4850 --manifest-sha256 <sha256>
   agent-browser dashboard ingress commit --expected-revision 2 --evidence <presentation-evidence.json>
+  agent-browser dashboard ingress commit --expected-revision 2 --handoff-id <id>
   agent-browser dashboard ingress rollback --expected-revision 2 --generation candidate-1
   agent-browser dashboard stop
 "##
@@ -6284,7 +6297,7 @@ Notes:
   - The stdio server reads newline-delimited JSON-RPC messages from stdin and writes MCP messages to stdout.
   - MCP tools include service_access_plan, service_request, service_job_cancel, service_incidents, service_remedies_apply, service_trace, service_profile_upsert, service_profile_freshness_update, service_profile_seeding_handoff_update, service_profile_delete, service_session_upsert, service_session_delete, service_site_policy_upsert, service_site_policy_delete, service_monitor_upsert, service_monitor_delete, service_monitors_run_due, service_monitor_pause, service_monitor_resume, service_monitor_reset_failures, service_monitor_triage, service_provider_upsert, service_provider_delete, service_browser_capability_registry_upsert, browser_navigate, browser_requests, browser_request_detail, browser_headers, browser_offline, browser_cookies_get, browser_cookies_set, browser_cookies_clear, browser_storage_get, browser_storage_set, browser_storage_clear, browser_user_agent, browser_viewport, browser_geolocation, browser_permissions, browser_timezone, browser_locale, browser_media, browser_dialog, browser_upload, browser_download, browser_wait_for_download, browser_har_start, browser_har_stop, browser_route, browser_unroute, browser_console, browser_errors, browser_pdf, browser_response_body, browser_clipboard, browser_back, browser_forward, browser_reload, browser_tab_new, browser_tab_switch, browser_tab_close, browser_set_content, browser_command, browser_snapshot, browser_get_url, browser_get_title, browser_tabs, browser_screenshot, browser_click, browser_fill, browser_wait, browser_type, browser_press, browser_hover, browser_select, browser_get_text, browser_get_value, browser_get_attribute, browser_get_html, browser_get_styles, browser_count, browser_get_box, browser_is_visible, browser_is_enabled, browser_check, browser_is_checked, browser_uncheck, browser_scroll, browser_scroll_into_view, browser_focus, and browser_clear.
   - service_request accepts one intent object with serviceName, agentName, taskName, siteId/loginId/accountId/url, targetServiceId, browserBuild, browserHost, viewStreamProvider, controlInputProvider, displayIsolation, profile or runtimeProfile hints, top-level browserId/sessionName reuse route hints, profileLeasePolicy, profileLeaseWaitTimeoutMs, action, params, and jobTimeoutMs, then queues the browser command through the same service-owned control path. Top-level browserId/sessionName route ordinary commands to an existing daemon lane selected by access-plan profileReuse; params.browserId/params.sessionName remain action parameters. Direct launches that select a profile already backed by a live retained browser are rejected unless they use those route hints or allowDuplicateProfileLane=true for reviewed isolation or throwaway work. Use action=external_byop_adopt with a registered external_byop profile and exactly one explicit cdpUrl or cdpPort when an already-running Chrome lane should become retained attached_existing browser/session/tab state before the next access plan. Use action=probe with a valid serviceTabHandle, timeoutMs, maxReturnBytes, and a provider-neutral probe.detectors recipe for bounded identity, account, readiness, or page-state evidence; supported generic detector types are url_title, selector_text, evaluate, and client_evidence. Optional probe.recordFreshness merges target/account freshness evidence into the selected service profile. Use action=tab_handle_refresh with a current or stale serviceTabHandle, optional desiredUrl, and repairPolicy=reject_only, reuse_compatible, open_if_missing, or replace_duplicates when a client needs structured stale-tab evidence, a refreshed generic handle, or one compatible target with duplicate cleanup before follow-on work. Use action=tab_handle_release with a serviceTabHandle when a client is finished with a leased shared-profile tab; release best-effort closes that exact physical target when the routed live browser owns it, marks only that retained tab closed in service state, and preserves the browser process plus session route for other clients. Use action=ui_action with a valid serviceTabHandle, timeoutMs, optional maxTextBytes, and a bounded uiAction.steps recipe for generic find, focus, fill, type, select, menu_select, click, wait, clear, or guarded dialog steps; clients supply website-specific selectors and instructions while agent-browser owns handle validation, caps, trace, and per-step evidence. Use action=network_capture with a valid serviceTabHandle, timeoutMs, and bounded networkCapture.maxEvents for capped network evidence; metadata is default, headers are redacted unless allowlisted, and response bodies require captureBodies=true plus maxBodyBytes. Use action=file_transfer with a valid serviceTabHandle, timeoutMs, and a fileTransfer upload and/or download recipe for service-owned file input and download capture; uploads require selector or labelText, files, allowedPaths, and maxFiles, while downloads require selector, directory, allowedDirectories, and optional maxBytes. Use action=view_focus with params.targetId plus params.index when both are known, or params.index alone as the fallback, plus params.maximize before opening a dashboard remote-view iframe for a retained tab. Use action=view_takeover with params.browserId, params.sessionName, params.streamId, params.provider, and params.openMode when a single-active-viewer RDP or Guacamole connection should be taken over or reconnected while preserving the browser process and session. Use action=service_remote_view_route_preflight to get a no-launch fastPreflight response with ready, partial, stale, or blocked component evidence before route-bound launch. Use action=service_remote_view_browser_reattach to show a retained RDP browser again without launching Chrome or acquiring its profile, and action=service_remote_view_route_switch to bind that browser to another available or parkable Guacamole route; route switch returns routeSwitchParking when it parks another live browser route because no route-pool entry was available. Use action=service_route_pool_repair with an exact acquisitionLeaseId and apply=false before attempting terminal quarantine recovery. Apply is accepted only when the matching browser, process identity, and session are absent and the route, display, and pool are terminal; otherwise the response retains quarantine with a typed skipped reason. Use service_viewer_lease_request, service_viewer_lease_heartbeat, service_viewer_lease_release, and service_controller_lease_takeover for explicit remote-view observer and controller leases. Use action=cdp_free_launch when the request should launch and track a headed browser without a DevTools port. Remote-headed CDP-free requests retain their explicit hidden display and RDP view-stream metadata without enabling DevTools. Its response includes unsupportedCommands for service request actions that still require CDP; software clients can use summarizeServiceCdpFreeLaunchAvailability for API, MCP, or dashboard control availability.
-  - remote_view_open returns an authenticated durable /remote-view/<handoff-id> operator URL in externalUrl and handoffUrl only when the route supplies a dashboard publicOperatorUrl. It never rewrites providerExternalUrl into a dashboard handoff path. Software clients should use requestServiceRemoteViewHandoff(), which returns only handoffId and handoffUrl. requestServiceRemoteViewOpen() rejects a real response without a durable handoff unless allowRawProviderUrl=true is explicitly selected for provider diagnostics. providerExternalUrl and routeBinding URLs identify only the current provider connection. Use action=service_remote_view_handoff_resolve with params.handoffId to adopt the exact retained browser identity and reacquire presentation without navigation, replacement targets, browser relaunch, provider substitution, or a raw-provider redirect. A ready response includes a presentationGeneration and matching presentationReceipt bound to the dashboard deployment, logical browser, daemon owner generation, process identity, target, and requested provider; a missing or stale receipt remains retryable with status=converging. Set params.allowReopenClosed=true only after explicit operator confirmation because explicit reopen is the separate path that may create and navigate a replacement target.
+  - remote_view_open returns an authenticated durable /remote-view/<handoff-id> operator URL in externalUrl and handoffUrl only when the route supplies a dashboard publicOperatorUrl. It never rewrites providerExternalUrl into a dashboard handoff path. Software clients should use requestServiceRemoteViewHandoff(), which returns only handoffId and handoffUrl. requestServiceRemoteViewOpen() rejects a real response without a durable handoff unless allowRawProviderUrl=true is explicitly selected for provider diagnostics. providerExternalUrl and routeBinding URLs identify only the current provider connection. Use action=service_remote_view_handoff_resolve with params.handoffId to adopt the exact retained browser identity and reacquire presentation without navigation, replacement targets, browser relaunch, provider substitution, or a raw-provider redirect. If the recorded CDP target ID expired, normal resolution may bind the current tab whose URL still matches the recorded intent. A ready response includes a presentationGeneration and matching presentationReceipt bound to the dashboard deployment, logical browser, daemon owner generation, process identity, target, and requested provider; the durable handoff sidecar preserves the highest recorded presentation generation when an older service writer saves stale state. A missing or stale receipt remains retryable with status=converging. Set params.allowReopenClosed=true only after explicit operator confirmation because explicit reopen is the separate path that may create and navigate a replacement target.
   - HTTP GET /api/service/contracts and MCP agent-browser://contracts expose matching service request schema IDs, contract versions, routes, MCP tool names, and supported actions for compatibility checks. Contracts include no-launch remote-view allocation collections for display allocations, remote-view routes, route pool entries, and viewer leases.
   - CLI service profiles lookup, HTTP GET /api/service/profiles/lookup, and MCP agent-browser://profiles/lookup{?query,hostname,profileId,profileName,serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,authenticationState,freshnessState,tag,url,readinessProfileId,browserBuild} rank the authoritative profile catalog and return match evidence plus launch, add-tab, view, seed, wait, or holder-inspection guidance. Identity searches never fall back to an unrelated generic browser-build default.
   - Service status includes manualBrowsers for live detached headed runtime launches, including PID, profile path, target URL, display, browser family/build, CDP availability, remote-view route, and the next safe operator action.

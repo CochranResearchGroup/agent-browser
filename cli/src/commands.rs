@@ -2443,6 +2443,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 }
                 "resume" => {
                     let mut source_session = None;
+                    let mut logical_browser_id = None;
                     let mut index = 1;
                     while index < rest.len() {
                         match rest[index] {
@@ -2469,6 +2470,33 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                                 source_session = Some(*value);
                                 index += 2;
                             }
+                            "--logical-browser-id" => {
+                                if logical_browser_id.is_some() {
+                                    return Err(ParseError::InvalidValue {
+                                        message: "handoff resume --logical-browser-id may be supplied once"
+                                            .to_string(),
+                                        usage: "handoff resume --source-session <session> [--logical-browser-id session:<session>]",
+                                    });
+                                }
+                                let value = rest.get(index + 1).ok_or_else(|| {
+                                    ParseError::MissingArguments {
+                                        context: "handoff resume".to_string(),
+                                        usage: "handoff resume --source-session <session> [--logical-browser-id session:<session>]",
+                                    }
+                                })?;
+                                let valid = value
+                                    .strip_prefix("session:")
+                                    .is_some_and(crate::validation::is_valid_session_name);
+                                if !valid {
+                                    return Err(ParseError::InvalidValue {
+                                        message: "handoff resume --logical-browser-id must be a valid session-scoped browser ID"
+                                            .to_string(),
+                                        usage: "handoff resume --source-session <session> [--logical-browser-id session:<session>]",
+                                    });
+                                }
+                                logical_browser_id = Some(*value);
+                                index += 2;
+                            }
                             option => {
                                 return Err(ParseError::InvalidValue {
                                     message: format!(
@@ -2489,6 +2517,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                         "id": id,
                         "action": "runtime_handoff_resume",
                         "sourceSession": source_session,
+                        "logicalBrowserId": logical_browser_id,
                     }))
                 }
                 "abort" if rest.len() == 1 => {
@@ -9788,6 +9817,13 @@ mod tests {
         assert_eq!(resume["action"], "runtime_handoff_resume");
         assert_eq!(resume["sourceSession"], "work");
 
+        let retry_resume = parse_command(
+            &args("handoff resume --source-session orphan-prior --logical-browser-id session:work"),
+            &default_flags(),
+        )
+        .unwrap();
+        assert_eq!(retry_resume["logicalBrowserId"], "session:work");
+
         let finalize = parse_command(&args("handoff finalize"), &default_flags()).unwrap();
         assert_eq!(finalize["action"], "runtime_handoff_finalize");
 
@@ -9806,6 +9842,11 @@ mod tests {
         assert!(parse_command(&args("handoff resume"), &default_flags()).is_err());
         assert!(parse_command(
             &args("handoff resume --source-session ../escape"),
+            &default_flags()
+        )
+        .is_err());
+        assert!(parse_command(
+            &args("handoff resume --source-session work --logical-browser-id ../escape"),
             &default_flags()
         )
         .is_err());

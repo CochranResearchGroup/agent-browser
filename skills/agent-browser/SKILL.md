@@ -44,7 +44,10 @@ inert until candidate selection. On Linux, repair a daemon identity affected
 by this controlled relocation only when its exact process start token and
 imported binary digest match. If a census-proven browserless daemon does not
 finish graceful shutdown, allow the installer to force-stop only that exact
-verified daemon process after the bounded grace. For a schema-v1 live daemon
+verified daemon process after the bounded grace. For a Linux idle daemon whose
+executable was replaced after launch, allow identity repair only when the PID,
+start token, original path, and recorded executable digest match the live
+deleted proc inode exactly. For a schema-v1 live daemon
 with no owner record, allow first-owner bootstrap only from the explicit
 `cooperative_owner_registration_required` census disposition and only after
 exact daemon revocation. Treat route, display, and stream identifiers as
@@ -69,6 +72,9 @@ runtime has a proven disposition. Do not work around a transaction stop by
 killing, detaching, or rehoming the browser.
 Treat a verified live browser without a session route as preserve-only. Orphan
 resume has no safe source session to bind for that runtime.
+After an accepted upgrade, treat `active_runtime_manual_preservation` as a
+nonblocking warning only when the exact session is recorded with disposition
+`manual_preservation` in that accepted transaction.
 If an exact old-generation daemon reports that `handoff` is unavailable, the
 installer verifies the recorded daemon executable and revokes only that exact
 daemon, then advances the exact registry owner to an orphaned generation before
@@ -120,8 +126,11 @@ seven readiness axes. The axes are `payloadReady`,
 and `rollbackReady`; overall `ready` stays false until all axes agree and the
 admission drain is closed. Real-host apply starts a candidate dashboard on the
 second port after ingress, then waits up to five minutes after runtime transfer
-for `dashboard ingress commit --expected-revision <revision> --evidence
-<presentation-evidence.json>`. Do not synthesize that evidence. The stable
+for `dashboard ingress commit --expected-revision <revision> --handoff-id
+<id>` after the candidate dashboard resolves that opaque durable handoff to a
+ready operator surface. The command rechecks its candidate-bound receipt
+against the current owner, route, display, target, provider, and deployment
+generation. Do not synthesize file-based presentation evidence. The stable
 ingress remains on the old backend until the authenticated candidate journey
 is committed. Keep the accepted rollback generation until the operator runs
 `agent-browser install workstation finalize --json`; finalization fails closed
@@ -132,6 +141,18 @@ every generation referenced by a live process, named supervisor, failed or
 unclosed transaction, or rollback state. This
 branch remains a release no-go until the disposable Ubuntu and release gates
 pass.
+
+If status reports `operator_recovery_required`, use only the exact transaction
+that owns the admission drain:
+
+```bash
+agent-browser install workstation recover --transaction-id <id> --json
+```
+
+Recovery is not a generic retry. It fails closed unless the sealed old
+generation is selected, the candidate executable and dashboard route are
+absent, and a fresh stable runtime census permits activation. It preserves the
+ledger, appends a recovery checkpoint, and closes only the matching drain.
 
 After apply, use `agent-browser install doctor --json` to verify the installed
 binary, controller assets, Guacamole manifest, and Guacamole files against the
@@ -162,6 +183,8 @@ browser:
 7. Require a ready `presentationReceipt` whose generation, dashboard
    deployment, logical browser, daemon owner generation, process identity,
    target, and requested provider match the resolution.
+   The durable handoff sidecar preserves the highest recorded presentation
+   generation when an older service writer saves stale state.
    Treat `status=converging` as retryable on the same durable URL.
 8. Treat `allowRawProviderUrl: true` as an infrastructure diagnostic escape
    hatch, never as an ordinary agent workflow.
@@ -267,11 +290,14 @@ describe only the current provider connection. Resolve a stored link with
 service request action `service_remote_view_handoff_resolve` and
 `params.handoffId`. Normal resolution requests adoption of the exact retained
 browser when its original daemon is gone and reacquires only its requested
-presentation. It does not navigate, open a replacement target, relaunch the
-browser, change providers, or redirect to a raw provider URL. A ready result
+presentation. If the recorded CDP target ID expired, it may bind the current
+tab whose URL still matches the recorded intent. It does not navigate, open a
+replacement target, relaunch the browser, change providers, or redirect to a
+raw provider URL. A ready result
 includes `presentationGeneration` and a matching `presentationReceipt`; keep
-retrying the same durable URL while status is `converging`. A missing target
-fails closed. Do not send `allowReopenClosed: true` unless the operator
+retrying the same durable URL while status is `converging`. Resolution fails
+closed when neither the retained target nor a current intent-matching target
+exists. Do not send `allowReopenClosed: true` unless the operator
 explicitly asked to reopen a tab recorded as closed. Explicit reopen is the
 separate path that may open and navigate a replacement target.
 Use service request action `service_remote_view_route_preflight`, HTTP
@@ -1172,6 +1198,12 @@ agent-browser -q chat "summarize this page"               # Quiet (text only, no
 agent-browser -v chat "fill in the login form"            # Verbose (show command output)
 agent-browser --model openai/gpt-4o chat "take a screenshot"  # Override model
 ```
+
+Transactional retry recovery may add
+`--logical-browser-id session:<original>` when a failed orphan adoption retained
+a different source-session alias. Use that flag only with the exact logical
+browser from current service evidence. The candidate rejects the hint unless
+the service session and browser records bind the alias to that browser.
 
 ## Typing Strategy
 

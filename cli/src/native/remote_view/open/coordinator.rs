@@ -1159,17 +1159,30 @@ pub(crate) async fn execute_durable_resolution<
     }
 }
 
-fn durable_handoff_observation_matches(
+pub(crate) fn durable_handoff_observation_matches(
     observation: &RouteBoundBrowserObservation,
     handoff: &RemoteViewHandoff,
 ) -> bool {
-    let target_matches = handoff.target_id.as_deref().is_some_and(|target_id| {
+    let retained_target_matches = handoff.target_id.as_deref().is_some_and(|target_id| {
         observation.active_target_id.as_deref() == Some(target_id)
             || observation
                 .pages
                 .iter()
                 .any(|page| page.target_id == target_id)
     });
+    let intent_target_matches = handoff
+        .desired_url
+        .as_deref()
+        .or_else(|| handoff.intent.get("url").and_then(Value::as_str))
+        .is_some_and(|desired_url| {
+            observation.pages.iter().any(|page| {
+                !is_blank_url(page.url.as_str())
+                    && route_bound_handoff_target_url_readiness(
+                        Some(desired_url),
+                        Some(page.url.as_str()),
+                    ) == "ready"
+            })
+        });
     observation.browser_present
         && handoff.browser_id.as_deref() == Some(observation.browser_id.as_str())
         && handoff.session_name.as_deref() == Some(observation.session_id.as_str())
@@ -1177,5 +1190,5 @@ fn durable_handoff_observation_matches(
             .profile_id
             .as_deref()
             .is_none_or(|profile_id| observation.runtime_profile.as_deref() == Some(profile_id))
-        && target_matches
+        && (retained_target_matches || intent_target_matches)
 }

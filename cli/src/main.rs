@@ -1462,14 +1462,30 @@ fn run_dashboard_ingress_command(args: &[String], json_mode: bool) {
             let expected_revision = dashboard_argument(args, "--expected-revision")?
                 .parse::<u64>()
                 .map_err(|_| "Invalid --expected-revision value".to_string())?;
-            let evidence_path = dashboard_argument(args, "--evidence")?;
-            let body = fs::read(evidence_path).map_err(|error| {
-                format!("Unable to read presentation evidence {evidence_path}: {error}")
-            })?;
-            let evidence = serde_json::from_slice(&body).map_err(|error| {
-                format!("Unable to parse presentation evidence {evidence_path}: {error}")
-            })?;
-            dashboard_ingress::commit_dashboard_candidate(expected_revision, evidence)
+            let has_evidence = args.iter().any(|argument| argument == "--evidence");
+            let has_handoff = args.iter().any(|argument| argument == "--handoff-id");
+            if has_evidence == has_handoff {
+                return Err(
+                    "dashboard ingress commit requires exactly one of --evidence or --handoff-id"
+                        .to_string(),
+                );
+            }
+            if has_handoff {
+                let handoff_id = dashboard_argument(args, "--handoff-id")?;
+                dashboard_ingress::commit_dashboard_candidate_from_handoff(
+                    expected_revision,
+                    handoff_id,
+                )
+            } else {
+                let evidence_path = dashboard_argument(args, "--evidence")?;
+                let body = fs::read(evidence_path).map_err(|error| {
+                    format!("Unable to read presentation evidence {evidence_path}: {error}")
+                })?;
+                let evidence = serde_json::from_slice(&body).map_err(|error| {
+                    format!("Unable to parse presentation evidence {evidence_path}: {error}")
+                })?;
+                dashboard_ingress::commit_dashboard_candidate(expected_revision, evidence)
+            }
         })(),
         "rollback" => (|| {
             let expected_revision = dashboard_argument(args, "--expected-revision")?

@@ -28,6 +28,37 @@ pub(crate) fn remote_view_open_reusable_live_target(
         })
         .cloned()
 }
+
+pub(crate) fn remote_view_open_reacquired_live_target(
+    pages: &[PageInfo],
+    preferred_target_id: Option<&str>,
+    active_target_id: Option<&str>,
+    expected_url: Option<&str>,
+) -> Option<PageInfo> {
+    let expected_url = expected_url?;
+    let compatible = |page: &&PageInfo| {
+        !is_blank_url(page.url.as_str())
+            && route_bound_handoff_target_url_readiness(Some(expected_url), Some(&page.url))
+                == "ready"
+    };
+    preferred_target_id
+        .and_then(|target_id| {
+            pages
+                .iter()
+                .filter(&compatible)
+                .find(|page| page.target_id == target_id)
+        })
+        .or_else(|| {
+            active_target_id.and_then(|target_id| {
+                pages
+                    .iter()
+                    .filter(&compatible)
+                    .find(|page| page.target_id == target_id)
+            })
+        })
+        .or_else(|| pages.iter().find(compatible))
+        .cloned()
+}
 pub(crate) fn remote_view_open_retained_tab_candidate(
     service_state: &ServiceState,
     browser_id: &str,
@@ -98,11 +129,20 @@ pub(crate) async fn route_bound_open_acquire_target<R: RouteBoundOpenRuntime>(
         desired_origin.as_deref(),
     )
     .and_then(|tab| tab.target_id.clone());
-    let selected = remote_view_open_reusable_live_target(
-        &observation.pages,
-        cmd.get("preferredTargetId").and_then(Value::as_str),
-        desired_origin.as_deref(),
-    )
+    let selected = if reacquire_only {
+        remote_view_open_reacquired_live_target(
+            &observation.pages,
+            cmd.get("preferredTargetId").and_then(Value::as_str),
+            observation.active_target_id.as_deref(),
+            expected_url,
+        )
+    } else {
+        remote_view_open_reusable_live_target(
+            &observation.pages,
+            cmd.get("preferredTargetId").and_then(Value::as_str),
+            desired_origin.as_deref(),
+        )
+    }
     .or_else(|| {
         retained_target_id.as_deref().and_then(|target_id| {
             observation
@@ -192,7 +232,9 @@ pub(crate) async fn route_bound_open_acquire_target<R: RouteBoundOpenRuntime>(
         opened["reusedExistingTarget"] = Value::Bool(false);
         opened
     };
-    route_bound_open_wait_for_target(cmd, runtime, supervisor, &mut tab).await;
+    if !reacquire_only {
+        route_bound_open_wait_for_target(cmd, runtime, supervisor, &mut tab).await;
+    }
     tab["duplicateTargetCleanup"] = no_duplicate_target_cleanup();
     if !reacquire_only {
         if let Some(service_tab_handle) = tab.get("serviceTabHandle").cloned() {

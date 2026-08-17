@@ -86,6 +86,7 @@ pnpm reference:
 agent-browser install workstation --dry-run --json
 agent-browser install workstation --apply --json
 agent-browser install workstation status --json
+agent-browser install workstation recover --transaction-id upgrade-... --json
 agent-browser install workstation finalize --json
 agent-browser install workstation gc --dry-run --json
 ```
@@ -119,7 +120,10 @@ selection. On Linux, the installer repairs a daemon identity affected by this
 controlled relocation only when its exact process start token and imported
 binary digest match. If a census-proven browserless daemon does not finish
 graceful shutdown, the installer force-stops only that exact verified daemon
-process after the bounded grace. For a schema-v1 live daemon with no owner
+process after the bounded grace. For a Linux idle daemon whose executable was
+replaced after launch, the installer repairs the deleted proc-executable
+identity only when the PID, start token, original path, and recorded executable
+digest match the live inode exactly. For a schema-v1 live daemon with no owner
 record, exact census evidence permits the candidate to create the first
 receipted owner only after daemon revocation. The imported generation remains
 the rollback target for candidate activation. Historical route, display, and
@@ -143,6 +147,9 @@ interval. The sealed candidate is
 selected only after every discovered runtime has a proven disposition.
 Verified live browsers that have no session route remain preserve-only because
 orphan resume has no safe source session to bind.
+After an accepted upgrade, install and remote-view doctors keep an exact
+ledger-backed `manual_preservation` session visible as the nonblocking
+`active_runtime_manual_preservation` warning until its operator closes it.
 When an exact old-generation daemon reports that the cooperative handoff
 command is unavailable, apply verifies the recorded daemon executable, revokes
 only that daemon's effect authority, advances the exact registry owner to an
@@ -184,7 +191,12 @@ the second port after the stable ingress port and stages it in the ingress
 registry before admission drain. After runtime transfer reaches candidate
 readiness, apply waits up to five minutes for an authenticated candidate
 journey to be committed with `agent-browser dashboard ingress commit
---expected-revision <revision> --evidence <presentation-evidence.json>`. The
+--expected-revision <revision> --handoff-id <id>`. The candidate dashboard
+must first resolve that opaque durable handoff to a ready operator surface.
+Commit rechecks its candidate-bound presentation receipt against the current
+runtime owner, route, display, target, provider, and deployment generation.
+The file-based `--evidence <presentation-evidence.json>` form remains available
+for externally receipted integrations. The
 stable ingress continues serving the selected backend while that proof is
 pending. Reconciliation then quiesces only the generation backend, runtime
 interlock, and backup timer. It starts the managed candidate backend on the
@@ -207,6 +219,13 @@ a usable password or project label fails closed.
 `agent-browser install workstation status --json` reports the selected and
 candidate generations, migration dispositions, blockers, admission state, and
 terminal result without exposing private paths, endpoints, or profile evidence.
+When rollback leaves an explicit operator-recovery state, run
+`agent-browser install workstation recover --transaction-id <id> --json` with
+the exact admission-owning transaction ID from the failure. Recovery fails
+closed unless the sealed old generation is selected, no candidate executable
+is live, no candidate dashboard route remains, and a fresh two-round runtime
+census is stable. It retains the transaction ledger, appends a recovery
+checkpoint, and only then reopens runtime admission.
 Its `readiness` object separates `payloadReady`, `selectedGenerationReady`,
 `runtimeConvergenceReady`, `upgradeTransactionState`,
 `dashboardIngressReady`, `operatorJourneyReady`, and `rollbackReady`. Overall
@@ -309,10 +328,15 @@ agent-browser --json remote-view open https://example.com/secure \
 Require `operatorVisible.state` to be `ready`. Give the operator only the
 returned `handoffUrl`, shaped as `/remote-view/<handoff-id>`. Reopen that same
 URL after route, display, or viewer changes so agent-browser can reacquire the
-current provider route. Normal resolution adopts the exact retained browser and
-target without navigating, opening a replacement target, relaunching the
-browser, or changing providers. The dashboard stays on the durable URL and
-waits for a matching authenticated presentation generation before rendering.
+current provider route. Normal resolution adopts the exact retained browser. If
+its recorded CDP target ID expired during an owner transfer, resolution may bind
+the current tab whose URL still matches the recorded intent. It does not
+navigate, open a replacement target, relaunch the browser, or change providers.
+The dashboard stays on the durable URL and waits for a matching authenticated
+presentation generation before rendering.
+The durable handoff sidecar keeps the highest recorded presentation generation
+when an older service writer saves stale state, so concurrent runtime updates
+cannot erase newer ready presentation evidence.
 
 The route must supply `publicOperatorUrl` for the authenticated dashboard
 origin. If it is absent, the open does not return a durable handoff URL. Agent
@@ -441,6 +465,12 @@ and preserves the browser. A verified ownerless browser can use the same resume
 command without a prepared proposal. The local publisher also inventories
 active named supervisors, runs this transaction around executable replacement,
 and finalizes only after its candidate validation succeeds.
+
+Transactional retry recovery may add
+`--logical-browser-id session:<original>` when a failed orphan adoption retained
+a different source-session alias. The candidate rejects the hint unless the
+current service session and browser records bind that alias to the exact
+logical browser.
 
 Service mode is the persistent control plane for long-lived automation. It keeps profile, session, browser, tab, monitor, job, incident, event, site-policy, provider, and challenge state aligned across CLI commands, the HTTP API, MCP resources/tools, and the dashboard. Agents should include `serviceName`, `agentName`, and `taskName` when available so multi-service work remains traceable. The normal service request is identity-first: ask for a tab or browser action, target site or login identity, and the owning service, agent, and task. agent-browser selects or reuses the managed profile and browser, serializes CDP work through the queue, and records the state needed for debugging. Service profile records and profile allocation rows include `targetReadiness`, a no-launch readiness view for target services. Google targets without authenticated evidence report `needs_manual_seeding` and recommend detached `runtime login` before attachable automation. Once a managed profile lists the target in `authenticatedServiceIds`, readiness changes to `seeded_unknown_freshness` and access-plan no longer treats first-login seeding as a required manual action. Access-plan responses also include `monitorFindings` and `decision.monitorAttentionRequired` when an active `profile_readiness` monitor is faulted for the requested target identity. When a matching active `profile_readiness` monitor is due or never checked, access-plan sets `monitorFindings.profileReadinessProbeDue`, fills `decision.monitorRunDue`, and recommends `run_due_profile_readiness_monitor` before the caller trusts the profile. Use an explicit managed runtime profile when you know where the needed login state lives; use `--profile <path>` only when bringing an external profile is part of the contract.
 
@@ -3248,16 +3278,19 @@ Successful non-dry-run opens return an authenticated durable URL in
 `providerExternalUrl` and URLs under `routeBinding` only as evidence for the
 current provider connection. Opening the durable URL after dashboard login
 queues `service_remote_view_handoff_resolve`, prefers the originally retained
-browser tab, and reacquires expired Guacamole route state with the original view
-stream and control-input posture. If the original daemon is gone, the resolver
-requests adoption of the exact retained browser identity. It never substitutes
-a raw provider URL, launches a replacement browser, opens a replacement target,
-or replays navigation during ordinary resolution. The dashboard renders only
+browser tab, then may bind the current tab whose URL matches the durable intent
+if the recorded CDP target ID expired. It also reacquires expired Guacamole
+route state with the original view stream and control-input posture. If the
+original daemon is gone, the resolver requests adoption of the exact retained
+browser identity. It never substitutes a raw provider URL, launches a
+replacement browser, opens a replacement target, or replays navigation during
+ordinary resolution. The dashboard renders only
 after the resulting presentation receipt matches the dashboard deployment,
 logical browser, daemon owner generation, process identity, target, and
 requested provider. Until then it reports a
-retryable converging state on the same durable URL. A missing target fails
-closed. A tab recorded as deliberately closed stays closed until the operator
+retryable converging state on the same durable URL. Resolution fails closed when
+neither the retained target nor a current intent-matching target exists. A tab
+recorded as deliberately closed stays closed until the operator
 explicitly chooses **Reopen tab**; that explicit action is the separate path
 that may open and navigate a replacement target.
 Software clients should call `requestServiceRemoteViewHandoff()` when they

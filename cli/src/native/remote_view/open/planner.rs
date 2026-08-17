@@ -17,22 +17,20 @@ pub(crate) fn ensure_remote_view_route_available_for_display(
     {
         return Ok(());
     }
-    let current_allocation_is_private = route
-        .display_allocation_id
-        .as_ref()
-        .and_then(|id| state.display_allocations.get(id))
-        .is_some_and(|allocation| allocation.display_isolation == "private_virtual_display");
-    let requested_allocation_is_private = allocation
-        .is_some_and(|allocation| allocation.display_isolation == "private_virtual_display");
-    if current_allocation_is_private || requested_allocation_is_private {
-        return Err(
-            format!(
-                "route_pool_contention: remote view route '{}' is already checked out to another private display allocation",
-                route_id
-            ),
-        );
-    }
-    Ok(())
+    let current_display_allocation_id = route.display_allocation_id.as_deref().unwrap_or("unknown");
+    let current_browser_id = route.browser_id.as_deref().unwrap_or("unknown");
+    let requested_display_isolation = allocation
+        .map(|allocation| allocation.display_isolation.as_str())
+        .unwrap_or("unknown");
+    Err(format!(
+        "route_pool_contention: remote view route '{}' is already checked out to browser '{}' and display allocation '{}'; requested browser '{}' and display allocation '{}' ({}) cannot overwrite that active route identity",
+        route_id,
+        current_browser_id,
+        current_display_allocation_id,
+        browser_id,
+        display_allocation_id,
+        requested_display_isolation
+    ))
 }
 pub(crate) fn remote_view_lease_is_active(lease: &ViewerLease) -> bool {
     !matches!(

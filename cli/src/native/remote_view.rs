@@ -1077,21 +1077,30 @@ pub fn route_pool_entry_matches_display(
     allocation: Option<&DisplayAllocation>,
 ) -> bool {
     if let Some(target_allocation_id) = route_pool_target_string(entry, "displayAllocationId") {
-        return target_allocation_id == display_allocation_id;
+        if target_allocation_id != display_allocation_id {
+            return false;
+        }
     }
     if let Some(target_browser_id) = route_pool_target_string(entry, "browserId") {
-        return allocation.and_then(|allocation| allocation.owner_browser_id.as_deref())
-            == Some(target_browser_id.as_str());
+        if allocation.and_then(|allocation| allocation.owner_browser_id.as_deref())
+            != Some(target_browser_id.as_str())
+        {
+            return false;
+        }
     }
     if let Some(target_session_id) = route_pool_target_string(entry, "sessionId") {
-        return allocation.and_then(|allocation| allocation.owner_session_id.as_deref())
-            == Some(target_session_id.as_str());
+        if allocation.and_then(|allocation| allocation.owner_session_id.as_deref())
+            != Some(target_session_id.as_str())
+        {
+            return false;
+        }
     }
     if let Some(target_display_name) = route_pool_target_string(entry, "displayName") {
-        let Some(allocation) = allocation else {
-            return true;
-        };
-        return allocation.display_name.as_deref() == Some(target_display_name.as_str());
+        if allocation.is_some_and(|allocation| {
+            allocation.display_name.as_deref() != Some(target_display_name.as_str())
+        }) {
+            return false;
+        }
     }
     true
 }
@@ -2087,6 +2096,28 @@ mod tests {
         };
 
         assert!(route_pool_entry_matches_display(
+            &entry,
+            "display-a",
+            Some(&allocation)
+        ));
+    }
+
+    #[test]
+    fn route_pool_entry_rejects_matching_allocation_id_with_wrong_display_name() {
+        let entry = RoutePoolEntry {
+            target: json!({
+                "displayAllocationId": "display-a",
+                "displayName": ":11"
+            }),
+            ..RoutePoolEntry::default()
+        };
+        let allocation = DisplayAllocation {
+            id: "display-a".to_string(),
+            display_name: Some(":10".to_string()),
+            ..DisplayAllocation::default()
+        };
+
+        assert!(!route_pool_entry_matches_display(
             &entry,
             "display-a",
             Some(&allocation)
