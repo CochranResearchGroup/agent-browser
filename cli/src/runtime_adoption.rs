@@ -898,7 +898,9 @@ fn service_browser_readback(
             evidence.metadata_present = true;
             evidence.profile_identity = profile_digest
                 .as_ref()
-                .map_or(EvidenceAgreement::Missing, |_| EvidenceAgreement::Match);
+                .map_or(EvidenceAgreement::NotApplicable, |_| {
+                    EvidenceAgreement::Match
+                });
             evidence.browser_family = if family_known {
                 EvidenceAgreement::Match
             } else if browser_live && !evidence.manual_browser {
@@ -2537,6 +2539,10 @@ mod tests {
         let readback = service_browser_readback(&state).unwrap();
         assert_eq!(readback.observations.len(), 1);
         assert_eq!(readback.observations[0].profile_identity_digest, None);
+        assert_eq!(
+            readback.observations[0].evidence.profile_identity,
+            EvidenceAgreement::NotApplicable
+        );
     }
 
     #[test]
