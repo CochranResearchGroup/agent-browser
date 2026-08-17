@@ -504,6 +504,7 @@ pub(crate) struct RuntimeCensusSourceReadback {
 pub(crate) struct RuntimeCensusCandidate {
     pub(crate) logical_browser_id: String,
     pub(crate) profile_identity_digest: String,
+    pub(crate) observation_digest: String,
     pub(crate) observed_sources: Vec<RuntimeCensusSource>,
     pub(crate) evidence: RuntimeEvidenceSummary,
 }
@@ -651,6 +652,13 @@ pub(crate) fn adapt_runtime_census_readbacks(
         };
         let mut evidence =
             merge_evidence(indexes.iter().map(|index| &flattened[*index].1.evidence));
+        let mut observation_entries = indexes
+            .iter()
+            .map(|index| serde_json::to_string(&flattened[*index]))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("could not serialize runtime census observation: {error}"))?;
+        observation_entries.sort();
+        let observation_digest = sha256_text(&observation_entries.join("\n"));
         if profile_digests.len() > 1 || hints.len() > 1 {
             evidence.profile_identity = EvidenceAgreement::Mismatch;
         } else if profile_digests.is_empty() && evidence.browser_live {
@@ -660,6 +668,7 @@ pub(crate) fn adapt_runtime_census_readbacks(
         candidates.push(RuntimeCensusCandidate {
             logical_browser_id,
             profile_identity_digest,
+            observation_digest,
             observed_sources: observed_sources.into_iter().collect(),
             evidence,
         });
@@ -1639,6 +1648,7 @@ pub(crate) fn collect_runtime_census_round(
         || candidates.iter().any(|candidate| {
             candidate.logical_browser_id.trim().is_empty()
                 || !is_sha256(&candidate.profile_identity_digest)
+                || !is_sha256(&candidate.observation_digest)
         })
     {
         return Err(
@@ -1710,7 +1720,7 @@ pub(crate) fn build_stable_runtime_census(
         let candidate_stable = first_candidate == second_candidate;
         let mut evidence = selected.evidence.clone();
         evidence.observation_rounds_agree &= candidate_stable;
-        evidence.registry_revision_stable &= registry_revision_stable && source_revisions_stable;
+        evidence.registry_revision_stable &= registry_revision_stable;
         let decision = if !evidence.observation_rounds_agree || !evidence.registry_revision_stable {
             let mut reason_codes = vec!["census_changed_during_classification"];
             if !candidate_stable {
@@ -2381,6 +2391,58 @@ mod tests {
     }
 
     #[test]
+    fn candidate_observation_digest_scopes_source_drift_to_identity_evidence() {
+        fn round(cdp_markers: [&str; 2], cdp_revision: &str) -> RuntimeCensusRound {
+            let profile_digest = digest_text("profile-a");
+            let readbacks = runtime_census_sources()
+                .into_iter()
+                .map(|source| {
+                    let markers = if source == RuntimeCensusSource::CdpBrowserAndTargets {
+                        cdp_markers.as_slice()
+                    } else {
+                        &["base"][..]
+                    };
+                    let observations = markers
+                        .iter()
+                        .map(|marker| RuntimeCensusObservation {
+                            logical_browser_id_hint: Some("browser-a".to_string()),
+                            aliases: vec![
+                                "browser:browser-a".to_string(),
+                                format!("source-marker:{marker}"),
+                            ],
+                            profile_identity_digest: Some(profile_digest.clone()),
+                            evidence: cooperative_fragment(source),
+                        })
+                        .collect();
+                    RuntimeCensusSourceReadback {
+                        source,
+                        source_revision: if source == RuntimeCensusSource::CdpBrowserAndTargets {
+                            cdp_revision.to_string()
+                        } else {
+                            format!("{source:?}-stable")
+                        },
+                        observations,
+                    }
+                })
+                .collect();
+            adapt_runtime_census_readbacks(23, readbacks).unwrap()
+        }
+
+        let first = round(["target-a", "target-b"], "cdp-first");
+        let reordered = round(["target-b", "target-a"], "cdp-reordered");
+        let reordered_census = build_stable_runtime_census(&first, &reordered).unwrap();
+        assert!(reordered_census.activation_allowed);
+        assert_eq!(first.candidates, reordered.candidates);
+
+        let changed = round(["target-a", "target-c"], "cdp-changed");
+        let changed_census = build_stable_runtime_census(&first, &changed).unwrap();
+        assert!(!changed_census.activation_allowed);
+        assert!(changed_census.records[0]
+            .reason_codes
+            .contains(&"runtime_candidate_changed_during_classification".to_string()));
+    }
+
+    #[test]
     fn attached_existing_browser_with_cooperative_daemon_is_not_external() {
         use crate::native::service_model::{
             BrowserHealth, BrowserHost, BrowserProcess, ServiceState,
@@ -2925,6 +2987,10 @@ mod tests {
                 profile_identity_digest: format!(
                     "{:x}",
                     Sha256::digest(fixture.fixture_id.as_bytes())
+                ),
+                observation_digest: format!(
+                    "{:x}",
+                    Sha256::digest(format!("observation:{}", fixture.fixture_id).as_bytes())
                 ),
                 observed_sources: fixture.observed_sources.clone(),
                 evidence: fixture.evidence.clone(),

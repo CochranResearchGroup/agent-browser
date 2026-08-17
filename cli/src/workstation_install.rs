@@ -6553,6 +6553,7 @@ mod tests {
                 vec![RuntimeCensusCandidate {
                     logical_browser_id: runtime_id,
                     profile_identity_digest: "a".repeat(64),
+                    observation_digest: "b".repeat(64),
                     observed_sources: vec![RuntimeCensusSource::ServiceBrowserRecords],
                     evidence: RuntimeEvidenceSummary {
                         observation_rounds_agree: true,
