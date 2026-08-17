@@ -40,7 +40,9 @@ mutable layout, the installer seals the exact existing binary, support tree,
 and user units as the rollback generation before replacing stable entrypoints
 with generation-backed links. It restores the original files and selector if
 that conversion fails. Unit types introduced after the legacy install remain
-inert until candidate selection. Cooperative and verified orphan browsers move
+inert until candidate selection. On Linux, repair a daemon identity affected
+by this controlled relocation only when its exact process start token and
+imported binary digest match. Cooperative and verified orphan browsers move
 through receipt-bearing owner generations; manual and external browsers remain
 preserved without effect authority. The selector changes only after every
 runtime has a proven disposition. Do not work around a transaction stop by

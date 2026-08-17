@@ -17,7 +17,9 @@
 //! installed binary, support tree, and unit files as the rollback generation
 //! before converting stable entrypoints to generation-backed symlinks. Unit
 //! types introduced after that legacy install remain inert until candidate
-//! selection.
+//! selection. On Linux, exact daemon identities are reconciled after that
+//! controlled relocation only when the process start token and imported binary
+//! digest still match.
 //! Failed reconciliation restores the exact prior active state of managed user
 //! units and writes a private diagnostic receipt.
 
@@ -3450,6 +3452,19 @@ fn prepare_payload_transaction(
         ));
     }
 
+    if !isolated_root {
+        if let Err(error) = reconcile_selected_legacy_daemon_identities(paths) {
+            block_incomplete_runtime_census(&mut transaction, &runtime_adoption_timestamp());
+            transaction.stop_reason =
+                Some("legacy_daemon_identity_reconciliation_failed".to_string());
+            write_private_json_atomic(&transaction_path, &transaction)?;
+            return Err(format!(
+                "legacy daemon identity reconciliation failed before runtime census; payload and selected generation were not changed; transaction {}: {error}",
+                transaction_path.display()
+            ));
+        }
+    }
+
     let census = if isolated_root {
         isolated_runtime_census()
     } else {
@@ -5392,10 +5407,165 @@ fn migrate_legacy_payload_to_generation(paths: &InstallPaths) -> Result<String, 
         commit_immutable_generation(&staging, &generation_path)?;
         select_generation(paths, &generation_id)?;
         replace_legacy_payload_with_stable_links(paths, &units)?;
+        reconcile_relocated_legacy_daemon_identities(paths, &binary_sha256)?;
         Ok(generation_id)
     })();
     let _ = remove_generation_tree(&staging);
     result
+}
+
+fn reconcile_selected_legacy_daemon_identities(paths: &InstallPaths) -> Result<(), String> {
+    let Some(generation_id) = selected_generation_id(paths) else {
+        return Ok(());
+    };
+    let generation = paths.generations_dir.join(generation_id);
+    let manifest_path = generation.join("generation.json");
+    let manifest: Value = serde_json::from_slice(&fs::read(&manifest_path).map_err(display_io(
+        "read selected runtime generation manifest",
+        &manifest_path,
+    ))?)
+    .map_err(|error| {
+        format!(
+            "Unable to parse selected runtime generation manifest {}: {error}",
+            manifest_path.display()
+        )
+    })?;
+    if manifest
+        .get("importedFromLegacyPayload")
+        .and_then(Value::as_bool)
+        != Some(true)
+    {
+        return Ok(());
+    }
+    let binary_sha256 = manifest
+        .get("binarySha256")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            format!(
+                "selected imported legacy generation manifest lacks binarySha256: {}",
+                manifest_path.display()
+            )
+        })?;
+    reconcile_relocated_legacy_daemon_identities(paths, binary_sha256)
+}
+
+#[cfg(target_os = "linux")]
+fn reconcile_relocated_legacy_daemon_identities(
+    paths: &InstallPaths,
+    imported_binary_sha256: &str,
+) -> Result<(), String> {
+    use crate::process_identity::ProcessObservation;
+
+    let socket_dir = crate::connection::get_socket_dir();
+    let entries = match fs::read_dir(&socket_dir) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(format!(
+                "Unable to read daemon identity directory {}: {error}",
+                socket_dir.display()
+            ));
+        }
+    };
+    for entry in entries {
+        let entry = entry.map_err(|error| {
+            format!(
+                "Unable to read daemon identity entry in {}: {error}",
+                socket_dir.display()
+            )
+        })?;
+        let file_name = entry.file_name().to_string_lossy().to_string();
+        let Some(session) = file_name.strip_suffix(".identity.json") else {
+            continue;
+        };
+        let recorded = match crate::connection::load_daemon_process_identity(session) {
+            Ok(recorded) => recorded,
+            Err(_) => continue,
+        };
+        if recorded.executable_path.as_deref() != paths.binary.to_str() {
+            continue;
+        }
+        let observed = match crate::process_identity::observe_process(recorded.pid) {
+            ProcessObservation::Observed(observed) => observed,
+            ProcessObservation::Missing | ProcessObservation::Failed { .. } => continue,
+        };
+        if !relocated_legacy_daemon_observation_matches(paths, &recorded, &observed) {
+            continue;
+        }
+        let proc_executable = PathBuf::from(format!("/proc/{}/exe", recorded.pid));
+        let observed_binary_sha256 = workstation_file_sha256(&proc_executable)?;
+        let Some(reconciled) = reconciled_legacy_daemon_identity(
+            paths,
+            &recorded,
+            &observed,
+            imported_binary_sha256,
+            &observed_binary_sha256,
+        ) else {
+            continue;
+        };
+        let verified = crate::process_identity::VerifiedProcessTermination::open(&reconciled)?;
+        if verified.is_none() {
+            continue;
+        }
+        crate::connection::write_daemon_process_identity(session, &reconciled)?;
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn reconcile_relocated_legacy_daemon_identities(
+    _paths: &InstallPaths,
+    _imported_binary_sha256: &str,
+) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn reconciled_legacy_daemon_identity(
+    paths: &InstallPaths,
+    recorded: &crate::process_identity::RecordedProcessIdentity,
+    observed: &crate::process_identity::ObservedProcessIdentity,
+    imported_binary_sha256: &str,
+    observed_binary_sha256: &str,
+) -> Option<crate::process_identity::RecordedProcessIdentity> {
+    if !relocated_legacy_daemon_observation_matches(paths, recorded, observed)
+        || imported_binary_sha256 != observed_binary_sha256
+    {
+        return None;
+    }
+    let mut reconciled = recorded.clone();
+    reconciled.executable_path = observed.executable_path.clone();
+    Some(reconciled)
+}
+
+#[cfg(target_os = "linux")]
+fn relocated_legacy_daemon_observation_matches(
+    paths: &InstallPaths,
+    recorded: &crate::process_identity::RecordedProcessIdentity,
+    observed: &crate::process_identity::ObservedProcessIdentity,
+) -> bool {
+    let Some(observed_executable) = observed.executable_path.as_deref() else {
+        return false;
+    };
+    let Some(legacy_parent) = paths.binary.parent() else {
+        return false;
+    };
+    let Some(binary_name) = paths.binary.file_name() else {
+        return false;
+    };
+    let legacy_prefix = format!(".{}.legacy-", binary_name.to_string_lossy());
+    let relocated = observed_executable
+        .strip_suffix(" (deleted)")
+        .unwrap_or(observed_executable);
+    let relocated = Path::new(relocated);
+    recorded.pid == observed.pid
+        && observed.start_token.as_deref() == Some(recorded.start_token.as_str())
+        && recorded.executable_path.as_deref() == paths.binary.to_str()
+        && relocated.parent() == Some(legacy_parent)
+        && relocated
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.starts_with(&legacy_prefix))
 }
 
 fn inactive_legacy_generation_unit(unit: &str) -> String {
@@ -6673,6 +6843,71 @@ mod tests {
 
         remove_generation_tree(&generation).unwrap();
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn relocated_legacy_daemon_identity_requires_exact_start_path_and_binary_digest() {
+        let root = PathBuf::from("/tmp/agent-browser-legacy-daemon-identity-fixture");
+        let paths = install_paths(&root);
+        let recorded = crate::process_identity::RecordedProcessIdentity {
+            pid: 41,
+            start_token: "linux:boot:100".to_string(),
+            executable_path: Some(paths.binary.display().to_string()),
+            browser_family: None,
+        };
+        let relocated = paths
+            .binary
+            .parent()
+            .unwrap()
+            .join(".agent-browser.legacy-fixture");
+        let observed = crate::process_identity::ObservedProcessIdentity {
+            pid: 41,
+            start_token: Some("linux:boot:100".to_string()),
+            executable_path: Some(format!("{} (deleted)", relocated.display())),
+            browser_family: None,
+            command_line: Some(vec![paths.binary.display().to_string()]),
+        };
+
+        let reconciled = reconciled_legacy_daemon_identity(
+            &paths,
+            &recorded,
+            &observed,
+            "matching-sha",
+            "matching-sha",
+        )
+        .unwrap();
+        assert_eq!(reconciled.executable_path, observed.executable_path);
+
+        let mut wrong_start = observed.clone();
+        wrong_start.start_token = Some("linux:boot:101".to_string());
+        assert!(reconciled_legacy_daemon_identity(
+            &paths,
+            &recorded,
+            &wrong_start,
+            "matching-sha",
+            "matching-sha",
+        )
+        .is_none());
+        assert!(reconciled_legacy_daemon_identity(
+            &paths,
+            &recorded,
+            &observed,
+            "matching-sha",
+            "different-sha",
+        )
+        .is_none());
+
+        let mut wrong_path = observed;
+        wrong_path.executable_path = Some("/tmp/unrelated-agent-browser (deleted)".to_string());
+        assert!(reconciled_legacy_daemon_identity(
+            &paths,
+            &recorded,
+            &wrong_path,
+            "matching-sha",
+            "matching-sha",
+        )
+        .is_none());
     }
 
     #[cfg(unix)]

@@ -115,7 +115,10 @@ binary, support tree, and user units as the rollback generation, then replaces
 the stable binary and unit paths with generation-backed links. A conversion
 failure restores the original files and selector before returning an error.
 Unit types introduced after the legacy install remain inert until candidate
-selection. The imported generation remains the rollback target for candidate activation.
+selection. On Linux, the installer repairs a daemon identity affected by this
+controlled relocation only when its exact process start token and imported
+binary digest match. The imported generation remains the rollback target for
+candidate activation.
 Cooperative and verified orphan runtimes move through receipt-bearing owner
 generations; manual and external browsers remain preserved without effect
 authority. The sealed candidate is
