@@ -337,11 +337,22 @@ fn requested_route_subjects(state: &ServiceState) -> Vec<RequestedRouteSubject> 
             route_state: route.state.clone(),
             route_url_ready: route.frame_url.is_some() || route.external_url.is_some(),
             display_ready: display.is_some_and(|value| value.state == "ready"),
-            route_pool_ready: pool_entry.is_some_and(|value| value.state == "ready"),
+            route_pool_ready: pool_entry.is_some_and(requested_route_pool_entry_ready),
         });
     }
     subjects.sort_by(|left, right| left.route_id.cmp(&right.route_id));
     subjects
+}
+
+fn requested_route_pool_entry_ready(entry: &crate::native::service_model::RoutePoolEntry) -> bool {
+    entry.state == "ready"
+        || matches!(entry.state.as_str(), "checked_out" | "occupied")
+            && entry
+                .readiness
+                .as_ref()
+                .and_then(|readiness| readiness.get("state"))
+                .and_then(Value::as_str)
+                == Some("ready")
 }
 
 fn requested_scope_report(
@@ -4065,6 +4076,24 @@ EOF
         assert_eq!(requested["status"], "ready");
         assert_eq!(requested["subject"]["routeId"], "route-a");
         assert_eq!(advisories, vec![global_issue]);
+    }
+
+    #[test]
+    fn requested_route_accepts_ready_checked_out_pool_entry() {
+        let mut state = scoped_service_state(false);
+        let pool_entry = state.route_pool.get_mut("pool-a").unwrap();
+        pool_entry.state = "checked_out".to_string();
+        pool_entry.readiness = Some(json!({"state": "ready"}));
+
+        let requested = requested_scope_report(
+            &scoped_doctor_args(Some("session-a"), Some("profile-a"), Some("guacamole:1")),
+            Ok(state),
+            &json!({"data": {"success": true}}),
+            &json!({"ready": true}),
+        );
+
+        assert_eq!(requested["status"], "ready");
+        assert_eq!(requested["subject"]["routePoolReady"], true);
     }
 
     #[test]
