@@ -1471,8 +1471,14 @@ fn presentation_readback(
     }
     for handoff in state.remote_view_handoffs.values() {
         let mut aliases = vec![format!("handoff:{}", handoff.id)];
+        let canonical_browser_id = canonical_handoff_browser_id(state, handoff);
         if let Some(browser_id) = handoff.browser_id.as_deref() {
             aliases.push(format!("browser:{browser_id}"));
+        }
+        if canonical_browser_id.as_deref() != handoff.browser_id.as_deref() {
+            if let Some(browser_id) = canonical_browser_id.as_deref() {
+                aliases.push(format!("browser:{browser_id}"));
+            }
         }
         if let Some(session) = handoff.session_name.as_deref() {
             aliases.push(format!("session:{session}"));
@@ -1489,7 +1495,7 @@ fn presentation_readback(
         let mut evidence = base_fragment();
         evidence.metadata_present = true;
         observations.push(RuntimeCensusObservation {
-            logical_browser_id_hint: handoff.browser_id.clone(),
+            logical_browser_id_hint: canonical_browser_id,
             aliases,
             profile_identity_digest: None,
             evidence,
@@ -1539,6 +1545,26 @@ fn presentation_readback(
         source_revision: source_revision(&observations)?,
         observations,
     })
+}
+
+fn canonical_handoff_browser_id(
+    state: &crate::native::service_model::ServiceState,
+    handoff: &crate::native::service_model::RemoteViewHandoff,
+) -> Option<String> {
+    let browser_id = handoff.browser_id.as_ref()?;
+    let session_name = handoff.session_name.as_deref()?;
+    if browser_id.strip_prefix("session:") != Some(session_name) {
+        return Some(browser_id.clone());
+    }
+    let session = state.sessions.get(session_name)?;
+    let [current_browser_id] = session.browser_ids.as_slice() else {
+        return Some(browser_id.clone());
+    };
+    if state.browsers.contains_key(current_browser_id) {
+        Some(current_browser_id.clone())
+    } else {
+        Some(browser_id.clone())
+    }
 }
 
 fn scoped_view_stream_alias(browser_id: &str, stream_id: &str) -> String {
@@ -2457,6 +2483,73 @@ mod tests {
             .iter()
             .filter(|alias| alias.starts_with("view-stream:"))
             .all(|alias| !beta.aliases.contains(alias)));
+    }
+
+    #[test]
+    fn legacy_handoff_browser_alias_uses_its_single_session_browser() {
+        use crate::native::service_model::{
+            BrowserProcess, BrowserSession, RemoteViewHandoff, ServiceState,
+        };
+
+        let mut state = ServiceState::default();
+        state.sessions.insert(
+            "p116-alpha-daemon".to_string(),
+            BrowserSession {
+                id: "p116-alpha-daemon".to_string(),
+                browser_ids: vec!["session:p116-alpha".to_string()],
+                ..BrowserSession::default()
+            },
+        );
+        state.browsers.insert(
+            "session:p116-alpha".to_string(),
+            BrowserProcess {
+                id: "session:p116-alpha".to_string(),
+                ..BrowserProcess::default()
+            },
+        );
+        state.remote_view_handoffs.insert(
+            "legacy-handoff".to_string(),
+            RemoteViewHandoff {
+                id: "legacy-handoff".to_string(),
+                state: "ready".to_string(),
+                intent: serde_json::json!({}),
+                handoff_url: None,
+                desired_url: None,
+                profile_id: None,
+                browser_id: Some("session:p116-alpha-daemon".to_string()),
+                session_name: Some("p116-alpha-daemon".to_string()),
+                tab_id: None,
+                target_id: None,
+                view_stream_provider: None,
+                control_input: None,
+                last_route_id: None,
+                last_route_pool_entry_id: None,
+                last_display_allocation_id: None,
+                created_at: None,
+                updated_at: None,
+                last_resolved_at: None,
+                last_resolution: None,
+                presentation_receipt: None,
+            },
+        );
+
+        let readback = presentation_readback(&state).unwrap();
+        let handoff = readback
+            .observations
+            .iter()
+            .find(|observation| {
+                observation
+                    .aliases
+                    .contains(&"handoff:legacy-handoff".to_string())
+            })
+            .expect("legacy handoff observation");
+        assert_eq!(
+            handoff.logical_browser_id_hint.as_deref(),
+            Some("session:p116-alpha")
+        );
+        assert!(handoff
+            .aliases
+            .contains(&"browser:session:p116-alpha".to_string()));
     }
 
     #[test]
