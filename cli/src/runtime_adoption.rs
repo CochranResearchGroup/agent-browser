@@ -922,14 +922,18 @@ fn service_browser_readback(
 }
 
 fn observed_browser_user_data_dir(pid: u32) -> Option<String> {
-    let crate::process_identity::ProcessObservation::Observed(observed) =
-        crate::process_identity::observe_process(pid)
-    else {
+    let observation = crate::process_identity::observe_process(pid);
+    browser_user_data_dir_from_observation(&observation).map(std::borrow::ToOwned::to_owned)
+}
+
+fn browser_user_data_dir_from_observation(
+    observation: &crate::process_identity::ProcessObservation,
+) -> Option<&str> {
+    let crate::process_identity::ProcessObservation::Observed(observed) = observation else {
         return None;
     };
     observed.browser_family.as_ref()?;
     command_line_option_value(observed.command_line.as_deref()?, "--user-data-dir")
-        .map(std::borrow::ToOwned::to_owned)
 }
 
 fn command_line_option_value<'a>(arguments: &'a [String], option: &str) -> Option<&'a str> {
@@ -1206,8 +1210,13 @@ fn process_identity_readback(
     add_value_process_aliases(daemons.get("runtimes"), &mut seeds);
 
     let mut observations = Vec::with_capacity(seeds.len());
-    for (pid, seed) in seeds {
+    for (pid, mut seed) in seeds {
         let observation = crate::process_identity::observe_process(pid);
+        if let Some(profile_path) = browser_user_data_dir_from_observation(&observation) {
+            let digest = canonical_profile_digest(profile_path)?;
+            seed.aliases.insert(format!("profile-digest:{digest}"));
+            seed.profile_digests.insert(digest);
+        }
         let mut evidence = base_fragment();
         evidence.metadata_present = true;
         let mut profile_identity_digest = match seed.profile_digests.len() {
@@ -2549,6 +2558,20 @@ mod tests {
         assert_eq!(
             command_line_option_value(&separate, "--user-data-dir"),
             Some("/profile/b")
+        );
+
+        let observation = crate::process_identity::ProcessObservation::Observed(
+            crate::process_identity::ObservedProcessIdentity {
+                pid: 41,
+                start_token: Some("start-token".to_string()),
+                executable_path: Some("/browser".to_string()),
+                browser_family: Some("chromium".to_string()),
+                command_line: Some(joined),
+            },
+        );
+        assert_eq!(
+            browser_user_data_dir_from_observation(&observation),
+            Some("/profile/a")
         );
     }
 
