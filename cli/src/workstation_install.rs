@@ -15,7 +15,9 @@
 //! commit, and failures reverse to the prior selected generation when proven.
 //! A first upgrade from the legacy mutable layout imports and seals the exact
 //! installed binary, support tree, and unit files as the rollback generation
-//! before converting stable entrypoints to generation-backed symlinks.
+//! before converting stable entrypoints to generation-backed symlinks. Unit
+//! types introduced after that legacy install remain inert until candidate
+//! selection.
 //! Failed reconciliation restores the exact prior active state of managed user
 //! units and writes a private diagnostic receipt.
 
@@ -5314,20 +5316,10 @@ fn migrate_legacy_payload_to_generation(paths: &InstallPaths) -> Result<String, 
         .filter(|path| !path.is_file())
         .map(|path| path.display().to_string())
         .collect::<Vec<_>>();
-    let missing_units = WORKSTATION_GENERATION_UNITS
-        .iter()
-        .map(|unit| paths.unit_dir.join(unit))
-        .filter(|path| !path.is_file())
-        .map(|path| path.display().to_string())
-        .collect::<Vec<_>>();
-    if !missing.is_empty() || !missing_units.is_empty() {
+    if !missing.is_empty() {
         return Err(format!(
             "legacy workstation payload is incomplete; missing: {}",
-            missing
-                .into_iter()
-                .chain(missing_units)
-                .collect::<Vec<_>>()
-                .join(", ")
+            missing.join(", ")
         ));
     }
 
@@ -5353,8 +5345,18 @@ fn migrate_legacy_payload_to_generation(paths: &InstallPaths) -> Result<String, 
         let mut units = Vec::with_capacity(WORKSTATION_GENERATION_UNITS.len());
         for unit in WORKSTATION_GENERATION_UNITS {
             let source = paths.unit_dir.join(unit);
-            let content = fs::read_to_string(&source)
-                .map_err(display_io("read legacy systemd user unit", &source))?;
+            let content = match fs::read_to_string(&source) {
+                Ok(content) => content,
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                    inactive_legacy_generation_unit(unit)
+                }
+                Err(error) => {
+                    return Err(format!(
+                        "Unable to read legacy systemd user unit {}: {error}",
+                        source.display()
+                    ));
+                }
+            };
             fs::write(staged_units.join(unit), &content)
                 .map_err(display_io("stage legacy systemd user unit", &staged_units))?;
             units.push((unit, content));
@@ -5394,6 +5396,12 @@ fn migrate_legacy_payload_to_generation(paths: &InstallPaths) -> Result<String, 
     })();
     let _ = remove_generation_tree(&staging);
     result
+}
+
+fn inactive_legacy_generation_unit(unit: &str) -> String {
+    format!(
+        "[Unit]\nDescription=Inactive placeholder for {unit} in imported legacy generation\nConditionPathExists=/dev/null/agent-browser-legacy-unit-unavailable\n\n[Service]\nType=oneshot\nExecStart=/usr/bin/false\n"
+    )
 }
 
 fn copy_legacy_generation_tree(source: &Path, destination: &Path) -> Result<(), String> {
@@ -5444,7 +5452,7 @@ fn replace_legacy_payload_with_stable_links(
             PathBuf::from("../../../.local/lib/agent-browser/current/units").join(name),
         )
     }));
-    let mut backups = Vec::<(PathBuf, PathBuf)>::new();
+    let mut backups = Vec::<(PathBuf, Option<PathBuf>)>::new();
     for (path, target) in replacements {
         let backup = path.with_file_name(format!(
             ".{}.legacy-{}",
@@ -5453,30 +5461,40 @@ fn replace_legacy_payload_with_stable_links(
                 .unwrap_or("payload"),
             uuid::Uuid::new_v4()
         ));
-        if let Err(error) = fs::rename(&path, &backup) {
-            rollback_legacy_link_replacements(paths, &backups);
-            return Err(format!(
-                "Unable to preserve legacy payload entry {}: {error}",
-                path.display()
-            ));
-        }
+        let backup = match fs::rename(&path, &backup) {
+            Ok(()) => Some(backup),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+            Err(error) => {
+                rollback_legacy_link_replacements(paths, &backups);
+                return Err(format!(
+                    "Unable to preserve legacy payload entry {}: {error}",
+                    path.display()
+                ));
+            }
+        };
         if let Err(error) = atomic_symlink(&target, &path) {
-            let _ = fs::rename(&backup, &path);
+            if let Some(backup) = backup.as_ref() {
+                let _ = fs::rename(backup, &path);
+            }
             rollback_legacy_link_replacements(paths, &backups);
             return Err(error);
         }
         backups.push((path, backup));
     }
     for (_, backup) in backups {
-        let _ = fs::remove_file(backup);
+        if let Some(backup) = backup {
+            let _ = fs::remove_file(backup);
+        }
     }
     Ok(())
 }
 
-fn rollback_legacy_link_replacements(paths: &InstallPaths, backups: &[(PathBuf, PathBuf)]) {
+fn rollback_legacy_link_replacements(paths: &InstallPaths, backups: &[(PathBuf, Option<PathBuf>)]) {
     for (path, backup) in backups.iter().rev() {
         let _ = fs::remove_file(path);
-        let _ = fs::rename(backup, path);
+        if let Some(backup) = backup {
+            let _ = fs::rename(backup, path);
+        }
     }
     let _ = restore_generation_selector(paths, None);
 }
@@ -6618,6 +6636,9 @@ mod tests {
         fs::write(paths.legacy_support_dir.join("manifest.json"), b"{}\n").unwrap();
         fs::write(paths.legacy_support_dir.join("README.txt"), b"legacy\n").unwrap();
         for unit in WORKSTATION_GENERATION_UNITS {
+            if unit == "agent-browser-dashboard-backend.service" {
+                continue;
+            }
             fs::write(paths.unit_dir.join(unit), format!("legacy {unit}\n")).unwrap();
         }
 
@@ -6642,6 +6663,11 @@ mod tests {
             b"legacy-binary"
         );
         assert!(generation.join("support/README.txt").is_file());
+        assert!(fs::read_to_string(
+            generation.join("units/agent-browser-dashboard-backend.service")
+        )
+        .unwrap()
+        .contains("Inactive placeholder"));
         validate_generation_install_preconditions(&paths).unwrap();
         validate_sealed_generation_tree(&generation).unwrap();
 

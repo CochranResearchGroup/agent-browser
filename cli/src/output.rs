@@ -5417,7 +5417,8 @@ bounded CDP identity and target evidence, displays, routes, streams, and
 durable handoffs. On the first upgrade from a legacy mutable install, it seals
 the exact installed binary, support assets, and user units as the rollback
 generation before replacing stable entrypoints with generation-backed links.
-Any conversion failure restores the original files and selector. It installs
+Units introduced after the legacy install remain inert until the candidate is
+selected. Any conversion failure restores the original files and selector. It installs
 host prerequisites before admission drain or ownership transfer, transfers
 cooperative and verified orphan runtimes through
 receipt-bearing owner generations, then selects the sealed candidate only

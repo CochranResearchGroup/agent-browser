@@ -114,7 +114,8 @@ upgrade from the legacy mutable layout, the installer seals the exact existing
 binary, support tree, and user units as the rollback generation, then replaces
 the stable binary and unit paths with generation-backed links. A conversion
 failure restores the original files and selector before returning an error.
-The imported generation remains the rollback target for candidate activation.
+Unit types introduced after the legacy install remain inert until candidate
+selection. The imported generation remains the rollback target for candidate activation.
 Cooperative and verified orphan runtimes move through receipt-bearing owner
 generations; manual and external
 browsers remain preserved without effect authority. The sealed candidate is
