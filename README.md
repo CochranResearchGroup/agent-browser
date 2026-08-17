@@ -135,7 +135,11 @@ recovers it only from one runtime-state record with the same exact process
 identity and DevTools browser endpoint; zero or multiple matches fail closed.
 Cooperative and verified orphan runtimes move through receipt-bearing owner
 generations; manual and external browsers remain preserved without effect
-authority. The sealed candidate is
+authority. The same atomic service-state transaction commits effect authority
+to `~/.agent-browser/service/runtime-owner-registry.json`. New generations
+merge that durable registry on every read, so a legacy dashboard or daemon
+that rewrites `state.json` cannot erase candidate ownership during the shadow
+interval. The sealed candidate is
 selected only after every discovered runtime has a proven disposition.
 Verified live browsers that have no session route remain preserve-only because
 orphan resume has no safe source session to bind.

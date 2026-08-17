@@ -59,7 +59,12 @@ only from one runtime-state record with the same exact process identity and
 DevTools browser endpoint. Treat zero or multiple matches as a hard stop.
 Cooperative and verified orphan browsers move
 through receipt-bearing owner generations; manual and external browsers remain
-preserved without effect authority. The selector changes only after every
+preserved without effect authority. The same atomic service-state transaction
+commits effect authority to
+`~/.agent-browser/service/runtime-owner-registry.json`. New generations merge
+that durable registry on every read, so a legacy dashboard or daemon that
+rewrites `state.json` cannot erase candidate ownership during the shadow
+interval. The selector changes only after every
 runtime has a proven disposition. Do not work around a transaction stop by
 killing, detaching, or rehoming the browser.
 Treat a verified live browser without a session route as preserve-only. Orphan

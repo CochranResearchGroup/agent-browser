@@ -5437,7 +5437,11 @@ identity and DevTools browser endpoint; zero or multiple matches fail closed.
 Any conversion failure restores the original files and selector. It
 installs host prerequisites before admission drain or ownership transfer,
 transfers cooperative and verified orphan runtimes through receipt-bearing
-owner generations, then selects the sealed candidate only
+owner generations. The same atomic service-state transaction commits effect
+authority to ~/.agent-browser/service/runtime-owner-registry.json. New
+generations merge that durable registry on every read, so a legacy dashboard
+or daemon that rewrites state.json cannot erase candidate ownership during the
+shadow interval. It then selects the sealed candidate only
 after every runtime has a proven disposition. Failure restores the old
 selector and reverses committed owner transfers when that can be proved.
 Verified live browsers without a session route remain preserve-only because
