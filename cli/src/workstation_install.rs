@@ -3603,6 +3603,7 @@ fn activate_prepared_payload_transaction(
         transfer_discovered_runtimes(
             paths,
             &prepared.staged,
+            &prepared.transaction.transaction_id,
             &mut prepared.transaction.runtime_migrations,
             &mut prepared.runtime_handoffs,
         )?;
@@ -3633,6 +3634,7 @@ fn activate_prepared_payload_transaction(
 fn transfer_discovered_runtimes(
     paths: &InstallPaths,
     staged: &StagedWorkstationGeneration,
+    transaction_id: &str,
     migrations: &mut [crate::runtime_adoption::RuntimeMigrationRecord],
     handoffs: &mut Vec<PreparedRuntimeHandoff>,
 ) -> Result<(), String> {
@@ -3674,6 +3676,7 @@ fn transfer_discovered_runtimes(
                         adopt_runtime_via_verified_orphan_fallback(
                             paths,
                             &candidate_binary,
+                            transaction_id,
                             &service_state,
                             migration,
                             handoffs,
@@ -3697,6 +3700,7 @@ fn transfer_discovered_runtimes(
                     adopt_runtime_via_verified_orphan_fallback(
                         paths,
                         &candidate_binary,
+                        transaction_id,
                         &service_state,
                         migration,
                         handoffs,
@@ -3750,7 +3754,7 @@ fn transfer_discovered_runtimes(
                         migration.logical_browser_id
                     ));
                 }
-                let candidate_session = orphan_candidate_session(migration);
+                let candidate_session = orphan_candidate_session(migration, transaction_id);
                 handoffs.push(PreparedRuntimeHandoff {
                     source_session: source_session.clone(),
                     candidate_session: candidate_session.clone(),
@@ -3846,10 +3850,16 @@ fn retire_verified_idle_daemon_process(
     Ok(())
 }
 
-fn orphan_candidate_session(migration: &crate::runtime_adoption::RuntimeMigrationRecord) -> String {
+/// Derive a stable session within one transaction without allowing a failed
+/// transaction's temporary candidate daemon to become the next transaction's owner.
+fn orphan_candidate_session(
+    migration: &crate::runtime_adoption::RuntimeMigrationRecord,
+    transaction_id: &str,
+) -> String {
+    let identity = format!("{}\0{transaction_id}", migration.logical_browser_id);
     format!(
         "orphan-{}",
-        &workstation_bytes_sha256(migration.logical_browser_id.as_bytes())[..16]
+        &workstation_bytes_sha256(identity.as_bytes())[..16]
     )
 }
 
@@ -4017,6 +4027,7 @@ where
 fn adopt_runtime_via_verified_orphan_fallback(
     paths: &InstallPaths,
     candidate_binary: &Path,
+    transaction_id: &str,
     service_state: &crate::native::service_model::ServiceState,
     migration: &mut crate::runtime_adoption::RuntimeMigrationRecord,
     handoffs: &mut Vec<PreparedRuntimeHandoff>,
@@ -4044,7 +4055,7 @@ fn adopt_runtime_via_verified_orphan_fallback(
             migration.logical_browser_id
         ));
     }
-    let candidate_session = orphan_candidate_session(migration);
+    let candidate_session = orphan_candidate_session(migration, transaction_id);
     let expected_owner = service_state
         .runtime_owner_registry
         .owner(&migration.profile_identity_digest)
@@ -6713,6 +6724,21 @@ mod tests {
         .unwrap();
 
         assert_eq!(source.as_deref(), Some("p116-alpha-recovery"));
+    }
+
+    #[test]
+    fn orphan_candidate_sessions_are_scoped_to_the_upgrade_transaction() {
+        let migration = runtime_migration("session:p116-alpha");
+        let first = orphan_candidate_session(&migration, "upgrade-first");
+
+        assert_eq!(first, orphan_candidate_session(&migration, "upgrade-first"));
+        assert_ne!(first, orphan_candidate_session(&migration, "upgrade-retry"));
+        assert_ne!(
+            first,
+            orphan_candidate_session(&runtime_migration("session:p116-beta"), "upgrade-first")
+        );
+        assert!(first.starts_with("orphan-"));
+        assert_eq!(first.len(), "orphan-".len() + 16);
     }
 
     #[test]

@@ -5429,6 +5429,8 @@ owner and cannot merge unrelated runtime candidates when providers reuse them.
 Verified orphan adoption maps process-observed Chrome, Chromium, Brave, and
 Edge family labels to the canonical chrome engine while rejecting Lightpanda
 and unrelated family evidence.
+Its temporary candidate session is scoped to the upgrade transaction, so a
+retry cannot reuse a candidate daemon left by an earlier failed transaction.
 Any conversion failure restores the original files and selector. It
 installs host prerequisites before admission drain or ownership transfer,
 transfers cooperative and verified orphan runtimes through receipt-bearing
