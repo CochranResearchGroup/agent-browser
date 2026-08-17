@@ -2923,11 +2923,18 @@ fn install_doctor_reports_expected_upgrade_ready(
                 == Some("workstation_upgrade_transaction_not_terminal")
         })
         .count();
+    let shadow_dashboard_transition_ready =
+        expected_upgrade_shadow_dashboard_transition_ready(upgrade, expected);
     let remaining_issues = issues
         .iter()
         .filter(|issue| {
             let code = issue.get("code").and_then(Value::as_str);
             if code == Some("workstation_upgrade_transaction_not_terminal") {
+                return false;
+            }
+            if code == Some("dashboard_runtime_stale_or_unreadable")
+                && shadow_dashboard_transition_ready
+            {
                 return false;
             }
             !(code == Some("active_runtime_stale_executable")
@@ -2943,6 +2950,36 @@ fn install_doctor_reports_expected_upgrade_ready(
         .cloned()
         .collect::<Vec<_>>();
     transaction_issue_count == 1 && install_doctor_issues_are_advisory(data, &remaining_issues)
+}
+
+fn expected_upgrade_shadow_dashboard_transition_ready(
+    upgrade: &Value,
+    expected: &crate::runtime_adoption::UpgradeTransaction,
+) -> bool {
+    let Some(ingress) = upgrade.get("dashboardIngress") else {
+        return false;
+    };
+    ingress
+        .get("dashboardIngressReady")
+        .and_then(Value::as_bool)
+        == Some(true)
+        && ingress.get("operatorJourneyReady").and_then(Value::as_bool) == Some(true)
+        && ingress
+            .pointer("/selectedBackend/generationId")
+            .and_then(Value::as_str)
+            == Some(expected.candidate_generation_id.as_str())
+        && ingress
+            .pointer("/presentationReceipt/dashboardDeploymentGeneration")
+            .and_then(Value::as_str)
+            == Some(expected.candidate_generation_id.as_str())
+        && ingress
+            .pointer("/presentationReceipt/state")
+            .and_then(Value::as_str)
+            == Some("ready")
+        && ingress
+            .pointer("/presentationReceipt/receiptId")
+            .and_then(Value::as_str)
+            .is_some_and(|receipt| !receipt.trim().is_empty())
 }
 
 /// Remote-view doctor derives `remoteControl.ready` from install-doctor
@@ -7256,6 +7293,77 @@ mod tests {
             &route_blocked,
             &transaction,
             &["source-owner".to_string()]
+        ));
+    }
+
+    #[test]
+    fn transaction_validation_accepts_only_the_proven_shadow_dashboard_transition() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-upgrade-shadow-dashboard-doctor-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "generation-new".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.state = crate::runtime_adoption::UpgradeTransactionState::PostCommitValidating;
+        let report = serde_json::json!({
+            "success": false,
+            "data": {
+                "issues": [
+                    {"code": "workstation_upgrade_transaction_not_terminal"},
+                    {"code": "dashboard_runtime_stale_or_unreadable"},
+                ],
+                "sessionSupervisors": {"sessions": [], "issues": []},
+                "liveDashboardRuntime": {
+                    "workstationUpgrade": {
+                        "selectedGenerationId": "generation-new",
+                        "admissionDraining": true,
+                        "dashboardIngress": {
+                            "dashboardIngressReady": true,
+                            "operatorJourneyReady": true,
+                            "selectedBackend": {"generationId": "generation-new"},
+                            "presentationReceipt": {
+                                "dashboardDeploymentGeneration": "generation-new",
+                                "state": "ready",
+                                "receiptId": "presentation-ready",
+                            }
+                        },
+                        "latestTransaction": {
+                            "transactionId": transaction.transaction_id.clone(),
+                            "state": "post_commit_validating",
+                        }
+                    }
+                }
+            }
+        });
+
+        assert!(install_doctor_reports_expected_upgrade_ready(
+            &report,
+            &transaction,
+            &[]
+        ));
+
+        let mut journey_missing = report.clone();
+        journey_missing["data"]["liveDashboardRuntime"]["workstationUpgrade"]["dashboardIngress"]
+            ["operatorJourneyReady"] = Value::Bool(false);
+        assert!(!install_doctor_reports_expected_upgrade_ready(
+            &journey_missing,
+            &transaction,
+            &[]
+        ));
+
+        let mut wrong_generation = report;
+        wrong_generation["data"]["liveDashboardRuntime"]["workstationUpgrade"]
+            ["dashboardIngress"]["selectedBackend"]["generationId"] =
+            Value::String("another-generation".to_string());
+        assert!(!install_doctor_reports_expected_upgrade_ready(
+            &wrong_generation,
+            &transaction,
+            &[]
         ));
     }
 
