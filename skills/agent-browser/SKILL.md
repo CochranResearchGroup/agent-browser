@@ -2094,6 +2094,10 @@ Lightpanda does not support `--extension`, `--profile`, `--state`, or `--allow-f
 
 The dashboard is a standalone background server that shows live browser viewports, command activity, and console output for all sessions.
 
+Open a specific Service record tab with `/service?view=service:<name>`, where
+`<name>` is `browsers`, `profiles`, `incidents`, `sessions`, `tabs`, `jobs`, or
+`events`. The left workspace selection remains separate from this Service view.
+
 ```bash
 # Start the dashboard server (background, port 4848)
 agent-browser dashboard start
