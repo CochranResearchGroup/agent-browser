@@ -1484,6 +1484,13 @@ fn reconcile_workstation_after_quiesce(
         name: "user-services-active",
         success: true,
     });
+    if expected_upgrade.is_some() {
+        restart_stable_dashboard_ingress(paths, support_root, &command_env)?;
+        steps.push(ReconcileStep {
+            name: "stable-dashboard-ingress-refreshed",
+            success: true,
+        });
+    }
 
     let final_route_pool = route_readiness(&scripts_dir, support_root, &command_env)?;
     reconcile_authoritative_route_pool(
@@ -2507,6 +2514,46 @@ fn activate_user_units(
         )?;
     }
     Ok(())
+}
+
+/// The stable ingress is intentionally excluded from the ordinary reconcile
+/// quiesce set. During an upgrade its unit link changes generations, so reload
+/// and restart it only after the candidate selector and authenticated shadow
+/// route are committed.
+fn restart_stable_dashboard_ingress(
+    paths: &InstallPaths,
+    support_root: &Path,
+    command_env: &[(String, String)],
+) -> Result<(), String> {
+    run_required(
+        "systemctl",
+        &["--user", "daemon-reload"],
+        support_root,
+        command_env,
+        false,
+        "reload stable dashboard ingress generation",
+    )?;
+    run_required(
+        "systemctl",
+        &["--user", "restart", "agent-browser-dashboard.service"],
+        support_root,
+        command_env,
+        false,
+        "restart stable dashboard ingress on selected generation",
+    )?;
+    run_required(
+        "systemctl",
+        &[
+            "--user",
+            "is-active",
+            "--quiet",
+            "agent-browser-dashboard.service",
+        ],
+        &paths.support_dir,
+        command_env,
+        false,
+        "verify refreshed stable dashboard ingress",
+    )
 }
 
 fn reset_failed_user_unit_if_failed(
@@ -4564,10 +4611,21 @@ fn rollback_prepared_payload_transaction(
     );
     let dashboard_process_result = stop_prepared_dashboard_candidate(prepared);
     let handoff_result = rollback_runtime_handoffs(prepared);
+    let dashboard_ingress_result = if after_generation_commit
+        && selector_result.is_ok()
+        && dashboard_result.is_ok()
+        && dirs::home_dir().as_deref() == Some(paths.root.as_path())
+    {
+        let command_env = workstation_command_env(paths);
+        restart_stable_dashboard_ingress(paths, &paths.support_dir, &command_env)
+    } else {
+        Ok(())
+    };
     if selector_result.is_ok()
         && dashboard_result.is_ok()
         && dashboard_process_result.is_ok()
         && handoff_result.is_ok()
+        && dashboard_ingress_result.is_ok()
     {
         prepared.transaction.terminal_result = Some("old_generation_preserved".to_string());
         clear_admission_drain(&prepared.admission_drain_path)?;
@@ -4586,7 +4644,7 @@ fn rollback_prepared_payload_transaction(
             "operator_recovery_required",
         )?;
         Err(format!(
-            "runtime transaction rollback requires operator recovery: selector={}, dashboard={}, dashboardProcess={}, handoffs={}",
+            "runtime transaction rollback requires operator recovery: selector={}, dashboard={}, dashboardProcess={}, handoffs={}, dashboardIngress={}",
             selector_result
                 .err()
                 .unwrap_or_else(|| "restored".to_string()),
@@ -4598,7 +4656,10 @@ fn rollback_prepared_payload_transaction(
                 .unwrap_or_else(|| "stopped".to_string()),
             handoff_result
                 .err()
-                .unwrap_or_else(|| "restored".to_string())
+                .unwrap_or_else(|| "restored".to_string()),
+            dashboard_ingress_result
+                .err()
+                .unwrap_or_else(|| "refreshed".to_string())
         ))
     }
 }

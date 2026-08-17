@@ -970,6 +970,12 @@ pub(crate) async fn handle_runtime_handoff_rollback(
             reverse_nonce_digest,
         },
     )?;
+    restore_runtime_handoff_service_projection(
+        &repository,
+        &binding.claim.logical_browser_id,
+        &state.session_id,
+        source_session,
+    )?;
     let manager = state.browser.as_mut().ok_or_else(|| {
         "runtime_handoff_rollback_browser_missing: candidate browser is unavailable".to_string()
     })?;
@@ -987,6 +993,53 @@ pub(crate) async fn handle_runtime_handoff_rollback(
         "retryRecordRemoved": retry_record_removed,
         "ownerTransferReceipt": receipt,
     }))
+}
+
+fn restore_runtime_handoff_service_projection(
+    repository: &impl ServiceStateRepository,
+    logical_browser_id: &str,
+    candidate_session: &str,
+    source_session: &str,
+) -> Result<(), String> {
+    repository.mutate(|service_state| {
+        restore_runtime_handoff_service_projection_in_state(
+            service_state,
+            logical_browser_id,
+            candidate_session,
+            source_session,
+        )
+    })
+}
+
+fn restore_runtime_handoff_service_projection_in_state(
+    service_state: &mut crate::native::service_model::ServiceState,
+    logical_browser_id: &str,
+    candidate_session: &str,
+    source_session: &str,
+) -> Result<(), String> {
+    let browser = service_state
+        .browsers
+        .get_mut(logical_browser_id)
+        .ok_or_else(|| {
+            "runtime_handoff_rollback_browser_projection_missing: retained browser record disappeared"
+                .to_string()
+        })?;
+    browser.active_session_ids = vec![source_session.to_string()];
+    for tab in &mut browser.tab_handles {
+        if tab.session_name.as_deref() == Some(candidate_session) {
+            tab.session_name = Some(source_session.to_string());
+        }
+        if tab.owner_session_id.as_deref() == Some(candidate_session) {
+            tab.owner_session_id = Some(source_session.to_string());
+        }
+        if tab.lease_id.as_deref() == Some(candidate_session) {
+            tab.lease_id = Some(source_session.to_string());
+        }
+        if tab.trace_filter.session_id.as_deref() == Some(candidate_session) {
+            tab.trace_filter.session_id = Some(source_session.to_string());
+        }
+    }
+    Ok(())
 }
 
 fn runtime_handoff_profile_digest(runtime_profile: &str) -> Result<String, String> {
@@ -1277,4 +1330,56 @@ pub(crate) fn write_runtime_handoff(
         )
     })?;
     Ok(path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::native::service_model::{BrowserProcess, ServiceState, ServiceTabHandle};
+
+    #[test]
+    fn rollback_restores_browser_and_tab_projection_to_source_session() {
+        let mut state = ServiceState {
+            browsers: std::collections::BTreeMap::from([(
+                "browser-a".to_string(),
+                BrowserProcess {
+                    id: "browser-a".to_string(),
+                    active_session_ids: vec!["candidate-session".to_string()],
+                    tab_handles: vec![ServiceTabHandle {
+                        browser_id: "browser-a".to_string(),
+                        session_name: Some("candidate-session".to_string()),
+                        owner_session_id: Some("candidate-session".to_string()),
+                        lease_id: Some("candidate-session".to_string()),
+                        trace_filter: crate::native::service_model::ServiceTabHandleTraceFilter {
+                            session_id: Some("candidate-session".to_string()),
+                            ..Default::default()
+                        },
+                        valid: true,
+                        ..ServiceTabHandle::default()
+                    }],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        restore_runtime_handoff_service_projection_in_state(
+            &mut state,
+            "browser-a",
+            "candidate-session",
+            "source-session",
+        )
+        .unwrap();
+
+        let browser = &state.browsers["browser-a"];
+        assert_eq!(browser.active_session_ids, ["source-session"]);
+        let tab = &browser.tab_handles[0];
+        assert_eq!(tab.session_name.as_deref(), Some("source-session"));
+        assert_eq!(tab.owner_session_id.as_deref(), Some("source-session"));
+        assert_eq!(tab.lease_id.as_deref(), Some("source-session"));
+        assert_eq!(
+            tab.trace_filter.session_id.as_deref(),
+            Some("source-session")
+        );
+    }
 }
