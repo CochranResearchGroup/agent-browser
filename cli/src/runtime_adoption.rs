@@ -542,6 +542,8 @@ pub(crate) struct StableRuntimeCensus {
 /// runtime authority. Duplicate aliases converge to one candidate. Conflicting
 /// profile identities remain one candidate with mismatch evidence, so the
 /// later classification blocks activation rather than granting ownership.
+/// Presentation identifiers are browser-scoped because providers may reuse a
+/// route, display, or stream identifier after its earlier owner is released.
 pub(crate) fn adapt_runtime_census_readbacks(
     registry_revision: u64,
     readbacks: Vec<RuntimeCensusSourceReadback>,
@@ -1425,12 +1427,19 @@ fn display_readback(
         .display_allocations
         .values()
         .map(|display| {
-            let mut aliases = vec![format!("display:{}", display.id)];
+            let mut aliases = Vec::new();
             if let Some(browser_id) = display.owner_browser_id.as_deref() {
                 aliases.push(format!("browser:{browser_id}"));
-            }
-            if let Some(session_id) = display.owner_session_id.as_deref() {
-                aliases.push(format!("session:{session_id}"));
+                aliases.push(scoped_presentation_alias(
+                    "display",
+                    browser_id,
+                    &display.id,
+                ));
+            } else {
+                aliases.push(format!("display:{}", display.id));
+                if let Some(session_id) = display.owner_session_id.as_deref() {
+                    aliases.push(format!("session:{session_id}"));
+                }
             }
             let mut evidence = base_fragment();
             evidence.metadata_present = true;
@@ -1462,10 +1471,14 @@ fn presentation_readback(
         for stream in &browser.view_streams {
             aliases.push(scoped_view_stream_alias(&browser.id, &stream.id));
             if let Some(route_id) = stream.route_id.as_deref() {
-                aliases.push(format!("route:{route_id}"));
+                aliases.push(scoped_presentation_alias("route", &browser.id, route_id));
             }
             if let Some(display_id) = stream.display_allocation_id.as_deref() {
-                aliases.push(format!("display:{display_id}"));
+                aliases.push(scoped_presentation_alias(
+                    "display",
+                    &browser.id,
+                    display_id,
+                ));
             }
         }
         let mut evidence = base_fragment();
@@ -1478,15 +1491,21 @@ fn presentation_readback(
         });
     }
     for route in state.remote_view_routes.values() {
-        let mut aliases = vec![format!("route:{}", route.id)];
+        let mut aliases = Vec::new();
         if let Some(browser_id) = route.browser_id.as_deref() {
             aliases.push(format!("browser:{browser_id}"));
-        }
-        if let Some(session_id) = route.session_id.as_deref() {
-            aliases.push(format!("session:{session_id}"));
-        }
-        if let Some(display_id) = route.display_allocation_id.as_deref() {
-            aliases.push(format!("display:{display_id}"));
+            aliases.push(scoped_presentation_alias("route", browser_id, &route.id));
+            if let Some(display_id) = route.display_allocation_id.as_deref() {
+                aliases.push(scoped_presentation_alias("display", browser_id, display_id));
+            }
+        } else {
+            aliases.push(format!("route:{}", route.id));
+            if let Some(session_id) = route.session_id.as_deref() {
+                aliases.push(format!("session:{session_id}"));
+            }
+            if let Some(display_id) = route.display_allocation_id.as_deref() {
+                aliases.push(format!("display:{display_id}"));
+            }
         }
         let mut evidence = base_fragment();
         evidence.metadata_present = true;
@@ -1508,8 +1527,10 @@ fn presentation_readback(
                 aliases.push(format!("browser:{browser_id}"));
             }
         }
-        if let Some(session) = handoff.session_name.as_deref() {
-            aliases.push(format!("session:{session}"));
+        if canonical_browser_id.is_none() {
+            if let Some(session) = handoff.session_name.as_deref() {
+                aliases.push(format!("session:{session}"));
+            }
         }
         let mut evidence = base_fragment();
         evidence.metadata_present = true;
@@ -1521,30 +1542,42 @@ fn presentation_readback(
         });
     }
     for entry in state.route_pool.values() {
-        let mut aliases = vec![
-            format!("route-pool:{}", entry.id),
-            format!("route:{}", entry.route_id),
-        ];
-        if let Some(browser_id) = entry
+        let browser_id = entry
             .target
             .get("browserId")
             .and_then(serde_json::Value::as_str)
-        {
+            .filter(|value| !value.trim().is_empty());
+        let mut aliases = vec![format!("route-pool:{}", entry.id)];
+        if let Some(browser_id) = browser_id {
             aliases.push(format!("browser:{browser_id}"));
-        }
-        if let Some(session_id) = entry
-            .target
-            .get("sessionId")
-            .and_then(serde_json::Value::as_str)
-        {
-            aliases.push(format!("session:{session_id}"));
-        }
-        if let Some(display_id) = entry
-            .target
-            .get("displayAllocationId")
-            .and_then(serde_json::Value::as_str)
-        {
-            aliases.push(format!("display:{display_id}"));
+            aliases.push(scoped_presentation_alias(
+                "route",
+                browser_id,
+                &entry.route_id,
+            ));
+            if let Some(display_id) = entry
+                .target
+                .get("displayAllocationId")
+                .and_then(serde_json::Value::as_str)
+            {
+                aliases.push(scoped_presentation_alias("display", browser_id, display_id));
+            }
+        } else {
+            aliases.push(format!("route:{}", entry.route_id));
+            if let Some(session_id) = entry
+                .target
+                .get("sessionId")
+                .and_then(serde_json::Value::as_str)
+            {
+                aliases.push(format!("session:{session_id}"));
+            }
+            if let Some(display_id) = entry
+                .target
+                .get("displayAllocationId")
+                .and_then(serde_json::Value::as_str)
+            {
+                aliases.push(format!("display:{display_id}"));
+            }
         }
         let mut evidence = base_fragment();
         evidence.metadata_present = true;
@@ -1586,9 +1619,13 @@ fn canonical_handoff_browser_id(
 }
 
 fn scoped_view_stream_alias(browser_id: &str, stream_id: &str) -> String {
-    let payload = serde_json::to_string(&(browser_id, stream_id))
-        .expect("browser and view-stream identifiers must serialize");
-    format!("view-stream:{}", sha256_text(&payload))
+    scoped_presentation_alias("view-stream", browser_id, stream_id)
+}
+
+fn scoped_presentation_alias(kind: &str, browser_id: &str, projection_id: &str) -> String {
+    let payload = serde_json::to_string(&(browser_id, projection_id))
+        .expect("browser and presentation identifiers must serialize");
+    format!("{kind}:{}", sha256_text(&payload))
 }
 
 fn value_readback(
@@ -2677,6 +2714,61 @@ mod tests {
             .iter()
             .filter(|alias| alias.starts_with("view-stream:"))
             .all(|alias| !beta.aliases.contains(alias)));
+    }
+
+    #[test]
+    fn reused_route_and_display_projections_do_not_merge_browser_owners() {
+        use crate::native::service_model::{DisplayAllocation, RemoteViewRoute, ServiceState};
+
+        let mut state = ServiceState::default();
+        state.display_allocations.insert(
+            "shared-display".to_string(),
+            DisplayAllocation {
+                id: "shared-display".to_string(),
+                owner_browser_id: Some("session:beta".to_string()),
+                owner_session_id: Some("beta".to_string()),
+                ..DisplayAllocation::default()
+            },
+        );
+        state.remote_view_routes.insert(
+            "shared-route".to_string(),
+            RemoteViewRoute {
+                id: "shared-route".to_string(),
+                browser_id: Some("session:alpha".to_string()),
+                session_id: Some("beta".to_string()),
+                display_allocation_id: Some("shared-display".to_string()),
+                ..RemoteViewRoute::default()
+            },
+        );
+
+        let display = display_readback(&state).unwrap().observations.remove(0);
+        let route = presentation_readback(&state)
+            .unwrap()
+            .observations
+            .remove(0);
+        assert_eq!(
+            display.logical_browser_id_hint.as_deref(),
+            Some("session:beta")
+        );
+        assert_eq!(
+            route.logical_browser_id_hint.as_deref(),
+            Some("session:alpha")
+        );
+        assert!(!route.aliases.contains(&"session:beta".to_string()));
+        assert!(display
+            .aliases
+            .iter()
+            .all(|alias| !route.aliases.contains(alias)));
+        assert!(display.aliases.contains(&scoped_presentation_alias(
+            "display",
+            "session:beta",
+            "shared-display"
+        )));
+        assert!(route.aliases.contains(&scoped_presentation_alias(
+            "display",
+            "session:alpha",
+            "shared-display"
+        )));
     }
 
     #[test]

@@ -47,7 +47,9 @@ finish graceful shutdown, allow the installer to force-stop only that exact
 verified daemon process after the bounded grace. For a schema-v1 live daemon
 with no owner record, allow first-owner bootstrap only from the explicit
 `cooperative_owner_registration_required` census disposition and only after
-exact daemon revocation. Cooperative and verified orphan browsers move
+exact daemon revocation. Treat route, display, and stream identifiers as
+browser-scoped projection evidence. Provider reuse must not merge unrelated
+runtime candidates. Cooperative and verified orphan browsers move
 through receipt-bearing owner generations; manual and external browsers remain
 preserved without effect authority. The selector changes only after every
 runtime has a proven disposition. Do not work around a transaction stop by

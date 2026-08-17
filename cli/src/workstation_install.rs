@@ -21,7 +21,8 @@
 //! controlled relocation only when the process start token and imported binary
 //! digest still match. A schema-v1 live daemon without an owner record can
 //! bootstrap the first receipted owner only from the explicit census reason
-//! and only after exact daemon revocation.
+//! and only after exact daemon revocation. Historical presentation identifiers
+//! remain scoped to their browser owner during census joins.
 //! Failed reconciliation restores the exact prior active state of managed user
 //! units and writes a private diagnostic receipt.
 

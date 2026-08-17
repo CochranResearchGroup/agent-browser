@@ -122,7 +122,9 @@ graceful shutdown, the installer force-stops only that exact verified daemon
 process after the bounded grace. For a schema-v1 live daemon with no owner
 record, exact census evidence permits the candidate to create the first
 receipted owner only after daemon revocation. The imported generation remains
-the rollback target for candidate activation.
+the rollback target for candidate activation. Historical route, display, and
+stream identifiers are scoped to their browser owner so provider reuse cannot
+merge unrelated runtime candidates.
 Cooperative and verified orphan runtimes move through receipt-bearing owner
 generations; manual and external browsers remain preserved without effect
 authority. The sealed candidate is
