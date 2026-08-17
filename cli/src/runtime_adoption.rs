@@ -1745,28 +1745,39 @@ pub(crate) fn build_stable_runtime_census(
         let mut evidence = selected.evidence.clone();
         evidence.observation_rounds_agree &= candidate_stable;
         evidence.registry_revision_stable &= registry_revision_stable;
-        let decision = if !evidence.observation_rounds_agree || !evidence.registry_revision_stable {
-            let mut reason_codes = vec!["census_changed_during_classification"];
-            if !candidate_stable {
-                reason_codes.push("runtime_candidate_changed_during_classification");
-            }
-            if !registry_revision_stable {
-                reason_codes.push("runtime_owner_registry_changed_during_classification");
-            }
-            if !source_revisions_stable {
-                reason_codes.push("runtime_source_snapshot_changed_during_classification");
-            }
-            decision(RuntimeClassification::InsufficientEvidence, &reason_codes)
-        } else {
-            classify_runtime(&evidence)
-        };
+        let mut classification_decision =
+            if !evidence.observation_rounds_agree || !evidence.registry_revision_stable {
+                let mut reason_codes = vec!["census_changed_during_classification"];
+                if !candidate_stable {
+                    reason_codes.push("runtime_candidate_changed_during_classification");
+                }
+                if !registry_revision_stable {
+                    reason_codes.push("runtime_owner_registry_changed_during_classification");
+                }
+                if !source_revisions_stable {
+                    reason_codes.push("runtime_source_snapshot_changed_during_classification");
+                }
+                decision(RuntimeClassification::InsufficientEvidence, &reason_codes)
+            } else {
+                classify_runtime(&evidence)
+            };
+        if classification_decision.classification == RuntimeClassification::OrphanAdoptable
+            && selected.logical_browser_id.starts_with("observed-")
+        {
+            // Orphan resume requires a stable session route. A profile-only
+            // observation remains visible and preserved without effect authority.
+            classification_decision = decision(
+                RuntimeClassification::ManualPreserveOnly,
+                &["verified_browser_without_session_route_preserved"],
+            );
+        }
         records.push(RuntimeCensusRecord {
             logical_browser_id: selected.logical_browser_id.clone(),
             profile_identity_digest: selected.profile_identity_digest.clone(),
             observed_sources: selected.observed_sources.clone(),
-            classification: decision.classification,
-            disposition: disposition_for_classification(decision.classification),
-            reason_codes: decision
+            classification: classification_decision.classification,
+            disposition: disposition_for_classification(classification_decision.classification),
+            reason_codes: classification_decision
                 .reason_codes
                 .into_iter()
                 .map(str::to_string)
@@ -3211,6 +3222,48 @@ mod tests {
         assert_eq!(
             classify_runtime(&evidence).classification,
             RuntimeClassification::InsufficientEvidence
+        );
+    }
+
+    #[test]
+    fn verified_profile_only_browser_without_session_route_is_preserve_only() {
+        let logical_browser_id = "observed-profile-only".to_string();
+        let observed_source = RuntimeCensusSource::OperatingSystemProcessIdentity;
+        let round = collect_runtime_census_round(
+            17,
+            runtime_census_sources()
+                .into_iter()
+                .map(|source| RuntimeCensusSourceSnapshot {
+                    source,
+                    source_revision: format!("{source:?}-stable"),
+                    logical_browser_ids: (source == observed_source)
+                        .then(|| vec![logical_browser_id.clone()])
+                        .unwrap_or_default(),
+                })
+                .collect(),
+            vec![RuntimeCensusCandidate {
+                logical_browser_id: logical_browser_id.clone(),
+                profile_identity_digest: digest_text("profile-only"),
+                observation_digest: digest_text("profile-only-observation"),
+                observed_sources: vec![observed_source],
+                evidence: live_identity_fragment(),
+            }],
+        )
+        .unwrap();
+
+        let census = build_stable_runtime_census(&round, &round).unwrap();
+        assert!(census.activation_allowed);
+        assert_eq!(
+            census.records[0].classification,
+            RuntimeClassification::ManualPreserveOnly
+        );
+        assert_eq!(
+            census.records[0].disposition,
+            RuntimeDisposition::ManualPreservation
+        );
+        assert_eq!(
+            census.records[0].reason_codes,
+            vec!["verified_browser_without_session_route_preserved"]
         );
     }
 

@@ -117,9 +117,11 @@ failure restores the original files and selector before returning an error.
 Unit types introduced after the legacy install remain inert until candidate
 selection. The imported generation remains the rollback target for candidate activation.
 Cooperative and verified orphan runtimes move through receipt-bearing owner
-generations; manual and external
-browsers remain preserved without effect authority. The sealed candidate is
+generations; manual and external browsers remain preserved without effect
+authority. The sealed candidate is
 selected only after every discovered runtime has a proven disposition.
+Verified live browsers that have no session route remain preserve-only because
+orphan resume has no safe source session to bind.
 When an exact old-generation daemon reports that the cooperative handoff
 command is unavailable, apply verifies the recorded daemon executable, revokes
 only that daemon's effect authority, advances the exact registry owner to an

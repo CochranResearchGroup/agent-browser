@@ -40,11 +40,13 @@ mutable layout, the installer seals the exact existing binary, support tree,
 and user units as the rollback generation before replacing stable entrypoints
 with generation-backed links. It restores the original files and selector if
 that conversion fails. Unit types introduced after the legacy install remain
-inert until candidate selection. Cooperative and verified orphan browsers move through
-receipt-bearing owner generations; manual and external browsers remain
+inert until candidate selection. Cooperative and verified orphan browsers move
+through receipt-bearing owner generations; manual and external browsers remain
 preserved without effect authority. The selector changes only after every
 runtime has a proven disposition. Do not work around a transaction stop by
 killing, detaching, or rehoming the browser.
+Treat a verified live browser without a session route as preserve-only. Orphan
+resume has no safe source session to bind for that runtime.
 If an exact old-generation daemon reports that `handoff` is unavailable, the
 installer verifies the recorded daemon executable and revokes only that exact
 daemon, then advances the exact registry owner to an orphaned generation before

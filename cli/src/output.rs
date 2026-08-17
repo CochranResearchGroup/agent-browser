@@ -5418,12 +5418,14 @@ durable handoffs. On the first upgrade from a legacy mutable install, it seals
 the exact installed binary, support assets, and user units as the rollback
 generation before replacing stable entrypoints with generation-backed links.
 Units introduced after the legacy install remain inert until the candidate is
-selected. Any conversion failure restores the original files and selector. It installs
-host prerequisites before admission drain or ownership transfer, transfers
-cooperative and verified orphan runtimes through
-receipt-bearing owner generations, then selects the sealed candidate only
+selected. Any conversion failure restores the original files and selector. It
+installs host prerequisites before admission drain or ownership transfer,
+transfers cooperative and verified orphan runtimes through receipt-bearing
+owner generations, then selects the sealed candidate only
 after every runtime has a proven disposition. Failure restores the old
 selector and reverses committed owner transfers when that can be proved.
+Verified live browsers without a session route remain preserve-only because
+orphan resume has no source session to bind.
 If an exact old-generation daemon reports that the cooperative handoff command
 is unavailable, apply verifies its recorded executable identity, revokes only
 that daemon's effect authority, advances the exact registry owner to an
