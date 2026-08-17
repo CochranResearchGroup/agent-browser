@@ -33,6 +33,8 @@ const DASHBOARD_CANDIDATE_START_TIMEOUT: std::time::Duration = std::time::Durati
 const DASHBOARD_PRESENTATION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
 const DASHBOARD_CANDIDATE_POLL_INTERVAL: std::time::Duration =
     std::time::Duration::from_millis(250);
+const POST_COMMIT_DOCTOR_ATTEMPTS: usize = 4;
+const POST_COMMIT_DOCTOR_RETRY_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
 const LEGACY_DAEMON_EXIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 const LEGACY_DAEMON_EXIT_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(25);
 // A reconcile may run as agent-browser-runtime-interlock.service, so stopping
@@ -2822,46 +2824,86 @@ fn verify_final_doctors(
             "/data/remoteControl/ready",
         ),
     ] {
-        let output = run_observed(
-            paths
-                .binary
-                .to_str()
-                .ok_or_else(|| "invalid installed agent-browser path".to_string())?,
-            &args,
-            support_root,
-            command_env,
-        )?;
-        let payload: Value = serde_json::from_slice(&output.stdout)
-            .map_err(|error| format!("{label} JSON parse failed: {error}"))?;
-        let ready = if label == "install doctor" {
-            expected_upgrade.map_or_else(
-                || install_doctor_reports_workstation_ready(&payload),
-                |transaction| {
-                    install_doctor_reports_expected_upgrade_ready(
+        let attempts = if expected_upgrade.is_some() {
+            POST_COMMIT_DOCTOR_ATTEMPTS
+        } else {
+            1
+        };
+        let mut last_failure = None;
+        for attempt in 0..attempts {
+            let output = run_observed(
+                paths
+                    .binary
+                    .to_str()
+                    .ok_or_else(|| "invalid installed agent-browser path".to_string())?,
+                &args,
+                support_root,
+                command_env,
+            )?;
+            let payload: Value = serde_json::from_slice(&output.stdout)
+                .map_err(|error| format!("{label} JSON parse failed: {error}"))?;
+            let ready = if label == "install doctor" {
+                expected_upgrade.map_or_else(
+                    || install_doctor_reports_workstation_ready(&payload),
+                    |transaction| {
+                        install_doctor_reports_expected_upgrade_ready(
+                            &payload,
+                            transaction,
+                            transitional_source_sessions,
+                        )
+                    },
+                )
+            } else if let Some(transaction) = expected_upgrade {
+                output.status.success()
+                    && remote_view_doctor_reports_expected_upgrade_ready(
                         &payload,
                         transaction,
                         transitional_source_sessions,
                     )
-                },
-            )
-        } else if let Some(transaction) = expected_upgrade {
-            output.status.success()
-                && remote_view_doctor_reports_expected_upgrade_ready(
+            } else {
+                final_doctor_reports_ready(
+                    label,
                     &payload,
-                    transaction,
-                    transitional_source_sessions,
+                    output.status.success(),
+                    readiness_pointer,
                 )
-        } else {
-            final_doctor_reports_ready(label, &payload, output.status.success(), readiness_pointer)
-        };
-        if !ready {
+            };
+            if ready {
+                last_failure = None;
+                break;
+            }
+            last_failure = Some((output.status.to_string(), doctor_issue_codes(&payload)));
+            if attempt + 1 < attempts {
+                std::thread::sleep(POST_COMMIT_DOCTOR_RETRY_INTERVAL);
+            }
+        }
+        if let Some((status, issue_codes)) = last_failure {
             return Err(format!(
-                "{label} did not report ready (status {})",
-                output.status
+                "{label} did not report ready after {attempts} attempt(s) (status {status}; issueCodes={issue_codes})"
             ));
         }
     }
     Ok(())
+}
+
+fn doctor_issue_codes(payload: &Value) -> String {
+    let issues = payload
+        .pointer("/data/issues")
+        .or_else(|| payload.pointer("/data/install/data/issues"))
+        .and_then(Value::as_array);
+    let mut codes = issues
+        .into_iter()
+        .flatten()
+        .filter_map(|issue| issue.get("code").and_then(Value::as_str))
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    codes.sort();
+    codes.dedup();
+    if codes.is_empty() {
+        "none".to_string()
+    } else {
+        codes.join(",")
+    }
 }
 
 fn final_doctor_reports_ready(
@@ -7225,6 +7267,24 @@ mod tests {
             false,
             "/data/remoteControl/ready"
         ));
+    }
+
+    #[test]
+    fn doctor_failure_diagnostics_report_only_sorted_issue_codes() {
+        let payload = serde_json::json!({
+            "data": {
+                "issues": [
+                    {"code": "workstation_upgrade_transaction_not_terminal", "message": "private detail"},
+                    {"code": "dashboard_runtime_stale_or_unreadable", "path": "/private/path"},
+                    {"code": "dashboard_runtime_stale_or_unreadable"}
+                ]
+            }
+        });
+
+        assert_eq!(
+            doctor_issue_codes(&payload),
+            "dashboard_runtime_stale_or_unreadable,workstation_upgrade_transaction_not_terminal"
+        );
     }
 
     #[test]
