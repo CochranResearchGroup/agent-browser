@@ -3455,13 +3455,16 @@ fn transfer_discovered_runtimes(
                         migration.logical_browser_id
                     )
                 })?;
-                let prepared = match run_agent_json_detailed(
-                    &old_binary,
-                    &source_session,
-                    &["handoff", "prepare"],
-                ) {
+                let (source_session, prepared, retired_aliases) = match
+                    prepare_runtime_handoff_with_alias_fallback(
+                        &old_binary,
+                        &service_state,
+                        migration,
+                        &source_session,
+                    )
+                {
                     Ok(prepared) => prepared,
-                    Err(error)
+                    Err((failed_session, error))
                         if matches!(
                             error.kind,
                             RuntimeTransactionCommandFailureKind::ProtocolUnavailable
@@ -3470,83 +3473,41 @@ fn transfer_discovered_runtimes(
                     {
                         let legacy_transferred_owner_rejected = error.kind
                             == RuntimeTransactionCommandFailureKind::LegacyTransferredOwnerRejected;
-                        if legacy_transferred_owner_rejected
-                            && !legacy_transferred_owner_prepare_rejection_can_fallback(
-                                &service_state,
-                                migration,
-                                &source_session,
-                            )
-                        {
-                            return Err(error.message);
-                        }
-                        if !legacy_transferred_owner_rejected
-                            && migration.logical_browser_id
-                                != format!("session:{source_session}")
-                        {
-                            return Err(format!(
-                                "runtime_orphan_logical_browser_not_session_bound:{}",
-                                migration.logical_browser_id
-                            ));
-                        }
-                        let candidate_session = orphan_candidate_session(migration);
-                        let expected_owner = service_state
-                            .runtime_owner_registry
-                            .owner(&migration.profile_identity_digest)
-                            .cloned()
-                            .ok_or_else(|| {
-                                format!(
-                                    "legacy_daemon_owner_missing:{}",
-                                    migration.logical_browser_id
-                                )
-                            })?;
-                        handoffs.push(PreparedRuntimeHandoff {
-                            source_session: source_session.clone(),
-                            candidate_session: candidate_session.clone(),
-                            mode: BrowserAdoptionMode::OrphanAdoption,
-                            committed: false,
-                            source_finalized: false,
-                            irreversible_source_revocation: false,
-                        });
-                        let handoff_index = handoffs.len() - 1;
-                        let revocation = revoke_legacy_daemon_effect_authority(
+                        adopt_runtime_via_verified_orphan_fallback(
                             paths,
-                            &source_session,
-                            &migration.logical_browser_id,
-                            &migration.profile_identity_digest,
-                            &expected_owner.owner_id,
-                            expected_owner.owner_generation,
-                            &mut handoffs[handoff_index].irreversible_source_revocation,
-                        );
-                        if let Err(error) = revocation {
-                            if handoffs[handoff_index].irreversible_source_revocation {
-                                migration.disposition = RuntimeDisposition::OrphanAdoption;
-                                let reason = "legacy_daemon_effect_authority_revocation_incomplete";
-                                if !migration.reason_codes.iter().any(|value| value == reason) {
-                                    migration.reason_codes.push(reason.to_string());
-                                }
-                            }
-                            return Err(error);
-                        }
-                        migration.disposition = RuntimeDisposition::OrphanAdoption;
-                        let reason = if legacy_transferred_owner_rejected {
-                            "legacy_transferred_owner_prepare_rejected_effect_authority_revoked"
-                        } else {
-                            "legacy_daemon_protocol_unavailable_effect_authority_revoked"
-                        };
-                        if !migration.reason_codes.iter().any(|value| value == reason) {
-                            migration.reason_codes.push(reason.to_string());
-                        }
-                        let resumed = run_agent_json(
                             &candidate_binary,
-                            &candidate_session,
-                            &["handoff", "resume", "--source-session", &source_session],
+                            &service_state,
+                            migration,
+                            handoffs,
+                            &failed_session,
+                            legacy_transferred_owner_rejected,
+                            false,
                         )?;
-                        handoffs[handoff_index].committed = true;
-                        migration.adoption_receipt_id = Some(owner_transfer_receipt_id(&resumed)?);
                         continue;
                     }
-                    Err(error) => return Err(error.message),
+                    Err((_failed_session, error)) => return Err(error.message),
                 };
+                if !retired_aliases.is_empty() {
+                    let reason = "browserless_source_alias_daemon_retired";
+                    if !migration.reason_codes.iter().any(|value| value == reason) {
+                        migration.reason_codes.push(reason.to_string());
+                    }
+                }
+                if runtime_handoff_prepare_response_kind(&prepared)
+                    == RuntimeHandoffPrepareResponseKind::LegacyBrowser
+                {
+                    adopt_runtime_via_verified_orphan_fallback(
+                        paths,
+                        &candidate_binary,
+                        &service_state,
+                        migration,
+                        handoffs,
+                        &source_session,
+                        false,
+                        true,
+                    )?;
+                    continue;
+                }
                 let candidate_session = prepared
                     .pointer("/data/candidateSessionName")
                     .and_then(Value::as_str)
@@ -3668,6 +3629,205 @@ fn orphan_candidate_session(migration: &crate::runtime_adoption::RuntimeMigratio
     )
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeHandoffPrepareResponseKind {
+    NoBrowser,
+    LegacyBrowser,
+    Cooperative,
+    Invalid,
+}
+
+fn runtime_handoff_prepare_response_kind(payload: &Value) -> RuntimeHandoffPrepareResponseKind {
+    let data = payload.get("data").unwrap_or(payload);
+    let prepared = data.get("prepared").and_then(Value::as_bool);
+    let browser_present = data.get("browserPresent").and_then(Value::as_bool);
+    let candidate_session = data
+        .get("candidateSessionName")
+        .and_then(Value::as_str)
+        .is_some_and(|value| !value.trim().is_empty());
+    if prepared == Some(false) || browser_present == Some(false) {
+        RuntimeHandoffPrepareResponseKind::NoBrowser
+    } else if prepared == Some(true) && browser_present == Some(true) && candidate_session {
+        RuntimeHandoffPrepareResponseKind::Cooperative
+    } else if prepared == Some(true) && browser_present == Some(true) {
+        RuntimeHandoffPrepareResponseKind::LegacyBrowser
+    } else {
+        RuntimeHandoffPrepareResponseKind::Invalid
+    }
+}
+
+fn alternate_runtime_source_sessions(
+    service_state: &crate::native::service_model::ServiceState,
+    logical_browser_id: &str,
+    primary_session: &str,
+) -> Vec<String> {
+    service_state
+        .sessions
+        .values()
+        .filter(|session| {
+            session.id != primary_session
+                && session
+                    .browser_ids
+                    .iter()
+                    .any(|browser_id| browser_id == logical_browser_id)
+        })
+        .map(|session| session.id.clone())
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+fn prepare_runtime_handoff_with_alias_fallback(
+    old_binary: &Path,
+    service_state: &crate::native::service_model::ServiceState,
+    migration: &crate::runtime_adoption::RuntimeMigrationRecord,
+    primary_session: &str,
+) -> Result<(String, Value, Vec<String>), (String, RuntimeTransactionCommandFailure)> {
+    let mut candidates = vec![primary_session.to_string()];
+    candidates.extend(alternate_runtime_source_sessions(
+        service_state,
+        &migration.logical_browser_id,
+        primary_session,
+    ));
+    let mut retired_aliases = Vec::new();
+    for session in candidates {
+        match run_agent_json_detailed(old_binary, &session, &["handoff", "prepare"]) {
+            Ok(payload)
+                if runtime_handoff_prepare_response_kind(&payload)
+                    == RuntimeHandoffPrepareResponseKind::NoBrowser =>
+            {
+                if let Err(message) = retire_idle_daemon(&session) {
+                    return Err((
+                        session,
+                        RuntimeTransactionCommandFailure {
+                            kind: RuntimeTransactionCommandFailureKind::CommandFailed,
+                            message,
+                        },
+                    ));
+                }
+                retired_aliases.push(session);
+            }
+            Ok(payload) => return Ok((session, payload, retired_aliases)),
+            Err(error) => return Err((session, error)),
+        }
+    }
+    Err((
+        primary_session.to_string(),
+        RuntimeTransactionCommandFailure {
+            kind: RuntimeTransactionCommandFailureKind::CommandFailed,
+            message: format!(
+                "runtime_transfer_source_browser_missing:{}",
+                migration.logical_browser_id
+            ),
+        },
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn adopt_runtime_via_verified_orphan_fallback(
+    paths: &InstallPaths,
+    candidate_binary: &Path,
+    service_state: &crate::native::service_model::ServiceState,
+    migration: &mut crate::runtime_adoption::RuntimeMigrationRecord,
+    handoffs: &mut Vec<PreparedRuntimeHandoff>,
+    source_session: &str,
+    legacy_transferred_owner_rejected: bool,
+    legacy_prepare_v1: bool,
+) -> Result<(), String> {
+    use crate::runtime_adoption::{BrowserAdoptionMode, RuntimeDisposition};
+
+    if legacy_transferred_owner_rejected {
+        if !legacy_transferred_owner_prepare_rejection_can_fallback(
+            service_state,
+            migration,
+            source_session,
+        ) {
+            return Err("runtime_owner_current_evidence_mismatch: transferred owner fallback evidence is incomplete".to_string());
+        }
+    } else if !runtime_source_session_is_bound(
+        service_state,
+        &migration.logical_browser_id,
+        source_session,
+    ) {
+        return Err(format!(
+            "runtime_orphan_logical_browser_not_session_bound:{}",
+            migration.logical_browser_id
+        ));
+    }
+    let candidate_session = orphan_candidate_session(migration);
+    let expected_owner = service_state
+        .runtime_owner_registry
+        .owner(&migration.profile_identity_digest)
+        .cloned()
+        .ok_or_else(|| {
+            format!(
+                "legacy_daemon_owner_missing:{}",
+                migration.logical_browser_id
+            )
+        })?;
+    handoffs.push(PreparedRuntimeHandoff {
+        source_session: source_session.to_string(),
+        candidate_session: candidate_session.clone(),
+        mode: BrowserAdoptionMode::OrphanAdoption,
+        committed: false,
+        source_finalized: false,
+        irreversible_source_revocation: false,
+    });
+    let handoff_index = handoffs.len() - 1;
+    let revocation = revoke_legacy_daemon_effect_authority(
+        paths,
+        source_session,
+        &expected_owner,
+        &mut handoffs[handoff_index].irreversible_source_revocation,
+    );
+    if let Err(error) = revocation {
+        if handoffs[handoff_index].irreversible_source_revocation {
+            migration.disposition = RuntimeDisposition::OrphanAdoption;
+            let reason = "legacy_daemon_effect_authority_revocation_incomplete";
+            if !migration.reason_codes.iter().any(|value| value == reason) {
+                migration.reason_codes.push(reason.to_string());
+            }
+        }
+        return Err(error);
+    }
+    migration.disposition = RuntimeDisposition::OrphanAdoption;
+    let reason = if legacy_transferred_owner_rejected {
+        "legacy_transferred_owner_prepare_rejected_effect_authority_revoked"
+    } else if legacy_prepare_v1 {
+        "legacy_daemon_protocol_v1_effect_authority_revoked"
+    } else {
+        "legacy_daemon_protocol_unavailable_effect_authority_revoked"
+    };
+    if !migration.reason_codes.iter().any(|value| value == reason) {
+        migration.reason_codes.push(reason.to_string());
+    }
+    let resumed = run_agent_json(
+        candidate_binary,
+        &candidate_session,
+        &["handoff", "resume", "--source-session", source_session],
+    )?;
+    handoffs[handoff_index].committed = true;
+    migration.adoption_receipt_id = Some(owner_transfer_receipt_id(&resumed)?);
+    Ok(())
+}
+
+fn runtime_source_session_is_bound(
+    service_state: &crate::native::service_model::ServiceState,
+    logical_browser_id: &str,
+    source_session: &str,
+) -> bool {
+    logical_browser_id == format!("session:{source_session}")
+        || service_state
+            .sessions
+            .get(source_session)
+            .is_some_and(|session| {
+                session
+                    .browser_ids
+                    .iter()
+                    .any(|browser_id| browser_id == logical_browser_id)
+            })
+}
+
 /// Revokes one legacy daemon only after its recorded process identity proves it
 /// matches a binary hash from a sealed retained generation. The browser
 /// process is not signaled; the candidate must independently prove and adopt
@@ -3675,10 +3835,7 @@ fn orphan_candidate_session(migration: &crate::runtime_adoption::RuntimeMigratio
 fn revoke_legacy_daemon_effect_authority(
     paths: &InstallPaths,
     source_session: &str,
-    logical_browser_id: &str,
-    profile_identity_digest: &str,
-    expected_owner_id: &str,
-    expected_owner_generation: u64,
+    expected_owner: &crate::runtime_owner_transfer::ProfileOwner,
     source_authority_unavailable: &mut bool,
 ) -> Result<(), String> {
     let identity = crate::connection::load_daemon_process_identity(source_session)?;
@@ -3709,11 +3866,11 @@ fn revoke_legacy_daemon_effect_authority(
     let repository = crate::native::service_store::LockedServiceStateRepository::default_json()?;
     crate::runtime_owner_transfer::revoke_legacy_daemon_owner(
         &repository,
-        profile_identity_digest,
-        logical_browser_id,
-        source_session,
-        expected_owner_id,
-        expected_owner_generation,
+        &expected_owner.profile_identity_digest,
+        &expected_owner.browser_id,
+        &expected_owner.daemon_session_route,
+        &expected_owner.owner_id,
+        expected_owner.owner_generation,
     )?;
     Ok(())
 }
@@ -7150,6 +7307,63 @@ mod tests {
             &migration,
             "handoff-candidate",
         ));
+    }
+
+    #[test]
+    fn legacy_prepare_payload_distinguishes_browserless_aliases_from_retained_browsers() {
+        let browserless = serde_json::json!({
+            "success": true,
+            "data": {"prepared": false, "browserPresent": false, "sessionName": "alias"}
+        });
+        assert_eq!(
+            runtime_handoff_prepare_response_kind(&browserless),
+            RuntimeHandoffPrepareResponseKind::NoBrowser
+        );
+
+        let legacy = serde_json::json!({
+            "success": true,
+            "data": {"prepared": true, "browserPresent": true, "sessionName": "legacy"}
+        });
+        assert_eq!(
+            runtime_handoff_prepare_response_kind(&legacy),
+            RuntimeHandoffPrepareResponseKind::LegacyBrowser
+        );
+
+        let cooperative = serde_json::json!({
+            "success": true,
+            "data": {
+                "prepared": true,
+                "browserPresent": true,
+                "sessionName": "current",
+                "candidateSessionName": "candidate"
+            }
+        });
+        assert_eq!(
+            runtime_handoff_prepare_response_kind(&cooperative),
+            RuntimeHandoffPrepareResponseKind::Cooperative
+        );
+    }
+
+    #[test]
+    fn legacy_browser_alias_candidates_include_all_sessions_bound_to_the_logical_browser() {
+        use crate::native::service_model::{BrowserSession, ServiceState};
+
+        let mut service_state = ServiceState::default();
+        for session_id in ["p116-beta", "p116-beta-daemon"] {
+            service_state.sessions.insert(
+                session_id.to_string(),
+                BrowserSession {
+                    id: session_id.to_string(),
+                    browser_ids: vec!["session:p116-beta".to_string()],
+                    ..BrowserSession::default()
+                },
+            );
+        }
+
+        assert_eq!(
+            alternate_runtime_source_sessions(&service_state, "session:p116-beta", "p116-beta",),
+            vec!["p116-beta-daemon".to_string()]
+        );
     }
 
     #[test]

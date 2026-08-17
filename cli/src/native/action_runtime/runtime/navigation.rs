@@ -709,9 +709,34 @@ pub(crate) fn orphan_logical_browser_id(
             "runtime_handoff_orphan_owner_ambiguous: source session '{source_session}' matches multiple revoked owners"
         ));
     }
-    Ok(matches
-        .first()
-        .map(|owner| owner.browser_id.clone())
+    if let Some(owner) = matches.first() {
+        return Ok(owner.browser_id.clone());
+    }
+    let mapped_orphans = snapshot
+        .sessions
+        .get(source_session)
+        .into_iter()
+        .flat_map(|session| session.browser_ids.iter())
+        .filter(|browser_id| {
+            snapshot
+                .runtime_owner_registry
+                .owners
+                .values()
+                .any(|owner| {
+                    owner.state == crate::runtime_owner_transfer::ProfileOwnerState::Orphaned
+                        && owner.browser_id.as_str() == browser_id.as_str()
+                })
+        })
+        .cloned()
+        .collect::<std::collections::BTreeSet<_>>();
+    if mapped_orphans.len() > 1 {
+        return Err(format!(
+            "runtime_handoff_orphan_browser_ambiguous: source session '{source_session}' maps to multiple revoked logical browsers"
+        ));
+    }
+    Ok(mapped_orphans
+        .into_iter()
+        .next()
         .unwrap_or_else(|| service_browser_id(source_session)))
 }
 

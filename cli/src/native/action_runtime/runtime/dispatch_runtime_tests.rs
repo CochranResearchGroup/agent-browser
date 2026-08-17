@@ -583,7 +583,7 @@ fn route_derived_legacy_owner_can_prepare_without_a_binding() {
 
 #[test]
 fn orphan_adoption_follows_the_revoked_owner_logical_browser() {
-    use crate::native::service_model::ServiceState;
+    use crate::native::service_model::{BrowserSession, ServiceState};
     use crate::runtime_owner_transfer::{ProfileOwner, ProfileOwnerState};
 
     let mut service_state = ServiceState::default();
@@ -607,6 +607,25 @@ fn orphan_adoption_follows_the_revoked_owner_logical_browser() {
 
     assert_eq!(
         orphan_logical_browser_id(&service_state, "handoff-source").unwrap(),
+        "session:logical-browser"
+    );
+    let mut mapped_state = service_state.clone();
+    mapped_state
+        .runtime_owner_registry
+        .owners
+        .get_mut("profile-digest")
+        .unwrap()
+        .daemon_session_route = "registry-alias".to_string();
+    mapped_state.sessions.insert(
+        "handoff-source".to_string(),
+        BrowserSession {
+            id: "handoff-source".to_string(),
+            browser_ids: vec!["session:logical-browser".to_string()],
+            ..BrowserSession::default()
+        },
+    );
+    assert_eq!(
+        orphan_logical_browser_id(&mapped_state, "handoff-source").unwrap(),
         "session:logical-browser"
     );
     assert_eq!(
