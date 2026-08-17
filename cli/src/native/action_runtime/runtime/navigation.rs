@@ -777,6 +777,24 @@ fn persist_adopted_logical_browser_health(
         })
     });
     LockedServiceStateRepository::default_json()?.mutate(|service_state| {
+        let prior_session_ids = service_state
+            .browsers
+            .get(logical_browser_id)
+            .ok_or_else(|| {
+                "runtime_handoff_logical_browser_missing: owner browser record disappeared"
+                    .to_string()
+            })?
+            .active_session_ids
+            .iter()
+            .filter(|session_id| session_id.as_str() != state.session_id)
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>();
+        rebind_runtime_handoff_service_projection_in_state(
+            service_state,
+            logical_browser_id,
+            &prior_session_ids,
+            &state.session_id,
+        )?;
         let browser = service_state
             .browsers
             .get_mut(logical_browser_id)
@@ -788,7 +806,6 @@ fn persist_adopted_logical_browser_health(
         browser.health = ServiceBrowserHealth::Ready;
         browser.pid = pid;
         browser.cdp_endpoint = Some(cdp_endpoint);
-        browser.active_session_ids = vec![state.session_id.clone()];
         browser.last_error = None;
         if let Some(process_identity) = process_identity {
             service_state
@@ -1017,6 +1034,20 @@ fn restore_runtime_handoff_service_projection_in_state(
     candidate_session: &str,
     source_session: &str,
 ) -> Result<(), String> {
+    rebind_runtime_handoff_service_projection_in_state(
+        service_state,
+        logical_browser_id,
+        &std::collections::BTreeSet::from([candidate_session.to_string()]),
+        source_session,
+    )
+}
+
+fn rebind_runtime_handoff_service_projection_in_state(
+    service_state: &mut crate::native::service_model::ServiceState,
+    logical_browser_id: &str,
+    prior_session_ids: &std::collections::BTreeSet<String>,
+    next_session_id: &str,
+) -> Result<(), String> {
     let browser = service_state
         .browsers
         .get_mut(logical_browser_id)
@@ -1024,19 +1055,138 @@ fn restore_runtime_handoff_service_projection_in_state(
             "runtime_handoff_rollback_browser_projection_missing: retained browser record disappeared"
                 .to_string()
         })?;
-    browser.active_session_ids = vec![source_session.to_string()];
+    browser.active_session_ids = vec![next_session_id.to_string()];
     for tab in &mut browser.tab_handles {
-        if tab.session_name.as_deref() == Some(candidate_session) {
-            tab.session_name = Some(source_session.to_string());
+        if tab
+            .session_name
+            .as_ref()
+            .is_some_and(|session| prior_session_ids.contains(session))
+        {
+            tab.session_name = Some(next_session_id.to_string());
         }
-        if tab.owner_session_id.as_deref() == Some(candidate_session) {
-            tab.owner_session_id = Some(source_session.to_string());
+        if tab
+            .owner_session_id
+            .as_ref()
+            .is_some_and(|session| prior_session_ids.contains(session))
+        {
+            tab.owner_session_id = Some(next_session_id.to_string());
         }
-        if tab.lease_id.as_deref() == Some(candidate_session) {
-            tab.lease_id = Some(source_session.to_string());
+        if tab
+            .lease_id
+            .as_ref()
+            .is_some_and(|session| prior_session_ids.contains(session))
+        {
+            tab.lease_id = Some(next_session_id.to_string());
         }
-        if tab.trace_filter.session_id.as_deref() == Some(candidate_session) {
-            tab.trace_filter.session_id = Some(source_session.to_string());
+        if tab
+            .trace_filter
+            .session_id
+            .as_ref()
+            .is_some_and(|session| prior_session_ids.contains(session))
+        {
+            tab.trace_filter.session_id = Some(next_session_id.to_string());
+        }
+    }
+    for tab in service_state
+        .tabs
+        .values_mut()
+        .filter(|tab| tab.browser_id == logical_browser_id)
+    {
+        if tab
+            .session_id
+            .as_ref()
+            .is_some_and(|session| prior_session_ids.contains(session))
+        {
+            tab.session_id = Some(next_session_id.to_string());
+        }
+        if tab
+            .owner_session_id
+            .as_ref()
+            .is_some_and(|session| prior_session_ids.contains(session))
+        {
+            tab.owner_session_id = Some(next_session_id.to_string());
+        }
+        if let Some(handle) = tab.service_tab_handle.as_mut() {
+            if handle
+                .session_name
+                .as_ref()
+                .is_some_and(|session| prior_session_ids.contains(session))
+            {
+                handle.session_name = Some(next_session_id.to_string());
+            }
+            if handle
+                .owner_session_id
+                .as_ref()
+                .is_some_and(|session| prior_session_ids.contains(session))
+            {
+                handle.owner_session_id = Some(next_session_id.to_string());
+            }
+            if handle
+                .lease_id
+                .as_ref()
+                .is_some_and(|session| prior_session_ids.contains(session))
+            {
+                handle.lease_id = Some(next_session_id.to_string());
+            }
+            if handle
+                .trace_filter
+                .session_id
+                .as_ref()
+                .is_some_and(|session| prior_session_ids.contains(session))
+            {
+                handle.trace_filter.session_id = Some(next_session_id.to_string());
+            }
+        }
+    }
+    for route in service_state
+        .remote_view_routes
+        .values_mut()
+        .filter(|route| {
+            route.browser_id.as_deref() == Some(logical_browser_id)
+                && route
+                    .session_id
+                    .as_ref()
+                    .is_some_and(|session| prior_session_ids.contains(session))
+        })
+    {
+        route.session_id = Some(next_session_id.to_string());
+    }
+    for allocation in service_state
+        .display_allocations
+        .values_mut()
+        .filter(|allocation| {
+            allocation.owner_browser_id.as_deref() == Some(logical_browser_id)
+                && allocation
+                    .owner_session_id
+                    .as_ref()
+                    .is_some_and(|session| prior_session_ids.contains(session))
+        })
+    {
+        allocation.owner_session_id = Some(next_session_id.to_string());
+    }
+    for handoff in service_state
+        .remote_view_handoffs
+        .values_mut()
+        .filter(|handoff| handoff.browser_id.as_deref() == Some(logical_browser_id))
+    {
+        if handoff
+            .session_name
+            .as_ref()
+            .is_some_and(|session| prior_session_ids.contains(session))
+        {
+            handoff.session_name = Some(next_session_id.to_string());
+        }
+        if let Some(last_resolution) = handoff.last_resolution.as_mut() {
+            let resolution_session = last_resolution
+                .get("sessionName")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            if resolution_session
+                .as_ref()
+                .is_some_and(|session| prior_session_ids.contains(session))
+            {
+                last_resolution["sessionName"] = Value::String(next_session_id.to_string());
+            }
         }
     }
     Ok(())
@@ -1335,7 +1485,10 @@ pub(crate) fn write_runtime_handoff(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::native::service_model::{BrowserProcess, ServiceState, ServiceTabHandle};
+    use crate::native::service_model::{
+        BrowserProcess, BrowserTab, DisplayAllocation, RemoteViewHandoff, RemoteViewRoute,
+        ServiceState, ServiceTabHandle,
+    };
 
     #[test]
     fn rollback_restores_browser_and_tab_projection_to_source_session() {
@@ -1360,6 +1513,58 @@ mod tests {
                     ..BrowserProcess::default()
                 },
             )]),
+            tabs: std::collections::BTreeMap::from([(
+                "tab-a".to_string(),
+                BrowserTab {
+                    id: "tab-a".to_string(),
+                    browser_id: "browser-a".to_string(),
+                    session_id: Some("candidate-session".to_string()),
+                    owner_session_id: Some("candidate-session".to_string()),
+                    service_tab_handle: Some(ServiceTabHandle {
+                        browser_id: "browser-a".to_string(),
+                        session_name: Some("candidate-session".to_string()),
+                        owner_session_id: Some("candidate-session".to_string()),
+                        lease_id: Some("candidate-session".to_string()),
+                        trace_filter: crate::native::service_model::ServiceTabHandleTraceFilter {
+                            session_id: Some("candidate-session".to_string()),
+                            ..Default::default()
+                        },
+                        ..ServiceTabHandle::default()
+                    }),
+                    ..BrowserTab::default()
+                },
+            )]),
+            remote_view_routes: std::collections::BTreeMap::from([(
+                "route-a".to_string(),
+                RemoteViewRoute {
+                    id: "route-a".to_string(),
+                    browser_id: Some("browser-a".to_string()),
+                    session_id: Some("candidate-session".to_string()),
+                    ..RemoteViewRoute::default()
+                },
+            )]),
+            display_allocations: std::collections::BTreeMap::from([(
+                "display-a".to_string(),
+                DisplayAllocation {
+                    id: "display-a".to_string(),
+                    owner_browser_id: Some("browser-a".to_string()),
+                    owner_session_id: Some("candidate-session".to_string()),
+                    ..DisplayAllocation::default()
+                },
+            )]),
+            remote_view_handoffs: std::collections::BTreeMap::from([(
+                "handoff-a".to_string(),
+                RemoteViewHandoff {
+                    id: "handoff-a".to_string(),
+                    browser_id: Some("browser-a".to_string()),
+                    session_name: Some("candidate-session".to_string()),
+                    last_resolution: Some(json!({
+                        "sessionName": "candidate-session",
+                        "status": "ready"
+                    })),
+                    ..RemoteViewHandoff::default()
+                },
+            )]),
             ..ServiceState::default()
         };
 
@@ -1379,6 +1584,41 @@ mod tests {
         assert_eq!(tab.lease_id.as_deref(), Some("source-session"));
         assert_eq!(
             tab.trace_filter.session_id.as_deref(),
+            Some("source-session")
+        );
+        let retained_tab = &state.tabs["tab-a"];
+        assert_eq!(retained_tab.session_id.as_deref(), Some("source-session"));
+        assert_eq!(
+            retained_tab.owner_session_id.as_deref(),
+            Some("source-session")
+        );
+        let retained_handle = retained_tab.service_tab_handle.as_ref().unwrap();
+        assert_eq!(
+            retained_handle.session_name.as_deref(),
+            Some("source-session")
+        );
+        assert_eq!(
+            retained_handle.owner_session_id.as_deref(),
+            Some("source-session")
+        );
+        assert_eq!(
+            state.remote_view_routes["route-a"].session_id.as_deref(),
+            Some("source-session")
+        );
+        assert_eq!(
+            state.display_allocations["display-a"]
+                .owner_session_id
+                .as_deref(),
+            Some("source-session")
+        );
+        let handoff = &state.remote_view_handoffs["handoff-a"];
+        assert_eq!(handoff.session_name.as_deref(), Some("source-session"));
+        assert_eq!(
+            handoff
+                .last_resolution
+                .as_ref()
+                .and_then(|resolution| resolution.get("sessionName"))
+                .and_then(Value::as_str),
             Some("source-session")
         );
     }
