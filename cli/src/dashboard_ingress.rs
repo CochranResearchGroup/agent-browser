@@ -16,6 +16,8 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::time::timeout;
 
 pub(crate) const DASHBOARD_INGRESS_SCHEMA_VERSION: &str = "agent-browser.dashboard-ingress.v1";
+const DASHBOARD_INGRESS_FIRST_RESPONSE_TIMEOUT: Duration = Duration::from_secs(2);
+const DASHBOARD_INGRESS_HANDOFF_FIRST_RESPONSE_TIMEOUT: Duration = Duration::from_secs(65);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -741,6 +743,7 @@ async fn proxy_ingress_request(client: &mut TcpStream, registry: &DashboardIngre
     } else {
         request_with_connection_close(&request)
     };
+    let first_response_timeout = dashboard_ingress_first_response_timeout(&backend_request);
     let mut attempts = vec![registry.selected_backend()];
     if retry_safe {
         if let Some(fallback) = registry.fallback_backend() {
@@ -749,7 +752,7 @@ async fn proxy_ingress_request(client: &mut TcpStream, registry: &DashboardIngre
     }
     let mut failures = Vec::new();
     for backend in attempts {
-        match attempt_dashboard_backend(backend, &backend_request).await {
+        match attempt_dashboard_backend(backend, &backend_request, first_response_timeout).await {
             Ok((mut connection, first_response)) => {
                 if client.write_all(&first_response).await.is_ok() {
                     proxy_ingress_connection(client, &mut connection).await;
@@ -769,6 +772,35 @@ async fn proxy_ingress_request(client: &mut TcpStream, registry: &DashboardIngre
         ),
     )
     .await;
+}
+
+/// Durable handoff resolution may use the backend's bounded 60-second service
+/// proxy while it proves the current owner and presentation generation. Keep
+/// ordinary ingress failures fast, but allow that exact action to finish.
+fn dashboard_ingress_first_response_timeout(request: &[u8]) -> Duration {
+    if !request.starts_with(b"POST /api/service/request ") {
+        return DASHBOARD_INGRESS_FIRST_RESPONSE_TIMEOUT;
+    }
+    let Some(body_offset) = request
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .map(|index| index + 4)
+    else {
+        return DASHBOARD_INGRESS_FIRST_RESPONSE_TIMEOUT;
+    };
+    let action = serde_json::from_slice::<serde_json::Value>(&request[body_offset..])
+        .ok()
+        .and_then(|payload| {
+            payload
+                .get("action")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string)
+        });
+    if action.as_deref() == Some("service_remote_view_handoff_resolve") {
+        DASHBOARD_INGRESS_HANDOFF_FIRST_RESPONSE_TIMEOUT
+    } else {
+        DASHBOARD_INGRESS_FIRST_RESPONSE_TIMEOUT
+    }
 }
 
 fn request_with_connection_close(request: &[u8]) -> Vec<u8> {
@@ -878,6 +910,7 @@ async fn read_initial_http_request(client: &mut TcpStream) -> Result<Vec<u8>, St
 async fn attempt_dashboard_backend(
     backend: &DashboardBackend,
     request: &[u8],
+    first_response_timeout: Duration,
 ) -> Result<(TcpStream, Vec<u8>), String> {
     let mut connection = timeout(
         Duration::from_secs(2),
@@ -891,7 +924,7 @@ async fn attempt_dashboard_backend(
         .await
         .map_err(|error| format!("request write failed: {error}"))?;
     let mut first_response = vec![0_u8; 8192];
-    let count = timeout(Duration::from_secs(2), connection.read(&mut first_response))
+    let count = timeout(first_response_timeout, connection.read(&mut first_response))
         .await
         .map_err(|_| "first response byte timed out".to_string())?
         .map_err(|error| format!("response read failed: {error}"))?;
@@ -1174,6 +1207,56 @@ mod tests {
                 .await
                 .is_err()
         );
+    }
+
+    #[tokio::test]
+    async fn durable_handoff_resolution_waits_for_the_bounded_backend_response() {
+        let backend_listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let backend_port = backend_listener.local_addr().unwrap().port();
+        let registry = DashboardIngressRegistry::new(DashboardBackend::new(
+            "generation-selected",
+            backend_port,
+            "selected-manifest",
+        ));
+        let backend = tokio::spawn(async move {
+            let (mut connection, _) = backend_listener.accept().await.unwrap();
+            let request = read_initial_http_request(&mut connection).await.unwrap();
+            assert!(request.starts_with(b"POST /api/service/request "));
+            tokio::time::sleep(Duration::from_millis(2_100)).await;
+            let _ = connection
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nready",
+                )
+                .await;
+        });
+        let ingress_listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let ingress_port = ingress_listener.local_addr().unwrap().port();
+        let ingress = tokio::spawn(async move {
+            let (mut connection, _) = ingress_listener.accept().await.unwrap();
+            proxy_ingress_request(&mut connection, &registry).await;
+        });
+        let body = serde_json::json!({
+            "action": "service_remote_view_handoff_resolve",
+            "params": {"handoffId": "handoff-a"},
+            "jobTimeoutMs": 90_000,
+        })
+        .to_string();
+        let request = format!(
+            "POST /api/service/request HTTP/1.1\r\nHost: localhost\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        let mut client = TcpStream::connect(("127.0.0.1", ingress_port))
+            .await
+            .unwrap();
+        client.write_all(request.as_bytes()).await.unwrap();
+        client.shutdown().await.unwrap();
+        let mut response = Vec::new();
+        client.read_to_end(&mut response).await.unwrap();
+
+        backend.await.unwrap();
+        ingress.await.unwrap();
+        assert!(response.ends_with(b"ready"));
     }
 
     #[test]
