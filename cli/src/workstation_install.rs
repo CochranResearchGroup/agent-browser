@@ -3815,27 +3815,73 @@ fn prepare_runtime_handoff_with_alias_fallback(
         &migration.logical_browser_id,
         primary_session,
     ));
+    prepare_runtime_handoff_candidates(
+        &migration.logical_browser_id,
+        primary_session,
+        candidates,
+        |session| run_agent_json_detailed(old_binary, session, &["handoff", "prepare"]),
+        retire_idle_daemon,
+    )
+}
+
+fn prepare_runtime_handoff_candidates<Prepare, Retire>(
+    logical_browser_id: &str,
+    primary_session: &str,
+    candidates: Vec<String>,
+    mut prepare: Prepare,
+    mut retire: Retire,
+) -> Result<(String, Value, Vec<String>), (String, RuntimeTransactionCommandFailure)>
+where
+    Prepare: FnMut(&str) -> Result<Value, RuntimeTransactionCommandFailure>,
+    Retire: FnMut(&str) -> Result<(), String>,
+{
     let mut retired_aliases = Vec::new();
+    let mut selected: Option<(String, Value)> = None;
     for session in candidates {
-        match run_agent_json_detailed(old_binary, &session, &["handoff", "prepare"]) {
-            Ok(payload)
-                if runtime_handoff_prepare_response_kind(&payload)
-                    == RuntimeHandoffPrepareResponseKind::NoBrowser =>
-            {
-                if let Err(message) = retire_idle_daemon(&session) {
+        match prepare(&session) {
+            Ok(payload) => match runtime_handoff_prepare_response_kind(&payload) {
+                RuntimeHandoffPrepareResponseKind::NoBrowser => {
+                    if let Err(message) = retire(&session) {
+                        return Err((
+                            session,
+                            RuntimeTransactionCommandFailure {
+                                kind: RuntimeTransactionCommandFailureKind::CommandFailed,
+                                message,
+                            },
+                        ));
+                    }
+                    retired_aliases.push(session);
+                }
+                RuntimeHandoffPrepareResponseKind::LegacyBrowser
+                | RuntimeHandoffPrepareResponseKind::Cooperative => {
+                    if let Some((selected_session, _)) = &selected {
+                        return Err((
+                            session.clone(),
+                            RuntimeTransactionCommandFailure {
+                                kind: RuntimeTransactionCommandFailureKind::CommandFailed,
+                                message: format!(
+                                    "runtime_handoff_alternate_browser_conflict:{logical_browser_id}:{selected_session}:{session}"
+                                ),
+                            },
+                        ));
+                    }
+                    selected = Some((session, payload));
+                }
+                RuntimeHandoffPrepareResponseKind::Invalid => {
                     return Err((
-                        session,
+                        session.clone(),
                         RuntimeTransactionCommandFailure {
                             kind: RuntimeTransactionCommandFailureKind::CommandFailed,
-                            message,
+                            message: format!("runtime_handoff_prepare_response_invalid:{session}"),
                         },
                     ));
                 }
-                retired_aliases.push(session);
-            }
-            Ok(payload) => return Ok((session, payload, retired_aliases)),
+            },
             Err(error) => return Err((session, error)),
         }
+    }
+    if let Some((session, payload)) = selected {
+        return Ok((session, payload, retired_aliases));
     }
     Err((
         primary_session.to_string(),
@@ -3843,7 +3889,7 @@ fn prepare_runtime_handoff_with_alias_fallback(
             kind: RuntimeTransactionCommandFailureKind::CommandFailed,
             message: format!(
                 "runtime_transfer_source_browser_missing:{}",
-                migration.logical_browser_id
+                logical_browser_id
             ),
         },
     ))
@@ -7649,6 +7695,76 @@ mod tests {
         assert_eq!(
             alternate_runtime_source_sessions(&service_state, "session:p116-beta", "p116-beta",),
             vec!["p116-beta-daemon".to_string()]
+        );
+    }
+
+    #[test]
+    fn runtime_handoff_prepare_retires_browserless_alias_after_selecting_primary() {
+        let candidates = vec!["primary".to_string(), "historical-alias".to_string()];
+        let mut prepared_sessions = Vec::new();
+        let mut retired_sessions = Vec::new();
+
+        let (selected_session, payload, retired_aliases) = prepare_runtime_handoff_candidates(
+            "session:logical-browser",
+            "primary",
+            candidates,
+            |session| {
+                prepared_sessions.push(session.to_string());
+                Ok(if session == "primary" {
+                    serde_json::json!({
+                        "data": {
+                            "prepared": true,
+                            "browserPresent": true,
+                            "candidateSessionName": "candidate"
+                        }
+                    })
+                } else {
+                    serde_json::json!({
+                        "data": {"prepared": false, "browserPresent": false}
+                    })
+                })
+            },
+            |session| {
+                retired_sessions.push(session.to_string());
+                Ok(())
+            },
+        )
+        .expect("one browser-bearing session should be selected");
+
+        assert_eq!(selected_session, "primary");
+        assert_eq!(
+            payload.pointer("/data/candidateSessionName"),
+            Some(&serde_json::json!("candidate"))
+        );
+        assert_eq!(prepared_sessions, vec!["primary", "historical-alias"]);
+        assert_eq!(retired_sessions, vec!["historical-alias"]);
+        assert_eq!(retired_aliases, vec!["historical-alias"]);
+    }
+
+    #[test]
+    fn runtime_handoff_prepare_rejects_second_browser_bearing_alias() {
+        let candidates = vec!["primary".to_string(), "conflicting-alias".to_string()];
+
+        let (_, error) = prepare_runtime_handoff_candidates(
+            "session:logical-browser",
+            "primary",
+            candidates,
+            |session| {
+                Ok(serde_json::json!({
+                    "data": {
+                        "prepared": true,
+                        "browserPresent": true,
+                        "candidateSessionName": format!("candidate-{session}")
+                    }
+                }))
+            },
+            |_| Ok(()),
+        )
+        .expect_err("multiple browser-bearing aliases must fail closed");
+
+        assert_eq!(
+            error.message,
+            "runtime_handoff_alternate_browser_conflict:session:logical-browser:primary:conflicting-alias"
         );
     }
 
