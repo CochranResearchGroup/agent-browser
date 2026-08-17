@@ -1970,12 +1970,14 @@ pub(crate) fn classify_runtime(evidence: &RuntimeEvidenceSummary) -> RuntimeClas
     if evidence.browser_live
         && evidence.daemon_live
         && evidence.daemon_cooperative
-        && unique_owner_generations.len() == 1
+        && unique_owner_generations.len() <= 1
     {
-        return decision(
-            RuntimeClassification::CooperativeLiveOwner,
-            &["cooperative_owner_verified"],
-        );
+        let reason = if unique_owner_generations.is_empty() {
+            "cooperative_owner_registration_required"
+        } else {
+            "cooperative_owner_verified"
+        };
+        return decision(RuntimeClassification::CooperativeLiveOwner, &[reason]);
     }
     if evidence.browser_live && !evidence.daemon_live && unique_owner_generations.is_empty() {
         return decision(
@@ -3187,6 +3189,29 @@ mod tests {
 
     fn digest_text(value: &str) -> String {
         format!("{:x}", Sha256::digest(value.as_bytes()))
+    }
+
+    #[test]
+    fn verified_cooperative_legacy_daemon_can_bootstrap_owner_registration() {
+        let mut evidence = live_identity_fragment();
+        evidence.daemon_live = true;
+        evidence.daemon_cooperative = true;
+
+        let decision = classify_runtime(&evidence);
+        assert_eq!(
+            decision.classification,
+            RuntimeClassification::CooperativeLiveOwner
+        );
+        assert_eq!(
+            decision.reason_codes,
+            vec!["cooperative_owner_registration_required"]
+        );
+
+        evidence.daemon_cooperative = false;
+        assert_eq!(
+            classify_runtime(&evidence).classification,
+            RuntimeClassification::InsufficientEvidence
+        );
     }
 
     #[test]
