@@ -513,7 +513,7 @@ async fn handle_runtime_handoff_orphan_adoption(
 ) -> Result<Value, String> {
     let repository = LockedServiceStateRepository::default_json()?;
     let snapshot = repository.load_snapshot()?;
-    let logical_browser_id = service_browser_id(source_session);
+    let logical_browser_id = orphan_logical_browser_id(&snapshot, source_session)?;
     let browser = snapshot
         .browsers
         .get(&logical_browser_id)
@@ -689,6 +689,30 @@ async fn handle_runtime_handoff_orphan_adoption(
         "ownerTransferReceipt": receipt,
         "targetsReattached": state.browser.as_ref().map(BrowserManager::page_count).unwrap_or(0),
     }))
+}
+
+pub(crate) fn orphan_logical_browser_id(
+    snapshot: &crate::native::service_model::ServiceState,
+    source_session: &str,
+) -> Result<String, String> {
+    let matches = snapshot
+        .runtime_owner_registry
+        .owners
+        .values()
+        .filter(|owner| {
+            owner.state == crate::runtime_owner_transfer::ProfileOwnerState::Orphaned
+                && owner.daemon_session_route == source_session
+        })
+        .collect::<Vec<_>>();
+    if matches.len() > 1 {
+        return Err(format!(
+            "runtime_handoff_orphan_owner_ambiguous: source session '{source_session}' matches multiple revoked owners"
+        ));
+    }
+    Ok(matches
+        .first()
+        .map(|owner| owner.browser_id.clone())
+        .unwrap_or_else(|| service_browser_id(source_session)))
 }
 
 fn persist_adopted_logical_browser_health(

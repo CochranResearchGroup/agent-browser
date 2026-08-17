@@ -3462,10 +3462,27 @@ fn transfer_discovered_runtimes(
                 ) {
                     Ok(prepared) => prepared,
                     Err(error)
-                        if error.kind
-                            == RuntimeTransactionCommandFailureKind::ProtocolUnavailable =>
+                        if matches!(
+                            error.kind,
+                            RuntimeTransactionCommandFailureKind::ProtocolUnavailable
+                                | RuntimeTransactionCommandFailureKind::LegacyTransferredOwnerRejected
+                        ) =>
                     {
-                        if migration.logical_browser_id != format!("session:{source_session}") {
+                        let legacy_transferred_owner_rejected = error.kind
+                            == RuntimeTransactionCommandFailureKind::LegacyTransferredOwnerRejected;
+                        if legacy_transferred_owner_rejected
+                            && !legacy_transferred_owner_prepare_rejection_can_fallback(
+                                &service_state,
+                                migration,
+                                &source_session,
+                            )
+                        {
+                            return Err(error.message);
+                        }
+                        if !legacy_transferred_owner_rejected
+                            && migration.logical_browser_id
+                                != format!("session:{source_session}")
+                        {
                             return Err(format!(
                                 "runtime_orphan_logical_browser_not_session_bound:{}",
                                 migration.logical_browser_id
@@ -3511,7 +3528,11 @@ fn transfer_discovered_runtimes(
                             return Err(error);
                         }
                         migration.disposition = RuntimeDisposition::OrphanAdoption;
-                        let reason = "legacy_daemon_protocol_unavailable_effect_authority_revoked";
+                        let reason = if legacy_transferred_owner_rejected {
+                            "legacy_transferred_owner_prepare_rejected_effect_authority_revoked"
+                        } else {
+                            "legacy_daemon_protocol_unavailable_effect_authority_revoked"
+                        };
                         if !migration.reason_codes.iter().any(|value| value == reason) {
                             migration.reason_codes.push(reason.to_string());
                         }
@@ -3762,6 +3783,7 @@ fn resolve_runtime_source_session(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RuntimeTransactionCommandFailureKind {
     ProtocolUnavailable,
+    LegacyTransferredOwnerRejected,
     CommandFailed,
 }
 
@@ -3785,11 +3807,33 @@ fn runtime_transaction_failure_kind(
     let textual_unknown = handoff_command
         && (normalized.contains("unknown command") || normalized.contains("unknown subcommand"))
         && normalized.contains("handoff");
+    let legacy_transferred_owner_rejected = command_args == ["handoff", "prepare"]
+        && normalized.contains("runtime_owner_current_evidence_mismatch:");
     if handoff_command && (typed_unknown || textual_unknown) {
         RuntimeTransactionCommandFailureKind::ProtocolUnavailable
+    } else if legacy_transferred_owner_rejected {
+        RuntimeTransactionCommandFailureKind::LegacyTransferredOwnerRejected
     } else {
         RuntimeTransactionCommandFailureKind::CommandFailed
     }
+}
+
+fn legacy_transferred_owner_prepare_rejection_can_fallback(
+    service_state: &crate::native::service_model::ServiceState,
+    migration: &crate::runtime_adoption::RuntimeMigrationRecord,
+    source_session: &str,
+) -> bool {
+    service_state
+        .runtime_owner_registry
+        .owner(&migration.profile_identity_digest)
+        .is_some_and(|owner| {
+            owner.state == crate::runtime_owner_transfer::ProfileOwnerState::Ready
+                && owner.pending_transfer.is_none()
+                && owner.owner_generation > 1
+                && owner.browser_id == migration.logical_browser_id
+                && owner.daemon_session_route == source_session
+                && owner.browser_id != format!("session:{source_session}")
+        })
 }
 
 fn run_agent_json_detailed(
@@ -6971,6 +7015,83 @@ mod tests {
             ),
             RuntimeTransactionCommandFailureKind::CommandFailed
         );
+        assert_eq!(
+            runtime_transaction_failure_kind(
+                Some(&runtime_failure),
+                "runtime_owner_current_evidence_mismatch: existing profile owner does not match the preparing daemon",
+                &["handoff", "prepare"]
+            ),
+            RuntimeTransactionCommandFailureKind::LegacyTransferredOwnerRejected
+        );
+        assert_eq!(
+            runtime_transaction_failure_kind(
+                Some(&runtime_failure),
+                "runtime_owner_current_evidence_mismatch: existing profile owner does not match the preparing daemon",
+                &["handoff", "resume"]
+            ),
+            RuntimeTransactionCommandFailureKind::CommandFailed
+        );
+    }
+
+    #[test]
+    fn only_an_exact_transferred_owner_can_use_legacy_prepare_rejection_fallback() {
+        use crate::native::service_model::ServiceState;
+        use crate::runtime_adoption::{
+            RuntimeClassification, RuntimeDisposition, RuntimeMigrationRecord,
+        };
+        use crate::runtime_owner_transfer::{ProfileOwner, ProfileOwnerState};
+
+        let migration = RuntimeMigrationRecord {
+            logical_browser_id: "session:logical-browser".to_string(),
+            profile_identity_digest: "profile-digest".to_string(),
+            classification: RuntimeClassification::CooperativeLiveOwner,
+            disposition: RuntimeDisposition::CooperativeTransfer,
+            adoption_receipt_id: None,
+            reason_codes: Vec::new(),
+        };
+        let owner = ProfileOwner {
+            owner_id: "owner-transfer-issued".to_string(),
+            profile_identity_digest: migration.profile_identity_digest.clone(),
+            state: ProfileOwnerState::Ready,
+            owner_generation: 2,
+            browser_id: migration.logical_browser_id.clone(),
+            daemon_session_route: "handoff-candidate".to_string(),
+            process_instance_digest: "process-digest".to_string(),
+            browser_family: "chrome".to_string(),
+            cdp_endpoint_identity_digest: "cdp-digest".to_string(),
+            target_set_digest: "targets-digest".to_string(),
+            pending_transfer: None,
+            last_transition: None,
+        };
+        let mut service_state = ServiceState::default();
+        service_state
+            .runtime_owner_registry
+            .owners
+            .insert(migration.profile_identity_digest.clone(), owner.clone());
+
+        assert!(legacy_transferred_owner_prepare_rejection_can_fallback(
+            &service_state,
+            &migration,
+            "handoff-candidate",
+        ));
+        assert!(!legacy_transferred_owner_prepare_rejection_can_fallback(
+            &service_state,
+            &migration,
+            "different-route",
+        ));
+
+        let mut generation_one_state = service_state;
+        generation_one_state
+            .runtime_owner_registry
+            .owners
+            .get_mut(&migration.profile_identity_digest)
+            .unwrap()
+            .owner_generation = 1;
+        assert!(!legacy_transferred_owner_prepare_rejection_can_fallback(
+            &generation_one_state,
+            &migration,
+            "handoff-candidate",
+        ));
     }
 
     #[test]
