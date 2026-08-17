@@ -35,7 +35,11 @@ retry by killing or detaching a browser. Successful JSON output includes
 `runtimeCensusTransaction`, a private receipt under
 `~/.agent-browser/runtime-adoption/transactions/` with the census digest and
 per-runtime classifications. Host prerequisites must succeed before admission
-drain or owner transfer. Cooperative and verified orphan browsers move through
+drain or owner transfer. On the first transactional upgrade from the legacy
+mutable layout, the installer seals the exact existing binary, support tree,
+and user units as the rollback generation before replacing stable entrypoints
+with generation-backed links. It restores the original files and selector if
+that conversion fails. Cooperative and verified orphan browsers move through
 receipt-bearing owner generations; manual and external browsers remain
 preserved without effect authority. The selector changes only after every
 runtime has a proven disposition. Do not work around a transaction stop by

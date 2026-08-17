@@ -13,6 +13,9 @@
 //! share one durable transaction: census precedes candidate staging, host gates
 //! precede admission drain, runtime ownership is receipted before selector
 //! commit, and failures reverse to the prior selected generation when proven.
+//! A first upgrade from the legacy mutable layout imports and seals the exact
+//! installed binary, support tree, and unit files as the rollback generation
+//! before converting stable entrypoints to generation-backed symlinks.
 //! Failed reconciliation restores the exact prior active state of managed user
 //! units and writes a private diagnostic receipt.
 
@@ -3472,6 +3475,34 @@ fn prepare_payload_transaction(
         ));
     }
 
+    if transaction.old_generation_id.is_none() && legacy_mutable_payload_present(paths) {
+        let legacy_generation_id = match migrate_legacy_payload_to_generation(paths) {
+            Ok(generation_id) => generation_id,
+            Err(error) => {
+                transaction.stop_reason = Some("legacy_generation_migration_failed".to_string());
+                let _ = persist_upgrade_transition(
+                    &transaction_path,
+                    &mut transaction,
+                    UpgradeTransactionState::RollbackBeforeCommit,
+                    "rollback_before_commit",
+                );
+                transaction.terminal_result = Some("legacy_payload_preserved".to_string());
+                let _ = persist_upgrade_transition(
+                    &transaction_path,
+                    &mut transaction,
+                    UpgradeTransactionState::FailedPreservedOldGeneration,
+                    "failed_preserved_old_generation",
+                );
+                return Err(format!(
+                    "{error}; transaction: {}",
+                    transaction_path.display()
+                ));
+            }
+        };
+        transaction.old_generation_id = Some(legacy_generation_id);
+        write_private_json_atomic(&transaction_path, &transaction)?;
+    }
+
     let staged = match stage_payload_generation(paths, args) {
         Ok(staged) => staged,
         Err(error) => {
@@ -5262,6 +5293,194 @@ fn commit_staged_payload_generation(
     Ok(())
 }
 
+fn legacy_mutable_payload_present(paths: &InstallPaths) -> bool {
+    let legacy_units = WORKSTATION_RECONCILE_QUIESCE_UNITS
+        .iter()
+        .any(|unit| paths.unit_dir.join(unit).exists());
+    paths.binary.exists() || paths.legacy_support_dir.exists() || legacy_units
+}
+
+fn migrate_legacy_payload_to_generation(paths: &InstallPaths) -> Result<String, String> {
+    if fs::symlink_metadata(&paths.current_selector).is_ok() {
+        return selected_generation_id(paths)
+            .ok_or_else(|| "current runtime generation selector is invalid".to_string());
+    }
+    let required = [
+        paths.binary.clone(),
+        paths.legacy_support_dir.join("manifest.json"),
+    ];
+    let missing = required
+        .iter()
+        .filter(|path| !path.is_file())
+        .map(|path| path.display().to_string())
+        .collect::<Vec<_>>();
+    let missing_units = WORKSTATION_GENERATION_UNITS
+        .iter()
+        .map(|unit| paths.unit_dir.join(unit))
+        .filter(|path| !path.is_file())
+        .map(|path| path.display().to_string())
+        .collect::<Vec<_>>();
+    if !missing.is_empty() || !missing_units.is_empty() {
+        return Err(format!(
+            "legacy workstation payload is incomplete; missing: {}",
+            missing
+                .into_iter()
+                .chain(missing_units)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+
+    let staging = paths
+        .root
+        .join(".agent-browser/install-staging")
+        .join(format!("legacy-{}", uuid::Uuid::new_v4()));
+    let result = (|| {
+        let staged_binary = staging.join("bin/agent-browser");
+        let staged_support = staging.join("support");
+        let staged_units = staging.join("units");
+        fs::create_dir_all(staged_binary.parent().expect("staged binary parent"))
+            .map_err(display_io("create legacy binary staging", &staging))?;
+        fs::create_dir_all(&staged_units)
+            .map_err(display_io("create legacy unit staging", &staged_units))?;
+        fs::copy(&paths.binary, &staged_binary).map_err(display_io(
+            "stage legacy agent-browser executable",
+            &staged_binary,
+        ))?;
+        set_executable(&staged_binary)?;
+        copy_legacy_generation_tree(&paths.legacy_support_dir, &staged_support)?;
+
+        let mut units = Vec::with_capacity(WORKSTATION_GENERATION_UNITS.len());
+        for unit in WORKSTATION_GENERATION_UNITS {
+            let source = paths.unit_dir.join(unit);
+            let content = fs::read_to_string(&source)
+                .map_err(display_io("read legacy systemd user unit", &source))?;
+            fs::write(staged_units.join(unit), &content)
+                .map_err(display_io("stage legacy systemd user unit", &staged_units))?;
+            units.push((unit, content));
+        }
+
+        let binary_sha256 = workstation_file_sha256(&staged_binary)?;
+        let support_manifest_sha256 =
+            workstation_file_sha256(&staged_support.join("manifest.json"))?;
+        let generation_id = format!(
+            "{}-{}-{}",
+            env!("CARGO_PKG_VERSION"),
+            &binary_sha256[..12],
+            &support_manifest_sha256[..12]
+        );
+        let generation_path = paths.generations_dir.join(&generation_id);
+        let generation_manifest = serde_json::to_string_pretty(&serde_json::json!({
+            "schemaVersion": "agent-browser.runtime-generation.v1",
+            "generationId": generation_id,
+            "packageVersion": env!("CARGO_PKG_VERSION"),
+            "binarySha256": binary_sha256,
+            "supportManifestSha256": support_manifest_sha256,
+            "controllerCompatibilityVersion": 1,
+            "schemaCompatibilityVersion": 1,
+            "immutableInstallationPath": generation_path,
+            "importedFromLegacyPayload": true,
+        }))
+        .expect("legacy runtime generation manifest must serialize");
+        fs::write(staging.join("generation.json"), generation_manifest).map_err(display_io(
+            "stage legacy runtime generation manifest",
+            &staging,
+        ))?;
+        preflight_staged_generation(&staging, &binary_sha256, &support_manifest_sha256, &units)?;
+        commit_immutable_generation(&staging, &generation_path)?;
+        select_generation(paths, &generation_id)?;
+        replace_legacy_payload_with_stable_links(paths, &units)?;
+        Ok(generation_id)
+    })();
+    let _ = remove_generation_tree(&staging);
+    result
+}
+
+fn copy_legacy_generation_tree(source: &Path, destination: &Path) -> Result<(), String> {
+    let metadata = fs::symlink_metadata(source)
+        .map_err(display_io("inspect legacy workstation payload", source))?;
+    if metadata.file_type().is_symlink() {
+        return Err(format!(
+            "legacy workstation payload contains an unsupported symlink: {}",
+            source.display()
+        ));
+    }
+    if metadata.is_dir() {
+        fs::create_dir_all(destination).map_err(display_io(
+            "create legacy generation directory",
+            destination,
+        ))?;
+        for entry in
+            fs::read_dir(source).map_err(display_io("read legacy workstation payload", source))?
+        {
+            let entry =
+                entry.map_err(|error| format!("Unable to read legacy payload entry: {error}"))?;
+            copy_legacy_generation_tree(&entry.path(), &destination.join(entry.file_name()))?;
+        }
+        return Ok(());
+    }
+    if metadata.is_file() {
+        fs::copy(source, destination)
+            .map_err(display_io("copy legacy workstation payload", destination))?;
+        return Ok(());
+    }
+    Err(format!(
+        "legacy workstation payload contains an unsupported entry: {}",
+        source.display()
+    ))
+}
+
+fn replace_legacy_payload_with_stable_links(
+    paths: &InstallPaths,
+    units: &[(&'static str, String)],
+) -> Result<(), String> {
+    let mut replacements = vec![(
+        paths.binary.clone(),
+        PathBuf::from("../lib/agent-browser/current/bin/agent-browser"),
+    )];
+    replacements.extend(units.iter().map(|(name, _)| {
+        (
+            paths.unit_dir.join(name),
+            PathBuf::from("../../../.local/lib/agent-browser/current/units").join(name),
+        )
+    }));
+    let mut backups = Vec::<(PathBuf, PathBuf)>::new();
+    for (path, target) in replacements {
+        let backup = path.with_file_name(format!(
+            ".{}.legacy-{}",
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("payload"),
+            uuid::Uuid::new_v4()
+        ));
+        if let Err(error) = fs::rename(&path, &backup) {
+            rollback_legacy_link_replacements(paths, &backups);
+            return Err(format!(
+                "Unable to preserve legacy payload entry {}: {error}",
+                path.display()
+            ));
+        }
+        if let Err(error) = atomic_symlink(&target, &path) {
+            let _ = fs::rename(&backup, &path);
+            rollback_legacy_link_replacements(paths, &backups);
+            return Err(error);
+        }
+        backups.push((path, backup));
+    }
+    for (_, backup) in backups {
+        let _ = fs::remove_file(backup);
+    }
+    Ok(())
+}
+
+fn rollback_legacy_link_replacements(paths: &InstallPaths, backups: &[(PathBuf, PathBuf)]) {
+    for (path, backup) in backups.iter().rev() {
+        let _ = fs::remove_file(path);
+        let _ = fs::rename(backup, path);
+    }
+    let _ = restore_generation_selector(paths, None);
+}
+
 fn validate_generation_install_preconditions(paths: &InstallPaths) -> Result<(), String> {
     match fs::symlink_metadata(&paths.current_selector) {
         Ok(metadata) if metadata.file_type().is_symlink() => {
@@ -5310,10 +5529,7 @@ fn validate_generation_install_preconditions(paths: &InstallPaths) -> Result<(),
             ));
         }
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
-            let legacy_units = WORKSTATION_RECONCILE_QUIESCE_UNITS
-                .iter()
-                .any(|unit| paths.unit_dir.join(unit).exists());
-            if paths.binary.exists() || paths.legacy_support_dir.exists() || legacy_units {
+            if legacy_mutable_payload_present(paths) {
                 return Err(
                     "legacy mutable workstation payload requires transactional generation migration before apply"
                         .to_string(),
@@ -6385,6 +6601,52 @@ mod tests {
         assert!(manifest.contains(r#""controllerAssets""#));
         assert!(manifest.contains(r#""guacamoleBundleManifestSha256""#));
         assert!(manifest.contains(r#""agent-browser-runtime-interlock.timer""#));
+    }
+
+    #[test]
+    fn legacy_mutable_payload_migrates_to_a_sealed_rollback_generation() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-legacy-generation-migration-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        fs::create_dir_all(paths.binary.parent().unwrap()).unwrap();
+        fs::create_dir_all(&paths.legacy_support_dir).unwrap();
+        fs::create_dir_all(&paths.unit_dir).unwrap();
+        fs::write(&paths.binary, b"legacy-binary").unwrap();
+        set_executable(&paths.binary).unwrap();
+        fs::write(paths.legacy_support_dir.join("manifest.json"), b"{}\n").unwrap();
+        fs::write(paths.legacy_support_dir.join("README.txt"), b"legacy\n").unwrap();
+        for unit in WORKSTATION_GENERATION_UNITS {
+            fs::write(paths.unit_dir.join(unit), format!("legacy {unit}\n")).unwrap();
+        }
+
+        let generation_id = migrate_legacy_payload_to_generation(&paths).unwrap();
+        let generation = paths.generations_dir.join(&generation_id);
+        assert_eq!(
+            fs::read_link(&paths.current_selector).unwrap(),
+            PathBuf::from("generations").join(&generation_id)
+        );
+        assert_eq!(
+            fs::read_link(&paths.binary).unwrap(),
+            PathBuf::from("../lib/agent-browser/current/bin/agent-browser")
+        );
+        for unit in WORKSTATION_GENERATION_UNITS {
+            assert_eq!(
+                fs::read_link(paths.unit_dir.join(unit)).unwrap(),
+                PathBuf::from("../../../.local/lib/agent-browser/current/units").join(unit)
+            );
+        }
+        assert_eq!(
+            fs::read(generation.join("bin/agent-browser")).unwrap(),
+            b"legacy-binary"
+        );
+        assert!(generation.join("support/README.txt").is_file());
+        validate_generation_install_preconditions(&paths).unwrap();
+        validate_sealed_generation_tree(&generation).unwrap();
+
+        remove_generation_tree(&generation).unwrap();
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[cfg(unix)]
