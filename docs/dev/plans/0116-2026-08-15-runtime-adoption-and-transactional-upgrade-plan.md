@@ -1584,6 +1584,97 @@ Slice I is accepted. Plan 0116 is complete at source and disposable installed
 acceptance. Retained rollback cleanup and any formal release remain separately
 reviewed follow-up operations, not part of this acceptance.
 
+### 2026-08-17 | Maintainer Workstation Deep Audit And Remediation
+
+A later closed-world audit against the maintainer workstation found and fixed
+additional upgrade boundaries that the disposable acceptance did not exercise.
+Production and documentation changes are committed in `1ecac119`.
+
+The remediation now:
+
+- provides an exact-transaction recovery command for a verified
+  `operator_recovery_required` drain while preserving the ledger and sealed old
+  generation;
+- requires authenticated ingress to commit one candidate-bound durable handoff
+  receipt instead of accepting file-supplied presentation evidence;
+- carries the original logical browser identity through a transaction-scoped
+  retry without granting authority from an unverified alias;
+- reacquires an expired retained target only from a current tab that still
+  matches the recorded intent, without navigation, target creation, browser
+  relaunch, or provider substitution;
+- prevents owner, provider, route, display, and retry-candidate projections
+  from merging unrelated runtimes;
+- retires a deleted-inode idle daemon only after exact PID, process-start,
+  path, family, and executable-digest agreement;
+- preserves effect-capable owner authority and the highest durable handoff
+  presentation generation across writes by older dashboard or daemon binaries;
+- gives only runtime-handoff repository operations the longer state-lock budget
+  needed during transfer while ordinary service mutations retain their short
+  contention bound; and
+- treats only an exact accepted `manual_preservation` migration session as a
+  nonblocking workstation warning. It never grants that session automation
+  authority or an automatic close remedy.
+
+Installed acceptance used artifact SHA-256
+`6927249b92bc3d037a89be944aef3285fb64ebf5ce520444936f81e7872460e1`.
+The installed command, release build, and local platform artifact all matched
+that digest. Transaction
+`upgrade-66870a6f-686f-4d57-ba87-e1699ca0970a` accepted selected generation
+`0.28.0-6927249b92bc-04207cd4f381` at revision 10 with admission open and all
+seven readiness axes true.
+
+Durable receipt
+`durable-handoff-947fe6e54bffb1280a22114046cdb3e09ffa0e635e109e17bd0faf9a97f39728`
+and opaque handoff `/remote-view/r903382` reached `ready`. Presentation
+generation 2 bound dashboard generation
+`0.28.0-6927249b92bc-04207cd4f381`, logical browser
+`session:upgrade-validation-29cd-v2-20260817`, owner generation 6, target
+`859AC42DA0164E686910FD7808B2FF4E`, and matching required and observed
+`rdp_gateway`. The public operator handoff is
+`https://agent-browser.ecochran.dyndns.org/remote-view/r903382`; no provider
+route URL is an operator handoff.
+
+Fresh post-acceptance readback preserved all four protected browser identities:
+PID 3200 at start token 26224971, PID 34923 at 27036479, PID 66297 at 3930481,
+and PID 9179 at 44220008. The OS census found two Xorg processes, six
+Agent Browser processes, 215 Chrome processes, one `guacd`, one `xrdp`, and
+three `xrdp-sesman` processes. This readback, rather than service status alone,
+was used to check for residual runtime trees.
+
+Final validation passed:
+
+- the complete Rust gate with 1,307 parallel-safe tests, four close-scope
+  integration tests, the remote-view doctor scope test, the session-supervisor
+  integration test, and every serialized environment-mutating partition;
+- 61 focused workstation installer tests, four workstation payload-status
+  tests, and repeated presentation-generation isolation coverage;
+- strict Clippy, Rust formatting, diff hygiene, and install help parsing;
+- route-confusion, source-free workstation, host-provision, fresh-VM,
+  Guacamole assets, PostgreSQL durability, route-user synchronization, and
+  remote-view documentation gates;
+- generated service-client contracts and types, dashboard inspector contracts,
+  the dashboard production build, and the 35-route documentation build; and
+- an exact diff match between the repository Agent Browser skill and the
+  installed shared skill.
+
+The full gate exposed three stale compound fixtures that reused a route with a
+different display identity, plus one temp-state fixture whose durable sidecars
+were not isolated between repeated runs. The fixtures now model one coherent
+route and display owner, and each rollback repository uses its own temporary
+directory. A subsequent uninterrupted full Rust run passed.
+
+`agent-browser install doctor --json` remains nonzero only for three current
+advisories: duplicate profile pressure, exact accepted manual preservation of
+`p0417-preflight`, and an inactive supervisor executable drift warning. The
+workstation payload and live dashboard are ready. `agent-browser doctor
+remote-view --json` exits zero with status `ready`, remote control ready, and
+no issue codes. The generic many-to-many live gate remains its recommended
+next diagnostic, not a blocker for this already receipted handoff.
+
+No transaction finalize, generation garbage collection, formal release, or
+operator-requested close of `p0417-preflight` was performed. Rollback material
+and the accepted manual-preservation boundary remain intact.
+
 ## Planning Evidence
 
 - CodeGraph was healthy on 2026-08-15 with 553 files, 19,654 nodes, and 68,296
