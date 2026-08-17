@@ -582,7 +582,14 @@ fn find_remote_view_script_root() -> Option<PathBuf> {
 }
 
 fn find_installed_support_script_root(home: &Path, version: &str) -> Option<PathBuf> {
-    normalize_script_root_candidate(&home.join(".local/lib/agent-browser").join(version))
+    let install_root = home.join(".local/lib/agent-browser");
+    [
+        install_root.join("current/support"),
+        install_root.join(version),
+        install_root.join(version).join("support"),
+    ]
+    .into_iter()
+    .find_map(|candidate| normalize_script_root_candidate(&candidate))
 }
 
 fn find_script_root_in_ancestors(path: &Path) -> Option<PathBuf> {
@@ -3028,6 +3035,19 @@ mod tests {
             .join(".local/lib/agent-browser")
             .join(env!("CARGO_PKG_VERSION"));
         let scripts = support_root.join("scripts");
+        write_remote_view_helper_scripts(&scripts);
+
+        let resolved =
+            find_installed_support_script_root(&home, env!("CARGO_PKG_VERSION")).unwrap();
+        assert_eq!(resolved, scripts);
+
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn discovers_current_workstation_support_script_root() {
+        let home = unique_temp_dir("current-workstation-support-home");
+        let scripts = home.join(".local/lib/agent-browser/current/support/scripts");
         write_remote_view_helper_scripts(&scripts);
 
         let resolved =
