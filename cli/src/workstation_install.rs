@@ -3117,6 +3117,33 @@ fn write_private_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String
     set_private_file(path)
 }
 
+const MAX_RUNTIME_CENSUS_ROUNDS: usize = 4;
+
+fn collect_stable_runtime_census_with(
+    mut collect_round: impl FnMut() -> Result<crate::runtime_adoption::RuntimeCensusRound, String>,
+) -> Result<crate::runtime_adoption::StableRuntimeCensus, String> {
+    use crate::runtime_adoption::build_stable_runtime_census;
+
+    let mut previous = collect_round()?;
+    let mut latest = None;
+    for _ in 1..MAX_RUNTIME_CENSUS_ROUNDS {
+        let current = collect_round()?;
+        let census = build_stable_runtime_census(&previous, &current)?;
+        let changed_during_classification = census.records.iter().any(|record| {
+            record
+                .reason_codes
+                .iter()
+                .any(|reason| reason == "census_changed_during_classification")
+        });
+        if !changed_during_classification {
+            return Ok(census);
+        }
+        previous = current;
+        latest = Some(census);
+    }
+    latest.ok_or_else(|| "runtime census did not collect two rounds".to_string())
+}
+
 #[cfg(test)]
 fn require_stable_runtime_census_with(
     root: &Path,
@@ -3125,8 +3152,8 @@ fn require_stable_runtime_census_with(
     mut collect_round: impl FnMut() -> Result<crate::runtime_adoption::RuntimeCensusRound, String>,
 ) -> Result<PathBuf, String> {
     use crate::runtime_adoption::{
-        build_stable_runtime_census, persist_runtime_census, UpgradeCheckpoint, UpgradeTransaction,
-        UpgradeTransactionState, RUNTIME_ADOPTION_SCHEMA_VERSION,
+        persist_runtime_census, UpgradeCheckpoint, UpgradeTransaction, UpgradeTransactionState,
+        RUNTIME_ADOPTION_SCHEMA_VERSION,
     };
 
     let current_exe = env::current_exe()
@@ -3174,9 +3201,7 @@ fn require_stable_runtime_census_with(
         stop_reason: None,
     };
 
-    let census_result = collect_round().and_then(|first| {
-        collect_round().and_then(|second| build_stable_runtime_census(&first, &second))
-    });
+    let census_result = collect_stable_runtime_census_with(&mut collect_round);
     let census = match census_result {
         Ok(census) => census,
         Err(error) => {
@@ -3395,9 +3420,7 @@ fn prepare_payload_transaction(
     args: &WorkstationInstallArgs,
     isolated_root: bool,
 ) -> Result<PreparedPayloadTransaction, String> {
-    use crate::runtime_adoption::{
-        build_stable_runtime_census, persist_runtime_census, UpgradeTransactionState,
-    };
+    use crate::runtime_adoption::{persist_runtime_census, UpgradeTransactionState};
 
     let (generation_id, binary_sha256, support_manifest_sha256) =
         candidate_generation_identity(paths, args)?;
@@ -3425,11 +3448,9 @@ fn prepare_payload_transaction(
     let census = if isolated_root {
         isolated_runtime_census()
     } else {
-        (|| {
-            let first = crate::runtime_adoption::collect_host_runtime_census_round()?;
-            let second = crate::runtime_adoption::collect_host_runtime_census_round()?;
-            build_stable_runtime_census(&first, &second)
-        })()
+        collect_stable_runtime_census_with(
+            crate::runtime_adoption::collect_host_runtime_census_round,
+        )
     };
     let census = match census {
         Ok(census) => census,
@@ -6506,6 +6527,69 @@ mod tests {
             );
         }
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn runtime_census_requires_an_adjacent_stable_pair_within_the_bounded_window() {
+        fn round(registry_revision: u64) -> crate::runtime_adoption::RuntimeCensusRound {
+            use crate::runtime_adoption::{
+                EvidenceAgreement, RuntimeCensusCandidate, RuntimeCensusSource,
+                RuntimeCensusSourceSnapshot, RuntimeEvidenceSummary,
+            };
+
+            let runtime_id = "browser-a".to_string();
+            crate::runtime_adoption::collect_runtime_census_round(
+                registry_revision,
+                crate::runtime_adoption::runtime_census_sources()
+                    .into_iter()
+                    .map(|source| RuntimeCensusSourceSnapshot {
+                        source,
+                        source_revision: format!("{source:?}-stable"),
+                        logical_browser_ids: (source == RuntimeCensusSource::ServiceBrowserRecords)
+                            .then(|| vec![runtime_id.clone()])
+                            .unwrap_or_default(),
+                    })
+                    .collect(),
+                vec![RuntimeCensusCandidate {
+                    logical_browser_id: runtime_id,
+                    profile_identity_digest: "a".repeat(64),
+                    observed_sources: vec![RuntimeCensusSource::ServiceBrowserRecords],
+                    evidence: RuntimeEvidenceSummary {
+                        observation_rounds_agree: true,
+                        registry_revision_stable: true,
+                        manual_browser: true,
+                        metadata_present: true,
+                        profile_identity: EvidenceAgreement::Match,
+                        ..RuntimeEvidenceSummary::default()
+                    },
+                }],
+            )
+            .unwrap()
+        }
+
+        let mut converging = std::collections::VecDeque::from([round(11), round(12), round(12)]);
+        let converged = collect_stable_runtime_census_with(|| {
+            converging
+                .pop_front()
+                .ok_or_else(|| "test census exhausted".to_string())
+        })
+        .unwrap();
+        assert!(converged.activation_allowed);
+        assert!(converging.is_empty());
+
+        let mut changing =
+            std::collections::VecDeque::from([round(11), round(12), round(13), round(14)]);
+        let blocked = collect_stable_runtime_census_with(|| {
+            changing
+                .pop_front()
+                .ok_or_else(|| "test census exhausted".to_string())
+        })
+        .unwrap();
+        assert!(!blocked.activation_allowed);
+        assert!(changing.is_empty());
+        assert!(blocked.records[0]
+            .reason_codes
+            .contains(&"census_changed_during_classification".to_string()));
     }
 
     #[test]
