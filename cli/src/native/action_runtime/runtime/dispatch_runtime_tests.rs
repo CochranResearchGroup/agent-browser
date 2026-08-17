@@ -633,3 +633,23 @@ fn orphan_adoption_follows_the_revoked_owner_logical_browser() {
         "session:legacy-source"
     );
 }
+
+#[test]
+fn orphan_adoption_uses_verified_legacy_profile_when_service_evidence_omits_it() {
+    assert_eq!(
+        runtime_handoff_orphan_profile(None, Some("p116-beta")).unwrap(),
+        "p116-beta"
+    );
+    assert_eq!(
+        runtime_handoff_orphan_profile(Some("current-profile"), Some("legacy-profile")).unwrap(),
+        "current-profile"
+    );
+    assert_eq!(
+        runtime_handoff_orphan_profile(Some("  "), Some("p116-beta")).unwrap(),
+        "p116-beta"
+    );
+    assert_eq!(
+        runtime_handoff_orphan_profile(None, None).unwrap_err(),
+        "runtime_handoff_orphan_profile_missing: canonical runtime profile is required"
+    );
+}

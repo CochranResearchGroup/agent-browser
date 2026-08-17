@@ -541,14 +541,12 @@ async fn handle_runtime_handoff_orphan_adoption(
         .ok_or_else(|| {
             "runtime_handoff_orphan_cdp_missing: bounded DevTools evidence is required".to_string()
         })?;
-    let runtime_profile = recorded
-        .runtime_profile
-        .clone()
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| {
-            "runtime_handoff_orphan_profile_missing: canonical runtime profile is required"
-                .to_string()
-        })?;
+    let runtime_profile = runtime_handoff_orphan_profile(
+        recorded.runtime_profile.as_deref(),
+        legacy_descriptor
+            .as_ref()
+            .and_then(|descriptor| descriptor.runtime_profile.as_deref()),
+    )?;
     if let Some(legacy) = legacy_descriptor.as_ref() {
         if legacy.session_name != source_session
             || legacy.browser_pid != Some(browser_pid)
@@ -689,6 +687,20 @@ async fn handle_runtime_handoff_orphan_adoption(
         "ownerTransferReceipt": receipt,
         "targetsReattached": state.browser.as_ref().map(BrowserManager::page_count).unwrap_or(0),
     }))
+}
+
+pub(crate) fn runtime_handoff_orphan_profile(
+    recorded_runtime_profile: Option<&str>,
+    legacy_runtime_profile: Option<&str>,
+) -> Result<String, String> {
+    recorded_runtime_profile
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| legacy_runtime_profile.filter(|value| !value.trim().is_empty()))
+        .map(str::to_string)
+        .ok_or_else(|| {
+            "runtime_handoff_orphan_profile_missing: canonical runtime profile is required"
+                .to_string()
+        })
 }
 
 pub(crate) fn orphan_logical_browser_id(
