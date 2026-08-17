@@ -637,20 +637,89 @@ fn orphan_adoption_follows_the_revoked_owner_logical_browser() {
 #[test]
 fn orphan_adoption_uses_verified_legacy_profile_when_service_evidence_omits_it() {
     assert_eq!(
-        runtime_handoff_orphan_profile(None, Some("p116-beta")).unwrap(),
+        runtime_handoff_orphan_profile(None, Some("p116-beta"), None).unwrap(),
         "p116-beta"
     );
     assert_eq!(
-        runtime_handoff_orphan_profile(Some("current-profile"), Some("legacy-profile")).unwrap(),
+        runtime_handoff_orphan_profile(
+            Some("current-profile"),
+            Some("legacy-profile"),
+            Some("verified-profile")
+        )
+        .unwrap(),
         "current-profile"
     );
     assert_eq!(
-        runtime_handoff_orphan_profile(Some("  "), Some("p116-beta")).unwrap(),
+        runtime_handoff_orphan_profile(Some("  "), Some("p116-beta"), None).unwrap(),
         "p116-beta"
     );
     assert_eq!(
-        runtime_handoff_orphan_profile(None, None).unwrap_err(),
+        runtime_handoff_orphan_profile(None, None, Some("verified-profile")).unwrap(),
+        "verified-profile"
+    );
+    assert_eq!(
+        runtime_handoff_orphan_profile(None, None, None).unwrap_err(),
         "runtime_handoff_orphan_profile_missing: canonical runtime profile is required"
+    );
+}
+
+#[test]
+fn orphan_adoption_requires_one_exact_runtime_state_profile_match() {
+    let process_identity = crate::process_identity::RecordedProcessIdentity {
+        pid: 34923,
+        start_token: "linux:test:27036479".to_string(),
+        executable_path: Some("/opt/chromium/chrome".to_string()),
+        browser_family: Some("chromium".to_string()),
+    };
+    let recorded = crate::native::service_model::ServiceBrowserProcessIdentity {
+        process_identity: process_identity.clone(),
+        user_data_dir: None,
+        runtime_profile: None,
+    };
+    let runtime_state = |name: &str, identity| crate::runtime_profile::RuntimeState {
+        runtime_profile: name.to_string(),
+        user_data_dir: format!("/profiles/{name}"),
+        browser_pid: 34923,
+        process_identity: Some(identity),
+        headed: true,
+        launch_mode: "automation".to_string(),
+        devtools_port: Some(37485),
+        ws_url: Some("ws://127.0.0.1:37485/devtools/browser/exact".to_string()),
+        launch_record: None,
+    };
+
+    assert_eq!(
+        runtime_handoff_verified_profile_from_states(
+            &recorded,
+            "ws://127.0.0.1:37485/devtools/browser/exact",
+            [runtime_state("qbo-soylei", process_identity.clone())]
+        )
+        .unwrap()
+        .as_deref(),
+        Some("qbo-soylei")
+    );
+    let mut mismatched_identity = process_identity.clone();
+    mismatched_identity.start_token = "linux:test:reused".to_string();
+    assert_eq!(
+        runtime_handoff_verified_profile_from_states(
+            &recorded,
+            "ws://127.0.0.1:37485/devtools/browser/exact",
+            [runtime_state("qbo-soylei", mismatched_identity)]
+        )
+        .unwrap(),
+        None
+    );
+    assert_eq!(
+        runtime_handoff_verified_profile_from_states(
+            &recorded,
+            "ws://127.0.0.1:37485/devtools/browser/exact",
+            [
+                runtime_state("qbo-soylei", process_identity.clone()),
+                runtime_state("duplicate", process_identity),
+            ]
+        )
+        .unwrap_err(),
+        "runtime_handoff_orphan_profile_ambiguous: multiple exact runtime-profile states match the retained browser"
     );
 }
 

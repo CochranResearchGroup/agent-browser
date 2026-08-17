@@ -5431,6 +5431,9 @@ Edge family labels to the canonical chrome engine while rejecting Lightpanda
 and unrelated family evidence.
 Its temporary candidate session is scoped to the upgrade transaction, so a
 retry cannot reuse a candidate daemon left by an earlier failed transaction.
+If service projection metadata omits the runtime-profile name, orphan adoption
+recovers it only from one runtime-state record with the same exact process
+identity and DevTools browser endpoint; zero or multiple matches fail closed.
 Any conversion failure restores the original files and selector. It
 installs host prerequisites before admission drain or ownership transfer,
 transfers cooperative and verified orphan runtimes through receipt-bearing

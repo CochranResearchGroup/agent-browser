@@ -550,11 +550,14 @@ async fn handle_runtime_handoff_orphan_adoption(
         .ok_or_else(|| {
             "runtime_handoff_orphan_cdp_missing: bounded DevTools evidence is required".to_string()
         })?;
+    let verified_runtime_profile =
+        runtime_handoff_verified_profile_from_runtime_state(&recorded, &cdp_url)?;
     let runtime_profile = runtime_handoff_orphan_profile(
         recorded.runtime_profile.as_deref(),
         legacy_descriptor
             .as_ref()
             .and_then(|descriptor| descriptor.runtime_profile.as_deref()),
+        verified_runtime_profile.as_deref(),
     )?;
     if let Some(legacy) = legacy_descriptor.as_ref() {
         if legacy.session_name != source_session
@@ -702,15 +705,75 @@ async fn handle_runtime_handoff_orphan_adoption(
 pub(crate) fn runtime_handoff_orphan_profile(
     recorded_runtime_profile: Option<&str>,
     legacy_runtime_profile: Option<&str>,
+    verified_runtime_profile: Option<&str>,
 ) -> Result<String, String> {
     recorded_runtime_profile
         .filter(|value| !value.trim().is_empty())
         .or_else(|| legacy_runtime_profile.filter(|value| !value.trim().is_empty()))
+        .or_else(|| verified_runtime_profile.filter(|value| !value.trim().is_empty()))
         .map(str::to_string)
         .ok_or_else(|| {
             "runtime_handoff_orphan_profile_missing: canonical runtime profile is required"
                 .to_string()
         })
+}
+
+/// Resolve omitted service projection metadata only from one runtime-state
+/// record with the same exact process identity and DevTools browser endpoint.
+fn runtime_handoff_verified_profile_from_runtime_state(
+    recorded: &ServiceBrowserProcessIdentity,
+    cdp_url: &str,
+) -> Result<Option<String>, String> {
+    let root = crate::runtime_profile::runtime_profiles_root()?;
+    let entries = match fs::read_dir(&root) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(format!(
+                "runtime_handoff_profile_inventory_failed: unable to read '{}': {error}",
+                root.display()
+            ));
+        }
+    };
+    let mut states = Vec::new();
+    for entry in entries.flatten() {
+        if !entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().to_string();
+        if crate::runtime_profile::validate_runtime_profile_name(&name).is_err() {
+            continue;
+        }
+        if let Ok(Some(state)) = read_runtime_state(&name) {
+            states.push(state);
+        }
+    }
+    runtime_handoff_verified_profile_from_states(recorded, cdp_url, states)
+}
+
+pub(crate) fn runtime_handoff_verified_profile_from_states(
+    recorded: &ServiceBrowserProcessIdentity,
+    cdp_url: &str,
+    states: impl IntoIterator<Item = crate::runtime_profile::RuntimeState>,
+) -> Result<Option<String>, String> {
+    let matches = states
+        .into_iter()
+        .filter(|state| {
+            state.browser_pid == recorded.process_identity.pid
+                && state.process_identity.as_ref() == Some(&recorded.process_identity)
+                && state.ws_url.as_deref() == Some(cdp_url)
+                && crate::runtime_profile::validate_runtime_profile_name(&state.runtime_profile)
+                    .is_ok()
+        })
+        .map(|state| state.runtime_profile)
+        .collect::<BTreeSet<_>>();
+    if matches.len() > 1 {
+        return Err(
+            "runtime_handoff_orphan_profile_ambiguous: multiple exact runtime-profile states match the retained browser"
+                .to_string(),
+        );
+    }
+    Ok(matches.into_iter().next())
 }
 
 pub(crate) fn orphan_logical_browser_id(

@@ -54,6 +54,9 @@ Chrome, Chromium, Brave, and Edge family labels as the canonical `chrome`
 engine. Continue to reject Lightpanda and unrelated family evidence.
 Treat the temporary orphan candidate session as transaction-scoped. A retry
 must not reuse a candidate daemon created by an earlier failed transaction.
+When service projection metadata omits the runtime-profile name, recover it
+only from one runtime-state record with the same exact process identity and
+DevTools browser endpoint. Treat zero or multiple matches as a hard stop.
 Cooperative and verified orphan browsers move
 through receipt-bearing owner generations; manual and external browsers remain
 preserved without effect authority. The selector changes only after every

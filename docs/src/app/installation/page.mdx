@@ -132,7 +132,10 @@ orphan adoption maps process-observed Chrome, Chromium, Brave, and Edge family
 labels to the canonical <code>chrome</code> engine while continuing to reject
 Lightpanda and unrelated family evidence. Its temporary candidate session is
 scoped to the upgrade transaction, so a retry cannot reuse a candidate daemon
-left by an earlier failed transaction. Cooperative
+left by an earlier failed transaction. If service projection metadata omits the
+runtime-profile name, orphan adoption recovers it only from one runtime-state
+record with the same exact process identity and DevTools browser endpoint. Zero
+or multiple matches fail closed. Cooperative
 and verified orphan browsers move through receipt-bearing owner generations;
 manual and external
 browsers remain preserved without effect authority. The selector changes only
