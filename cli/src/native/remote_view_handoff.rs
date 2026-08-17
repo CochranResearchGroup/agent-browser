@@ -1710,7 +1710,7 @@ pub fn opened_route_bound_handoff_response(
         "displayAllocationId": input.planned_route_binding.display_allocation_id,
         "routePoolEntryId": input.planned_route_binding.route_pool_entry_id,
         "frameUrl": input.planned_route_binding.frame_url,
-        "externalUrl": input.handoff_url.or(input.planned_route_binding.external_url.as_deref()),
+        "externalUrl": input.handoff_url,
         "providerExternalUrl": input.final_route_binding.external_url,
         "handoffId": input.handoff_id,
         "handoffUrl": input.handoff_url,
@@ -3865,7 +3865,12 @@ mod tests {
         let (path, store, repository, mut lease) = rollback_test_repository();
         lease.state = "pending".to_string();
         lease.phase = "reserved".to_string();
-        let planned_route_binding = command_test_route_binding();
+        let mut planned_route_binding = command_test_route_binding();
+        planned_route_binding.route_descriptor = Some(json!({
+            "kind": "guacamole",
+            "id": "route-a",
+            "publicOperatorUrl": "https://dashboard.example/operator"
+        }));
         let acquisition_plan = command_test_acquisition_plan(planned_route_binding.clone());
         let intent = command_test_intent();
         let operator_visible = json!({
@@ -3940,7 +3945,7 @@ mod tests {
         assert_eq!(response["handoffId"], "job-handoff-a");
         assert_eq!(
             response["externalUrl"],
-            "https://guac.example/remote-view/job-handoff-a"
+            "https://dashboard.example/remote-view/job-handoff-a"
         );
         assert_eq!(
             response["providerExternalUrl"],
@@ -3968,7 +3973,7 @@ mod tests {
         );
         assert_eq!(
             handoff.handoff_url.as_deref(),
-            Some("https://guac.example/remote-view/job-handoff-a")
+            Some("https://dashboard.example/remote-view/job-handoff-a")
         );
 
         let _ = std::fs::remove_file(path);
