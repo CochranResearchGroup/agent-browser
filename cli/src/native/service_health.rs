@@ -1816,6 +1816,19 @@ async fn refresh_browser_record_health(
             apply_browser_health_observation(browser, Some(&details));
             return;
         }
+        if ownership == crate::process_identity::RuntimeProcessOwnership::MatchingBrowser
+            && endpoint.is_none()
+            && browser
+                .last_health_observation
+                .as_ref()
+                .and_then(|observation| observation.failure_class.as_deref())
+                == Some("browser_process_identity_ambiguous")
+        {
+            browser.health = BrowserHealth::Ready;
+            browser.last_error = None;
+            browser.last_health_observation = None;
+            return;
+        }
     }
 
     refresh_browser_endpoint_health(browser, endpoint.as_deref()).await;
@@ -5822,6 +5835,68 @@ mod tests {
             Some("browser_process_identity_mismatch")
         );
         assert!(crate::process_identity::process_exists(std::process::id()));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn refresh_restores_exact_cdp_free_browser_after_ambiguous_identity_observation() {
+        let root = std::env::temp_dir().join(format!(
+            "service-cdp-free-identity-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let executable = root.join("service-chrome");
+        std::fs::copy("/bin/sleep", &executable).unwrap();
+        let mut child = std::process::Command::new(&executable)
+            .arg("30")
+            .spawn()
+            .unwrap();
+        let process_identity = crate::process_identity::capture_process_identity(
+            child.id(),
+            Some(&executable),
+            Some("chrome"),
+        )
+        .unwrap();
+        let mut browser = BrowserProcess {
+            id: "browser-cdp-free".to_string(),
+            health: BrowserHealth::Degraded,
+            pid: Some(child.id()),
+            last_error: Some(format!(
+                "Recorded browser PID {} is live but process ownership is ambiguous",
+                child.id()
+            )),
+            ..BrowserProcess::default()
+        };
+        apply_browser_health_observation(
+            &mut browser,
+            Some(&serde_json::json!({
+                "failureClass": "browser_process_identity_ambiguous",
+            })),
+        );
+        let mut state = service_state_with_browser(browser);
+        state.browser_process_identities.insert(
+            "browser-cdp-free".to_string(),
+            ServiceBrowserProcessIdentity {
+                process_identity,
+                user_data_dir: Some(root.join("profile").to_string_lossy().into_owned()),
+                runtime_profile: Some("cdp-free".to_string()),
+            },
+        );
+
+        refresh_persisted_browser_health(&mut state).await;
+
+        let browser = &state.browsers["browser-cdp-free"];
+        assert_eq!(browser.health, BrowserHealth::Ready);
+        assert_eq!(browser.last_error, None);
+        assert_eq!(browser.last_health_observation, None);
+
+        let _ = child.kill();
+        let _ = child.wait();
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[cfg(unix)]
