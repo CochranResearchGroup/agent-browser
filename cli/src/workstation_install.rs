@@ -3810,11 +3810,15 @@ fn prepare_runtime_handoff_with_alias_fallback(
     primary_session: &str,
 ) -> Result<(String, Value, Vec<String>), (String, RuntimeTransactionCommandFailure)> {
     let mut candidates = vec![primary_session.to_string()];
-    candidates.extend(alternate_runtime_source_sessions(
-        service_state,
-        &migration.logical_browser_id,
-        primary_session,
-    ));
+    candidates.extend(
+        alternate_runtime_source_sessions(
+            service_state,
+            &migration.logical_browser_id,
+            primary_session,
+        )
+        .into_iter()
+        .filter(|session| crate::connection::daemon_ready(session)),
+    );
     prepare_runtime_handoff_candidates(
         &migration.logical_browser_id,
         primary_session,
@@ -3877,6 +3881,22 @@ where
                     ));
                 }
             },
+            Err(error)
+                if error.kind == RuntimeTransactionCommandFailureKind::ObservationOnlyAlias
+                    && selected.is_some()
+                    && session != primary_session =>
+            {
+                if let Err(message) = retire(&session) {
+                    return Err((
+                        session,
+                        RuntimeTransactionCommandFailure {
+                            kind: RuntimeTransactionCommandFailureKind::CommandFailed,
+                            message,
+                        },
+                    ));
+                }
+                retired_aliases.push(session);
+            }
             Err(error) => return Err((session, error)),
         }
     }
@@ -4189,6 +4209,7 @@ fn resolve_runtime_source_session_with_probe(
 enum RuntimeTransactionCommandFailureKind {
     ProtocolUnavailable,
     LegacyTransferredOwnerRejected,
+    ObservationOnlyAlias,
     CommandFailed,
 }
 
@@ -4214,10 +4235,14 @@ fn runtime_transaction_failure_kind(
         && normalized.contains("handoff");
     let legacy_transferred_owner_rejected = command_args == ["handoff", "prepare"]
         && normalized.contains("runtime_owner_current_evidence_mismatch:");
+    let observation_only_alias = command_args == ["handoff", "prepare"]
+        && normalized.contains("runtime_owner_observation_only:");
     if handoff_command && (typed_unknown || textual_unknown) {
         RuntimeTransactionCommandFailureKind::ProtocolUnavailable
     } else if legacy_transferred_owner_rejected {
         RuntimeTransactionCommandFailureKind::LegacyTransferredOwnerRejected
+    } else if observation_only_alias {
+        RuntimeTransactionCommandFailureKind::ObservationOnlyAlias
     } else {
         RuntimeTransactionCommandFailureKind::CommandFailed
     }
@@ -7578,6 +7603,22 @@ mod tests {
             ),
             RuntimeTransactionCommandFailureKind::CommandFailed
         );
+        assert_eq!(
+            runtime_transaction_failure_kind(
+                Some(&runtime_failure),
+                "runtime_owner_observation_only: candidate cannot issue browser effects before owner compare-and-swap",
+                &["handoff", "prepare"]
+            ),
+            RuntimeTransactionCommandFailureKind::ObservationOnlyAlias
+        );
+        assert_eq!(
+            runtime_transaction_failure_kind(
+                Some(&runtime_failure),
+                "runtime_owner_observation_only: candidate cannot issue browser effects before owner compare-and-swap",
+                &["handoff", "resume"]
+            ),
+            RuntimeTransactionCommandFailureKind::CommandFailed
+        );
     }
 
     #[test]
@@ -7765,6 +7806,65 @@ mod tests {
         assert_eq!(
             error.message,
             "runtime_handoff_alternate_browser_conflict:session:logical-browser:primary:conflicting-alias"
+        );
+    }
+
+    #[test]
+    fn runtime_handoff_prepare_retires_observation_only_alias_after_owner_selection() {
+        let candidates = vec!["owner-route".to_string(), "stale-alias".to_string()];
+        let mut retired_sessions = Vec::new();
+
+        let (selected_session, _, retired_aliases) = prepare_runtime_handoff_candidates(
+            "session:logical-browser",
+            "owner-route",
+            candidates,
+            |session| {
+                if session == "owner-route" {
+                    Ok(serde_json::json!({
+                        "data": {
+                            "prepared": true,
+                            "browserPresent": true,
+                            "candidateSessionName": "candidate"
+                        }
+                    }))
+                } else {
+                    Err(RuntimeTransactionCommandFailure {
+                        kind: RuntimeTransactionCommandFailureKind::ObservationOnlyAlias,
+                        message: "runtime_owner_observation_only".to_string(),
+                    })
+                }
+            },
+            |session| {
+                retired_sessions.push(session.to_string());
+                Ok(())
+            },
+        )
+        .expect("an observation-only non-owner alias should be retired");
+
+        assert_eq!(selected_session, "owner-route");
+        assert_eq!(retired_sessions, vec!["stale-alias"]);
+        assert_eq!(retired_aliases, vec!["stale-alias"]);
+    }
+
+    #[test]
+    fn runtime_handoff_prepare_rejects_observation_only_primary() {
+        let (_, error) = prepare_runtime_handoff_candidates(
+            "session:logical-browser",
+            "owner-route",
+            vec!["owner-route".to_string()],
+            |_| {
+                Err(RuntimeTransactionCommandFailure {
+                    kind: RuntimeTransactionCommandFailureKind::ObservationOnlyAlias,
+                    message: "runtime_owner_observation_only".to_string(),
+                })
+            },
+            |_| Ok(()),
+        )
+        .expect_err("the authoritative source route must remain effect-capable");
+
+        assert_eq!(
+            error.kind,
+            RuntimeTransactionCommandFailureKind::ObservationOnlyAlias
         );
     }
 
