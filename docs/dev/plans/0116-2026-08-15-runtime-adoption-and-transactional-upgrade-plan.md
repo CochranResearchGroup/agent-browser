@@ -1671,6 +1671,10 @@ remote-view --json` exits zero with status `ready`, remote control ready, and
 no issue codes. The generic many-to-many live gate remains its recommended
 next diagnostic, not a blocker for this already receipted handoff.
 
+The Graphiti provider-readiness preflight returned `degraded` with an app-server
+runtime error. No memory write was queued; this source-backed plan remains the
+authoritative closeout artifact.
+
 No transaction finalize, generation garbage collection, formal release, or
 operator-requested close of `p0417-preflight` was performed. Rollback material
 and the accepted manual-preservation boundary remain intact.
