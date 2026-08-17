@@ -820,14 +820,35 @@ fn service_browser_readback(
         .values()
         .map(|browser| -> Result<_, String> {
             let process = state.browser_process_identities.get(&browser.id);
+            let browser_live = matches!(
+                browser.health,
+                BrowserHealth::Ready
+                    | BrowserHealth::Degraded
+                    | BrowserHealth::Unreachable
+                    | BrowserHealth::CdpDisconnected
+                    | BrowserHealth::Reconnecting
+                    | BrowserHealth::Closing
+            );
             let profile = browser
                 .profile_id
                 .as_deref()
                 .and_then(|profile_id| state.profiles.get(profile_id));
             let profile_path = process
                 .and_then(|identity| identity.user_data_dir.as_deref())
-                .or_else(|| profile.and_then(|profile| profile.user_data_dir.as_deref()));
-            let profile_digest = profile_path.map(canonical_profile_digest).transpose()?;
+                .map(std::borrow::ToOwned::to_owned)
+                .or_else(|| browser.pid.and_then(observed_browser_user_data_dir))
+                // A service profile ID is a selection label, not proof that an
+                // already-attached live browser uses that profile directory.
+                // Retain the registered path only for non-live metadata.
+                .or_else(|| {
+                    (!browser_live)
+                        .then(|| profile.and_then(|profile| profile.user_data_dir.clone()))
+                        .flatten()
+                });
+            let profile_digest = profile_path
+                .as_deref()
+                .map(canonical_profile_digest)
+                .transpose()?;
             let mut aliases = vec![format!("browser:{}", browser.id)];
             aliases.extend(
                 browser
@@ -853,15 +874,6 @@ fn service_browser_readback(
                 .and_then(|identity| identity.process_identity.browser_family.as_deref())
                 .is_some()
                 || profile.and_then(|profile| profile.browser_build).is_some();
-            let browser_live = matches!(
-                browser.health,
-                BrowserHealth::Ready
-                    | BrowserHealth::Degraded
-                    | BrowserHealth::Unreachable
-                    | BrowserHealth::CdpDisconnected
-                    | BrowserHealth::Reconnecting
-                    | BrowserHealth::Closing
-            );
             let mut evidence = base_fragment();
             evidence.browser_live = browser_live;
             evidence.manual_browser = browser_live
@@ -878,7 +890,11 @@ fn service_browser_readback(
                 browser.pid.is_none() && browser.cdp_endpoint.is_none() && process.is_none();
             evidence.externally_owned = matches!(browser.host, BrowserHost::CloudProvider)
                 || (matches!(browser.host, BrowserHost::RemoteHeaded)
-                    && lacks_local_process_identity);
+                    && lacks_local_process_identity)
+                || (matches!(browser.host, BrowserHost::AttachedExisting)
+                    && browser.pid.is_none()
+                    && process.is_none()
+                    && browser.cdp_endpoint.is_some());
             evidence.metadata_present = true;
             evidence.profile_identity = profile_digest
                 .as_ref()
@@ -903,6 +919,29 @@ fn service_browser_readback(
         source_revision: source_revision(&observations)?,
         observations,
     })
+}
+
+fn observed_browser_user_data_dir(pid: u32) -> Option<String> {
+    let crate::process_identity::ProcessObservation::Observed(observed) =
+        crate::process_identity::observe_process(pid)
+    else {
+        return None;
+    };
+    observed.browser_family.as_ref()?;
+    command_line_option_value(observed.command_line.as_deref()?, "--user-data-dir")
+        .map(std::borrow::ToOwned::to_owned)
+}
+
+fn command_line_option_value<'a>(arguments: &'a [String], option: &str) -> Option<&'a str> {
+    for (index, argument) in arguments.iter().enumerate() {
+        if let Some(value) = argument.strip_prefix(&format!("{option}=")) {
+            return Some(value);
+        }
+        if argument == option {
+            return arguments.get(index + 1).map(String::as_str);
+        }
+    }
+    None
 }
 
 fn runtime_profile_readback(
@@ -2462,6 +2501,81 @@ mod tests {
         let readback = service_browser_readback(&state).unwrap();
         assert_eq!(readback.observations.len(), 1);
         assert!(!readback.observations[0].evidence.externally_owned);
+    }
+
+    #[test]
+    fn attached_existing_cdp_browser_without_local_identity_is_preserve_only() {
+        use crate::native::service_model::{
+            BrowserHealth, BrowserHost, BrowserProcess, ServiceState,
+        };
+
+        let mut state = ServiceState::default();
+        state.browsers.insert(
+            "session:legacy-cdp-attachment".to_string(),
+            BrowserProcess {
+                id: "session:legacy-cdp-attachment".to_string(),
+                host: BrowserHost::AttachedExisting,
+                health: BrowserHealth::Ready,
+                cdp_endpoint: Some("ws://127.0.0.1:9222/devtools/browser/example".to_string()),
+                ..BrowserProcess::default()
+            },
+        );
+
+        let readback = service_browser_readback(&state).unwrap();
+        assert_eq!(readback.observations.len(), 1);
+        assert!(readback.observations[0].evidence.externally_owned);
+    }
+
+    #[test]
+    fn live_browser_does_not_treat_selected_service_profile_as_runtime_identity() {
+        use crate::native::service_model::{
+            BrowserHealth, BrowserProcess, BrowserProfile, ServiceState,
+        };
+
+        let mut state = ServiceState::default();
+        state.profiles.insert(
+            "default".to_string(),
+            BrowserProfile {
+                id: "default".to_string(),
+                user_data_dir: Some("/registered/profile".to_string()),
+                ..BrowserProfile::default()
+            },
+        );
+        state.browsers.insert(
+            "session:attached".to_string(),
+            BrowserProcess {
+                id: "session:attached".to_string(),
+                profile_id: Some("default".to_string()),
+                health: BrowserHealth::Ready,
+                ..BrowserProcess::default()
+            },
+        );
+
+        let readback = service_browser_readback(&state).unwrap();
+        assert_eq!(readback.observations.len(), 1);
+        assert_eq!(readback.observations[0].profile_identity_digest, None);
+    }
+
+    #[test]
+    fn command_line_profile_option_supports_joined_and_separate_forms() {
+        let joined = vec![
+            "chrome".to_string(),
+            "--user-data-dir=/profile/a".to_string(),
+        ];
+        let separate = vec![
+            "chrome".to_string(),
+            "--user-data-dir".to_string(),
+            "/profile/b".to_string(),
+        ];
+
+        assert_eq!(
+            command_line_option_value(&joined, "--user-data-dir"),
+            Some("/profile/a")
+        );
+        assert_eq!(
+            command_line_option_value(&separate, "--user-data-dir"),
+            Some("/profile/b")
+        );
     }
 
     #[test]
