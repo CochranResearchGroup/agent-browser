@@ -1033,33 +1033,11 @@ fn profile_owner_readback(
             }
         })
         .collect::<Vec<_>>();
-    let authoritative_profiles = state
-        .runtime_owner_registry
-        .owners
-        .keys()
-        .cloned()
-        .collect::<BTreeSet<_>>();
     let legacy_observations = state
         .sessions
         .values()
         .filter(|session| session.profile_id.is_some() || !session.browser_ids.is_empty())
-        .filter_map(|session| {
-            let profile_path = session.profile_id.as_deref().and_then(|profile_id| {
-                state
-                    .profiles
-                    .get(profile_id)
-                    .and_then(|profile| profile.user_data_dir.as_deref())
-            });
-            let profile_digest = match profile_path.map(canonical_profile_digest).transpose() {
-                Ok(digest) => digest,
-                Err(error) => return Some(Err(error)),
-            };
-            if profile_digest
-                .as_ref()
-                .is_some_and(|digest| authoritative_profiles.contains(digest))
-            {
-                return None;
-            }
+        .map(|session| {
             let mut aliases = vec![format!("session:{}", session.id)];
             aliases.extend(
                 session
@@ -1067,25 +1045,21 @@ fn profile_owner_readback(
                     .iter()
                     .map(|browser_id| format!("browser:{browser_id}")),
             );
-            if let Some(digest) = profile_digest.as_deref() {
-                aliases.push(format!("profile-digest:{digest}"));
-            }
             let mut evidence = base_fragment();
             evidence.metadata_present = true;
-            evidence.profile_identity = profile_digest
-                .as_ref()
-                .map_or(EvidenceAgreement::NotApplicable, |_| {
-                    EvidenceAgreement::Match
-                });
-            Some(Ok(RuntimeCensusObservation {
+            // A legacy session's profile ID records selection intent. It is
+            // not proof of the user-data directory used by any live browser.
+            // The owner registry or joined runtime evidence supplies identity.
+            evidence.profile_identity = EvidenceAgreement::NotApplicable;
+            RuntimeCensusObservation {
                 logical_browser_id_hint: (session.browser_ids.len() == 1)
                     .then(|| session.browser_ids[0].clone()),
                 aliases,
-                profile_identity_digest: profile_digest,
+                profile_identity_digest: None,
                 evidence,
-            }))
+            }
         })
-        .collect::<Result<Vec<_>, String>>()?;
+        .collect::<Vec<_>>();
     observations.extend(legacy_observations);
     let source_revision = source_revision(&(state.runtime_owner_registry.revision, &observations))?;
     Ok(RuntimeCensusSourceReadback {
@@ -2874,14 +2848,23 @@ mod tests {
     }
 
     #[test]
-    fn profileless_legacy_session_alias_is_neutral_identity_evidence() {
-        use crate::native::service_model::{BrowserSession, ServiceState};
+    fn legacy_session_profile_selection_is_neutral_identity_evidence() {
+        use crate::native::service_model::{BrowserProfile, BrowserSession, ServiceState};
 
         let mut state = ServiceState::default();
+        state.profiles.insert(
+            "default".to_string(),
+            BrowserProfile {
+                id: "default".to_string(),
+                user_data_dir: Some("/registered/profile".to_string()),
+                ..BrowserProfile::default()
+            },
+        );
         state.sessions.insert(
             "p116-alpha".to_string(),
             BrowserSession {
                 id: "p116-alpha".to_string(),
+                profile_id: Some("default".to_string()),
                 browser_ids: vec!["session:p116-alpha-daemon".to_string()],
                 ..BrowserSession::default()
             },
@@ -2897,6 +2880,11 @@ mod tests {
             readback.observations[0].logical_browser_id_hint.as_deref(),
             Some("session:p116-alpha-daemon")
         );
+        assert_eq!(readback.observations[0].profile_identity_digest, None);
+        assert!(readback.observations[0]
+            .aliases
+            .iter()
+            .all(|alias| !alias.starts_with("profile-digest:")));
     }
 
     #[test]
