@@ -19,7 +19,9 @@
 //! types introduced after that legacy install remain inert until candidate
 //! selection. On Linux, exact daemon identities are reconciled after that
 //! controlled relocation only when the process start token and imported binary
-//! digest still match.
+//! digest still match. A schema-v1 live daemon without an owner record can
+//! bootstrap the first receipted owner only from the explicit census reason
+//! and only after exact daemon revocation.
 //! Failed reconciliation restores the exact prior active state of managed user
 //! units and writes a private diagnostic receipt.
 
@@ -4045,13 +4047,19 @@ fn adopt_runtime_via_verified_orphan_fallback(
     let expected_owner = service_state
         .runtime_owner_registry
         .owner(&migration.profile_identity_digest)
-        .cloned()
-        .ok_or_else(|| {
-            format!(
-                "legacy_daemon_owner_missing:{}",
-                migration.logical_browser_id
-            )
-        })?;
+        .cloned();
+    if expected_owner.is_none()
+        && !legacy_ownerless_orphan_bootstrap_allowed(
+            migration,
+            legacy_transferred_owner_rejected,
+            legacy_prepare_v1,
+        )
+    {
+        return Err(format!(
+            "legacy_daemon_owner_missing:{}",
+            migration.logical_browser_id
+        ));
+    }
     handoffs.push(PreparedRuntimeHandoff {
         source_session: source_session.to_string(),
         candidate_session: candidate_session.clone(),
@@ -4064,7 +4072,7 @@ fn adopt_runtime_via_verified_orphan_fallback(
     let revocation = revoke_legacy_daemon_effect_authority(
         paths,
         source_session,
-        &expected_owner,
+        expected_owner.as_ref(),
         &mut handoffs[handoff_index].irreversible_source_revocation,
     );
     if let Err(error) = revocation {
@@ -4098,6 +4106,19 @@ fn adopt_runtime_via_verified_orphan_fallback(
     Ok(())
 }
 
+fn legacy_ownerless_orphan_bootstrap_allowed(
+    migration: &crate::runtime_adoption::RuntimeMigrationRecord,
+    legacy_transferred_owner_rejected: bool,
+    legacy_prepare_v1: bool,
+) -> bool {
+    !legacy_transferred_owner_rejected
+        && legacy_prepare_v1
+        && migration
+            .reason_codes
+            .iter()
+            .any(|reason| reason == "cooperative_owner_registration_required")
+}
+
 fn runtime_source_session_is_bound(
     service_state: &crate::native::service_model::ServiceState,
     logical_browser_id: &str,
@@ -4122,7 +4143,7 @@ fn runtime_source_session_is_bound(
 fn revoke_legacy_daemon_effect_authority(
     paths: &InstallPaths,
     source_session: &str,
-    expected_owner: &crate::runtime_owner_transfer::ProfileOwner,
+    expected_owner: Option<&crate::runtime_owner_transfer::ProfileOwner>,
     source_authority_unavailable: &mut bool,
 ) -> Result<(), String> {
     let identity = crate::connection::load_daemon_process_identity(source_session)?;
@@ -4150,15 +4171,18 @@ fn revoke_legacy_daemon_effect_authority(
             "legacy_daemon_effect_authority_reappeared:{source_session}"
         ));
     }
-    let repository = crate::native::service_store::LockedServiceStateRepository::default_json()?;
-    crate::runtime_owner_transfer::revoke_legacy_daemon_owner(
-        &repository,
-        &expected_owner.profile_identity_digest,
-        &expected_owner.browser_id,
-        &expected_owner.daemon_session_route,
-        &expected_owner.owner_id,
-        expected_owner.owner_generation,
-    )?;
+    if let Some(expected_owner) = expected_owner {
+        let repository =
+            crate::native::service_store::LockedServiceStateRepository::default_json()?;
+        crate::runtime_owner_transfer::revoke_legacy_daemon_owner(
+            &repository,
+            &expected_owner.profile_identity_digest,
+            &expected_owner.browser_id,
+            &expected_owner.daemon_session_route,
+            &expected_owner.owner_id,
+            expected_owner.owner_generation,
+        )?;
+    }
     Ok(())
 }
 
@@ -8358,6 +8382,29 @@ mod tests {
             &generation_one_state,
             &migration,
             "handoff-candidate",
+        ));
+    }
+
+    #[test]
+    fn ownerless_bootstrap_requires_legacy_v1_and_explicit_census_reason() {
+        let mut migration = runtime_migration("session:legacy-ownerless");
+        migration.classification =
+            crate::runtime_adoption::RuntimeClassification::CooperativeLiveOwner;
+        migration.disposition = crate::runtime_adoption::RuntimeDisposition::CooperativeTransfer;
+        migration.reason_codes = vec!["cooperative_owner_registration_required".to_string()];
+
+        assert!(legacy_ownerless_orphan_bootstrap_allowed(
+            &migration, false, true
+        ));
+        assert!(!legacy_ownerless_orphan_bootstrap_allowed(
+            &migration, false, false
+        ));
+        assert!(!legacy_ownerless_orphan_bootstrap_allowed(
+            &migration, true, true
+        ));
+        migration.reason_codes = vec!["cooperative_owner_verified".to_string()];
+        assert!(!legacy_ownerless_orphan_bootstrap_allowed(
+            &migration, false, true
         ));
     }
 

@@ -5422,6 +5422,8 @@ selected. On Linux, a daemon identity affected by that controlled relocation
 is repaired only when its exact start token and imported binary digest match.
 If a census-proven browserless daemon does not finish graceful shutdown, apply
 force-stops only that exact verified daemon process after the bounded grace.
+For a schema-v1 live daemon with no owner record, exact census evidence permits
+the candidate to create the first receipted owner only after daemon revocation.
 Any conversion failure restores the original files and selector. It
 installs host prerequisites before admission drain or ownership transfer,
 transfers cooperative and verified orphan runtimes through receipt-bearing

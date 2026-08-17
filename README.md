@@ -119,8 +119,10 @@ selection. On Linux, the installer repairs a daemon identity affected by this
 controlled relocation only when its exact process start token and imported
 binary digest match. If a census-proven browserless daemon does not finish
 graceful shutdown, the installer force-stops only that exact verified daemon
-process after the bounded grace. The imported generation remains the rollback
-target for candidate activation.
+process after the bounded grace. For a schema-v1 live daemon with no owner
+record, exact census evidence permits the candidate to create the first
+receipted owner only after daemon revocation. The imported generation remains
+the rollback target for candidate activation.
 Cooperative and verified orphan runtimes move through receipt-bearing owner
 generations; manual and external browsers remain preserved without effect
 authority. The sealed candidate is
