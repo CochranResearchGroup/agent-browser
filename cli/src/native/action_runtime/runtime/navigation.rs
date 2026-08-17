@@ -251,15 +251,17 @@ pub(crate) async fn handle_runtime_handoff_prepare(
         .owner(&profile_identity_digest)
         .cloned()
     {
-        if owner.state != crate::runtime_owner_transfer::ProfileOwnerState::Ready
-            || owner.owner_id != owner_id
-            || owner.browser_id != service_browser_id(&state.session_id)
-            || owner.daemon_session_route != state.session_id
-            || owner.process_instance_digest != process_instance_digest
-            || owner.browser_family != state.engine
-            || owner.cdp_endpoint_identity_digest != cdp_endpoint_identity_digest
-            || owner.target_set_digest != target_set_digest
-        {
+        if !current_owner_matches_preparing_daemon(
+            &owner,
+            state.runtime_owner_binding.as_ref(),
+            &owner_id,
+            &service_browser_id(&state.session_id),
+            &state.session_id,
+            &process_instance_digest,
+            &state.engine,
+            &cdp_endpoint_identity_digest,
+            &target_set_digest,
+        ) {
             return Err("runtime_owner_current_evidence_mismatch: existing profile owner does not match the preparing daemon".to_string());
         }
         owner
@@ -327,6 +329,35 @@ pub(crate) async fn handle_runtime_handoff_prepare(
     let path = write_runtime_handoff(&descriptor)?;
     Ok(runtime_handoff_prepared_response(&descriptor, path, false))
 }
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn current_owner_matches_preparing_daemon(
+    owner: &crate::runtime_owner_transfer::ProfileOwner,
+    binding: Option<&crate::runtime_owner_transfer::RuntimeOwnerBinding>,
+    route_derived_owner_id: &str,
+    route_derived_browser_id: &str,
+    daemon_session_route: &str,
+    process_instance_digest: &str,
+    browser_family: &str,
+    cdp_endpoint_identity_digest: &str,
+    target_set_digest: &str,
+) -> bool {
+    let owner_identity_is_current = binding.is_some_and(|binding| {
+        binding.effect_capable
+            && binding.claim
+                == crate::runtime_owner_transfer::OwnerAuthorityClaim::from_owner(owner)
+    }) || (owner.owner_id == route_derived_owner_id
+        && owner.browser_id == route_derived_browser_id);
+
+    owner.state == crate::runtime_owner_transfer::ProfileOwnerState::Ready
+        && owner_identity_is_current
+        && owner.daemon_session_route == daemon_session_route
+        && owner.process_instance_digest == process_instance_digest
+        && owner.browser_family == browser_family
+        && owner.cdp_endpoint_identity_digest == cdp_endpoint_identity_digest
+        && owner.target_set_digest == target_set_digest
+}
+
 pub(crate) async fn handle_runtime_handoff_resume(
     cmd: &Value,
     state: &mut DaemonState,

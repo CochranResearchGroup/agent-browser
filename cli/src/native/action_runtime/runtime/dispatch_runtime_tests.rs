@@ -467,3 +467,116 @@ fn test_default_timeout_ms_fallback() {
     let state = DaemonState::new();
     assert_eq!(state.default_timeout_ms, 30_000);
 }
+
+#[test]
+fn transferred_owner_can_prepare_the_next_runtime_handoff() {
+    use crate::runtime_owner_transfer::{
+        OwnerAuthorityClaim, ProfileOwner, ProfileOwnerState, RuntimeOwnerBinding,
+    };
+
+    let owner = ProfileOwner {
+        owner_id: "owner-transfer-issued".to_string(),
+        profile_identity_digest: "profile-digest".to_string(),
+        state: ProfileOwnerState::Ready,
+        owner_generation: 2,
+        browser_id: "session:logical-browser".to_string(),
+        daemon_session_route: "handoff-candidate".to_string(),
+        process_instance_digest: "process-digest".to_string(),
+        browser_family: "chrome".to_string(),
+        cdp_endpoint_identity_digest: "cdp-digest".to_string(),
+        target_set_digest: "targets-digest".to_string(),
+        pending_transfer: None,
+        last_transition: None,
+    };
+    let binding = RuntimeOwnerBinding::effect_capable(OwnerAuthorityClaim::from_owner(&owner));
+
+    assert!(current_owner_matches_preparing_daemon(
+        &owner,
+        Some(&binding),
+        "owner-route-derived",
+        "session:handoff-candidate",
+        "handoff-candidate",
+        "process-digest",
+        "chrome",
+        "cdp-digest",
+        "targets-digest",
+    ));
+}
+
+#[test]
+fn transferred_owner_requires_effect_capable_exact_binding() {
+    use crate::runtime_owner_transfer::{
+        OwnerAuthorityClaim, ProfileOwner, ProfileOwnerState, RuntimeOwnerBinding,
+    };
+
+    let owner = ProfileOwner {
+        owner_id: "owner-transfer-issued".to_string(),
+        profile_identity_digest: "profile-digest".to_string(),
+        state: ProfileOwnerState::Ready,
+        owner_generation: 2,
+        browser_id: "session:logical-browser".to_string(),
+        daemon_session_route: "handoff-candidate".to_string(),
+        process_instance_digest: "process-digest".to_string(),
+        browser_family: "chrome".to_string(),
+        cdp_endpoint_identity_digest: "cdp-digest".to_string(),
+        target_set_digest: "targets-digest".to_string(),
+        pending_transfer: None,
+        last_transition: None,
+    };
+    let binding = RuntimeOwnerBinding::observation_only(OwnerAuthorityClaim::from_owner(&owner));
+
+    assert!(!current_owner_matches_preparing_daemon(
+        &owner,
+        Some(&binding),
+        "owner-route-derived",
+        "session:handoff-candidate",
+        "handoff-candidate",
+        "process-digest",
+        "chrome",
+        "cdp-digest",
+        "targets-digest",
+    ));
+}
+
+#[test]
+fn route_derived_legacy_owner_can_prepare_without_a_binding() {
+    use crate::runtime_owner_transfer::{ProfileOwner, ProfileOwnerState};
+
+    let owner = ProfileOwner {
+        owner_id: "owner-route-derived".to_string(),
+        profile_identity_digest: "profile-digest".to_string(),
+        state: ProfileOwnerState::Ready,
+        owner_generation: 1,
+        browser_id: "session:legacy-route".to_string(),
+        daemon_session_route: "legacy-route".to_string(),
+        process_instance_digest: "process-digest".to_string(),
+        browser_family: "chrome".to_string(),
+        cdp_endpoint_identity_digest: "cdp-digest".to_string(),
+        target_set_digest: "targets-digest".to_string(),
+        pending_transfer: None,
+        last_transition: None,
+    };
+
+    assert!(current_owner_matches_preparing_daemon(
+        &owner,
+        None,
+        "owner-route-derived",
+        "session:legacy-route",
+        "legacy-route",
+        "process-digest",
+        "chrome",
+        "cdp-digest",
+        "targets-digest",
+    ));
+    assert!(!current_owner_matches_preparing_daemon(
+        &owner,
+        None,
+        "owner-route-derived",
+        "session:legacy-route",
+        "legacy-route",
+        "different-process-digest",
+        "chrome",
+        "cdp-digest",
+        "targets-digest",
+    ));
+}
