@@ -3117,7 +3117,7 @@ fn write_private_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String
     set_private_file(path)
 }
 
-const MAX_RUNTIME_CENSUS_ROUNDS: usize = 4;
+const MAX_RUNTIME_CENSUS_ROUNDS: usize = 8;
 
 fn collect_stable_runtime_census_with(
     mut collect_round: impl FnMut() -> Result<crate::runtime_adoption::RuntimeCensusRound, String>,
@@ -6578,8 +6578,22 @@ mod tests {
         assert!(converged.activation_allowed);
         assert!(converging.is_empty());
 
-        let mut changing =
-            std::collections::VecDeque::from([round(11), round(12), round(13), round(14)]);
+        let mut late_convergence = (11..18)
+            .map(round)
+            .chain(std::iter::once(round(17)))
+            .collect::<std::collections::VecDeque<_>>();
+        let converged = collect_stable_runtime_census_with(|| {
+            late_convergence
+                .pop_front()
+                .ok_or_else(|| "test census exhausted".to_string())
+        })
+        .unwrap();
+        assert!(converged.activation_allowed);
+        assert!(late_convergence.is_empty());
+
+        let mut changing = (11..19)
+            .map(round)
+            .collect::<std::collections::VecDeque<_>>();
         let blocked = collect_stable_runtime_census_with(|| {
             changing
                 .pop_front()
