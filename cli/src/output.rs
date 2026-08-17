@@ -5426,6 +5426,9 @@ For a schema-v1 live daemon with no owner record, exact census evidence permits
 the candidate to create the first receipted owner only after daemon revocation.
 Historical route, display, and stream identifiers are scoped to their browser
 owner and cannot merge unrelated runtime candidates when providers reuse them.
+Verified orphan adoption maps process-observed Chrome, Chromium, Brave, and
+Edge family labels to the canonical chrome engine while rejecting Lightpanda
+and unrelated family evidence.
 Any conversion failure restores the original files and selector. It
 installs host prerequisites before admission drain or ownership transfer,
 transfers cooperative and verified orphan runtimes through receipt-bearing

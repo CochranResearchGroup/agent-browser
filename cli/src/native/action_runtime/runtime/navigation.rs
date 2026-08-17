@@ -506,6 +506,15 @@ pub(crate) async fn handle_runtime_handoff_resume(
     ))
 }
 
+/// Match process-observed Chromium family labels to the canonical Chrome engine
+/// without treating a different engine as compatible adoption evidence.
+pub(crate) fn runtime_engine_accepts_browser_family(engine: &str, browser_family: &str) -> bool {
+    match engine {
+        "chrome" => matches!(browser_family, "chrome" | "chromium" | "brave" | "edge"),
+        _ => engine == browser_family,
+    }
+}
+
 async fn handle_runtime_handoff_orphan_adoption(
     source_session: &str,
     legacy_descriptor: Option<RuntimeHandoffDescriptor>,
@@ -560,18 +569,19 @@ async fn handle_runtime_handoff_orphan_adoption(
             );
         }
     }
-    let engine = recorded
+    let observed_browser_family = recorded
         .process_identity
         .browser_family
         .clone()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| state.engine.clone());
-    if engine != state.engine {
+    if !runtime_engine_accepts_browser_family(&state.engine, &observed_browser_family) {
         return Err(format!(
             "runtime_handoff_orphan_browser_family_mismatch: expected '{}' but observed '{}'",
-            state.engine, engine
+            state.engine, observed_browser_family
         ));
     }
+    let engine = state.engine.clone();
     let provisional = RuntimeHandoffDescriptor {
         schema_version: 2,
         session_name: source_session.to_string(),

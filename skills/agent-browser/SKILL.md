@@ -49,7 +49,10 @@ with no owner record, allow first-owner bootstrap only from the explicit
 `cooperative_owner_registration_required` census disposition and only after
 exact daemon revocation. Treat route, display, and stream identifiers as
 browser-scoped projection evidence. Provider reuse must not merge unrelated
-runtime candidates. Cooperative and verified orphan browsers move
+runtime candidates. For verified orphan adoption, treat process-observed
+Chrome, Chromium, Brave, and Edge family labels as the canonical `chrome`
+engine. Continue to reject Lightpanda and unrelated family evidence.
+Cooperative and verified orphan browsers move
 through receipt-bearing owner generations; manual and external browsers remain
 preserved without effect authority. The selector changes only after every
 runtime has a proven disposition. Do not work around a transaction stop by

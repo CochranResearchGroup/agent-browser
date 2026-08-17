@@ -653,3 +653,23 @@ fn orphan_adoption_uses_verified_legacy_profile_when_service_evidence_omits_it()
         "runtime_handoff_orphan_profile_missing: canonical runtime profile is required"
     );
 }
+
+#[test]
+fn orphan_adoption_maps_chromium_process_families_to_the_chrome_engine() {
+    for family in ["chrome", "chromium", "brave", "edge"] {
+        assert!(runtime_engine_accepts_browser_family("chrome", family));
+    }
+    assert!(runtime_engine_accepts_browser_family(
+        "lightpanda",
+        "lightpanda"
+    ));
+    assert!(!runtime_engine_accepts_browser_family(
+        "chrome",
+        "lightpanda"
+    ));
+    assert!(!runtime_engine_accepts_browser_family(
+        "lightpanda",
+        "chromium"
+    ));
+    assert!(!runtime_engine_accepts_browser_family("chrome", "unknown"));
+}

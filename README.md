@@ -125,6 +125,9 @@ receipted owner only after daemon revocation. The imported generation remains
 the rollback target for candidate activation. Historical route, display, and
 stream identifiers are scoped to their browser owner so provider reuse cannot
 merge unrelated runtime candidates.
+Verified orphan adoption maps process-observed Chrome, Chromium, Brave, and
+Edge family labels to the canonical `chrome` engine while continuing to reject
+Lightpanda and unrelated family evidence.
 Cooperative and verified orphan runtimes move through receipt-bearing owner
 generations; manual and external browsers remain preserved without effect
 authority. The sealed candidate is
