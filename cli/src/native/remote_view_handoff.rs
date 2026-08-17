@@ -1,5 +1,6 @@
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use serde_json::{json, Map, Value};
+use sha2::{Digest, Sha256};
 
 use super::remote_view::{
     readiness_state, route_binding_readiness, RemoteViewAcquisitionPlan, RemoteViewOpenIntent,
@@ -11,7 +12,7 @@ use super::remote_view_proof::{
     remote_view_operator_visible_state, remote_view_target_component_state,
 };
 use super::service_model::{
-    ControlInputProvider, DisplayAllocation, DurableHandoffPresentationReceipt,
+    BrowserHealth, ControlInputProvider, DisplayAllocation, DurableHandoffPresentationReceipt,
     RemoteViewAcquisitionLease, RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry, ServiceState,
     TabLifecycle, ViewStreamProvider,
 };
@@ -569,20 +570,19 @@ pub(crate) fn remote_view_handoff_ready_owner_session(
     handoff: &RemoteViewHandoff,
 ) -> Option<String> {
     let browser_id = handoff.browser_id.as_deref()?;
-    let receipt = handoff.presentation_receipt.as_ref()?;
-    let process_instance_digest = receipt.process_instance_digest.as_deref()?;
-    if receipt.state != "ready"
-        || receipt.logical_browser_id != browser_id
-        || handoff
-            .target_id
-            .as_deref()
-            .is_some_and(|target_id| receipt.target_id != target_id)
-        || handoff
-            .view_stream_provider
-            .is_some_and(|provider| receipt.required_stream_provider != provider)
+    let target_id = handoff.target_id.as_deref()?;
+    let browser = state.browsers.get(browser_id)?;
+    let process = state.browser_process_identities.get(browser_id)?;
+    if browser.id != browser_id
+        || browser.health != BrowserHealth::Ready
+        || browser.pid != Some(process.process_identity.pid)
     {
         return None;
     }
+    let process_instance_digest = format!(
+        "{:x}",
+        Sha256::digest(serde_json::to_vec(&process.process_identity).ok()?)
+    );
 
     let mut owners = state
         .runtime_owner_registry
@@ -594,6 +594,16 @@ pub(crate) fn remote_view_handoff_ready_owner_session(
                 && owner.browser_id == browser_id
                 && owner.process_instance_digest == process_instance_digest
                 && !owner.daemon_session_route.trim().is_empty()
+                && browser
+                    .active_session_ids
+                    .iter()
+                    .any(|session_id| session_id == &owner.daemon_session_route)
+                && browser.tab_handles.iter().any(|tab| {
+                    tab.valid
+                        && tab.browser_id == browser_id
+                        && tab.target_id.as_deref() == Some(target_id)
+                        && tab.session_name.as_deref() == Some(owner.daemon_session_route.as_str())
+                })
         });
     let owner = owners.next()?;
     if owners.next().is_some() {

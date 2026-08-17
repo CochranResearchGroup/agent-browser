@@ -3253,32 +3253,24 @@ mod tests {
 
     #[test]
     fn dashboard_durable_handoff_resolution_targets_transferred_ready_owner_session() {
+        use sha2::{Digest, Sha256};
+
         let logical_browser_id = "session:im-receipts";
-        let process_digest = "process-digest";
+        let process_identity = crate::process_identity::RecordedProcessIdentity {
+            pid: 4242,
+            start_token: "linux:boot:4242".to_string(),
+            executable_path: Some("/opt/chrome".to_string()),
+            browser_family: Some("chrome".to_string()),
+        };
+        let process_digest = format!(
+            "{:x}",
+            Sha256::digest(serde_json::to_vec(&process_identity).unwrap())
+        );
         let handoff = crate::native::service_model::RemoteViewHandoff {
             id: "handoff-a".to_string(),
             session_name: Some("retained-owner".to_string()),
             browser_id: Some(logical_browser_id.to_string()),
             target_id: Some("target-a".to_string()),
-            presentation_receipt: Some(
-                crate::native::service_model::DurableHandoffPresentationReceipt {
-                    schema_version: "agent-browser.durable-handoff-presentation.v1".to_string(),
-                    generation: 4,
-                    dashboard_deployment_generation: "dashboard-old".to_string(),
-                    logical_browser_id: logical_browser_id.to_string(),
-                    daemon_owner_generation: Some(7),
-                    process_instance_digest: Some(process_digest.to_string()),
-                    target_id: "target-a".to_string(),
-                    required_stream_provider:
-                        crate::native::service_model::ViewStreamProvider::RdpGateway,
-                    observed_stream_provider:
-                        crate::native::service_model::ViewStreamProvider::RdpGateway,
-                    route_id: "route-a".to_string(),
-                    display_allocation_id: "display-a".to_string(),
-                    observed_at: "2026-08-16T12:00:00Z".to_string(),
-                    state: "ready".to_string(),
-                },
-            ),
             view_stream_provider: Some(
                 crate::native::service_model::ViewStreamProvider::RdpGateway,
             ),
@@ -3286,6 +3278,31 @@ mod tests {
         };
         let state = crate::native::service_model::ServiceState {
             remote_view_handoffs: std::collections::BTreeMap::from([(handoff.id.clone(), handoff)]),
+            browsers: std::collections::BTreeMap::from([(
+                logical_browser_id.to_string(),
+                crate::native::service_model::BrowserProcess {
+                    id: logical_browser_id.to_string(),
+                    pid: Some(process_identity.pid),
+                    health: crate::native::service_model::BrowserHealth::Ready,
+                    active_session_ids: vec!["current-owner".to_string()],
+                    tab_handles: vec![crate::native::service_model::ServiceTabHandle {
+                        browser_id: logical_browser_id.to_string(),
+                        session_name: Some("current-owner".to_string()),
+                        target_id: Some("target-a".to_string()),
+                        valid: true,
+                        ..crate::native::service_model::ServiceTabHandle::default()
+                    }],
+                    ..crate::native::service_model::BrowserProcess::default()
+                },
+            )]),
+            browser_process_identities: std::collections::BTreeMap::from([(
+                logical_browser_id.to_string(),
+                crate::native::service_model::ServiceBrowserProcessIdentity {
+                    process_identity,
+                    user_data_dir: None,
+                    runtime_profile: Some("im-receipts-main".to_string()),
+                },
+            )]),
             runtime_owner_registry: crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(
                 crate::runtime_owner_transfer::ProfileOwner {
                     owner_id: "owner-current".to_string(),
@@ -3294,7 +3311,7 @@ mod tests {
                     owner_generation: 11,
                     browser_id: logical_browser_id.to_string(),
                     daemon_session_route: "current-owner".to_string(),
-                    process_instance_digest: process_digest.to_string(),
+                    process_instance_digest: process_digest,
                     browser_family: "chrome".to_string(),
                     cdp_endpoint_identity_digest: "cdp-digest".to_string(),
                     target_set_digest: "target-set-digest".to_string(),
