@@ -1721,14 +1721,22 @@ pub(crate) fn build_stable_runtime_census(
         let selected = second_candidate
             .or(first_candidate)
             .expect("runtime id came from a round");
+        let candidate_stable = first_candidate == second_candidate;
         let mut evidence = selected.evidence.clone();
-        evidence.observation_rounds_agree &= first_candidate == second_candidate;
+        evidence.observation_rounds_agree &= candidate_stable;
         evidence.registry_revision_stable &= registry_revision_stable && source_revisions_stable;
         let decision = if !evidence.observation_rounds_agree || !evidence.registry_revision_stable {
-            decision(
-                RuntimeClassification::InsufficientEvidence,
-                &["census_changed_during_classification"],
-            )
+            let mut reason_codes = vec!["census_changed_during_classification"];
+            if !candidate_stable {
+                reason_codes.push("runtime_candidate_changed_during_classification");
+            }
+            if !registry_revision_stable {
+                reason_codes.push("runtime_owner_registry_changed_during_classification");
+            }
+            if !source_revisions_stable {
+                reason_codes.push("runtime_source_snapshot_changed_during_classification");
+            }
+            decision(RuntimeClassification::InsufficientEvidence, &reason_codes)
         } else {
             classify_runtime(&evidence)
         };
@@ -2347,7 +2355,13 @@ mod tests {
                 && record
                     .reason_codes
                     .contains(&"census_changed_during_classification".to_string())
+                && record
+                    .reason_codes
+                    .contains(&"runtime_owner_registry_changed_during_classification".to_string())
         }));
+        assert!(census.records[0]
+            .reason_codes
+            .contains(&"runtime_candidate_changed_during_classification".to_string()));
     }
 
     #[test]
