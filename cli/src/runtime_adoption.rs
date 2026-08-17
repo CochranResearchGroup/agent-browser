@@ -1429,7 +1429,7 @@ fn display_readback(
         .map(|display| {
             let mut aliases = Vec::new();
             if let Some(browser_id) = display.owner_browser_id.as_deref() {
-                aliases.push(format!("browser:{browser_id}"));
+                push_browser_identity_aliases(&mut aliases, browser_id);
                 aliases.push(scoped_presentation_alias(
                     "display",
                     browser_id,
@@ -1467,7 +1467,8 @@ fn presentation_readback(
         .values()
         .filter(|browser| !browser.view_streams.is_empty())
     {
-        let mut aliases = vec![format!("browser:{}", browser.id)];
+        let mut aliases = Vec::new();
+        push_browser_identity_aliases(&mut aliases, &browser.id);
         for stream in &browser.view_streams {
             aliases.push(scoped_view_stream_alias(&browser.id, &stream.id));
             if let Some(route_id) = stream.route_id.as_deref() {
@@ -1493,7 +1494,7 @@ fn presentation_readback(
     for route in state.remote_view_routes.values() {
         let mut aliases = Vec::new();
         if let Some(browser_id) = route.browser_id.as_deref() {
-            aliases.push(format!("browser:{browser_id}"));
+            push_browser_identity_aliases(&mut aliases, browser_id);
             aliases.push(scoped_presentation_alias("route", browser_id, &route.id));
             if let Some(display_id) = route.display_allocation_id.as_deref() {
                 aliases.push(scoped_presentation_alias("display", browser_id, display_id));
@@ -1520,11 +1521,11 @@ fn presentation_readback(
         let mut aliases = vec![format!("handoff:{}", handoff.id)];
         let canonical_browser_id = canonical_handoff_browser_id(state, handoff);
         if let Some(browser_id) = handoff.browser_id.as_deref() {
-            aliases.push(format!("browser:{browser_id}"));
+            push_browser_identity_aliases(&mut aliases, browser_id);
         }
         if canonical_browser_id.as_deref() != handoff.browser_id.as_deref() {
             if let Some(browser_id) = canonical_browser_id.as_deref() {
-                aliases.push(format!("browser:{browser_id}"));
+                push_browser_identity_aliases(&mut aliases, browser_id);
             }
         }
         if canonical_browser_id.is_none() {
@@ -1549,7 +1550,7 @@ fn presentation_readback(
             .filter(|value| !value.trim().is_empty());
         let mut aliases = vec![format!("route-pool:{}", entry.id)];
         if let Some(browser_id) = browser_id {
-            aliases.push(format!("browser:{browser_id}"));
+            push_browser_identity_aliases(&mut aliases, browser_id);
             aliases.push(scoped_presentation_alias(
                 "route",
                 browser_id,
@@ -1620,6 +1621,13 @@ fn canonical_handoff_browser_id(
 
 fn scoped_view_stream_alias(browser_id: &str, stream_id: &str) -> String {
     scoped_presentation_alias("view-stream", browser_id, stream_id)
+}
+
+fn push_browser_identity_aliases(aliases: &mut Vec<String>, browser_id: &str) {
+    aliases.push(format!("browser:{browser_id}"));
+    if browser_id.starts_with("session:") {
+        aliases.push(browser_id.to_string());
+    }
 }
 
 fn scoped_presentation_alias(kind: &str, browser_id: &str, projection_id: &str) -> String {
@@ -2754,6 +2762,7 @@ mod tests {
             route.logical_browser_id_hint.as_deref(),
             Some("session:alpha")
         );
+        assert!(route.aliases.contains(&"session:alpha".to_string()));
         assert!(!route.aliases.contains(&"session:beta".to_string()));
         assert!(display
             .aliases
@@ -2769,6 +2778,60 @@ mod tests {
             "session:alpha",
             "shared-display"
         )));
+    }
+
+    #[test]
+    fn browser_derived_session_alias_joins_only_its_own_daemon_candidate() {
+        let mut readbacks = empty_source_readbacks();
+        let presentation = readbacks
+            .iter_mut()
+            .find(|readback| {
+                readback.source == RuntimeCensusSource::ViewStreamsRoutePoolGuacamoleAndHandoffs
+            })
+            .unwrap();
+        for browser_id in ["session:alpha", "session:beta"] {
+            let mut aliases = Vec::new();
+            push_browser_identity_aliases(&mut aliases, browser_id);
+            aliases.push(scoped_presentation_alias(
+                "route",
+                browser_id,
+                "reused-route",
+            ));
+            presentation.observations.push(RuntimeCensusObservation {
+                logical_browser_id_hint: Some(browser_id.to_string()),
+                aliases,
+                profile_identity_digest: None,
+                evidence: base_fragment(),
+            });
+        }
+        let daemon = readbacks
+            .iter_mut()
+            .find(|readback| readback.source == RuntimeCensusSource::DaemonMetadata)
+            .unwrap();
+        let mut daemon_evidence = base_fragment();
+        daemon_evidence.daemon_live = true;
+        daemon_evidence.daemon_cooperative = true;
+        daemon.observations.push(RuntimeCensusObservation {
+            logical_browser_id_hint: None,
+            aliases: vec!["session:alpha".to_string()],
+            profile_identity_digest: None,
+            evidence: daemon_evidence,
+        });
+
+        let round = adapt_runtime_census_readbacks(31, readbacks).unwrap();
+        assert_eq!(round.candidates.len(), 2);
+        let alpha = round
+            .candidates
+            .iter()
+            .find(|candidate| candidate.logical_browser_id == "session:alpha")
+            .unwrap();
+        let beta = round
+            .candidates
+            .iter()
+            .find(|candidate| candidate.logical_browser_id == "session:beta")
+            .unwrap();
+        assert!(alpha.evidence.daemon_live);
+        assert!(!beta.evidence.daemon_live);
     }
 
     #[test]
