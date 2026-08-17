@@ -3509,7 +3509,7 @@ fn transfer_discovered_runtimes(
                         });
                         let handoff_index = handoffs.len() - 1;
                         let revocation = revoke_legacy_daemon_effect_authority(
-                            &old_binary,
+                            paths,
                             &source_session,
                             &migration.logical_browser_id,
                             &migration.profile_identity_digest,
@@ -3669,10 +3669,11 @@ fn orphan_candidate_session(migration: &crate::runtime_adoption::RuntimeMigratio
 }
 
 /// Revokes one legacy daemon only after its recorded process identity proves it
-/// is the selected old-generation executable. The browser process is not
-/// signaled; the candidate must independently prove and adopt that orphan.
+/// matches a binary hash from a sealed retained generation. The browser
+/// process is not signaled; the candidate must independently prove and adopt
+/// that orphan.
 fn revoke_legacy_daemon_effect_authority(
-    old_binary: &Path,
+    paths: &InstallPaths,
     source_session: &str,
     logical_browser_id: &str,
     profile_identity_digest: &str,
@@ -3681,9 +3682,11 @@ fn revoke_legacy_daemon_effect_authority(
     source_authority_unavailable: &mut bool,
 ) -> Result<(), String> {
     let identity = crate::connection::load_daemon_process_identity(source_session)?;
+    let authorized_binary_hashes =
+        authorized_runtime_generation_binary_hashes(&paths.generations_dir)?;
     revoke_verified_legacy_daemon_process(
         &identity,
-        old_binary,
+        &authorized_binary_hashes,
         LEGACY_DAEMON_EXIT_TIMEOUT,
         source_authority_unavailable,
     )?;
@@ -3717,7 +3720,7 @@ fn revoke_legacy_daemon_effect_authority(
 
 fn revoke_verified_legacy_daemon_process(
     identity: &crate::process_identity::RecordedProcessIdentity,
-    old_binary: &Path,
+    authorized_binary_hashes: &std::collections::BTreeSet<String>,
     exit_timeout: std::time::Duration,
     source_authority_unavailable: &mut bool,
 ) -> Result<(), String> {
@@ -3725,14 +3728,12 @@ fn revoke_verified_legacy_daemon_process(
         .executable_path
         .as_deref()
         .ok_or_else(|| "legacy_daemon_executable_identity_unavailable".to_string())?;
-    let expected = old_binary
-        .canonicalize()
-        .map_err(|error| format!("legacy_daemon_selected_binary_unavailable:{error}"))?;
     let recorded = Path::new(recorded_executable)
         .canonicalize()
         .map_err(|error| format!("legacy_daemon_recorded_binary_unavailable:{error}"))?;
-    if recorded != expected {
-        return Err("legacy_daemon_executable_identity_mismatch".to_string());
+    let recorded_hash = workstation_file_sha256(&recorded)?;
+    if !authorized_binary_hashes.contains(&recorded_hash) {
+        return Err("legacy_daemon_executable_provenance_mismatch".to_string());
     }
 
     let Some(process) = crate::process_identity::VerifiedProcessTermination::open(identity)? else {
@@ -3749,6 +3750,63 @@ fn revoke_verified_legacy_daemon_process(
         std::thread::sleep(LEGACY_DAEMON_EXIT_POLL_INTERVAL);
     }
     Ok(())
+}
+
+fn authorized_runtime_generation_binary_hashes(
+    generations_dir: &Path,
+) -> Result<std::collections::BTreeSet<String>, String> {
+    let mut hashes = std::collections::BTreeSet::new();
+    for entry in fs::read_dir(generations_dir).map_err(display_io(
+        "read installed runtime generations",
+        generations_dir,
+    ))? {
+        let entry = entry.map_err(|error| {
+            format!("Unable to read installed runtime generation entry: {error}")
+        })?;
+        let generation_path = entry.path();
+        if !generation_path.is_dir() {
+            continue;
+        }
+        let generation_id = entry.file_name().to_string_lossy().into_owned();
+        let manifest_path = generation_path.join("generation.json");
+        let manifest: Value = serde_json::from_slice(&fs::read(&manifest_path).map_err(
+            display_io("read installed runtime generation manifest", &manifest_path),
+        )?)
+        .map_err(|error| {
+            format!(
+                "Installed runtime generation manifest is invalid for '{generation_id}': {error}"
+            )
+        })?;
+        let declared_generation = manifest
+            .get("generationId")
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| format!("installed runtime generation id is missing:{generation_id}"))?;
+        let declared_hash = manifest
+            .get("binarySha256")
+            .and_then(Value::as_str)
+            .filter(|value| value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit()))
+            .ok_or_else(|| {
+                format!("installed runtime generation binary hash is invalid:{generation_id}")
+            })?;
+        if declared_generation != generation_id {
+            return Err(format!(
+                "installed runtime generation manifest identity mismatch:{generation_id}"
+            ));
+        }
+        validate_sealed_generation_tree(&generation_path)?;
+        let actual_hash = workstation_file_sha256(&generation_path.join("bin/agent-browser"))?;
+        if actual_hash != declared_hash {
+            return Err(format!(
+                "installed runtime generation binary hash mismatch:{generation_id}"
+            ));
+        }
+        hashes.insert(actual_hash);
+    }
+    if hashes.is_empty() {
+        return Err("installed runtime generation provenance is unavailable".to_string());
+    }
+    Ok(hashes)
 }
 
 fn resolve_runtime_source_session(
@@ -7143,7 +7201,7 @@ mod tests {
         let wrong_binary = root.join("wrong-agent-browser");
         let browser_binary = root.join("retained-browser");
         fs::copy("/bin/sleep", &old_binary).unwrap();
-        fs::copy("/bin/sleep", &wrong_binary).unwrap();
+        fs::copy("/bin/true", &wrong_binary).unwrap();
         fs::copy("/bin/sleep", &browser_binary).unwrap();
 
         let mut daemon = Command::new(&old_binary).arg("30").spawn().unwrap();
@@ -7163,21 +7221,25 @@ mod tests {
         let mut browser = Command::new(&browser_binary).arg("30").spawn().unwrap();
 
         let mut source_authority_unavailable = false;
+        let wrong_hashes =
+            std::collections::BTreeSet::from([workstation_file_sha256(&wrong_binary).unwrap()]);
         let mismatch = revoke_verified_legacy_daemon_process(
             &daemon_identity,
-            &wrong_binary,
+            &wrong_hashes,
             std::time::Duration::from_secs(1),
             &mut source_authority_unavailable,
         )
         .unwrap_err();
-        assert_eq!(mismatch, "legacy_daemon_executable_identity_mismatch");
+        assert_eq!(mismatch, "legacy_daemon_executable_provenance_mismatch");
         assert!(!source_authority_unavailable);
         assert!(daemon.try_wait().unwrap().is_none());
         assert!(browser.try_wait().unwrap().is_none());
 
+        let authorized_hashes =
+            std::collections::BTreeSet::from([workstation_file_sha256(&old_binary).unwrap()]);
         revoke_verified_legacy_daemon_process(
             &daemon_identity,
-            &old_binary,
+            &authorized_hashes,
             std::time::Duration::from_secs(2),
             &mut source_authority_unavailable,
         )
@@ -7188,6 +7250,40 @@ mod tests {
 
         browser.kill().unwrap();
         browser.wait().unwrap();
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn retained_generation_hash_authorizes_an_identical_daemon_binary_copy() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-retained-generation-provenance-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let generations_dir = root.join("generations");
+        let generation_id = "generation-a";
+        let generation = generations_dir.join(generation_id);
+        let binary = generation.join("bin/agent-browser");
+        let copied_binary = root.join("workspace-agent-browser");
+        fs::create_dir_all(binary.parent().unwrap()).unwrap();
+        fs::copy("/bin/true", &binary).unwrap();
+        fs::copy(&binary, &copied_binary).unwrap();
+        let binary_sha256 = workstation_file_sha256(&binary).unwrap();
+        fs::write(
+            generation.join("generation.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "schemaVersion": "agent-browser.runtime-generation.v1",
+                "generationId": generation_id,
+                "binarySha256": binary_sha256,
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        seal_generation_tree(&generation).unwrap();
+
+        let hashes = authorized_runtime_generation_binary_hashes(&generations_dir).unwrap();
+        assert!(hashes.contains(&workstation_file_sha256(&copied_binary).unwrap()));
+
+        remove_generation_tree(&generation).unwrap();
         fs::remove_dir_all(&root).unwrap();
     }
 }
