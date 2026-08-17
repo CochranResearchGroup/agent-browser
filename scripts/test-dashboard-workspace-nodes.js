@@ -437,6 +437,15 @@ assert.equal(action(unboundDisplayNode, 'repair').automatic, true);
 assert.equal(unboundDisplayNode.inventoryPlacement?.lane, 'primary');
 assert.equal(workspaceInventoryGroupForNode(unboundDisplayNode), 'active');
 
+const automaticReconnectAttentionPlacement = workspaceInventoryPlacementForNode({
+  ...unboundDisplayNode,
+  id: 'browser:automatic-reconnect-attention',
+  group: 'needs-attention',
+  attentionReason: 'Retained desktop route is stale.',
+});
+assert.equal(automaticReconnectAttentionPlacement.lane, 'attention');
+assert.match(automaticReconnectAttentionPlacement.reason, /stale/i);
+
 const proofMissingNode = byId(diagnosticNodes, 'browser:rdp-proof-missing');
 assert.equal(proofMissingNode.diagnostics.some((diagnostic) => diagnostic.kind === 'idle-route-display'), false);
 assert.equal(proofMissingNode.group, 'active');

@@ -882,6 +882,11 @@ export function workspaceInventoryPlacementForNode(node: WorkspaceNode): Workspa
     action.id === "resume" ||
     action.id === "seed"
   ));
+  const automaticRecoveryAction = node.actions.find((action) => action.enabled && action.automatic === true && (
+    action.id === "repair" ||
+    action.id === "resume" ||
+    action.id === "seed"
+  ));
   const profileAction = node.source === "profile" && node.profileActionability?.enabled === true;
   const hasRecoveryAction = Boolean(recoveryAction || node.takeover?.active);
   const hasLiveBrowserAuthority = node.live && !node.retained && (
@@ -917,6 +922,9 @@ export function workspaceInventoryPlacementForNode(node: WorkspaceNode): Workspa
   }
   if (hasLiveBrowserAuthority && hasRecoveryAction) {
     return { lane: "attention", reason: node.attentionReason ?? recoveryAction?.reason ?? "Live browser row needs operator attention.", rank: 500 };
+  }
+  if (hasLiveBrowserAuthority && node.group === "needs-attention" && automaticRecoveryAction) {
+    return { lane: "attention", reason: node.attentionReason ?? automaticRecoveryAction.reason ?? "Live browser row is reconnecting automatically.", rank: 500 };
   }
   if (hasLiveBrowserAuthority && node.group !== "needs-attention") {
     return { lane: "primary", reason: "Live browser authority is viable.", rank: 0 };
