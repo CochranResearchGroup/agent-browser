@@ -3970,6 +3970,16 @@ fn resolve_runtime_source_session(
     service_state: &crate::native::service_model::ServiceState,
     migration: &crate::runtime_adoption::RuntimeMigrationRecord,
 ) -> Result<Option<String>, String> {
+    resolve_runtime_source_session_with_probe(service_state, migration, |session| {
+        crate::connection::daemon_ready(session)
+    })
+}
+
+fn resolve_runtime_source_session_with_probe(
+    service_state: &crate::native::service_model::ServiceState,
+    migration: &crate::runtime_adoption::RuntimeMigrationRecord,
+    session_ready: impl Fn(&str) -> bool,
+) -> Result<Option<String>, String> {
     let mut candidates = std::collections::BTreeSet::new();
     if let Some(owner) = service_state
         .runtime_owner_registry
@@ -3985,6 +3995,14 @@ fn resolve_runtime_source_session(
         if let Some(session) = migration.logical_browser_id.strip_prefix("session:") {
             candidates.insert(session.to_string());
         }
+    }
+    let live_candidates = candidates
+        .iter()
+        .filter(|session| session_ready(session))
+        .cloned()
+        .collect::<std::collections::BTreeSet<_>>();
+    if !live_candidates.is_empty() {
+        candidates = live_candidates;
     }
     if candidates.len() > 1 {
         return Err(format!(
@@ -5969,6 +5987,45 @@ mod tests {
             error,
             "runtime_transfer_source_session_ambiguous:session:p116-alpha"
         );
+    }
+
+    #[test]
+    fn live_owner_route_supersedes_a_retained_inactive_browser_alias() {
+        let logical_browser_id = "session:p116-alpha";
+        let mut service_state = crate::native::service_model::ServiceState::default();
+        service_state.runtime_owner_registry =
+            crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(
+                crate::runtime_owner_transfer::ProfileOwner {
+                    owner_id: "owner-current".to_string(),
+                    profile_identity_digest: "profile-digest".to_string(),
+                    state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+                    owner_generation: 8,
+                    browser_id: logical_browser_id.to_string(),
+                    daemon_session_route: "p116-alpha-recovery".to_string(),
+                    process_instance_digest: "process-digest".to_string(),
+                    browser_family: "chrome".to_string(),
+                    cdp_endpoint_identity_digest: "cdp-digest".to_string(),
+                    target_set_digest: "target-digest".to_string(),
+                    pending_transfer: None,
+                    last_transition: None,
+                },
+            );
+        service_state.browsers.insert(
+            logical_browser_id.to_string(),
+            crate::native::service_model::BrowserProcess {
+                active_session_ids: vec!["retained-candidate-alias".to_string()],
+                ..Default::default()
+            },
+        );
+
+        let source = resolve_runtime_source_session_with_probe(
+            &service_state,
+            &runtime_migration(logical_browser_id),
+            |session| session == "p116-alpha-recovery",
+        )
+        .unwrap();
+
+        assert_eq!(source.as_deref(), Some("p116-alpha-recovery"));
     }
 
     #[test]
