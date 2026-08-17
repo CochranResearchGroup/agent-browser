@@ -829,9 +829,6 @@ fn service_browser_readback(
             if let Some(pid) = browser.pid {
                 aliases.push(format!("pid:{pid}"));
             }
-            if let Some(profile_id) = browser.profile_id.as_deref() {
-                aliases.push(format!("service-profile:{profile_id}"));
-            }
             if let Some(digest) = profile_digest.as_deref() {
                 aliases.push(format!("profile-digest:{digest}"));
             }
@@ -868,7 +865,11 @@ fn service_browser_readback(
             // browser, not whether the browser lacks a cooperative owner. A
             // receipted handoff necessarily becomes attached-existing and
             // must remain eligible for the next cooperative upgrade.
-            evidence.externally_owned = matches!(browser.host, BrowserHost::CloudProvider);
+            let lacks_local_process_identity =
+                browser.pid.is_none() && browser.cdp_endpoint.is_none() && process.is_none();
+            evidence.externally_owned = matches!(browser.host, BrowserHost::CloudProvider)
+                || (matches!(browser.host, BrowserHost::RemoteHeaded)
+                    && lacks_local_process_identity);
             evidence.metadata_present = true;
             evidence.profile_identity = profile_digest
                 .as_ref()
@@ -1018,9 +1019,6 @@ fn profile_owner_readback(
                     .iter()
                     .map(|browser_id| format!("browser:{browser_id}")),
             );
-            if let Some(profile_id) = session.profile_id.as_deref() {
-                aliases.push(format!("service-profile:{profile_id}"));
-            }
             if let Some(digest) = profile_digest.as_deref() {
                 aliases.push(format!("profile-digest:{digest}"));
             }
@@ -1401,9 +1399,6 @@ fn display_readback(
             if let Some(session_id) = display.owner_session_id.as_deref() {
                 aliases.push(format!("session:{session_id}"));
             }
-            if let Some(profile_id) = display.profile_id.as_deref() {
-                aliases.push(format!("service-profile:{profile_id}"));
-            }
             let mut evidence = base_fragment();
             evidence.metadata_present = true;
             RuntimeCensusObservation {
@@ -1482,9 +1477,6 @@ fn presentation_readback(
         }
         if let Some(session) = handoff.session_name.as_deref() {
             aliases.push(format!("session:{session}"));
-        }
-        if let Some(profile_id) = handoff.profile_id.as_deref() {
-            aliases.push(format!("service-profile:{profile_id}"));
         }
         if let Some(route_id) = handoff.last_route_id.as_deref() {
             aliases.push(format!("route:{route_id}"));
@@ -2595,6 +2587,79 @@ mod tests {
         state.browsers.get_mut("browser-a").unwrap().pid = Some(41);
         let after_runtime_change = service_census_readbacks(&state).unwrap();
         assert_ne!(after_runtime_change, baseline);
+    }
+
+    #[test]
+    fn remote_headed_projection_without_local_identity_is_external_observed() {
+        use crate::native::service_model::{
+            BrowserHealth, BrowserHost, BrowserProcess, ServiceState,
+        };
+
+        let mut state = ServiceState::default();
+        state.browsers.insert(
+            "remote-projection".to_string(),
+            BrowserProcess {
+                id: "remote-projection".to_string(),
+                host: BrowserHost::RemoteHeaded,
+                health: BrowserHealth::Ready,
+                ..BrowserProcess::default()
+            },
+        );
+
+        let readback = service_browser_readback(&state).unwrap();
+        let evidence = &readback.observations[0].evidence;
+        assert!(evidence.browser_live);
+        assert!(evidence.externally_owned);
+        assert_eq!(
+            classify_runtime(evidence).classification,
+            RuntimeClassification::ExternalObserved
+        );
+    }
+
+    #[test]
+    fn coarse_service_profile_ids_are_not_runtime_identity_join_keys() {
+        use crate::native::service_model::{
+            BrowserProcess, BrowserSession, DisplayAllocation, ServiceState,
+        };
+
+        let mut state = ServiceState::default();
+        state.browsers.insert(
+            "browser-a".to_string(),
+            BrowserProcess {
+                id: "browser-a".to_string(),
+                profile_id: Some("default".to_string()),
+                ..BrowserProcess::default()
+            },
+        );
+        state.sessions.insert(
+            "session-a".to_string(),
+            BrowserSession {
+                id: "session-a".to_string(),
+                profile_id: Some("default".to_string()),
+                browser_ids: vec!["browser-a".to_string()],
+                ..BrowserSession::default()
+            },
+        );
+        state.display_allocations.insert(
+            "display-a".to_string(),
+            DisplayAllocation {
+                id: "display-a".to_string(),
+                owner_browser_id: Some("browser-a".to_string()),
+                profile_id: Some("default".to_string()),
+                ..DisplayAllocation::default()
+            },
+        );
+
+        for readback in [
+            service_browser_readback(&state).unwrap(),
+            profile_owner_readback(&state).unwrap(),
+            display_readback(&state).unwrap(),
+        ] {
+            assert!(readback.observations.iter().all(|observation| observation
+                .aliases
+                .iter()
+                .all(|alias| !alias.starts_with("service-profile:"))));
+        }
     }
 
     #[test]
