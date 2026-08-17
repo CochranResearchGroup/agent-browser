@@ -2,7 +2,7 @@
 
 Date: 2026-08-15
 
-State: OPEN
+State: ACCEPTED
 
 Lane: P116
 
@@ -1484,6 +1484,105 @@ fresh-VM harnesses, Guacamole assets, PostgreSQL durability, and route-user
 synchronization pass. The correction is accepted at the source and
 isolated-fixture boundary. No installed or live state was changed. Slice I
 remains separately authorization-gated.
+
+### 2026-08-17 | Slice I Controlled Installed Acceptance
+
+Plan acceptance state: `ACCEPTED`
+
+The separately authorized installed gate ran only in the disposable P116 VM.
+No retained private browser, profile, authentication state, route, or host
+runtime participated.
+
+Installed outcome:
+
+- source commit `971f33a4ef4bb312cfa9f451a7ef407c992f70ff` produced
+  release artifact SHA-256
+  `30a2a646e5ec179a91425f27bdc7095e3ca3b68bf572d6a8f4d6ebbd1a3774aa`;
+- transaction `upgrade-296ae36c-3e99-4124-a2d5-2982f7ebbb93` accepted
+  generation `0.28.0-30a2a646e5ec-be3680665537` at revision 10;
+- `payloadReady`, `selectedGenerationReady`, `runtimeConvergenceReady`,
+  `dashboardIngressReady`, `operatorJourneyReady`, and `rollbackReady` were
+  true, `upgradeTransactionState` was `accepted`, and admission drain was
+  cleared;
+- rollback material remains retained. Formal release, transaction finalize,
+  and generation garbage collection were not run;
+- the installed binary, stable ingress unit, backend unit, and four persistent
+  Agent Browser processes resolved to the accepted artifact. A fresh OS
+  process census found no persistent old-generation Agent Browser executable;
+- disposable alpha Chrome remained PID 61284 with OS start token 891714 and
+  disposable beta Chrome remained PID 97930 with OS start token 1288820.
+  Both matched their original process-instance records after every accepted
+  upgrade and the recurrence pass.
+
+Runtime preservation and failure evidence:
+
+- cooperative transfer preserved both disposable logical browsers and ended
+  with one effect-capable owner per browser;
+- transaction `upgrade-75e32bc0-6618-49e5-bd88-a6e1622ac729` exercised the
+  legacy-daemon orphan path and emitted adoption receipt
+  `owner-transfer-0a98ef57a8020fd088c69061fd0dc239555fa8f80064c3c9cce0ed26948c9ae7`.
+  A later candidate-activation failure correctly stopped in
+  `operator_recovery_required` because daemon revocation was irreversible;
+  the browser process survived and subsequent accepted transactions retained
+  that same process identity;
+- transaction `upgrade-73345369-cd6d-4701-8ed9-96bdca7ce698` rejected an
+  unproved candidate presentation and terminated as
+  `failed_preserved_old_generation` with terminal result
+  `old_generation_preserved`. The old generation remained selected, admission
+  drain cleared, and both browser processes remained unchanged;
+- live acceptance exposed and repaired stale alias projection across browser,
+  route, display, durable handoff, and last-resolution ownership. Final owner
+  generation 42 and all five projections agreed on one current daemon session;
+- live acceptance also repaired stable-ingress handoff timeout, retained
+  checked-out route reuse, and installed doctor helper discovery without
+  weakening the provider, process, profile, target, or ownership gates.
+
+Operator journey and recurrence evidence:
+
+- the same opaque `/remote-view/r634651` handoff stayed available through
+  candidate staging, generation selection, owner transfer, and dashboard
+  backend rotation;
+- two independent final authenticated clients used distinct session cookies.
+  Both received HTTP 200 from login, the opaque handoff surface, and
+  `service_remote_view_handoff_resolve`; both returned `ready` and `resolved`
+  for logical browser `session:p116-alpha`, the same retained target, owner
+  generation 42, the original process-instance digest, and required and
+  observed `rdp_gateway`. Neither reopened or navigated a tab;
+- an explicit workstation recurrence cycle succeeded, preserved both browser
+  process identities and aligned ownership projections, and two additional
+  fresh clients repeated the same ready identity proof afterward;
+- stable ingress remained responsive for candidate authentication and opaque
+  handoff loads while mutation admission was drained. No dashboard outage,
+  duplicate browser launch, provider substitution, or target navigation was
+  observed.
+
+Final doctors:
+
+- `agent-browser install doctor --json` exited zero with service, live
+  dashboard, workstation payload, remote-view privileges, and service
+  resources ready, runtime convergence `converged`, and no issue codes;
+- `agent-browser doctor remote-view` scoped to the current owner session and
+  route `guacamole:1` exited zero with overall, requested scope,
+  single-route remote control, many-to-many, route pool, route display,
+  display access, RDP gateway, dashboard ingress, and operator journey all
+  ready, with no issue codes;
+- doctor resolved its helpers from the installed
+  `current/support/scripts` selector. A ready checked-out route-pool entry now
+  remains ready in the requested-scope projection.
+
+Source validation for the live remediation included forty-nine workstation
+installer tests, ten dashboard-ingress tests, twelve handoff-resolution tests,
+eight runtime-handoff tests, the rollback projection regression, five doctor
+script-root tests, two requested-route tests, Rust formatting, and strict
+Clippy. The wider remote-view handoff module retained one pre-existing baseline
+failure in `complete_open_finalizes_lease_and_returns_opened_response`; the
+other forty-six tests passed, and the same failure reproduced before these
+changes because that fixture still expects a raw provider URL instead of the
+durable handoff URL.
+
+Slice I is accepted. Plan 0116 is complete at source and disposable installed
+acceptance. Retained rollback cleanup and any formal release remain separately
+reviewed follow-up operations, not part of this acceptance.
 
 ## Planning Evidence
 
