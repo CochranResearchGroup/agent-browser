@@ -270,18 +270,21 @@ backup_command() {
   mv "$temp_manifest" "$manifest_path"
   trap - EXIT
 
-  mapfile -t old_dumps < <(
+  mapfile -t published_dumps < <(
     find "$BACKUP_DIR" -maxdepth 1 -type f \
-      -name 'guacamole-postgres-*.dump' -printf '%T@ %p\n' |
-      sort -nr | awk -v keep="$RETENTION_COUNT" 'NR > keep {$1=""; sub(/^ /, ""); print}'
+      -name 'guacamole-postgres-*.dump' -printf '%p\n' | sort -r
   )
-  local old_dump
-  for old_dump in "${old_dumps[@]}"; do
-    [[ -n "$old_dump" ]] || continue
-    if [[ -r "${old_dump%.dump}.keep" ]]; then
+  local published_dump retained_unprotected=0
+  for published_dump in "${published_dumps[@]}"; do
+    [[ -n "$published_dump" ]] || continue
+    if [[ -r "${published_dump%.dump}.keep" ]]; then
       continue
     fi
-    rm -f "$old_dump" "${old_dump%.dump}.json"
+    if [[ "$retained_unprotected" -lt "$RETENTION_COUNT" ]]; then
+      ((retained_unprotected += 1))
+      continue
+    fi
+    rm -f "$published_dump" "${published_dump%.dump}.json"
   done
 
   printf 'backup=%s\n' "$dump_path"

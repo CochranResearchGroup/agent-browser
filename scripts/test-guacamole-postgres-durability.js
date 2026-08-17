@@ -221,7 +221,9 @@ try {
   const published = readdirSync(backupDir).filter((name) =>
     name.endsWith('.dump'),
   );
-  const publishedNew = published.find((name) => !name.includes('20260101'));
+  const publishedNew = published.find(
+    (name) => !name.includes('20260101') && !name.includes('20260102'),
+  );
   assert.ok(publishedNew);
   const publishedPath = join(backupDir, publishedNew);
   assert.equal(existsSync(`${publishedPath.slice(0, -5)}.json`), true);
