@@ -599,7 +599,13 @@ The command reports agent-browser daemons, browser processes, and remote display
 processes with PID, process group, RSS, age, CDP port, profile path, browser id,
 session ids, display allocation id, disposition, and safety reasons. It protects
 the dashboard service main PID, retained active browser PIDs, and named or
-persistent managed profiles. Use <code>agent-browser service gc --dry-run</code>
+persistent managed profiles. The response also includes
+<code>runtimeLanes</code> and summary counts for managed lanes and cleanup
+obligations. Package-launched and managed-attached Chrome lanes register
+canonical profile, exact process, CDP endpoint, owner-generation, and target
+evidence before ready state. Transfer, retained detach, recovery, and owned
+close move the same cleanup obligation, and terminal close requires exact
+process exit plus profile-lock release. Use <code>agent-browser service gc --dry-run</code>
 to group only conservative cleanup candidates and receive a short-lived review
 token. Use <code>agent-browser service gc --apply --review-token &lt;token&gt;</code>
 only after reviewing that exact dry-run. Apply mode re-reads process identity

@@ -38,7 +38,8 @@ use super::action_runtime::runtime::{
     handle_launch, handle_navigate, handle_runtime_handoff_abort, handle_runtime_handoff_finalize,
     handle_runtime_handoff_prepare, handle_runtime_handoff_resume, handle_runtime_handoff_rollback,
     handle_snapshot, persist_browser_recovery_started_from_persisted_state,
-    persist_current_browser_stale_health, BackendType, DaemonState, PendingConfirmation,
+    persist_current_browser_stale_health, BackendType, CloseBehavior, DaemonState,
+    PendingConfirmation,
 };
 use super::auth::{
     handle_auth_show, handle_credentials_delete, handle_credentials_get, handle_credentials_list,
@@ -595,13 +596,10 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
                         stale_state.event_details,
                     );
                 }
-                if let Some(ref mut mgr) = state.browser {
-                    let _ = mgr.close().await;
+                state.close_behavior = CloseBehavior::CloseBrowser;
+                if let Err(error) = handle_close(state).await {
+                    return error_response(&id, &error);
                 }
-                state.browser = None;
-                state.screencasting = false;
-                state.reset_input_state();
-                state.update_stream_client().await;
             }
             if !recovery_persistence.recorded() {
                 recovery_persistence = persist_browser_recovery_started_from_persisted_state(

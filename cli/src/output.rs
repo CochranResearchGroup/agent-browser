@@ -6768,7 +6768,7 @@ Service:
   service status             Show service worker health, profile lease waits, and configured service state
   service watch              Poll service worker health and reconciliation state
   service reconcile          Probe persisted records and optionally refresh authoritative route definitions
-  service resources          Inspect service-owned browser, daemon, and display processes
+  service resources          Inspect processes, runtime lanes, and cleanup obligations
   service gc                 Dry-run or apply conservative cleanup candidates from service resources
   service prune-retained     Dry-run or apply retained closed-tab, inert-browser, orphaned-profile, and display-allocation cleanup
   service repair-retained    Dry-run or apply retained session evidence repair

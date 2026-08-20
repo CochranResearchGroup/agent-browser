@@ -68,6 +68,8 @@ pub struct ChromeProcess {
     aux_processes: Vec<Child>,
     pub ws_url: String,
     owns_process: bool,
+    lifecycle_managed: bool,
+    lifecycle_close_approved: bool,
     temp_user_data_dir: Option<PathBuf>,
     user_data_dir: PathBuf,
     runtime_profile: Option<String>,
@@ -147,6 +149,19 @@ impl ChromeStderrLogBuffer {
 }
 
 impl ChromeProcess {
+    pub fn mark_lifecycle_managed(&mut self) {
+        self.lifecycle_managed = true;
+        self.lifecycle_close_approved = false;
+    }
+
+    pub fn approve_lifecycle_close(&mut self) {
+        self.lifecycle_close_approved = true;
+    }
+
+    pub fn lifecycle_close_is_approved(&self) -> bool {
+        !self.lifecycle_managed || self.lifecycle_close_approved
+    }
+
     /// Relinquish process ownership without closing Chrome.
     ///
     /// This is used by daemon executable handoff. `std::process::Child` does
@@ -412,6 +427,10 @@ fn kill_aux_processes(
 impl Drop for ChromeProcess {
     fn drop(&mut self) {
         if !self.owns_process {
+            return;
+        }
+        if self.lifecycle_managed && !self.lifecycle_close_approved {
+            self.temp_user_data_dir = None;
             return;
         }
         self.kill();
@@ -1536,6 +1555,8 @@ fn try_launch_chrome(
         child,
         ws_url,
         owns_process: true,
+        lifecycle_managed: false,
+        lifecycle_close_approved: false,
         temp_user_data_dir,
         user_data_dir,
         runtime_profile,
@@ -3323,6 +3344,8 @@ mod tests {
             aux_processes: Vec::new(),
             ws_url: String::new(),
             owns_process: true,
+            lifecycle_managed: false,
+            lifecycle_close_approved: false,
             temp_user_data_dir: None,
             user_data_dir: dir.to_path_buf(),
             runtime_profile: None,
@@ -3888,6 +3911,8 @@ mod tests {
                 aux_processes: Vec::new(),
                 ws_url: String::new(),
                 owns_process: true,
+                lifecycle_managed: false,
+                lifecycle_close_approved: false,
                 temp_user_data_dir: Some(dir.clone()),
                 user_data_dir: dir.clone(),
                 runtime_profile: None,
@@ -3905,6 +3930,41 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn lifecycle_managed_drop_preserves_unapproved_browser_and_profile() {
+        let dir = std::env::temp_dir().join(format!(
+            "agent-browser-chrome-lifecycle-drop-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let child = spawn_sleep_child();
+        let pid = child.id();
+        let mut process = ChromeProcess {
+            child,
+            aux_processes: Vec::new(),
+            ws_url: String::new(),
+            owns_process: true,
+            lifecycle_managed: false,
+            lifecycle_close_approved: false,
+            temp_user_data_dir: Some(dir.clone()),
+            user_data_dir: dir.clone(),
+            runtime_profile: None,
+            display_name: None,
+            stderr_log_path: None,
+            stderr_drainer: None,
+            pgid: None,
+        };
+        process.mark_lifecycle_managed();
+
+        drop(process);
+
+        assert!(crate::process_identity::process_exists(pid));
+        assert!(dir.exists());
+        let _ = unsafe { libc::kill(pid as i32, libc::SIGKILL) };
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn test_chrome_process_handoff_preserves_child_and_temp_dir() {
         let dir = std::env::temp_dir().join(format!(
             "agent-browser-chrome-handoff-test-{}",
@@ -3918,6 +3978,8 @@ mod tests {
             aux_processes: Vec::new(),
             ws_url: "ws://127.0.0.1:9222/devtools/browser/handoff".to_string(),
             owns_process: true,
+            lifecycle_managed: false,
+            lifecycle_close_approved: false,
             temp_user_data_dir: Some(dir.clone()),
             user_data_dir: dir.clone(),
             runtime_profile: None,

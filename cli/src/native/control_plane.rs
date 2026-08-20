@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 
 use tokio::sync::{mpsc, oneshot};
 
+use super::action_runtime::runtime::{handle_close, CloseBehavior};
 use super::action_runtime::{service_profile_lease_gate, DaemonState, ServiceProfileLeaseGate};
 use super::actions::execute_command;
 use super::cancellation::CancellationToken as RunningJobCancel;
@@ -1833,8 +1834,9 @@ async fn run_worker(
 }
 
 async fn close_browser(state: &mut DaemonState) {
-    if let Some(ref mut mgr) = state.browser {
-        let _ = mgr.close().await;
+    if state.browser.is_some() {
+        state.close_behavior = CloseBehavior::CloseBrowser;
+        let _ = handle_close(state).await;
     }
 }
 
@@ -1842,12 +1844,10 @@ async fn cleanup_exited_browser(state: &mut DaemonState) {
     if state.browser.is_some() {
         persist_process_exited_browser_health(state);
     }
-    if let Some(ref mut mgr) = state.browser {
-        let _ = mgr.close().await;
+    if state.browser.is_some() {
+        state.close_behavior = CloseBehavior::CloseBrowser;
+        let _ = handle_close(state).await;
     }
-    state.browser = None;
-    state.screencasting = false;
-    state.update_stream_client().await;
 }
 
 fn browser_health_requires_cleanup_after_interruption(health: BrowserHealth) -> bool {

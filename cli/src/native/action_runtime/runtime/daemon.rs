@@ -141,13 +141,10 @@ pub(crate) async fn relaunch_and_restore_page(
     state: &mut DaemonState,
     desired_url: Option<String>,
 ) -> Result<(), String> {
-    if let Some(ref mut mgr) = state.browser {
-        let _ = mgr.close().await;
+    if state.browser.is_some() {
+        state.close_behavior = CloseBehavior::CloseBrowser;
+        super::navigation::handle_close(state).await?;
     }
-    state.browser = None;
-    state.screencasting = false;
-    state.reset_input_state();
-    state.update_stream_client().await;
     auto_launch(state, &json!({})).await?;
     if let Some(url) = desired_url.as_deref() {
         if !url.is_empty() && url != "about:blank" {

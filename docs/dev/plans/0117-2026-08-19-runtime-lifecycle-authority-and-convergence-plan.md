@@ -2,7 +2,7 @@
 
 Date: 2026-08-19
 
-State: IN PROGRESS — SLICE A SOURCE ACCEPTED
+State: IN PROGRESS — SLICE B SOURCE ACCEPTED
 
 Lane: P117
 
@@ -10,6 +10,9 @@ Source baseline: `93503441a735accab2d2414c170f84ff4bab22b7`
 
 Slice A receipt:
 `docs/dev/notes/0117-1-2026-08-20-runtime-lifecycle-slice-a-source-acceptance.md`
+
+Slice B receipt:
+`docs/dev/notes/0117-2-2026-08-20-runtime-lifecycle-slice-b-source-acceptance.md`
 
 Depends on:
 

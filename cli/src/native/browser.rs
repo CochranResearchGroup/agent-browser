@@ -387,6 +387,25 @@ impl BrowserShutdownOutcome {
 }
 
 impl BrowserProcess {
+    pub fn mark_lifecycle_managed(&mut self) {
+        if let BrowserProcess::Chrome(process) = self {
+            process.mark_lifecycle_managed();
+        }
+    }
+
+    pub fn approve_lifecycle_close(&mut self) {
+        if let BrowserProcess::Chrome(process) = self {
+            process.approve_lifecycle_close();
+        }
+    }
+
+    pub fn lifecycle_close_is_approved(&self) -> bool {
+        match self {
+            BrowserProcess::Chrome(process) => process.lifecycle_close_is_approved(),
+            BrowserProcess::Lightpanda(_) => true,
+        }
+    }
+
     pub fn kill(&mut self) {
         let _ = self.kill_with_outcome();
     }
@@ -1242,6 +1261,13 @@ impl BrowserManager {
 
     pub async fn close_with_outcome(&mut self) -> Result<BrowserShutdownOutcome, String> {
         let mut outcome = BrowserShutdownOutcome::default();
+        if self
+            .browser_process
+            .as_ref()
+            .is_some_and(|process| !process.lifecycle_close_is_approved())
+        {
+            return Err("runtime_lifecycle_close_not_approved".to_string());
+        }
         if self.browser_process.is_some() {
             // Only send Browser.close when we launched the browser ourselves.
             // For external connections (--auto-connect, --cdp) we just disconnect
@@ -1293,6 +1319,18 @@ impl BrowserManager {
 
     pub async fn close(&mut self) -> Result<(), String> {
         self.close_with_outcome().await.map(|_| ())
+    }
+
+    pub fn mark_lifecycle_managed(&mut self) {
+        if let Some(process) = self.browser_process.as_mut() {
+            process.mark_lifecycle_managed();
+        }
+    }
+
+    pub fn approve_lifecycle_close(&mut self) {
+        if let Some(process) = self.browser_process.as_mut() {
+            process.approve_lifecycle_close();
+        }
     }
 
     /// Disconnect from a launched persistent runtime-profile browser without

@@ -427,7 +427,7 @@ impl RuntimeOwnerRegistry {
         }))
     }
 
-    fn refreshed_claim_after_reverse(
+    pub(crate) fn refreshed_claim_after_reverse(
         &self,
         claim: &OwnerAuthorityClaim,
     ) -> Option<OwnerAuthorityClaim> {
@@ -718,24 +718,30 @@ pub(crate) fn register_current_owner(
     repository: &impl ServiceStateRepository,
     owner: ProfileOwner,
 ) -> Result<ProfileOwner, String> {
-    repository.mutate(|state| {
-        state
-            .runtime_owner_registry
-            .register_current_owner(owner)
-            .map_err(owner_transfer_error_text)
-    })
+    use crate::native::runtime_lifecycle::{
+        RuntimeLifecycleAuthority, RuntimeLifecycleIntent, RuntimeLifecycleTransition,
+    };
+    match RuntimeLifecycleAuthority::new(repository)
+        .transition(RuntimeLifecycleIntent::RegisterCurrentOwner(owner))?
+    {
+        RuntimeLifecycleTransition::OwnerRegistered(owner) => Ok(owner),
+        _ => Err("runtime_lifecycle_registration_outcome_mismatch".to_string()),
+    }
 }
 
 pub(crate) fn begin_owner_transfer(
     repository: &impl ServiceStateRepository,
     request: OwnerTransferRequest,
 ) -> Result<OwnerTransferProposal, String> {
-    repository.mutate(|state| {
-        state
-            .runtime_owner_registry
-            .begin_transfer(request)
-            .map_err(owner_transfer_error_text)
-    })
+    use crate::native::runtime_lifecycle::{
+        RuntimeLifecycleAuthority, RuntimeLifecycleIntent, RuntimeLifecycleTransition,
+    };
+    match RuntimeLifecycleAuthority::new(repository)
+        .transition(RuntimeLifecycleIntent::BeginTransfer(request))?
+    {
+        RuntimeLifecycleTransition::TransferPrepared(proposal) => Ok(proposal),
+        _ => Err("runtime_lifecycle_transfer_prepare_outcome_mismatch".to_string()),
+    }
 }
 
 /// Marks one exact ready owner as orphaned only after the caller has proved
@@ -748,30 +754,36 @@ pub(crate) fn revoke_legacy_daemon_owner(
     expected_owner_id: &str,
     expected_owner_generation: u64,
 ) -> Result<ProfileOwner, String> {
-    repository.mutate(|state| {
-        state
-            .runtime_owner_registry
-            .revoke_legacy_daemon_owner(
-                profile_identity_digest,
-                logical_browser_id,
-                expected_daemon_session_route,
-                expected_owner_id,
-                expected_owner_generation,
-            )
-            .map_err(owner_transfer_error_text)
-    })
+    use crate::native::runtime_lifecycle::{
+        RuntimeLifecycleAuthority, RuntimeLifecycleIntent, RuntimeLifecycleTransition,
+    };
+    match RuntimeLifecycleAuthority::new(repository).transition(
+        RuntimeLifecycleIntent::RevokeLegacyOwner {
+            profile_identity_digest: profile_identity_digest.to_string(),
+            logical_browser_id: logical_browser_id.to_string(),
+            expected_daemon_session_route: expected_daemon_session_route.to_string(),
+            expected_owner_id: expected_owner_id.to_string(),
+            expected_owner_generation,
+        },
+    )? {
+        RuntimeLifecycleTransition::LegacyOwnerRevoked(owner) => Ok(owner),
+        _ => Err("runtime_lifecycle_legacy_revoke_outcome_mismatch".to_string()),
+    }
 }
 
 pub(crate) fn commit_candidate_owner(
     repository: &impl ServiceStateRepository,
     attachment: CandidateOwnerAttachment,
 ) -> Result<OwnerTransferReceipt, String> {
-    repository.mutate(|state| {
-        state
-            .runtime_owner_registry
-            .commit_candidate(attachment)
-            .map_err(owner_transfer_error_text)
-    })
+    use crate::native::runtime_lifecycle::{
+        RuntimeLifecycleAuthority, RuntimeLifecycleIntent, RuntimeLifecycleTransition,
+    };
+    match RuntimeLifecycleAuthority::new(repository)
+        .transition(RuntimeLifecycleIntent::CommitCandidate(attachment))?
+    {
+        RuntimeLifecycleTransition::CandidateCommitted(receipt) => Ok(receipt),
+        _ => Err("runtime_lifecycle_candidate_commit_outcome_mismatch".to_string()),
+    }
 }
 
 pub(crate) fn abort_owner_transfer(
@@ -781,29 +793,35 @@ pub(crate) fn abort_owner_transfer(
     expected_owner_generation: u64,
     transfer_nonce_digest: &str,
 ) -> Result<bool, String> {
-    repository.mutate(|state| {
-        state
-            .runtime_owner_registry
-            .abort_pending_transfer(
-                profile_identity_digest,
-                expected_owner_id,
-                expected_owner_generation,
-                transfer_nonce_digest,
-            )
-            .map_err(owner_transfer_error_text)
-    })
+    use crate::native::runtime_lifecycle::{
+        RuntimeLifecycleAuthority, RuntimeLifecycleIntent, RuntimeLifecycleTransition,
+    };
+    match RuntimeLifecycleAuthority::new(repository).transition(
+        RuntimeLifecycleIntent::AbortTransfer {
+            profile_identity_digest: profile_identity_digest.to_string(),
+            expected_owner_id: expected_owner_id.to_string(),
+            expected_owner_generation,
+            transfer_nonce_digest: transfer_nonce_digest.to_string(),
+        },
+    )? {
+        RuntimeLifecycleTransition::TransferAborted(aborted) => Ok(aborted),
+        _ => Err("runtime_lifecycle_transfer_abort_outcome_mismatch".to_string()),
+    }
 }
 
 pub(crate) fn reverse_candidate_owner(
     repository: &impl ServiceStateRepository,
     request: ReverseOwnerTransferRequest,
 ) -> Result<OwnerTransferReceipt, String> {
-    repository.mutate(|state| {
-        state
-            .runtime_owner_registry
-            .reverse_transfer(request)
-            .map_err(owner_transfer_error_text)
-    })
+    use crate::native::runtime_lifecycle::{
+        RuntimeLifecycleAuthority, RuntimeLifecycleIntent, RuntimeLifecycleTransition,
+    };
+    match RuntimeLifecycleAuthority::new(repository)
+        .transition(RuntimeLifecycleIntent::ReverseTransfer(request))?
+    {
+        RuntimeLifecycleTransition::TransferReversed(receipt) => Ok(receipt),
+        _ => Err("runtime_lifecycle_reverse_outcome_mismatch".to_string()),
+    }
 }
 
 pub(crate) fn owner_authority_is_current(
@@ -826,16 +844,6 @@ pub(crate) fn owner_binding_for_session(
         .binding_for_session(session_id)
 }
 
-fn refreshed_owner_claim_after_reverse(
-    repository: &impl ServiceStateRepository,
-    claim: &OwnerAuthorityClaim,
-) -> Result<Option<OwnerAuthorityClaim>, String> {
-    Ok(repository
-        .load_snapshot()?
-        .runtime_owner_registry
-        .refreshed_claim_after_reverse(claim))
-}
-
 /// Fence browser effects for daemons participating in owner transfer.
 /// Legacy daemons remain unbound until a transfer begins. Once bound, reads
 /// may continue but every browser effect requires the current registry owner.
@@ -847,20 +855,8 @@ pub(crate) fn require_owner_effect_authority(
     if action_is_observation_only(action) {
         return Ok(());
     }
-    if !binding.effect_capable {
-        return Err("runtime_owner_observation_only: candidate cannot issue browser effects before owner compare-and-swap".to_string());
-    }
-    if !owner_authority_is_current(repository, &binding.claim)? {
-        if let Some(claim) = refreshed_owner_claim_after_reverse(repository, &binding.claim)? {
-            binding.claim = claim;
-            return Ok(());
-        }
-        return Err(
-            "runtime_owner_generation_stale: daemon is no longer the effect-capable browser owner"
-                .to_string(),
-        );
-    }
-    Ok(())
+    crate::native::runtime_lifecycle::RuntimeLifecycleAuthority::new(repository)
+        .authorize_effect(binding)
 }
 
 /// Return whether an action must hydrate and validate runtime owner authority.
@@ -966,7 +962,7 @@ fn validate_request(request: &OwnerTransferRequest) -> Result<(), OwnerTransferE
     Ok(())
 }
 
-fn validate_profile_owner(owner: &ProfileOwner) -> Result<(), OwnerTransferError> {
+pub(crate) fn validate_profile_owner(owner: &ProfileOwner) -> Result<(), OwnerTransferError> {
     let opaque_ids = [
         owner.owner_id.as_str(),
         owner.browser_id.as_str(),
@@ -1235,18 +1231,33 @@ mod tests {
     }
 
     #[test]
-    fn handoff_red_fixture_preserves_browser_without_cleanup_accountability() {
-        let mut registry = RuntimeOwnerRegistry::from_owner(owner());
-        let request = cooperative_request();
-        registry.begin_transfer(request.clone()).unwrap();
-        registry
-            .commit_candidate(CandidateOwnerAttachment::from_request(&request, 8))
+    fn handoff_fixture_moves_cleanup_accountability_with_owner_generation() {
+        let repository = MemoryRepository::default();
+        repository
+            .mutate(|state| {
+                state.runtime_owner_registry = RuntimeOwnerRegistry::from_owner(owner());
+                Ok(())
+            })
             .unwrap();
+        let request = cooperative_request();
+        begin_owner_transfer(&repository, request.clone()).unwrap();
+        commit_candidate_owner(
+            &repository,
+            CandidateOwnerAttachment::from_request(&request, 8),
+        )
+        .unwrap();
+        let registry = repository.load_snapshot().unwrap().runtime_owner_registry;
 
-        assert!(registry.lifecycle_records.is_empty());
         assert_eq!(
             registry.owner(&digest("profile")).unwrap().owner_generation,
             8
+        );
+        let lifecycle = &registry.lifecycle_records["browser-a"];
+        assert_eq!(lifecycle.owner_generation, 8);
+        assert_eq!(lifecycle.lifecycle_state, RuntimeLaneLifecycleState::Ready);
+        assert_eq!(
+            lifecycle.cleanup_obligation_state,
+            CleanupObligationState::Owned
         );
     }
 
@@ -1638,7 +1649,12 @@ mod tests {
         let persisted = repository.load_snapshot().unwrap();
 
         assert_eq!(receipt.candidate_owner_generation, 8);
-        assert_eq!(persisted.runtime_owner_registry.revision, 3);
+        assert_eq!(persisted.runtime_owner_registry.revision, 5);
+        assert_eq!(
+            persisted.runtime_owner_registry.lifecycle_records["browser-a"]
+                .cleanup_obligation_state,
+            CleanupObligationState::Owned
+        );
         assert_eq!(
             persisted
                 .runtime_owner_registry
@@ -1661,7 +1677,7 @@ mod tests {
         assert!(register_current_owner(&repository, conflict).is_err());
 
         let persisted = repository.load_snapshot().unwrap();
-        assert_eq!(persisted.runtime_owner_registry.revision, 1);
+        assert_eq!(persisted.runtime_owner_registry.revision, 2);
         assert_eq!(
             persisted
                 .runtime_owner_registry

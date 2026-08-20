@@ -9,7 +9,7 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 
 ## P117 | Runtime Lifecycle Authority And Convergence
 
-State: IN PROGRESS — SLICE A SOURCE ACCEPTED
+State: IN PROGRESS — SLICE B SOURCE ACCEPTED
 Current state: the August 19 workstation audit found one healthy dashboard but
 multiple daemon processes and executable generations, 226 Chrome processes,
 218 runtime-profile directories using about 58 GiB, and 21 immutable runtime
@@ -30,7 +30,14 @@ owner registry carries a backward-compatible conservative lifecycle ledger,
 and install doctor exposes a read-only multiplicity report. Current live
 readback correctly reports one dashboard process, zero runtime hosts, seven
 legacy daemons, one executable generation, and typed `drift` without changing
-the runtime.
+the runtime. Slice B is source accepted. One concrete lifecycle authority now
+owns managed launch and attach registration, transfer, adoption, reverse,
+finalize, retained preservation, recovery relaunch, and close transitions.
+Owner generations and cleanup obligations move atomically, browser effects are
+generation-fenced, unapproved managed drops preserve the browser and profile,
+and Service State resource summaries project lifecycle accountability without
+becoming writers. The canonical serial Rust suite, strict lint gates, docs,
+contract checks, and an isolated production managed-Chrome smoke pass.
 
 ### Plan
 
@@ -38,11 +45,11 @@ the runtime.
 
 ### Next Recommendation
 
-Execute Slice B through the existing owner-registry seam. Introduce the deep
-runtime lifecycle owner, route lifecycle transitions through it incrementally,
-and move cleanup obligations atomically with owner generations. Preserve the
-Slice A no-effect boundary until each transition has a focused red-to-green
-proof.
+Execute Slice C through the lifecycle owner. Join exact process observation,
+package launch identity, lifecycle generation, canonical profile identity, and
+process group into one reconciler. Make normal close and garbage collection
+share one reviewed process-tree shutdown path, including legitimate Linux
+browser-wrapper transitions without accepting unrelated executable drift.
 
 ## P116 | Runtime Adoption And Transactional Upgrade
 

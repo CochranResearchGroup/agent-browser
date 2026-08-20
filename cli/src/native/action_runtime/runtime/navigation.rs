@@ -15,6 +15,7 @@ use crate::native::browser_navigation::{
 };
 use crate::native::network::resolve_fetch_paused;
 use crate::native::network_archive::{har_cdp_protocol_to_http_version, har_extract_headers};
+use crate::native::runtime_lifecycle::{RuntimeLifecycleAuthority, RuntimeLifecycleIntent};
 use crate::native::service_model::{
     retained_display_allocation_candidates, service_profile_allocations,
     service_profile_seeding_handoff, service_profile_sources, BrowserBuild,
@@ -258,6 +259,20 @@ pub(crate) async fn handle_runtime_handoff_prepare(
         ))[..20]
     );
     let repository = runtime_handoff_service_repository()?;
+    if let Some(binding) = state.runtime_owner_binding.as_mut() {
+        let authority = RuntimeLifecycleAuthority::new(&repository);
+        authority.authorize_effect(binding)?;
+        match authority.transition(RuntimeLifecycleIntent::RefreshCurrentOwnerEvidence {
+            claim: binding.claim.clone(),
+            cdp_endpoint_identity_digest: cdp_endpoint_identity_digest.clone(),
+            target_set_digest: target_set_digest.clone(),
+        })? {
+            crate::native::runtime_lifecycle::RuntimeLifecycleTransition::OwnerEvidenceRefreshed(
+                _,
+            ) => {}
+            _ => return Err("runtime_handoff_owner_refresh_outcome_mismatch".to_string()),
+        }
+    }
     let current_owner = if let Some(owner) = repository
         .load_snapshot()?
         .runtime_owner_registry
@@ -991,11 +1006,8 @@ pub(crate) async fn handle_runtime_handoff_finalize(
         );
     }
     let repository = runtime_handoff_service_repository()?;
-    if crate::runtime_owner_transfer::owner_authority_is_current(&repository, &binding.claim)? {
-        return Err(
-            "runtime_handoff_finalize_before_commit: old daemon remains effect-capable".to_string(),
-        );
-    }
+    RuntimeLifecycleAuthority::new(&repository)
+        .authorize_relinquish_after_transfer(&binding.claim)?;
     let Some(manager) = state.browser.as_mut() else {
         return Err(
             "runtime_handoff_finalize_browser_missing: old browser is unavailable".to_string(),
@@ -1129,6 +1141,8 @@ pub(crate) async fn handle_runtime_handoff_rollback(
         &state.session_id,
         source_session,
     )?;
+    RuntimeLifecycleAuthority::new(&repository)
+        .authorize_relinquish_after_transfer(&binding.claim)?;
     let manager = state.browser.as_mut().ok_or_else(|| {
         "runtime_handoff_rollback_browser_missing: candidate browser is unavailable".to_string()
     })?;
@@ -1438,6 +1452,30 @@ pub(crate) async fn handle_close(state: &mut DaemonState) -> Result<Value, Strin
     let attached_runtime_profile = state.attached_runtime_profile.take();
     let attached_browser_pid = state.attached_browser_pid.take();
     let close_behavior = std::mem::take(&mut state.close_behavior);
+    let managed_close_claim = if let Some(binding) = state.runtime_owner_binding.as_mut() {
+        let repository = runtime_handoff_service_repository()?;
+        let authority = RuntimeLifecycleAuthority::new(&repository);
+        authority.authorize_effect(binding)?;
+        let claim = binding.claim.clone();
+        let intent = if close_behavior == CloseBehavior::CloseBrowser {
+            RuntimeLifecycleIntent::BeginClose {
+                claim: claim.clone(),
+            }
+        } else {
+            RuntimeLifecycleIntent::PreserveRetained {
+                claim: claim.clone(),
+            }
+        };
+        authority.transition(intent)?;
+        Some(claim)
+    } else {
+        None
+    };
+    if managed_close_claim.is_some() && close_behavior == CloseBehavior::CloseBrowser {
+        if let Some(manager) = state.browser.as_mut() {
+            manager.approve_lifecycle_close();
+        }
+    }
     let mut shutdown_outcome = BrowserShutdownOutcome::default();
     if let Some(ref mgr) = state.browser {
         if let Some(ref session_name) = state.session_name {
@@ -1477,6 +1515,8 @@ pub(crate) async fn handle_close(state: &mut DaemonState) -> Result<Value, Strin
             shutdown_outcome.polite_close_attempted |= outcome.polite_close_attempted;
             shutdown_outcome.polite_close_succeeded |= outcome.polite_close_succeeded;
             shutdown_outcome.polite_close_failed |= outcome.polite_close_failed;
+            shutdown_outcome.exact_process_exited |= outcome.exact_process_exited;
+            shutdown_outcome.profile_lock_released |= outcome.profile_lock_released;
             shutdown_outcome.force_kill_attempted |= outcome.force_kill_attempted;
             shutdown_outcome.force_kill_succeeded |= outcome.force_kill_succeeded;
             shutdown_outcome.force_kill_failed |= outcome.force_kill_failed;
@@ -1498,6 +1538,8 @@ pub(crate) async fn handle_close(state: &mut DaemonState) -> Result<Value, Strin
                 shutdown_outcome.polite_close_attempted |= outcome.polite_close_attempted;
                 shutdown_outcome.polite_close_succeeded |= outcome.polite_close_succeeded;
                 shutdown_outcome.polite_close_failed |= outcome.polite_close_failed;
+                shutdown_outcome.exact_process_exited |= outcome.exact_process_exited;
+                shutdown_outcome.profile_lock_released |= outcome.profile_lock_released;
                 shutdown_outcome.force_kill_attempted |= outcome.force_kill_attempted;
                 shutdown_outcome.force_kill_succeeded |= outcome.force_kill_succeeded;
                 shutdown_outcome.force_kill_failed |= outcome.force_kill_failed;
@@ -1513,6 +1555,8 @@ pub(crate) async fn handle_close(state: &mut DaemonState) -> Result<Value, Strin
             shutdown_outcome.polite_close_attempted |= outcome.polite_close_attempted;
             shutdown_outcome.polite_close_succeeded |= outcome.polite_close_succeeded;
             shutdown_outcome.polite_close_failed |= outcome.polite_close_failed;
+            shutdown_outcome.exact_process_exited |= outcome.exact_process_exited;
+            shutdown_outcome.profile_lock_released |= outcome.profile_lock_released;
             shutdown_outcome.force_kill_attempted |= outcome.force_kill_attempted;
             shutdown_outcome.force_kill_succeeded |= outcome.force_kill_succeeded;
             shutdown_outcome.force_kill_failed |= outcome.force_kill_failed;
@@ -1556,11 +1600,36 @@ pub(crate) async fn handle_close(state: &mut DaemonState) -> Result<Value, Strin
         server.shutdown();
     }
     state.ref_map.clear();
+    if close_behavior == CloseBehavior::CloseBrowser {
+        if let (Some(claim), Some(terminal_evidence)) = (
+            managed_close_claim,
+            browser_terminal_evidence(&shutdown_outcome),
+        ) {
+            RuntimeLifecycleAuthority::new(&runtime_handoff_service_repository()?).transition(
+                RuntimeLifecycleIntent::CompleteClose {
+                    logical_browser_id: claim.logical_browser_id,
+                    profile_identity_digest: claim.profile_identity_digest,
+                    expected_owner_generation: claim.owner_generation,
+                    terminal_evidence,
+                },
+            )?;
+        }
+    }
     Ok(json!({ "closed" : true }))
 }
 
 fn browser_shutdown_confirmed(outcome: &BrowserShutdownOutcome) -> bool {
     outcome.errors.is_empty() && !outcome.polite_close_failed && !outcome.force_kill_failed
+}
+
+pub(crate) fn browser_terminal_evidence(outcome: &BrowserShutdownOutcome) -> Option<Vec<String>> {
+    (outcome.exact_process_exited && outcome.profile_lock_released && !outcome.force_kill_failed)
+        .then(|| {
+            vec![
+                "exact_process_exited".to_string(),
+                "profile_lock_released".to_string(),
+            ]
+        })
 }
 pub(crate) async fn handle_snapshot(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
     let cancellation = state.current_cancellation.clone();

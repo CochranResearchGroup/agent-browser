@@ -170,6 +170,42 @@ fn test_close_behavior_for_launched_browser_detaches_only_for_named_runtime_prof
     );
 }
 #[test]
+fn managed_close_terminal_evidence_requires_exit_and_profile_unlock() {
+    let incomplete = BrowserShutdownOutcome {
+        exact_process_exited: true,
+        ..BrowserShutdownOutcome::default()
+    };
+    assert!(
+        crate::native::action_runtime::runtime::navigation::browser_terminal_evidence(&incomplete)
+            .is_none()
+    );
+
+    let complete = BrowserShutdownOutcome {
+        exact_process_exited: true,
+        profile_lock_released: true,
+        ..BrowserShutdownOutcome::default()
+    };
+    assert_eq!(
+        crate::native::action_runtime::runtime::navigation::browser_terminal_evidence(&complete),
+        Some(vec![
+            "exact_process_exited".to_string(),
+            "profile_lock_released".to_string(),
+        ])
+    );
+
+    let crashed = BrowserShutdownOutcome {
+        polite_close_failed: true,
+        exact_process_exited: true,
+        profile_lock_released: true,
+        errors: vec!["CDP channel already closed".to_string()],
+        ..BrowserShutdownOutcome::default()
+    };
+    assert!(
+        crate::native::action_runtime::runtime::navigation::browser_terminal_evidence(&crashed)
+            .is_some()
+    );
+}
+#[test]
 fn test_launch_profile_from_sources_prefers_command_then_env() {
     let guard = EnvGuard::new(&["AGENT_BROWSER_PROFILE"]);
     guard.set("AGENT_BROWSER_PROFILE", "/tmp/env-profile");

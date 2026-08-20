@@ -44,6 +44,7 @@ use crate::native::stream_runtime::{
 use serde_json::{json, Map, Value};
 use std::env;
 use std::fs;
+use std::path::Path;
 pub(crate) fn remote_headed_view_streams_from_command(command: &Value) -> Vec<ViewStream> {
     if browser_host_from_command(command) != Some(ServiceBrowserHost::RemoteHeaded) {
         return Vec::new();
@@ -464,11 +465,12 @@ pub(crate) fn refresh_cdp_screencast_view_streams(service_state: &mut ServiceSta
     }
 }
 pub(crate) fn persist_current_browser_health(
-    state: &DaemonState,
+    state: &mut DaemonState,
     host: ServiceBrowserHost,
     health: ServiceBrowserHealth,
     metadata: Option<ServiceLaunchMetadata>,
-) {
+) -> Result<(), String> {
+    register_current_browser_lifecycle(state)?;
     let preserves_existing_metadata = metadata.is_none();
     let (pid, cdp_endpoint, browser_stderr_log_path) = state
         .browser
@@ -530,6 +532,56 @@ pub(crate) fn persist_current_browser_health(
             });
         }
     }
+    Ok(())
+}
+
+fn register_current_browser_lifecycle(state: &mut DaemonState) -> Result<(), String> {
+    let Some(manager) = state.browser.as_ref() else {
+        return Ok(());
+    };
+    let Some(pid) = manager.browser_pid().or(state.attached_browser_pid) else {
+        return Ok(());
+    };
+    let profile_root = manager
+        .browser_user_data_dir()
+        .map(Path::to_path_buf)
+        .or_else(|| {
+            state
+                .attached_runtime_profile
+                .as_deref()
+                .and_then(|profile| {
+                    crate::runtime_profile::runtime_profile_user_data_dir(profile).ok()
+                })
+        });
+    let Some(profile_root) = profile_root else {
+        if manager.browser_pid().is_some() {
+            return Err("runtime_lifecycle_owned_browser_profile_unavailable".to_string());
+        }
+        return Ok(());
+    };
+    let process_identity = crate::process_identity::capture_process_identity(pid, None, None)
+        .ok_or_else(|| "runtime_lifecycle_process_identity_unavailable".to_string())?;
+    let registration = crate::native::runtime_lifecycle::ManagedLaneRegistration {
+        logical_browser_id: super::capability::service_browser_id(&state.session_id),
+        profile_root,
+        daemon_session_route: state.session_id.clone(),
+        process_identity,
+        browser_family: state.engine.clone(),
+        cdp_endpoint: manager.get_cdp_url().to_string(),
+        target_ids: manager
+            .pages_list()
+            .into_iter()
+            .map(|page| page.target_id)
+            .collect(),
+    };
+    let repository = LockedServiceStateRepository::default_json()?;
+    let binding = crate::native::runtime_lifecycle::RuntimeLifecycleAuthority::new(&repository)
+        .register_managed_lane(registration)?;
+    if let Some(manager) = state.browser.as_mut() {
+        manager.mark_lifecycle_managed();
+    }
+    state.runtime_owner_binding = Some(binding);
+    Ok(())
 }
 /// Enforces service-owned profile leases before Chrome starts.
 ///

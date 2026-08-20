@@ -108,6 +108,11 @@ pub(crate) struct ResourceSummary {
     pub(crate) observed_count: usize,
     pub(crate) candidate_rss_bytes: u64,
     pub(crate) total_rss_bytes: u64,
+    pub(crate) managed_lane_count: usize,
+    pub(crate) cleanup_obligations_owned: usize,
+    pub(crate) cleanup_obligations_transferring: usize,
+    pub(crate) cleanup_obligations_satisfied: usize,
+    pub(crate) cleanup_obligations_unknown: usize,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -241,6 +246,7 @@ fn service_resources_response_from_samples(
     json!({
         "summary": snapshot.summary,
         "resources": snapshot.resources,
+        "runtimeLanes": state.runtime_owner_registry.lifecycle_records.values().collect::<Vec<_>>(),
         "warnings": snapshot.warnings,
         "policy": {
             "protectsDashboardMainPid": snapshot.protects_dashboard_main_pid,
@@ -265,7 +271,7 @@ pub(crate) fn service_resource_authority_snapshot_from_samples(
         .collect::<Vec<_>>();
     records.sort_by_key(|record| record.pid);
 
-    let summary = summarize_resources(&records);
+    let summary = summarize_resources(state, &records);
     let warnings = resource_warnings(state, collection_warnings.clone());
     ResourceAuthoritySnapshot {
         summary,
@@ -563,7 +569,8 @@ fn classify_process(
     })
 }
 
-fn summarize_resources(records: &[ResourceRecord]) -> ResourceSummary {
+fn summarize_resources(state: &ServiceState, records: &[ResourceRecord]) -> ResourceSummary {
+    let lifecycle_records = state.runtime_owner_registry.lifecycle_records.values();
     ResourceSummary {
         total_processes: records.len(),
         correlated_processes: records
@@ -592,6 +599,34 @@ fn summarize_resources(records: &[ResourceRecord]) -> ResourceSummary {
             .filter_map(|record| record.rss_bytes)
             .sum(),
         total_rss_bytes: records.iter().filter_map(|record| record.rss_bytes).sum(),
+        managed_lane_count: state.runtime_owner_registry.lifecycle_records.len(),
+        cleanup_obligations_owned: lifecycle_records
+            .clone()
+            .filter(|record| {
+                record.cleanup_obligation_state
+                    == crate::runtime_owner_transfer::CleanupObligationState::Owned
+            })
+            .count(),
+        cleanup_obligations_transferring: lifecycle_records
+            .clone()
+            .filter(|record| {
+                record.cleanup_obligation_state
+                    == crate::runtime_owner_transfer::CleanupObligationState::Transferring
+            })
+            .count(),
+        cleanup_obligations_satisfied: lifecycle_records
+            .clone()
+            .filter(|record| {
+                record.cleanup_obligation_state
+                    == crate::runtime_owner_transfer::CleanupObligationState::Satisfied
+            })
+            .count(),
+        cleanup_obligations_unknown: lifecycle_records
+            .filter(|record| {
+                record.cleanup_obligation_state
+                    == crate::runtime_owner_transfer::CleanupObligationState::Unknown
+            })
+            .count(),
     }
 }
 
@@ -1503,6 +1538,35 @@ mod tests {
         assert!(!warnings
             .iter()
             .any(|warning| warning["code"] == "duplicate_active_profile_leases"));
+    }
+
+    #[test]
+    fn resources_project_lifecycle_cleanup_accountability() {
+        let mut state = ServiceState::default();
+        state.runtime_owner_registry.lifecycle_records.insert(
+            "browser-owned".to_string(),
+            crate::runtime_owner_transfer::RuntimeLifecycleRecord {
+                logical_browser_id: "browser-owned".to_string(),
+                profile_identity_digest: "a".repeat(64),
+                owner_generation: 3,
+                lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Retained,
+                cleanup_obligation_state:
+                    crate::runtime_owner_transfer::CleanupObligationState::Owned,
+                process_group_id: Some(4100),
+                package_launch_identity_digest: Some("b".repeat(64)),
+                terminal_evidence: Vec::new(),
+            },
+        );
+
+        let response = service_resources_response_from_samples(&state, Vec::new(), Vec::new());
+
+        assert_eq!(response["summary"]["managedLaneCount"], 1);
+        assert_eq!(response["summary"]["cleanupObligationsOwned"], 1);
+        assert_eq!(
+            response["runtimeLanes"][0]["logicalBrowserId"],
+            "browser-owned"
+        );
+        assert_eq!(response["runtimeLanes"][0]["lifecycleState"], "retained");
     }
 
     #[test]

@@ -2829,7 +2829,13 @@ The persisted service state also includes bounded audit records for recent contr
 Use `service reconcile` to run the persisted browser health and target probes intentionally without requesting a control-plane status snapshot. This command updates the same `reconciliation` snapshot, expires due or orphaned session leases without launching a browser, returns `expiredSessionLeases`, `expiredSessionLeaseCount`, `remoteViewRepair`, and `routePoolRefresh`, refreshes live tab records for reachable browser CDP endpoints, and appends service events. The local runtime interlock passes the readiness-verified pool through `--authoritative-route-pool-json <json-array>` so stable route entries track current Guacamole connection and display assignments after a reboot. A conflicting active allocation is retained and reported in `skippedActiveConflictEntryIds` instead of being redirected.
 
 Use `service resources` or HTTP `GET /api/service/resources` to inspect the
-read-only resource monitor summary without launching a browser. Use
+read-only resource monitor summary without launching a browser. The response
+includes `runtimeLanes` plus managed-lane and cleanup-obligation counts. A
+package-launched or managed-attached Chrome lane is registered with canonical
+profile, exact process, CDP endpoint, owner-generation, and target-set evidence
+before it is projected ready. Ownership transfer, retained detach, recovery,
+and owned close move the same cleanup obligation; terminal close requires exact
+process exit and profile-lock release. Use
 `service gc --dry-run` to receive a short-lived review token for conservative
 cleanup candidates, then use `service gc --apply --review-token <token>` only
 after reviewing that dry-run. Apply mode re-reads process identity before

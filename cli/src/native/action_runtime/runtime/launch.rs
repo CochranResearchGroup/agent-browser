@@ -176,7 +176,7 @@ pub(crate) async fn attach_managed_runtime_browser(
         ServiceBrowserHost::AttachedExisting,
         ServiceBrowserHealth::Ready,
         Some(metadata),
-    );
+    )?;
     Ok(())
 }
 pub(crate) async fn attach_shared_profile_browser_for_auto_launch(
@@ -210,7 +210,7 @@ pub(crate) async fn attach_shared_profile_browser_for_auto_launch(
         ServiceBrowserHost::AttachedExisting,
         ServiceBrowserHealth::Ready,
         Some(metadata),
-    );
+    )?;
     Ok(())
 }
 pub(crate) async fn attach_retained_service_session_browser_for_auto_launch(
@@ -222,6 +222,16 @@ pub(crate) async fn attach_retained_service_session_browser_for_auto_launch(
     state.attached_browser_pid = target.browser_pid;
     state.close_behavior = CloseBehavior::Detach;
     state.browser = Some(BrowserManager::connect_cdp(&target.cdp_endpoint).await?);
+    let repository = LockedServiceStateRepository::default_json()?;
+    let mut binding =
+        crate::runtime_owner_transfer::owner_binding_for_session(&repository, &state.session_id)?
+            .ok_or_else(|| "runtime_lifecycle_retained_attach_owner_missing".to_string())?;
+    if binding.claim.logical_browser_id != target.browser_id {
+        return Err("runtime_lifecycle_retained_attach_browser_mismatch".to_string());
+    }
+    crate::native::runtime_lifecycle::RuntimeLifecycleAuthority::new(&repository)
+        .authorize_effect(&mut binding)?;
+    state.runtime_owner_binding = Some(binding);
     state.subscribe_to_browser_events();
     state.start_fetch_handler();
     state.start_dialog_handler();
@@ -596,7 +606,7 @@ pub(crate) async fn auto_launch(state: &mut DaemonState, command: &Value) -> Res
             ServiceBrowserHost::AttachedExisting,
             ServiceBrowserHealth::Ready,
             Some(metadata),
-        );
+        )?;
         try_auto_restore_state(state).await;
         return Ok(());
     }
@@ -615,7 +625,7 @@ pub(crate) async fn auto_launch(state: &mut DaemonState, command: &Value) -> Res
             ServiceBrowserHost::AttachedExisting,
             ServiceBrowserHealth::Ready,
             None,
-        );
+        )?;
         try_auto_restore_state(state).await;
         return Ok(());
     }
@@ -652,7 +662,7 @@ pub(crate) async fn auto_launch(state: &mut DaemonState, command: &Value) -> Res
                         ServiceBrowserHost::CloudProvider,
                         ServiceBrowserHealth::Ready,
                         None,
-                    );
+                    )?;
                     try_auto_restore_state(state).await;
                     return Ok(());
                 }
@@ -694,7 +704,7 @@ pub(crate) async fn auto_launch(state: &mut DaemonState, command: &Value) -> Res
         service_host,
         ServiceBrowserHealth::Ready,
         Some(metadata),
-    );
+    )?;
     if has_proxy_auth {
         if let Some(ref mgr) = state.browser {
             if let Ok(session_id) = mgr.active_session_id() {
@@ -919,16 +929,9 @@ pub(crate) async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Resul
         true
     };
     if needs_relaunch {
-        if let Some(ref mut b) = state.browser {
-            b.close().await?;
-            state.browser = None;
-            state.launch_hash = None;
-            state.attached_runtime_profile = None;
-            state.attached_browser_pid = None;
+        if state.browser.is_some() {
             state.close_behavior = CloseBehavior::CloseBrowser;
-            state.screencasting = false;
-            state.reset_input_state();
-            state.update_stream_client().await;
+            super::navigation::handle_close(state).await?;
         }
     } else {
         persist_current_browser_health(
@@ -936,7 +939,7 @@ pub(crate) async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Resul
             service_host,
             ServiceBrowserHealth::Ready,
             Some(metadata),
-        );
+        )?;
         return Ok(json!({ "launched" : true, "reused" : true }));
     }
     state.ref_map.clear();
@@ -964,7 +967,7 @@ pub(crate) async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Resul
             service_host,
             ServiceBrowserHealth::Ready,
             Some(metadata),
-        );
+        )?;
         return Ok(json!({ "launched" : true }));
     }
     if let Some(port) = cdp_port {
@@ -991,7 +994,7 @@ pub(crate) async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Resul
             service_host,
             ServiceBrowserHealth::Ready,
             Some(metadata),
-        );
+        )?;
         return Ok(json!({ "launched" : true }));
     }
     if auto_connect {
@@ -1004,7 +1007,7 @@ pub(crate) async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Resul
         state.start_fetch_handler();
         state.start_dialog_handler();
         state.update_stream_client().await;
-        persist_current_browser_health(state, service_host, ServiceBrowserHealth::Ready, None);
+        persist_current_browser_health(state, service_host, ServiceBrowserHealth::Ready, None)?;
         return Ok(json!({ "launched" : true }));
     }
     if let Some(provider) = cmd.get("provider").and_then(|v| v.as_str()) {
@@ -1046,7 +1049,7 @@ pub(crate) async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Resul
                             service_host,
                             ServiceBrowserHealth::Ready,
                             None,
-                        );
+                        )?;
                         if let Some(info) = providers::get_agentcore_info() {
                             return Ok(json!(
                                 { "launched" : true, "provider" : provider,
@@ -1131,7 +1134,7 @@ pub(crate) async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Resul
         service_host,
         ServiceBrowserHealth::Ready,
         Some(metadata),
-    );
+    )?;
     {
         let df = state.domain_filter.read().await;
         let has_domain_filter = df.is_some();
@@ -1285,7 +1288,7 @@ pub(crate) async fn handle_external_byop_adopt(
         ServiceBrowserHost::AttachedExisting,
         ServiceBrowserHealth::Ready,
         Some(metadata),
-    );
+    )?;
     let open_url = optional_command_string(cmd, "url").unwrap_or_else(|| "about:blank".to_string());
     let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
     let opened = mgr.tab_new(Some(open_url.as_str())).await?;
