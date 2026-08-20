@@ -364,6 +364,7 @@ struct RuntimeLane {
     control_plane: ControlPlaneHandle,
     stream_server: Option<Arc<StreamServer>>,
     stream_file: Option<PathBuf>,
+    config: crate::runtime_host::RuntimeLaneConfig,
 }
 
 #[derive(Clone)]
@@ -392,6 +393,15 @@ impl RuntimeHostRouter {
         stream_file: Option<PathBuf>,
         options: RuntimeHostWorkerOptions,
     ) -> Result<Self, String> {
+        let initial_config = crate::session_supervisor::runtime_host_supervised_lane_configs()
+            .ok()
+            .and_then(|configs| {
+                configs
+                    .into_iter()
+                    .find(|(session, _)| session == initial_session)
+                    .map(|(_, config)| config)
+            })
+            .unwrap_or_default();
         let lanes = Arc::new(crate::runtime_host::RuntimeLaneRegistry::new(
             crate::runtime_host::DEFAULT_MAX_RUNTIME_LANES,
         ));
@@ -411,6 +421,7 @@ impl RuntimeHostRouter {
                 control_plane,
                 stream_server,
                 stream_file,
+                config: initial_config,
             },
         )?;
         Ok(Self {
@@ -421,6 +432,19 @@ impl RuntimeHostRouter {
             service_job_timeout_ms: options.service_job_timeout_ms,
             service_monitor_interval_ms: options.service_monitor_interval_ms,
         })
+    }
+
+    async fn preload_supervised_lanes(&self, initial_session: &str) -> Result<(), String> {
+        if !crate::runtime_host::admission_enabled() {
+            return Ok(());
+        }
+        for (session, config) in crate::session_supervisor::runtime_host_supervised_lane_configs()?
+        {
+            if session != initial_session {
+                self.lane(&session, Some(config)).await?;
+            }
+        }
+        Ok(())
     }
 
     async fn lane(
@@ -481,6 +505,7 @@ impl RuntimeHostRouter {
             ),
             stream_server,
             stream_file,
+            config,
         };
         self.lanes.insert(session.to_string(), lane)
     }
@@ -546,6 +571,7 @@ async fn run_socket_server(
             service_monitor_interval_ms,
         },
     )?;
+    router.preload_supervised_lanes(session).await?;
 
     let (reset_tx, mut reset_rx) = mpsc::channel::<()>(64);
     let reset_tx = idle_timeout_ms.map(|_| Arc::new(reset_tx));
@@ -661,6 +687,7 @@ async fn run_socket_server(
             service_monitor_interval_ms,
         },
     )?;
+    router.preload_supervised_lanes(session).await?;
 
     let (reset_tx, mut reset_rx) = mpsc::channel::<()>(64);
     let reset_tx = idle_timeout_ms.map(|_| Arc::new(reset_tx));
@@ -823,6 +850,13 @@ async fn handle_connection<S>(
                     }
                 };
                 let control_plane = lane.control_plane.clone();
+                if let (Some(runtime_profile), Some(object)) =
+                    (lane.config.runtime_profile.as_ref(), cmd.as_object_mut())
+                {
+                    object
+                        .entry("runtimeProfile".to_string())
+                        .or_insert_with(|| Value::String(runtime_profile.clone()));
+                }
 
                 if let Some(ref tx) = idle_reset_tx {
                     let _ = tx.try_send(());

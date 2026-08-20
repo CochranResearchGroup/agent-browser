@@ -403,6 +403,7 @@ fn cache_runtime_lane_config(session: &str, opts: &DaemonOptions<'_>) {
         .and_then(|value| value.parse::<u16>().ok())
         .filter(|port| *port > 0);
     let config = crate::runtime_host::RuntimeLaneConfig {
+        runtime_profile: opts.runtime_profile.map(str::to_string),
         session_name: opts.session_name.map(str::to_string),
         allowed_domains: opts.allowed_domains.map(|domains| domains.join(",")),
         action_policy: opts.action_policy.map(str::to_string),
@@ -428,6 +429,15 @@ fn cache_runtime_lane_config(session: &str, opts: &DaemonOptions<'_>) {
 
 fn cached_runtime_lane_config(session: &str) -> Option<crate::runtime_host::RuntimeLaneConfig> {
     runtime_lane_configs().lock().ok()?.get(session).cloned()
+}
+
+pub(crate) fn register_runtime_lane_config(
+    session: &str,
+    config: crate::runtime_host::RuntimeLaneConfig,
+) {
+    if let Ok(mut configs) = runtime_lane_configs().lock() {
+        configs.insert(session.to_string(), config);
+    }
 }
 
 fn apply_daemon_env(cmd: &mut Command, session: &str, opts: &DaemonOptions) {

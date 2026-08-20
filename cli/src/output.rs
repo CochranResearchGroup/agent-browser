@@ -5368,11 +5368,11 @@ Operations:
   (none)               Show current session name
   list                 List all active sessions
   supervisor install <session> --stream-port <port>
-                       Install and start a Linux user service for one named daemon
+                       Install one named lane under the Linux runtime host service
   supervisor status <session>
-                       Report unit, executable, restart, and fixed-port readiness
+                       Report shared host, executable, restart, and lane-port readiness
   supervisor remove <session>
-                       Stop and remove only the named daemon supervisor
+                       Close and remove only the named runtime lane
 
 Environment:
   AGENT_BROWSER_SESSION    Default session name
@@ -6820,9 +6820,9 @@ Confirmation:
 Sessions:
   session                    Show current session name
   session list               List active sessions
-  session supervisor install Install and start one named Linux daemon service
-  session supervisor status  Report named daemon and fixed-port readiness
-  session supervisor remove  Stop and remove only one named daemon service
+  session supervisor install Install one named lane under the Linux runtime host
+  session supervisor status  Report shared host and lane-port readiness
+  session supervisor remove  Close and remove only one named runtime lane
 
 Chat (AI):
   chat <message>             Send a natural language instruction (single-shot)

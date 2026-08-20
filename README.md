@@ -1056,27 +1056,33 @@ The guarded runtime-host foundation can route several named sessions through
 one authenticated daemon process while keeping each session in an independent
 serialized lane. Set `AGENT_BROWSER_RUNTIME_HOST=1` for disposable validation.
 Closing one lane leaves the other lanes running. This migration switch is not
-yet the default and does not authorize cleanup of legacy daemons.
+yet the default for ordinary CLI sessions; the Linux supervisor always uses
+the shared host. Neither path authorizes cleanup of legacy daemons.
 
-On Linux, a named daemon can run under a bounded user-service supervisor
-without launching a browser. The install command records the exact executable
-and fixed loopback stream port. Status reports executable drift, port
-conflicts, restart exhaustion, and whether the published stream is reachable.
+On Linux, named sessions can run as lanes under one bounded user-scoped runtime
+host service without launching a browser. Each install records the exact
+executable and fixed loopback stream port in a lane manifest. Status reports
+shared-host executable drift, port conflicts, restart exhaustion, and whether
+the lane stream is reachable.
 
 ```bash
-# Install and start one named daemon supervisor
+# Install one named lane and start or reuse the shared runtime host
 agent-browser session supervisor install messages-v4 --stream-port 39716
 
 # Inspect the exact unit, executable, restart, and port state
 agent-browser session supervisor status messages-v4 --json
 
-# Stop and remove only this supervisor
+# Close and remove only this lane
 agent-browser session supervisor remove messages-v4
 ```
 
 The remove operation preserves browser profiles, browser storage, service
-state, and unrelated user services. The supervised daemon does not open a
-browser until an authenticated effectful request explicitly asks it to.
+state, other lanes, and unrelated user services. It stops the shared host only
+after the final supervised lane is removed. The host does not open a browser
+until an authenticated effectful request explicitly asks it to.
+Legacy `agent-browser-session@<name>.service` starts are retained as oneshot
+forwarders that admit the named lane into the shared host; they cannot launch a
+per-session daemon.
 
 Each session has its own:
 

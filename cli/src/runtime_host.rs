@@ -81,6 +81,7 @@ pub(crate) fn take_lane_config(command: &mut Value) -> Result<Option<RuntimeLane
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct RuntimeLaneConfig {
+    pub(crate) runtime_profile: Option<String>,
     pub(crate) session_name: Option<String>,
     pub(crate) allowed_domains: Option<String>,
     pub(crate) action_policy: Option<String>,
@@ -245,6 +246,7 @@ mod tests {
         let guard = EnvGuard::new(&[RUNTIME_HOST_ENV]);
         guard.set(RUNTIME_HOST_ENV, "1");
         let config = RuntimeLaneConfig {
+            runtime_profile: Some("profile-a".to_string()),
             session_name: Some("durable-auth".to_string()),
             allowed_domains: Some("example.com,*.example.com".to_string()),
             action_policy: Some("/tmp/policy.json".to_string()),

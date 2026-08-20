@@ -13,11 +13,14 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use crate::connection::{generate_daemon_auth_token, get_socket_dir, write_daemon_auth_token};
+use crate::connection::{
+    daemon_ready, generate_daemon_auth_token, get_socket_dir, register_runtime_lane_config,
+    send_command, write_daemon_auth_token,
+};
 use crate::validation::is_valid_session_name;
 
 const SUPERVISOR_SCHEMA_VERSION: &str = "agent-browser.session-supervisor.v1";
-const SUPERVISOR_UNIT_TEMPLATE: &str = "agent-browser-session@.service";
+const SUPERVISOR_UNIT_NAME: &str = "agent-browser-runtime-host.service";
 const SYSTEMCTL_TIMEOUT: Duration = Duration::from_secs(5);
 const SYSTEMCTL_POLL_INTERVAL: Duration = Duration::from_millis(25);
 static SYSTEMCTL_OUTPUT_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -134,7 +137,15 @@ pub(crate) fn render_unit(executable_path: &str) -> Result<String, String> {
     validate_absolute_text_path(executable_path, "executable path")?;
     let executable = systemd_quote(executable_path);
     Ok(format!(
-        "[Unit]\nDescription=Agent Browser supervised daemon session %i\nAfter=default.target\nStartLimitIntervalSec=60\nStartLimitBurst=5\n\n[Service]\nType=simple\nExecStart={executable} session supervisor run %i\nRestart=on-failure\nRestartSec=2\nNoNewPrivileges=true\nPrivateTmp=true\n\n[Install]\nWantedBy=default.target\n"
+        "[Unit]\nDescription=Agent Browser user runtime host\nAfter=default.target\nStartLimitIntervalSec=60\nStartLimitBurst=5\n\n[Service]\nType=simple\nExecStart={executable} session supervisor run-host\nRestart=on-failure\nRestartSec=2\nNoNewPrivileges=true\nPrivateTmp=true\n\n[Install]\nWantedBy=default.target\n"
+    ))
+}
+
+fn render_legacy_forwarder_unit(executable_path: &str) -> Result<String, String> {
+    validate_absolute_text_path(executable_path, "executable path")?;
+    let executable = systemd_quote(executable_path);
+    Ok(format!(
+        "[Unit]\nDescription=Agent Browser runtime lane compatibility adapter %i\nRequires={SUPERVISOR_UNIT_NAME}\nAfter={SUPERVISOR_UNIT_NAME}\n\n[Service]\nType=oneshot\nExecStart={executable} session supervisor run-lane %i\nRemainAfterExit=yes\nNoNewPrivileges=true\nPrivateTmp=true\n\n[Install]\nWantedBy=default.target\n"
     ))
 }
 
@@ -143,7 +154,11 @@ pub(crate) fn manifest_path(paths: &SessionSupervisorPaths, session: &str) -> Pa
 }
 
 pub(crate) fn unit_path(paths: &SessionSupervisorPaths) -> PathBuf {
-    paths.unit_dir.join(SUPERVISOR_UNIT_TEMPLATE)
+    paths.unit_dir.join(SUPERVISOR_UNIT_NAME)
+}
+
+fn legacy_unit_path(paths: &SessionSupervisorPaths) -> PathBuf {
+    paths.unit_dir.join("agent-browser-session@.service")
 }
 
 fn validate_absolute_text_path(value: &str, label: &str) -> Result<(), String> {
@@ -208,6 +223,10 @@ fn run_session_supervisor_inner(args: &[String]) -> Result<Value, String> {
         .get(base + 2)
         .map(String::as_str)
         .ok_or_else(supervisor_usage)?;
+    let paths = default_paths()?;
+    if operation == "run-host" {
+        return run_supervised_host(&paths);
+    }
     let session = args
         .get(base + 3)
         .map(String::as_str)
@@ -215,7 +234,6 @@ fn run_session_supervisor_inner(args: &[String]) -> Result<Value, String> {
     if !is_valid_session_name(session) {
         return Err(crate::validation::session_name_error(session));
     }
-    let paths = default_paths()?;
     match operation {
         "install" => {
             let request = parse_install_request(args, base, session)?;
@@ -223,7 +241,7 @@ fn run_session_supervisor_inner(args: &[String]) -> Result<Value, String> {
         }
         "status" => status_report(&paths, session).map(|report| json!(report)),
         "remove" => remove_supervisor(&paths, session),
-        "run" => run_supervised_daemon(&paths, session),
+        "run-lane" => run_supervised_lane(&paths, session),
         _ => Err(supervisor_usage()),
     }
 }
@@ -320,15 +338,49 @@ fn install_supervisor(
     request: &InstallRequest,
 ) -> Result<Value, String> {
     validate_install_request(request)?;
+    let existing_manifests = supervised_manifests(paths)?;
+    if let Some(conflict) = existing_manifests.iter().find(|manifest| {
+        manifest.session != request.session && manifest.stream_port == request.stream_port
+    }) {
+        return Err(format!(
+            "port_conflict: stream port {} is already assigned to supervised lane {}",
+            request.stream_port, conflict.session
+        ));
+    }
+    let mut legacy_sessions = existing_manifests
+        .iter()
+        .map(|manifest| manifest.session.clone())
+        .collect::<Vec<_>>();
+    legacy_sessions.push(request.session.clone());
+    legacy_sessions.sort();
+    legacy_sessions.dedup();
+    for session in legacy_sessions {
+        if legacy_supervisor_is_active(paths, &session)? {
+            return Err(format!(
+                "legacy_supervisor_transfer_required: {session} is still owned by an active per-session unit; use the runtime convergence transaction before enabling the shared host"
+            ));
+        }
+    }
     let executable = env::current_exe()
         .map_err(|error| format!("could not resolve current executable: {error}"))?
         .canonicalize()
         .map_err(|error| format!("could not canonicalize current executable: {error}"))?;
+    let executable_path = executable.display().to_string();
+    let executable_sha256 = sha256_file(&executable)?;
+    if let Some(stale) = existing_manifests.iter().find(|manifest| {
+        manifest.executable_path != executable_path
+            || manifest.executable_sha256 != executable_sha256
+    }) {
+        return Err(format!(
+            "runtime_host_convergence_required: supervised lane {} records another executable generation",
+            stale.session
+        ));
+    }
     let manifest = SessionSupervisorManifest {
         schema_version: SUPERVISOR_SCHEMA_VERSION.to_string(),
         session: request.session.clone(),
-        executable_path: executable.display().to_string(),
-        executable_sha256: sha256_file(&executable)?,
+        executable_path,
+        executable_sha256,
         stream_port: request.stream_port,
         runtime_profile: request.runtime_profile.clone(),
         service_config_path: request.service_config_path.clone(),
@@ -343,6 +395,7 @@ fn install_supervisor(
     run_systemctl(&["--user", "daemon-reload"])?;
     let unit = unit_name(&request.session);
     run_systemctl(&["--user", "enable", "--now", &unit])?;
+    admit_supervised_lane(&manifest)?;
     Ok(json!({
         "schemaVersion": SUPERVISOR_SCHEMA_VERSION,
         "state": "installed",
@@ -352,6 +405,25 @@ fn install_supervisor(
         "streamPort": request.stream_port,
         "browserLaunched": false,
     }))
+}
+
+fn legacy_supervisor_is_active(
+    paths: &SessionSupervisorPaths,
+    session: &str,
+) -> Result<bool, String> {
+    let template = legacy_unit_path(paths);
+    if !template.is_file() {
+        return Ok(false);
+    }
+    if fs::read_to_string(&template)
+        .ok()
+        .is_some_and(|unit| unit.contains("session supervisor run-lane %i"))
+    {
+        return Ok(false);
+    }
+    let unit = format!("agent-browser-session@{session}.service");
+    let output = run_systemctl_output(&["--user", "is-active", &unit])?;
+    Ok(output.status.success() && String::from_utf8_lossy(&output.stdout).trim() == "active")
 }
 
 fn write_manifest_and_unit(
@@ -375,6 +447,11 @@ fn write_manifest_and_unit(
         &unit_path(paths),
         render_unit(&manifest.executable_path)?.as_bytes(),
         false,
+    )?;
+    replace_file(
+        &legacy_unit_path(paths),
+        render_legacy_forwarder_unit(&manifest.executable_path)?.as_bytes(),
+        false,
     )
 }
 
@@ -385,9 +462,24 @@ fn remove_supervisor(paths: &SessionSupervisorPaths, session: &str) -> Result<Va
         return Err("invalid_manifest: session does not match requested removal".to_string());
     }
     let unit = unit_name(session);
-    run_systemctl(&["--user", "disable", "--now", &unit])?;
+    env::set_var(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+    if daemon_ready(session) {
+        let _ = send_command(
+            json!({
+                "id": format!("supervisor-remove-{session}"),
+                "action": "close",
+            }),
+            session,
+        );
+    }
+    let legacy_unit = format!("agent-browser-session@{session}.service");
+    let _ = run_systemctl(&["--user", "disable", "--now", &legacy_unit]);
     fs::remove_file(&path)
         .map_err(|error| format!("could not remove supervisor manifest: {error}"))?;
+    let remaining = supervised_manifests(paths)?;
+    if remaining.is_empty() {
+        run_systemctl(&["--user", "disable", "--now", &unit])?;
+    }
     run_systemctl(&["--user", "daemon-reload"])?;
     Ok(json!({
         "schemaVersion": SUPERVISOR_SCHEMA_VERSION,
@@ -398,32 +490,126 @@ fn remove_supervisor(paths: &SessionSupervisorPaths, session: &str) -> Result<Va
     }))
 }
 
-fn run_supervised_daemon(paths: &SessionSupervisorPaths, session: &str) -> Result<Value, String> {
-    let manifest = load_manifest(&manifest_path(paths, session))?;
-    if manifest.session != session {
-        return Err("invalid_manifest: session does not match requested unit".to_string());
+fn run_supervised_host(paths: &SessionSupervisorPaths) -> Result<Value, String> {
+    let manifests = supervised_manifests(paths)?;
+    let manifest = manifests
+        .first()
+        .ok_or("runtime_host_supervisor_empty: no lane manifests are installed")?;
+    for candidate in &manifests {
+        verify_manifest_executable(candidate)?;
+        let listener =
+            TcpListener::bind(("127.0.0.1", candidate.stream_port)).map_err(|error| {
+                format!(
+                    "port_conflict: loopback port {} for lane {} is unavailable: {error}",
+                    candidate.stream_port, candidate.session
+                )
+            })?;
+        drop(listener);
     }
-    verify_manifest_executable(&manifest)?;
-    let listener = TcpListener::bind(("127.0.0.1", manifest.stream_port)).map_err(|error| {
-        format!(
-            "port_conflict: loopback port {} is unavailable: {error}",
-            manifest.stream_port
-        )
-    })?;
-    drop(listener);
+    env::set_var(crate::runtime_host::RUNTIME_HOST_ENV, "1");
     let token = generate_daemon_auth_token()?;
-    write_daemon_auth_token(session, &token)?;
-    for (name, value) in supervised_daemon_environment(&manifest, &token) {
+    write_daemon_auth_token(&manifest.session, &token)?;
+    for (name, value) in supervised_daemon_environment(manifest, &token) {
         env::set_var(name, value);
     }
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|error| format!("could not start daemon runtime: {error}"))?;
-    runtime.block_on(crate::native::daemon::run_daemon(session));
+    runtime.block_on(crate::native::daemon::run_daemon(&manifest.session));
     Ok(json!({
         "schemaVersion": SUPERVISOR_SCHEMA_VERSION,
         "state": "stopped",
-        "session": session,
+        "unit": SUPERVISOR_UNIT_NAME,
     }))
+}
+
+fn run_supervised_lane(paths: &SessionSupervisorPaths, session: &str) -> Result<Value, String> {
+    let manifest = load_manifest(&manifest_path(paths, session))?;
+    verify_manifest_executable(&manifest)?;
+    admit_supervised_lane(&manifest)?;
+    Ok(json!({
+        "schemaVersion": SUPERVISOR_SCHEMA_VERSION,
+        "state": "admitted",
+        "session": session,
+        "unit": SUPERVISOR_UNIT_NAME,
+    }))
+}
+
+fn supervised_manifests(
+    paths: &SessionSupervisorPaths,
+) -> Result<Vec<SessionSupervisorManifest>, String> {
+    if !paths.manifest_dir.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut manifests = fs::read_dir(&paths.manifest_dir)
+        .map_err(|error| format!("could not read supervisor manifests: {error}"))?
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().extension().and_then(|value| value.to_str()) == Some("json"))
+        .map(|entry| load_manifest(&entry.path()))
+        .collect::<Result<Vec<_>, _>>()?;
+    manifests.sort_by(|left, right| left.session.cmp(&right.session));
+    let mut ports = std::collections::BTreeSet::new();
+    for manifest in &manifests {
+        if !ports.insert(manifest.stream_port) {
+            return Err(format!(
+                "port_conflict: supervised stream port {} is assigned more than once",
+                manifest.stream_port
+            ));
+        }
+    }
+    Ok(manifests)
+}
+
+fn runtime_lane_config_from_manifest(
+    manifest: &SessionSupervisorManifest,
+) -> crate::runtime_host::RuntimeLaneConfig {
+    crate::runtime_host::RuntimeLaneConfig {
+        runtime_profile: manifest.runtime_profile.clone(),
+        stream_port: Some(manifest.stream_port),
+        ..Default::default()
+    }
+}
+
+pub(crate) fn runtime_host_supervised_lane_configs(
+) -> Result<Vec<(String, crate::runtime_host::RuntimeLaneConfig)>, String> {
+    let paths = default_paths()?;
+    Ok(supervised_manifests(&paths)?
+        .into_iter()
+        .map(|manifest| {
+            let config = runtime_lane_config_from_manifest(&manifest);
+            (manifest.session, config)
+        })
+        .collect())
+}
+
+fn admit_supervised_lane(manifest: &SessionSupervisorManifest) -> Result<(), String> {
+    env::set_var(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+    register_runtime_lane_config(
+        &manifest.session,
+        runtime_lane_config_from_manifest(manifest),
+    );
+    let started = Instant::now();
+    while !daemon_ready(&manifest.session) {
+        if started.elapsed() >= SYSTEMCTL_TIMEOUT {
+            return Err(
+                "runtime_host_start_timeout: supervised host did not become ready".to_string(),
+            );
+        }
+        thread::sleep(SYSTEMCTL_POLL_INTERVAL);
+    }
+    let response = send_command(
+        json!({
+            "id": format!("supervisor-admit-{}", manifest.session),
+            "action": "worker_status",
+        }),
+        &manifest.session,
+    )?;
+    if response.success {
+        Ok(())
+    } else {
+        Err(response
+            .error
+            .unwrap_or_else(|| "runtime_host_lane_admission_failed".to_string()))
+    }
 }
 
 fn supervised_daemon_environment(
@@ -432,6 +618,7 @@ fn supervised_daemon_environment(
 ) -> Vec<(&'static str, String)> {
     let mut values = vec![
         ("AGENT_BROWSER_DAEMON_AUTH_TOKEN", token.to_string()),
+        (crate::runtime_host::RUNTIME_HOST_ENV, "1".to_string()),
         ("AGENT_BROWSER_SESSION", manifest.session.clone()),
         (
             "AGENT_BROWSER_STREAM_PORT",
@@ -610,7 +797,7 @@ fn classify_status(
         } else {
             issues.push(issue(
                 "supervisor_stopped",
-                "The named daemon supervisor is not active and ready.",
+                "The shared runtime host supervisor is not active and ready.",
             ));
         }
         ("stopped", false)
@@ -844,8 +1031,8 @@ fn set_file_private(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn unit_name(session: &str) -> String {
-    format!("agent-browser-session@{session}.service")
+fn unit_name(_session: &str) -> String {
+    SUPERVISOR_UNIT_NAME.to_string()
 }
 
 fn loopback_port_reachable(port: u16) -> bool {
@@ -937,17 +1124,23 @@ mod tests {
     }
 
     #[test]
-    fn unit_is_an_instance_service_without_shell_interpolation() {
+    fn unit_is_one_runtime_host_service_without_shell_interpolation() {
         let unit = render_unit("/home/test/Agent Browser/bin/agent-browser").expect("unit");
         assert!(unit.contains("Restart=on-failure"));
         assert!(unit.contains("StartLimitBurst=5"));
         assert!(unit.contains("StartLimitIntervalSec=60"));
         assert!(unit.contains(
-            "ExecStart=\"/home/test/Agent Browser/bin/agent-browser\" session supervisor run %i"
+            "ExecStart=\"/home/test/Agent Browser/bin/agent-browser\" session supervisor run-host"
         ));
         assert!(!unit.contains("/bin/sh"));
         assert!(!unit.contains("sh -c"));
         assert!(!unit.contains("AGENT_BROWSER_HEADED"));
+        let forwarder = render_legacy_forwarder_unit("/home/test/Agent Browser/bin/agent-browser")
+            .expect("forwarder");
+        assert!(forwarder.contains("Requires=agent-browser-runtime-host.service"));
+        assert!(forwarder.contains("session supervisor run-lane %i"));
+        assert!(forwarder.contains("[Install]\nWantedBy=default.target"));
+        assert!(!forwarder.contains("session supervisor run %i"));
     }
 
     #[test]
@@ -962,6 +1155,10 @@ mod tests {
         );
         assert_eq!(
             unit_path(&paths),
+            PathBuf::from("/tmp/units/agent-browser-runtime-host.service")
+        );
+        assert_eq!(
+            legacy_unit_path(&paths),
             PathBuf::from("/tmp/units/agent-browser-session@.service")
         );
     }
@@ -981,7 +1178,10 @@ mod tests {
         assert_eq!(decoded, manifest());
         assert!(fs::read_to_string(unit_path(&paths))
             .expect("unit")
-            .contains("session supervisor run %i"));
+            .contains("session supervisor run-host"));
+        assert!(fs::read_to_string(legacy_unit_path(&paths))
+            .expect("legacy forwarder")
+            .contains("session supervisor run-lane %i"));
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -1002,6 +1202,45 @@ mod tests {
                 0o700
             );
         }
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn host_inventory_preloads_distinct_fixed_port_lanes() {
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-supervisor-host-inventory-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = SessionSupervisorPaths {
+            manifest_dir: root.join("manifests"),
+            unit_dir: root.join("units"),
+        };
+        let alpha = manifest();
+        let mut beta = manifest();
+        beta.session = "messages-v5".to_string();
+        beta.stream_port = 39_717;
+        beta.runtime_profile = Some("messages-v5".to_string());
+        write_manifest_and_unit(&paths, &alpha).unwrap();
+        write_manifest_and_unit(&paths, &beta).unwrap();
+
+        let manifests = supervised_manifests(&paths).unwrap();
+        assert_eq!(
+            manifests
+                .iter()
+                .map(|manifest| (manifest.session.as_str(), manifest.stream_port))
+                .collect::<Vec<_>>(),
+            vec![("messages-v4", 39_716), ("messages-v5", 39_717)]
+        );
+        let config = runtime_lane_config_from_manifest(&manifests[1]);
+        assert_eq!(config.runtime_profile.as_deref(), Some("messages-v5"));
+        assert_eq!(config.stream_port, Some(39_717));
+
+        beta.stream_port = 39_716;
+        write_manifest_and_unit(&paths, &beta).unwrap();
+        assert!(supervised_manifests(&paths)
+            .unwrap_err()
+            .contains("assigned more than once"));
+
         let _ = fs::remove_dir_all(root);
     }
 

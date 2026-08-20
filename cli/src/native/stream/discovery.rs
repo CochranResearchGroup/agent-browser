@@ -20,7 +20,10 @@ pub(super) fn discover_sessions() -> String {
             if let Some(session) = name_str.strip_suffix(".stream") {
                 if let Ok(port_str) = std::fs::read_to_string(entry.path()) {
                     if let Ok(port) = port_str.trim().parse::<u16>() {
-                        let pid_path = dir.join(format!("{}.pid", session));
+                        let pid_path = dir.join(format!(
+                            "{}.pid",
+                            crate::runtime_host::endpoint_key(session)
+                        ));
                         if is_process_alive(&pid_path) {
                             let engine_path = dir.join(format!("{}.engine", session));
                             let engine = std::fs::read_to_string(&engine_path)

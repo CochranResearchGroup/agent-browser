@@ -1728,8 +1728,8 @@ agent-browser --session reviewer-a --runtime-profile work open https://app.examp
 agent-browser session list
 ```
 
-On Linux, supervise a long-lived named daemon on a fixed loopback stream port
-without launching a browser:
+On Linux, supervise long-lived named lanes on fixed loopback stream ports under
+one user-scoped runtime host without launching a browser:
 
 ```bash
 agent-browser session supervisor install messages-v4 --stream-port 39716
@@ -1737,10 +1737,13 @@ agent-browser session supervisor status messages-v4 --json
 agent-browser session supervisor remove messages-v4
 ```
 
-Use `status` to detect executable drift, port conflicts, restart exhaustion,
-and missing stream readiness. `remove` is scoped to the named supervisor and
-preserves runtime profiles, browser storage, and service state. A supervised
-daemon remains no-launch until an authenticated effectful request arrives.
+Use `status` to detect shared-host executable drift, port conflicts, restart
+exhaustion, and missing lane stream readiness. `remove` closes only the named
+lane, preserves other lanes, runtime profiles, browser storage, and service
+state, and stops the host only after the final supervised lane is removed. The
+host remains no-launch until an authenticated effectful request arrives.
+Legacy `agent-browser-session@<name>.service` starts are oneshot forwarders into
+the shared host and cannot launch a per-session daemon.
 
 ### Connect to Existing Chrome
 
