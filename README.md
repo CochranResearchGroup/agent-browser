@@ -2838,9 +2838,13 @@ and owned close move the same cleanup obligation; terminal close requires exact
 process exit and profile-lock release. Use
 `service gc --dry-run` to receive a short-lived review token for conservative
 cleanup candidates, then use `service gc --apply --review-token <token>` only
-after reviewing that dry-run. Apply mode re-reads process identity before
-termination, sends SIGTERM first, uses SIGKILL only for a still-matching
-candidate, and appends compact service-event counts. The Service dashboard shows
+after reviewing that dry-run. A named or persistent profile remains protected
+from data deletion, but its exact lifecycle-owned `closing` process tree can be
+reclaimed without deleting the profile. Apply mode fences the root PID, start
+token, executable, process group, owner generation, launch identity, and profile
+identity before signaling the full process group. It sends SIGTERM first, uses
+SIGKILL only for a still-matching tree, removes only the stale `SingletonLock`
+after the full group exits, and appends compact service-event counts. The Service dashboard shows
 candidate count and estimated candidate RSS but does not expose one-click
 destructive cleanup. Resource warnings include
 `duplicate_live_browsers_for_profile` and `duplicate_active_profile_leases`

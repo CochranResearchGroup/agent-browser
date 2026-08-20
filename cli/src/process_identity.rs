@@ -105,6 +105,24 @@ pub fn capture_process_identity(
     })
 }
 
+/// Capture the final browser executable after a package launcher or vendor
+/// wrapper has completed. A wrapper transition is accepted only for a script
+/// and same-family executable in the same canonical install directory.
+pub fn capture_launched_browser_identity(
+    pid: u32,
+    requested_executable: &Path,
+    expected_browser_family: Option<&str>,
+) -> Option<RecordedProcessIdentity> {
+    let identity = capture_process_identity(pid, None, expected_browser_family)?;
+    let observed_executable = identity.executable_path.as_deref().map(Path::new)?;
+    browser_launch_paths_match(
+        requested_executable,
+        observed_executable,
+        expected_browser_family,
+    )
+    .then_some(identity)
+}
+
 pub fn assess_process_ownership(
     recorded: Option<&RecordedProcessIdentity>,
     observation: ProcessObservation,
@@ -191,6 +209,21 @@ pub fn assess_process_ownership(
 
 pub fn observe_process(pid: u32) -> ProcessObservation {
     platform_process_identity(pid)
+}
+
+/// Observe the current Unix process group for launch identity binding.
+/// Non-Unix platforms return no process-group evidence.
+pub fn observe_process_group_id(pid: u32) -> Option<u32> {
+    #[cfg(unix)]
+    {
+        let process_group_id = unsafe { libc::getpgid(pid as libc::pid_t) };
+        (process_group_id > 0).then_some(process_group_id as u32)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = pid;
+        None
+    }
 }
 
 #[cfg(test)]
@@ -525,6 +558,35 @@ fn executable_paths_match(expected: &Path, observed: &Path) -> bool {
     }
     #[cfg(not(windows))]
     false
+}
+
+fn browser_launch_paths_match(
+    requested: &Path,
+    observed: &Path,
+    expected_browser_family: Option<&str>,
+) -> bool {
+    if executable_paths_match(requested, observed) {
+        return true;
+    }
+    let (Ok(requested), Ok(observed)) = (
+        std::fs::canonicalize(requested),
+        std::fs::canonicalize(observed),
+    ) else {
+        return false;
+    };
+    let requested_family = browser_family_for_path(Some(&requested));
+    let observed_family = browser_family_for_path(Some(&observed));
+    if requested_family.is_none()
+        || requested_family != observed_family
+        || expected_browser_family
+            .is_some_and(|expected| observed_family.as_deref() != Some(expected))
+        || requested.parent() != observed.parent()
+    {
+        return false;
+    }
+    std::fs::read(&requested)
+        .ok()
+        .is_some_and(|contents| contents.starts_with(b"#!"))
 }
 
 #[cfg(target_os = "linux")]
@@ -893,7 +955,7 @@ fn parse_macos_kern_procargs2(buffer: &[u8]) -> Option<Vec<String>> {
     Some(arguments)
 }
 
-fn browser_family_for_path(path: Option<&Path>) -> Option<String> {
+pub(crate) fn browser_family_for_path(path: Option<&Path>) -> Option<String> {
     let normalized = path?.to_string_lossy().to_ascii_lowercase();
     for (needle, family) in [
         ("chromium", "chromium"),
@@ -1025,6 +1087,37 @@ mod tests {
             ),
             RuntimeProcessOwnership::ReusedUnrelated
         );
+    }
+
+    #[test]
+    fn browser_wrapper_transition_requires_same_install_root_and_family() {
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-launch-wrapper-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let install = root.join("google-chrome");
+        let unrelated = root.join("unrelated");
+        std::fs::create_dir_all(&install).unwrap();
+        std::fs::create_dir_all(&unrelated).unwrap();
+        let wrapper = install.join("google-chrome");
+        let browser = install.join("chrome");
+        let unrelated_browser = unrelated.join("chrome");
+        std::fs::write(&wrapper, "#!/bin/sh\nexec \"$(dirname \"$0\")/chrome\"\n").unwrap();
+        std::fs::write(&browser, "browser").unwrap();
+        std::fs::write(&unrelated_browser, "browser").unwrap();
+
+        assert!(browser_launch_paths_match(
+            &wrapper,
+            &browser,
+            Some("chrome")
+        ));
+        assert!(!browser_launch_paths_match(
+            &wrapper,
+            &unrelated_browser,
+            Some("chrome")
+        ));
+
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

@@ -565,7 +565,8 @@ fn register_current_browser_lifecycle(state: &mut DaemonState) -> Result<(), Str
         logical_browser_id: super::capability::service_browser_id(&state.session_id),
         profile_root,
         daemon_session_route: state.session_id.clone(),
-        process_identity,
+        process_group_id: crate::process_identity::observe_process_group_id(pid),
+        process_identity: process_identity.clone(),
         browser_family: state.engine.clone(),
         cdp_endpoint: manager.get_cdp_url().to_string(),
         target_ids: manager
@@ -575,10 +576,11 @@ fn register_current_browser_lifecycle(state: &mut DaemonState) -> Result<(), Str
             .collect(),
     };
     let repository = LockedServiceStateRepository::default_json()?;
-    let binding = crate::native::runtime_lifecycle::RuntimeLifecycleAuthority::new(&repository)
-        .register_managed_lane(registration)?;
+    let authority = crate::native::runtime_lifecycle::RuntimeLifecycleAuthority::new(&repository);
+    let binding = authority.register_managed_lane(registration)?;
+    let reviewed_process_tree = authority.reviewed_process_tree(&binding, &process_identity)?;
     if let Some(manager) = state.browser.as_mut() {
-        manager.mark_lifecycle_managed();
+        manager.mark_lifecycle_managed(reviewed_process_tree);
     }
     state.runtime_owner_binding = Some(binding);
     Ok(())

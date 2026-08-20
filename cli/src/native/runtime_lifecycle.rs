@@ -25,6 +25,7 @@ pub(crate) struct ManagedLaneRegistration {
     pub(crate) logical_browser_id: String,
     pub(crate) profile_root: PathBuf,
     pub(crate) daemon_session_route: String,
+    pub(crate) process_group_id: Option<u32>,
     pub(crate) process_identity: crate::process_identity::RecordedProcessIdentity,
     pub(crate) browser_family: String,
     pub(crate) cdp_endpoint: String,
@@ -37,7 +38,16 @@ pub(crate) struct ManagedLaneRegistration {
 #[derive(Debug, Clone)]
 pub(crate) enum RuntimeLifecycleIntent {
     RegisterCurrentOwner(ProfileOwner),
-    ActivateTerminalReplacement(ProfileOwner),
+    RegisterManagedLane {
+        owner: ProfileOwner,
+        process_group_id: Option<u32>,
+        package_launch_identity_digest: String,
+    },
+    ActivateTerminalReplacement {
+        owner: ProfileOwner,
+        process_group_id: Option<u32>,
+        package_launch_identity_digest: String,
+    },
     RefreshCurrentOwnerEvidence {
         claim: OwnerAuthorityClaim,
         cdp_endpoint_identity_digest: String,
@@ -160,6 +170,45 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
         Ok(())
     }
 
+    pub(crate) fn reviewed_process_tree(
+        &self,
+        binding: &RuntimeOwnerBinding,
+        root_process: &crate::process_identity::RecordedProcessIdentity,
+    ) -> Result<Option<crate::native::runtime_reconciliation::ReviewedProcessTree>, String> {
+        let registry = self.repository.load_snapshot()?.runtime_owner_registry;
+        if !binding.effect_capable || !registry.authorizes(&binding.claim) {
+            return Err("runtime_lifecycle_process_tree_owner_stale".to_string());
+        }
+        if digest_json(root_process)? != binding.claim.process_instance_digest {
+            return Err("runtime_lifecycle_process_tree_identity_mismatch".to_string());
+        }
+        let lifecycle = registry
+            .lifecycle_records
+            .get(&binding.claim.logical_browser_id)
+            .ok_or_else(|| "runtime_lifecycle_process_tree_record_missing".to_string())?;
+        if lifecycle.profile_identity_digest != binding.claim.profile_identity_digest
+            || lifecycle.owner_generation != binding.claim.owner_generation
+        {
+            return Err("runtime_lifecycle_process_tree_generation_mismatch".to_string());
+        }
+        let (Some(process_group_id), Some(package_launch_identity_digest)) = (
+            lifecycle.process_group_id,
+            lifecycle.package_launch_identity_digest.clone(),
+        ) else {
+            return Ok(None);
+        };
+        Ok(Some(
+            crate::native::runtime_reconciliation::ReviewedProcessTree {
+                root_process: root_process.clone(),
+                process_group_id,
+                logical_browser_id: binding.claim.logical_browser_id.clone(),
+                profile_identity_digest: binding.claim.profile_identity_digest.clone(),
+                owner_generation: binding.claim.owner_generation,
+                package_launch_identity_digest,
+            },
+        ))
+    }
+
     /// Register one newly observed managed browser lane and return the binding
     /// that every subsequent effect must present. A conflicting durable owner
     /// requires an explicit transfer, close, or recovery transition.
@@ -204,6 +253,8 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
             pending_transfer: None,
             last_transition: None,
         };
+        let package_launch_identity_digest =
+            package_launch_identity_digest(&owner, registration.process_group_id)?;
         if let Some(current) = existing {
             let lifecycle = self
                 .repository
@@ -222,12 +273,17 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
                     .owner_generation
                     .checked_add(1)
                     .ok_or_else(|| "runtime_lifecycle_generation_exhausted".to_string())?;
-                let activated = match self.transition(
-                    RuntimeLifecycleIntent::ActivateTerminalReplacement(replacement),
-                )? {
-                    RuntimeLifecycleTransition::TerminalReplacementActivated(owner) => owner,
-                    _ => return Err("runtime_lifecycle_replacement_outcome_mismatch".to_string()),
-                };
+                let activated =
+                    match self.transition(RuntimeLifecycleIntent::ActivateTerminalReplacement {
+                        owner: replacement,
+                        process_group_id: registration.process_group_id,
+                        package_launch_identity_digest,
+                    })? {
+                        RuntimeLifecycleTransition::TerminalReplacementActivated(owner) => owner,
+                        _ => {
+                            return Err("runtime_lifecycle_replacement_outcome_mismatch".to_string())
+                        }
+                    };
                 return Ok(RuntimeOwnerBinding::effect_capable(
                     OwnerAuthorityClaim::from_owner(&activated),
                 ));
@@ -259,11 +315,14 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
                 OwnerAuthorityClaim::from_owner(&refreshed),
             ));
         }
-        let registered =
-            match self.transition(RuntimeLifecycleIntent::RegisterCurrentOwner(owner))? {
-                RuntimeLifecycleTransition::OwnerRegistered(owner) => owner,
-                _ => return Err("runtime_lifecycle_registration_outcome_mismatch".to_string()),
-            };
+        let registered = match self.transition(RuntimeLifecycleIntent::RegisterManagedLane {
+            owner,
+            process_group_id: registration.process_group_id,
+            package_launch_identity_digest,
+        })? {
+            RuntimeLifecycleTransition::OwnerRegistered(owner) => owner,
+            _ => return Err("runtime_lifecycle_registration_outcome_mismatch".to_string()),
+        };
         Ok(RuntimeOwnerBinding::effect_capable(
             OwnerAuthorityClaim::from_owner(&registered),
         ))
@@ -274,10 +333,23 @@ fn digest_text(value: &str) -> String {
     format!("{:x}", Sha256::digest(value.as_bytes()))
 }
 
-fn digest_json(value: &impl serde::Serialize) -> Result<String, String> {
+pub(crate) fn digest_json(value: &impl serde::Serialize) -> Result<String, String> {
     serde_json::to_vec(value)
         .map(|bytes| format!("{:x}", Sha256::digest(bytes)))
         .map_err(|error| format!("runtime_lifecycle_identity_encode_failed: {error}"))
+}
+
+pub(crate) fn package_launch_identity_digest(
+    owner: &ProfileOwner,
+    process_group_id: Option<u32>,
+) -> Result<String, String> {
+    digest_json(&(
+        owner.browser_id.as_str(),
+        owner.profile_identity_digest.as_str(),
+        owner.owner_generation,
+        owner.process_instance_digest.as_str(),
+        process_group_id,
+    ))
 }
 
 fn is_digest(value: &str) -> bool {
@@ -300,8 +372,35 @@ fn apply_transition(
             store_lifecycle(registry, lifecycle)?;
             Ok(RuntimeLifecycleTransition::OwnerRegistered(owner))
         }
-        RuntimeLifecycleIntent::ActivateTerminalReplacement(owner) => {
+        RuntimeLifecycleIntent::RegisterManagedLane {
+            owner,
+            process_group_id,
+            package_launch_identity_digest,
+        } => {
+            if !is_digest(&package_launch_identity_digest) {
+                return Err("runtime_lifecycle_package_launch_identity_invalid".to_string());
+            }
+            let owner = registry
+                .register_current_owner(owner)
+                .map_err(owner_error)?;
+            let mut lifecycle = take_or_bootstrap_lifecycle(registry, &owner)?;
+            lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
+            lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
+            lifecycle.owner_generation = owner.owner_generation;
+            lifecycle.process_group_id = process_group_id;
+            lifecycle.package_launch_identity_digest = Some(package_launch_identity_digest);
+            store_lifecycle(registry, lifecycle)?;
+            Ok(RuntimeLifecycleTransition::OwnerRegistered(owner))
+        }
+        RuntimeLifecycleIntent::ActivateTerminalReplacement {
+            owner,
+            process_group_id,
+            package_launch_identity_digest,
+        } => {
             crate::runtime_owner_transfer::validate_profile_owner(&owner).map_err(owner_error)?;
+            if !is_digest(&package_launch_identity_digest) {
+                return Err("runtime_lifecycle_package_launch_identity_invalid".to_string());
+            }
             let current = registry
                 .owner(&owner.profile_identity_digest)
                 .cloned()
@@ -328,6 +427,8 @@ fn apply_transition(
             lifecycle.owner_generation = owner.owner_generation;
             lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
             lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
+            lifecycle.process_group_id = process_group_id;
+            lifecycle.package_launch_identity_digest = Some(package_launch_identity_digest);
             lifecycle.terminal_evidence.clear();
             store_lifecycle(registry, lifecycle)?;
             Ok(RuntimeLifecycleTransition::TerminalReplacementActivated(
@@ -728,6 +829,7 @@ mod tests {
             logical_browser_id: "session:alpha".to_string(),
             profile_root: std::env::temp_dir().join("agent-browser-lifecycle-profile-alpha"),
             daemon_session_route: "alpha".to_string(),
+            process_group_id: Some(4100),
             process_identity: crate::process_identity::RecordedProcessIdentity {
                 pid: 4100,
                 start_token: "linux:boot:4100".to_string(),
@@ -743,6 +845,13 @@ mod tests {
             .register_managed_lane(registration.clone())
             .unwrap();
         assert!(binding.effect_capable);
+        let registered = repository.load_snapshot().unwrap();
+        let lifecycle = &registered.runtime_owner_registry.lifecycle_records["session:alpha"];
+        assert_eq!(lifecycle.process_group_id, Some(4100));
+        assert!(lifecycle
+            .package_launch_identity_digest
+            .as_deref()
+            .is_some_and(is_digest));
         let mut effect_binding = binding.clone();
         authority.authorize_effect(&mut effect_binding).unwrap();
         let revision = repository
@@ -806,6 +915,7 @@ mod tests {
             logical_browser_id: "session:replacement".to_string(),
             profile_root,
             daemon_session_route: "replacement".to_string(),
+            process_group_id: Some(4200),
             process_identity: crate::process_identity::RecordedProcessIdentity {
                 pid: 4200,
                 start_token: "linux:boot:4200".to_string(),
@@ -839,6 +949,7 @@ mod tests {
         let mut replacement = registration;
         replacement.process_identity.pid = 4201;
         replacement.process_identity.start_token = "linux:boot:4201".to_string();
+        replacement.process_group_id = Some(4201);
         replacement.cdp_endpoint = "ws://127.0.0.1:9556/devtools/browser/new".to_string();
         replacement.target_ids = vec!["target-new".to_string()];
         let replacement_binding = authority.register_managed_lane(replacement).unwrap();

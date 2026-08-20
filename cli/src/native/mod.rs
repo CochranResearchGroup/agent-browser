@@ -94,6 +94,8 @@ pub mod remote_view_proof;
 #[allow(dead_code)]
 pub(crate) mod runtime_lifecycle;
 #[allow(dead_code)]
+pub(crate) mod runtime_reconciliation;
+#[allow(dead_code)]
 pub mod screenshot;
 #[allow(dead_code)]
 pub mod service_access;

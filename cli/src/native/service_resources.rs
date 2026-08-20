@@ -1,11 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-#[cfg(target_os = "linux")]
 use std::path::Path;
 use std::path::PathBuf;
-#[cfg(unix)]
 use std::thread;
-#[cfg(unix)]
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -18,8 +15,9 @@ use super::service_model::{
 };
 
 const TEMP_PROFILE_MIN_AGE_SECONDS: u64 = 30 * 60;
+const OWNED_CLOSING_GRACE_SECONDS: u64 = 5;
 const GC_REVIEW_TOKEN_TTL_SECONDS: u64 = 10 * 60;
-const GC_TERM_WAIT_MS: u64 = 500;
+const GC_TERM_WAIT_MS: u64 = 1_500;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -27,6 +25,7 @@ pub(crate) struct ProcessSample {
     pub pid: u32,
     pub ppid: Option<u32>,
     pub process_group_id: Option<u32>,
+    pub start_token: Option<String>,
     pub executable: Option<String>,
     pub command: Vec<String>,
     pub rss_bytes: Option<u64>,
@@ -84,11 +83,16 @@ pub(crate) struct ResourceRecord {
     candidate_identity: Option<GcCandidateIdentity>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 struct GcCandidateIdentity {
     pid: u32,
     process_group_id: Option<u32>,
+    start_token: Option<String>,
+    executable_path: Option<String>,
+    owner_generation: Option<u64>,
+    profile_identity_digest: Option<String>,
+    package_launch_identity_digest: Option<String>,
     kind: String,
     action: String,
     command_digest: String,
@@ -489,6 +493,7 @@ fn classify_process(
     let mut disposition = ResourceDisposition::Observed;
     let mut reasons = Vec::new();
     let mut gc_action = None;
+    let mut reviewed_tree = None;
 
     if Some(process.pid) == dashboard_main_pid {
         disposition = ResourceDisposition::Protected;
@@ -500,14 +505,10 @@ fn classify_process(
         disposition = ResourceDisposition::Protected;
         reasons.push("retained_active_browser".to_string());
     }
-    if correlation
+    let retained_named_or_persistent_profile = correlation
         .profile_id
         .as_deref()
-        .is_some_and(|profile_id| retained_profile_is_named_or_persistent(state, profile_id))
-    {
-        disposition = ResourceDisposition::Protected;
-        reasons.push("retained_named_or_persistent_profile".to_string());
-    }
+        .is_some_and(|profile_id| retained_profile_is_named_or_persistent(state, profile_id));
     if correlation
         .display_allocation_id
         .as_deref()
@@ -518,14 +519,63 @@ fn classify_process(
     }
 
     if disposition != ResourceDisposition::Protected {
-        if temporary_profile_path(correlation.profile_path.as_deref())
-            && process
-                .age_seconds
-                .is_some_and(|age| age >= TEMP_PROFILE_MIN_AGE_SECONDS)
+        if correlation.browser_id.is_some()
+            || temporary_profile_path(correlation.profile_path.as_deref())
         {
-            disposition = ResourceDisposition::Candidate;
-            reasons.push("old_temporary_profile_process".to_string());
-            gc_action = Some("terminate_process".to_string());
+            let decision =
+                crate::native::runtime_reconciliation::RuntimeResourceReconciler::new(state)
+                    .classify(
+                        crate::native::runtime_reconciliation::RuntimeProcessEvidence {
+                            process: crate::process_identity::ObservedProcessIdentity {
+                                pid: process.pid,
+                                start_token: process.start_token.clone(),
+                                executable_path: process.executable.clone(),
+                                browser_family: crate::process_identity::browser_family_for_path(
+                                    process.executable.as_deref().map(Path::new),
+                                ),
+                                command_line: Some(process.command.clone()),
+                            },
+                            process_group_id: process.process_group_id,
+                            logical_browser_id: correlation.browser_id.clone(),
+                            profile_root: correlation.profile_path.clone(),
+                        },
+                    );
+            match decision {
+                crate::native::runtime_reconciliation::RuntimeResourceDecision::Owned(tree)
+                    if process
+                        .age_seconds
+                        .is_some_and(|age| age >= OWNED_CLOSING_GRACE_SECONDS) =>
+                {
+                    disposition = ResourceDisposition::Candidate;
+                    reasons.push("lifecycle_owned_closing_process_tree_after_grace".to_string());
+                    gc_action = Some("terminate_process_tree".to_string());
+                    reviewed_tree = Some(tree);
+                }
+                crate::native::runtime_reconciliation::RuntimeResourceDecision::Owned(_) => {
+                    disposition = ResourceDisposition::Protected;
+                    reasons.push("runtime_lifecycle_closing_grace_active".to_string());
+                }
+                crate::native::runtime_reconciliation::RuntimeResourceDecision::Protected {
+                    reason,
+                } => {
+                    if retained_named_or_persistent_profile {
+                        disposition = ResourceDisposition::Protected;
+                        reasons.push("retained_named_or_persistent_profile".to_string());
+                        reasons.push(reason.to_string());
+                    } else if process
+                        .age_seconds
+                        .is_some_and(|age| age >= TEMP_PROFILE_MIN_AGE_SECONDS)
+                    {
+                        disposition = ResourceDisposition::Protected;
+                        reasons.push(reason.to_string());
+                    } else {
+                        reasons.push("temporary_profile_too_fresh_or_unknown_age".to_string());
+                    }
+                }
+            }
+        } else if retained_named_or_persistent_profile {
+            disposition = ResourceDisposition::Protected;
+            reasons.push("retained_named_or_persistent_profile".to_string());
         } else if kind == ResourceKind::RemoteDisplay && correlation.browser_id.is_none() {
             disposition = ResourceDisposition::Candidate;
             reasons.push("orphaned_remote_display_process".to_string());
@@ -542,6 +592,19 @@ fn classify_process(
     let candidate_identity = gc_action.as_ref().map(|action| GcCandidateIdentity {
         pid: process.pid,
         process_group_id: process.process_group_id,
+        start_token: reviewed_tree
+            .as_ref()
+            .map(|tree| tree.root_process.start_token.clone()),
+        executable_path: reviewed_tree
+            .as_ref()
+            .and_then(|tree| tree.root_process.executable_path.clone()),
+        owner_generation: reviewed_tree.as_ref().map(|tree| tree.owner_generation),
+        profile_identity_digest: reviewed_tree
+            .as_ref()
+            .map(|tree| tree.profile_identity_digest.clone()),
+        package_launch_identity_digest: reviewed_tree
+            .as_ref()
+            .map(|tree| tree.package_launch_identity_digest.clone()),
         kind: resource_kind_name(&kind).to_string(),
         action: action.clone(),
         command_digest: command_digest(&process.command),
@@ -824,7 +887,7 @@ fn unix_now_seconds() -> u64 {
 }
 
 trait ProcessTerminator {
-    fn terminate(&self, candidate: &Value) -> Value;
+    fn terminate(&self, state: &ServiceState, candidate: &Value) -> Value;
 }
 
 trait ProcessInspector {
@@ -841,18 +904,8 @@ impl ProcessInspector for LiveInspector {
 }
 
 impl ProcessTerminator for LiveTerminator {
-    fn terminate(&self, candidate: &Value) -> Value {
-        let Some(pid) = candidate
-            .get("pid")
-            .and_then(Value::as_u64)
-            .and_then(|value| i32::try_from(value).ok())
-        else {
-            return json!({
-                "status": "skipped",
-                "reason": "missing_pid",
-            });
-        };
-        terminate_pid(pid)
+    fn terminate(&self, state: &ServiceState, candidate: &Value) -> Value {
+        terminate_reviewed_candidate(state, candidate)
     }
 }
 
@@ -927,7 +980,7 @@ fn service_gc_apply_response_from_samples(
             }));
             continue;
         }
-        let outcome = terminator.terminate(candidate);
+        let outcome = terminator.terminate(state, candidate);
         match outcome.get("status").and_then(Value::as_str) {
             Some("terminated") | Some("already_exited") => terminated.push(json!({
                 "pid": candidate.get("pid").cloned().unwrap_or(Value::Null),
@@ -1028,6 +1081,7 @@ fn live_process_sample(pid: u32) -> Option<ProcessSample> {
             linux_boot_time_seconds(),
             linux_uptime_seconds(),
             linux_clock_ticks(),
+            linux_boot_id(),
         )
     }
     #[cfg(not(target_os = "linux"))]
@@ -1037,55 +1091,176 @@ fn live_process_sample(pid: u32) -> Option<ProcessSample> {
     }
 }
 
-fn terminate_pid(pid: i32) -> Value {
-    #[cfg(unix)]
+fn terminate_reviewed_candidate(state: &ServiceState, candidate: &Value) -> Value {
+    let Some(identity_value) = candidate.get("candidateIdentity").cloned() else {
+        return json!({ "status": "skipped", "reason": "missing_candidate_identity" });
+    };
+    let Ok(identity) = serde_json::from_value::<GcCandidateIdentity>(identity_value.clone()) else {
+        return json!({ "status": "skipped", "reason": "invalid_candidate_identity" });
+    };
+    let (
+        Some(process_group_id),
+        Some(start_token),
+        Some(executable_path),
+        Some(owner_generation),
+        Some(profile_identity_digest),
+        Some(package_launch_identity_digest),
+        Some(logical_browser_id),
+        Some(profile_root),
+    ) = (
+        identity.process_group_id,
+        identity.start_token,
+        identity.executable_path,
+        identity.owner_generation,
+        identity.profile_identity_digest,
+        identity.package_launch_identity_digest,
+        identity.browser_id,
+        identity.profile_path,
+    )
+    else {
+        return json!({ "status": "skipped", "reason": "incomplete_reviewed_process_tree" });
+    };
+    let reviewed = crate::native::runtime_reconciliation::ReviewedProcessTree {
+        root_process: crate::process_identity::RecordedProcessIdentity {
+            pid: identity.pid,
+            start_token,
+            browser_family: crate::process_identity::browser_family_for_path(Some(Path::new(
+                &executable_path,
+            ))),
+            executable_path: Some(executable_path),
+        },
+        process_group_id,
+        logical_browser_id,
+        profile_identity_digest,
+        owner_generation,
+        package_launch_identity_digest,
+    };
+    let mut runtime = LiveGcProcessTreeRuntime {
+        state,
+        candidate,
+        expected_identity: identity_value,
+    };
+    let outcome = crate::native::runtime_reconciliation::shutdown_reviewed_process_tree(
+        &reviewed,
+        Path::new(&profile_root),
+        &mut runtime,
+    );
+    if let Some(reason) = outcome.blocked_reason {
+        return json!({ "status": "skipped", "reason": reason });
+    }
+    if !outcome.errors.is_empty() || !outcome.exact_process_exited || !outcome.profile_lock_released
     {
-        if !pid_is_running(pid) {
-            return json!({
-                "status": "already_exited",
-                "signal": null,
-            });
+        return json!({
+            "status": "failed",
+            "reason": if outcome.errors.is_empty() {
+                "process_tree_or_profile_lock_not_terminal"
+            } else {
+                "process_tree_shutdown_failed"
+            },
+            "errors": outcome.errors,
+            "exactProcessExited": outcome.exact_process_exited,
+            "profileLockReleased": outcome.profile_lock_released,
+        });
+    }
+    json!({
+        "status": "terminated",
+        "signal": if outcome.kill_sent { "SIGKILL" } else { "SIGTERM" },
+        "processGroupId": process_group_id,
+        "exactProcessExited": true,
+        "profileLockReleased": true,
+    })
+}
+
+struct LiveGcProcessTreeRuntime<'a> {
+    state: &'a ServiceState,
+    candidate: &'a Value,
+    expected_identity: Value,
+}
+
+impl crate::native::runtime_reconciliation::ReviewedProcessTreeRuntime
+    for LiveGcProcessTreeRuntime<'_>
+{
+    fn recheck(
+        &mut self,
+        _reviewed: &crate::native::runtime_reconciliation::ReviewedProcessTree,
+    ) -> Result<(), String> {
+        candidate_identity_still_matches(
+            self.state,
+            self.candidate,
+            &self.expected_identity,
+            &LiveInspector,
+        )
+        .then_some(())
+        .ok_or_else(|| "candidate_identity_changed".to_string())
+    }
+
+    fn signal_group(
+        &mut self,
+        process_group_id: u32,
+        signal: crate::native::runtime_reconciliation::ProcessTreeSignal,
+    ) -> Result<(), String> {
+        #[cfg(unix)]
+        {
+            let signal = match signal {
+                crate::native::runtime_reconciliation::ProcessTreeSignal::Terminate => {
+                    libc::SIGTERM
+                }
+                crate::native::runtime_reconciliation::ProcessTreeSignal::Kill => libc::SIGKILL,
+            };
+            let result = unsafe { libc::kill(-(process_group_id as i32), signal) };
+            if result == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH) {
+                Ok(())
+            } else {
+                Err(format!(
+                    "process_group_signal_failed: {}",
+                    std::io::Error::last_os_error()
+                ))
+            }
         }
-        if unsafe { libc::kill(pid, libc::SIGTERM) } != 0 {
-            return json!({
-                "status": "failed",
-                "reason": "sigterm_failed",
-            });
-        }
-        thread::sleep(Duration::from_millis(GC_TERM_WAIT_MS));
-        if !pid_is_running(pid) {
-            return json!({
-                "status": "terminated",
-                "signal": "SIGTERM",
-            });
-        }
-        if unsafe { libc::kill(pid, libc::SIGKILL) } != 0 {
-            return json!({
-                "status": "failed",
-                "reason": "sigkill_failed",
-            });
-        }
-        thread::sleep(Duration::from_millis(GC_TERM_WAIT_MS));
-        if pid_is_running(pid) {
-            json!({
-                "status": "failed",
-                "reason": "process_survived_sigkill",
-            })
-        } else {
-            json!({
-                "status": "terminated",
-                "signal": "SIGKILL",
-            })
+        #[cfg(not(unix))]
+        {
+            let _ = (process_group_id, signal);
+            Err("process_group_shutdown_unsupported".to_string())
         }
     }
-    #[cfg(not(unix))]
-    {
-        let _ = pid;
-        json!({
-            "status": "skipped",
-            "reason": "apply_not_supported_on_this_platform",
-        })
+
+    fn wait_after_signal(&mut self) {
+        thread::sleep(Duration::from_millis(GC_TERM_WAIT_MS));
     }
+
+    fn process_exited(&mut self, root_pid: u32) -> Result<bool, String> {
+        let process_group_id = self
+            .expected_identity
+            .get("processGroupId")
+            .and_then(Value::as_u64)
+            .and_then(|value| u32::try_from(value).ok())
+            .ok_or_else(|| "candidate_process_group_missing".to_string())?;
+        Ok(!pid_is_running(root_pid as i32) && !process_group_is_running(process_group_id))
+    }
+
+    fn profile_lock_released(&mut self, profile_root: &Path) -> Result<bool, String> {
+        let lock_path = profile_root.join("SingletonLock");
+        match fs::symlink_metadata(&lock_path) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(true),
+            Ok(_) => {
+                fs::remove_file(&lock_path)
+                    .map_err(|error| format!("stale_profile_lock_cleanup_failed: {error}"))?;
+                Ok(true)
+            }
+            Err(error) => Err(format!("profile_lock_observation_failed: {error}")),
+        }
+    }
+}
+
+#[cfg(unix)]
+fn process_group_is_running(process_group_id: u32) -> bool {
+    let result = unsafe { libc::kill(-(process_group_id as i32), 0) };
+    result == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+}
+
+#[cfg(not(unix))]
+fn process_group_is_running(_process_group_id: u32) -> bool {
+    false
 }
 
 #[cfg(unix)]
@@ -1144,6 +1319,16 @@ fn temporary_profile_path(path: Option<&str>) -> bool {
 }
 
 fn command_arg_value(command: &[String], flag: &str) -> Option<String> {
+    let rewritten;
+    let command = if command.len() == 1 && command[0].contains(char::is_whitespace) {
+        rewritten = command[0]
+            .split_whitespace()
+            .map(str::to_string)
+            .collect::<Vec<_>>();
+        rewritten.as_slice()
+    } else {
+        command
+    };
     for (index, arg) in command.iter().enumerate() {
         if arg == flag {
             return command.get(index + 1).cloned();
@@ -1237,6 +1422,7 @@ fn linux_collect_process_samples() -> (Vec<ProcessSample>, Vec<String>) {
     let boot_time_seconds = linux_boot_time_seconds();
     let uptime_seconds = linux_uptime_seconds();
     let clock_ticks = linux_clock_ticks();
+    let boot_id = linux_boot_id();
     let mut samples = Vec::new();
     let entries = match fs::read_dir("/proc") {
         Ok(entries) => entries,
@@ -1251,7 +1437,13 @@ fn linux_collect_process_samples() -> (Vec<ProcessSample>, Vec<String>) {
         let Ok(pid) = entry.file_name().to_string_lossy().parse::<u32>() else {
             continue;
         };
-        match linux_process_sample(pid, boot_time_seconds, uptime_seconds, clock_ticks) {
+        match linux_process_sample(
+            pid,
+            boot_time_seconds,
+            uptime_seconds,
+            clock_ticks,
+            boot_id.clone(),
+        ) {
             Some(sample) => samples.push(sample),
             None => continue,
         }
@@ -1268,6 +1460,7 @@ fn linux_process_sample(
     boot_time_seconds: Option<u64>,
     uptime_seconds: Option<u64>,
     clock_ticks: u64,
+    boot_id: Option<String>,
 ) -> Option<ProcessSample> {
     let proc_path = format!("/proc/{pid}");
     let command = fs::read(format!("{proc_path}/cmdline"))
@@ -1294,6 +1487,10 @@ fn linux_process_sample(
         .and_then(|value| value.parse::<u64>().ok())
         .unwrap_or(0);
     let start_ticks = fields.get(19).and_then(|value| value.parse::<u64>().ok());
+    let start_token = match (boot_id, start_ticks) {
+        (Some(boot_id), Some(start_ticks)) => Some(format!("linux:{boot_id}:{start_ticks}")),
+        _ => None,
+    };
     let cpu_seconds = Some((utime + stime) / clock_ticks.max(1));
     let age_seconds = match (boot_time_seconds, uptime_seconds, start_ticks) {
         (Some(_), Some(uptime), Some(start_ticks)) => {
@@ -1312,20 +1509,27 @@ fn linux_process_sample(
         });
     let executable = fs::read_link(format!("{proc_path}/exe"))
         .ok()
-        .as_deref()
-        .and_then(Path::file_name)
-        .map(|value| value.to_string_lossy().to_string())
+        .map(|value| value.to_string_lossy().into_owned())
         .or_else(|| command.first().cloned());
     Some(ProcessSample {
         pid,
         ppid,
         process_group_id,
+        start_token,
         executable,
         command,
         rss_bytes,
         cpu_seconds,
         age_seconds,
     })
+}
+
+#[cfg(target_os = "linux")]
+fn linux_boot_id() -> Option<String> {
+    fs::read_to_string("/proc/sys/kernel/random/boot_id")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }
 
 #[cfg(target_os = "linux")]
@@ -1366,6 +1570,7 @@ fn linux_clock_ticks() -> u64 {
 mod tests {
     use super::super::service_model::{
         BrowserHost, BrowserProcess, BrowserProfile, BrowserSession, DisplayAllocation, LeaseState,
+        ServiceBrowserProcessIdentity,
     };
     use super::*;
 
@@ -1378,6 +1583,88 @@ mod tests {
             rss_bytes: Some(10),
             ..ProcessSample::default()
         }
+    }
+
+    fn owned_closing_candidate(pid: u32, profile_root: &str) -> (ServiceState, ProcessSample) {
+        let executable = "/opt/agent-browser/chromium";
+        let start_token = format!("linux:fixture:{pid}");
+        let recorded = crate::process_identity::RecordedProcessIdentity {
+            pid,
+            start_token: start_token.clone(),
+            executable_path: Some(executable.to_string()),
+            browser_family: Some("chromium".to_string()),
+        };
+        let profile_identity_digest =
+            crate::runtime_profile::canonical_profile_identity_digest(Path::new(profile_root))
+                .unwrap();
+        let owner = crate::runtime_owner_transfer::ProfileOwner {
+            owner_id: format!("owner-{pid}"),
+            profile_identity_digest: profile_identity_digest.clone(),
+            state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+            owner_generation: 4,
+            browser_id: format!("browser-{pid}"),
+            daemon_session_route: format!("session-{pid}"),
+            process_instance_digest: crate::native::runtime_lifecycle::digest_json(&recorded)
+                .unwrap(),
+            browser_family: "chromium".to_string(),
+            cdp_endpoint_identity_digest: "c".repeat(64),
+            target_set_digest: "d".repeat(64),
+            pending_transfer: None,
+            last_transition: None,
+        };
+        let package_launch_identity_digest =
+            crate::native::runtime_lifecycle::package_launch_identity_digest(&owner, Some(pid))
+                .unwrap();
+        let mut state = ServiceState::default();
+        state.runtime_owner_registry =
+            crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(owner.clone());
+        state.runtime_owner_registry.lifecycle_records.insert(
+            owner.browser_id.clone(),
+            crate::runtime_owner_transfer::RuntimeLifecycleRecord {
+                logical_browser_id: owner.browser_id.clone(),
+                profile_identity_digest,
+                owner_generation: owner.owner_generation,
+                lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Closing,
+                cleanup_obligation_state:
+                    crate::runtime_owner_transfer::CleanupObligationState::Owned,
+                process_group_id: Some(pid),
+                package_launch_identity_digest: Some(package_launch_identity_digest),
+                terminal_evidence: Vec::new(),
+            },
+        );
+        state.browsers.insert(
+            owner.browser_id.clone(),
+            BrowserProcess {
+                id: owner.browser_id.clone(),
+                host: BrowserHost::LocalHeadless,
+                health: BrowserHealth::Faulted,
+                pid: Some(pid),
+                ..BrowserProcess::default()
+            },
+        );
+        state.browser_process_identities.insert(
+            owner.browser_id,
+            ServiceBrowserProcessIdentity {
+                process_identity: recorded,
+                user_data_dir: Some(profile_root.to_string()),
+                runtime_profile: None,
+            },
+        );
+        let candidate = ProcessSample {
+            pid,
+            ppid: Some(1),
+            process_group_id: Some(pid),
+            start_token: Some(start_token),
+            executable: Some(executable.to_string()),
+            command: vec![
+                executable.to_string(),
+                format!("--user-data-dir={profile_root}"),
+            ],
+            rss_bytes: Some(1024),
+            cpu_seconds: Some(1),
+            age_seconds: Some(TEMP_PROFILE_MIN_AGE_SECONDS + 1),
+        };
+        (state, candidate)
     }
 
     #[test]
@@ -1570,7 +1857,7 @@ mod tests {
     }
 
     #[test]
-    fn resources_classify_old_temporary_profile_as_candidate() {
+    fn resources_protect_old_temporary_profile_without_exact_lifecycle_ownership() {
         let response = service_resources_response_from_samples(
             &ServiceState::default(),
             vec![sample(
@@ -1580,48 +1867,75 @@ mod tests {
             )],
             Vec::new(),
         );
-        assert_eq!(response["summary"]["candidateCount"], 1);
-        assert_eq!(response["resources"][0]["gcAction"], "terminate_process");
+        assert_eq!(response["summary"]["candidateCount"], 0);
+        assert_eq!(response["resources"][0]["disposition"], "protected");
+        assert_eq!(
+            response["resources"][0]["reasons"][0],
+            "runtime_lifecycle_browser_unproven"
+        );
     }
 
     #[test]
-    fn rewritten_chrome_argv_red_fixture_loses_supplementary_flag_evidence() {
+    fn rewritten_single_field_chrome_argv_retains_supplementary_flag_evidence() {
         let flattened = vec![
             "chrome --user-data-dir=/tmp/agent-browser-fixture/profile-a --remote-debugging-port=9222"
                 .to_string(),
         ];
 
-        assert_eq!(command_arg_value(&flattened, "--user-data-dir"), None);
         assert_eq!(
-            command_arg_value(&flattened, "--remote-debugging-port"),
-            None
+            command_arg_value(&flattened, "--user-data-dir").as_deref(),
+            Some("/tmp/agent-browser-fixture/profile-a")
+        );
+        assert_eq!(
+            command_arg_value(&flattened, "--remote-debugging-port").as_deref(),
+            Some("9222")
         );
     }
 
     #[test]
-    fn gc_red_fixture_records_a_process_group_but_exposes_a_root_pid_effect() {
-        let response = service_resources_response_from_samples(
-            &ServiceState::default(),
-            vec![ProcessSample {
-                pid: 4200,
-                ppid: Some(1),
-                process_group_id: Some(4200),
-                command: vec![
-                    "chromium".to_string(),
-                    "--user-data-dir=/tmp/agent-browser-fixture/profile-b".to_string(),
-                ],
-                executable: Some("/tmp/fixture-generation-old/chromium".to_string()),
-                rss_bytes: Some(1024),
-                cpu_seconds: Some(1),
-                age_seconds: Some(TEMP_PROFILE_MIN_AGE_SECONDS + 1),
-            }],
-            Vec::new(),
-        );
+    fn exact_owned_gc_candidate_targets_the_reviewed_process_tree() {
+        let (state, candidate_sample) =
+            owned_closing_candidate(4200, "/tmp/agent-browser-fixture/profile-b");
+        let response =
+            service_resources_response_from_samples(&state, vec![candidate_sample], Vec::new());
 
         let candidate = &response["resources"][0];
         assert_eq!(candidate["candidateIdentity"]["processGroupId"], 4200);
+        assert_eq!(candidate["candidateIdentity"]["ownerGeneration"], 4);
         assert_eq!(candidate["pid"], 4200);
-        assert_eq!(candidate["gcAction"], "terminate_process");
+        assert_eq!(candidate["gcAction"], "terminate_process_tree");
+    }
+
+    #[test]
+    fn exact_owned_closing_tree_does_not_delete_its_named_profile_policy() {
+        let profile_root =
+            "/tmp/ab-managed-resource-gc-fixture/.agent-browser/runtime-profiles/default/user-data";
+        let (mut state, candidate_sample) = owned_closing_candidate(4300, profile_root);
+        let browser_id = "browser-4300";
+        state.profiles.insert(
+            "default".to_string(),
+            BrowserProfile {
+                id: "default".to_string(),
+                name: "Default".to_string(),
+                user_data_dir: Some(profile_root.to_string()),
+                persistent: true,
+                ..BrowserProfile::default()
+            },
+        );
+        state.browsers.get_mut(browser_id).unwrap().profile_id = Some("default".to_string());
+
+        let response =
+            service_resources_response_from_samples(&state, vec![candidate_sample], Vec::new());
+
+        assert_eq!(response["resources"][0]["disposition"], "candidate");
+        assert_eq!(
+            response["resources"][0]["gcAction"],
+            "terminate_process_tree"
+        );
+        assert_eq!(
+            response["resources"][0]["correlation"]["profileId"],
+            "default"
+        );
     }
 
     #[test]
@@ -1669,15 +1983,8 @@ mod tests {
 
     #[test]
     fn gc_dry_run_groups_candidates_without_applying() {
-        let response = service_resources_response_from_samples(
-            &ServiceState::default(),
-            vec![sample(
-                404,
-                &["chromium", "--user-data-dir=/tmp/agent-browser-smoke-old"],
-                Some(TEMP_PROFILE_MIN_AGE_SECONDS + 1),
-            )],
-            Vec::new(),
-        );
+        let (state, candidate) = owned_closing_candidate(404, "/tmp/agent-browser-smoke-old");
+        let response = service_resources_response_from_samples(&state, vec![candidate], Vec::new());
         let candidates = response["resources"]
             .as_array()
             .unwrap()
@@ -1700,7 +2007,7 @@ mod tests {
     struct FakeTerminator;
 
     impl ProcessTerminator for FakeTerminator {
-        fn terminate(&self, _candidate: &Value) -> Value {
+        fn terminate(&self, _state: &ServiceState, _candidate: &Value) -> Value {
             json!({
                 "status": "terminated",
                 "signal": "SIGTERM",
@@ -1710,20 +2017,11 @@ mod tests {
 
     #[test]
     fn gc_apply_requires_matching_review_token() {
-        let candidate = sample(
-            606,
-            &["chromium", "--user-data-dir=/tmp/agent-browser-plan0026"],
-            Some(TEMP_PROFILE_MIN_AGE_SECONDS + 1),
-        );
-        let resources = service_resources_response_from_samples(
-            &ServiceState::default(),
-            vec![candidate.clone()],
-            Vec::new(),
-        );
+        let (mut state, candidate) = owned_closing_candidate(606, "/tmp/agent-browser-plan0026");
+        let resources =
+            service_resources_response_from_samples(&state, vec![candidate.clone()], Vec::new());
         let candidates = candidates_from_response(&resources);
         let token = review_token_for_candidates(&candidates, unix_now_seconds());
-        let mut state = ServiceState::default();
-
         let response = service_gc_apply_response_from_samples(
             &mut state,
             vec![candidate.clone()],
@@ -1743,24 +2041,13 @@ mod tests {
 
     #[test]
     fn gc_apply_refuses_changed_candidate_identity() {
-        let candidate = sample(
-            707,
-            &["chromium", "--user-data-dir=/tmp/agent-browser-plan0026"],
-            Some(TEMP_PROFILE_MIN_AGE_SECONDS + 1),
-        );
-        let resources = service_resources_response_from_samples(
-            &ServiceState::default(),
-            vec![candidate.clone()],
-            Vec::new(),
-        );
+        let (mut state, candidate) = owned_closing_candidate(707, "/tmp/agent-browser-plan0026");
+        let resources =
+            service_resources_response_from_samples(&state, vec![candidate.clone()], Vec::new());
         let candidates = candidates_from_response(&resources);
         let token = review_token_for_candidates(&candidates, unix_now_seconds());
-        let changed = sample(
-            707,
-            &["chromium", "--user-data-dir=/tmp/agent-browser-other"],
-            Some(TEMP_PROFILE_MIN_AGE_SECONDS + 1),
-        );
-        let mut state = ServiceState::default();
+        let mut changed = candidate.clone();
+        changed.start_token = Some("linux:fixture:reused".to_string());
 
         let response = service_gc_apply_response_from_samples(
             &mut state,

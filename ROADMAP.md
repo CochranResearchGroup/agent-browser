@@ -9,7 +9,7 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 
 ## P117 | Runtime Lifecycle Authority And Convergence
 
-State: IN PROGRESS — SLICE B SOURCE ACCEPTED
+State: IN PROGRESS — SLICE C SOURCE ACCEPTED
 Current state: the August 19 workstation audit found one healthy dashboard but
 multiple daemon processes and executable generations, 226 Chrome processes,
 218 runtime-profile directories using about 58 GiB, and 21 immutable runtime
@@ -37,7 +37,13 @@ Owner generations and cleanup obligations move atomically, browser effects are
 generation-fenced, unapproved managed drops preserve the browser and profile,
 and Service State resource summaries project lifecycle accountability without
 becoming writers. The canonical serial Rust suite, strict lint gates, docs,
-contract checks, and an isolated production managed-Chrome smoke pass.
+contract checks, and an isolated production managed-Chrome smoke pass. Slice C
+is source accepted. One reconciler now joins exact process, process group,
+package launch, profile, owner generation, and cleanup-obligation evidence.
+Normal close and GC share the reviewed process-tree shutdown protocol. Named
+persistent profile data stays protected while its exact closing process tree
+can be reclaimed. The isolated GC smoke proves full helper-tree exit, profile
+lock cleanup, unrelated-Chrome protection, and generation-drift rejection.
 
 ### Plan
 
@@ -45,11 +51,12 @@ contract checks, and an isolated production managed-Chrome smoke pass.
 
 ### Next Recommendation
 
-Execute Slice C through the lifecycle owner. Join exact process observation,
-package launch identity, lifecycle generation, canonical profile identity, and
-process group into one reconciler. Make normal close and garbage collection
-share one reviewed process-tree shutdown path, including legitimate Linux
-browser-wrapper transitions without accepting unrelated executable drift.
+Execute Slice D through one retention authority. Join Service State, lifecycle,
+process, handoff, transaction, rollback, supervisor, selected-generation, and
+filesystem evidence before profile or generation reclamation. Implement the
+accepted 24-hour ephemeral, seven-day failed or quarantined, and never automatic
+persistent-profile policies without allowing historical transaction metadata
+to pin old binary generations forever.
 
 ## P116 | Runtime Adoption And Transactional Upgrade
 

@@ -2975,7 +2975,6 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 Ok(json!({
                     "id": id,
                     "action": action,
-                    "serviceState": flags.service_state.clone(),
                 }))
             }
             Some("gc") => {
@@ -3045,7 +3044,6 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                     "apply": apply,
                     "dryRun": dry_run,
                     "forceWithoutReview": force_without_review,
-                    "serviceState": flags.service_state.clone(),
                 });
                 if let Some(review_token) = review_token {
                     cmd["reviewToken"] = json!(review_token);
@@ -8131,7 +8129,7 @@ mod tests {
         let cmd = parse_command(&args("service resources"), &default_flags()).unwrap();
 
         assert_eq!(cmd["action"], "service_resources");
-        assert!(cmd["serviceState"].is_object());
+        assert!(cmd.get("serviceState").is_none());
     }
 
     #[test]
@@ -8163,7 +8161,7 @@ mod tests {
         assert_eq!(cmd["action"], "service_gc");
         assert_eq!(cmd["dryRun"], true);
         assert_eq!(cmd["apply"], false);
-        assert!(cmd["serviceState"].is_object());
+        assert!(cmd.get("serviceState").is_none());
     }
 
     #[test]

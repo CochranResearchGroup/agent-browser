@@ -6769,7 +6769,7 @@ Service:
   service watch              Poll service worker health and reconciliation state
   service reconcile          Probe persisted records and optionally refresh authoritative route definitions
   service resources          Inspect processes, runtime lanes, and cleanup obligations
-  service gc                 Dry-run or apply conservative cleanup candidates from service resources
+  service gc                 Review or reclaim exact lifecycle-owned closing process trees
   service prune-retained     Dry-run or apply retained closed-tab, inert-browser, orphaned-profile, and display-allocation cleanup
   service repair-retained    Dry-run or apply retained session evidence repair
   service access-plan        Show no-launch profile and browser-build routing recommendation

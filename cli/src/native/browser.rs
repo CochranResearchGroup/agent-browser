@@ -387,9 +387,12 @@ impl BrowserShutdownOutcome {
 }
 
 impl BrowserProcess {
-    pub fn mark_lifecycle_managed(&mut self) {
+    pub fn mark_lifecycle_managed(
+        &mut self,
+        reviewed_process_tree: Option<crate::native::runtime_reconciliation::ReviewedProcessTree>,
+    ) {
         if let BrowserProcess::Chrome(process) = self {
-            process.mark_lifecycle_managed();
+            process.mark_lifecycle_managed(reviewed_process_tree);
         }
     }
 
@@ -1321,9 +1324,12 @@ impl BrowserManager {
         self.close_with_outcome().await.map(|_| ())
     }
 
-    pub fn mark_lifecycle_managed(&mut self) {
+    pub fn mark_lifecycle_managed(
+        &mut self,
+        reviewed_process_tree: Option<crate::native::runtime_reconciliation::ReviewedProcessTree>,
+    ) {
         if let Some(process) = self.browser_process.as_mut() {
-            process.mark_lifecycle_managed();
+            process.mark_lifecycle_managed(reviewed_process_tree);
         }
     }
 
