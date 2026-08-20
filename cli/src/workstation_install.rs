@@ -6970,6 +6970,7 @@ mod tests {
     ) -> crate::runtime_adoption::RuntimeMigrationRecord {
         crate::runtime_adoption::RuntimeMigrationRecord {
             logical_browser_id: logical_browser_id.to_string(),
+            session_names: Vec::new(),
             profile_identity_digest: "profile-digest".to_string(),
             classification: crate::runtime_adoption::RuntimeClassification::ExternalObserved,
             disposition: crate::runtime_adoption::RuntimeDisposition::ManualPreservation,
@@ -7802,6 +7803,7 @@ mod tests {
                     .collect(),
                 vec![RuntimeCensusCandidate {
                     logical_browser_id: runtime_id,
+                    session_names: Vec::new(),
                     profile_identity_digest: "a".repeat(64),
                     observation_digest: "b".repeat(64),
                     observed_sources: vec![RuntimeCensusSource::ServiceBrowserRecords],
@@ -9013,6 +9015,7 @@ mod tests {
 
         let migration = RuntimeMigrationRecord {
             logical_browser_id: "session:logical-browser".to_string(),
+            session_names: vec!["logical-browser".to_string()],
             profile_identity_digest: "profile-digest".to_string(),
             classification: RuntimeClassification::CooperativeLiveOwner,
             disposition: RuntimeDisposition::CooperativeTransfer,

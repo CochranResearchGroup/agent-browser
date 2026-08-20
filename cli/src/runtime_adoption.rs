@@ -96,6 +96,8 @@ pub(crate) enum UpgradeTransactionState {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct RuntimeMigrationRecord {
     pub(crate) logical_browser_id: String,
+    #[serde(default)]
+    pub(crate) session_names: Vec<String>,
     pub(crate) profile_identity_digest: String,
     pub(crate) classification: RuntimeClassification,
     pub(crate) disposition: RuntimeDisposition,
@@ -504,6 +506,8 @@ pub(crate) struct RuntimeCensusSourceReadback {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct RuntimeCensusCandidate {
     pub(crate) logical_browser_id: String,
+    #[serde(default)]
+    pub(crate) session_names: Vec<String>,
     pub(crate) profile_identity_digest: String,
     pub(crate) observation_digest: String,
     pub(crate) observed_sources: Vec<RuntimeCensusSource>,
@@ -522,6 +526,8 @@ pub(crate) struct RuntimeCensusRound {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct RuntimeCensusRecord {
     pub(crate) logical_browser_id: String,
+    #[serde(default)]
+    pub(crate) session_names: Vec<String>,
     pub(crate) profile_identity_digest: String,
     pub(crate) observed_sources: Vec<RuntimeCensusSource>,
     pub(crate) classification: RuntimeClassification,
@@ -670,6 +676,11 @@ pub(crate) fn adapt_runtime_census_readbacks(
         sources_by_runtime.insert(logical_browser_id.clone(), observed_sources.clone());
         candidates.push(RuntimeCensusCandidate {
             logical_browser_id,
+            session_names: session_aliases
+                .iter()
+                .filter_map(|alias| alias.strip_prefix("session:"))
+                .map(str::to_string)
+                .collect(),
             profile_identity_digest,
             observation_digest,
             observed_sources: observed_sources.into_iter().collect(),
@@ -1829,6 +1840,7 @@ pub(crate) fn build_stable_runtime_census(
         }
         records.push(RuntimeCensusRecord {
             logical_browser_id: selected.logical_browser_id.clone(),
+            session_names: selected.session_names.clone(),
             profile_identity_digest: selected.profile_identity_digest.clone(),
             observed_sources: selected.observed_sources.clone(),
             classification: classification_decision.classification,
@@ -1876,6 +1888,7 @@ pub(crate) fn persist_runtime_census(
         .iter()
         .map(|record| RuntimeMigrationRecord {
             logical_browser_id: record.logical_browser_id.clone(),
+            session_names: record.session_names.clone(),
             profile_identity_digest: record.profile_identity_digest.clone(),
             classification: record.classification,
             disposition: record.disposition,
@@ -2480,7 +2493,13 @@ mod tests {
     #[test]
     fn source_adapters_join_one_runtime_across_all_ten_readbacks() {
         let profile_digest = digest_text("profile-a");
-        let aliases = vec!["browser:browser-a", "profile:profile-a", "pid:41"];
+        let aliases = vec![
+            "browser:browser-a",
+            "profile:profile-a",
+            "pid:41",
+            "session:lane-b",
+            "session:lane-a",
+        ];
         let readbacks = runtime_census_sources()
             .into_iter()
             .map(|source| RuntimeCensusSourceReadback {
@@ -2500,6 +2519,7 @@ mod tests {
         let candidate = &round.candidates[0];
         assert_eq!(candidate.logical_browser_id, "browser-a");
         assert_eq!(candidate.profile_identity_digest, profile_digest);
+        assert_eq!(candidate.session_names, ["lane-a", "lane-b"]);
         assert_eq!(candidate.observed_sources.len(), 10);
         assert_eq!(
             classify_runtime(&candidate.evidence).classification,
@@ -3360,6 +3380,7 @@ mod tests {
             .iter()
             .map(|fixture| RuntimeCensusCandidate {
                 logical_browser_id: fixture.fixture_id.clone(),
+                session_names: Vec::new(),
                 profile_identity_digest: format!(
                     "{:x}",
                     Sha256::digest(fixture.fixture_id.as_bytes())
@@ -3475,6 +3496,7 @@ mod tests {
                 .collect(),
             vec![RuntimeCensusCandidate {
                 logical_browser_id: logical_browser_id.clone(),
+                session_names: Vec::new(),
                 profile_identity_digest: digest_text("profile-only"),
                 observation_digest: digest_text("profile-only-observation"),
                 observed_sources: vec![observed_source],
