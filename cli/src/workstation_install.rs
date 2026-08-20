@@ -3434,6 +3434,7 @@ fn require_stable_runtime_census_with(
         candidate_support_manifest_sha256: support_manifest_sha256,
         runtime_census_digest: None,
         runtime_migrations: Vec::new(),
+        runtime_host_convergence: None,
         state: UpgradeTransactionState::Planned,
         revision: 0,
         checkpoints: vec![UpgradeCheckpoint {
@@ -3546,11 +3547,14 @@ fn new_upgrade_transaction(
     candidate_support_manifest_sha256: String,
 ) -> crate::runtime_adoption::UpgradeTransaction {
     use crate::runtime_adoption::{
-        UpgradeCheckpoint, UpgradeTransaction, UpgradeTransactionState,
-        RUNTIME_ADOPTION_SCHEMA_VERSION,
+        RuntimeHostConvergenceRecord, UpgradeCheckpoint, UpgradeTransaction,
+        UpgradeTransactionState, RUNTIME_ADOPTION_SCHEMA_VERSION,
     };
 
     let recorded_at = runtime_adoption_timestamp();
+    let deadline_at = (time::OffsetDateTime::now_utc() + time::Duration::minutes(10))
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_else(|_| "timestamp-unavailable".to_string());
     UpgradeTransaction {
         schema_version: RUNTIME_ADOPTION_SCHEMA_VERSION.to_string(),
         transaction_id: format!("upgrade-{}", uuid::Uuid::new_v4()),
@@ -3561,6 +3565,14 @@ fn new_upgrade_transaction(
         candidate_support_manifest_sha256,
         runtime_census_digest: None,
         runtime_migrations: Vec::new(),
+        runtime_host_convergence: Some(RuntimeHostConvergenceRecord {
+            schema_version: "agent-browser.runtime-host-convergence.v1".to_string(),
+            deadline_at,
+            queue_transfer_policy: "drain_then_commit".to_string(),
+            old_host: None,
+            candidate_host: None,
+            lanes: Vec::new(),
+        }),
         state: UpgradeTransactionState::Planned,
         revision: 0,
         checkpoints: vec![UpgradeCheckpoint {

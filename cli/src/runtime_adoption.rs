@@ -113,6 +113,54 @@ pub(crate) struct UpgradeCheckpoint {
     pub(crate) recorded_at: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum RuntimeLaneTransferState {
+    CensusStable,
+    ObservationAttached,
+    Committed,
+    RolledBack,
+    Finalized,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct RuntimeHostIdentityEvidence {
+    pub(crate) endpoint_key: String,
+    pub(crate) generation_id: String,
+    pub(crate) binary_sha256: String,
+    pub(crate) pid: u32,
+    pub(crate) process_start_token: String,
+    pub(crate) socket_identity: String,
+    pub(crate) observation_only: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct RuntimeLaneTransferRecord {
+    pub(crate) session_name: String,
+    pub(crate) source_generation_id: Option<String>,
+    pub(crate) candidate_generation_id: String,
+    pub(crate) state: RuntimeLaneTransferState,
+    pub(crate) owner_generation_before: Option<u64>,
+    pub(crate) owner_generation_after: Option<u64>,
+    pub(crate) observation_receipt_id: Option<String>,
+    pub(crate) commit_receipt_id: Option<String>,
+    pub(crate) rollback_receipt_id: Option<String>,
+    pub(crate) queued_work_count: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct RuntimeHostConvergenceRecord {
+    pub(crate) schema_version: String,
+    pub(crate) deadline_at: String,
+    pub(crate) queue_transfer_policy: String,
+    pub(crate) old_host: Option<RuntimeHostIdentityEvidence>,
+    pub(crate) candidate_host: Option<RuntimeHostIdentityEvidence>,
+    pub(crate) lanes: Vec<RuntimeLaneTransferRecord>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct UpgradeTransaction {
@@ -125,6 +173,8 @@ pub(crate) struct UpgradeTransaction {
     pub(crate) candidate_support_manifest_sha256: String,
     pub(crate) runtime_census_digest: Option<String>,
     pub(crate) runtime_migrations: Vec<RuntimeMigrationRecord>,
+    #[serde(default)]
+    pub(crate) runtime_host_convergence: Option<RuntimeHostConvergenceRecord>,
     pub(crate) state: UpgradeTransactionState,
     pub(crate) revision: u64,
     pub(crate) checkpoints: Vec<UpgradeCheckpoint>,
@@ -1896,6 +1946,27 @@ pub(crate) fn persist_runtime_census(
             reason_codes: record.reason_codes.clone(),
         })
         .collect();
+    if let Some(convergence) = transaction.runtime_host_convergence.as_mut() {
+        convergence.lanes = transaction
+            .runtime_migrations
+            .iter()
+            .flat_map(|migration| migration.session_names.iter().cloned())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .map(|session_name| RuntimeLaneTransferRecord {
+                session_name,
+                source_generation_id: transaction.old_generation_id.clone(),
+                candidate_generation_id: transaction.candidate_generation_id.clone(),
+                state: RuntimeLaneTransferState::CensusStable,
+                owner_generation_before: None,
+                owner_generation_after: None,
+                observation_receipt_id: None,
+                commit_receipt_id: None,
+                rollback_receipt_id: None,
+                queued_work_count: 0,
+            })
+            .collect();
+    }
     transaction.revision = transaction.revision.saturating_add(1);
     transaction.state = if census.activation_allowed {
         UpgradeTransactionState::CensusStable
@@ -2524,6 +2595,31 @@ mod tests {
         assert_eq!(
             classify_runtime(&candidate.evidence).classification,
             RuntimeClassification::CooperativeLiveOwner
+        );
+
+        let census = build_stable_runtime_census(&round, &round).unwrap();
+        let samples: Value = serde_json::from_str(SCHEMA_SAMPLES).unwrap();
+        let mut transaction: UpgradeTransaction =
+            serde_json::from_value(samples["upgradeTransaction"].clone()).unwrap();
+        transaction.runtime_host_convergence = Some(RuntimeHostConvergenceRecord {
+            schema_version: "agent-browser.runtime-host-convergence.v1".to_string(),
+            deadline_at: "2026-08-20T18:00:00Z".to_string(),
+            queue_transfer_policy: "drain_then_commit".to_string(),
+            old_host: None,
+            candidate_host: None,
+            lanes: Vec::new(),
+        });
+        persist_runtime_census(&mut transaction, &census, "2026-08-20T17:50:00Z");
+        assert_eq!(
+            transaction
+                .runtime_host_convergence
+                .as_ref()
+                .unwrap()
+                .lanes
+                .iter()
+                .map(|lane| lane.session_name.as_str())
+                .collect::<Vec<_>>(),
+            ["lane-a", "lane-b"]
         );
     }
 
