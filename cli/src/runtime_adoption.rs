@@ -161,6 +161,109 @@ pub(crate) struct RuntimeHostConvergenceRecord {
     pub(crate) lanes: Vec<RuntimeLaneTransferRecord>,
 }
 
+pub(crate) fn record_runtime_host_identity(
+    transaction: &mut UpgradeTransaction,
+    candidate: bool,
+    evidence: RuntimeHostIdentityEvidence,
+) -> Result<(), String> {
+    if evidence.endpoint_key.trim().is_empty()
+        || evidence.process_start_token.trim().is_empty()
+        || evidence.socket_identity.trim().is_empty()
+        || evidence.binary_sha256.len() != 64
+    {
+        return Err("runtime_host_identity_incomplete".to_string());
+    }
+    if candidate {
+        if evidence.generation_id != transaction.candidate_generation_id
+            || evidence.binary_sha256 != transaction.candidate_binary_sha256
+            || !evidence.observation_only
+        {
+            return Err("candidate_runtime_host_identity_mismatch".to_string());
+        }
+    } else if transaction.old_generation_id.as_deref() != Some(&evidence.generation_id) {
+        return Err("old_runtime_host_identity_mismatch".to_string());
+    }
+    let convergence = transaction
+        .runtime_host_convergence
+        .as_mut()
+        .ok_or_else(|| "runtime_host_convergence_missing".to_string())?;
+    let slot = if candidate {
+        &mut convergence.candidate_host
+    } else {
+        &mut convergence.old_host
+    };
+    if slot.as_ref().is_some_and(|recorded| recorded != &evidence) {
+        return Err("runtime_host_identity_changed".to_string());
+    }
+    *slot = Some(evidence);
+    Ok(())
+}
+
+pub(crate) fn record_runtime_lane_observation(
+    transaction: &mut UpgradeTransaction,
+    session_name: &str,
+    owner_generation: u64,
+    receipt_id: &str,
+) -> Result<(), String> {
+    if receipt_id.trim().is_empty() {
+        return Err("runtime_lane_observation_receipt_missing".to_string());
+    }
+    let convergence = transaction
+        .runtime_host_convergence
+        .as_mut()
+        .ok_or_else(|| "runtime_host_convergence_missing".to_string())?;
+    if convergence.candidate_host.is_none() {
+        return Err("candidate_runtime_host_identity_missing".to_string());
+    }
+    let lane = convergence
+        .lanes
+        .iter_mut()
+        .find(|lane| lane.session_name == session_name)
+        .ok_or_else(|| format!("runtime_lane_not_in_census:{session_name}"))?;
+    if lane.state != RuntimeLaneTransferState::CensusStable {
+        return Err(format!(
+            "runtime_lane_observation_out_of_order:{session_name}"
+        ));
+    }
+    lane.owner_generation_before = Some(owner_generation);
+    lane.observation_receipt_id = Some(receipt_id.to_string());
+    lane.state = RuntimeLaneTransferState::ObservationAttached;
+    Ok(())
+}
+
+pub(crate) fn commit_runtime_lane_transfer(
+    transaction: &mut UpgradeTransaction,
+    session_name: &str,
+    owner_generation: u64,
+    queued_work_count: u64,
+    receipt_id: &str,
+) -> Result<(), String> {
+    if receipt_id.trim().is_empty() {
+        return Err("runtime_lane_commit_receipt_missing".to_string());
+    }
+    let convergence = transaction
+        .runtime_host_convergence
+        .as_mut()
+        .ok_or_else(|| "runtime_host_convergence_missing".to_string())?;
+    let lane = convergence
+        .lanes
+        .iter_mut()
+        .find(|lane| lane.session_name == session_name)
+        .ok_or_else(|| format!("runtime_lane_not_in_census:{session_name}"))?;
+    if lane.state != RuntimeLaneTransferState::ObservationAttached
+        || lane
+            .owner_generation_before
+            .is_none_or(|before| owner_generation <= before)
+    {
+        return Err(format!("runtime_lane_owner_fence_rejected:{session_name}"));
+    }
+    lane.owner_generation_after = Some(owner_generation);
+    lane.queued_work_count = queued_work_count;
+    lane.commit_receipt_id = Some(receipt_id.to_string());
+    lane.state = RuntimeLaneTransferState::Committed;
+    Ok(())
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct UpgradeTransaction {
@@ -303,7 +406,35 @@ pub(crate) fn transition_upgrade_transaction(
 }
 
 pub(crate) fn upgrade_runtime_preservation_proven(transaction: &UpgradeTransaction) -> bool {
-    transaction.runtime_census_digest.is_some()
+    let host_convergence_proven =
+        transaction
+            .runtime_host_convergence
+            .as_ref()
+            .is_none_or(|convergence| {
+                convergence.lanes.is_empty()
+                    || (convergence.candidate_host.is_some()
+                        && convergence.lanes.iter().all(|lane| {
+                            matches!(
+                                lane.state,
+                                RuntimeLaneTransferState::Committed
+                                    | RuntimeLaneTransferState::Finalized
+                            ) && lane.owner_generation_before.is_some()
+                                && lane.owner_generation_after.is_some_and(|after| {
+                                    lane.owner_generation_before
+                                        .is_some_and(|before| after > before)
+                                })
+                                && lane
+                                    .observation_receipt_id
+                                    .as_deref()
+                                    .is_some_and(|receipt| !receipt.trim().is_empty())
+                                && lane
+                                    .commit_receipt_id
+                                    .as_deref()
+                                    .is_some_and(|receipt| !receipt.trim().is_empty())
+                        }))
+            });
+    host_convergence_proven
+        && transaction.runtime_census_digest.is_some()
         && transaction
             .runtime_migrations
             .iter()
@@ -2429,6 +2560,52 @@ mod tests {
             transaction.state,
             UpgradeTransactionState::OperatorRecoveryRequired
         );
+    }
+
+    #[test]
+    fn runtime_host_convergence_requires_identity_observation_and_owner_fence() {
+        let samples: Value = serde_json::from_str(SCHEMA_SAMPLES).unwrap();
+        let mut transaction: UpgradeTransaction =
+            serde_json::from_value(samples["upgradeTransaction"].clone()).unwrap();
+        transaction.runtime_host_convergence = Some(RuntimeHostConvergenceRecord {
+            schema_version: "agent-browser.runtime-host-convergence.v1".to_string(),
+            deadline_at: "2026-08-20T18:00:00Z".to_string(),
+            queue_transfer_policy: "drain_then_commit".to_string(),
+            old_host: None,
+            candidate_host: None,
+            lanes: vec![RuntimeLaneTransferRecord {
+                session_name: "alpha".to_string(),
+                source_generation_id: transaction.old_generation_id.clone(),
+                candidate_generation_id: transaction.candidate_generation_id.clone(),
+                state: RuntimeLaneTransferState::CensusStable,
+                owner_generation_before: None,
+                owner_generation_after: None,
+                observation_receipt_id: None,
+                commit_receipt_id: None,
+                rollback_receipt_id: None,
+                queued_work_count: 0,
+            }],
+        });
+        let candidate = RuntimeHostIdentityEvidence {
+            endpoint_key: "runtime-host-candidate".to_string(),
+            generation_id: transaction.candidate_generation_id.clone(),
+            binary_sha256: transaction.candidate_binary_sha256.clone(),
+            pid: 41001,
+            process_start_token: "start-41001".to_string(),
+            socket_identity: "socket-41001".to_string(),
+            observation_only: true,
+        };
+
+        assert!(!upgrade_runtime_preservation_proven(&transaction));
+        record_runtime_host_identity(&mut transaction, true, candidate).unwrap();
+        record_runtime_lane_observation(&mut transaction, "alpha", 7, "observe-alpha").unwrap();
+        assert_eq!(
+            commit_runtime_lane_transfer(&mut transaction, "alpha", 7, 2, "commit-alpha")
+                .unwrap_err(),
+            "runtime_lane_owner_fence_rejected:alpha"
+        );
+        commit_runtime_lane_transfer(&mut transaction, "alpha", 8, 2, "commit-alpha").unwrap();
+        assert!(upgrade_runtime_preservation_proven(&transaction));
     }
 
     #[test]
