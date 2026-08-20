@@ -130,7 +130,23 @@ pub(crate) async fn handle_navigate(cmd: &Value, state: &mut DaemonState) -> Res
     state.ref_map.clear();
     state.iframe_sessions.clear();
     state.active_frame_id = None;
-    let mut data = cancellable(mgr.navigate(url, wait_until), cancellation).await?;
+    let navigation_session = mgr.active_session_id()?.to_string();
+    let navigation = cancellable(mgr.navigate(url, wait_until), cancellation.clone()).await;
+    if navigation.is_err()
+        && cancellation
+            .as_ref()
+            .is_some_and(crate::native::cancellation::CancellationToken::is_cancelled)
+    {
+        let _ = mgr
+            .client
+            .send_command(
+                "Page.stopLoading",
+                Some(json!({})),
+                Some(&navigation_session),
+            )
+            .await;
+    }
+    let mut data = navigation?;
     if let (Some(object), Some(shared_acquisition)) = (
         data.as_object_mut(),
         pending_shared_profile_acquisition.as_ref(),

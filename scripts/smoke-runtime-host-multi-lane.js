@@ -187,7 +187,10 @@ try {
   releaseSlowRequest();
 
   const recovered = await run('alpha', ['open', 'data:text/html,<title>Recovered lane</title>']);
-  assert(recovered.data?.title === 'Recovered lane', 'cancelled lane did not recover');
+  assert(
+    recovered.data?.title === 'Recovered lane',
+    `cancelled lane did not recover: ${JSON.stringify(recovered)}`,
+  );
 
   await Promise.all([
     run('alpha', ['close']),
