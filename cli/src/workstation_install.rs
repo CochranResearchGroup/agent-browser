@@ -3975,9 +3975,10 @@ fn transfer_discovered_runtimes(
                     irreversible_source_revocation: false,
                 });
                 let handoff_index = handoffs.len() - 1;
-                let resumed = match run_agent_json(
+                let resumed = match run_candidate_agent_json(
                     &candidate_binary,
                     &candidate_session,
+                    transaction_id,
                     &["handoff", "resume", "--source-session", &source_session],
                 ) {
                     Ok(resumed) => resumed,
@@ -4021,9 +4022,10 @@ fn transfer_discovered_runtimes(
                     irreversible_source_revocation: false,
                 });
                 let handoff_index = handoffs.len() - 1;
-                let resumed = run_agent_json(
+                let resumed = run_candidate_agent_json(
                     &candidate_binary,
                     &candidate_session,
+                    transaction_id,
                     &[
                         "handoff",
                         "resume",
@@ -4446,9 +4448,10 @@ fn adopt_runtime_via_verified_orphan_fallback(
     if !migration.reason_codes.iter().any(|value| value == reason) {
         migration.reason_codes.push(reason.to_string());
     }
-    let resumed = run_agent_json(
+    let resumed = run_candidate_agent_json(
         candidate_binary,
         &candidate_session,
+        transaction_id,
         &[
             "handoff",
             "resume",
@@ -4753,12 +4756,28 @@ fn run_agent_json_detailed(
     session: &str,
     command_args: &[&str],
 ) -> Result<Value, RuntimeTransactionCommandFailure> {
-    let output = Command::new(binary)
+    run_agent_json_detailed_in_socket_dir(binary, session, command_args, None)
+}
+
+fn run_agent_json_detailed_in_socket_dir(
+    binary: &Path,
+    session: &str,
+    command_args: &[&str],
+    socket_dir: Option<&Path>,
+) -> Result<Value, RuntimeTransactionCommandFailure> {
+    let mut command = Command::new(binary);
+    command
         .args(["--json", "--session", session])
         .args(command_args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+    if let Some(socket_dir) = socket_dir {
+        command
+            .env(crate::runtime_host::RUNTIME_HOST_ENV, "1")
+            .env("AGENT_BROWSER_SOCKET_DIR", socket_dir);
+    }
+    let output = command
         .output()
         .map_err(|error| RuntimeTransactionCommandFailure {
             kind: RuntimeTransactionCommandFailureKind::CommandFailed,
@@ -4792,6 +4811,36 @@ fn run_agent_json_detailed(
         });
     }
     Ok(payload)
+}
+
+fn candidate_runtime_host_socket_dir(transaction_id: &str) -> Result<PathBuf, String> {
+    if transaction_id.trim().is_empty()
+        || !transaction_id
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
+    {
+        return Err("candidate_runtime_host_transaction_id_invalid".to_string());
+    }
+    let home = dirs::home_dir().ok_or_else(|| "Unable to determine home directory".to_string())?;
+    Ok(home
+        .join(".agent-browser/runtime-adoption/transactions")
+        .join(transaction_id)
+        .join("candidate-host"))
+}
+
+fn run_candidate_agent_json(
+    binary: &Path,
+    session: &str,
+    transaction_id: &str,
+    command_args: &[&str],
+) -> Result<Value, String> {
+    let socket_dir = candidate_runtime_host_socket_dir(transaction_id)?;
+    fs::create_dir_all(&socket_dir).map_err(display_io(
+        "create candidate runtime host socket directory",
+        &socket_dir,
+    ))?;
+    run_agent_json_detailed_in_socket_dir(binary, session, command_args, Some(&socket_dir))
+        .map_err(|error| error.message)
 }
 
 fn run_agent_json(binary: &Path, session: &str, command_args: &[&str]) -> Result<Value, String> {
@@ -5316,9 +5365,10 @@ fn rollback_runtime_handoffs(prepared: &PreparedPayloadTransaction) -> Result<()
     let mut failures = Vec::new();
     for handoff in prepared.runtime_handoffs.iter().rev() {
         if handoff.committed {
-            if let Err(error) = run_agent_json(
+            if let Err(error) = run_candidate_agent_json(
                 &candidate_binary,
                 &handoff.candidate_session,
+                &prepared.transaction.transaction_id,
                 &[
                     "handoff",
                     "rollback",
