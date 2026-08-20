@@ -649,7 +649,12 @@ that explicit flag can also remove old failed retained session lanes that have
 no retained tabs. Add <code>--orphaned-profiles</code> to include
 <code>custom:*</code> profile records with no retained service references and
 missing ephemeral user-data directories, plus unreferenced nonpersistent
-<code>managed_one_time</code> profile records. Add
+<code>managed_one_time</code> profile records. Present managed one-time
+directories require 24 terminal hours with no process or retained reference.
+Failed or quarantined profiles require seven days and review. Persistent
+profiles are never age-deleted. Apply uses an exact-root quarantine manifest,
+reports projected and reclaimed bytes, and removes the Service State record
+only after filesystem reclamation succeeds. Add
 <code>--display-allocations</code> to classify retained display allocation records and prune only apply-safe
 orphan, stale-route, or historical-placeholder allocations. Add
 <code>--released-sessions</code> to prune released

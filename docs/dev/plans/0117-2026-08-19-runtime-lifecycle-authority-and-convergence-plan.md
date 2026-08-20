@@ -2,7 +2,7 @@
 
 Date: 2026-08-19
 
-State: IN PROGRESS — SLICE C SOURCE ACCEPTED
+State: IN PROGRESS — SLICE D SOURCE ACCEPTED
 
 Lane: P117
 
@@ -16,6 +16,9 @@ Slice B receipt:
 
 Slice C receipt:
 `docs/dev/notes/0117-3-2026-08-20-runtime-lifecycle-slice-c-source-acceptance.md`
+
+Slice D receipt:
+`docs/dev/notes/0117-4-2026-08-20-runtime-lifecycle-slice-d-source-acceptance.md`
 
 Depends on:
 

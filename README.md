@@ -234,14 +234,14 @@ Its `readiness` object separates `payloadReady`, `selectedGenerationReady`,
 `runtimeConvergenceReady`, `upgradeTransactionState`,
 `dashboardIngressReady`, `operatorJourneyReady`, and `rollbackReady`. Overall
 `ready` remains false while a transaction or admission drain is active or any
-axis is unproved. An accepted generation retains its rollback authority until
-a later reviewed `agent-browser install workstation finalize --json` confirms
-the same readiness model and marks the old generation retirable. Run GC dry
-run again after finalization before any `gc --apply` deletion.
+axis is unproved. An accepted generation retains rollback authority for 24
+hours. Generation GC then finalizes the accepted transaction automatically
+after rechecking the locked ledger. The transaction remains durable history,
+but no longer pins every generation it names.
 `agent-browser install workstation gc --dry-run --json` previews old-generation
-cleanup. A later explicit `--apply` retains the selected generation plus every
-generation referenced by a live process, named supervisor, failed or unclosed
-transaction, or rollback state.
+cleanup. A later explicit `--apply` retains the selected generation, the
+immediately previous healthy rollback generation, and exact live-process,
+named-supervisor, active-transaction, and open-rollback references.
 `agent-browser install workstation reconcile --json` reruns the installed
 convergence controller without reinstalling the payload.
 `agent-browser install workstation backup --json` performs the same protected
@@ -2859,7 +2859,7 @@ to `~/.agent-browser/service/resource-monitor-summary.json`; read it with
 `bash scripts/remove-resource-monitor-user-timer.sh`. The timer never applies
 cleanup.
 
-Use `service prune-retained` when the retained service inventory has accumulated closed tabs or inert browser records after many operator and agent sessions. It is dry-run by default and removes nothing unless `--apply` is present. The default candidate set is closed tabs plus `not_started` browser records that have no PID, CDP endpoint, active sessions, view streams, or non-closed tabs. Add `--process-exited-browsers` only after reviewing failure evidence, because `process_exited` and `unreachable` records may still explain a crash, shutdown, or host problem. With `--abandoned-sessions`, that explicit flag can also remove old failed retained session lanes that have no retained tabs. Add `--orphaned-profiles` to include `custom:*` profile records with no retained service references and missing ephemeral user-data directories, plus unreferenced nonpersistent `managed_one_time` profile records. Add `--display-allocations` to classify retained display allocation records and include only apply-safe orphan, stale-route, or historical-placeholder allocations in the prune candidates. Applying the prune also removes matching browser, tab, session-link, reviewed orphaned-profile, and reviewed display-allocation records through the serialized service-state repository.
+Use `service prune-retained` when the retained service inventory has accumulated closed tabs or inert browser records after many operator and agent sessions. It is dry-run by default and removes nothing unless `--apply` is present. The default candidate set is closed tabs plus `not_started` browser records that have no PID, CDP endpoint, active sessions, view streams, or non-closed tabs. Add `--process-exited-browsers` only after reviewing failure evidence, because `process_exited` and `unreachable` records may still explain a crash, shutdown, or host problem. With `--abandoned-sessions`, that explicit flag can also remove old failed retained session lanes that have no retained tabs. Add `--orphaned-profiles` for unreferenced ephemeral profile records and directories. Present managed one-time directories require 24 terminal hours with no process or retained reference. Failed or quarantined profiles require seven days and review. Persistent profiles are never age-deleted. Apply moves an eligible directory through an exact-root quarantine manifest, reports projected and reclaimed bytes, and removes its Service State record only after filesystem reclamation succeeds. Add `--display-allocations` to classify retained display allocation records and include only apply-safe orphan, stale-route, or historical-placeholder allocations in the prune candidates.
 
 Add `--released-sessions` when released or expired session records should be pruned with their inert linked `not_started` browser placeholders. The session must have no retained tabs and every linked browser must have no PID, CDP endpoint, view streams, profile binding, or non-self active sessions. Add `--abandoned-sessions` only after operator review; it applies the same inert-placeholder rule to shared or exclusive session leases that would otherwise continue to affect profile allocation. When `--process-exited-browsers` is also present, abandoned-session cleanup can prune old linked `process_exited` or `unreachable` browser records that have no retained tabs, even when stale failure or view-stream metadata is still attached. Abandoned shared or exclusive sessions must also have a parseable `lastLeaseObservedAt` or `createdAt` older than `--abandoned-session-min-age-minutes`, which defaults to `1440`. Dry-runs report skipped abandoned sessions as `abandonedSessionsMissingAgeTimestamp` or `abandonedSessionsTooFresh` so operators can distinguish unsafe stale-looking placeholders from actual prune candidates. The `skippedSummary` field reports the top skipped groups by stable prefix after trimming trailing numeric run suffixes, including total and omitted group counts, and text output shows the same top groups for triage.
 

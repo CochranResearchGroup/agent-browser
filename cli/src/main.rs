@@ -20,6 +20,7 @@ mod runtime_multiplicity;
 #[allow(dead_code)]
 mod runtime_owner_transfer;
 mod runtime_profile;
+mod runtime_retention;
 mod session_supervisor;
 #[cfg(test)]
 mod test_utils;

@@ -816,13 +816,21 @@ fn test_prune_retained_service_state_removes_orphaned_custom_profiles() {
 }
 
 #[test]
-fn p117_red_profile_record_prune_does_not_reclaim_the_profile_directory() {
-    let profile_root = env::temp_dir().join(format!(
+fn profile_record_prune_reclaims_an_eligible_profile_directory() {
+    let fixture_root = env::temp_dir().join(format!(
         "agent-browser-p117-profile-prune-{}",
         uuid::Uuid::new_v4()
     ));
+    let profile_root = fixture_root
+        .join("runtime-profiles")
+        .join("managed-one-time-p117");
     fs::create_dir_all(&profile_root).unwrap();
     fs::write(profile_root.join("retained-evidence"), b"fixture").unwrap();
+    let old = std::time::SystemTime::now() - std::time::Duration::from_secs(25 * 60 * 60);
+    fs::File::open(&profile_root)
+        .unwrap()
+        .set_times(std::fs::FileTimes::new().set_modified(old))
+        .unwrap();
     let mut service_state = ServiceState {
         profiles: BTreeMap::from([(
             "managed-one-time-p117".to_string(),
@@ -854,10 +862,17 @@ fn p117_red_profile_record_prune_does_not_reclaim_the_profile_directory() {
     );
 
     assert_eq!(result["removed"]["orphanedProfiles"], 1);
+    assert_eq!(result["removed"]["orphanedProfileBytes"], 7);
     assert!(!service_state.profiles.contains_key("managed-one-time-p117"));
-    assert!(profile_root.join("retained-evidence").is_file());
+    assert!(!profile_root.exists());
+    assert!(fixture_root
+        .join("retention-quarantine/manifests")
+        .read_dir()
+        .unwrap()
+        .next()
+        .is_some());
 
-    fs::remove_dir_all(profile_root).unwrap();
+    fs::remove_dir_all(fixture_root).unwrap();
 }
 
 #[test]

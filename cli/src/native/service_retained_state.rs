@@ -25,9 +25,10 @@ pub(crate) mod service_commands {
     };
     use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
     use crate::native::state;
-    use chrono::{DateTime, FixedOffset};
+    use chrono::{DateTime, FixedOffset, Utc};
     use serde_json::{json, Map, Value};
     use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+    use std::fs;
     use std::path::{Path, PathBuf};
     use std::time::{Duration, Instant};
     #[derive(Debug, Clone, Copy)]
@@ -84,8 +85,22 @@ pub(crate) mod service_commands {
     pub(crate) async fn handle_service_prune_retained(cmd: &Value) -> Result<Value, String> {
         let options = ServiceRetentionPruneOptions::from_command(cmd);
         if options.apply {
+            let mut resumed_profile_reclaims = Vec::new();
+            if let Ok(root) = crate::runtime_profile::runtime_profiles_root() {
+                resumed_profile_reclaims
+                    .extend(crate::runtime_retention::resume_profile_reclaims(&root)?);
+            }
+            resumed_profile_reclaims.extend(crate::runtime_retention::resume_profile_reclaims(
+                &std::env::temp_dir(),
+            )?);
+            resumed_profile_reclaims.sort();
+            resumed_profile_reclaims.dedup();
             let repository = LockedServiceStateRepository::default_json()?;
-            repository.mutate(|state| Ok(prune_retained_service_state(state, options)))
+            repository.mutate(|state| {
+                let mut report = prune_retained_service_state(state, options);
+                report["resumedProfileReclaims"] = json!(resumed_profile_reclaims);
+                Ok(report)
+            })
         } else {
             let mut service_state = cmd
                 .get("serviceState")
@@ -786,6 +801,35 @@ pub(crate) mod service_commands {
             Vec::new()
         };
         profile_ids.sort();
+        let now = Utc::now();
+        let mut profile_retention_decisions = serde_json::Map::new();
+        profile_ids.retain(|profile_id| {
+            let Some(profile) = state.profiles.get(profile_id) else {
+                return false;
+            };
+            let Some(path) = profile.user_data_dir.as_deref().map(PathBuf::from) else {
+                return true;
+            };
+            if !path.exists() {
+                return true;
+            }
+            let evidence = profile_retention_evidence(profile_id, profile, &path);
+            let decision = crate::runtime_retention::decide_profile_retention(&evidence, now);
+            profile_retention_decisions.insert(
+                profile_id.clone(),
+                json!({
+                    "disposition": retention_disposition_name(decision.disposition),
+                    "reasonCodes": decision.reason_codes,
+                    "projectedBytes": decision.projected_bytes,
+                    "userDataDir": evidence.user_data_dir,
+                }),
+            );
+            matches!(
+                decision.disposition,
+                crate::runtime_retention::RetentionDisposition::AutomaticallyReclaimable
+                    | crate::runtime_retention::RetentionDisposition::Reviewable
+            )
+        });
         let display_allocation_candidates = if options.display_allocations {
             retained_display_allocation_candidates(state)
         } else {
@@ -813,6 +857,9 @@ pub(crate) mod service_commands {
             summarize_skipped_session_groups(&skipped_abandoned_sessions_too_fresh);
         let mut session_tab_refs_removed = 0usize;
         let mut session_browser_refs_removed = 0usize;
+        let mut removed_profile_count = 0usize;
+        let mut reclaimed_profile_bytes = 0u64;
+        let mut profile_apply_errors = serde_json::Map::new();
         if options.apply {
             for session_id in &session_ids {
                 state.sessions.remove(session_id);
@@ -824,8 +871,40 @@ pub(crate) mod service_commands {
                 state.browsers.remove(browser_id);
             }
             for profile_id in &profile_ids {
+                let reclaim_result = state.profiles.get(profile_id).and_then(|profile| {
+                    profile
+                        .user_data_dir
+                        .as_deref()
+                        .map(PathBuf::from)
+                        .filter(|path| path.exists())
+                        .map(|path| {
+                            let evidence = profile_retention_evidence(profile_id, profile, &path);
+                            let decision = crate::runtime_retention::decide_profile_retention(
+                                &evidence,
+                                Utc::now(),
+                            );
+                            approved_runtime_profile_root(&path)
+                                .ok_or_else(|| {
+                                    "retention_target_outside_approved_profile_root".to_string()
+                                })
+                                .and_then(|root| {
+                                    crate::runtime_retention::apply_profile_reclaim(
+                                        &evidence, &decision, &root,
+                                    )
+                                })
+                        })
+                });
+                match reclaim_result {
+                    Some(Ok(bytes)) => reclaimed_profile_bytes += bytes,
+                    Some(Err(error)) => {
+                        profile_apply_errors.insert(profile_id.clone(), json!(error));
+                        continue;
+                    }
+                    None => {}
+                }
                 state.profiles.remove(profile_id);
                 state.entity_sources.profiles.remove(profile_id);
+                removed_profile_count += 1;
             }
             for display_allocation_id in &display_allocation_ids {
                 state.display_allocations.remove(display_allocation_id);
@@ -883,6 +962,7 @@ pub(crate) mod service_commands {
             "orphanedProfiles" : profile_ids, "displayAllocations" :
             display_allocation_ids, }, "candidateReasons" : { "orphanedProfiles" :
             orphaned_profile_reasons, "displayAllocations" : display_allocation_reasons,
+            "profileRetention" : profile_retention_decisions,
             }, "candidateClassCounts" : { "displayAllocations" :
             display_allocation_class_counts, }, "candidateCounts" : { "closedTabs" :
             closed_tab_ids.len(), "browsers" : browser_ids.len(), "sessions" :
@@ -902,7 +982,9 @@ pub(crate) mod service_commands {
             }, "removed" : { "closedTabs" : if options.apply { closed_tab_ids.len() }
             else { 0 }, "browsers" : if options.apply { browser_ids.len() } else { 0 },
             "sessions" : if options.apply { session_ids.len() } else { 0 },
-            "orphanedProfiles" : if options.apply { profile_ids.len() } else { 0 },
+            "orphanedProfiles" : removed_profile_count,
+            "orphanedProfileBytes" : reclaimed_profile_bytes,
+            "orphanedProfileErrors" : profile_apply_errors,
             "displayAllocations" : removed_display_allocation_count, "sessionTabRefs" :
             session_tab_refs_removed, "sessionBrowserRefs" :
             session_browser_refs_removed, }, "after" : { "profileCount" : state.profiles
@@ -914,6 +996,89 @@ pub(crate) mod service_commands {
             "Review the candidates, then rerun with --apply when the retained records are safe to remove."
             }, }
         )
+    }
+    fn retention_disposition_name(
+        disposition: crate::runtime_retention::RetentionDisposition,
+    ) -> &'static str {
+        match disposition {
+            crate::runtime_retention::RetentionDisposition::Protected => "protected",
+            crate::runtime_retention::RetentionDisposition::Reviewable => "reviewable",
+            crate::runtime_retention::RetentionDisposition::AutomaticallyReclaimable => {
+                "automatically_reclaimable"
+            }
+        }
+    }
+    fn profile_retention_evidence(
+        profile_id: &str,
+        profile: &BrowserProfile,
+        path: &Path,
+    ) -> crate::runtime_retention::ProfileRetentionEvidence {
+        let terminal_since = fs::metadata(path)
+            .ok()
+            .and_then(|metadata| metadata.modified().ok())
+            .map(DateTime::<Utc>::from);
+        let failed = profile.tags.iter().any(|tag| {
+            matches!(
+                tag.trim().to_ascii_lowercase().as_str(),
+                "failed" | "quarantined"
+            )
+        });
+        crate::runtime_retention::ProfileRetentionEvidence {
+            profile_id: profile_id.to_string(),
+            user_data_dir: path.to_path_buf(),
+            class: if profile.persistent || profile.profile_class != ProfileClass::ManagedOneTime {
+                crate::runtime_retention::ProfileRetentionClass::Persistent
+            } else if failed {
+                crate::runtime_retention::ProfileRetentionClass::FailedOrQuarantined
+            } else {
+                crate::runtime_retention::ProfileRetentionClass::Ephemeral
+            },
+            terminal_since,
+            projected_bytes: crate::runtime_retention::directory_projected_bytes(path)
+                .unwrap_or_default(),
+            reference_reasons: BTreeSet::new(),
+            process_observed: profile_path_has_live_process(path),
+        }
+    }
+    fn approved_runtime_profile_root(path: &Path) -> Option<PathBuf> {
+        if let Ok(root) = crate::runtime_profile::runtime_profiles_root() {
+            if path != root && path.starts_with(&root) {
+                return Some(root);
+            }
+        }
+        let temp_root = std::env::temp_dir();
+        if path.parent() == Some(temp_root.as_path())
+            && path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("agent-browser-profile-"))
+        {
+            return Some(temp_root);
+        }
+        #[cfg(test)]
+        return path.ancestors().skip(1).find_map(|ancestor| {
+            let name = ancestor.file_name()?.to_str()?;
+            matches!(name, "runtime-profiles" | "retired-runtime-profiles")
+                .then(|| ancestor.to_path_buf())
+        });
+        #[cfg(not(test))]
+        None
+    }
+    fn profile_path_has_live_process(path: &Path) -> bool {
+        let needle = path.as_os_str().as_encoded_bytes();
+        let Ok(entries) = fs::read_dir("/proc") else {
+            return true;
+        };
+        entries.filter_map(Result::ok).any(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .bytes()
+                .all(|byte| byte.is_ascii_digit())
+                && fs::read(entry.path().join("cmdline"))
+                    .map(|body| body.windows(needle.len()).any(|window| window == needle))
+                    .unwrap_or(false)
+        })
     }
     pub(crate) fn referenced_service_profile_ids(state: &ServiceState) -> HashSet<String> {
         let mut profile_ids = HashSet::new();

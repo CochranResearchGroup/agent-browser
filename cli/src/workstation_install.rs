@@ -758,7 +758,16 @@ fn run_workstation_generation_gc(args: &[String], json: bool) {
         } else {
             None
         };
-        let references = generation_references(&root, &paths)?;
+        if mode == InstallMode::Apply
+            && root
+                .join(".agent-browser/runtime-adoption/admission-drain.json")
+                .exists()
+        {
+            return Err("generation_gc_blocked_by_active_admission_drain".to_string());
+        }
+        let retention = generation_retention_plan(&root, &paths, mode == InstallMode::Apply)?;
+        let finalizable_transaction_ids = retention.finalizable_transaction_ids.clone();
+        let references = retention.references;
         let mut retained = Vec::new();
         let mut candidates = Vec::new();
         let entries = match fs::read_dir(&paths.generations_dir) {
@@ -769,6 +778,13 @@ fn run_workstation_generation_gc(args: &[String], json: bool) {
                     "success": true,
                     "mode": if mode == InstallMode::Apply { "apply" } else { "dry-run" },
                     "selectedGenerationId": selected_generation_id(&paths),
+                    "previousHealthyGenerationId": retention.previous_healthy_generation_id,
+                    "finalizableTransactionIds": finalizable_transaction_ids.clone(),
+                    "finalizedTransactionIds": if mode == InstallMode::Apply {
+                        finalizable_transaction_ids.clone()
+                    } else {
+                        Vec::<String>::new()
+                    },
                     "candidates": [],
                     "retained": [],
                     "removed": [],
@@ -804,12 +820,6 @@ fn run_workstation_generation_gc(args: &[String], json: bool) {
         });
         let mut removed = Vec::new();
         if mode == InstallMode::Apply {
-            if root
-                .join(".agent-browser/runtime-adoption/admission-drain.json")
-                .exists()
-            {
-                return Err("generation_gc_blocked_by_active_admission_drain".to_string());
-            }
             for generation_id in &candidates {
                 let generation_path = paths.generations_dir.join(generation_id);
                 remove_generation_tree(&generation_path)?;
@@ -821,6 +831,13 @@ fn run_workstation_generation_gc(args: &[String], json: bool) {
             "success": true,
             "mode": if mode == InstallMode::Apply { "apply" } else { "dry-run" },
             "selectedGenerationId": selected_generation_id(&paths),
+            "previousHealthyGenerationId": retention.previous_healthy_generation_id,
+            "finalizableTransactionIds": finalizable_transaction_ids.clone(),
+            "finalizedTransactionIds": if mode == InstallMode::Apply {
+                finalizable_transaction_ids.clone()
+            } else {
+                Vec::<String>::new()
+            },
             "candidates": candidates,
             "retained": retained,
             "removed": removed,
@@ -853,20 +870,23 @@ fn run_workstation_generation_gc(args: &[String], json: bool) {
     }
 }
 
+#[cfg(test)]
 fn generation_references(
     root: &Path,
     paths: &InstallPaths,
 ) -> Result<std::collections::BTreeMap<String, Vec<String>>, String> {
-    use crate::runtime_adoption::UpgradeTransactionState;
+    Ok(generation_retention_plan(root, paths, false)?.references)
+}
 
-    let mut references = std::collections::BTreeMap::<String, Vec<String>>::new();
-    if let Some(selected) = selected_generation_id(paths) {
-        references
-            .entry(selected)
-            .or_default()
-            .push("selected_generation".to_string());
-    }
+fn generation_retention_plan(
+    root: &Path,
+    paths: &InstallPaths,
+    finalize_eligible: bool,
+) -> Result<crate::runtime_retention::GenerationRetentionPlan, String> {
+    let selected = selected_generation_id(paths);
     let transaction_dir = root.join(".agent-browser/runtime-adoption/transactions");
+    let mut transactions = Vec::new();
+    let mut transaction_paths = std::collections::BTreeMap::new();
     if let Ok(entries) = fs::read_dir(&transaction_dir) {
         for entry in entries.filter_map(Result::ok).filter(|entry| {
             entry.path().extension().and_then(|value| value.to_str()) == Some("json")
@@ -878,28 +898,43 @@ fn generation_references(
                     &path,
                 ))?)
                 .map_err(|error| format!("Runtime transaction blocks generation gc: {error}"))?;
-            if transaction.state == UpgradeTransactionState::OldGenerationRetirable {
-                continue;
-            }
-            if let Some(old) = transaction.old_generation_id {
-                references
-                    .entry(old)
-                    .or_default()
-                    .push("transaction_old_generation".to_string());
-            }
-            references
-                .entry(transaction.candidate_generation_id)
-                .or_default()
-                .push("transaction_candidate_generation".to_string());
+            transaction_paths.insert(transaction.transaction_id.clone(), path);
+            transactions.push(transaction);
         }
     }
+    let plan = crate::runtime_retention::plan_generation_retention(
+        selected.as_deref(),
+        &transactions,
+        chrono::Utc::now(),
+    );
+    if finalize_eligible {
+        for transaction_id in &plan.finalizable_transaction_ids {
+            let transaction = transactions
+                .iter_mut()
+                .find(|transaction| &transaction.transaction_id == transaction_id)
+                .ok_or_else(|| "retention_transaction_disappeared".to_string())?;
+            let expected_revision = transaction.revision;
+            crate::runtime_adoption::transition_upgrade_transaction(
+                transaction,
+                expected_revision,
+                crate::runtime_adoption::UpgradeTransactionState::OldGenerationRetirable,
+                "retention_window_elapsed",
+                &runtime_adoption_timestamp(),
+            )?;
+            let path = transaction_paths
+                .get(transaction_id)
+                .ok_or_else(|| "retention_transaction_path_missing".to_string())?;
+            write_private_json_atomic(path, transaction)?;
+        }
+    }
+    let mut references = plan.references.clone();
     collect_process_generation_references(paths, &mut references);
     collect_supervisor_generation_references(root, paths, &mut references)?;
     for reasons in references.values_mut() {
         reasons.sort();
         reasons.dedup();
     }
-    Ok(references)
+    Ok(crate::runtime_retention::GenerationRetentionPlan { references, ..plan })
 }
 
 fn collect_process_generation_references(
@@ -7629,7 +7664,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn p117_red_accepted_transaction_history_still_pins_both_generations() {
+    fn accepted_transaction_history_no_longer_pins_retired_generations() {
         use std::os::unix::fs::symlink;
 
         let root = env::temp_dir().join(format!(
@@ -7653,6 +7688,9 @@ mod tests {
         );
         transaction.old_generation_id = Some("accepted-old".to_string());
         transaction.state = crate::runtime_adoption::UpgradeTransactionState::Accepted;
+        transaction.dashboard_validation_summary = Some("ready".to_string());
+        transaction.presentation_validation_summary = Some("ready".to_string());
+        transaction.terminal_result = Some("accepted".to_string());
         transaction.checkpoints[0].recorded_at = "2026-08-01T00:00:00Z".to_string();
         write_private_json_atomic(
             &transaction_path(&root, &transaction.transaction_id),
@@ -7661,13 +7699,22 @@ mod tests {
         .unwrap();
 
         let references = generation_references(&root, &paths).unwrap();
+        assert!(!references.contains_key("accepted-old"));
+        assert!(!references.contains_key("accepted-candidate"));
         assert_eq!(
-            references["accepted-old"],
-            vec!["transaction_old_generation"]
+            references["selected-generation"],
+            vec!["selected_generation"]
         );
+
+        let plan = generation_retention_plan(&root, &paths, true).unwrap();
+        assert_eq!(plan.finalizable_transaction_ids.len(), 1);
+        let finalized: crate::runtime_adoption::UpgradeTransaction = serde_json::from_slice(
+            &fs::read(transaction_path(&root, &transaction.transaction_id)).unwrap(),
+        )
+        .unwrap();
         assert_eq!(
-            references["accepted-candidate"],
-            vec!["transaction_candidate_generation"]
+            finalized.state,
+            crate::runtime_adoption::UpgradeTransactionState::OldGenerationRetirable
         );
 
         fs::remove_dir_all(root).unwrap();

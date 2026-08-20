@@ -9,7 +9,7 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 
 ## P117 | Runtime Lifecycle Authority And Convergence
 
-State: IN PROGRESS — SLICE C SOURCE ACCEPTED
+State: IN PROGRESS — SLICE D SOURCE ACCEPTED
 Current state: the August 19 workstation audit found one healthy dashboard but
 multiple daemon processes and executable generations, 226 Chrome processes,
 218 runtime-profile directories using about 58 GiB, and 21 immutable runtime
@@ -44,6 +44,14 @@ Normal close and GC share the reviewed process-tree shutdown protocol. Named
 persistent profile data stays protected while its exact closing process tree
 can be reclaimed. The isolated GC smoke proves full helper-tree exit, profile
 lock cleanup, unrelated-Chrome protection, and generation-drift rejection.
+Slice D is source accepted. One retention authority now applies the 24-hour
+ephemeral, seven-day failed or quarantined, and never-automatic persistent
+profile policies. Exact-root quarantine manifests make filesystem reclamation
+idempotent and recoverable after interruption. Generation GC automatically
+finalizes healthy accepted transactions after the rollback window while
+retaining their metadata, the selected generation, the immediately previous
+healthy generation, and exact live references. A 49-transaction and
+21-generation fixture converges to the intended two-generation steady set.
 
 ### Plan
 
@@ -51,12 +59,10 @@ lock cleanup, unrelated-Chrome protection, and generation-drift rejection.
 
 ### Next Recommendation
 
-Execute Slice D through one retention authority. Join Service State, lifecycle,
-process, handoff, transaction, rollback, supervisor, selected-generation, and
-filesystem evidence before profile or generation reclamation. Implement the
-accepted 24-hour ephemeral, seven-day failed or quarantined, and never automatic
-persistent-profile policies without allowing historical transaction metadata
-to pin old binary generations forever.
+Execute Slice E by introducing one user-scoped runtime host and moving named
+session serialization into logical runtime lanes. Preserve per-lane ownership,
+profile, cancellation, stream, and effect fencing while preventing admission
+from launching another per-session daemon.
 
 ## P116 | Runtime Adoption And Transactional Upgrade
 

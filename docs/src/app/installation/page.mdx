@@ -239,15 +239,13 @@ The <code>readiness</code> object separates
 <code>dashboardIngressReady</code>, <code>operatorJourneyReady</code>, and
 <code>rollbackReady</code>. Overall <code>ready</code> remains false while a
 transaction or admission drain is active or any axis is unproved. Accepted
-generations keep rollback authority until later reviewed cleanup.
-Run <code>agent-browser install workstation finalize --json</code> only after
-reviewing the accepted result. It rechecks the same readiness model and marks
-the old generation retirable without deleting it. Run GC dry run again after
-finalization before any apply deletion.
+generations keep rollback authority for 24 hours.
 Use <code>agent-browser install workstation gc --dry-run --json</code> to
 preview reviewed old-generation cleanup. Apply retains the selected generation
-and every generation referenced by a live process, named supervisor, failed or
-unclosed transaction, or rollback state.
+and the immediately previous healthy rollback generation. It also retains
+exact live-process, supervisor, active-transaction, and open-rollback
+references. Eligible accepted transactions are finalized automatically while
+their durable metadata remains available for audit.
 
 <code>agent-browser install doctor --json</code> verifies the installed
 binary, controller assets, Guacamole manifest, and Guacamole files against the
