@@ -139,11 +139,15 @@ pub(crate) struct RuntimeHostIdentityEvidence {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct RuntimeLaneTransferRecord {
     pub(crate) session_name: String,
+    #[serde(default)]
+    pub(crate) candidate_session_name: Option<String>,
     pub(crate) source_generation_id: Option<String>,
     pub(crate) candidate_generation_id: String,
     pub(crate) state: RuntimeLaneTransferState,
     pub(crate) owner_generation_before: Option<u64>,
     pub(crate) owner_generation_after: Option<u64>,
+    #[serde(default)]
+    pub(crate) rollback_owner_generation: Option<u64>,
     pub(crate) observation_receipt_id: Option<String>,
     pub(crate) commit_receipt_id: Option<String>,
     pub(crate) rollback_receipt_id: Option<String>,
@@ -155,6 +159,8 @@ pub(crate) struct RuntimeLaneTransferRecord {
 pub(crate) struct RuntimeHostConvergenceRecord {
     pub(crate) schema_version: String,
     pub(crate) deadline_at: String,
+    #[serde(default)]
+    pub(crate) deadline_unix_seconds: i64,
     pub(crate) queue_transfer_policy: String,
     pub(crate) old_host: Option<RuntimeHostIdentityEvidence>,
     pub(crate) candidate_host: Option<RuntimeHostIdentityEvidence>,
@@ -199,13 +205,33 @@ pub(crate) fn record_runtime_host_identity(
     Ok(())
 }
 
+pub(crate) fn require_runtime_host_convergence_deadline(
+    transaction: &UpgradeTransaction,
+) -> Result<(), String> {
+    let convergence = transaction
+        .runtime_host_convergence
+        .as_ref()
+        .ok_or_else(|| "runtime_host_convergence_missing".to_string())?;
+    if !convergence.deadline_at.contains('T')
+        || !convergence.deadline_at.ends_with('Z')
+        || convergence.deadline_unix_seconds <= 0
+    {
+        return Err("runtime_host_convergence_deadline_invalid".to_string());
+    }
+    if time::OffsetDateTime::now_utc().unix_timestamp() > convergence.deadline_unix_seconds {
+        return Err("runtime_host_convergence_deadline_expired".to_string());
+    }
+    Ok(())
+}
+
 pub(crate) fn record_runtime_lane_observation(
     transaction: &mut UpgradeTransaction,
     session_name: &str,
+    candidate_session_name: &str,
     owner_generation: u64,
     receipt_id: &str,
 ) -> Result<(), String> {
-    if receipt_id.trim().is_empty() {
+    if candidate_session_name.trim().is_empty() || receipt_id.trim().is_empty() {
         return Err("runtime_lane_observation_receipt_missing".to_string());
     }
     let convergence = transaction
@@ -226,6 +252,7 @@ pub(crate) fn record_runtime_lane_observation(
         ));
     }
     lane.owner_generation_before = Some(owner_generation);
+    lane.candidate_session_name = Some(candidate_session_name.to_string());
     lane.observation_receipt_id = Some(receipt_id.to_string());
     lane.state = RuntimeLaneTransferState::ObservationAttached;
     Ok(())
@@ -261,6 +288,88 @@ pub(crate) fn commit_runtime_lane_transfer(
     lane.queued_work_count = queued_work_count;
     lane.commit_receipt_id = Some(receipt_id.to_string());
     lane.state = RuntimeLaneTransferState::Committed;
+    Ok(())
+}
+
+pub(crate) fn finalize_runtime_lane_transfer(
+    transaction: &mut UpgradeTransaction,
+    candidate_session_name: &str,
+) -> Result<(), String> {
+    let convergence = transaction
+        .runtime_host_convergence
+        .as_mut()
+        .ok_or_else(|| "runtime_host_convergence_missing".to_string())?;
+    let mut matched = false;
+    for lane in convergence
+        .lanes
+        .iter_mut()
+        .filter(|lane| lane.candidate_session_name.as_deref() == Some(candidate_session_name))
+    {
+        if lane.state != RuntimeLaneTransferState::Committed {
+            return Err(format!(
+                "runtime_lane_finalize_out_of_order:{}",
+                lane.session_name
+            ));
+        }
+        lane.state = RuntimeLaneTransferState::Finalized;
+        matched = true;
+    }
+    if !matched {
+        return Err(format!(
+            "runtime_lane_candidate_session_missing:{candidate_session_name}"
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn rollback_runtime_lane_transfer(
+    transaction: &mut UpgradeTransaction,
+    source_session_name: &str,
+    candidate_session_name: &str,
+    previous_owner_generation: u64,
+    owner_generation: u64,
+    receipt_id: &str,
+) -> Result<(), String> {
+    if receipt_id.trim().is_empty() {
+        return Err("runtime_lane_rollback_receipt_missing".to_string());
+    }
+    let convergence = transaction
+        .runtime_host_convergence
+        .as_mut()
+        .ok_or_else(|| "runtime_host_convergence_missing".to_string())?;
+    let mut matched = false;
+    for lane in convergence.lanes.iter_mut().filter(|lane| {
+        lane.session_name == source_session_name
+            || lane.candidate_session_name.as_deref() == Some(candidate_session_name)
+    }) {
+        let fence_valid = match lane.state {
+            RuntimeLaneTransferState::Committed => {
+                lane.owner_generation_after == Some(previous_owner_generation)
+                    && owner_generation > previous_owner_generation
+            }
+            RuntimeLaneTransferState::CensusStable => owner_generation > previous_owner_generation,
+            _ => false,
+        };
+        if !fence_valid {
+            return Err(format!(
+                "runtime_lane_rollback_owner_fence_rejected:{}",
+                lane.session_name
+            ));
+        }
+        lane.candidate_session_name
+            .get_or_insert_with(|| candidate_session_name.to_string());
+        lane.owner_generation_after
+            .get_or_insert(previous_owner_generation);
+        lane.rollback_owner_generation = Some(owner_generation);
+        lane.rollback_receipt_id = Some(receipt_id.to_string());
+        lane.state = RuntimeLaneTransferState::RolledBack;
+        matched = true;
+    }
+    if !matched {
+        return Err(format!(
+            "runtime_lane_candidate_session_missing:{candidate_session_name}"
+        ));
+    }
     Ok(())
 }
 
@@ -2081,16 +2190,24 @@ pub(crate) fn persist_runtime_census(
         convergence.lanes = transaction
             .runtime_migrations
             .iter()
+            .filter(|migration| {
+                matches!(
+                    migration.disposition,
+                    RuntimeDisposition::CooperativeTransfer | RuntimeDisposition::OrphanAdoption
+                )
+            })
             .flat_map(|migration| migration.session_names.iter().cloned())
             .collect::<BTreeSet<_>>()
             .into_iter()
             .map(|session_name| RuntimeLaneTransferRecord {
                 session_name,
+                candidate_session_name: None,
                 source_generation_id: transaction.old_generation_id.clone(),
                 candidate_generation_id: transaction.candidate_generation_id.clone(),
                 state: RuntimeLaneTransferState::CensusStable,
                 owner_generation_before: None,
                 owner_generation_after: None,
+                rollback_owner_generation: None,
                 observation_receipt_id: None,
                 commit_receipt_id: None,
                 rollback_receipt_id: None,
@@ -2569,17 +2686,20 @@ mod tests {
             serde_json::from_value(samples["upgradeTransaction"].clone()).unwrap();
         transaction.runtime_host_convergence = Some(RuntimeHostConvergenceRecord {
             schema_version: "agent-browser.runtime-host-convergence.v1".to_string(),
-            deadline_at: "2026-08-20T18:00:00Z".to_string(),
+            deadline_at: "2000-01-01T00:00:00Z".to_string(),
+            deadline_unix_seconds: 946_684_800,
             queue_transfer_policy: "drain_then_commit".to_string(),
             old_host: None,
             candidate_host: None,
             lanes: vec![RuntimeLaneTransferRecord {
                 session_name: "alpha".to_string(),
+                candidate_session_name: None,
                 source_generation_id: transaction.old_generation_id.clone(),
                 candidate_generation_id: transaction.candidate_generation_id.clone(),
                 state: RuntimeLaneTransferState::CensusStable,
                 owner_generation_before: None,
                 owner_generation_after: None,
+                rollback_owner_generation: None,
                 observation_receipt_id: None,
                 commit_receipt_id: None,
                 rollback_receipt_id: None,
@@ -2596,9 +2716,31 @@ mod tests {
             observation_only: true,
         };
 
+        assert_eq!(
+            require_runtime_host_convergence_deadline(&transaction).unwrap_err(),
+            "runtime_host_convergence_deadline_expired"
+        );
+        transaction
+            .runtime_host_convergence
+            .as_mut()
+            .unwrap()
+            .deadline_at = "2999-08-20T18:00:00Z".to_string();
+        transaction
+            .runtime_host_convergence
+            .as_mut()
+            .unwrap()
+            .deadline_unix_seconds = 32_451_948_000;
+        require_runtime_host_convergence_deadline(&transaction).unwrap();
         assert!(!upgrade_runtime_preservation_proven(&transaction));
         record_runtime_host_identity(&mut transaction, true, candidate).unwrap();
-        record_runtime_lane_observation(&mut transaction, "alpha", 7, "observe-alpha").unwrap();
+        record_runtime_lane_observation(
+            &mut transaction,
+            "alpha",
+            "candidate-alpha",
+            7,
+            "observe-alpha",
+        )
+        .unwrap();
         assert_eq!(
             commit_runtime_lane_transfer(&mut transaction, "alpha", 7, 2, "commit-alpha")
                 .unwrap_err(),
@@ -2606,6 +2748,28 @@ mod tests {
         );
         commit_runtime_lane_transfer(&mut transaction, "alpha", 8, 2, "commit-alpha").unwrap();
         assert!(upgrade_runtime_preservation_proven(&transaction));
+        let mut rollback = transaction.clone();
+        rollback_runtime_lane_transfer(
+            &mut rollback,
+            "alpha",
+            "candidate-alpha",
+            8,
+            9,
+            "rollback-alpha",
+        )
+        .unwrap();
+        let rolled_back_lane = &rollback.runtime_host_convergence.unwrap().lanes[0];
+        assert_eq!(rolled_back_lane.state, RuntimeLaneTransferState::RolledBack);
+        assert_eq!(rolled_back_lane.rollback_owner_generation, Some(9));
+        assert_eq!(
+            rolled_back_lane.rollback_receipt_id.as_deref(),
+            Some("rollback-alpha")
+        );
+        finalize_runtime_lane_transfer(&mut transaction, "candidate-alpha").unwrap();
+        assert_eq!(
+            transaction.runtime_host_convergence.unwrap().lanes[0].state,
+            RuntimeLaneTransferState::Finalized
+        );
     }
 
     #[test]
@@ -2781,6 +2945,7 @@ mod tests {
         transaction.runtime_host_convergence = Some(RuntimeHostConvergenceRecord {
             schema_version: "agent-browser.runtime-host-convergence.v1".to_string(),
             deadline_at: "2026-08-20T18:00:00Z".to_string(),
+            deadline_unix_seconds: 1_777_000_000,
             queue_transfer_policy: "drain_then_commit".to_string(),
             old_host: None,
             candidate_host: None,

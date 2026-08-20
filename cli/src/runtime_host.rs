@@ -18,9 +18,10 @@ pub(crate) const RUNTIME_HOST_ENV: &str = "AGENT_BROWSER_RUNTIME_HOST";
 pub(crate) const DEFAULT_MAX_RUNTIME_LANES: usize = 64;
 
 pub(crate) fn admission_enabled() -> bool {
-    std::env::var(RUNTIME_HOST_ENV)
-        .ok()
-        .is_some_and(|value| matches!(value.trim(), "1" | "true" | "yes"))
+    match std::env::var(RUNTIME_HOST_ENV) {
+        Ok(value) => matches!(value.trim(), "1" | "true" | "yes"),
+        Err(_) => crate::runtime_host_ingress::selected_socket_dir().is_some(),
+    }
 }
 
 pub(crate) fn endpoint_key(session: &str) -> &str {
@@ -118,12 +119,13 @@ pub(crate) fn write_manifest(
     executable_generation: String,
 ) -> Result<PathBuf, String> {
     let path = socket_dir.join("runtime-host.json");
+    let socket_path = socket_dir.join(format!("{RUNTIME_HOST_ENDPOINT_KEY}.sock"));
     let manifest = RuntimeHostManifest {
         schema_version: "agent-browser.runtime-host.v1".to_string(),
         host_id: format!("runtime-host:{}", std::process::id()),
         pid: std::process::id(),
         executable_generation,
-        socket_identity: format!("{RUNTIME_HOST_ENDPOINT_KEY}.sock"),
+        socket_identity: runtime_host_socket_identity(&socket_path)?,
         authentication_record: format!("{RUNTIME_HOST_ENDPOINT_KEY}.token"),
         max_lanes: DEFAULT_MAX_RUNTIME_LANES,
     };
@@ -138,6 +140,20 @@ pub(crate) fn write_manifest(
             .map_err(|error| format!("runtime_host_manifest_permissions_failed: {error}"))?;
     }
     Ok(path)
+}
+
+#[cfg(unix)]
+fn runtime_host_socket_identity(path: &Path) -> Result<String, String> {
+    use std::os::unix::fs::MetadataExt;
+
+    let metadata = fs::metadata(path)
+        .map_err(|error| format!("runtime_host_socket_identity_failed: {error}"))?;
+    Ok(format!("unix:{}:{}", metadata.dev(), metadata.ino()))
+}
+
+#[cfg(not(unix))]
+fn runtime_host_socket_identity(path: &Path) -> Result<String, String> {
+    Ok(path.display().to_string())
 }
 
 pub(crate) fn remove_manifest_if_owned(path: &Path) {

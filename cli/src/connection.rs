@@ -94,7 +94,8 @@ impl Connection {
 }
 
 /// Get the base directory for socket/pid files.
-/// Priority: AGENT_BROWSER_SOCKET_DIR > XDG_RUNTIME_DIR > ~/.agent-browser > tmpdir
+/// Priority: explicit socket override > selected runtime host ingress >
+/// XDG_RUNTIME_DIR > ~/.agent-browser > tmpdir.
 pub fn get_socket_dir() -> PathBuf {
     // 1. Explicit override (ignore empty string)
     if let Ok(dir) = env::var("AGENT_BROWSER_SOCKET_DIR") {
@@ -103,19 +104,27 @@ pub fn get_socket_dir() -> PathBuf {
         }
     }
 
-    // 2. XDG_RUNTIME_DIR (Linux standard, ignore empty string)
+    // 2. Transactionally selected runtime host. Candidate observation uses
+    // the explicit override above and therefore cannot route through itself.
+    if crate::runtime_host::admission_enabled() {
+        if let Some(dir) = crate::runtime_host_ingress::selected_socket_dir() {
+            return dir;
+        }
+    }
+
+    // 3. XDG_RUNTIME_DIR (Linux standard, ignore empty string)
     if let Ok(runtime_dir) = env::var("XDG_RUNTIME_DIR") {
         if !runtime_dir.is_empty() {
             return PathBuf::from(runtime_dir).join("agent-browser");
         }
     }
 
-    // 3. Home directory fallback (like Docker Desktop's ~/.docker/run/)
+    // 4. Home directory fallback (like Docker Desktop's ~/.docker/run/)
     if let Some(home) = dirs::home_dir() {
         return home.join(".agent-browser");
     }
 
-    // 4. Last resort: temp dir
+    // 5. Last resort: temp dir
     env::temp_dir().join("agent-browser")
 }
 
@@ -1214,6 +1223,49 @@ mod tests {
     }
 
     #[test]
+    fn p117_selected_runtime_host_ingress_routes_normal_clients_after_commit() {
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-p117-selected-ingress-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let selected_socket_dir = root.join("candidate-host");
+        let state_path = root.join("runtime-host-ingress.json");
+        let guard = EnvGuard::new(&[
+            "AGENT_BROWSER_SOCKET_DIR",
+            "XDG_RUNTIME_DIR",
+            "AGENT_BROWSER_RUNTIME_HOST_INGRESS_STATE",
+            crate::runtime_host::RUNTIME_HOST_ENV,
+        ]);
+        guard.remove("AGENT_BROWSER_SOCKET_DIR");
+        guard.set("XDG_RUNTIME_DIR", "/run/user/1000");
+        guard.set(
+            "AGENT_BROWSER_RUNTIME_HOST_INGRESS_STATE",
+            state_path.to_str().unwrap(),
+        );
+        guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+        let repository =
+            crate::runtime_host_ingress::RuntimeHostIngressRepository::new(&state_path);
+        repository
+            .initialize(crate::runtime_host_ingress::RuntimeHostBackend {
+                topology: crate::runtime_host_ingress::RuntimeHostTopology::SingleHost,
+                generation_id: "candidate-generation".to_string(),
+                socket_dir: selected_socket_dir.clone(),
+                binary_sha256: "a".repeat(64),
+                host_id: "candidate-host".to_string(),
+                pid: 41001,
+                socket_identity: "unix:1:2".to_string(),
+            })
+            .unwrap();
+
+        assert_eq!(get_socket_dir(), selected_socket_dir);
+        assert_eq!(
+            get_socket_path("named-lane"),
+            root.join("candidate-host/runtime-host.sock")
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn p117_legacy_endpoint_adapter_remains_distinct_before_host_admission() {
         let guard = EnvGuard::new(&[
             "AGENT_BROWSER_SOCKET_DIR",
@@ -1225,7 +1277,7 @@ mod tests {
             "/tmp/agent-browser-p117-legacy-runtime-sockets",
         );
         guard.remove("XDG_RUNTIME_DIR");
-        guard.remove(crate::runtime_host::RUNTIME_HOST_ENV);
+        guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "0");
 
         let sockets = [
             get_socket_path("fixture-session-a"),

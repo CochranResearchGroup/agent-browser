@@ -387,6 +387,21 @@ fn recover_operator_required_upgrade_for_root(
     if candidate_selected || candidate_staged {
         return Err("workstation_recovery_candidate_dashboard_still_routed".to_string());
     }
+    let runtime_host_ingress_path =
+        crate::runtime_host_ingress::RuntimeHostIngressRepository::default_path();
+    if runtime_host_ingress_path.is_file() {
+        let repository = crate::runtime_host_ingress::RuntimeHostIngressRepository::new(
+            runtime_host_ingress_path,
+        );
+        let ingress = repository.load()?;
+        if ingress.selected_backend().generation_id == transaction.candidate_generation_id
+            || ingress.candidate_backend().is_some_and(|candidate| {
+                candidate.generation_id == transaction.candidate_generation_id
+            })
+        {
+            return Err("workstation_recovery_candidate_runtime_host_still_routed".to_string());
+        }
+    }
 
     let census = if isolated_root {
         isolated_runtime_census()
@@ -421,6 +436,7 @@ fn recover_operator_required_upgrade_for_root(
         "selectedGenerationId": old_generation_id,
         "candidateProcessAbsent": true,
         "candidateDashboardRouteAbsent": true,
+        "candidateRuntimeHostRouteAbsent": true,
         "runtimeCensusStable": true,
         "admissionDraining": false,
     }))
@@ -3552,7 +3568,8 @@ fn new_upgrade_transaction(
     };
 
     let recorded_at = runtime_adoption_timestamp();
-    let deadline_at = (time::OffsetDateTime::now_utc() + time::Duration::minutes(10))
+    let deadline = time::OffsetDateTime::now_utc() + time::Duration::minutes(10);
+    let deadline_at = deadline
         .format(&time::format_description::well_known::Rfc3339)
         .unwrap_or_else(|_| "timestamp-unavailable".to_string());
     UpgradeTransaction {
@@ -3568,6 +3585,7 @@ fn new_upgrade_transaction(
         runtime_host_convergence: Some(RuntimeHostConvergenceRecord {
             schema_version: "agent-browser.runtime-host-convergence.v1".to_string(),
             deadline_at,
+            deadline_unix_seconds: deadline.unix_timestamp(),
             queue_transfer_policy: "drain_then_commit".to_string(),
             old_host: None,
             candidate_host: None,
@@ -3833,6 +3851,7 @@ fn activate_prepared_payload_transaction(
 ) -> Result<(), String> {
     use crate::runtime_adoption::UpgradeTransactionState;
 
+    crate::runtime_adoption::require_runtime_host_convergence_deadline(&prepared.transaction)?;
     persist_upgrade_transition(
         &prepared.transaction_path,
         &mut prepared.transaction,
@@ -3848,15 +3867,63 @@ fn activate_prepared_payload_transaction(
     )?;
     persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)?;
     if !isolated_root {
-        transfer_discovered_runtimes(
+        let transfer_evidence = transfer_discovered_runtimes(
             paths,
             &prepared.staged,
             &prepared.transaction.transaction_id,
             &mut prepared.transaction.runtime_migrations,
             &mut prepared.runtime_handoffs,
         )?;
+        if !transfer_evidence.is_empty() {
+            let (host_identity, candidate_backend) = capture_candidate_runtime_host_identity(
+                &prepared.transaction.transaction_id,
+                &prepared.transaction.candidate_generation_id,
+                &prepared.transaction.candidate_binary_sha256,
+            )?;
+            crate::runtime_adoption::record_runtime_host_identity(
+                &mut prepared.transaction,
+                true,
+                host_identity,
+            )?;
+            for evidence in transfer_evidence {
+                let session_names = prepared
+                    .transaction
+                    .runtime_migrations
+                    .iter()
+                    .find(|migration| migration.logical_browser_id == evidence.logical_browser_id)
+                    .map(|migration| migration.session_names.clone())
+                    .ok_or_else(|| {
+                        format!(
+                            "runtime_transfer_migration_disappeared:{}",
+                            evidence.logical_browser_id
+                        )
+                    })?;
+                for session_name in session_names {
+                    crate::runtime_adoption::record_runtime_lane_observation(
+                        &mut prepared.transaction,
+                        &session_name,
+                        &evidence.candidate_session,
+                        evidence.receipt.previous_owner_generation,
+                        &evidence.receipt.receipt_id,
+                    )?;
+                    crate::runtime_adoption::commit_runtime_lane_transfer(
+                        &mut prepared.transaction,
+                        &session_name,
+                        evidence.receipt.candidate_owner_generation,
+                        0,
+                        &evidence.receipt.receipt_id,
+                    )?;
+                }
+            }
+            stage_candidate_runtime_host_ingress(
+                paths,
+                &mut prepared.transaction,
+                candidate_backend,
+            )?;
+        }
         write_private_json_atomic(&prepared.transaction_path, &prepared.transaction)?;
     }
+    crate::runtime_adoption::require_runtime_host_convergence_deadline(&prepared.transaction)?;
     persist_upgrade_transition(
         &prepared.transaction_path,
         &mut prepared.transaction,
@@ -3885,7 +3952,7 @@ fn transfer_discovered_runtimes(
     transaction_id: &str,
     migrations: &mut [crate::runtime_adoption::RuntimeMigrationRecord],
     handoffs: &mut Vec<PreparedRuntimeHandoff>,
-) -> Result<(), String> {
+) -> Result<Vec<RuntimeTransferEvidence>, String> {
     use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
     use crate::runtime_adoption::{BrowserAdoptionMode, RuntimeClassification, RuntimeDisposition};
 
@@ -3893,6 +3960,7 @@ fn transfer_discovered_runtimes(
         JsonServiceStateStore::new(JsonServiceStateStore::default_path()?).load()?;
     let old_binary = paths.current_selector.join("bin/agent-browser");
     let candidate_binary = staged.generation_path.join("bin/agent-browser");
+    let mut transfer_evidence = Vec::new();
     for migration in migrations {
         let source_session = resolve_runtime_source_session(&service_state, migration)?;
         match migration.disposition {
@@ -3921,7 +3989,7 @@ fn transfer_discovered_runtimes(
                     {
                         let legacy_transferred_owner_rejected = error.kind
                             == RuntimeTransactionCommandFailureKind::LegacyTransferredOwnerRejected;
-                        adopt_runtime_via_verified_orphan_fallback(
+                        let evidence = adopt_runtime_via_verified_orphan_fallback(
                             paths,
                             &candidate_binary,
                             transaction_id,
@@ -3932,6 +4000,7 @@ fn transfer_discovered_runtimes(
                             legacy_transferred_owner_rejected,
                             false,
                         )?;
+                        transfer_evidence.push(evidence);
                         continue;
                     }
                     Err((_failed_session, error)) => return Err(error.message),
@@ -3945,7 +4014,7 @@ fn transfer_discovered_runtimes(
                 if runtime_handoff_prepare_response_kind(&prepared)
                     == RuntimeHandoffPrepareResponseKind::LegacyBrowser
                 {
-                    adopt_runtime_via_verified_orphan_fallback(
+                    let evidence = adopt_runtime_via_verified_orphan_fallback(
                         paths,
                         &candidate_binary,
                         transaction_id,
@@ -3956,6 +4025,7 @@ fn transfer_discovered_runtimes(
                         false,
                         true,
                     )?;
+                    transfer_evidence.push(evidence);
                     continue;
                 }
                 let candidate_session = prepared
@@ -3969,6 +4039,10 @@ fn transfer_discovered_runtimes(
                 handoffs.push(PreparedRuntimeHandoff {
                     source_session: source_session.clone(),
                     candidate_session: candidate_session.clone(),
+                    source_process_identity: crate::connection::load_daemon_process_identity(
+                        &source_session,
+                    )
+                    .ok(),
                     mode: BrowserAdoptionMode::CooperativeTransfer,
                     committed: false,
                     source_finalized: false,
@@ -3988,7 +4062,13 @@ fn transfer_discovered_runtimes(
                     }
                 };
                 handoffs[handoff_index].committed = true;
-                migration.adoption_receipt_id = Some(owner_transfer_receipt_id(&resumed)?);
+                let receipt = owner_transfer_receipt(&resumed)?;
+                migration.adoption_receipt_id = Some(receipt.receipt_id.clone());
+                transfer_evidence.push(RuntimeTransferEvidence {
+                    logical_browser_id: migration.logical_browser_id.clone(),
+                    candidate_session,
+                    receipt,
+                });
             }
             RuntimeDisposition::OrphanAdoption => {
                 let source_session = source_session.ok_or_else(|| {
@@ -4016,6 +4096,10 @@ fn transfer_discovered_runtimes(
                 handoffs.push(PreparedRuntimeHandoff {
                     source_session: source_session.clone(),
                     candidate_session: candidate_session.clone(),
+                    source_process_identity: crate::connection::load_daemon_process_identity(
+                        &source_session,
+                    )
+                    .ok(),
                     mode: BrowserAdoptionMode::OrphanAdoption,
                     committed: false,
                     source_finalized: false,
@@ -4036,7 +4120,13 @@ fn transfer_discovered_runtimes(
                     ],
                 )?;
                 handoffs[handoff_index].committed = true;
-                migration.adoption_receipt_id = Some(owner_transfer_receipt_id(&resumed)?);
+                let receipt = owner_transfer_receipt(&resumed)?;
+                migration.adoption_receipt_id = Some(receipt.receipt_id.clone());
+                transfer_evidence.push(RuntimeTransferEvidence {
+                    logical_browser_id: migration.logical_browser_id.clone(),
+                    candidate_session,
+                    receipt,
+                });
             }
             RuntimeDisposition::ManualPreservation => {}
             RuntimeDisposition::RetiredIdle => {
@@ -4061,7 +4151,7 @@ fn transfer_discovered_runtimes(
             }
         }
     }
-    Ok(())
+    Ok(transfer_evidence)
 }
 
 /// Stops a census-proven browserless daemon while the admission drain prevents
@@ -4374,7 +4464,7 @@ fn adopt_runtime_via_verified_orphan_fallback(
     source_session: &str,
     legacy_transferred_owner_rejected: bool,
     legacy_prepare_v1: bool,
-) -> Result<(), String> {
+) -> Result<RuntimeTransferEvidence, String> {
     use crate::runtime_adoption::{BrowserAdoptionMode, RuntimeDisposition};
 
     if legacy_transferred_owner_rejected {
@@ -4415,6 +4505,8 @@ fn adopt_runtime_via_verified_orphan_fallback(
     handoffs.push(PreparedRuntimeHandoff {
         source_session: source_session.to_string(),
         candidate_session: candidate_session.clone(),
+        source_process_identity: crate::connection::load_daemon_process_identity(source_session)
+            .ok(),
         mode: BrowserAdoptionMode::OrphanAdoption,
         committed: false,
         source_finalized: false,
@@ -4462,8 +4554,13 @@ fn adopt_runtime_via_verified_orphan_fallback(
         ],
     )?;
     handoffs[handoff_index].committed = true;
-    migration.adoption_receipt_id = Some(owner_transfer_receipt_id(&resumed)?);
-    Ok(())
+    let receipt = owner_transfer_receipt(&resumed)?;
+    migration.adoption_receipt_id = Some(receipt.receipt_id.clone());
+    Ok(RuntimeTransferEvidence {
+        logical_browser_id: migration.logical_browser_id.clone(),
+        candidate_session,
+        receipt,
+    })
 }
 
 fn legacy_ownerless_orphan_bootstrap_allowed(
@@ -4763,7 +4860,7 @@ fn run_agent_json_detailed_in_socket_dir(
     binary: &Path,
     session: &str,
     command_args: &[&str],
-    socket_dir: Option<&Path>,
+    runtime: Option<(&Path, bool)>,
 ) -> Result<Value, RuntimeTransactionCommandFailure> {
     let mut command = Command::new(binary);
     command
@@ -4772,9 +4869,12 @@ fn run_agent_json_detailed_in_socket_dir(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    if let Some(socket_dir) = socket_dir {
+    if let Some((socket_dir, runtime_host)) = runtime {
         command
-            .env(crate::runtime_host::RUNTIME_HOST_ENV, "1")
+            .env(
+                crate::runtime_host::RUNTIME_HOST_ENV,
+                if runtime_host { "1" } else { "0" },
+            )
             .env("AGENT_BROWSER_SOCKET_DIR", socket_dir);
     }
     let output = command
@@ -4828,6 +4928,173 @@ fn candidate_runtime_host_socket_dir(transaction_id: &str) -> Result<PathBuf, St
         .join("candidate-host"))
 }
 
+fn capture_candidate_runtime_host_identity(
+    transaction_id: &str,
+    generation_id: &str,
+    binary_sha256: &str,
+) -> Result<
+    (
+        crate::runtime_adoption::RuntimeHostIdentityEvidence,
+        crate::runtime_host_ingress::RuntimeHostBackend,
+    ),
+    String,
+> {
+    capture_runtime_host_identity(
+        &candidate_runtime_host_socket_dir(transaction_id)?,
+        generation_id,
+        binary_sha256,
+        true,
+    )
+}
+
+fn capture_runtime_host_identity(
+    socket_dir: &Path,
+    generation_id: &str,
+    binary_sha256: &str,
+    observation_only: bool,
+) -> Result<
+    (
+        crate::runtime_adoption::RuntimeHostIdentityEvidence,
+        crate::runtime_host_ingress::RuntimeHostBackend,
+    ),
+    String,
+> {
+    let manifest_path = socket_dir.join("runtime-host.json");
+    let identity_path = socket_dir.join("runtime-host.identity.json");
+    let sha_path = socket_dir.join("runtime-host.sha256");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let executable_sha256 = loop {
+        if let Ok(value) = fs::read_to_string(&sha_path) {
+            let value = value.trim();
+            if value.len() == 64 && value != "pending" {
+                break value.to_string();
+            }
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err("runtime_host_executable_identity_not_ready".to_string());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    };
+    if executable_sha256 != binary_sha256 {
+        return Err("runtime_host_executable_identity_mismatch".to_string());
+    }
+    let manifest: crate::runtime_host::RuntimeHostManifest = serde_json::from_slice(
+        &fs::read(&manifest_path)
+            .map_err(display_io("read runtime host manifest", &manifest_path))?,
+    )
+    .map_err(|error| format!("runtime_host_manifest_invalid: {error}"))?;
+    let identity: crate::process_identity::RecordedProcessIdentity =
+        serde_json::from_slice(&fs::read(&identity_path).map_err(display_io(
+            "read runtime host process identity",
+            &identity_path,
+        ))?)
+        .map_err(|error| format!("runtime_host_process_identity_invalid: {error}"))?;
+    if manifest.schema_version != "agent-browser.runtime-host.v1"
+        || manifest.pid != identity.pid
+        || manifest.executable_generation != executable_sha256
+        || manifest.socket_identity.trim().is_empty()
+        || identity.start_token.trim().is_empty()
+    {
+        return Err("runtime_host_identity_inconsistent".to_string());
+    }
+    let evidence = crate::runtime_adoption::RuntimeHostIdentityEvidence {
+        endpoint_key: crate::runtime_host::RUNTIME_HOST_ENDPOINT_KEY.to_string(),
+        generation_id: generation_id.to_string(),
+        binary_sha256: executable_sha256.clone(),
+        pid: identity.pid,
+        process_start_token: identity.start_token,
+        socket_identity: manifest.socket_identity.clone(),
+        observation_only,
+    };
+    let backend = crate::runtime_host_ingress::RuntimeHostBackend {
+        topology: crate::runtime_host_ingress::RuntimeHostTopology::SingleHost,
+        generation_id: generation_id.to_string(),
+        socket_dir: socket_dir.to_path_buf(),
+        binary_sha256: executable_sha256,
+        host_id: manifest.host_id,
+        pid: manifest.pid,
+        socket_identity: manifest.socket_identity,
+    };
+    Ok((evidence, backend))
+}
+
+fn stage_candidate_runtime_host_ingress(
+    paths: &InstallPaths,
+    transaction: &mut crate::runtime_adoption::UpgradeTransaction,
+    candidate: crate::runtime_host_ingress::RuntimeHostBackend,
+) -> Result<(), String> {
+    let repository = crate::runtime_host_ingress::RuntimeHostIngressRepository::new(
+        crate::runtime_host_ingress::RuntimeHostIngressRepository::default_path(),
+    );
+    let registry = match repository.load() {
+        Ok(registry) => registry,
+        Err(error) if error.contains("Unable to read runtime host ingress state") => {
+            let old_generation = transaction
+                .old_generation_id
+                .as_deref()
+                .ok_or_else(|| "runtime_host_ingress_old_generation_missing".to_string())?;
+            let old_socket_dir = crate::connection::get_socket_dir();
+            let old_sha_path = old_socket_dir.join("runtime-host.sha256");
+            if old_sha_path.is_file() {
+                let old_sha = fs::read_to_string(&old_sha_path)
+                    .map_err(display_io("read old runtime host hash", &old_sha_path))?;
+                let (old_identity, old_backend) = capture_runtime_host_identity(
+                    &old_socket_dir,
+                    old_generation,
+                    old_sha.trim(),
+                    false,
+                )?;
+                crate::runtime_adoption::record_runtime_host_identity(
+                    transaction,
+                    false,
+                    old_identity,
+                )?;
+                repository.initialize(old_backend)?
+            } else {
+                let old_binary = paths.current_selector.join("bin/agent-browser");
+                let legacy_backend = crate::runtime_host_ingress::RuntimeHostBackend {
+                    topology: crate::runtime_host_ingress::RuntimeHostTopology::LegacyPerSession,
+                    generation_id: old_generation.to_string(),
+                    socket_dir: old_socket_dir,
+                    binary_sha256: workstation_file_sha256(&old_binary)?,
+                    host_id: format!(
+                        "legacy-runtime-set:{}",
+                        transaction
+                            .runtime_census_digest
+                            .as_deref()
+                            .unwrap_or("unknown")
+                    ),
+                    pid: 0,
+                    socket_identity: "legacy-per-session-endpoints".to_string(),
+                };
+                repository.initialize(legacy_backend)?
+            }
+        }
+        Err(error) => return Err(error),
+    };
+    if registry.selected_backend().topology
+        == crate::runtime_host_ingress::RuntimeHostTopology::SingleHost
+        && transaction
+            .runtime_host_convergence
+            .as_ref()
+            .is_some_and(|convergence| convergence.old_host.is_none())
+    {
+        let selected = registry.selected_backend();
+        let (old_identity, observed_backend) = capture_runtime_host_identity(
+            &selected.socket_dir,
+            &selected.generation_id,
+            &selected.binary_sha256,
+            false,
+        )?;
+        if &observed_backend != selected {
+            return Err("runtime_host_ingress_selected_identity_changed".to_string());
+        }
+        crate::runtime_adoption::record_runtime_host_identity(transaction, false, old_identity)?;
+    }
+    repository.stage_candidate(registry.revision, &transaction.transaction_id, candidate)?;
+    Ok(())
+}
+
 fn run_candidate_agent_json(
     binary: &Path,
     session: &str,
@@ -4839,7 +5106,7 @@ fn run_candidate_agent_json(
         "create candidate runtime host socket directory",
         &socket_dir,
     ))?;
-    run_agent_json_detailed_in_socket_dir(binary, session, command_args, Some(&socket_dir))
+    run_agent_json_detailed_in_socket_dir(binary, session, command_args, Some((&socket_dir, true)))
         .map_err(|error| error.message)
 }
 
@@ -4847,13 +5114,22 @@ fn run_agent_json(binary: &Path, session: &str, command_args: &[&str]) -> Result
     run_agent_json_detailed(binary, session, command_args).map_err(|error| error.message)
 }
 
-fn owner_transfer_receipt_id(payload: &Value) -> Result<String, String> {
-    payload
-        .pointer("/data/ownerTransferReceipt/receiptId")
-        .and_then(Value::as_str)
-        .filter(|value| !value.trim().is_empty())
-        .map(str::to_string)
-        .ok_or_else(|| "runtime_transfer_receipt_missing".to_string())
+#[derive(Debug)]
+struct RuntimeTransferEvidence {
+    logical_browser_id: String,
+    candidate_session: String,
+    receipt: crate::runtime_owner_transfer::OwnerTransferReceipt,
+}
+
+fn owner_transfer_receipt(
+    payload: &Value,
+) -> Result<crate::runtime_owner_transfer::OwnerTransferReceipt, String> {
+    let receipt = payload
+        .pointer("/data/ownerTransferReceipt")
+        .cloned()
+        .ok_or_else(|| "runtime_transfer_receipt_missing".to_string())?;
+    serde_json::from_value(receipt)
+        .map_err(|error| format!("runtime_transfer_receipt_invalid: {error}"))
 }
 
 fn commit_prepared_payload_transaction(
@@ -4861,7 +5137,14 @@ fn commit_prepared_payload_transaction(
     args: &WorkstationInstallArgs,
     prepared: &mut PreparedPayloadTransaction,
 ) -> Result<(), String> {
-    commit_staged_payload_generation(paths, args, &prepared.staged)?;
+    crate::runtime_adoption::require_runtime_host_convergence_deadline(&prepared.transaction)?;
+    commit_candidate_runtime_host_ingress(&prepared.transaction)?;
+    if let Err(error) = commit_staged_payload_generation(paths, args, &prepared.staged) {
+        let rollback = rollback_runtime_host_ingress(&prepared.transaction);
+        return Err(rollback.err().map_or(error.clone(), |rollback| {
+            format!("{error}; runtime host ingress rollback failed: {rollback}")
+        }));
+    }
     persist_upgrade_transition(
         &prepared.transaction_path,
         &mut prepared.transaction,
@@ -4869,6 +5152,72 @@ fn commit_prepared_payload_transaction(
         "generation_committed",
     )?;
     persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)
+}
+
+fn commit_candidate_runtime_host_ingress(
+    transaction: &crate::runtime_adoption::UpgradeTransaction,
+) -> Result<(), String> {
+    if transaction
+        .runtime_host_convergence
+        .as_ref()
+        .and_then(|convergence| convergence.candidate_host.as_ref())
+        .is_none()
+    {
+        return Ok(());
+    }
+    let repository = crate::runtime_host_ingress::RuntimeHostIngressRepository::new(
+        crate::runtime_host_ingress::RuntimeHostIngressRepository::default_path(),
+    );
+    let registry = repository.load()?;
+    if registry.selected_backend().generation_id == transaction.candidate_generation_id {
+        return Ok(());
+    }
+    if registry
+        .candidate_backend()
+        .is_none_or(|candidate| candidate.generation_id != transaction.candidate_generation_id)
+    {
+        return Err("runtime host ingress candidate changed before commit".to_string());
+    }
+    repository.commit_candidate(
+        registry.revision,
+        &transaction.transaction_id,
+        &transaction.candidate_generation_id,
+    )?;
+    Ok(())
+}
+
+fn rollback_runtime_host_ingress(
+    transaction: &crate::runtime_adoption::UpgradeTransaction,
+) -> Result<(), String> {
+    if transaction
+        .runtime_host_convergence
+        .as_ref()
+        .and_then(|convergence| convergence.candidate_host.as_ref())
+        .is_none()
+    {
+        return Ok(());
+    }
+    let path = crate::runtime_host_ingress::RuntimeHostIngressRepository::default_path();
+    if !path.is_file() {
+        return Ok(());
+    }
+    let repository = crate::runtime_host_ingress::RuntimeHostIngressRepository::new(path);
+    let registry = repository.load()?;
+    if registry.selected_backend().generation_id == transaction.candidate_generation_id
+        && registry.fallback_backend().is_none()
+    {
+        return Err("runtime host ingress rollback backend is missing".to_string());
+    }
+    if registry.active_transaction_id.as_deref() == Some(&transaction.transaction_id)
+        || registry.selected_backend().generation_id == transaction.candidate_generation_id
+    {
+        repository.rollback(
+            registry.revision,
+            &transaction.transaction_id,
+            &transaction.candidate_generation_id,
+        )?;
+    }
+    Ok(())
 }
 
 fn begin_post_commit_validation(prepared: &mut PreparedPayloadTransaction) -> Result<(), String> {
@@ -5205,15 +5554,90 @@ fn accept_prepared_payload_transaction(
 }
 
 fn finalize_runtime_handoffs(prepared: &mut PreparedPayloadTransaction) -> Result<(), String> {
-    let candidate_binary = prepared.staged.generation_path.join("bin/agent-browser");
+    if !prepared
+        .runtime_handoffs
+        .iter()
+        .any(PreparedRuntimeHandoff::should_finalize_source)
+    {
+        return Ok(());
+    }
+    let transaction_client = prepared.staged.generation_path.join("bin/agent-browser");
+    let repository = crate::runtime_host_ingress::RuntimeHostIngressRepository::new(
+        crate::runtime_host_ingress::RuntimeHostIngressRepository::default_path(),
+    );
+    let registry = repository.load()?;
+    let source_backend = registry
+        .fallback_backend()
+        .ok_or_else(|| "runtime source ingress backend is missing before finalize".to_string())?
+        .clone();
+    let source_is_runtime_host =
+        source_backend.topology == crate::runtime_host_ingress::RuntimeHostTopology::SingleHost;
     for handoff in &mut prepared.runtime_handoffs {
         if handoff.should_finalize_source() {
-            run_agent_json(
-                &candidate_binary,
+            run_agent_json_detailed_in_socket_dir(
+                &transaction_client,
                 &handoff.source_session,
                 &["handoff", "finalize"],
-            )?;
+                Some((&source_backend.socket_dir, source_is_runtime_host)),
+            )
+            .map_err(|error| error.message)?;
             handoff.source_finalized = true;
+        }
+    }
+    prove_finalized_source_exit(&prepared.transaction, &prepared.runtime_handoffs)?;
+    for handoff in prepared
+        .runtime_handoffs
+        .iter()
+        .filter(|handoff| handoff.source_finalized)
+    {
+        crate::runtime_adoption::finalize_runtime_lane_transfer(
+            &mut prepared.transaction,
+            &handoff.candidate_session,
+        )?;
+    }
+    Ok(())
+}
+
+fn prove_finalized_source_exit(
+    transaction: &crate::runtime_adoption::UpgradeTransaction,
+    handoffs: &[PreparedRuntimeHandoff],
+) -> Result<(), String> {
+    crate::runtime_adoption::require_runtime_host_convergence_deadline(transaction)?;
+    let deadline_unix_seconds = transaction
+        .runtime_host_convergence
+        .as_ref()
+        .map(|convergence| convergence.deadline_unix_seconds)
+        .ok_or_else(|| "runtime_host_convergence_missing".to_string())?;
+    let mut seen = std::collections::BTreeSet::new();
+    for handoff in handoffs.iter().filter(|handoff| handoff.source_finalized) {
+        let identity = handoff.source_process_identity.as_ref().ok_or_else(|| {
+            format!(
+                "runtime_source_process_identity_missing:{}",
+                handoff.source_session
+            )
+        })?;
+        if !seen.insert((identity.pid, identity.start_token.clone())) {
+            continue;
+        }
+        let Some(process) = crate::process_identity::VerifiedProcessTermination::open(identity)?
+        else {
+            continue;
+        };
+        let local_deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while process.is_running()? {
+            if time::OffsetDateTime::now_utc().unix_timestamp() >= deadline_unix_seconds {
+                return Err(format!(
+                    "runtime_source_exit_deadline_expired:{}",
+                    handoff.source_session
+                ));
+            }
+            if std::time::Instant::now() >= local_deadline {
+                return Err(format!(
+                    "runtime_source_exit_not_observed:{}",
+                    handoff.source_session
+                ));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(25));
         }
     }
     Ok(())
@@ -5255,6 +5679,12 @@ fn rollback_prepared_payload_transaction(
     );
     let dashboard_process_result = stop_prepared_dashboard_candidate(prepared);
     let handoff_result = rollback_runtime_handoffs(prepared);
+    let candidate_host_result = if handoff_result.is_ok() {
+        stop_candidate_runtime_host(&prepared.transaction)
+    } else {
+        Err("candidate runtime host retained because handoff rollback failed".to_string())
+    };
+    let runtime_host_ingress_result = rollback_runtime_host_ingress(&prepared.transaction);
     let dashboard_ingress_result = if after_generation_commit
         && selector_result.is_ok()
         && dashboard_result.is_ok()
@@ -5269,6 +5699,8 @@ fn rollback_prepared_payload_transaction(
         && dashboard_result.is_ok()
         && dashboard_process_result.is_ok()
         && handoff_result.is_ok()
+        && candidate_host_result.is_ok()
+        && runtime_host_ingress_result.is_ok()
         && dashboard_ingress_result.is_ok()
     {
         prepared.transaction.terminal_result = Some("old_generation_preserved".to_string());
@@ -5288,7 +5720,7 @@ fn rollback_prepared_payload_transaction(
             "operator_recovery_required",
         )?;
         Err(format!(
-            "runtime transaction rollback requires operator recovery: selector={}, dashboard={}, dashboardProcess={}, handoffs={}, dashboardIngress={}",
+            "runtime transaction rollback requires operator recovery: selector={}, dashboard={}, dashboardProcess={}, handoffs={}, candidateHost={}, runtimeHostIngress={}, dashboardIngress={}",
             selector_result
                 .err()
                 .unwrap_or_else(|| "restored".to_string()),
@@ -5301,11 +5733,53 @@ fn rollback_prepared_payload_transaction(
             handoff_result
                 .err()
                 .unwrap_or_else(|| "restored".to_string()),
+            candidate_host_result
+                .err()
+                .unwrap_or_else(|| "stopped".to_string()),
+            runtime_host_ingress_result
+                .err()
+                .unwrap_or_else(|| "restored".to_string()),
             dashboard_ingress_result
                 .err()
                 .unwrap_or_else(|| "refreshed".to_string())
         ))
     }
+}
+
+fn stop_candidate_runtime_host(
+    transaction: &crate::runtime_adoption::UpgradeTransaction,
+) -> Result<(), String> {
+    let Some(evidence) = transaction
+        .runtime_host_convergence
+        .as_ref()
+        .and_then(|convergence| convergence.candidate_host.as_ref())
+    else {
+        return Ok(());
+    };
+    let socket_dir = candidate_runtime_host_socket_dir(&transaction.transaction_id)?;
+    let identity_path = socket_dir.join("runtime-host.identity.json");
+    let identity: crate::process_identity::RecordedProcessIdentity =
+        serde_json::from_slice(&fs::read(&identity_path).map_err(display_io(
+            "read candidate runtime host identity",
+            &identity_path,
+        ))?)
+        .map_err(|error| format!("candidate_runtime_host_identity_invalid: {error}"))?;
+    if identity.pid != evidence.pid || identity.start_token != evidence.process_start_token {
+        return Err("candidate_runtime_host_identity_changed_before_stop".to_string());
+    }
+    let Some(process) = crate::process_identity::VerifiedProcessTermination::open(&identity)?
+    else {
+        return Ok(());
+    };
+    process.signal(crate::process_identity::VerifiedProcessSignal::Terminate)?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while process.is_running()? && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    if process.is_running()? {
+        process.signal(crate::process_identity::VerifiedProcessSignal::Kill)?;
+    }
+    Ok(())
 }
 
 fn stop_prepared_dashboard_candidate(
@@ -5360,36 +5834,51 @@ fn rollback_dashboard_candidate_for_transaction(
     }
 }
 
-fn rollback_runtime_handoffs(prepared: &PreparedPayloadTransaction) -> Result<(), String> {
+fn rollback_runtime_handoffs(prepared: &mut PreparedPayloadTransaction) -> Result<(), String> {
     let candidate_binary = prepared.staged.generation_path.join("bin/agent-browser");
     let mut failures = Vec::new();
-    for handoff in prepared.runtime_handoffs.iter().rev() {
-        if handoff.committed {
-            if let Err(error) = run_candidate_agent_json(
+    for index in (0..prepared.runtime_handoffs.len()).rev() {
+        let handoff = &prepared.runtime_handoffs[index];
+        let source_session = handoff.source_session.clone();
+        let candidate_session = handoff.candidate_session.clone();
+        let committed = handoff.committed;
+        let requires_recovery = handoff.rollback_requires_operator_recovery();
+        let source_finalized = handoff.source_finalized;
+        let irreversible_source_revocation = handoff.irreversible_source_revocation;
+        if committed {
+            match run_candidate_agent_json(
                 &candidate_binary,
-                &handoff.candidate_session,
+                &candidate_session,
                 &prepared.transaction.transaction_id,
-                &[
-                    "handoff",
-                    "rollback",
-                    "--source-session",
-                    &handoff.source_session,
-                ],
+                &["handoff", "rollback", "--source-session", &source_session],
             ) {
-                failures.push(error);
+                Ok(payload) => match owner_transfer_receipt(&payload).and_then(|receipt| {
+                    crate::runtime_adoption::rollback_runtime_lane_transfer(
+                        &mut prepared.transaction,
+                        &source_session,
+                        &candidate_session,
+                        receipt.previous_owner_generation,
+                        receipt.candidate_owner_generation,
+                        &receipt.receipt_id,
+                    )
+                }) {
+                    Ok(()) => {}
+                    Err(error) => failures.push(error),
+                },
+                Err(error) => failures.push(error),
             }
         }
-        if handoff.rollback_requires_operator_recovery() {
-            if handoff.source_finalized {
+        if requires_recovery {
+            if source_finalized {
                 failures.push(format!(
                     "runtime_handoff_source_already_finalized:{}",
-                    handoff.source_session
+                    source_session
                 ));
             }
-            if handoff.irreversible_source_revocation {
+            if irreversible_source_revocation {
                 failures.push(format!(
                     "legacy_daemon_effect_authority_was_revoked:{}",
-                    handoff.source_session
+                    source_session
                 ));
             }
         }
@@ -5593,6 +6082,7 @@ impl Drop for PreparedDashboardCandidate {
 struct PreparedRuntimeHandoff {
     source_session: String,
     candidate_session: String,
+    source_process_identity: Option<crate::process_identity::RecordedProcessIdentity>,
     mode: crate::runtime_adoption::BrowserAdoptionMode,
     committed: bool,
     source_finalized: bool,
@@ -8906,6 +9396,7 @@ mod tests {
         let handoffs = vec![PreparedRuntimeHandoff {
             source_session: "cooperative-source".to_string(),
             candidate_session: "cooperative-candidate".to_string(),
+            source_process_identity: None,
             mode: crate::runtime_adoption::BrowserAdoptionMode::CooperativeTransfer,
             committed: true,
             source_finalized: false,
@@ -9345,6 +9836,7 @@ mod tests {
         let cooperative = PreparedRuntimeHandoff {
             source_session: "source".to_string(),
             candidate_session: "candidate".to_string(),
+            source_process_identity: None,
             mode: BrowserAdoptionMode::CooperativeTransfer,
             committed: true,
             source_finalized: false,
