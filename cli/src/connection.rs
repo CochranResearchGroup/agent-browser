@@ -322,6 +322,12 @@ pub fn daemon_ready(session: &str) -> bool {
     }
 }
 
+fn daemon_startup_ready(session: &str) -> bool {
+    daemon_ready(session)
+        && (!crate::runtime_host::admission_enabled()
+            || get_socket_dir().join(format!("{session}.stream")).is_file())
+}
+
 /// Result of ensure_daemon indicating whether a new daemon was started
 pub struct DaemonResult {
     /// True if we connected to an existing daemon, false if we started a new one
@@ -922,7 +928,7 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
 
     let startup_started = Instant::now();
     while startup_started.elapsed() < DAEMON_START_TIMEOUT {
-        if daemon_ready(session) {
+        if daemon_startup_ready(session) {
             return Ok(DaemonResult {
                 already_running: false,
             });
@@ -944,7 +950,7 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
                     || stderr_trimmed.contains("Failed to bind")
                 {
                     thread::sleep(Duration::from_millis(200));
-                    if daemon_ready(session) {
+                    if daemon_startup_ready(session) {
                         return Ok(reachable_daemon_result(session));
                     }
                 }
@@ -1247,6 +1253,31 @@ mod tests {
 
         assert!(reachable_daemon_result("alpha").already_running);
         assert!(!reachable_daemon_result("beta").already_running);
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn p117_cold_host_startup_waits_for_the_initial_lane() {
+        let guard = EnvGuard::new(&[
+            "AGENT_BROWSER_SOCKET_DIR",
+            crate::runtime_host::RUNTIME_HOST_ENV,
+        ]);
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-runtime-host-startup-readiness-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        guard.set("AGENT_BROWSER_SOCKET_DIR", root.to_str().unwrap());
+        guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+        let _listener = std::os::unix::net::UnixListener::bind(root.join("runtime-host.sock"))
+            .expect("fixture runtime host socket should bind");
+
+        assert!(daemon_ready("alpha"));
+        assert!(!daemon_startup_ready("alpha"));
+        std::fs::write(root.join("alpha.stream"), "39001").unwrap();
+        assert!(daemon_startup_ready("alpha"));
 
         let _ = std::fs::remove_dir_all(root);
     }
