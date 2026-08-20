@@ -119,27 +119,45 @@ pub fn get_socket_dir() -> PathBuf {
 
 #[cfg(unix)]
 fn get_socket_path(session: &str) -> PathBuf {
-    get_socket_dir().join(format!("{}.sock", session))
+    get_socket_dir().join(format!(
+        "{}.sock",
+        crate::runtime_host::endpoint_key(session)
+    ))
 }
 
 fn get_pid_path(session: &str) -> PathBuf {
-    get_socket_dir().join(format!("{}.pid", session))
+    get_socket_dir().join(format!(
+        "{}.pid",
+        crate::runtime_host::endpoint_key(session)
+    ))
 }
 
 fn get_version_path(session: &str) -> PathBuf {
-    get_socket_dir().join(format!("{}.version", session))
+    get_socket_dir().join(format!(
+        "{}.version",
+        crate::runtime_host::endpoint_key(session)
+    ))
 }
 
 fn get_executable_sha_path(session: &str) -> PathBuf {
-    get_socket_dir().join(format!("{}.sha256", session))
+    get_socket_dir().join(format!(
+        "{}.sha256",
+        crate::runtime_host::endpoint_key(session)
+    ))
 }
 
 fn get_auth_token_path(session: &str) -> PathBuf {
-    get_socket_dir().join(format!("{}.token", session))
+    get_socket_dir().join(format!(
+        "{}.token",
+        crate::runtime_host::endpoint_key(session)
+    ))
 }
 
 fn get_daemon_identity_path(session: &str) -> PathBuf {
-    get_socket_dir().join(format!("{}.identity.json", session))
+    get_socket_dir().join(format!(
+        "{}.identity.json",
+        crate::runtime_host::endpoint_key(session)
+    ))
 }
 
 fn set_private_file_permissions(path: &std::path::Path) -> std::io::Result<()> {
@@ -215,7 +233,7 @@ fn load_daemon_auth_token(session: &str) -> Result<String, String> {
 
 pub(crate) fn attach_daemon_auth_token(cmd: &Value, session: &str) -> Result<Value, String> {
     let token = load_daemon_auth_token(session)?;
-    let mut authenticated = cmd.clone();
+    let mut authenticated = crate::runtime_host::attach_lane(cmd.clone(), session);
     let obj = authenticated
         .as_object_mut()
         .ok_or("Command payload must be a JSON object")?;
@@ -253,7 +271,10 @@ pub fn cleanup_stale_files(session: &str) {
 
 #[cfg(windows)]
 fn get_port_path(session: &str) -> PathBuf {
-    get_socket_dir().join(format!("{}.port", session))
+    get_socket_dir().join(format!(
+        "{}.port",
+        crate::runtime_host::endpoint_key(session)
+    ))
 }
 
 #[cfg(windows)]
@@ -613,7 +634,87 @@ fn daemon_auth_token_available(session: &str) -> bool {
         .unwrap_or(false)
 }
 
+struct DaemonStartupLock {
+    path: PathBuf,
+    token: String,
+}
+
+impl Drop for DaemonStartupLock {
+    fn drop(&mut self) {
+        if fs::read_to_string(&self.path)
+            .ok()
+            .is_some_and(|value| value.trim() == self.token)
+        {
+            let _ = fs::remove_file(&self.path);
+        }
+    }
+}
+
+fn acquire_runtime_host_startup_lock(session: &str) -> Result<Option<DaemonStartupLock>, String> {
+    if !crate::runtime_host::admission_enabled() {
+        return Ok(None);
+    }
+    let socket_dir = ensure_socket_dir_exists()?;
+    let path = socket_dir.join(format!(
+        "{}.startup.lock",
+        crate::runtime_host::endpoint_key(session)
+    ));
+    let started = Instant::now();
+    let token = format!(
+        "{}:{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    );
+    loop {
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
+            Ok(mut file) => {
+                if let Err(error) = file.write_all(token.as_bytes()) {
+                    let _ = fs::remove_file(&path);
+                    return Err(format!(
+                        "Failed to write runtime-host startup lock: {error}"
+                    ));
+                }
+                if let Err(error) = set_private_file_permissions(&path) {
+                    let _ = fs::remove_file(&path);
+                    return Err(format!(
+                        "Failed to secure runtime-host startup lock: {error}"
+                    ));
+                }
+                return Ok(Some(DaemonStartupLock { path, token }));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                let stale = fs::metadata(&path)
+                    .and_then(|metadata| metadata.modified())
+                    .ok()
+                    .and_then(|modified| modified.elapsed().ok())
+                    .is_some_and(|elapsed| elapsed > Duration::from_secs(30));
+                if stale {
+                    let _ = fs::remove_file(&path);
+                    continue;
+                }
+                if started.elapsed() >= DAEMON_START_TIMEOUT {
+                    return Err("Timed out waiting for runtime-host startup admission".to_string());
+                }
+                thread::sleep(DAEMON_START_POLL_INTERVAL);
+            }
+            Err(error) => {
+                return Err(format!(
+                    "Failed to acquire runtime-host startup lock: {error}"
+                ));
+            }
+        }
+    }
+}
+
 pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult, String> {
+    let _startup_lock = acquire_runtime_host_startup_lock(session)?;
     // Socket connectivity is the sole liveness check — no PID check — so
     // callers in a different PID namespace (e.g. unshare) can still reuse
     // an existing daemon they can reach over the socket.
@@ -814,9 +915,10 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
     #[cfg(unix)]
     let endpoint_info = {
         let socket_dir = get_socket_dir();
-        let socket_path = socket_dir.join(format!("{}.sock", session));
-        let pid_path = socket_dir.join(format!("{}.pid", session));
-        let log_path = socket_dir.join(format!("{}.log", session));
+        let endpoint_key = crate::runtime_host::endpoint_key(session);
+        let socket_path = socket_dir.join(format!("{}.sock", endpoint_key));
+        let pid_path = socket_dir.join(format!("{}.pid", endpoint_key));
+        let log_path = socket_dir.join(format!("{}.log", endpoint_key));
         let pid_detail = fs::read_to_string(&pid_path)
             .ok()
             .map(|value| format!(", pid: {}", value.trim()))
@@ -1017,13 +1119,18 @@ mod tests {
     }
 
     #[test]
-    fn p117_red_named_sessions_resolve_to_distinct_daemon_sockets() {
-        let guard = EnvGuard::new(&["AGENT_BROWSER_SOCKET_DIR", "XDG_RUNTIME_DIR"]);
+    fn p117_named_sessions_resolve_to_one_runtime_host_socket_after_admission() {
+        let guard = EnvGuard::new(&[
+            "AGENT_BROWSER_SOCKET_DIR",
+            "XDG_RUNTIME_DIR",
+            crate::runtime_host::RUNTIME_HOST_ENV,
+        ]);
         guard.set(
             "AGENT_BROWSER_SOCKET_DIR",
             "/tmp/agent-browser-p117-runtime-sockets",
         );
         guard.remove("XDG_RUNTIME_DIR");
+        guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
 
         let sockets = [
             get_socket_path("fixture-session-a"),
@@ -1033,7 +1140,34 @@ mod tests {
         .into_iter()
         .collect::<std::collections::BTreeSet<_>>();
 
-        assert_eq!(sockets.len(), 3);
+        assert_eq!(sockets.len(), 1);
+        assert!(sockets
+            .iter()
+            .next()
+            .is_some_and(|path| path.ends_with("runtime-host.sock")));
+    }
+
+    #[test]
+    fn p117_legacy_endpoint_adapter_remains_distinct_before_host_admission() {
+        let guard = EnvGuard::new(&[
+            "AGENT_BROWSER_SOCKET_DIR",
+            "XDG_RUNTIME_DIR",
+            crate::runtime_host::RUNTIME_HOST_ENV,
+        ]);
+        guard.set(
+            "AGENT_BROWSER_SOCKET_DIR",
+            "/tmp/agent-browser-p117-legacy-runtime-sockets",
+        );
+        guard.remove("XDG_RUNTIME_DIR");
+        guard.remove(crate::runtime_host::RUNTIME_HOST_ENV);
+
+        let sockets = [
+            get_socket_path("fixture-session-a"),
+            get_socket_path("fixture-session-b"),
+        ]
+        .into_iter()
+        .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(sockets.len(), 2);
     }
 
     // === Transient Error Detection Tests ===

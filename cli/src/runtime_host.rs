@@ -1,0 +1,243 @@
+//! User-scoped runtime-host identity and logical lane registry.
+//!
+//! Named sessions remain public identities, but host admission routes them
+//! through one authenticated endpoint. Each lane owns its own serialized
+//! control-plane worker, so a stalled lane cannot block unrelated lanes.
+
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::BTreeMap;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::RwLock;
+
+pub(crate) const RUNTIME_HOST_ENDPOINT_KEY: &str = "runtime-host";
+pub(crate) const RUNTIME_HOST_LANE_FIELD: &str = "_agentBrowserRuntimeLane";
+pub(crate) const RUNTIME_HOST_ENV: &str = "AGENT_BROWSER_RUNTIME_HOST";
+pub(crate) const DEFAULT_MAX_RUNTIME_LANES: usize = 64;
+
+pub(crate) fn admission_enabled() -> bool {
+    std::env::var(RUNTIME_HOST_ENV)
+        .ok()
+        .is_some_and(|value| matches!(value.trim(), "1" | "true" | "yes"))
+}
+
+pub(crate) fn endpoint_key(session: &str) -> &str {
+    if admission_enabled() {
+        RUNTIME_HOST_ENDPOINT_KEY
+    } else {
+        session
+    }
+}
+
+pub(crate) fn attach_lane(mut command: Value, session: &str) -> Value {
+    if admission_enabled() {
+        if let Some(object) = command.as_object_mut() {
+            object.insert(
+                RUNTIME_HOST_LANE_FIELD.to_string(),
+                Value::String(session.to_string()),
+            );
+        }
+    }
+    command
+}
+
+pub(crate) fn take_lane(command: &mut Value, fallback: &str) -> Result<String, String> {
+    let lane = command
+        .as_object_mut()
+        .and_then(|object| object.remove(RUNTIME_HOST_LANE_FIELD))
+        .and_then(|value| value.as_str().map(str::to_string))
+        .unwrap_or_else(|| fallback.to_string());
+    if !crate::validation::is_valid_session_name(&lane) {
+        return Err(format!("runtime_host_lane_invalid: {lane}"));
+    }
+    Ok(lane)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RuntimeHostManifest {
+    pub(crate) schema_version: String,
+    pub(crate) host_id: String,
+    pub(crate) pid: u32,
+    pub(crate) executable_generation: String,
+    pub(crate) socket_identity: String,
+    pub(crate) authentication_record: String,
+    pub(crate) max_lanes: usize,
+}
+
+pub(crate) fn write_manifest(
+    socket_dir: &Path,
+    executable_generation: String,
+) -> Result<PathBuf, String> {
+    let path = socket_dir.join("runtime-host.json");
+    let manifest = RuntimeHostManifest {
+        schema_version: "agent-browser.runtime-host.v1".to_string(),
+        host_id: format!("runtime-host:{}", std::process::id()),
+        pid: std::process::id(),
+        executable_generation,
+        socket_identity: format!("{RUNTIME_HOST_ENDPOINT_KEY}.sock"),
+        authentication_record: format!("{RUNTIME_HOST_ENDPOINT_KEY}.token"),
+        max_lanes: DEFAULT_MAX_RUNTIME_LANES,
+    };
+    let bytes = serde_json::to_vec_pretty(&manifest)
+        .map_err(|error| format!("runtime_host_manifest_encode_failed: {error}"))?;
+    fs::write(&path, bytes)
+        .map_err(|error| format!("runtime_host_manifest_write_failed: {error}"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
+            .map_err(|error| format!("runtime_host_manifest_permissions_failed: {error}"))?;
+    }
+    Ok(path)
+}
+
+pub(crate) fn remove_manifest_if_owned(path: &Path) {
+    let owned = fs::read(path)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<RuntimeHostManifest>(&bytes).ok())
+        .is_some_and(|manifest| manifest.pid == std::process::id());
+    if owned {
+        let _ = fs::remove_file(path);
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct RuntimeLaneRegistry<T> {
+    max_lanes: usize,
+    lanes: RwLock<BTreeMap<String, T>>,
+}
+
+impl<T: Clone> RuntimeLaneRegistry<T> {
+    pub(crate) fn new(max_lanes: usize) -> Self {
+        Self {
+            max_lanes,
+            lanes: RwLock::new(BTreeMap::new()),
+        }
+    }
+
+    pub(crate) fn get(&self, lane: &str) -> Option<T> {
+        self.lanes.read().ok()?.get(lane).cloned()
+    }
+
+    pub(crate) fn insert(&self, lane: String, value: T) -> Result<T, String> {
+        let mut lanes = self
+            .lanes
+            .write()
+            .map_err(|_| "runtime_host_lane_registry_poisoned".to_string())?;
+        if let Some(existing) = lanes.get(&lane) {
+            return Ok(existing.clone());
+        }
+        if lanes.len() >= self.max_lanes {
+            return Err("runtime_host_lane_capacity_exhausted".to_string());
+        }
+        lanes.insert(lane, value.clone());
+        Ok(value)
+    }
+
+    pub(crate) fn remove(&self, lane: &str) -> Option<T> {
+        self.lanes.write().ok()?.remove(lane)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn snapshot(&self) -> Vec<String> {
+        self.lanes
+            .read()
+            .map(|lanes| lanes.keys().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    pub(crate) fn take_all(&self) -> Vec<T> {
+        self.lanes
+            .write()
+            .map(|mut lanes| std::mem::take(&mut *lanes).into_values().collect())
+            .unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::EnvGuard;
+    use std::sync::Arc;
+
+    #[test]
+    fn host_admission_maps_named_sessions_to_one_endpoint() {
+        let guard = EnvGuard::new(&[RUNTIME_HOST_ENV]);
+        guard.set(RUNTIME_HOST_ENV, "1");
+        assert_eq!(endpoint_key("alpha"), RUNTIME_HOST_ENDPOINT_KEY);
+        assert_eq!(endpoint_key("beta"), RUNTIME_HOST_ENDPOINT_KEY);
+        let command = attach_lane(serde_json::json!({"action": "get_url"}), "beta");
+        assert_eq!(command[RUNTIME_HOST_LANE_FIELD], "beta");
+    }
+
+    #[test]
+    fn disabled_admission_preserves_the_forwarding_only_legacy_endpoint() {
+        let guard = EnvGuard::new(&[RUNTIME_HOST_ENV]);
+        guard.remove(RUNTIME_HOST_ENV);
+        assert_eq!(endpoint_key("alpha"), "alpha");
+        assert!(attach_lane(serde_json::json!({}), "alpha")
+            .get(RUNTIME_HOST_LANE_FIELD)
+            .is_none());
+    }
+
+    #[test]
+    fn lane_admission_rejects_invalid_or_injected_names() {
+        let mut command = serde_json::json!({
+            RUNTIME_HOST_LANE_FIELD: "../other-user"
+        });
+        assert_eq!(
+            take_lane(&mut command, "default").unwrap_err(),
+            "runtime_host_lane_invalid: ../other-user"
+        );
+        assert!(command.get(RUNTIME_HOST_LANE_FIELD).is_none());
+    }
+
+    #[tokio::test]
+    async fn three_lanes_share_one_registry_and_a_stalled_lane_does_not_starve_another() {
+        let registry = RuntimeLaneRegistry::new(3);
+        let alpha = registry
+            .insert("alpha".to_string(), Arc::new(tokio::sync::Mutex::new(())))
+            .unwrap();
+        registry
+            .insert("beta".to_string(), Arc::new(tokio::sync::Mutex::new(())))
+            .unwrap();
+        let gamma = registry
+            .insert("gamma".to_string(), Arc::new(tokio::sync::Mutex::new(())))
+            .unwrap();
+        let _alpha_stalled = alpha.lock().await;
+        let _gamma_available =
+            tokio::time::timeout(std::time::Duration::from_millis(50), gamma.lock())
+                .await
+                .expect("an unrelated lane must remain schedulable");
+        assert_eq!(registry.snapshot(), vec!["alpha", "beta", "gamma"]);
+        assert_eq!(
+            registry
+                .insert("delta".to_string(), Arc::new(tokio::sync::Mutex::new(())))
+                .unwrap_err(),
+            "runtime_host_lane_capacity_exhausted"
+        );
+    }
+
+    #[test]
+    fn duplicate_lane_admission_is_idempotent_and_lane_close_is_scoped() {
+        let registry = RuntimeLaneRegistry::new(3);
+        assert_eq!(registry.insert("alpha".to_string(), 1).unwrap(), 1);
+        assert_eq!(registry.insert("alpha".to_string(), 2).unwrap(), 1);
+        assert_eq!(registry.insert("beta".to_string(), 3).unwrap(), 3);
+        assert_eq!(registry.snapshot(), vec!["alpha", "beta"]);
+        assert_eq!(registry.remove("alpha"), Some(1));
+        assert_eq!(registry.get("beta"), Some(3));
+    }
+
+    #[test]
+    fn taking_all_lanes_is_an_idempotent_host_shutdown_boundary() {
+        let registry = RuntimeLaneRegistry::new(2);
+        registry.insert("alpha".to_string(), 1).unwrap();
+        registry.insert("beta".to_string(), 2).unwrap();
+        assert_eq!(registry.take_all(), vec![1, 2]);
+        assert!(registry.take_all().is_empty());
+        assert!(registry.snapshot().is_empty());
+    }
+}

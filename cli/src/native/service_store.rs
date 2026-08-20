@@ -356,6 +356,27 @@ pub fn default_service_state_path() -> Result<PathBuf, String> {
     let Some(home) = dirs::home_dir() else {
         return Err("Could not determine home directory for service state".to_string());
     };
+    #[cfg(test)]
+    let home = if option_env!("HOME").is_some_and(|build_home| home == Path::new(build_home))
+        && std::env::var("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME")
+            .ok()
+            .as_deref()
+            != Some("1")
+    {
+        static TEST_HOME: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+        TEST_HOME
+            .get_or_init(|| {
+                let root = std::env::temp_dir().join(format!(
+                    "agent-browser-test-service-home-{}",
+                    std::process::id()
+                ));
+                let _ = fs::create_dir_all(&root);
+                root
+            })
+            .clone()
+    } else {
+        home
+    };
     Ok(home
         .join(".agent-browser")
         .join(SERVICE_DIR)

@@ -21,6 +21,14 @@ agent-browser session list
 agent-browser session
 ```
 
+## Guarded runtime host
+
+Set <code>AGENT_BROWSER_RUNTIME_HOST=1</code> for disposable validation of the
+single-host architecture. Named sessions then share one authenticated daemon
+endpoint while retaining independent serialized lanes, stream metadata, and
+lane-scoped close behavior. The migration switch is not yet the default and
+does not authorize cleanup of legacy daemons.
+
 ## Named daemon supervision
 
 On Linux, a named daemon can run as a bounded user service on a fixed loopback
@@ -393,6 +401,7 @@ agent-browser set headers '{"X-Custom-Header": "value"}'
   </thead>
   <tbody>
     <tr><td><code>AGENT_BROWSER_SESSION</code></td><td>Browser session ID (default: "default")</td></tr>
+    <tr><td><code>AGENT_BROWSER_RUNTIME_HOST</code></td><td>Enable guarded single-host admission for named runtime lanes</td></tr>
     <tr><td><code>AGENT_BROWSER_SESSION_NAME</code></td><td>Auto-save/load state persistence name</td></tr>
     <tr><td><code>AGENT_BROWSER_ENCRYPTION_KEY</code></td><td>64-char hex key for AES-256-GCM encryption</td></tr>
     <tr><td><code>AGENT_BROWSER_STATE_EXPIRE_DAYS</code></td><td>Auto-delete states older than N days (default: 30)</td></tr>

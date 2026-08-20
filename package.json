@@ -36,6 +36,7 @@
     "publish:local-dashboard": "node scripts/publish-local-dashboard-runtime.js",
     "test:dashboard-trace": "node --no-warnings --experimental-strip-types scripts/test-dashboard-service-trace.js",
     "test:cross-seam-interlocks": "node --no-warnings --experimental-strip-types scripts/test-cross-seam-interlocks.js",
+    "test:runtime-host-no-launch": "node scripts/smoke-runtime-host-no-launch.js",
     "test:dashboard-view-streams": "node --no-warnings --experimental-strip-types scripts/test-dashboard-view-streams.js",
     "test:dashboard-workspace-view-projection": "node --no-warnings --experimental-strip-types scripts/test-dashboard-workspace-view-projection.js",
     "test:dashboard-durable-remote-view-handoff": "node scripts/test-dashboard-durable-remote-view-handoff.js",

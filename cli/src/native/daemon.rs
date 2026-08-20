@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::signal;
-use tokio::sync::{mpsc, Notify, RwLock};
+use tokio::sync::{mpsc, Mutex, Notify, RwLock};
 
 use super::action_runtime::DaemonState;
 use super::cdp::client::CdpClient;
@@ -79,6 +79,7 @@ fn file_sha256(path: &Path) -> Result<String, std::io::Error> {
 pub async fn run_daemon(session: &str) {
     let startup_started = Instant::now();
     let socket_dir = get_daemon_socket_dir();
+    let endpoint_key = crate::runtime_host::endpoint_key(session).to_string();
     if !socket_dir.exists() {
         let _ = fs::create_dir_all(&socket_dir);
     }
@@ -101,7 +102,7 @@ pub async fn run_daemon(session: &str) {
     // parent which drops the read end after startup).
     #[cfg(unix)]
     if env::var("AGENT_BROWSER_DEBUG").is_ok() {
-        let log_path = socket_dir.join(format!("{}.log", session));
+        let log_path = socket_dir.join(format!("{}.log", endpoint_key));
         if let Ok(file) = fs::File::create(&log_path) {
             use std::os::unix::io::IntoRawFd;
             let fd = file.into_raw_fd();
@@ -134,7 +135,7 @@ pub async fn run_daemon(session: &str) {
         }
     }
 
-    let pid_path = socket_dir.join(format!("{}.pid", session));
+    let pid_path = socket_dir.join(format!("{}.pid", endpoint_key));
     let _ = fs::write(&pid_path, process::id().to_string());
     secure_daemon_file(&pid_path);
     log_startup_milestone(startup_started, "pid-written");
@@ -156,19 +157,19 @@ pub async fn run_daemon(session: &str) {
     }
     log_startup_milestone(startup_started, "process-identity-written");
 
-    let version_path = socket_dir.join(format!("{}.version", session));
+    let version_path = socket_dir.join(format!("{}.version", endpoint_key));
     let _ = fs::write(&version_path, env!("CARGO_PKG_VERSION"));
     secure_daemon_file(&version_path);
     log_startup_milestone(startup_started, "version-written");
 
-    let executable_sha_path = socket_dir.join(format!("{}.sha256", session));
+    let executable_sha_path = socket_dir.join(format!("{}.sha256", endpoint_key));
     let _ = fs::write(&executable_sha_path, "pending");
     secure_daemon_file(&executable_sha_path);
     log_startup_milestone(startup_started, "executable-sha-pending");
 
     // On Unix the daemon listens on a Unix domain socket; on Windows it uses
     // TCP, so there is no .sock file — only a .port file written by the server.
-    let socket_path = socket_dir.join(format!("{}.sock", session));
+    let socket_path = socket_dir.join(format!("{}.sock", endpoint_key));
 
     #[cfg(unix)]
     if socket_path.exists() {
@@ -193,8 +194,28 @@ pub async fn run_daemon(session: &str) {
 
     #[cfg(windows)]
     {
-        let _ = fs::remove_file(socket_dir.join(format!("{}.port", session)));
+        let _ = fs::remove_file(socket_dir.join(format!("{}.port", endpoint_key)));
     }
+
+    let runtime_host_manifest_path = if crate::runtime_host::admission_enabled() {
+        let executable_generation = env::current_exe()
+            .map_err(std::io::Error::other)
+            .and_then(|path| file_sha256(&path));
+        match executable_generation.and_then(|generation| {
+            crate::runtime_host::write_manifest(&socket_dir, generation)
+                .map_err(std::io::Error::other)
+        }) {
+            Ok(path) => Some(path),
+            Err(error) => {
+                let _ = writeln!(std::io::stderr(), "Failed to publish runtime host: {error}");
+                #[cfg(unix)]
+                let _ = fs::remove_file(&socket_path);
+                process::exit(1);
+            }
+        }
+    } else {
+        None
+    };
 
     let stream_path = socket_dir.join(format!("{}.stream", session));
     let _ = fs::remove_file(&stream_path);
@@ -293,17 +314,20 @@ pub async fn run_daemon(session: &str) {
     }
     #[cfg(windows)]
     {
-        let _ = fs::remove_file(socket_dir.join(format!("{}.port", session)));
+        let _ = fs::remove_file(socket_dir.join(format!("{}.port", endpoint_key)));
     }
     if owns_session_artifacts {
         let _ = fs::remove_file(&pid_path);
-        let _ = fs::remove_file(socket_dir.join(format!("{}.identity.json", session)));
+        let _ = fs::remove_file(socket_dir.join(format!("{}.identity.json", endpoint_key)));
         let _ = fs::remove_file(&version_path);
         let _ = fs::remove_file(&executable_sha_path);
         let _ = fs::remove_file(&stream_path);
         let _ = fs::remove_file(socket_dir.join(format!("{}.engine", session)));
         let _ = fs::remove_file(socket_dir.join(format!("{}.provider", session)));
         let _ = fs::remove_file(socket_dir.join(format!("{}.extensions", session)));
+        if let Some(path) = runtime_host_manifest_path.as_deref() {
+            crate::runtime_host::remove_manifest_if_owned(path);
+        }
     }
 
     if let Err(e) = result {
@@ -335,6 +359,140 @@ fn write_executable_sha_in_background(executable_sha_path: PathBuf, startup_star
     });
 }
 
+#[derive(Clone)]
+struct RuntimeLane {
+    control_plane: ControlPlaneHandle,
+    stream_server: Option<Arc<StreamServer>>,
+    stream_file: Option<PathBuf>,
+}
+
+#[derive(Clone)]
+struct RuntimeHostRouter {
+    lanes: Arc<crate::runtime_host::RuntimeLaneRegistry<RuntimeLane>>,
+    creation_lock: Arc<Mutex<()>>,
+    socket_dir: PathBuf,
+    service_reconcile_interval_ms: Option<u64>,
+    service_job_timeout_ms: Option<u64>,
+    service_monitor_interval_ms: Option<u64>,
+}
+
+#[derive(Clone, Copy)]
+struct RuntimeHostWorkerOptions {
+    service_reconcile_interval_ms: Option<u64>,
+    service_job_timeout_ms: Option<u64>,
+    service_monitor_interval_ms: Option<u64>,
+}
+
+impl RuntimeHostRouter {
+    fn new(
+        socket_dir: PathBuf,
+        initial_session: &str,
+        stream_client: Option<Arc<RwLock<Option<Arc<CdpClient>>>>>,
+        stream_server: Option<Arc<StreamServer>>,
+        stream_file: Option<PathBuf>,
+        options: RuntimeHostWorkerOptions,
+    ) -> Result<Self, String> {
+        let lanes = Arc::new(crate::runtime_host::RuntimeLaneRegistry::new(
+            crate::runtime_host::DEFAULT_MAX_RUNTIME_LANES,
+        ));
+        let control_plane = ControlPlaneWorker::start_with_options(
+            DaemonState::new_for_session_with_stream(
+                initial_session,
+                stream_client,
+                stream_server.clone(),
+            ),
+            options.service_reconcile_interval_ms,
+            options.service_job_timeout_ms,
+            options.service_monitor_interval_ms,
+        );
+        lanes.insert(
+            initial_session.to_string(),
+            RuntimeLane {
+                control_plane,
+                stream_server,
+                stream_file,
+            },
+        )?;
+        Ok(Self {
+            lanes,
+            creation_lock: Arc::new(Mutex::new(())),
+            socket_dir,
+            service_reconcile_interval_ms: options.service_reconcile_interval_ms,
+            service_job_timeout_ms: options.service_job_timeout_ms,
+            service_monitor_interval_ms: options.service_monitor_interval_ms,
+        })
+    }
+
+    async fn lane(&self, session: &str) -> Result<RuntimeLane, String> {
+        if let Some(lane) = self.lanes.get(session) {
+            return Ok(lane);
+        }
+        if !crate::runtime_host::admission_enabled() {
+            return Err(format!("runtime_host_lane_not_admitted: {session}"));
+        }
+
+        let _creation_guard = self.creation_lock.lock().await;
+        if let Some(lane) = self.lanes.get(session) {
+            return Ok(lane);
+        }
+
+        let (stream_server, stream_client, stream_file) =
+            match StreamServer::start_without_client(0, session.to_string(), true).await {
+                Ok((server, client)) => {
+                    let server = Arc::new(server);
+                    let path = self.socket_dir.join(format!("{session}.stream"));
+                    fs::write(&path, server.port().to_string()).map_err(|error| {
+                        format!("runtime_host_stream_metadata_write_failed: {error}")
+                    })?;
+                    secure_daemon_file(&path);
+                    (Some(server), Some(client), Some(path))
+                }
+                Err(error) => {
+                    return Err(format!("runtime_host_stream_start_failed: {error}"));
+                }
+            };
+        let lane = RuntimeLane {
+            control_plane: ControlPlaneWorker::start_with_options(
+                DaemonState::new_for_session_with_stream(
+                    session,
+                    stream_client,
+                    stream_server.clone(),
+                ),
+                self.service_reconcile_interval_ms,
+                self.service_job_timeout_ms,
+                self.service_monitor_interval_ms,
+            ),
+            stream_server,
+            stream_file,
+        };
+        self.lanes.insert(session.to_string(), lane)
+    }
+
+    async fn close_lane(&self, session: &str) {
+        if let Some(lane) = self.lanes.remove(session) {
+            lane.control_plane.shutdown().await;
+            if let Some(server) = lane.stream_server {
+                server.shutdown().await;
+            }
+            if let Some(path) = lane.stream_file {
+                let _ = fs::remove_file(path);
+            }
+        }
+    }
+
+    async fn shutdown(&self) {
+        for lane in self.lanes.take_all() {
+            lane.control_plane.shutdown().await;
+            if let Some(server) = lane.stream_server {
+                server.shutdown().await;
+            }
+            if let Some(path) = lane.stream_file {
+                let _ = fs::remove_file(path);
+            }
+        }
+    }
+}
+
 #[cfg(unix)]
 #[allow(clippy::too_many_arguments)]
 async fn run_socket_server(
@@ -356,12 +514,21 @@ async fn run_socket_server(
         None
     };
 
-    let control_plane = ControlPlaneWorker::start_with_options(
-        DaemonState::new_with_stream(stream_client, stream_server),
-        service_reconcile_interval_ms,
-        service_job_timeout_ms,
-        service_monitor_interval_ms,
-    );
+    let router = RuntimeHostRouter::new(
+        socket_path
+            .parent()
+            .unwrap_or(std::path::Path::new("."))
+            .to_path_buf(),
+        session,
+        stream_client,
+        stream_server,
+        stream_file.clone(),
+        RuntimeHostWorkerOptions {
+            service_reconcile_interval_ms,
+            service_job_timeout_ms,
+            service_monitor_interval_ms,
+        },
+    )?;
 
     let (reset_tx, mut reset_rx) = mpsc::channel::<()>(64);
     let reset_tx = idle_timeout_ms.map(|_| Arc::new(reset_tx));
@@ -379,13 +546,14 @@ async fn run_socket_server(
             accept_result = listener.accept() => {
                 match accept_result {
                     Ok((stream, _)) => {
-                        let control_plane = control_plane.clone();
+                        let router = router.clone();
                         let reset_tx = reset_tx.clone();
                         let sf = stream_file.clone();
                         let cn = close_notify.clone();
                         let auth = daemon_auth_token.clone();
+                        let fallback_session = session.to_string();
                         tokio::spawn(async move {
-                            handle_connection(stream, control_plane, reset_tx, sf, cn, auth).await;
+                            handle_connection(stream, router, &fallback_session, reset_tx, sf, cn, auth).await;
                         });
                     }
                     Err(e) => {
@@ -399,7 +567,7 @@ async fn run_socket_server(
                     None => std::future::pending::<()>().await,
                 }
             }, if idle_timeout_ms.is_some() => {
-                control_plane.shutdown().await;
+                router.shutdown().await;
                 break;
             }
             _ = reset_rx.recv(), if idle_timeout_ms.is_some() => {
@@ -411,11 +579,11 @@ async fn run_socket_server(
                 // "close" command was handled; browser already closed by
                 // handle_close(). Break to run cleanup and exit gracefully
                 // so destructors fire.
-                control_plane.shutdown().await;
+                router.shutdown().await;
                 break;
             }
             _ = shutdown_signal() => {
-                control_plane.shutdown().await;
+                router.shutdown().await;
                 break;
             }
         }
@@ -438,7 +606,8 @@ async fn run_socket_server(
 ) -> Result<(), String> {
     use tokio::net::TcpListener;
 
-    let preferred_port = get_port_for_session(session);
+    let endpoint_key = crate::runtime_host::endpoint_key(session);
+    let preferred_port = get_port_for_session(endpoint_key);
     // Try the hash-derived port first; if it is blocked (e.g. Windows Hyper-V
     // excluded port range), fall back to an OS-assigned ephemeral port.
     let listener = match TcpListener::bind(format!("127.0.0.1:{}", preferred_port)).await {
@@ -453,7 +622,7 @@ async fn run_socket_server(
         .port();
 
     let socket_dir = socket_path.parent().unwrap_or(std::path::Path::new("."));
-    let port_path = socket_dir.join(format!("{}.port", session));
+    let port_path = socket_dir.join(format!("{}.port", endpoint_key));
     let _ = fs::write(&port_path, actual_port.to_string());
     secure_daemon_file(&port_path);
 
@@ -463,12 +632,18 @@ async fn run_socket_server(
         None
     };
 
-    let control_plane = ControlPlaneWorker::start_with_options(
-        DaemonState::new_with_stream(stream_client, stream_server),
-        service_reconcile_interval_ms,
-        service_job_timeout_ms,
-        service_monitor_interval_ms,
-    );
+    let router = RuntimeHostRouter::new(
+        socket_dir.to_path_buf(),
+        session,
+        stream_client,
+        stream_server,
+        stream_file.clone(),
+        RuntimeHostWorkerOptions {
+            service_reconcile_interval_ms,
+            service_job_timeout_ms,
+            service_monitor_interval_ms,
+        },
+    )?;
 
     let (reset_tx, mut reset_rx) = mpsc::channel::<()>(64);
     let reset_tx = idle_timeout_ms.map(|_| Arc::new(reset_tx));
@@ -483,13 +658,14 @@ async fn run_socket_server(
             accept_result = listener.accept() => {
                 match accept_result {
                     Ok((stream, _)) => {
-                        let control_plane = control_plane.clone();
+                        let router = router.clone();
                         let reset_tx = reset_tx.clone();
                         let sf = stream_file.clone();
                         let cn = close_notify.clone();
                         let auth = daemon_auth_token.clone();
+                        let fallback_session = session.to_string();
                         tokio::spawn(async move {
-                            handle_connection(stream, control_plane, reset_tx, sf, cn, auth).await;
+                            handle_connection(stream, router, &fallback_session, reset_tx, sf, cn, auth).await;
                         });
                     }
                     Err(e) => {
@@ -503,7 +679,7 @@ async fn run_socket_server(
                     None => std::future::pending::<()>().await,
                 }
             }, if idle_timeout_ms.is_some() => {
-                control_plane.shutdown().await;
+                router.shutdown().await;
                 let _ = fs::remove_file(&port_path);
                 break;
             }
@@ -513,12 +689,12 @@ async fn run_socket_server(
                 continue;
             }
             _ = close_notify.notified() => {
-                control_plane.shutdown().await;
+                router.shutdown().await;
                 let _ = fs::remove_file(&port_path);
                 break;
             }
             _ = shutdown_signal() => {
-                control_plane.shutdown().await;
+                router.shutdown().await;
                 let _ = fs::remove_file(&port_path);
                 break;
             }
@@ -530,7 +706,8 @@ async fn run_socket_server(
 
 async fn handle_connection<S>(
     stream: S,
-    control_plane: ControlPlaneHandle,
+    router: RuntimeHostRouter,
+    fallback_session: &str,
     idle_reset_tx: Option<Arc<mpsc::Sender<()>>>,
     stream_file_cleanup: Option<PathBuf>,
     close_notify: Arc<Notify>,
@@ -588,6 +765,35 @@ async fn handle_connection<S>(
                     obj.remove(DAEMON_AUTH_FIELD);
                 }
 
+                let lane_session = match crate::runtime_host::take_lane(&mut cmd, fallback_session)
+                {
+                    Ok(session) => session,
+                    Err(error) => {
+                        let mut response = serde_json::to_string(&serde_json::json!({
+                            "success": false,
+                            "error": error,
+                        }))
+                        .unwrap_or_default();
+                        response.push('\n');
+                        let _ = writer.write_all(response.as_bytes()).await;
+                        continue;
+                    }
+                };
+                let lane = match router.lane(&lane_session).await {
+                    Ok(lane) => lane,
+                    Err(error) => {
+                        let mut response = serde_json::to_string(&serde_json::json!({
+                            "success": false,
+                            "error": error,
+                        }))
+                        .unwrap_or_default();
+                        response.push('\n');
+                        let _ = writer.write_all(response.as_bytes()).await;
+                        continue;
+                    }
+                };
+                let control_plane = lane.control_plane.clone();
+
                 if let Some(ref tx) = idle_reset_tx {
                     let _ = tx.try_send(());
                 }
@@ -634,14 +840,17 @@ async fn handle_connection<S>(
                 }
 
                 if exits_daemon {
-                    if let Some(ref path) = stream_file_cleanup {
-                        let _ = fs::remove_file(path);
+                    if !crate::runtime_host::admission_enabled() {
+                        if let Some(ref path) = stream_file_cleanup {
+                            let _ = fs::remove_file(path);
+                        }
                     }
-                    // Signal the daemon loop to exit gracefully. Close has
-                    // shut down the browser. Handoff finalize and rollback
-                    // relinquish it only after a receipted owner transition.
-                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                    close_notify.notify_one();
+                    router.close_lane(&lane_session).await;
+                    if !crate::runtime_host::admission_enabled() {
+                        // Signal the legacy per-session daemon to exit gracefully.
+                        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                        close_notify.notify_one();
+                    }
                     return;
                 }
             }

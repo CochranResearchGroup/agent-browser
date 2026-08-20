@@ -279,6 +279,17 @@ impl DaemonState {
         s.stream_server = stream_server;
         s
     }
+
+    /// Create one isolated logical lane inside the user-scoped runtime host.
+    pub(crate) fn new_for_session_with_stream(
+        session_id: &str,
+        stream_client: Option<Arc<RwLock<Option<Arc<CdpClient>>>>>,
+        stream_server: Option<Arc<StreamServer>>,
+    ) -> Self {
+        let mut state = Self::new_with_stream(stream_client, stream_server);
+        state.session_id = session_id.to_string();
+        state
+    }
     pub(crate) fn subscribe_to_browser_events(&mut self) {
         if let Some(ref browser) = self.browser {
             self.event_rx = Some(browser.client.subscribe());

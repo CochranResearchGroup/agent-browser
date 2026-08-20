@@ -1052,6 +1052,12 @@ agent-browser session list
 agent-browser session
 ```
 
+The guarded runtime-host foundation can route several named sessions through
+one authenticated daemon process while keeping each session in an independent
+serialized lane. Set `AGENT_BROWSER_RUNTIME_HOST=1` for disposable validation.
+Closing one lane leaves the other lanes running. This migration switch is not
+yet the default and does not authorize cleanup of legacy daemons.
+
 On Linux, a named daemon can run under a bounded user-service supervisor
 without launching a browser. The install command records the exact executable
 and fixed loopback stream port. Status reports executable drift, port
@@ -1585,6 +1591,7 @@ On macOS, `AGENT_BROWSER_KEYCHAIN_PASSWORD` unlocks the login keychain before Ch
 | `AGENT_BROWSER_ACTION_POLICY`       | Path to action policy JSON file          |
 | `AGENT_BROWSER_CONFIRM_ACTIONS`     | Action categories requiring confirmation |
 | `AGENT_BROWSER_CONFIRM_INTERACTIVE` | Enable interactive confirmation prompts  |
+| `AGENT_BROWSER_RUNTIME_HOST`        | Enable guarded single-host admission for named runtime lanes |
 | `AGENT_BROWSER_ENV_FILE`            | Optional dotenv file for agent-browser secrets |
 | `AGENT_BROWSER_USE_REAL_KEYCHAIN`   | Use the real OS keychain for Chrome profile launches |
 | `AGENT_BROWSER_KEYCHAIN_PASSWORD`   | Password used to unlock the macOS login keychain or Linux GNOME Keyring |
