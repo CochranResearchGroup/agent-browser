@@ -323,6 +323,13 @@ pub struct DaemonResult {
     pub already_running: bool,
 }
 
+fn reachable_daemon_result(session: &str) -> DaemonResult {
+    let lane_exists = get_socket_dir().join(format!("{session}.stream")).is_file();
+    DaemonResult {
+        already_running: !crate::runtime_host::admission_enabled() || lane_exists,
+    }
+}
+
 /// Options forwarded to the daemon process as environment variables.
 /// Note: `confirm_interactive` is intentionally absent -- it is a CLI-side
 /// UX concern (prompting the user on stdin) and not a daemon configuration.
@@ -738,9 +745,7 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
             let version_matches = daemon_version_matches(session);
             let auth_token_available = daemon_auth_token_available(session);
             if opts.allow_stale_daemon_handoff && auth_token_available {
-                return Ok(DaemonResult {
-                    already_running: true,
-                });
+                return Ok(reachable_daemon_result(session));
             }
             if opts.allow_stale_daemon_handoff && !auth_token_available {
                 return Err(format!(
@@ -759,9 +764,7 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
                     "Cannot refresh stale daemon session '{session}' implicitly. Run `agent-browser --session {session} handoff prepare`, attach the candidate session reported by that command, then finalize the old owner only after candidate commit."
                 ));
             } else {
-                return Ok(DaemonResult {
-                    already_running: true,
-                });
+                return Ok(reachable_daemon_result(session));
             }
         }
     }
@@ -883,9 +886,7 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
                 {
                     thread::sleep(Duration::from_millis(200));
                     if daemon_ready(session) {
-                        return Ok(DaemonResult {
-                            already_running: true,
-                        });
+                        return Ok(reachable_daemon_result(session));
                     }
                 }
 
@@ -1168,6 +1169,27 @@ mod tests {
         .into_iter()
         .collect::<std::collections::BTreeSet<_>>();
         assert_eq!(sockets.len(), 2);
+    }
+
+    #[test]
+    fn p117_reachable_host_distinguishes_existing_and_new_logical_lanes() {
+        let guard = EnvGuard::new(&[
+            "AGENT_BROWSER_SOCKET_DIR",
+            crate::runtime_host::RUNTIME_HOST_ENV,
+        ]);
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-runtime-lane-readiness-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        guard.set("AGENT_BROWSER_SOCKET_DIR", root.to_str().unwrap());
+        guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+        std::fs::write(root.join("alpha.stream"), "39001").unwrap();
+
+        assert!(reachable_daemon_result("alpha").already_running);
+        assert!(!reachable_daemon_result("beta").already_running);
+
+        let _ = std::fs::remove_dir_all(root);
     }
 
     // === Transient Error Detection Tests ===
