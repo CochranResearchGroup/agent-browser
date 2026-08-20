@@ -1,12 +1,14 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::{Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -234,6 +236,9 @@ fn load_daemon_auth_token(session: &str) -> Result<String, String> {
 pub(crate) fn attach_daemon_auth_token(cmd: &Value, session: &str) -> Result<Value, String> {
     let token = load_daemon_auth_token(session)?;
     let mut authenticated = crate::runtime_host::attach_lane(cmd.clone(), session);
+    if let Some(config) = cached_runtime_lane_config(session) {
+        authenticated = crate::runtime_host::attach_lane_config(authenticated, &config);
+    }
     let obj = authenticated
         .as_object_mut()
         .ok_or("Command payload must be a JSON object")?;
@@ -380,6 +385,49 @@ pub struct DaemonOptions<'a> {
     /// Permit only `handoff prepare` to reach an authenticated daemon whose
     /// executable metadata differs from the current client.
     pub allow_stale_daemon_handoff: bool,
+}
+
+fn runtime_lane_configs() -> &'static Mutex<BTreeMap<String, crate::runtime_host::RuntimeLaneConfig>>
+{
+    static CONFIGS: OnceLock<Mutex<BTreeMap<String, crate::runtime_host::RuntimeLaneConfig>>> =
+        OnceLock::new();
+    CONFIGS.get_or_init(|| Mutex::new(BTreeMap::new()))
+}
+
+fn cache_runtime_lane_config(session: &str, opts: &DaemonOptions<'_>) {
+    if !crate::runtime_host::admission_enabled() {
+        return;
+    }
+    let stream_port = env::var("AGENT_BROWSER_STREAM_PORT")
+        .ok()
+        .and_then(|value| value.parse::<u16>().ok())
+        .filter(|port| *port > 0);
+    let config = crate::runtime_host::RuntimeLaneConfig {
+        session_name: opts.session_name.map(str::to_string),
+        allowed_domains: opts.allowed_domains.map(|domains| domains.join(",")),
+        action_policy: opts.action_policy.map(str::to_string),
+        confirm_actions: opts.confirm_actions.map(str::to_string),
+        no_auto_dialog: opts.no_auto_dialog,
+        engine: opts.engine.map(str::to_string),
+        default_timeout_ms: opts.default_timeout,
+        stream_port,
+        service_reconcile_interval_ms: opts.service_reconcile_interval_ms,
+        service_job_timeout_ms: opts.service_job_timeout_ms,
+        service_monitor_interval_ms: opts.service_monitor_interval_ms,
+        recovery_retry_budget: opts.service_recovery_retry_budget,
+        recovery_base_backoff_ms: opts.service_recovery_base_backoff_ms,
+        recovery_max_backoff_ms: opts.service_recovery_max_backoff_ms,
+        recovery_retry_budget_source: opts.service_recovery_retry_budget_source.to_string(),
+        recovery_base_backoff_ms_source: opts.service_recovery_base_backoff_ms_source.to_string(),
+        recovery_max_backoff_ms_source: opts.service_recovery_max_backoff_ms_source.to_string(),
+    };
+    if let Ok(mut configs) = runtime_lane_configs().lock() {
+        configs.insert(session.to_string(), config);
+    }
+}
+
+fn cached_runtime_lane_config(session: &str) -> Option<crate::runtime_host::RuntimeLaneConfig> {
+    runtime_lane_configs().lock().ok()?.get(session).cloned()
 }
 
 fn apply_daemon_env(cmd: &mut Command, session: &str, opts: &DaemonOptions) {
@@ -721,6 +769,7 @@ fn acquire_runtime_host_startup_lock(session: &str) -> Result<Option<DaemonStart
 }
 
 pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult, String> {
+    cache_runtime_lane_config(session, opts);
     let _startup_lock = acquire_runtime_host_startup_lock(session)?;
     // Socket connectivity is the sole liveness check — no PID check — so
     // callers in a different PID namespace (e.g. unshare) can still reuse

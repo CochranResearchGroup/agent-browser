@@ -13,6 +13,7 @@ use std::sync::RwLock;
 
 pub(crate) const RUNTIME_HOST_ENDPOINT_KEY: &str = "runtime-host";
 pub(crate) const RUNTIME_HOST_LANE_FIELD: &str = "_agentBrowserRuntimeLane";
+pub(crate) const RUNTIME_HOST_LANE_CONFIG_FIELD: &str = "_agentBrowserRuntimeLaneConfig";
 pub(crate) const RUNTIME_HOST_ENV: &str = "AGENT_BROWSER_RUNTIME_HOST";
 pub(crate) const DEFAULT_MAX_RUNTIME_LANES: usize = 64;
 
@@ -42,6 +43,17 @@ pub(crate) fn attach_lane(mut command: Value, session: &str) -> Value {
     command
 }
 
+pub(crate) fn attach_lane_config(mut command: Value, config: &RuntimeLaneConfig) -> Value {
+    if admission_enabled() {
+        if let Some(object) = command.as_object_mut() {
+            if let Ok(value) = serde_json::to_value(config) {
+                object.insert(RUNTIME_HOST_LANE_CONFIG_FIELD.to_string(), value);
+            }
+        }
+    }
+    command
+}
+
 pub(crate) fn take_lane(command: &mut Value, fallback: &str) -> Result<String, String> {
     let lane = command
         .as_object_mut()
@@ -52,6 +64,40 @@ pub(crate) fn take_lane(command: &mut Value, fallback: &str) -> Result<String, S
         return Err(format!("runtime_host_lane_invalid: {lane}"));
     }
     Ok(lane)
+}
+
+pub(crate) fn take_lane_config(command: &mut Value) -> Result<Option<RuntimeLaneConfig>, String> {
+    let Some(value) = command
+        .as_object_mut()
+        .and_then(|object| object.remove(RUNTIME_HOST_LANE_CONFIG_FIELD))
+    else {
+        return Ok(None);
+    };
+    serde_json::from_value(value)
+        .map(Some)
+        .map_err(|error| format!("runtime_host_lane_config_invalid: {error}"))
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct RuntimeLaneConfig {
+    pub(crate) session_name: Option<String>,
+    pub(crate) allowed_domains: Option<String>,
+    pub(crate) action_policy: Option<String>,
+    pub(crate) confirm_actions: Option<String>,
+    pub(crate) no_auto_dialog: bool,
+    pub(crate) engine: Option<String>,
+    pub(crate) default_timeout_ms: Option<u64>,
+    pub(crate) stream_port: Option<u16>,
+    pub(crate) service_reconcile_interval_ms: Option<u64>,
+    pub(crate) service_job_timeout_ms: Option<u64>,
+    pub(crate) service_monitor_interval_ms: Option<u64>,
+    pub(crate) recovery_retry_budget: u64,
+    pub(crate) recovery_base_backoff_ms: u64,
+    pub(crate) recovery_max_backoff_ms: u64,
+    pub(crate) recovery_retry_budget_source: String,
+    pub(crate) recovery_base_backoff_ms_source: String,
+    pub(crate) recovery_max_backoff_ms_source: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -192,6 +238,34 @@ mod tests {
             "runtime_host_lane_invalid: ../other-user"
         );
         assert!(command.get(RUNTIME_HOST_LANE_FIELD).is_none());
+    }
+
+    #[test]
+    fn lane_configuration_round_trips_and_is_removed_before_dispatch() {
+        let guard = EnvGuard::new(&[RUNTIME_HOST_ENV]);
+        guard.set(RUNTIME_HOST_ENV, "1");
+        let config = RuntimeLaneConfig {
+            session_name: Some("durable-auth".to_string()),
+            allowed_domains: Some("example.com,*.example.com".to_string()),
+            action_policy: Some("/tmp/policy.json".to_string()),
+            confirm_actions: Some("click,fill".to_string()),
+            no_auto_dialog: true,
+            engine: Some("chrome".to_string()),
+            default_timeout_ms: Some(12_345),
+            stream_port: Some(39_716),
+            service_reconcile_interval_ms: Some(1_000),
+            service_job_timeout_ms: Some(2_000),
+            service_monitor_interval_ms: Some(3_000),
+            recovery_retry_budget: 4,
+            recovery_base_backoff_ms: 500,
+            recovery_max_backoff_ms: 5_000,
+            recovery_retry_budget_source: "cli".to_string(),
+            recovery_base_backoff_ms_source: "config".to_string(),
+            recovery_max_backoff_ms_source: "env".to_string(),
+        };
+        let mut command = attach_lane_config(serde_json::json!({"action": "status"}), &config);
+        assert_eq!(take_lane_config(&mut command).unwrap(), Some(config));
+        assert!(command.get(RUNTIME_HOST_LANE_CONFIG_FIELD).is_none());
     }
 
     #[tokio::test]

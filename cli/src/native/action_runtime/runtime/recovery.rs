@@ -290,6 +290,61 @@ impl DaemonState {
         state.session_id = session_id.to_string();
         state
     }
+
+    pub(crate) fn new_for_runtime_lane_with_stream(
+        session_id: &str,
+        stream_client: Option<Arc<RwLock<Option<Arc<CdpClient>>>>>,
+        stream_server: Option<Arc<StreamServer>>,
+        config: &crate::runtime_host::RuntimeLaneConfig,
+    ) -> Result<Self, String> {
+        let mut state = Self::new_for_session_with_stream(session_id, stream_client, stream_server);
+        state.domain_filter = Arc::new(RwLock::new(
+            config.allowed_domains.as_deref().map(DomainFilter::new),
+        ));
+        state.session_name = config.session_name.clone();
+        state.policy = config
+            .action_policy
+            .as_deref()
+            .map(ActionPolicy::load)
+            .transpose()?;
+        state.confirm_actions = config.confirm_actions.as_deref().and_then(|value| {
+            let categories = value
+                .split(',')
+                .map(|category| category.trim().to_lowercase())
+                .filter(|category| !category.is_empty())
+                .collect::<HashSet<_>>();
+            (!categories.is_empty()).then_some(ConfirmActions { categories })
+        });
+        state.auto_dialog = !config.no_auto_dialog;
+        if let Some(engine) = config.engine.as_ref() {
+            state.engine = engine.clone();
+        }
+        if let Some(timeout) = config.default_timeout_ms {
+            state.default_timeout_ms = timeout;
+        }
+        if config.recovery_retry_budget > 0
+            && config.recovery_base_backoff_ms > 0
+            && config.recovery_max_backoff_ms > 0
+        {
+            state.browser_recovery_policy_config = BrowserRecoveryPolicyConfig {
+                retry_budget: config.recovery_retry_budget,
+                base_backoff_ms: config.recovery_base_backoff_ms,
+                max_backoff_ms: config.recovery_max_backoff_ms,
+                source: BrowserRecoveryPolicySource {
+                    retry_budget: BrowserRecoveryPolicyValueSource::from_str(
+                        &config.recovery_retry_budget_source,
+                    ),
+                    base_backoff_ms: BrowserRecoveryPolicyValueSource::from_str(
+                        &config.recovery_base_backoff_ms_source,
+                    ),
+                    max_backoff_ms: BrowserRecoveryPolicyValueSource::from_str(
+                        &config.recovery_max_backoff_ms_source,
+                    ),
+                },
+            };
+        }
+        Ok(state)
+    }
     pub(crate) fn subscribe_to_browser_events(&mut self) {
         if let Some(ref browser) = self.browser {
             self.event_rx = Some(browser.client.subscribe());

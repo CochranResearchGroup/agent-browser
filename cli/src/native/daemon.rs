@@ -423,7 +423,11 @@ impl RuntimeHostRouter {
         })
     }
 
-    async fn lane(&self, session: &str) -> Result<RuntimeLane, String> {
+    async fn lane(
+        &self,
+        session: &str,
+        config: Option<crate::runtime_host::RuntimeLaneConfig>,
+    ) -> Result<RuntimeLane, String> {
         if let Some(lane) = self.lanes.get(session) {
             return Ok(lane);
         }
@@ -436,31 +440,44 @@ impl RuntimeHostRouter {
             return Ok(lane);
         }
 
-        let (stream_server, stream_client, stream_file) =
-            match StreamServer::start_without_client(0, session.to_string(), true).await {
-                Ok((server, client)) => {
-                    let server = Arc::new(server);
-                    let path = self.socket_dir.join(format!("{session}.stream"));
-                    fs::write(&path, server.port().to_string()).map_err(|error| {
-                        format!("runtime_host_stream_metadata_write_failed: {error}")
-                    })?;
-                    secure_daemon_file(&path);
-                    (Some(server), Some(client), Some(path))
-                }
-                Err(error) => {
-                    return Err(format!("runtime_host_stream_start_failed: {error}"));
-                }
-            };
+        let config = config.unwrap_or_else(|| crate::runtime_host::RuntimeLaneConfig {
+            service_reconcile_interval_ms: self.service_reconcile_interval_ms,
+            service_job_timeout_ms: self.service_job_timeout_ms,
+            service_monitor_interval_ms: self.service_monitor_interval_ms,
+            ..Default::default()
+        });
+        let stream_port = config.stream_port.unwrap_or(0);
+        let (stream_server, stream_client, stream_file) = match StreamServer::start_without_client(
+            stream_port,
+            session.to_string(),
+            true,
+        )
+        .await
+        {
+            Ok((server, client)) => {
+                let server = Arc::new(server);
+                let path = self.socket_dir.join(format!("{session}.stream"));
+                fs::write(&path, server.port().to_string()).map_err(|error| {
+                    format!("runtime_host_stream_metadata_write_failed: {error}")
+                })?;
+                secure_daemon_file(&path);
+                (Some(server), Some(client), Some(path))
+            }
+            Err(error) => {
+                return Err(format!("runtime_host_stream_start_failed: {error}"));
+            }
+        };
         let lane = RuntimeLane {
             control_plane: ControlPlaneWorker::start_with_options(
-                DaemonState::new_for_session_with_stream(
+                DaemonState::new_for_runtime_lane_with_stream(
                     session,
                     stream_client,
                     stream_server.clone(),
-                ),
-                self.service_reconcile_interval_ms,
-                self.service_job_timeout_ms,
-                self.service_monitor_interval_ms,
+                    &config,
+                )?,
+                config.service_reconcile_interval_ms,
+                config.service_job_timeout_ms,
+                config.service_monitor_interval_ms,
             ),
             stream_server,
             stream_file,
@@ -779,7 +796,20 @@ async fn handle_connection<S>(
                         continue;
                     }
                 };
-                let lane = match router.lane(&lane_session).await {
+                let lane_config = match crate::runtime_host::take_lane_config(&mut cmd) {
+                    Ok(config) => config,
+                    Err(error) => {
+                        let mut response = serde_json::to_string(&serde_json::json!({
+                            "success": false,
+                            "error": error,
+                        }))
+                        .unwrap_or_default();
+                        response.push('\n');
+                        let _ = writer.write_all(response.as_bytes()).await;
+                        continue;
+                    }
+                };
+                let lane = match router.lane(&lane_session, lane_config).await {
                     Ok(lane) => lane,
                     Err(error) => {
                         let mut response = serde_json::to_string(&serde_json::json!({
