@@ -7627,6 +7627,52 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn p117_red_accepted_transaction_history_still_pins_both_generations() {
+        use std::os::unix::fs::symlink;
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-p117-accepted-generation-history-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        fs::create_dir_all(&paths.generations_dir).unwrap();
+        fs::create_dir_all(paths.current_selector.parent().unwrap()).unwrap();
+        symlink(
+            PathBuf::from("generations").join("selected-generation"),
+            &paths.current_selector,
+        )
+        .unwrap();
+
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "accepted-candidate".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.old_generation_id = Some("accepted-old".to_string());
+        transaction.state = crate::runtime_adoption::UpgradeTransactionState::Accepted;
+        transaction.checkpoints[0].recorded_at = "2026-08-01T00:00:00Z".to_string();
+        write_private_json_atomic(
+            &transaction_path(&root, &transaction.transaction_id),
+            &transaction,
+        )
+        .unwrap();
+
+        let references = generation_references(&root, &paths).unwrap();
+        assert_eq!(
+            references["accepted-old"],
+            vec!["transaction_old_generation"]
+        );
+        assert_eq!(
+            references["accepted-candidate"],
+            vec!["transaction_candidate_generation"]
+        );
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn stable_census_receipt_commits_before_any_payload_path_exists() {
         let root = env::temp_dir().join(format!(

@@ -5408,8 +5408,8 @@ Usage: agent-browser install [--with-deps] [--with-remote-view-privileges]
        agent-browser install doctor [--json]
 
 Downloads and installs browser binaries required for automation. The doctor is
-no-launch and also reports service-status, duplicate profile pressure, and
-remote-view privilege readiness. Workstation payload checks bind the installed
+no-launch and also reports service-status, runtime multiplicity, duplicate
+profile pressure, and remote-view privilege readiness. Workstation payload checks bind the installed
 binary and support assets to recorded SHA-256 provenance. Real-host preflight
 requires at least 6 GiB free before sudo, payload staging, or package mutation.
 
@@ -6841,7 +6841,7 @@ Dashboard:
 Setup:
   install                    Install browser binaries
   install workstation        Install and reconcile the source-free Linux workstation
-  install doctor             Check user-scoped install drift and launch readiness
+  install doctor             Check install drift, runtime multiplicity, and launch readiness
   doctor windows-browser     Diagnose WSL to Windows browser CDP routing
   doctor remote-view         Diagnose Guacamole and RDP remote-view setup
   remote-view open <url>     Open a route-bound remote-headed browser and return view URLs

@@ -1016,6 +1016,26 @@ mod tests {
         );
     }
 
+    #[test]
+    fn p117_red_named_sessions_resolve_to_distinct_daemon_sockets() {
+        let guard = EnvGuard::new(&["AGENT_BROWSER_SOCKET_DIR", "XDG_RUNTIME_DIR"]);
+        guard.set(
+            "AGENT_BROWSER_SOCKET_DIR",
+            "/tmp/agent-browser-p117-runtime-sockets",
+        );
+        guard.remove("XDG_RUNTIME_DIR");
+
+        let sockets = [
+            get_socket_path("fixture-session-a"),
+            get_socket_path("fixture-session-b"),
+            get_socket_path("fixture-session-c"),
+        ]
+        .into_iter()
+        .collect::<std::collections::BTreeSet<_>>();
+
+        assert_eq!(sockets.len(), 3);
+    }
+
     // === Transient Error Detection Tests ===
 
     #[test]

@@ -68,6 +68,26 @@ _Avoid_: Partial rollback, cleanup warning
 A cohesive native module that owns a domain invariant and the operations that preserve it. Command dispatch and peer workflows import this owner directly.
 _Avoid_: Action bucket, handler collection
 
+**Runtime host**:
+The singular active authority that executes daemon commands for all runtime lanes in one user installation.
+_Avoid_: Per-session daemon, session process
+
+**Runtime lane**:
+A logical serialized command and ownership scope for one named browser session within the runtime host.
+_Avoid_: Daemon instance, socket process
+
+**Cleanup obligation**:
+The durable duty to preserve a valid retained resource or reclaim it after its lifecycle becomes terminal.
+_Avoid_: Best-effort cleanup, drop behavior
+
+**Reclaimable runtime resource**:
+A package-owned process tree, profile, display helper, transaction payload, or runtime generation whose lifecycle is terminal and which has no active ownership, lease, handoff, rollback, or process reference.
+_Avoid_: Old resource, orphan
+
+**Runtime convergence window**:
+The bounded upgrade interval during which the old and candidate runtime generations may coexist while ownership transfers and rollback remains possible.
+_Avoid_: Mixed steady state, maintenance mode
+
 **Transitional facade**:
 A temporary re-export-only module used while callers migrate to concrete owners. It is not an architectural owner and must be deleted before the final architecture gate.
 _Avoid_: Compatibility owner, permanent facade

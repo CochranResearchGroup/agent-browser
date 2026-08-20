@@ -1521,6 +1521,46 @@ mod tests {
     }
 
     #[test]
+    fn rewritten_chrome_argv_red_fixture_loses_supplementary_flag_evidence() {
+        let flattened = vec![
+            "chrome --user-data-dir=/tmp/agent-browser-fixture/profile-a --remote-debugging-port=9222"
+                .to_string(),
+        ];
+
+        assert_eq!(command_arg_value(&flattened, "--user-data-dir"), None);
+        assert_eq!(
+            command_arg_value(&flattened, "--remote-debugging-port"),
+            None
+        );
+    }
+
+    #[test]
+    fn gc_red_fixture_records_a_process_group_but_exposes_a_root_pid_effect() {
+        let response = service_resources_response_from_samples(
+            &ServiceState::default(),
+            vec![ProcessSample {
+                pid: 4200,
+                ppid: Some(1),
+                process_group_id: Some(4200),
+                command: vec![
+                    "chromium".to_string(),
+                    "--user-data-dir=/tmp/agent-browser-fixture/profile-b".to_string(),
+                ],
+                executable: Some("/tmp/fixture-generation-old/chromium".to_string()),
+                rss_bytes: Some(1024),
+                cpu_seconds: Some(1),
+                age_seconds: Some(TEMP_PROFILE_MIN_AGE_SECONDS + 1),
+            }],
+            Vec::new(),
+        );
+
+        let candidate = &response["resources"][0];
+        assert_eq!(candidate["candidateIdentity"]["processGroupId"], 4200);
+        assert_eq!(candidate["pid"], 4200);
+        assert_eq!(candidate["gcAction"], "terminate_process");
+    }
+
+    #[test]
     fn resources_do_not_gc_fresh_temporary_profile() {
         let response = service_resources_response_from_samples(
             &ServiceState::default(),

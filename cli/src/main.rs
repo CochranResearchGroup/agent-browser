@@ -16,6 +16,7 @@ mod remote_view_doctor;
 mod remote_view_helper_contract;
 #[allow(dead_code)]
 mod runtime_adoption;
+mod runtime_multiplicity;
 #[allow(dead_code)]
 mod runtime_owner_transfer;
 mod runtime_profile;

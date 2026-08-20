@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-HELPER_VERSION="2026-06-23.p44-route-desktop-v3"
+HELPER_VERSION="2026-06-23.p44-route-desktop-v4"
 
 usage() {
   cat <<'EOF'
@@ -148,7 +148,7 @@ status_json() {
     apparmor_profile_loaded="true"
   fi
   cat <<EOF
-{"schemaVersion":1,"helperVersion":"$HELPER_VERSION","routeDesktopSession":{"ready":true,"state":"browser_control_ready_template","terminalStartupDetected":false,"startsWindowManager":true,"keepsSessionAlive":true},"displayAccess":{"supportsFilesystemX11Socket":true,"supportsAbstractX11Socket":true,"boundedXhostTimeoutSeconds":2},"managedChromeSandboxPolicy":{"profileName":"agent-browser-managed-chrome","loaded":$apparmor_profile_loaded}}
+{"schemaVersion":1,"helperVersion":"$HELPER_VERSION","routeDesktopSession":{"ready":true,"state":"browser_control_ready_template","terminalStartupDetected":false,"startsWindowManager":true,"keepsSessionAlive":true},"displayAccess":{"supportsFilesystemX11Socket":true,"supportsAbstractX11Socket":true,"boundedXhostTimeoutSeconds":2},"routeUserCredentialUpdate":{"pamBypassed":true,"cryptMethod":"SHA512","shaRounds":100000},"managedChromeSandboxPolicy":{"profileName":"agent-browser-managed-chrome","loaded":$apparmor_profile_loaded}}
 EOF
 }
 
@@ -205,7 +205,11 @@ ensure_rdp_route_user() {
     useradd --create-home --shell /bin/bash --comment "agent-browser route-pool RDP session" "$user_name"
   fi
 
-  printf '%s:%s\n' "$user_name" "$password" | chpasswd
+  # chpasswd's default path uses PAM, which can invoke pam_gnome_keyring and
+  # raise an interactive unlock prompt during unattended reconciliation.
+  # Selecting the crypt method keeps the password on stdin while bypassing PAM.
+  printf '%s:%s\n' "$user_name" "$password" \
+    | chpasswd --crypt-method SHA512 --sha-rounds 100000
   usermod -aG ssl-cert "$user_name" >/dev/null 2>&1 || true
   usermod -aG ssl-cert xrdp >/dev/null 2>&1 || true
   write_xsession "$user_name"

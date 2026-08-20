@@ -1019,6 +1019,18 @@ pub fn run_install_doctor(flags: &Flags) {
         report.pointer("/data/runtimeInventory/status"),
     );
     print_doctor_field(
+        "runtime multiplicity",
+        report.pointer("/data/runtimeMultiplicity/state"),
+    );
+    print_doctor_field(
+        "runtime hosts",
+        report.pointer("/data/runtimeMultiplicity/counts/runtimeHosts"),
+    );
+    print_doctor_field(
+        "legacy daemons",
+        report.pointer("/data/runtimeMultiplicity/counts/legacyDaemons"),
+    );
+    print_doctor_field(
         "stale runtimes",
         report.pointer("/data/runtimeInventory/staleCount"),
     );
@@ -1120,6 +1132,14 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
     let session_supervisors = crate::session_supervisor::session_supervisor_health_json();
     install_doctor_trace("workstation_payload");
     let workstation_payload = workstation_payload_status();
+    install_doctor_trace("runtime_multiplicity");
+    let runtime_multiplicity =
+        crate::runtime_multiplicity::runtime_multiplicity_report_from_doctor_inputs(
+            &daemon_listener_inventory,
+            &runtime_inventory,
+            &live_dashboard_runtime,
+            &workstation_payload,
+        );
     install_doctor_trace("issues");
     let mut issues = install_doctor_issues(InstallDoctorIssueInputs {
         current_executable: &current_executable,
@@ -1158,6 +1178,7 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
             "dashboardRuntime": dashboard_runtime,
             "liveDashboardRuntime": live_dashboard_runtime,
             "runtimeInventory": runtime_inventory,
+            "runtimeMultiplicity": runtime_multiplicity,
             "daemonListenerInventory": daemon_listener_inventory,
             "runtimeConvergence": runtime_convergence,
             "sessionSupervisors": session_supervisors,
@@ -4027,7 +4048,7 @@ mod tests {
                 "success": true,
                 "parsed": {
                     "schemaVersion": 1,
-                    "helperVersion": "2026-06-23.p44-route-desktop-v2",
+                    "helperVersion": "2026-06-23.p44-route-desktop-v4",
                     "routeDesktopSession": {
                         "ready": true,
                         "terminalStartupDetected": false
@@ -4036,6 +4057,11 @@ mod tests {
                         "supportsFilesystemX11Socket": true,
                         "supportsAbstractX11Socket": true,
                         "boundedXhostTimeoutSeconds": 2
+                    },
+                    "routeUserCredentialUpdate": {
+                        "pamBypassed": true,
+                        "cryptMethod": "SHA512",
+                        "shaRounds": 100000
                     }
                 }
             }
@@ -5260,7 +5286,7 @@ EOF
             "success": true,
             "parsed": {
                 "schemaVersion": 1,
-                "helperVersion": "2026-06-23.p44-route-desktop-v2",
+                "helperVersion": "2026-06-23.p44-route-desktop-v4",
                 "routeDesktopSession": {
                     "ready": true,
                     "terminalStartupDetected": false
@@ -5269,9 +5295,43 @@ EOF
                     "supportsFilesystemX11Socket": true,
                     "supportsAbstractX11Socket": true,
                     "boundedXhostTimeoutSeconds": 2
+                },
+                "routeUserCredentialUpdate": {
+                    "pamBypassed": true,
+                    "cryptMethod": "SHA512",
+                    "shaRounds": 100000
                 }
             }
         });
+
+        assert!(remote_view_helper_status_contract_ready(&report));
+    }
+
+    #[test]
+    fn doctor_redaction_preserves_typed_route_user_credential_contract() {
+        let status = json!({
+            "schemaVersion": 1,
+            "helperVersion": "2026-06-23.p44-route-desktop-v4",
+            "routeDesktopSession": {
+                "ready": true,
+                "terminalStartupDetected": false
+            },
+            "displayAccess": {
+                "supportsFilesystemX11Socket": true,
+                "supportsAbstractX11Socket": true,
+                "boundedXhostTimeoutSeconds": 2
+            },
+            "routeUserCredentialUpdate": {
+                "pamBypassed": true,
+                "cryptMethod": "SHA512",
+                "shaRounds": 100000
+            }
+        })
+        .to_string();
+        let report = helper_status_output(json!({
+            "success": true,
+            "stdout": redact_doctor_text(status)
+        }));
 
         assert!(remote_view_helper_status_contract_ready(&report));
     }
@@ -5282,7 +5342,7 @@ EOF
             "success": true,
             "parsed": {
                 "schemaVersion": 1,
-                "helperVersion": "2026-06-23.p44-route-desktop-v2",
+                "helperVersion": "2026-06-23.p44-route-desktop-v4",
                 "routeDesktopSession": {
                     "ready": true,
                     "terminalStartupDetected": false
@@ -5291,6 +5351,11 @@ EOF
                     "supportsFilesystemX11Socket": true,
                     "supportsAbstractX11Socket": false,
                     "boundedXhostTimeoutSeconds": 2
+                },
+                "routeUserCredentialUpdate": {
+                    "pamBypassed": true,
+                    "cryptMethod": "SHA512",
+                    "shaRounds": 100000
                 }
             }
         });

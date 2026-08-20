@@ -814,6 +814,52 @@ fn test_prune_retained_service_state_removes_orphaned_custom_profiles() {
     assert!(service_state.profiles.contains_key("custom:observed"));
     assert!(service_state.profiles.contains_key("default"));
 }
+
+#[test]
+fn p117_red_profile_record_prune_does_not_reclaim_the_profile_directory() {
+    let profile_root = env::temp_dir().join(format!(
+        "agent-browser-p117-profile-prune-{}",
+        uuid::Uuid::new_v4()
+    ));
+    fs::create_dir_all(&profile_root).unwrap();
+    fs::write(profile_root.join("retained-evidence"), b"fixture").unwrap();
+    let mut service_state = ServiceState {
+        profiles: BTreeMap::from([(
+            "managed-one-time-p117".to_string(),
+            BrowserProfile {
+                id: "managed-one-time-p117".to_string(),
+                name: "P117 managed one-time fixture".to_string(),
+                profile_class: ProfileClass::ManagedOneTime,
+                user_data_dir: Some(profile_root.display().to_string()),
+                persistent: false,
+                ..BrowserProfile::default()
+            },
+        )]),
+        ..ServiceState::default()
+    };
+
+    let result = prune_retained_service_state(
+        &mut service_state,
+        ServiceRetentionPruneOptions {
+            apply: true,
+            closed_tabs: false,
+            not_started_browsers: false,
+            process_exited_browsers: false,
+            released_sessions: false,
+            abandoned_sessions: false,
+            orphaned_profiles: true,
+            display_allocations: false,
+            abandoned_session_min_age_minutes: 1440,
+        },
+    );
+
+    assert_eq!(result["removed"]["orphanedProfiles"], 1);
+    assert!(!service_state.profiles.contains_key("managed-one-time-p117"));
+    assert!(profile_root.join("retained-evidence").is_file());
+
+    fs::remove_dir_all(profile_root).unwrap();
+}
+
 #[test]
 fn test_prune_retained_service_state_classifies_display_allocations() {
     let mut service_state = ServiceState {

@@ -1,0 +1,111 @@
+{
+  "schemaVersion": "agent-browser.runtime-lifecycle-red-fixtures.v1",
+  "fixtures": [
+    {
+      "fixtureId": "rewritten-chrome-argv-loses-profile-and-cdp-evidence",
+      "gapKind": "process_observation",
+      "sourceAnchors": [
+        "cli/src/native/service_resources.rs command_arg_value",
+        "cli/src/native/service_resources.rs linux_process_sample"
+      ],
+      "sanitizedEvidence": {
+        "rootPid": 4100,
+        "processGroupId": 4100,
+        "startToken": "linux:fixture:100",
+        "executableGeneration": "fixture-generation-current",
+        "profileRoot": "/tmp/agent-browser-fixture/profile-a",
+        "rawProcCmdlineHex": "6368726f6d65202d2d757365722d646174612d6469723d2f746d702f6167656e742d62726f777365722d666978747572652f70726f66696c652d61202d2d72656d6f74652d646562756767696e672d706f72743d3932323200"
+      },
+      "currentBehavior": "flattened_command_is_one_argument_and_flag_lookup_returns_no_profile_or_cdp_value",
+      "requiredBehavior": "raw_command_observation_preserves_supplementary_profile_and_cdp_evidence",
+      "expectedRedReason": "rewritten_argv_evidence_lost"
+    },
+    {
+      "fixtureId": "gc-targets-root-pid-instead-of-reviewed-process-group",
+      "gapKind": "process_tree_effect",
+      "sourceAnchors": [
+        "cli/src/native/service_resources.rs GcCandidateIdentity",
+        "cli/src/native/service_resources.rs LiveTerminator"
+      ],
+      "sanitizedEvidence": {
+        "rootPid": 4200,
+        "processGroupId": 4200,
+        "helperTree": [4201, 4202, 4203],
+        "startToken": "linux:fixture:200",
+        "executableGeneration": "fixture-generation-old",
+        "profileRoot": "/tmp/agent-browser-fixture/profile-b"
+      },
+      "currentBehavior": "review_identity_records_process_group_but_apply_signals_only_root_pid",
+      "requiredBehavior": "normal_close_and_gc_recheck_and_terminate_the_same_reviewed_process_group",
+      "expectedRedReason": "reviewed_process_group_not_effect_target"
+    },
+    {
+      "fixtureId": "handoff-transfer-has-no-durable-cleanup-obligation",
+      "gapKind": "cleanup_obligation",
+      "sourceAnchors": [
+        "cli/src/runtime_owner_transfer.rs RuntimeOwnerRegistry",
+        "cli/src/runtime_owner_transfer.rs commit_candidate"
+      ],
+      "sanitizedEvidence": {
+        "logicalBrowserId": "browser-fixture-c",
+        "profileIdentityDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "sourceOwnerGeneration": 7,
+        "candidateOwnerGeneration": 8
+      },
+      "currentBehavior": "owner_generation_moves_but_no_lifecycle_record_carries_cleanup_accountability",
+      "requiredBehavior": "owner_and_cleanup_obligation_commit_atomically",
+      "expectedRedReason": "cleanup_obligation_not_transferred"
+    },
+    {
+      "fixtureId": "retained-prune-removes-record-but-not-profile-directory",
+      "gapKind": "profile_filesystem_retention",
+      "sourceAnchors": [
+        "cli/src/native/service_retained_state.rs prune_retained_service_state"
+      ],
+      "sanitizedEvidence": {
+        "profileId": "profile-fixture-d",
+        "profileRoot": "/tmp/agent-browser-fixture/profile-d",
+        "terminalAgeSeconds": 90000,
+        "filesystemPresent": true
+      },
+      "currentBehavior": "service_state_profile_record_can_be_removed_without_a_filesystem_effect_or_quarantine_receipt",
+      "requiredBehavior": "retention_authority_joins_record_and_filesystem_reclamation",
+      "expectedRedReason": "record_prune_is_not_filesystem_reclamation"
+    },
+    {
+      "fixtureId": "accepted-history-pins-every-generation-reference",
+      "gapKind": "generation_retention",
+      "sourceAnchors": [
+        "cli/src/workstation_install.rs generation_references"
+      ],
+      "sanitizedEvidence": {
+        "transactionState": "accepted",
+        "acceptedAgeSeconds": 172800,
+        "oldGenerationId": "fixture-generation-e-old",
+        "candidateGenerationId": "fixture-generation-e-candidate",
+        "readinessHealthy": true
+      },
+      "currentBehavior": "every_transaction_not_marked_old_generation_retirable_pins_old_and_candidate_generations",
+      "requiredBehavior": "healthy_accepted_transaction_closes_binary_references_after_rollback_window",
+      "expectedRedReason": "historical_transaction_pins_generations"
+    },
+    {
+      "fixtureId": "named-sessions-create-distinct-daemon-authorities",
+      "gapKind": "runtime_multiplicity",
+      "sourceAnchors": [
+        "cli/src/connection.rs ensure_daemon",
+        "cli/src/connection.rs get_socket_path"
+      ],
+      "sanitizedEvidence": {
+        "sessions": ["fixture-session-f-a", "fixture-session-f-b", "fixture-session-f-c"],
+        "socketCount": 3,
+        "daemonProcessCount": 3,
+        "runtimeHostCount": 0,
+        "executableGeneration": "fixture-generation-current"
+      },
+      "currentBehavior": "session_identity_is_also_the_daemon_socket_and_process_key",
+      "requiredBehavior": "named_sessions_are_serialized_lanes_inside_one_runtime_host",
+      "expectedRedReason": "named_session_requires_daemon_process"
+    }
+  ]
+}

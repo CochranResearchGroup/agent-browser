@@ -97,6 +97,10 @@ display-access operations use only the fixed root-owned helper through
 passwordless `sudo -n`. A compatible installed helper is retained even when
 its bytes differ from the newly bundled helper. Installed maintenance fails
 closed instead of falling back to an interactive sudo prompt.
+Route-user password reconciliation also bypasses PAM explicitly by selecting
+the helper's advertised SHA-512 crypt contract. This prevents
+`pam_gnome_keyring` from raising an unlock modal during unattended maintenance;
+browser-profile `basic_password_store` remains a separate Chrome launch policy.
 Before acquiring that authorization or staging the payload, the real-host
 preflight requires at least 6 GiB of free disk capacity. JSON output exposes
 `hostPlan.availableDiskBytes`, `minimumDiskBytes`, and `diskSpaceReady`.
@@ -256,7 +260,11 @@ from a checkout, and the no-launch `launchConfig` readiness view.
 It also runs a no-launch service-status probe and, on Linux, reports
 remote-view privilege helper readiness. For a workstation payload, it verifies
 the installed binary, controller assets, Guacamole manifest, and Guacamole
-files against the SHA-256 provenance recorded during installation.
+files against the SHA-256 provenance recorded during installation. The
+`runtimeMultiplicity` report separately counts the dashboard process, runtime
+hosts, legacy per-session daemons, and executable generations. Until the
+single-host migration is complete, legacy daemons are reported as typed drift
+without changing or terminating them.
 
 ```bash
 agent-browser install doctor

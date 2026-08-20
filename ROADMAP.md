@@ -1,16 +1,53 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-08-16
+Updated: 2026-08-20
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
 
+## P117 | Runtime Lifecycle Authority And Convergence
+
+State: IN PROGRESS — SLICE A SOURCE ACCEPTED
+Current state: the August 19 workstation audit found one healthy dashboard but
+multiple daemon processes and executable generations, 226 Chrome processes,
+218 runtime-profile directories using about 58 GiB, and 21 immutable runtime
+generations with no generation-GC candidates. Existing hot ownership transfer,
+process identity, conservative resource inventory, retained-state pruning, and
+transactional generation GC each protect their local invariant, but no deep
+module owns a browser lane from launch through transfer and final reclamation.
+The resource collector also loses live Chrome profile evidence when Chrome
+rewrites argv, records process groups while terminating only root PIDs, does
+not reclaim present profile directories, and lets historical nonterminal
+transactions pin generations indefinitely. P117 deepens runtime lifecycle
+authority, adds ownership-backed resource reconciliation, unifies retention
+authority, moves named sessions into one runtime host, bounds hot-upgrade
+overlap, enables conservative automatic reclamation, and ends with separately
+authorized controlled workstation convergence. Slice A is source accepted.
+Six sanitized live-shaped fixtures now freeze the confirmed gaps, the existing
+owner registry carries a backward-compatible conservative lifecycle ledger,
+and install doctor exposes a read-only multiplicity report. Current live
+readback correctly reports one dashboard process, zero runtime hosts, seven
+legacy daemons, one executable generation, and typed `drift` without changing
+the runtime.
+
+### Plan
+
+- `docs/dev/plans/0117-2026-08-19-runtime-lifecycle-authority-and-convergence-plan.md`
+
+### Next Recommendation
+
+Execute Slice B through the existing owner-registry seam. Introduce the deep
+runtime lifecycle owner, route lifecycle transitions through it incrementally,
+and move cleanup obligations atomically with owner generations. Preserve the
+Slice A no-effect boundary until each transition has a focused red-to-green
+proof.
+
 ## P116 | Runtime Adoption And Transactional Upgrade
 
-State: OPEN
-Current state: Plan 0116 converts the August 15 runtime and durable-handoff
+State: ACCEPTED
+Current state: Plan 0116 is accepted. It converted the August 15 runtime and durable-handoff
 failures into one generation-aware architecture. Current workstation apply can
 commit the new payload before runtime reconciliation, restore only systemd
 active states after later failure, and leave live daemons bound to prior or
@@ -129,12 +166,10 @@ transfer was executed.
 
 ### Next Recommendation
 
-Keep Slice E acceptance withheld until the user-scoped boundary incident is
-adjudicated or independently reconciled. The remediated Slices G and H source
-boundary is accepted, but Plan 0116 remains open. Do not replace the installed
-payload, enable the recurring interlock, finalize a live transaction, run
-generation GC apply, or touch a live browser without new authority. Slice I is
-the next gate and requires separate explicit live authorization.
+Preserve P116 as the accepted hot-adoption and transactional-upgrade
+foundation. Continue through P117, which owns lifecycle deepening, resource and
+retention convergence, single-host migration, and the separately authorized
+live cleanup gate.
 
 ## P114 | Terminal Route Quarantine Recovery
 

@@ -236,4 +236,31 @@ if [[ "$helper_sha_after_second_apply" != "$helper_sha_before_second_apply" ]]; 
   exit 1
 fi
 
+# A formerly compatible helper that advertises the non-PAM fields below the
+# redaction-triggering legacy object name is unsafe. It must cross the
+# intentional authorization boundary and be replaced, even when its remaining
+# capabilities still pass.
+sed -i \
+  's/"routeUserCredentialUpdate"/"routeUserPasswordUpdate"/' \
+  "$HELPER_PATH"
+if "$HELPER_PATH" status-json | grep -q 'routeUserCredentialUpdate'; then
+  echo "Legacy-helper fixture still advertises the current credential-update contract." >&2
+  exit 1
+fi
+
+sudo_v_count_before_legacy_apply="$(grep -c '^SUDO -v$' "$LOG" || true)"
+run_installer >/tmp/agent-browser-install-privileges-clean-fixture-legacy.out
+sudo_v_count_after_legacy_apply="$(grep -c '^SUDO -v$' "$LOG" || true)"
+
+if [[ "$sudo_v_count_after_legacy_apply" != "$((sudo_v_count_before_legacy_apply + 1))" ]]; then
+  echo "Legacy helper replacement must cross exactly one sudo -v boundary." >&2
+  cat "$LOG" >&2
+  exit 1
+fi
+
+if ! cmp -s "$ROOT/scripts/libexec/agent-browser-privileged-helper" "$HELPER_PATH"; then
+  echo "Legacy prompt-producing helper was not replaced by the bundled helper." >&2
+  exit 1
+fi
+
 echo "Install privileges clean-fixture smoke passed"

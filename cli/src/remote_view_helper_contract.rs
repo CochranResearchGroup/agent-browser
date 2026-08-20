@@ -1,4 +1,7 @@
 //! Typed compatibility contract for the root-owned remote-view helper.
+//!
+//! Route-user password updates are unattended only when the helper advertises
+//! the fixed SHA-512 crypt path that bypasses `chpasswd`'s PAM default.
 
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -46,6 +49,18 @@ pub(crate) fn status_contract_ready(report: &Value) -> bool {
             .pointer("/parsed/displayAccess/boundedXhostTimeoutSeconds")
             .and_then(Value::as_i64)
             .is_some_and(|value| value > 0 && value <= 2)
+        && report
+            .pointer("/parsed/routeUserCredentialUpdate/pamBypassed")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/routeUserCredentialUpdate/cryptMethod")
+            .and_then(Value::as_str)
+            == Some("SHA512")
+        && report
+            .pointer("/parsed/routeUserCredentialUpdate/shaRounds")
+            .and_then(Value::as_i64)
+            == Some(100_000)
 }
 
 pub(crate) fn helper_contract_report(
@@ -111,6 +126,7 @@ fn evaluate_helper_contract(
             "ready": capability_ready,
             "routeDesktopSession": helper_status.pointer("/parsed/routeDesktopSession"),
             "displayAccess": helper_status.pointer("/parsed/displayAccess"),
+            "routeUserCredentialUpdate": helper_status.pointer("/parsed/routeUserCredentialUpdate"),
             "managedChromeSandboxPolicy": helper_status.pointer("/parsed/managedChromeSandboxPolicy"),
         },
         "checkReady": check_ready,
@@ -181,7 +197,7 @@ mod tests {
             "success": true,
             "parsed": {
                 "schemaVersion": 1,
-                "helperVersion": "2026-06-23.p44-route-desktop-v2",
+                "helperVersion": "2026-06-23.p44-route-desktop-v4",
                 "routeDesktopSession": {
                     "ready": true,
                     "terminalStartupDetected": false
@@ -190,6 +206,11 @@ mod tests {
                     "supportsFilesystemX11Socket": true,
                     "supportsAbstractX11Socket": true,
                     "boundedXhostTimeoutSeconds": 2
+                },
+                "routeUserCredentialUpdate": {
+                    "pamBypassed": true,
+                    "cryptMethod": "SHA512",
+                    "shaRounds": 100000
                 }
             }
         })
@@ -217,5 +238,21 @@ mod tests {
             report["missingRequiredCommands"],
             json!(["ensure-rdp-route-user"])
         );
+    }
+
+    #[test]
+    fn legacy_pam_password_update_contract_is_blocking() {
+        let source = "\n  check)\n  status-json)\n  ensure-rdp-route-user)\n  restart-xrdp)\n  grant-display-access)\n";
+        let mut status = compatible_status();
+        status["parsed"]
+            .as_object_mut()
+            .expect("parsed helper status must be an object")
+            .remove("routeUserCredentialUpdate");
+
+        let report = evaluate_helper_contract(source, &status, true, true, true);
+
+        assert_eq!(report["ready"], false);
+        assert_eq!(report["capabilities"]["ready"], false);
+        assert_eq!(report["requiresInteractiveSudo"], false);
     }
 }

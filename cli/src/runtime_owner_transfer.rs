@@ -215,11 +215,65 @@ pub(crate) struct OwnerTransitionRecord {
     reverse_receipt: Option<OwnerTransferReceipt>,
 }
 
+/// Durable lifecycle posture for one logical runtime lane.
+///
+/// `Unknown` is the conservative compatibility default for registries written
+/// before lifecycle authority was recorded. Unknown lanes are never eligible
+/// for unattended effects.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum RuntimeLaneLifecycleState {
+    #[default]
+    Unknown,
+    Planned,
+    Launching,
+    Ready,
+    Retained,
+    Transferring,
+    Closing,
+    Terminal,
+    Quarantined,
+}
+
+/// Durable cleanup duty carried with a runtime lane owner generation.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum CleanupObligationState {
+    #[default]
+    Unknown,
+    Owned,
+    Transferring,
+    Reclaimable,
+    Reclaiming,
+    Satisfied,
+    Quarantined,
+}
+
+/// Backward-compatible lifecycle ledger entry attached to the existing owner
+/// registry. The ledger is intentionally evidence-only in P117 Slice A; later
+/// slices route lifecycle effects through this authority.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct RuntimeLifecycleRecord {
+    pub(crate) logical_browser_id: String,
+    pub(crate) profile_identity_digest: String,
+    pub(crate) owner_generation: u64,
+    pub(crate) lifecycle_state: RuntimeLaneLifecycleState,
+    pub(crate) cleanup_obligation_state: CleanupObligationState,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) process_group_id: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) package_launch_identity_digest: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) terminal_evidence: Vec<String>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct RuntimeOwnerRegistry {
     pub(crate) revision: u64,
     pub(crate) owners: BTreeMap<String, ProfileOwner>,
+    pub(crate) lifecycle_records: BTreeMap<String, RuntimeLifecycleRecord>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -258,6 +312,7 @@ impl RuntimeOwnerRegistry {
         Self {
             revision: 1,
             owners: BTreeMap::from([(owner.profile_identity_digest.clone(), owner)]),
+            lifecycle_records: BTreeMap::new(),
         }
     }
 
@@ -1016,6 +1071,8 @@ mod tests {
 
     const OWNER_TRANSFER_FIXTURES: &str =
         include_str!("../../docs/dev/fixtures/runtime-adoption/owner-transfer.v1.json");
+    const P117_CONFIRMED_GAPS: &str =
+        include_str!("../../docs/dev/fixtures/runtime-lifecycle/confirmed-gaps.v1.json");
 
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -1104,6 +1161,93 @@ mod tests {
             selected_target_identity_digest: digest("target-a"),
             transfer_nonce_digest: digest("transfer"),
         }
+    }
+
+    #[test]
+    fn legacy_owner_registry_loads_with_conservative_lifecycle_defaults() {
+        let legacy = serde_json::json!({
+            "revision": 1,
+            "owners": {
+                digest("profile"): owner()
+            }
+        });
+
+        let registry: RuntimeOwnerRegistry = serde_json::from_value(legacy).unwrap();
+        let encoded = serde_json::to_value(registry).unwrap();
+
+        assert_eq!(encoded["lifecycleRecords"], serde_json::json!({}));
+    }
+
+    #[test]
+    fn lifecycle_and_cleanup_obligation_schema_round_trips_without_effects() {
+        let mut registry = RuntimeOwnerRegistry::from_owner(owner());
+        registry.lifecycle_records.insert(
+            "browser-a".to_string(),
+            RuntimeLifecycleRecord {
+                logical_browser_id: "browser-a".to_string(),
+                profile_identity_digest: digest("profile"),
+                owner_generation: 7,
+                lifecycle_state: RuntimeLaneLifecycleState::Retained,
+                cleanup_obligation_state: CleanupObligationState::Owned,
+                process_group_id: Some(4100),
+                package_launch_identity_digest: Some(digest("launch")),
+                terminal_evidence: Vec::new(),
+            },
+        );
+
+        let encoded = serde_json::to_string(&registry).unwrap();
+        let decoded: RuntimeOwnerRegistry = serde_json::from_str(&encoded).unwrap();
+
+        assert_eq!(decoded, registry);
+        assert_eq!(
+            decoded.lifecycle_records["browser-a"].lifecycle_state,
+            RuntimeLaneLifecycleState::Retained
+        );
+        assert_eq!(
+            decoded.lifecycle_records["browser-a"].cleanup_obligation_state,
+            CleanupObligationState::Owned
+        );
+    }
+
+    #[test]
+    fn p117_slice_a_fixture_ledger_freezes_all_confirmed_gaps() {
+        let corpus: serde_json::Value = serde_json::from_str(P117_CONFIRMED_GAPS).unwrap();
+        assert_eq!(
+            corpus["schemaVersion"],
+            "agent-browser.runtime-lifecycle-red-fixtures.v1"
+        );
+        let fixtures = corpus["fixtures"].as_array().unwrap();
+        assert_eq!(fixtures.len(), 6);
+        let fixture_ids = fixtures
+            .iter()
+            .filter_map(|fixture| fixture["fixtureId"].as_str())
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(fixture_ids.len(), 6);
+        assert!(fixtures.iter().all(|fixture| {
+            fixture["sourceAnchors"]
+                .as_array()
+                .is_some_and(|anchors| !anchors.is_empty())
+                && fixture["sanitizedEvidence"].is_object()
+                && fixture["currentBehavior"].is_string()
+                && fixture["requiredBehavior"].is_string()
+                && fixture["expectedRedReason"].is_string()
+        }));
+    }
+
+    #[test]
+    fn handoff_red_fixture_preserves_browser_without_cleanup_accountability() {
+        let mut registry = RuntimeOwnerRegistry::from_owner(owner());
+        let request = cooperative_request();
+        registry.begin_transfer(request.clone()).unwrap();
+        registry
+            .commit_candidate(CandidateOwnerAttachment::from_request(&request, 8))
+            .unwrap();
+
+        assert!(registry.lifecycle_records.is_empty());
+        assert_eq!(
+            registry.owner(&digest("profile")).unwrap().owner_generation,
+            8
+        );
     }
 
     #[test]

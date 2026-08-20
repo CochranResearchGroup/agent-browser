@@ -273,7 +273,11 @@ helper_contract_ready() {
     '"keepsSessionAlive":true' \
     '"supportsFilesystemX11Socket":true' \
     '"supportsAbstractX11Socket":true' \
-    '"boundedXhostTimeoutSeconds":2'; do
+    '"boundedXhostTimeoutSeconds":2' \
+    '"routeUserCredentialUpdate":{' \
+    '"pamBypassed":true' \
+    '"cryptMethod":"SHA512"' \
+    '"shaRounds":100000'; do
     [[ "$compact_status" == *"$required"* ]] || return 1
   done
 }

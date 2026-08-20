@@ -3868,7 +3868,7 @@ EOF
             "success": true,
             "parsed": {
                 "schemaVersion": 1,
-                "helperVersion": "2026-06-23.p44-route-desktop-v2",
+                "helperVersion": "2026-06-23.p44-route-desktop-v4",
                 "routeDesktopSession": {
                     "ready": true,
                     "terminalStartupDetected": false
@@ -3877,6 +3877,11 @@ EOF
                     "supportsFilesystemX11Socket": true,
                     "supportsAbstractX11Socket": true,
                     "boundedXhostTimeoutSeconds": 2
+                },
+                "routeUserCredentialUpdate": {
+                    "pamBypassed": true,
+                    "cryptMethod": "SHA512",
+                    "shaRounds": 100000
                 }
             }
         });
@@ -3890,7 +3895,7 @@ EOF
             "success": true,
             "parsed": {
                 "schemaVersion": 1,
-                "helperVersion": "2026-06-23.p44-route-desktop-v2",
+                "helperVersion": "2026-06-23.p44-route-desktop-v4",
                 "routeDesktopSession": {
                     "ready": true,
                     "terminalStartupDetected": false
@@ -3899,6 +3904,11 @@ EOF
                     "supportsFilesystemX11Socket": true,
                     "supportsAbstractX11Socket": false,
                     "boundedXhostTimeoutSeconds": 2
+                },
+                "routeUserCredentialUpdate": {
+                    "pamBypassed": true,
+                    "cryptMethod": "SHA512",
+                    "shaRounds": 100000
                 }
             }
         });

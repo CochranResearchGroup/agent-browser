@@ -72,6 +72,16 @@ for (const file of files) {
   if (file.endsWith('agent-browser-privileged-helper')) {
     assert.match(
       source,
+      /chpasswd --crypt-method SHA512 --sha-rounds 100000/,
+      `${file} route-user password updates must bypass PAM and GNOME Keyring`,
+    );
+    assert.doesNotMatch(
+      source,
+      /\|\s*chpasswd\s*(?:\n|$)/,
+      `${file} route-user password updates must never use chpasswd's PAM default`,
+    );
+    assert.match(
+      source,
       /\/proc\/net\/unix/,
       `${file} display access grant must inspect abstract X11 sockets`,
     );
@@ -105,6 +115,9 @@ for (const file of files) {
     assert.equal(report.displayAccess?.supportsFilesystemX11Socket, true);
     assert.equal(report.displayAccess?.supportsAbstractX11Socket, true);
     assert.equal(report.displayAccess?.boundedXhostTimeoutSeconds, 2);
+    assert.equal(report.routeUserCredentialUpdate?.pamBypassed, true);
+    assert.equal(report.routeUserCredentialUpdate?.cryptMethod, 'SHA512');
+    assert.equal(report.routeUserCredentialUpdate?.shaRounds, 100000);
     assert.equal(
       report.managedChromeSandboxPolicy?.profileName,
       'agent-browser-managed-chrome',
