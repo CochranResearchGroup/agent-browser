@@ -9,7 +9,7 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 
 ## P117 | Runtime Lifecycle Authority And Convergence
 
-State: IN PROGRESS — SLICE H SOURCE ACCEPTED, SLICE I PENDING AUTHORIZATION
+State: IN PROGRESS — SLICE I ADMITTED, LIVE APPLY PENDING AUTHORIZATION
 Current state: Slices A through H are source accepted. One lifecycle authority
 owns launch, attach, transfer, adoption, rollback, retained preservation,
 recovery, close, and cleanup obligations. The reconciler joins exact process,
@@ -41,6 +41,19 @@ privileged-helper workflow, and the authenticated browser remains preserved.
 That helper repair does not establish installed P117 acceptance. Controlled
 installed convergence remains Slice I and still requires explicit live
 authorization.
+
+The Slice I candidate has now absorbed the compatible profile-owner maintenance
+lane and repairs stale handoff leases from canonical single-browser profile
+authority while rejecting ambiguous multi-browser repair. The official Rust
+cadence and isolated hot-handoff and convergence smokes pass. Optimized
+candidate SHA-256 is
+`2431fdc51d44403bac5b9b26024ad3a6c405366ea3e26f8fa3c553dfab7dc523`, and
+workstation dry-run admission is successful and non-mutating. Fresh installed
+readback still shows three listener daemons, duplicate inherited `default`
+leases, 26 retained generations, and 219 profile directories consuming about
+58 GiB. Process GC has no candidates; retained-state pruning has only the inert
+`display-orphan` candidate. No live install, reconciliation, or cleanup was
+performed from the Plan 0117 worktree.
 
 ### Plan
 

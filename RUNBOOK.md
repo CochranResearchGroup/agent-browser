@@ -4,6 +4,46 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 169 | 2026-08-20
+
+Scope: reconcile concurrent profile-owner maintenance into the Plan 0117
+candidate and complete Slice I read-only admission without changing installed
+or live state.
+
+Actions:
+
+- imported six compatible runtime handoff and workstation-recovery commits;
+- retained Slice H's versioned lifecycle sidecar instead of importing forward
+  fields into the legacy owner registry;
+- made canonical browser profile identity repair a stale single-browser
+  handoff lease while rejecting ambiguous multi-browser repair;
+- replaced a race-prone GNU `yes` fake-browser fixture with deterministic exact
+  process evidence;
+- rebuilt the optimized candidate and repeated installed-state, resource,
+  retention, generation, profile, and dry-run admission readback.
+
+Validation:
+
+- the official Rust cadence passes 1,358 parallel-safe tests, 57 intentional
+  ignores, all integration scopes, and every serialized environment-sensitive
+  partition;
+- the Chrome module, strict Clippy, formatting, real isolated multi-lane hot
+  handoff, and no-launch runtime-host convergence pass;
+- candidate SHA-256 is
+  `2431fdc51d44403bac5b9b26024ad3a6c405366ea3e26f8fa3c553dfab7dc523`;
+- workstation dry-run reports a planned, non-mutating, supported admission with
+  ready host and disk gates.
+
+Result:
+
+- the reconciled source candidate is admitted for Slice I;
+- the installed runtime remains intentionally unchanged and is not healthy by
+  Plan 0117 terminal criteria: three listener daemons, false duplicate profile
+  leases, 26 generations, and 219 profile directories remain;
+- process GC has zero candidates and retained-state pruning has only the inert
+  `display-orphan` candidate;
+- Slice I remains pending explicit live authorization.
+
 ## Turn 168 | 2026-08-20
 
 Scope: accept Plan 0117 Slice H at the source, contract, deterministic-fixture,
