@@ -4938,6 +4938,32 @@ fn runtime_source_session_is_bound(
                     .iter()
                     .any(|browser_id| browser_id == logical_browser_id)
             })
+        || service_state.remote_view_handoffs.values().any(|handoff| {
+            handoff.state == "ready"
+                && handoff.browser_id.as_deref() == Some(logical_browser_id)
+                && handoff.session_name.as_deref() == Some(source_session)
+                && handoff
+                    .presentation_receipt
+                    .as_ref()
+                    .is_some_and(|receipt| {
+                        receipt.state == "ready"
+                            && receipt.logical_browser_id == logical_browser_id
+                            && service_state
+                                .runtime_owner_registry
+                                .owners
+                                .values()
+                                .any(|owner| {
+                                    owner.state
+                                        == crate::runtime_owner_transfer::ProfileOwnerState::Ready
+                                        && owner.browser_id == logical_browser_id
+                                        && owner.daemon_session_route == source_session
+                                        && Some(owner.owner_generation)
+                                            == receipt.daemon_owner_generation
+                                        && receipt.process_instance_digest.as_deref()
+                                            == Some(owner.process_instance_digest.as_str())
+                                })
+                    })
+        })
 }
 
 /// Revokes one legacy daemon only after its recorded process identity proves it
@@ -8416,6 +8442,81 @@ mod tests {
             &service_state,
             "session:p116-beta",
             prior_candidate
+        ));
+    }
+
+    #[test]
+    fn ready_durable_handoff_binds_a_recovered_orphan_session() {
+        use crate::native::service_model::{
+            DurableHandoffPresentationReceipt, RemoteViewHandoff, ViewStreamProvider,
+        };
+        use crate::runtime_owner_transfer::{ProfileOwner, ProfileOwnerState};
+
+        let logical_browser_id = "session:p117-recovered";
+        let source_session = "orphan-recovered-session";
+        let process_digest = "2".repeat(64);
+        let profile_digest = "1".repeat(64);
+        let mut service_state = crate::native::service_model::ServiceState::default();
+        service_state.runtime_owner_registry.owners.insert(
+            profile_digest.clone(),
+            ProfileOwner {
+                owner_id: "owner-recovered".to_string(),
+                profile_identity_digest: profile_digest,
+                state: ProfileOwnerState::Ready,
+                owner_generation: 9,
+                browser_id: logical_browser_id.to_string(),
+                daemon_session_route: source_session.to_string(),
+                process_instance_digest: process_digest.clone(),
+                browser_family: "chrome".to_string(),
+                cdp_endpoint_identity_digest: "3".repeat(64),
+                target_set_digest: "4".repeat(64),
+                pending_transfer: None,
+                last_transition: None,
+            },
+        );
+        service_state.remote_view_handoffs.insert(
+            "r-recovered".to_string(),
+            RemoteViewHandoff {
+                id: "r-recovered".to_string(),
+                state: "ready".to_string(),
+                browser_id: Some(logical_browser_id.to_string()),
+                session_name: Some(source_session.to_string()),
+                presentation_receipt: Some(DurableHandoffPresentationReceipt {
+                    schema_version: "agent-browser.durable-handoff-presentation.v1".to_string(),
+                    generation: 3,
+                    dashboard_deployment_generation: "generation-a".to_string(),
+                    logical_browser_id: logical_browser_id.to_string(),
+                    daemon_owner_generation: Some(9),
+                    process_instance_digest: Some(process_digest),
+                    target_id: "target-a".to_string(),
+                    required_stream_provider: ViewStreamProvider::RdpGateway,
+                    observed_stream_provider: ViewStreamProvider::RdpGateway,
+                    route_id: "route-a".to_string(),
+                    display_allocation_id: "display-a".to_string(),
+                    observed_at: "2026-08-21T00:00:00Z".to_string(),
+                    state: "ready".to_string(),
+                }),
+                ..Default::default()
+            },
+        );
+
+        assert!(runtime_source_session_is_bound(
+            &service_state,
+            logical_browser_id,
+            source_session
+        ));
+        service_state
+            .remote_view_handoffs
+            .get_mut("r-recovered")
+            .unwrap()
+            .presentation_receipt
+            .as_mut()
+            .unwrap()
+            .daemon_owner_generation = Some(10);
+        assert!(!runtime_source_session_is_bound(
+            &service_state,
+            logical_browser_id,
+            source_session
         ));
     }
 
