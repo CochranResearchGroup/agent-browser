@@ -82,6 +82,33 @@ pub(crate) mod service_commands {
             }
         }
     }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum ServiceRetentionAuthority {
+        Reviewed,
+        Unattended,
+    }
+
+    pub(crate) fn automatically_prune_retained_service_state(
+        state: &mut ServiceState,
+        apply: bool,
+    ) -> Value {
+        prune_retained_service_state_with_authority(
+            state,
+            ServiceRetentionPruneOptions {
+                apply,
+                closed_tabs: true,
+                not_started_browsers: true,
+                process_exited_browsers: true,
+                released_sessions: true,
+                abandoned_sessions: false,
+                orphaned_profiles: true,
+                display_allocations: true,
+                abandoned_session_min_age_minutes: 1440,
+            },
+            ServiceRetentionAuthority::Unattended,
+        )
+    }
     pub(crate) async fn handle_service_prune_retained(cmd: &Value) -> Result<Value, String> {
         let options = ServiceRetentionPruneOptions::from_command(cmd);
         if options.apply {
@@ -685,6 +712,18 @@ pub(crate) mod service_commands {
         state: &mut ServiceState,
         options: ServiceRetentionPruneOptions,
     ) -> Value {
+        prune_retained_service_state_with_authority(
+            state,
+            options,
+            ServiceRetentionAuthority::Reviewed,
+        )
+    }
+
+    fn prune_retained_service_state_with_authority(
+        state: &mut ServiceState,
+        options: ServiceRetentionPruneOptions,
+        authority: ServiceRetentionAuthority,
+    ) -> Value {
         let before_profile_count = state.profiles.len();
         let before_browser_count = state.browsers.len();
         let before_tab_count = state.tabs.len();
@@ -825,9 +864,15 @@ pub(crate) mod service_commands {
                 }),
             );
             matches!(
-                decision.disposition,
-                crate::runtime_retention::RetentionDisposition::AutomaticallyReclaimable
-                    | crate::runtime_retention::RetentionDisposition::Reviewable
+                (authority, decision.disposition),
+                (
+                    ServiceRetentionAuthority::Unattended,
+                    crate::runtime_retention::RetentionDisposition::AutomaticallyReclaimable
+                ) | (
+                    ServiceRetentionAuthority::Reviewed,
+                    crate::runtime_retention::RetentionDisposition::AutomaticallyReclaimable
+                        | crate::runtime_retention::RetentionDisposition::Reviewable
+                )
             )
         });
         let display_allocation_candidates = if options.display_allocations {
@@ -937,7 +982,9 @@ pub(crate) mod service_commands {
             0
         };
         json!(
-            { "pruned" : options.apply, "dryRun" : ! options.apply, "policy" : {
+            { "pruned" : options.apply, "dryRun" : ! options.apply, "authority" : match authority {
+            ServiceRetentionAuthority::Reviewed => "reviewed", ServiceRetentionAuthority::Unattended =>
+            "unattended", }, "policy" : {
             "closedTabs" : options.closed_tabs, "notStartedBrowsers" : options
             .not_started_browsers, "processExitedBrowsers" : options
             .process_exited_browsers, "processExitedBrowsersIncludesUnreachable" : true,

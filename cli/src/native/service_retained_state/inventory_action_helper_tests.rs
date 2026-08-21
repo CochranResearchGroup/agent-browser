@@ -876,6 +876,72 @@ fn profile_record_prune_reclaims_an_eligible_profile_directory() {
 }
 
 #[test]
+fn unattended_prune_reclaims_only_automatically_reclaimable_profiles() {
+    let fixture_root = env::temp_dir().join(format!(
+        "agent-browser-p117-unattended-profile-prune-{}",
+        uuid::Uuid::new_v4()
+    ));
+    let profile_parent = fixture_root.join("runtime-profiles");
+    let ephemeral_root = profile_parent.join("ephemeral");
+    let quarantined_root = profile_parent.join("quarantined");
+    fs::create_dir_all(&ephemeral_root).unwrap();
+    fs::create_dir_all(&quarantined_root).unwrap();
+    fs::write(ephemeral_root.join("evidence"), b"ephemeral").unwrap();
+    fs::write(quarantined_root.join("evidence"), b"quarantined").unwrap();
+    let old = std::time::SystemTime::now() - std::time::Duration::from_secs(8 * 24 * 60 * 60);
+    for path in [&ephemeral_root, &quarantined_root] {
+        fs::File::open(path)
+            .unwrap()
+            .set_times(std::fs::FileTimes::new().set_modified(old))
+            .unwrap();
+    }
+    let mut service_state = ServiceState {
+        profiles: BTreeMap::from([
+            (
+                "ephemeral".to_string(),
+                BrowserProfile {
+                    id: "ephemeral".to_string(),
+                    name: "Unattended ephemeral fixture".to_string(),
+                    profile_class: ProfileClass::ManagedOneTime,
+                    user_data_dir: Some(ephemeral_root.display().to_string()),
+                    persistent: false,
+                    ..BrowserProfile::default()
+                },
+            ),
+            (
+                "quarantined".to_string(),
+                BrowserProfile {
+                    id: "quarantined".to_string(),
+                    name: "Unattended quarantined fixture".to_string(),
+                    profile_class: ProfileClass::ManagedOneTime,
+                    user_data_dir: Some(quarantined_root.display().to_string()),
+                    tags: vec!["quarantined".to_string()],
+                    persistent: false,
+                    ..BrowserProfile::default()
+                },
+            ),
+        ]),
+        ..ServiceState::default()
+    };
+
+    let result = automatically_prune_retained_service_state(&mut service_state, true);
+
+    assert_eq!(result["authority"], "unattended");
+    assert_eq!(result["candidateCounts"]["orphanedProfiles"], 1);
+    assert_eq!(result["candidates"]["orphanedProfiles"][0], "ephemeral");
+    assert!(!service_state.profiles.contains_key("ephemeral"));
+    assert!(!ephemeral_root.exists());
+    assert!(service_state.profiles.contains_key("quarantined"));
+    assert!(quarantined_root.exists());
+    assert_eq!(
+        result["candidateReasons"]["profileRetention"]["quarantined"]["disposition"],
+        "reviewable"
+    );
+
+    fs::remove_dir_all(fixture_root).unwrap();
+}
+
+#[test]
 fn test_prune_retained_service_state_classifies_display_allocations() {
     let mut service_state = ServiceState {
         display_allocations: BTreeMap::from([
