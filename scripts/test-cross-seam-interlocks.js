@@ -29,6 +29,11 @@ assert.match(
   /statusProjection\??: ServiceStatusProjection/,
   'Generated service observability types must expose typed statusProjection metadata.',
 );
+assert.match(
+  observabilityTypes,
+  /runtimeLifecycle\??: ServiceRuntimeLifecycleStatus/,
+  'Generated service observability types must expose typed runtimeLifecycle status.',
+);
 
 assert.ok(
   serviceStatusSchema.properties.browserSessionAuthority?.properties?.browserVerdicts,
@@ -161,6 +166,37 @@ const fixture = {
       }],
       viewStreams: [],
     },
+  },
+  runtimeLifecycle: {
+    schemaVersion: 'agent-browser.runtime-lifecycle-status.v1',
+    ready: true,
+    state: 'ready',
+    observedAtEpochMs: 1787259600000,
+    multiplicity: {
+      state: 'steady_current',
+      steadyState: true,
+      counts: {
+        dashboardProcesses: 1,
+        runtimeHosts: 1,
+        legacyDaemons: 0,
+        executableGenerations: 1,
+      },
+      convergenceWindow: null,
+      issues: [],
+    },
+    lifecycle: {
+      available: true,
+      registryRevision: 4,
+      ownerCount: 1,
+      recordCount: 1,
+      lifecycleStateCounts: { ready: 1 },
+      cleanupObligationStateCounts: { owned: 1 },
+    },
+    reconciliation: { ready: true, state: 'healthy', fresh: true },
+    resources: { summary: { candidateRssBytes: 0, protectedRssBytes: 1024 } },
+    cleanupObligations: { trackedCount: 1, missingCount: 0 },
+    retention: { profiles: { removed: [] }, generations: { removed: [] } },
+    incident: null,
   },
   service_state: {
     browsers: {

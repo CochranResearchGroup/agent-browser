@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import {
   acquireServiceLoginProfile,
   applyServiceRemedies,
+  createServiceStatusMcpToolCall,
   createServiceIncidentHandoff,
   createServiceTraceHandoff,
   findServiceProfileForIdentity,
@@ -74,6 +75,19 @@ function createFetchRecorder(payload) {
 }
 
 async function main() {
+  assert.deepEqual(createServiceStatusMcpToolCall(), {
+    name: 'service_status',
+    arguments: {},
+  });
+  assert.deepEqual(createServiceStatusMcpToolCall({ fullTabHistory: true }), {
+    name: 'service_status',
+    arguments: { fullTabHistory: true },
+  });
+  assert.throws(
+    () => createServiceStatusMcpToolCall({ fullTabHistory: 'yes' }),
+    /fullTabHistory must be a boolean/,
+  );
+
   const contracts = createFetchRecorder({
     success: true,
     data: {
@@ -152,6 +166,19 @@ async function main() {
           viewStreams: [],
         },
       },
+      runtimeLifecycle: {
+        schemaVersion: 'agent-browser.runtime-lifecycle-status.v1',
+        ready: true,
+        state: 'ready',
+        observedAtEpochMs: 1787259600000,
+        multiplicity: { state: 'steady_current', steadyState: true },
+        lifecycle: { available: true, ownerCount: 1, recordCount: 1 },
+        reconciliation: { ready: true, state: 'healthy' },
+        resources: null,
+        cleanupObligations: null,
+        retention: { profiles: null, generations: null },
+        incident: null,
+      },
       launchConfig: {
         defaultBrowserBuild: null,
         stealthCdpChromiumRequired: false,
@@ -176,6 +203,7 @@ async function main() {
   assert.equal(statusResult.launchConfig.stealthCdpChromiumReady, true);
   assert.equal(statusResult.statusProjection.observations.validUntil, null);
   assert.equal(statusResult.statusProjection.observations.errors[0].code, 'process_inventory_unavailable');
+  assert.equal(statusResult.runtimeLifecycle.multiplicity.state, 'steady_current');
 
   const oldV1Status = createFetchRecorder({
     success: true,

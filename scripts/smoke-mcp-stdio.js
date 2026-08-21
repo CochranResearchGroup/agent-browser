@@ -104,6 +104,12 @@ try {
   );
 
   const tools = await send('tools/list');
+  const statusTool = tools.tools?.find((tool) => tool.name === 'service_status');
+  assert(statusTool, 'MCP service_status tool missing');
+  assert(
+    statusTool.inputSchema?.properties?.fullTabHistory?.type === 'boolean',
+    'MCP service_status missing fullTabHistory flag',
+  );
   const cancelTool = tools.tools?.find((tool) => tool.name === 'service_job_cancel');
   assert(cancelTool, 'MCP service_job_cancel tool missing');
   assert(

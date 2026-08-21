@@ -58,6 +58,8 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceSessionsResponse} ServiceSessionsResponse
  * @typedef {import('./service-observability.generated.js').ServiceSitePoliciesResponse} ServiceSitePoliciesResponse
  * @typedef {import('./service-observability.generated.js').ServiceStatusResponse} ServiceStatusResponse
+ * @typedef {import('./service-observability.generated.js').ServiceStatusMcpToolCall} ServiceStatusMcpToolCall
+ * @typedef {import('./service-observability.generated.js').ServiceStatusMcpToolCallOptions} ServiceStatusMcpToolCallOptions
  * @typedef {import('./service-observability.generated.js').ServiceTabsResponse} ServiceTabsResponse
  * @typedef {import('./service-observability.generated.js').ServiceTraceResponse} ServiceTraceResponse
  * @typedef {import('./service-observability.generated.js').ServiceTraceAttentionSummary} ServiceTraceAttentionSummary
@@ -123,6 +125,26 @@ export {
  */
 export function getServiceStatus(options) {
   return serviceGet(options, '/api/service/status');
+}
+
+/**
+ * Build the typed MCP call for the same shared Service Status projection.
+ *
+ * @param {ServiceStatusMcpToolCallOptions} [options]
+ * @returns {ServiceStatusMcpToolCall}
+ */
+export function createServiceStatusMcpToolCall(options = {}) {
+  assertPlainObject(options, 'service status MCP options');
+  if (options.fullTabHistory !== undefined && typeof options.fullTabHistory !== 'boolean') {
+    throw new TypeError('service status MCP fullTabHistory must be a boolean');
+  }
+  return {
+    name: 'service_status',
+    arguments:
+      options.fullTabHistory === undefined
+        ? {}
+        : { fullTabHistory: options.fullTabHistory },
+  };
 }
 
 /**

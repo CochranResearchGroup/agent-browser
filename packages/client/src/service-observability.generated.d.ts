@@ -707,6 +707,55 @@ export interface ServiceManualRuntimeBrowser {
   [key: string]: unknown;
 }
 
+export interface ServiceRuntimeMultiplicity {
+  state?: string;
+  steadyState?: boolean;
+  counts?: {
+    dashboardProcesses?: number;
+    runtimeHosts?: number;
+    legacyDaemons?: number;
+    executableGenerations?: number;
+  };
+  convergenceWindow?: {
+    transactionId?: string;
+    state?: string;
+    deadline?: string | null;
+    active?: boolean;
+  } | null;
+  issues?: string[];
+  [key: string]: unknown;
+}
+
+export interface ServiceRuntimeLifecycleAuthority {
+  available: boolean;
+  registryRevision?: number;
+  ownerCount?: number;
+  recordCount?: number;
+  lifecycleStateCounts?: Record<string, number>;
+  cleanupObligationStateCounts?: Record<string, number>;
+  state?: string;
+  error?: string;
+  [key: string]: unknown;
+}
+
+export interface ServiceRuntimeLifecycleStatus {
+  schemaVersion: 'agent-browser.runtime-lifecycle-status.v1';
+  ready: boolean;
+  state: string;
+  observedAtEpochMs: number | null;
+  multiplicity: ServiceRuntimeMultiplicity | null;
+  lifecycle: ServiceRuntimeLifecycleAuthority;
+  reconciliation: Record<string, unknown> | null;
+  resources: Record<string, unknown> | null;
+  cleanupObligations: Record<string, unknown> | null;
+  retention: {
+    profiles: Record<string, unknown> | null;
+    generations: Record<string, unknown> | null;
+  };
+  incident: Record<string, unknown> | null;
+  [key: string]: unknown;
+}
+
 export interface ServiceStatusResponse {
   control_plane?: ServiceControlPlaneStatus;
   service_state: Record<string, unknown>;
@@ -715,6 +764,7 @@ export interface ServiceStatusResponse {
   retainedDisplayAllocations?: ServiceRetainedDisplayAllocationSummary;
   browserSessionAuthority?: ServiceBrowserSessionAuthoritySnapshot;
   statusProjection?: ServiceStatusProjection;
+  runtimeLifecycle?: ServiceRuntimeLifecycleStatus;
   launchConfig?: {
     defaultBrowserBuild: string | null;
     stealthCdpChromiumRequired: boolean;
@@ -755,6 +805,15 @@ export interface ServiceStatusResponse {
     [key: string]: unknown;
   };
   [key: string]: unknown;
+}
+
+export interface ServiceStatusMcpToolCallOptions {
+  fullTabHistory?: boolean;
+}
+
+export interface ServiceStatusMcpToolCall {
+  name: 'service_status';
+  arguments: ServiceStatusMcpToolCallOptions;
 }
 
 export interface ServiceContractEndpoint {
@@ -2704,6 +2763,8 @@ export declare const SERVICE_EVENT_KINDS: readonly string[];
 export declare const SERVICE_BROWSER_HEALTH_STATES: readonly string[];
 
 export declare function getServiceStatus(options: ServiceObservabilityHttpOptions): Promise<ServiceStatusResponse>;
+/** Build the typed MCP call for the same shared Service Status projection. */
+export declare function createServiceStatusMcpToolCall(options?: ServiceStatusMcpToolCallOptions): ServiceStatusMcpToolCall;
 export declare function getServiceContracts(options: ServiceObservabilityHttpOptions): Promise<ServiceContractsResponse>;
 export declare function getServiceBrowserCapabilityRegistry(options: ServiceObservabilityHttpOptions): Promise<ServiceBrowserCapabilityRegistryResponse>;
 /** Evaluate browser capability launch gates without starting Chrome. */

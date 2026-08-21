@@ -1208,6 +1208,21 @@ fn service_mcp_tools() -> Vec<Value> {
             }
         }),
         json!({
+            "name": "service_status",
+            "title": "Read service status",
+            "description": "Read the same reconciled Service Status projection as CLI and HTTP, including additive runtimeLifecycle multiplicity, lifecycle, reconciliation, retention, pressure, cleanup-obligation, and blocking-incident readback.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "fullTabHistory": {
+                        "type": "boolean",
+                        "description": "Include complete retained closed-tab history instead of the ordinary bounded projection."
+                    }
+                }
+            }
+        }),
+        json!({
             "name": "service_incidents",
             "title": "Read service incidents",
             "description": "Read grouped retained service incidents with the same filters as the HTTP and CLI service incidents surfaces, including severity and escalation.",
@@ -4929,6 +4944,7 @@ fn call_service_mcp_tool(
         "service_job_cancel" => call_service_job_cancel(arguments, session),
         "service_browser_retry" => call_service_browser_retry(arguments, session),
         "service_remedies_apply" => call_service_remedies_apply(arguments, session),
+        "service_status" => call_service_status(arguments, session),
         "service_incidents" => call_service_incidents(arguments, session),
         "service_trace" => call_service_trace(arguments, session),
         "service_profile_upsert" => call_service_profile_upsert(arguments, session),
@@ -5591,6 +5607,19 @@ fn call_service_remote_view_route_preflight(
         trace,
         command,
     )
+}
+
+fn call_service_status(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let command = service_status_mcp_command(arguments)?;
+    send_queued_tool_command("service_status", session, json!({}), command)
+}
+
+fn service_status_mcp_command(arguments: &Value) -> Result<Value, JsonRpcError> {
+    let full_tab_history = optional_bool_argument(arguments, "fullTabHistory")?.unwrap_or(false);
+    Ok(json!({
+        "action": "service_status",
+        "fullTabHistory": full_tab_history,
+    }))
 }
 
 fn call_service_job_cancel(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
@@ -10793,6 +10822,14 @@ mod tests {
             .expect("service_browser_retry schema should be listed");
         assert!(service_browser_retry["inputSchema"]["required"][0] == "browserId");
         assert!(service_browser_retry["inputSchema"]["properties"]["serviceName"].is_object());
+        let service_status = tools
+            .iter()
+            .find(|tool| tool["name"] == "service_status")
+            .expect("service_status schema should be listed");
+        assert_eq!(
+            service_status["inputSchema"]["properties"]["fullTabHistory"]["type"],
+            "boolean"
+        );
         let service_incidents = tools
             .iter()
             .find(|tool| tool["name"] == "service_incidents")
@@ -11752,6 +11789,25 @@ mod tests {
 
         assert_eq!(response["id"], 41);
         assert_eq!(response["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn service_status_typed_tool_builds_the_shared_status_command() {
+        assert_eq!(
+            service_status_mcp_command(&json!({})).unwrap(),
+            json!({
+                "action": "service_status",
+                "fullTabHistory": false,
+            })
+        );
+        assert_eq!(
+            service_status_mcp_command(&json!({ "fullTabHistory": true })).unwrap(),
+            json!({
+                "action": "service_status",
+                "fullTabHistory": true,
+            })
+        );
+        assert!(service_status_mcp_command(&json!({ "fullTabHistory": "yes" })).is_err());
     }
 
     #[test]

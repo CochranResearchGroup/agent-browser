@@ -1,6 +1,8 @@
 use crate::color;
 use crate::connection::{cleanup_stale_files, get_socket_dir};
 use crate::flags::{launch_config_status, Flags};
+#[cfg(not(test))]
+use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use crate::native::stream::runtime_manifest_json;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
@@ -2202,7 +2204,121 @@ pub(crate) fn runtime_health_json() -> serde_json::Value {
             "fresh": true,
         });
     }
+    health["runtimeLifecycle"] =
+        runtime_lifecycle_status_from_health(&health, runtime_lifecycle_authority_summary(None));
     health
+}
+
+fn summarize_runtime_lifecycle_authority(
+    registry: &crate::runtime_owner_transfer::RuntimeOwnerRegistry,
+) -> Value {
+    let mut lifecycle_counts = BTreeMap::<String, usize>::new();
+    let mut cleanup_counts = BTreeMap::<String, usize>::new();
+    for record in registry.lifecycle_records.values() {
+        let lifecycle = serde_json::to_value(record.lifecycle_state)
+            .ok()
+            .and_then(|value| value.as_str().map(str::to_string))
+            .unwrap_or_else(|| "unknown".to_string());
+        let cleanup = serde_json::to_value(record.cleanup_obligation_state)
+            .ok()
+            .and_then(|value| value.as_str().map(str::to_string))
+            .unwrap_or_else(|| "unknown".to_string());
+        *lifecycle_counts.entry(lifecycle).or_default() += 1;
+        *cleanup_counts.entry(cleanup).or_default() += 1;
+    }
+    json!({
+        "available": true,
+        "registryRevision": registry.revision,
+        "ownerCount": registry.owners.len(),
+        "recordCount": registry.lifecycle_records.len(),
+        "lifecycleStateCounts": lifecycle_counts,
+        "cleanupObligationStateCounts": cleanup_counts,
+    })
+}
+
+fn runtime_lifecycle_authority_summary(
+    registry: Option<&crate::runtime_owner_transfer::RuntimeOwnerRegistry>,
+) -> Value {
+    if let Some(registry) = registry {
+        return summarize_runtime_lifecycle_authority(registry);
+    }
+    #[cfg(test)]
+    {
+        return summarize_runtime_lifecycle_authority(
+            &crate::runtime_owner_transfer::RuntimeOwnerRegistry::default(),
+        );
+    }
+    #[cfg(not(test))]
+    match LockedServiceStateRepository::default_json()
+        .and_then(|repository| repository.load_snapshot())
+    {
+        Ok(state) => summarize_runtime_lifecycle_authority(&state.runtime_owner_registry),
+        Err(_error) => json!({
+            "available": false,
+            "state": "unavailable",
+            "error": "runtime_lifecycle_registry_unavailable",
+        }),
+    }
+}
+
+fn runtime_lifecycle_status_from_health(health: &Value, lifecycle: Value) -> Value {
+    let monitor = health.get("runtimeMonitor").cloned().unwrap_or(Value::Null);
+    let receipt = monitor.get("receipt").cloned().unwrap_or(Value::Null);
+    let effects = receipt.get("effects").cloned().unwrap_or(Value::Null);
+    let observed_at_epoch_ms = receipt
+        .get("observedAtEpochSeconds")
+        .and_then(Value::as_u64)
+        .map(|seconds| Value::from(seconds.saturating_mul(1_000)))
+        .unwrap_or(Value::Null);
+    let ready = health
+        .get("ready")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+        && monitor
+            .get("ready")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        && lifecycle
+            .get("available")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+    let health_state = health
+        .get("state")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let state = if ready {
+        "ready"
+    } else if health_state == "ready" {
+        "degraded"
+    } else {
+        health_state
+    };
+    json!({
+        "schemaVersion": "agent-browser.runtime-lifecycle-status.v1",
+        "ready": ready,
+        "state": state,
+        "observedAtEpochMs": observed_at_epoch_ms,
+        "multiplicity": health.get("runtimeMultiplicity").cloned().unwrap_or(Value::Null),
+        "lifecycle": lifecycle,
+        "reconciliation": monitor,
+        "resources": effects.pointer("/service/resources").cloned().unwrap_or(Value::Null),
+        "cleanupObligations": effects.pointer("/service/cleanupObligations").cloned().unwrap_or(Value::Null),
+        "retention": {
+            "profiles": effects.get("profiles").cloned().unwrap_or(Value::Null),
+            "generations": effects.get("generations").cloned().unwrap_or(Value::Null),
+        },
+        "incident": receipt.get("incident").cloned().unwrap_or(Value::Null),
+    })
+}
+
+pub(crate) fn runtime_lifecycle_status_json_for_registry(
+    registry: &crate::runtime_owner_transfer::RuntimeOwnerRegistry,
+) -> Value {
+    let health = runtime_health_json();
+    runtime_lifecycle_status_from_health(
+        &health,
+        runtime_lifecycle_authority_summary(Some(registry)),
+    )
 }
 
 #[cfg(test)]
@@ -5086,6 +5202,58 @@ mod tests {
             health["runtimeMonitor"]["schemaVersion"],
             "agent-browser.runtime-monitor-status.v1"
         );
+        assert_eq!(
+            health["runtimeLifecycle"]["schemaVersion"],
+            "agent-browser.runtime-lifecycle-status.v1"
+        );
+        assert_eq!(
+            health["runtimeLifecycle"]["multiplicity"],
+            health["runtimeMultiplicity"]
+        );
+        assert_eq!(
+            health["runtimeLifecycle"]["reconciliation"],
+            health["runtimeMonitor"]
+        );
+        assert_eq!(health["runtimeLifecycle"]["observedAtEpochMs"], Value::Null);
+    }
+
+    #[test]
+    fn runtime_lifecycle_observation_time_comes_from_the_reconciliation_receipt() {
+        let health = json!({
+            "ready": true,
+            "state": "ready",
+            "runtimeMonitor": {
+                "ready": true,
+                "receipt": { "observedAtEpochSeconds": 1_787_280_000_u64 },
+            },
+        });
+
+        assert_eq!(
+            runtime_lifecycle_status_from_health(
+                &health,
+                runtime_lifecycle_authority_summary(None),
+            )["observedAtEpochMs"],
+            1_787_280_000_000_u64
+        );
+    }
+
+    #[test]
+    fn service_status_lifecycle_summary_uses_its_reconciled_registry_snapshot() {
+        let mut registry = crate::runtime_owner_transfer::RuntimeOwnerRegistry {
+            revision: 7,
+            ..crate::runtime_owner_transfer::RuntimeOwnerRegistry::default()
+        };
+        registry.lifecycle_records.insert(
+            "browser-fixed".to_string(),
+            crate::runtime_owner_transfer::RuntimeLifecycleRecord {
+                logical_browser_id: "browser-fixed".to_string(),
+                ..crate::runtime_owner_transfer::RuntimeLifecycleRecord::default()
+            },
+        );
+
+        let lifecycle = runtime_lifecycle_status_json_for_registry(&registry);
+        assert_eq!(lifecycle["lifecycle"]["registryRevision"], 7);
+        assert_eq!(lifecycle["lifecycle"]["recordCount"], 1);
     }
 
     #[test]

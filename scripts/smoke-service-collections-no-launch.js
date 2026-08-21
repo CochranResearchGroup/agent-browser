@@ -27,6 +27,7 @@ const context = createSmokeContext({
   prefix: 'ab-service-collections-no-launch-',
   sessionPrefix: 'service-collections-no-launch',
 });
+context.env.AGENT_BROWSER_RUNTIME_HOST = '1';
 const { agentHome, session, tempHome } = context;
 const stateDir = join(agentHome, 'service');
 const statePath = join(stateDir, 'state.json');

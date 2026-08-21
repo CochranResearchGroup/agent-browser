@@ -172,6 +172,58 @@ type SessionSupervisorHealth = {
   issues?: RuntimeHealthIssue[];
 };
 
+type RuntimeMultiplicityHealth = {
+  state?: string;
+  steadyState?: boolean;
+  convergenceWindow?: {
+    active?: boolean;
+    state?: string;
+    transactionId?: string;
+    deadline?: string | null;
+  } | null;
+  counts?: {
+    dashboardProcesses?: number;
+    runtimeHosts?: number;
+    legacyDaemons?: number;
+    executableGenerations?: number;
+  };
+  issues?: string[];
+};
+
+type RuntimeMonitorHealth = {
+  ready?: boolean;
+  state?: string;
+  fresh?: boolean;
+  ageSeconds?: number | null;
+  receipt?: {
+    consecutiveFailures?: number;
+    effects?: {
+      service?: {
+        resources?: {
+          summary?: {
+            candidateRssBytes?: number;
+            protectedRssBytes?: number;
+            observedRssBytes?: number;
+            totalRssBytes?: number;
+          };
+        };
+        cleanupObligations?: {
+          trackedCount?: number;
+          missingCount?: number;
+        };
+      };
+      generations?: {
+        removed?: unknown[];
+        retained?: unknown[];
+      };
+    };
+    incident?: {
+      type?: string;
+      failureCount?: number;
+    } | null;
+  };
+};
+
 type RuntimeHealth = {
   schemaVersion?: string;
   state?: "ready" | "degraded" | string;
@@ -181,55 +233,31 @@ type RuntimeHealth = {
   staleSessions?: string[];
   sessionSupervisors?: SessionSupervisorHealth;
   issues?: RuntimeHealthIssue[];
-  runtimeMultiplicity?: {
-    state?: string;
-    steadyState?: boolean;
-    convergenceWindow?: {
-      active?: boolean;
-      state?: string;
-      transactionId?: string;
-      deadline?: string | null;
-    } | null;
-    counts?: {
-      dashboardProcesses?: number;
-      runtimeHosts?: number;
-      legacyDaemons?: number;
-      executableGenerations?: number;
-    };
-    issues?: string[];
-  };
-  runtimeMonitor?: {
+  runtimeMultiplicity?: RuntimeMultiplicityHealth;
+  runtimeMonitor?: RuntimeMonitorHealth;
+  runtimeLifecycle?: {
     ready?: boolean;
     state?: string;
-    fresh?: boolean;
-    ageSeconds?: number | null;
-    receipt?: {
-      consecutiveFailures?: number;
-      effects?: {
-        service?: {
-          resources?: {
-            summary?: {
-              candidateRssBytes?: number;
-              protectedRssBytes?: number;
-              observedRssBytes?: number;
-              totalRssBytes?: number;
-            };
-          };
-          cleanupObligations?: {
-            trackedCount?: number;
-            missingCount?: number;
-          };
-        };
-        generations?: {
-          removed?: unknown[];
-          retained?: unknown[];
-        };
-      };
-      incident?: {
-        type?: string;
-        failureCount?: number;
-      } | null;
+    multiplicity?: RuntimeMultiplicityHealth | null;
+    lifecycle?: {
+      available?: boolean;
+      ownerCount?: number;
+      recordCount?: number;
     };
+    reconciliation?: RuntimeMonitorHealth | null;
+    resources?: {
+      summary?: {
+        candidateRssBytes?: number;
+        protectedRssBytes?: number;
+        observedRssBytes?: number;
+        totalRssBytes?: number;
+      };
+    } | null;
+    cleanupObligations?: { trackedCount?: number; missingCount?: number } | null;
+    retention?: {
+      generations?: { removed?: unknown[]; retained?: unknown[] } | null;
+    };
+    incident?: { type?: string; failureCount?: number } | null;
   };
   workstationUpgrade?: {
     selectedGenerationId?: string | null;
@@ -734,14 +762,18 @@ function RuntimeHealthNotice({ state }: { state: RuntimeHealthState }) {
 }
 
 function RuntimeHealthSummary({ state }: { state: RuntimeHealthState }) {
-  const multiplicity = state.health?.runtimeMultiplicity;
-  const monitor = state.health?.runtimeMonitor;
+  const lifecycle = state.health?.runtimeLifecycle;
+  const multiplicity = lifecycle?.multiplicity ?? state.health?.runtimeMultiplicity;
+  const monitor = lifecycle?.reconciliation ?? state.health?.runtimeMonitor;
   if (!multiplicity && !monitor) return null;
   const counts = multiplicity?.counts;
-  const cleanup = monitor?.receipt?.effects?.service?.cleanupObligations;
-  const pressure = monitor?.receipt?.effects?.service?.resources?.summary;
-	  const generations = monitor?.receipt?.effects?.generations;
-	  const convergenceWindow = multiplicity?.convergenceWindow;
+  const cleanup = lifecycle?.cleanupObligations
+    ?? monitor?.receipt?.effects?.service?.cleanupObligations;
+  const pressure = lifecycle?.resources?.summary
+    ?? monitor?.receipt?.effects?.service?.resources?.summary;
+  const generations = lifecycle?.retention?.generations
+    ?? monitor?.receipt?.effects?.generations;
+  const convergenceWindow = multiplicity?.convergenceWindow;
   const healthy = multiplicity?.steadyState === true
     && monitor?.ready === true
     && (cleanup?.missingCount ?? 0) === 0;
@@ -763,7 +795,7 @@ function RuntimeHealthSummary({ state }: { state: RuntimeHealthState }) {
           {pressure ? ` RSS ${formatRuntimeBytes(pressure.protectedRssBytes)} protected, ${formatRuntimeBytes(pressure.candidateRssBytes)} reclaimable, ${formatRuntimeBytes(pressure.observedRssBytes)} unowned.` : ""}
           {generations ? ` Last retention pass removed ${generations.removed?.length ?? 0} and retained ${generations.retained?.length ?? 0}.` : ""}
           {monitor?.state ? ` Monitor ${monitor.state}${monitor.ageSeconds == null ? "" : ` (${monitor.ageSeconds}s old)`}.` : ""}
-          {monitor?.receipt?.incident?.type ? ` Blocking incident ${monitor.receipt.incident.type} after ${monitor.receipt.incident.failureCount ?? "?"} failures.` : ""}
+          {(lifecycle?.incident ?? monitor?.receipt?.incident)?.type ? ` Blocking incident ${(lifecycle?.incident ?? monitor?.receipt?.incident)?.type} after ${(lifecycle?.incident ?? monitor?.receipt?.incident)?.failureCount ?? "?"} failures.` : ""}
         </span>
       </div>
     </div>

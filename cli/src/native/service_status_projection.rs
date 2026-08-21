@@ -55,6 +55,7 @@ pub(crate) struct StatusAuthorityInput {
     pub(crate) browser_session_authority: BrowserSessionAuthoritySnapshot,
     pub(crate) launch_config: StatusLaunchConfiguration,
     pub(crate) full_tab_history: bool,
+    pub(crate) runtime_lifecycle: Value,
 }
 
 pub(crate) struct ServiceStatusProjectionDependencies<'a, Repository, Preparer, BrowserAuthority> {
@@ -303,6 +304,8 @@ pub(crate) struct ServiceStatusResponse {
     pub(crate) launch_config: StatusLaunchConfiguration,
     #[serde(rename = "statusProjection")]
     pub(crate) status_projection: StatusProjection,
+    #[serde(rename = "runtimeLifecycle")]
+    pub(crate) runtime_lifecycle: Value,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -467,6 +470,7 @@ impl ServiceStatusProjector {
                 },
                 observations,
             },
+            runtime_lifecycle: input.runtime_lifecycle,
         };
         serde_json::to_value(&response)
             .map_err(|error| ServiceStatusProjectionError::Serialization(error.to_string()))?;
@@ -483,6 +487,9 @@ pub(crate) async fn project_status_with_launch_configuration(
     full_tab_history: bool,
 ) -> Result<ServiceStatusResponse, ServiceStatusProjectionError> {
     let launch_config = StatusLaunchConfiguration::try_from(launch_config)?;
+    let runtime_lifecycle = crate::install::runtime_lifecycle_status_json_for_registry(
+        &service_state.runtime_owner_registry,
+    );
     projector
         .project(StatusAuthorityInput {
             service_state,
@@ -490,6 +497,7 @@ pub(crate) async fn project_status_with_launch_configuration(
             browser_session_authority,
             launch_config,
             full_tab_history,
+            runtime_lifecycle,
         })
         .await
 }

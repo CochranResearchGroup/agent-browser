@@ -607,7 +607,20 @@ evidence before ready state. Transfer, retained detach, recovery, and owned
 close move the same cleanup obligation, and terminal close requires exact
 process exit plus profile-lock release. Named or persistent profile data stays
 protected from deletion while an exact lifecycle-owned <code>closing</code>
-process tree can still be reclaimed. Use <code>agent-browser service gc --dry-run</code>
+process tree can still be reclaimed.
+
+Service Status also includes additive <code>runtimeLifecycle</code> readback for
+CLI JSON, HTTP <code>GET /api/service/status</code>, typed MCP
+<code>service_status</code>, the generated client helpers, Service State, and the dashboard. It
+combines runtime multiplicity and any bounded hot-upgrade convergence window,
+lifecycle and cleanup-obligation counts, reconciliation freshness, protected
+and reclaimable resource pressure, profile and generation retention, and the
+current blocking incident. Steady state is one dashboard, one runtime host, no
+legacy daemon, and one selected generation. Automatic GC applies only to exact
+package-owned unattended classes; persistent profiles, review-gated candidates,
+and ambiguous resources remain protected.
+
+Use <code>agent-browser service gc --dry-run</code>
 to group only conservative cleanup candidates and receive a short-lived review
 token. Use <code>agent-browser service gc --apply --review-token &lt;token&gt;</code>
 only after reviewing that exact dry-run. Apply mode fences root PID, start token,

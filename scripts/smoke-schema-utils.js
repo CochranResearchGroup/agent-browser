@@ -126,6 +126,22 @@ export function assertServiceStatusResponseSchemaRecord(response, schema, label)
     assert(Array.isArray(response.statusProjection.observations.errors), `${label} statusProjection errors missing`);
     assert(Array.isArray(response.statusProjection.observations.viewStreams), `${label} statusProjection viewStreams missing`);
   }
+  if (response.runtimeLifecycle) {
+    const lifecycleSchema = schema.properties.runtimeLifecycle;
+    assertRequiredFields(response.runtimeLifecycle, lifecycleSchema, `${label} runtimeLifecycle`);
+    assert(
+      response.runtimeLifecycle.schemaVersion === 'agent-browser.runtime-lifecycle-status.v1',
+      `${label} runtimeLifecycle schemaVersion is invalid`,
+    );
+    assert(
+      typeof response.runtimeLifecycle.ready === 'boolean',
+      `${label} runtimeLifecycle readiness is missing`,
+    );
+    assert(
+      response.runtimeLifecycle.lifecycle && typeof response.runtimeLifecycle.lifecycle.available === 'boolean',
+      `${label} runtimeLifecycle authority summary is missing`,
+    );
+  }
 }
 
 export function assertServiceTraceSummarySchemaRecord(summary, schema, label) {

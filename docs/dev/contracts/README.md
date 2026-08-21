@@ -483,6 +483,11 @@ The additive `statusProjection` object records host-observation source,
 availability, and freshness while preserving reconciled `service_state` as
 authority. Older v1 servers may omit it. Current v1 servers retain all legacy
 fields and mirrors.
+The additive `runtimeLifecycle` object is one shared readback for runtime
+multiplicity, lifecycle-owner and cleanup-obligation counts, reconciliation
+freshness, resource pressure, profile and generation retention, and blocking
+incidents. CLI JSON, HTTP, MCP, the generated client, Service State, and the
+dashboard consume this shape. Older v1 servers may omit it.
 response returned by `agent-browser service status` and HTTP
 `GET /api/service/status`. It includes the derived `profileAllocations` view so
 software clients can consume profile holder, waiting job, conflict, lease

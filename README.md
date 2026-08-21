@@ -293,6 +293,13 @@ After installing or replacing a release candidate binary locally, run
 `agent-browser install doctor`. Treat any nonzero result as an install drift or
 custom browser readiness issue before calling the candidate validated.
 
+Release diagnostics must also show `runtimeLifecycle.ready=true`, steady
+multiplicity after any convergence window closes, a fresh reconciliation
+receipt, no missing cleanup obligation, no blocking repeated-failure incident,
+and no unexplained retained generation. The selected generation plus one
+healthy rollback generation inside its retention window is the only expected
+two-generation disk state.
+
 ### Updating
 
 Upgrade to the latest version:
@@ -2837,6 +2844,19 @@ total, retained, omitted, and deterministic ordering. Use
 `GET /api/service/status?full-tab-history=true` for the complete response-only
 diagnostic projection. Status projection never deletes or rewrites persisted
 service state, so routing and stale-handle classification remain authoritative.
+
+Current Service Status responses also include additive `runtimeLifecycle`
+readback across CLI JSON, HTTP `GET /api/service/status`, typed MCP
+`service_status`, the generated client's `getServiceStatus()` and
+`createServiceStatusMcpToolCall()` helpers, Service State, and the dashboard. It combines the shared
+runtime multiplicity report, lifecycle-owner and cleanup-obligation counts,
+reconciliation freshness, protected and reclaimable resource pressure, profile
+and generation retention effects, and the current blocking incident. Normal
+steady state is one dashboard process, one runtime host, no legacy per-session
+daemon, and one selected executable generation. A hot upgrade may temporarily
+report a transaction-bound `convergence_window`; any unbound overlap is drift.
+Automatic GC applies only to exact package-owned unattended classes. Persistent
+profiles, review-gated candidates, and ambiguous resources remain protected.
 
 With `profileLeasePolicy: "wait"`, the control-plane scheduler keeps the blocked request queued while it polls for profile release, so the worker can continue dispatching unrelated service requests.
 

@@ -427,6 +427,55 @@
       },
       "additionalProperties": false
     },
+    "runtimeLifecycle": {
+      "description": "Shared runtime lifecycle readback for multiplicity, owner state, reconciliation, retention, resource pressure, cleanup obligations, and blocking incidents. Older v1 servers may omit this additive field.",
+      "type": "object",
+      "required": [
+        "schemaVersion", "ready", "state", "observedAtEpochMs", "multiplicity",
+        "lifecycle", "reconciliation", "resources", "cleanupObligations",
+        "retention", "incident"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "agent-browser.runtime-lifecycle-status.v1" },
+        "ready": { "type": "boolean" },
+        "state": { "type": "string" },
+        "observedAtEpochMs": { "type": ["integer", "null"], "minimum": 0 },
+        "multiplicity": { "type": ["object", "null"], "additionalProperties": true },
+        "lifecycle": {
+          "type": "object",
+          "required": ["available"],
+          "properties": {
+            "available": { "type": "boolean" },
+            "registryRevision": { "type": "integer", "minimum": 0 },
+            "ownerCount": { "type": "integer", "minimum": 0 },
+            "recordCount": { "type": "integer", "minimum": 0 },
+            "lifecycleStateCounts": {
+              "type": "object",
+              "additionalProperties": { "type": "integer", "minimum": 0 }
+            },
+            "cleanupObligationStateCounts": {
+              "type": "object",
+              "additionalProperties": { "type": "integer", "minimum": 0 }
+            }
+          },
+          "additionalProperties": true
+        },
+        "reconciliation": { "type": ["object", "null"], "additionalProperties": true },
+        "resources": { "type": ["object", "null"], "additionalProperties": true },
+        "cleanupObligations": { "type": ["object", "null"], "additionalProperties": true },
+        "retention": {
+          "type": "object",
+          "required": ["profiles", "generations"],
+          "properties": {
+            "profiles": { "type": ["object", "null"], "additionalProperties": true },
+            "generations": { "type": ["object", "null"], "additionalProperties": true }
+          },
+          "additionalProperties": false
+        },
+        "incident": { "type": ["object", "null"], "additionalProperties": true }
+      },
+      "additionalProperties": false
+    },
     "service_state": {
       "type": "object"
     }

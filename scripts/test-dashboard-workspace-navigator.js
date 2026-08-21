@@ -61,7 +61,7 @@ assert.match(
 
 assert.match(
   page,
-  /runtimeMultiplicity[\s\S]*runtimeMonitor[\s\S]*data-runtime-health-summary[\s\S]*legacy daemons[\s\S]*Convergence window[\s\S]*Cleanup obligations[\s\S]*protected[\s\S]*reclaimable[\s\S]*Last retention pass[\s\S]*Blocking incident/,
+  /runtimeMultiplicity[\s\S]*runtimeMonitor[\s\S]*runtimeLifecycle[\s\S]*data-runtime-health-summary[\s\S]*legacy daemons[\s\S]*Convergence window[\s\S]*Cleanup obligations[\s\S]*protected[\s\S]*reclaimable[\s\S]*Last retention pass[\s\S]*Blocking incident/,
   'Dashboard runtime health must summarize topology, cleanup accountability, retention, and monitor freshness',
 );
 

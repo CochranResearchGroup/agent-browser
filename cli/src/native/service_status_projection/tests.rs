@@ -116,6 +116,11 @@ fn input(state: ServiceState, full_tab_history: bool) -> StatusAuthorityInput {
         .unwrap(),
         launch_config: StatusLaunchConfiguration::try_from(valid_launch_config()).unwrap(),
         full_tab_history,
+        runtime_lifecycle: json!({
+            "schemaVersion": "agent-browser.runtime-lifecycle-status.v1",
+            "ready": true,
+            "state": "ready"
+        }),
     }
 }
 
@@ -195,6 +200,11 @@ async fn unavailable_observations_are_typed_unknown_and_keep_legacy_manual_array
         value["statusProjection"]["authority"]["projectedAt"],
         "2026-08-09T21:00:05.000Z"
     );
+    assert_eq!(
+        value["runtimeLifecycle"]["schemaVersion"],
+        "agent-browser.runtime-lifecycle-status.v1"
+    );
+    assert_eq!(value["runtimeLifecycle"]["ready"], true);
 }
 
 #[tokio::test]
