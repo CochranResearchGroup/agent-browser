@@ -2051,7 +2051,31 @@ pub(crate) fn active_runtime_inventory(expected_sha256: Option<&str>) -> serde_j
             .ok()
             .and_then(|value| value.trim().parse::<u16>().ok());
         let stream_reachable = stream_port.map(local_port_reachable);
-        let pid_running = pid.is_some_and(pid_is_running);
+        let daemon_identity_path = socket_dir.join(format!(
+            "{}.identity.json",
+            crate::runtime_host::endpoint_key(&session)
+        ));
+        let pid_os_running = pid.is_some_and(pid_is_running);
+        let pid_running = pid.is_some_and(|pid| {
+            if !pid_os_running {
+                return false;
+            }
+            if !daemon_identity_path.is_file() {
+                return true;
+            }
+            crate::connection::load_daemon_process_identity(&session)
+                .ok()
+                .filter(|identity| identity.pid == pid)
+                .is_some_and(|identity| {
+                    crate::process_identity::assess_process_ownership(
+                        Some(&identity),
+                        crate::process_identity::observe_process(pid),
+                        crate::process_identity::LegacyProfileProof::Unproven,
+                    )
+                    .ownership
+                        == crate::process_identity::RuntimeProcessOwnership::MatchingBrowser
+                })
+        });
         let addressable = extensions.contains("sock")
             || extensions.contains("port")
             || extensions.contains("stream");
@@ -2065,6 +2089,9 @@ pub(crate) fn active_runtime_inventory(expected_sha256: Option<&str>) -> serde_j
             (_, None) => false,
         };
         let mut drift_reasons = Vec::new();
+        if pid_os_running && !pid_running && daemon_identity_path.is_file() {
+            drift_reasons.push("process_identity_mismatch");
+        }
         if pid_running && addressable && !package_version_matches {
             drift_reasons.push("package_version_mismatch");
         }
@@ -5079,6 +5106,48 @@ mod tests {
         assert_eq!(inventory["runtimes"][0]["session"], "probe");
         assert_eq!(inventory["runtimes"][0]["state"], "diagnostic");
         assert_eq!(inventory["runtimes"][0]["metadata"]["addressable"], false);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn active_runtime_inventory_rejects_a_reused_pid_with_stale_daemon_identity() {
+        let dir = std::env::temp_dir().join(format!(
+            "agent-browser-runtime-inventory-reused-pid-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let guard = EnvGuard::new(&["AGENT_BROWSER_SOCKET_DIR"]);
+        guard.set("AGENT_BROWSER_SOCKET_DIR", dir.to_str().unwrap());
+        fs::write(dir.join("probe.pid"), std::process::id().to_string()).unwrap();
+        fs::write(dir.join("probe.version"), env!("CARGO_PKG_VERSION")).unwrap();
+        fs::write(dir.join("probe.sha256"), "expected").unwrap();
+        fs::write(dir.join("probe.sock"), "").unwrap();
+        fs::write(
+            dir.join("probe.identity.json"),
+            serde_json::to_vec_pretty(&crate::process_identity::RecordedProcessIdentity {
+                pid: std::process::id(),
+                start_token: "linux:stale-boot:1".to_string(),
+                executable_path: Some("/opt/stale/agent-browser".to_string()),
+                browser_family: None,
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+        let inventory = active_runtime_inventory(Some("expected"));
+
+        assert_eq!(inventory["runtimes"][0]["session"], "probe");
+        assert_eq!(inventory["runtimes"][0]["pidRunning"], false);
+        assert_eq!(inventory["runtimes"][0]["state"], "inactive");
+        assert!(inventory["runtimes"][0]["driftReasons"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|reason| reason == "process_identity_mismatch"));
 
         let _ = fs::remove_dir_all(&dir);
     }
