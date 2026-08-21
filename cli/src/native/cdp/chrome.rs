@@ -3780,24 +3780,41 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn test_detached_manual_launch_records_inherited_display() {
+    fn test_manual_runtime_projection_records_inherited_display() {
         let guard = EnvGuard::new(&["HOME", "DISPLAY"]);
         let home = TempDir::new("manual-runtime-inherited-display");
         std::fs::create_dir_all(&*home).unwrap();
         guard.set("HOME", home.to_str().unwrap());
         guard.set("DISPLAY", ":91");
 
-        let fake_chrome = home.join("fake-chrome");
-        std::fs::copy("/usr/bin/yes", &fake_chrome).unwrap();
-
         let runtime_profile = "manual-inherited-display";
-        let launch = launch_chrome_detached(&LaunchOptions {
-            headless: false,
-            executable_path: Some(fake_chrome.display().to_string()),
-            runtime_profile: Some(runtime_profile.to_string()),
-            manual_login: true,
-            args: vec!["https://example.test/manual-login".to_string()],
-            ..Default::default()
+        let (executable, mut child) = spawn_browser_looking_child(&home);
+        let process_identity = crate::process_identity::capture_process_identity(
+            child.id(),
+            Some(&executable),
+            Some("chrome"),
+        )
+        .unwrap();
+        let user_data_dir =
+            crate::runtime_profile::runtime_profile_user_data_dir(runtime_profile).unwrap();
+        std::fs::create_dir_all(&user_data_dir).unwrap();
+        write_runtime_state(&RuntimeState {
+            runtime_profile: runtime_profile.to_string(),
+            user_data_dir: user_data_dir.display().to_string(),
+            browser_pid: child.id(),
+            process_identity: Some(process_identity),
+            headed: true,
+            launch_mode: "manual".to_string(),
+            devtools_port: None,
+            ws_url: None,
+            launch_record: Some(RuntimeLaunchRecord {
+                target_url: Some("https://example.test/manual-login".to_string()),
+                display: headed_display_value(&LaunchOptions {
+                    headless: false,
+                    ..Default::default()
+                }),
+                ..RuntimeLaunchRecord::default()
+            }),
         })
         .unwrap();
 
@@ -3808,7 +3825,7 @@ mod tests {
             .process_identity
             .as_ref()
             .expect("new manual runtime state must record process identity");
-        assert_eq!(process_identity.pid, launch.pid);
+        assert_eq!(process_identity.pid, child.id());
         assert!(!process_identity.start_token.is_empty());
 
         assert_eq!(
@@ -3865,8 +3882,8 @@ mod tests {
             Some("guacamole:91")
         );
         assert!(manual_browser.remote_control_available);
-        let _ = unsafe { libc::kill(launch.pid as i32, libc::SIGKILL) };
-        let _ = unsafe { libc::waitpid(launch.pid as i32, std::ptr::null_mut(), 0) };
+        let _ = child.kill();
+        let _ = child.wait();
     }
 
     #[cfg(target_os = "linux")]
