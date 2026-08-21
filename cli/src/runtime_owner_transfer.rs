@@ -220,6 +220,11 @@ pub(crate) struct OwnerTransitionRecord {
 pub(crate) struct RuntimeOwnerRegistry {
     pub(crate) revision: u64,
     pub(crate) owners: BTreeMap<String, ProfileOwner>,
+    /// Opaque forward-compatible lifecycle evidence written by newer runtimes.
+    ///
+    /// This maintenance generation does not interpret or act on these records,
+    /// but it must preserve them whenever it updates the owner registry.
+    pub(crate) lifecycle_records: BTreeMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -258,6 +263,7 @@ impl RuntimeOwnerRegistry {
         Self {
             revision: 1,
             owners: BTreeMap::from([(owner.profile_identity_digest.clone(), owner)]),
+            lifecycle_records: BTreeMap::new(),
         }
     }
 
@@ -1104,6 +1110,30 @@ mod tests {
             selected_target_identity_digest: digest("target-a"),
             transfer_nonce_digest: digest("transfer"),
         }
+    }
+
+    #[test]
+    fn future_lifecycle_records_round_trip_without_granting_authority() {
+        let payload = serde_json::json!({
+            "revision": 0,
+            "owners": {},
+            "lifecycleRecords": {
+                "session:future": {
+                    "logicalBrowserId": "session:future",
+                    "lifecycleState": "retained",
+                    "cleanupObligationState": "owned"
+                }
+            }
+        });
+
+        let registry: RuntimeOwnerRegistry = serde_json::from_value(payload).unwrap();
+        assert!(registry.owners.is_empty());
+        assert!(registry.lifecycle_records.contains_key("session:future"));
+
+        let round_trip: RuntimeOwnerRegistry =
+            serde_json::from_value(serde_json::to_value(&registry).unwrap()).unwrap();
+        assert_eq!(round_trip, registry);
+        assert!(round_trip.is_empty());
     }
 
     #[test]
