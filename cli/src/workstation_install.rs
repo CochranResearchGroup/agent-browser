@@ -6351,7 +6351,7 @@ fn ensure_stable_symlink(link: &Path, target: &Path) -> Result<bool, String> {
         Ok(metadata) if metadata.file_type().is_symlink() => {
             let existing = fs::read_link(link)
                 .map_err(display_io("read stable runtime generation link", link))?;
-            if existing == target {
+            if existing == target || stable_symlink_targets_equivalent(link, &existing, target) {
                 return Ok(false);
             }
             Err(format!(
@@ -6373,6 +6373,44 @@ fn ensure_stable_symlink(link: &Path, target: &Path) -> Result<bool, String> {
             link.display()
         )),
     }
+}
+
+fn stable_symlink_targets_equivalent(link: &Path, left: &Path, right: &Path) -> bool {
+    let Some(parent) = link.parent() else {
+        return false;
+    };
+    let resolve = |target: &Path| {
+        let path = if target.is_absolute() {
+            target.to_path_buf()
+        } else {
+            parent.join(target)
+        };
+        lexically_normalized_absolute_path(&path)
+    };
+    resolve(left).is_some_and(|left| resolve(right).as_ref() == Some(&left))
+}
+
+fn lexically_normalized_absolute_path(path: &Path) -> Option<PathBuf> {
+    use std::path::Component;
+
+    if !path.is_absolute() {
+        return None;
+    }
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
+            Component::RootDir => normalized.push(component.as_os_str()),
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if !normalized.pop() {
+                    return None;
+                }
+            }
+            Component::Normal(value) => normalized.push(value),
+        }
+    }
+    Some(normalized)
 }
 
 fn atomic_symlink(target: &Path, destination: &Path) -> Result<(), String> {
@@ -7291,6 +7329,42 @@ mod tests {
                 assert!(!body.contains("OnBootSec="));
             }
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stable_generation_link_accepts_equivalent_absolute_target() {
+        use std::os::unix::fs::symlink;
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-equivalent-stable-link-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let link_dir = root.join("links");
+        let target = root.join("current/units/example.service");
+        let link = link_dir.join("example.service");
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        fs::create_dir_all(&link_dir).unwrap();
+        fs::write(&target, b"unit\n").unwrap();
+        symlink(&target, &link).unwrap();
+
+        assert!(
+            !ensure_stable_symlink(&link, Path::new("../current/units/example.service")).unwrap()
+        );
+
+        fs::remove_file(&link).unwrap();
+        let unexpected = root.join("other/example.service");
+        fs::create_dir_all(unexpected.parent().unwrap()).unwrap();
+        fs::write(&unexpected, b"other unit\n").unwrap();
+        symlink(&unexpected, &link).unwrap();
+        assert!(
+            ensure_stable_symlink(&link, Path::new("../current/units/example.service")).is_err()
+        );
+
+        fs::remove_file(&link).unwrap();
+        fs::remove_file(unexpected).unwrap();
+        fs::remove_file(target).unwrap();
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
