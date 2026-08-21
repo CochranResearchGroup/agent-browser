@@ -3511,9 +3511,10 @@ fn install_doctor_issues_are_advisory(data: &Value, issues: &[Value]) -> bool {
 /// remain globally non-ready because the transaction and admission drain are
 /// still active. The installer may consume the component evidence only when
 /// the only additional blockers are the exact expected transaction at the
-/// exact `post_commit_validating` revision and the runtime monitor startup gap
-/// created by this installer quiescing and reactivating its units. This does
-/// not weaken ordinary doctor.
+/// exact `post_commit_validating` revision, the runtime monitor startup gap
+/// created by this installer quiescing and reactivating its units, and
+/// reviewed external process pressure when the service proves that it has no
+/// GC candidates. This does not weaken ordinary doctor.
 fn install_doctor_reports_expected_upgrade_ready(
     payload: &Value,
     expected: &crate::runtime_adoption::UpgradeTransaction,
@@ -3567,6 +3568,11 @@ fn install_doctor_reports_expected_upgrade_ready(
             if code == Some("runtime_monitor_not_ready") {
                 return false;
             }
+            if code == Some("runtime_pressure_ownership_unknown")
+                && expected_upgrade_runtime_pressure_is_review_only(data)
+            {
+                return false;
+            }
             if code == Some("dashboard_runtime_stale_or_unreadable")
                 && shadow_dashboard_transition_ready
             {
@@ -3585,6 +3591,16 @@ fn install_doctor_reports_expected_upgrade_ready(
         .cloned()
         .collect::<Vec<_>>();
     transaction_issue_count == 1 && install_doctor_issues_are_advisory(data, &remaining_issues)
+}
+
+fn expected_upgrade_runtime_pressure_is_review_only(data: &Value) -> bool {
+    let resources = data.get("serviceResources").unwrap_or(&Value::Null);
+    resources.get("available").and_then(Value::as_bool) == Some(true)
+        && resources.get("candidateCount").and_then(Value::as_u64) == Some(0)
+        && resources
+            .get("readinessImpactingCandidates")
+            .and_then(Value::as_u64)
+            == Some(0)
 }
 
 fn expected_upgrade_shadow_dashboard_transition_ready(
@@ -10088,8 +10104,14 @@ mod tests {
                         "state": "post_commit_validating",
                     },
                     {"code": "runtime_monitor_not_ready"},
+                    {"code": "runtime_pressure_ownership_unknown"},
                     {"code": "service_duplicate_profile_pressure"},
                 ],
+                "serviceResources": {
+                    "available": true,
+                    "candidateCount": 0,
+                    "readinessImpactingCandidates": 0,
+                },
                 "sessionSupervisors": {"sessions": [], "issues": []},
                 "liveDashboardRuntime": {
                     "workstationUpgrade": {
@@ -10110,6 +10132,14 @@ mod tests {
             &[]
         ));
         assert!(!install_doctor_reports_workstation_ready(&report));
+
+        let mut reclaimable = report.clone();
+        reclaimable["data"]["serviceResources"]["candidateCount"] = Value::from(1);
+        assert!(!install_doctor_reports_expected_upgrade_ready(
+            &reclaimable,
+            &transaction,
+            &[]
+        ));
 
         let mut wrong = report;
         wrong["data"]["liveDashboardRuntime"]["workstationUpgrade"]["latestTransaction"]
