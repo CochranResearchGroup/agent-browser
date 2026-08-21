@@ -1511,10 +1511,7 @@ fn run_close_all(flags: &Flags) {
     if let Ok(entries) = fs::read_dir(&socket_dir) {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            if let Some(session_name) = name.strip_suffix(".pid") {
-                if session_name.is_empty() {
-                    continue;
-                }
+            if let Some(session_name) = close_all_session_from_metadata_name(&name, ".pid") {
                 let pid_path = socket_dir.join(&name);
                 let pid = match fs::read_to_string(&pid_path)
                     .ok()
@@ -1560,10 +1557,7 @@ fn run_close_all(flags: &Flags) {
     if let Ok(entries) = fs::read_dir(&socket_dir) {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            if let Some(session_name) = name.strip_suffix(".sock") {
-                if session_name.is_empty() {
-                    continue;
-                }
+            if let Some(session_name) = close_all_session_from_metadata_name(&name, ".sock") {
                 let pid_path = socket_dir.join(format!("{}.pid", session_name));
                 if !pid_path.exists() {
                     failed.push((
@@ -1639,6 +1633,15 @@ fn run_close_all(flags: &Flags) {
     }
 }
 
+fn close_all_session_from_metadata_name<'a>(name: &'a str, suffix: &str) -> Option<&'a str> {
+    let session_name = name.strip_suffix(suffix)?;
+    if session_name.is_empty() || session_name == runtime_host::RUNTIME_HOST_ENDPOINT_KEY {
+        None
+    } else {
+        Some(session_name)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CloseScopeIssue {
     code: &'static str,
@@ -1673,6 +1676,11 @@ fn print_close_scope_issue(issue: &CloseScopeIssue, json_mode: bool) {
 }
 
 fn force_close_session_from_metadata(session: &str) -> Result<bool, String> {
+    if session == runtime_host::RUNTIME_HOST_ENDPOINT_KEY {
+        return Err(
+            "refusing to close shared runtime-host control metadata as a browser lane".to_string(),
+        );
+    }
     let pid_path = get_socket_dir().join(format!("{}.pid", session));
     let pid = fs::read_to_string(&pid_path)
         .ok()
@@ -3497,6 +3505,22 @@ mod tests {
         assert!(!dir.join("stale.version").exists());
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_close_all_excludes_runtime_host_control_metadata() {
+        assert_eq!(
+            close_all_session_from_metadata_name("payment.pid", ".pid"),
+            Some("payment")
+        );
+        assert_eq!(
+            close_all_session_from_metadata_name("runtime-host.pid", ".pid"),
+            None
+        );
+        assert_eq!(
+            close_all_session_from_metadata_name("runtime-host.sock", ".sock"),
+            None
+        );
     }
 
     #[test]
