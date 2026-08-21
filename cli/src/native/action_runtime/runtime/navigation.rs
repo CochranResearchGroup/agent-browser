@@ -1273,6 +1273,18 @@ fn rebind_runtime_handoff_service_projection_in_state(
                 .map(str::to_string),
         );
     }
+    browser_session_ids.extend(
+        service_state
+            .sessions
+            .values()
+            .filter(|session| {
+                session
+                    .browser_ids
+                    .iter()
+                    .any(|browser_id| browser_id == logical_browser_id)
+            })
+            .map(|session| session.id.clone()),
+    );
     browser_session_ids.remove(next_session_id);
 
     if !service_state.browsers.contains_key(logical_browser_id) {
@@ -1290,11 +1302,21 @@ fn rebind_runtime_handoff_service_projection_in_state(
                 && session.profile_id.is_some()
                 && !matches!(session.lease, LeaseState::Released | LeaseState::Expired)
         })
-        .max_by_key(|session| match session.lease {
-            LeaseState::HumanTakeover => 3,
-            LeaseState::Exclusive => 2,
-            LeaseState::Shared => 1,
-            LeaseState::Released | LeaseState::Expired => 0,
+        .max_by_key(|session| {
+            let lease_priority = match session.lease {
+                LeaseState::HumanTakeover => 3,
+                LeaseState::Exclusive => 2,
+                LeaseState::Shared => 1,
+                LeaseState::Released | LeaseState::Expired => 0,
+            };
+            (
+                prior_session_ids.contains(&session.id),
+                lease_priority,
+                session.service_name.is_some(),
+                session.agent_name.is_some(),
+                session.task_name.is_some(),
+                session.last_lease_observed_at.is_some(),
+            )
         })
         .cloned();
     if let Some(inherited_profile_id) = inherited_session
@@ -1964,6 +1986,16 @@ mod tests {
                         ..BrowserSession::default()
                     },
                 ),
+                (
+                    "stale-alias".to_string(),
+                    BrowserSession {
+                        id: "stale-alias".to_string(),
+                        lease: LeaseState::Exclusive,
+                        profile_id: Some("social-profile".to_string()),
+                        browser_ids: vec![logical_browser_id.to_string()],
+                        ..BrowserSession::default()
+                    },
+                ),
             ]),
             browsers: std::collections::BTreeMap::from([(
                 logical_browser_id.to_string(),
@@ -1998,6 +2030,9 @@ mod tests {
         assert_eq!(old_owner.lease, LeaseState::Released);
         assert!(old_owner.browser_ids.is_empty());
         assert!(old_owner.tab_ids.is_empty());
+        let stale_alias = &state.sessions["stale-alias"];
+        assert_eq!(stale_alias.lease, LeaseState::Released);
+        assert!(stale_alias.browser_ids.is_empty());
 
         let candidate = &state.sessions["candidate"];
         assert_eq!(candidate.service_name.as_deref(), Some("x"));
