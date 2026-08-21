@@ -5506,6 +5506,36 @@ fn stage_candidate_runtime_host_ingress(
         }
         Err(error) => return Err(error),
     };
+    let old_generation = transaction
+        .old_generation_id
+        .as_deref()
+        .ok_or_else(|| "runtime_host_ingress_old_generation_missing".to_string())?;
+    let registry = if registry.selected_backend().generation_id != old_generation {
+        let selected = registry.selected_backend();
+        let fallback_matches = registry
+            .fallback_backend()
+            .is_some_and(|fallback| fallback.generation_id == old_generation);
+        let selected_is_missing = matches!(
+            crate::process_identity::observe_process(selected.pid),
+            crate::process_identity::ProcessObservation::Missing
+        );
+        if registry.active_transaction_id.is_none()
+            && registry.candidate_backend().is_none()
+            && fallback_matches
+            && selected_is_missing
+        {
+            repository.recover_dead_selected_backend(
+                registry.revision,
+                &selected.generation_id,
+                selected.pid,
+                old_generation,
+            )?
+        } else {
+            return Err("runtime_host_ingress_selected_generation_drift".to_string());
+        }
+    } else {
+        registry
+    };
     if selected_runtime_host_capture_required(
         registry.selected_backend().topology,
         transaction

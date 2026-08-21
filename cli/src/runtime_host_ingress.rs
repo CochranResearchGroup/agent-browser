@@ -56,6 +56,8 @@ pub(crate) struct RuntimeHostIngressRegistry {
     pub(crate) schema_version: String,
     pub(crate) revision: u64,
     pub(crate) active_transaction_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    selected_transaction_id: Option<String>,
     selected_backend: RuntimeHostBackend,
     candidate_backend: Option<RuntimeHostBackend>,
     fallback_backend: Option<RuntimeHostBackend>,
@@ -68,6 +70,7 @@ impl RuntimeHostIngressRegistry {
             schema_version: RUNTIME_HOST_INGRESS_SCHEMA_VERSION.to_string(),
             revision: 1,
             active_transaction_id: None,
+            selected_transaction_id: None,
             selected_backend,
             candidate_backend: None,
             fallback_backend: None,
@@ -131,6 +134,7 @@ impl RuntimeHostIngressRegistry {
         let prior = std::mem::replace(&mut self.selected_backend, candidate);
         self.fallback_backend = Some(prior);
         self.active_transaction_id = None;
+        self.selected_transaction_id = Some(transaction_id.to_string());
         self.revision = self.revision.saturating_add(1);
         Ok(())
     }
@@ -152,6 +156,9 @@ impl RuntimeHostIngressRegistry {
         if self.active_transaction_id.is_some() {
             return Err("runtime host ingress transaction changed before rollback".to_string());
         }
+        if self.selected_transaction_id.as_deref() != Some(transaction_id) {
+            return Err("runtime host ingress transaction changed before rollback".to_string());
+        }
         if self.selected_backend.generation_id != expected_generation {
             return Err("runtime host selected generation changed before rollback".to_string());
         }
@@ -161,6 +168,36 @@ impl RuntimeHostIngressRegistry {
             .ok_or_else(|| "runtime host rollback backend is missing".to_string())?;
         let failed = std::mem::replace(&mut self.selected_backend, fallback);
         self.fallback_backend = Some(failed);
+        self.selected_transaction_id = None;
+        self.revision = self.revision.saturating_add(1);
+        Ok(())
+    }
+
+    fn recover_dead_selected_backend(
+        &mut self,
+        expected_selected_generation: &str,
+        expected_selected_pid: u32,
+        expected_fallback_generation: &str,
+    ) -> Result<(), String> {
+        if self.active_transaction_id.is_some() || self.candidate_backend.is_some() {
+            return Err("runtime host ingress transaction changed before recovery".to_string());
+        }
+        if self.selected_backend.generation_id != expected_selected_generation
+            || self.selected_backend.pid != expected_selected_pid
+        {
+            return Err("runtime host selected backend changed before recovery".to_string());
+        }
+        let fallback = self
+            .fallback_backend
+            .take()
+            .ok_or_else(|| "runtime host recovery backend is missing".to_string())?;
+        if fallback.generation_id != expected_fallback_generation {
+            self.fallback_backend = Some(fallback);
+            return Err("runtime host recovery backend changed".to_string());
+        }
+        let failed = std::mem::replace(&mut self.selected_backend, fallback);
+        self.fallback_backend = Some(failed);
+        self.selected_transaction_id = None;
         self.revision = self.revision.saturating_add(1);
         Ok(())
     }
@@ -243,6 +280,22 @@ impl RuntimeHostIngressRepository {
     ) -> Result<RuntimeHostIngressRegistry, String> {
         self.mutate(expected_revision, |registry| {
             registry.rollback(transaction_id, expected_generation)
+        })
+    }
+
+    pub(crate) fn recover_dead_selected_backend(
+        &self,
+        expected_revision: u64,
+        expected_selected_generation: &str,
+        expected_selected_pid: u32,
+        expected_fallback_generation: &str,
+    ) -> Result<RuntimeHostIngressRegistry, String> {
+        self.mutate(expected_revision, |registry| {
+            registry.recover_dead_selected_backend(
+                expected_selected_generation,
+                expected_selected_pid,
+                expected_fallback_generation,
+            )
         })
     }
 
@@ -454,6 +507,75 @@ mod tests {
             .unwrap();
         assert_eq!(rolled_back.selected_backend(), &old);
         assert_eq!(rolled_back.fallback_backend(), Some(&candidate));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn stale_committed_transaction_cannot_roll_back_a_newer_same_generation_commit() {
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-runtime-host-ingress-stale-rollback-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let repository = RuntimeHostIngressRepository::new(root.join("ingress.json"));
+        let old = backend(&root, "old", 101);
+        let candidate = backend(&root, "candidate", 202);
+
+        let initial = repository.initialize(old.clone()).unwrap();
+        let first_staged = repository
+            .stage_candidate(initial.revision, "tx-1", candidate.clone())
+            .unwrap();
+        let first_committed = repository
+            .commit_candidate(first_staged.revision, "tx-1", "candidate")
+            .unwrap();
+        let first_rolled_back = repository
+            .rollback(first_committed.revision, "tx-1", "candidate")
+            .unwrap();
+
+        let second_staged = repository
+            .stage_candidate(first_rolled_back.revision, "tx-2", candidate.clone())
+            .unwrap();
+        let second_committed = repository
+            .commit_candidate(second_staged.revision, "tx-2", "candidate")
+            .unwrap();
+        let error = repository
+            .rollback(second_committed.revision, "tx-1", "candidate")
+            .unwrap_err();
+
+        assert!(error.contains("transaction changed before rollback"));
+        let current = repository.load().unwrap();
+        assert_eq!(current.selected_backend(), &candidate);
+        assert_eq!(current.fallback_backend(), Some(&old));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn dead_selected_backend_can_restore_the_exact_fallback_before_restaging() {
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-runtime-host-ingress-dead-selected-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let repository = RuntimeHostIngressRepository::new(root.join("ingress.json"));
+        let old = backend(&root, "old", 101);
+        let candidate = backend(&root, "candidate", 202);
+
+        let initial = repository.initialize(old.clone()).unwrap();
+        let staged = repository
+            .stage_candidate(initial.revision, "tx-1", candidate.clone())
+            .unwrap();
+        let committed = repository
+            .commit_candidate(staged.revision, "tx-1", "candidate")
+            .unwrap();
+        let recovered = repository
+            .recover_dead_selected_backend(committed.revision, "candidate", 202, "old")
+            .unwrap();
+
+        assert_eq!(recovered.selected_backend(), &old);
+        assert_eq!(recovered.fallback_backend(), Some(&candidate));
+        let restaged = repository
+            .stage_candidate(recovered.revision, "tx-2", candidate.clone())
+            .unwrap();
+        assert_eq!(restaged.selected_backend(), &old);
+        assert_eq!(restaged.candidate_backend(), Some(&candidate));
         let _ = fs::remove_dir_all(root);
     }
 
