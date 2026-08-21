@@ -5664,6 +5664,7 @@ fn candidate_dashboard_command(
         .env("AGENT_BROWSER_DASHBOARD_PORT", shadow_port.to_string())
         .env("AGENT_BROWSER_DASHBOARD_GENERATION", generation_id)
         .env("AGENT_BROWSER_SOCKET_DIR", runtime_socket_dir)
+        .env(crate::runtime_host::RUNTIME_HOST_ENV, "1")
         .env_remove("AGENT_BROWSER_DASHBOARD_INGRESS")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -9570,6 +9571,11 @@ mod tests {
             env.get("AGENT_BROWSER_DASHBOARD_GENERATION")
                 .and_then(Clone::clone),
             Some("generation-candidate".to_string())
+        );
+        assert_eq!(
+            env.get(crate::runtime_host::RUNTIME_HOST_ENV)
+                .and_then(Clone::clone),
+            Some("1".to_string())
         );
     }
 
