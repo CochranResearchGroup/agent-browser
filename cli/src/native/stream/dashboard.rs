@@ -776,7 +776,6 @@ fn dashboard_service_backend_port_from_sessions(sessions: &[Value]) -> Option<u1
                 .iter()
                 .find(|session| session.get("session").and_then(Value::as_str) == Some("default"))
         })
-        .or_else(|| sessions.first())
         .and_then(|session| session.get("port"))
         .and_then(Value::as_u64)
         .and_then(|port| u16::try_from(port).ok())
@@ -2695,6 +2694,29 @@ mod tests {
         assert_eq!(
             dashboard_service_backend_port_from_sessions(&sessions),
             Some(2222)
+        );
+    }
+
+    #[test]
+    fn dashboard_service_backend_rejects_foreign_only_sessions() {
+        let sessions = vec![
+            json!({
+                "session": "detected-chatgpt-45013",
+                "port": 45013,
+                "detected": true,
+                "ownership": "foreign_cdp"
+            }),
+            json!({
+                "session": "detected-chatgpt-45015",
+                "port": 45015,
+                "detected": true,
+                "ownership": "foreign_cdp"
+            }),
+        ];
+
+        assert_eq!(
+            dashboard_service_backend_port_from_sessions(&sessions),
+            None
         );
     }
 

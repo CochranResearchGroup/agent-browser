@@ -5705,9 +5705,12 @@ fn candidate_dashboard_command(
     runtime_socket_dir: &Path,
 ) -> Command {
     let mut command = Command::new(candidate_binary);
+    // The shadow dashboard owns the transaction-scoped socket directory and
+    // must bootstrap its candidate runtime host before admission begins.
+    // Omitting backend-only mode lets the ordinary dashboard startup path
+    // create that one service lane without exposing the shadow as ingress.
     command
         .env("AGENT_BROWSER_DASHBOARD", "1")
-        .env("AGENT_BROWSER_DASHBOARD_BACKEND_ONLY", "1")
         .env("AGENT_BROWSER_DASHBOARD_PORT", shadow_port.to_string())
         .env("AGENT_BROWSER_DASHBOARD_GENERATION", generation_id)
         .env("AGENT_BROWSER_SOCKET_DIR", runtime_socket_dir)
@@ -9699,6 +9702,7 @@ mod tests {
                 .and_then(Clone::clone),
             Some("1".to_string())
         );
+        assert_eq!(env.get("AGENT_BROWSER_DASHBOARD_BACKEND_ONLY"), None);
     }
 
     #[test]
