@@ -4166,7 +4166,7 @@ fn activate_prepared_payload_transaction(
         "runtimes_transferring",
     )?;
     persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)?;
-    if !isolated_root {
+    if candidate_runtime_host_stage_required(isolated_root, 0) {
         capture_selected_runtime_host_before_transfer(&mut prepared.transaction)?;
         let transfer_evidence = transfer_discovered_runtimes(
             paths,
@@ -4175,53 +4175,47 @@ fn activate_prepared_payload_transaction(
             &mut prepared.transaction.runtime_migrations,
             &mut prepared.runtime_handoffs,
         )?;
-        if !transfer_evidence.is_empty() {
-            let (host_identity, candidate_backend) = capture_candidate_runtime_host_identity(
-                &prepared.transaction.transaction_id,
-                &prepared.transaction.candidate_generation_id,
-                &prepared.transaction.candidate_binary_sha256,
-            )?;
-            crate::runtime_adoption::record_runtime_host_identity(
-                &mut prepared.transaction,
-                true,
-                host_identity,
-            )?;
-            for evidence in transfer_evidence {
-                let session_names = prepared
-                    .transaction
-                    .runtime_migrations
-                    .iter()
-                    .find(|migration| migration.logical_browser_id == evidence.logical_browser_id)
-                    .map(|migration| migration.session_names.clone())
-                    .ok_or_else(|| {
-                        format!(
-                            "runtime_transfer_migration_disappeared:{}",
-                            evidence.logical_browser_id
-                        )
-                    })?;
-                for session_name in session_names {
-                    crate::runtime_adoption::record_runtime_lane_observation(
-                        &mut prepared.transaction,
-                        &session_name,
-                        &evidence.candidate_session,
-                        evidence.receipt.previous_owner_generation,
-                        &evidence.receipt.receipt_id,
-                    )?;
-                    crate::runtime_adoption::commit_runtime_lane_transfer(
-                        &mut prepared.transaction,
-                        &session_name,
-                        evidence.receipt.candidate_owner_generation,
-                        0,
-                        &evidence.receipt.receipt_id,
-                    )?;
-                }
+        let (host_identity, candidate_backend) = capture_candidate_runtime_host_identity(
+            &prepared.transaction.transaction_id,
+            &prepared.transaction.candidate_generation_id,
+            &prepared.transaction.candidate_binary_sha256,
+        )?;
+        crate::runtime_adoption::record_runtime_host_identity(
+            &mut prepared.transaction,
+            true,
+            host_identity,
+        )?;
+        for evidence in transfer_evidence {
+            let session_names = prepared
+                .transaction
+                .runtime_migrations
+                .iter()
+                .find(|migration| migration.logical_browser_id == evidence.logical_browser_id)
+                .map(|migration| migration.session_names.clone())
+                .ok_or_else(|| {
+                    format!(
+                        "runtime_transfer_migration_disappeared:{}",
+                        evidence.logical_browser_id
+                    )
+                })?;
+            for session_name in session_names {
+                crate::runtime_adoption::record_runtime_lane_observation(
+                    &mut prepared.transaction,
+                    &session_name,
+                    &evidence.candidate_session,
+                    evidence.receipt.previous_owner_generation,
+                    &evidence.receipt.receipt_id,
+                )?;
+                crate::runtime_adoption::commit_runtime_lane_transfer(
+                    &mut prepared.transaction,
+                    &session_name,
+                    evidence.receipt.candidate_owner_generation,
+                    0,
+                    &evidence.receipt.receipt_id,
+                )?;
             }
-            stage_candidate_runtime_host_ingress(
-                paths,
-                &mut prepared.transaction,
-                candidate_backend,
-            )?;
         }
+        stage_candidate_runtime_host_ingress(paths, &mut prepared.transaction, candidate_backend)?;
         write_private_json_atomic(&prepared.transaction_path, &prepared.transaction)?;
     }
     crate::runtime_adoption::require_runtime_host_convergence_deadline(&prepared.transaction)?;
@@ -4245,6 +4239,13 @@ fn activate_prepared_payload_transaction(
         "candidate_ready",
     )?;
     persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)
+}
+
+fn candidate_runtime_host_stage_required(
+    isolated_root: bool,
+    _transferable_lane_count: usize,
+) -> bool {
+    !isolated_root
 }
 
 fn transfer_discovered_runtimes(
@@ -8414,6 +8415,13 @@ mod tests {
             crate::runtime_host_ingress::RuntimeHostTopology::LegacyPerSession,
             false,
         ));
+    }
+
+    #[test]
+    fn real_host_stages_candidate_runtime_host_even_without_transferable_lanes() {
+        assert!(candidate_runtime_host_stage_required(false, 0));
+        assert!(candidate_runtime_host_stage_required(false, 3));
+        assert!(!candidate_runtime_host_stage_required(true, 0));
     }
 
     #[cfg(unix)]
