@@ -357,9 +357,14 @@ fn recover_operator_required_upgrade_for_root(
         .checkpoints
         .iter()
         .any(|checkpoint| checkpoint.name == "pre_admission_census_block_recovered");
+    let pre_admission_inflight_block = transaction.state
+        == UpgradeTransactionState::BlockedInflightEffect
+        && transaction.stop_reason.as_deref() == Some("installer_lock_busy")
+        && !admission_drain_present;
     let recoverable = match transaction.state {
         UpgradeTransactionState::OperatorRecoveryRequired => admission_drain_present,
         UpgradeTransactionState::BlockedAmbiguousRuntime => !admission_drain_present,
+        UpgradeTransactionState::BlockedInflightEffect => pre_admission_inflight_block,
         UpgradeTransactionState::FailedPreservedOldGeneration => {
             operator_recovery_checkpoint_present || pre_admission_recovery_checkpoint_present
         }
@@ -380,6 +385,29 @@ fn recover_operator_required_upgrade_for_root(
         return Err("workstation_recovery_old_generation_not_selected".to_string());
     }
     validate_sealed_generation_tree(&paths.generations_dir.join(&old_generation_id))?;
+
+    if pre_admission_inflight_block {
+        transaction.stop_reason = Some("pre_admission_inflight_block_recovered".to_string());
+        transaction.terminal_result = Some("old_generation_preserved".to_string());
+        persist_upgrade_transition(
+            &transaction_path,
+            &mut transaction,
+            UpgradeTransactionState::FailedPreservedOldGeneration,
+            "pre_admission_inflight_block_recovered",
+        )?;
+        return Ok(serde_json::json!({
+            "schemaVersion": "agent-browser.workstation-upgrade-recovery.v1",
+            "success": true,
+            "changed": true,
+            "transactionId": transaction.transaction_id,
+            "state": transaction.state,
+            "selectedGenerationId": old_generation_id,
+            "candidatePayloadStaged": false,
+            "runtimeCensusStable": true,
+            "admissionDrainPresent": false,
+            "admissionDraining": false,
+        }));
+    }
 
     let mut live_process_references = std::collections::BTreeMap::new();
     collect_process_generation_references(&paths, &mut live_process_references);
@@ -9391,6 +9419,21 @@ mod tests {
         assert_eq!(
             transaction.stop_reason.as_deref(),
             Some("installer_lock_busy")
+        );
+        let revision = transaction.revision;
+        let mut recovered = transaction.clone();
+        recovered.terminal_result = Some("old_generation_preserved".to_string());
+        crate::runtime_adoption::transition_upgrade_transaction(
+            &mut recovered,
+            revision,
+            crate::runtime_adoption::UpgradeTransactionState::FailedPreservedOldGeneration,
+            "pre_admission_inflight_block_recovered",
+            "2026-08-21T21:45:00Z",
+        )
+        .expect("a pre-admission lock collision must have a terminal recovery transition");
+        assert_eq!(
+            recovered.state,
+            crate::runtime_adoption::UpgradeTransactionState::FailedPreservedOldGeneration
         );
         assert!(!paths.generations_dir.exists());
         assert!(!paths.current_selector.exists());

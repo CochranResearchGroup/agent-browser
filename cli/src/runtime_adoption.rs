@@ -601,6 +601,7 @@ fn upgrade_transition_allowed(
             | (Accepted, OperatorRecoveryRequired)
             | (OperatorRecoveryRequired, FailedPreservedOldGeneration)
             | (BlockedAmbiguousRuntime, FailedPreservedOldGeneration)
+            | (BlockedInflightEffect, FailedPreservedOldGeneration)
             | (
                 Planned | CandidatePreflightReady,
                 BlockedCandidateIncompatible
