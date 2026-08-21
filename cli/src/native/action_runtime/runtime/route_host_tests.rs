@@ -1892,6 +1892,47 @@ fn test_retained_session_attach_target_does_not_cross_session_ownership() {
     let _ = fs::remove_dir_all(&home);
 }
 #[test]
+fn test_retained_session_attach_target_rejects_cross_profile_browser_link() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("retained-session-cross-profile-home");
+    fs::create_dir_all(&home).expect("test home should be created");
+    guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+    store
+        .save(&ServiceState {
+            sessions: BTreeMap::from([(
+                "last30days-facebook".to_string(),
+                BrowserSession {
+                    id: "last30days-facebook".to_string(),
+                    profile_id: Some("last30days-facebook".to_string()),
+                    browser_ids: vec!["session:last30days-facebook".to_string()],
+                    lease: LeaseState::Exclusive,
+                    ..BrowserSession::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                "session:default".to_string(),
+                BrowserProcess {
+                    id: "session:default".to_string(),
+                    profile_id: Some("default".to_string()),
+                    health: ServiceBrowserHealth::Ready,
+                    cdp_endpoint: Some("ws://127.0.0.1:37137/devtools/browser/default".to_string()),
+                    active_session_ids: vec!["last30days-facebook".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            ..ServiceState::default()
+        })
+        .expect("service state should be persisted");
+
+    assert!(retained_session_attach_target_for_auto_launch(
+        &json!({ "action" : "tab_list", "sessionName" : "last30days-facebook" }),
+        "last30days-facebook",
+    )
+    .is_none());
+    let _ = fs::remove_dir_all(&home);
+}
+#[test]
 fn test_launch_options_service_profile_id_treats_named_profile_as_runtime_profile() {
     let named = LaunchOptions {
         profile: Some("stealthcdp-default".to_string()),

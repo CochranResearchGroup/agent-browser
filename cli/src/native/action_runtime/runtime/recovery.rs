@@ -1410,10 +1410,21 @@ pub(crate) fn retained_session_attach_target_for_auto_launch(
     let service_state = repository.load_snapshot().ok()?;
     let requested_browser_id = optional_command_string(command, "browserId");
     let current_browser_id = service_browser_id(session_id);
+    let expected_profile_id = service_state
+        .sessions
+        .get(session_id)
+        .and_then(|session| session.profile_id.as_deref())
+        .map(str::trim)
+        .filter(|profile_id| !profile_id.is_empty());
     let mut candidates = service_state
         .browsers
         .values()
         .filter(|browser| service_browser_health_counts_as_live(browser.health))
+        .filter(|browser| {
+            expected_profile_id.is_none_or(|expected_profile_id| {
+                browser.profile_id.as_deref().map(str::trim) == Some(expected_profile_id)
+            })
+        })
         .filter(|browser| {
             browser.id == current_browser_id
                 || browser
