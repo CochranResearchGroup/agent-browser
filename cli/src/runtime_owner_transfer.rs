@@ -524,13 +524,15 @@ impl RuntimeOwnerRegistry {
                 OwnerTransferFailureCode::UnsupportedOwnerState,
             ));
         }
+        let target_set_matches = request.mode == BrowserAdoptionMode::OrphanAdoption
+            || request.target_set_digest == owner.target_set_digest;
         if request.expected_owner_id.as_deref() != Some(owner.owner_id.as_str())
             || request.expected_owner_generation != owner.owner_generation
             || request.logical_browser_id != owner.browser_id
             || request.process_instance_digest != owner.process_instance_digest
             || request.browser_family != owner.browser_family
             || request.cdp_endpoint_identity_digest != owner.cdp_endpoint_identity_digest
-            || request.target_set_digest != owner.target_set_digest
+            || !target_set_matches
         {
             return Err(transfer_error(
                 OwnerTransferFailureCode::OwnerCompareAndSwapMismatch,
@@ -1342,6 +1344,7 @@ mod tests {
         request.expected_owner_generation = orphan.owner_generation;
         request.candidate_owner_id = "owner-adopter".to_string();
         request.candidate_daemon_session_route = "session-adopter".to_string();
+        request.target_set_digest = digest("targets-observed-after-revocation");
         request.transfer_nonce_digest = digest("legacy-orphan-transfer");
 
         let proposal = registry.begin_transfer(request.clone()).unwrap();
@@ -1353,6 +1356,13 @@ mod tests {
         assert_eq!(receipt.mode, BrowserAdoptionMode::OrphanAdoption);
         assert_eq!(receipt.previous_owner_generation, 8);
         assert_eq!(receipt.candidate_owner_generation, 9);
+        assert_eq!(
+            registry
+                .owner(&digest("profile"))
+                .unwrap()
+                .target_set_digest,
+            digest("targets-observed-after-revocation")
+        );
     }
 
     #[test]

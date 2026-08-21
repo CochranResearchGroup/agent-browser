@@ -5955,7 +5955,7 @@ fn rollback_prepared_payload_transaction(
     let dashboard_process_result = stop_prepared_dashboard_candidate(prepared);
     let handoff_result = rollback_runtime_handoffs(prepared);
     let candidate_host_result = if handoff_result.is_ok() {
-        stop_candidate_runtime_host(&prepared.transaction)
+        stop_candidate_runtime_host(paths, &prepared.transaction)
     } else {
         Err("candidate runtime host retained because handoff rollback failed".to_string())
     };
@@ -6022,28 +6022,51 @@ fn rollback_prepared_payload_transaction(
 }
 
 fn stop_candidate_runtime_host(
+    paths: &InstallPaths,
     transaction: &crate::runtime_adoption::UpgradeTransaction,
 ) -> Result<(), String> {
-    let Some(evidence) = transaction
+    let evidence = transaction
         .runtime_host_convergence
         .as_ref()
-        .and_then(|convergence| convergence.candidate_host.as_ref())
-    else {
-        return Ok(());
-    };
+        .and_then(|convergence| convergence.candidate_host.as_ref());
     let socket_dir = candidate_runtime_host_socket_dir(&transaction.transaction_id)?;
+    stop_candidate_runtime_host_in(paths, transaction, evidence, &socket_dir)
+}
+
+fn stop_candidate_runtime_host_in(
+    paths: &InstallPaths,
+    transaction: &crate::runtime_adoption::UpgradeTransaction,
+    evidence: Option<&crate::runtime_adoption::RuntimeHostIdentityEvidence>,
+    socket_dir: &Path,
+) -> Result<(), String> {
     let identity_path = socket_dir.join("runtime-host.identity.json");
+    if !identity_path.is_file() {
+        return Ok(());
+    }
     let identity: crate::process_identity::RecordedProcessIdentity =
         serde_json::from_slice(&fs::read(&identity_path).map_err(display_io(
             "read candidate runtime host identity",
             &identity_path,
         ))?)
         .map_err(|error| format!("candidate_runtime_host_identity_invalid: {error}"))?;
-    if identity.pid != evidence.pid || identity.start_token != evidence.process_start_token {
+    let expected_executable = paths
+        .generations_dir
+        .join(&transaction.candidate_generation_id)
+        .join("bin/agent-browser");
+    if identity.executable_path.as_deref() != expected_executable.to_str() {
+        return Err("candidate_runtime_host_executable_changed_before_stop".to_string());
+    }
+    if evidence.is_some_and(|evidence| {
+        identity.pid != evidence.pid || identity.start_token != evidence.process_start_token
+    }) {
         return Err("candidate_runtime_host_identity_changed_before_stop".to_string());
     }
     let Some(process) = crate::process_identity::VerifiedProcessTermination::open(&identity)?
     else {
+        fs::remove_dir_all(socket_dir).map_err(display_io(
+            "remove stopped candidate runtime host directory",
+            socket_dir,
+        ))?;
         return Ok(());
     };
     process.signal(crate::process_identity::VerifiedProcessSignal::Terminate)?;
@@ -6054,6 +6077,17 @@ fn stop_candidate_runtime_host(
     if process.is_running()? {
         process.signal(crate::process_identity::VerifiedProcessSignal::Kill)?;
     }
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while process.is_running()? && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    if process.is_running()? {
+        return Err("candidate_runtime_host_exit_timeout".to_string());
+    }
+    fs::remove_dir_all(socket_dir).map_err(display_io(
+        "remove stopped candidate runtime host directory",
+        socket_dir,
+    ))?;
     Ok(())
 }
 
@@ -8042,6 +8076,59 @@ mod tests {
             candidate_runtime_host_socket_dir_in(runtime_root, "upgrade-retry")
         );
         assert!(socket_path.as_os_str().len() <= 103, "{socket_path:?}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rollback_stops_candidate_host_started_before_identity_capture() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-candidate-host-rollback-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let candidate_generation_id = "generation-candidate";
+        let executable = paths
+            .generations_dir
+            .join(candidate_generation_id)
+            .join("bin/agent-browser");
+        fs::create_dir_all(executable.parent().unwrap()).unwrap();
+        fs::copy("/bin/sleep", &executable).unwrap();
+        let mut child = Command::new(&executable).arg("30").spawn().unwrap();
+        let identity =
+            crate::process_identity::capture_process_identity(child.id(), Some(&executable), None)
+                .unwrap();
+        let transaction = new_upgrade_transaction(
+            &paths,
+            candidate_generation_id.to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        assert!(transaction
+            .runtime_host_convergence
+            .as_ref()
+            .unwrap()
+            .candidate_host
+            .is_none());
+        let socket_dir = root.join("candidate-host-socket");
+        fs::create_dir_all(&socket_dir).unwrap();
+        fs::write(
+            socket_dir.join("runtime-host.identity.json"),
+            serde_json::to_vec(&identity).unwrap(),
+        )
+        .unwrap();
+
+        stop_candidate_runtime_host_in(&paths, &transaction, None, &socket_dir).unwrap();
+
+        assert!(!socket_dir.exists());
+        assert!(!crate::process_identity::process_exists(child.id()));
+        let _ = child.wait();
+        remove_generation_tree(
+            &paths
+                .generations_dir
+                .join(transaction.candidate_generation_id),
+        )
+        .unwrap();
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
