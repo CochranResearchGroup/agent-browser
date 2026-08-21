@@ -273,6 +273,7 @@ pub(crate) struct RuntimeLifecycleRecord {
 pub(crate) struct RuntimeOwnerRegistry {
     pub(crate) revision: u64,
     pub(crate) owners: BTreeMap<String, ProfileOwner>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) lifecycle_records: BTreeMap<String, RuntimeLifecycleRecord>,
 }
 
@@ -1059,7 +1060,7 @@ mod tests {
         let registry: RuntimeOwnerRegistry = serde_json::from_value(legacy).unwrap();
         let encoded = serde_json::to_value(registry).unwrap();
 
-        assert_eq!(encoded["lifecycleRecords"], serde_json::json!({}));
+        assert!(encoded.get("lifecycleRecords").is_none());
     }
 
     #[test]
