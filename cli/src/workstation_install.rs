@@ -760,25 +760,49 @@ fn latest_upgrade_transaction_entry(
             ));
         }
     };
-    let mut candidates = entries
+    let mut candidates = Vec::new();
+    for entry in entries
         .filter_map(Result::ok)
         .filter(|entry| entry.path().extension().and_then(|value| value.to_str()) == Some("json"))
-        .filter_map(|entry| {
-            entry
-                .metadata()
-                .ok()
-                .and_then(|metadata| metadata.modified().ok())
-                .map(|modified| (modified, entry.path()))
-        })
-        .collect::<Vec<_>>();
-    candidates.sort_by(|left, right| right.0.cmp(&left.0));
-    let Some((_, path)) = candidates.first() else {
+    {
+        let path = entry.path();
+        let modified = entry
+            .metadata()
+            .and_then(|metadata| metadata.modified())
+            .map_err(display_io("inspect runtime transaction", &path))?;
+        let body = fs::read(&path).map_err(display_io("read runtime transaction", &path))?;
+        let transaction: crate::runtime_adoption::UpgradeTransaction =
+            serde_json::from_slice(&body).map_err(|error| {
+                format!("Runtime transaction {} is invalid: {error}", path.display())
+            })?;
+        let planned_at = transaction
+            .checkpoints
+            .iter()
+            .find(|checkpoint| checkpoint.name == "transaction_planned")
+            .or_else(|| transaction.checkpoints.first())
+            .and_then(|checkpoint| {
+                chrono::DateTime::parse_from_rfc3339(&checkpoint.recorded_at).ok()
+            })
+            .map(|timestamp| timestamp.timestamp_millis() as i128 * 1_000_000)
+            .unwrap_or_else(|| {
+                modified
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|duration| duration.as_nanos() as i128)
+                    .unwrap_or(i128::MIN)
+            });
+        candidates.push((planned_at, modified, path, transaction));
+    }
+    candidates.sort_by(|left, right| {
+        right
+            .0
+            .cmp(&left.0)
+            .then_with(|| right.1.cmp(&left.1))
+            .then_with(|| right.2.cmp(&left.2))
+    });
+    let Some((_, _, path, transaction)) = candidates.into_iter().next() else {
         return Ok(None);
     };
-    let body = fs::read(path).map_err(display_io("read latest runtime transaction", path))?;
-    serde_json::from_slice(&body)
-        .map(|transaction| Some((path.clone(), transaction)))
-        .map_err(|error| format!("Latest runtime transaction is invalid: {error}"))
+    Ok(Some((path, transaction)))
 }
 
 fn run_workstation_generation_gc(args: &[String], json: bool) {
@@ -7918,6 +7942,53 @@ mod tests {
         assert_eq!(runtime_monitor_backoff_seconds(3), 1200);
         assert_eq!(runtime_monitor_backoff_seconds(4), 2400);
         assert_eq!(runtime_monitor_backoff_seconds(99), 2400);
+    }
+
+    #[test]
+    fn latest_transaction_uses_planned_time_instead_of_mutable_file_time() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-transaction-ordering-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let transaction_dir = root.join(".agent-browser/runtime-adoption/transactions");
+        fs::create_dir_all(&transaction_dir).unwrap();
+
+        let mut newer = new_upgrade_transaction(
+            &paths,
+            "candidate-new".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        newer.transaction_id = "upgrade-new".to_string();
+        newer.checkpoints[0].recorded_at = "2026-08-21T16:00:00Z".to_string();
+        fs::write(
+            transaction_dir.join("upgrade-new.json"),
+            serde_json::to_vec_pretty(&newer).unwrap(),
+        )
+        .unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+
+        let mut older = new_upgrade_transaction(
+            &paths,
+            "candidate-old".to_string(),
+            "c".repeat(64),
+            "d".repeat(64),
+        );
+        older.transaction_id = "upgrade-old".to_string();
+        older.checkpoints[0].recorded_at = "2026-08-17T16:00:00Z".to_string();
+        fs::write(
+            transaction_dir.join("upgrade-old.json"),
+            serde_json::to_vec_pretty(&older).unwrap(),
+        )
+        .unwrap();
+
+        let latest = latest_upgrade_transaction(&transaction_dir)
+            .unwrap()
+            .unwrap();
+        assert_eq!(latest.transaction_id, "upgrade-new");
+
+        fs::remove_dir_all(root).unwrap();
     }
 
     fn runtime_migration(
