@@ -5179,11 +5179,28 @@ fn candidate_runtime_host_socket_dir(transaction_id: &str) -> Result<PathBuf, St
     {
         return Err("candidate_runtime_host_transaction_id_invalid".to_string());
     }
-    let home = dirs::home_dir().ok_or_else(|| "Unable to determine home directory".to_string())?;
-    Ok(home
-        .join(".agent-browser/runtime-adoption/transactions")
-        .join(transaction_id)
-        .join("candidate-host"))
+    let runtime_root = if let Some(root) = env::var_os("AGENT_BROWSER_WORKSTATION_ROOT") {
+        PathBuf::from(root).join(".agent-browser/runtime-hosts")
+    } else if let Some(runtime_dir) = env::var_os("XDG_RUNTIME_DIR")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+    {
+        runtime_dir.join("agent-browser/runtime-hosts")
+    } else {
+        dirs::home_dir()
+            .ok_or_else(|| "Unable to determine home directory".to_string())?
+            .join(".agent-browser/runtime-hosts")
+    };
+    Ok(candidate_runtime_host_socket_dir_in(
+        &runtime_root,
+        transaction_id,
+    ))
+}
+
+fn candidate_runtime_host_socket_dir_in(runtime_root: &Path, transaction_id: &str) -> PathBuf {
+    let digest = workstation_bytes_sha256(transaction_id.as_bytes());
+    runtime_root.join(&digest[..16])
 }
 
 fn capture_candidate_runtime_host_identity(
@@ -8003,6 +8020,28 @@ mod tests {
         );
         assert!(first.starts_with("orphan-"));
         assert_eq!(first.len(), "orphan-".len() + 16);
+    }
+
+    #[test]
+    fn candidate_runtime_host_socket_path_is_bounded_for_orphan_adoption() {
+        let runtime_root = Path::new("/run/user/1000/agent-browser/runtime-hosts");
+        let transaction_id = "upgrade-719d8fd6-057f-4526-a7c7-1031b36ac46b";
+        let socket_dir = candidate_runtime_host_socket_dir_in(runtime_root, transaction_id);
+        let orphan_session = orphan_candidate_session(
+            &runtime_migration("session:last30days-x-upgrade-live-20260820"),
+            transaction_id,
+        );
+        let socket_path = socket_dir.join(format!("{orphan_session}.sock"));
+
+        assert_eq!(
+            socket_dir,
+            candidate_runtime_host_socket_dir_in(runtime_root, transaction_id)
+        );
+        assert_ne!(
+            socket_dir,
+            candidate_runtime_host_socket_dir_in(runtime_root, "upgrade-retry")
+        );
+        assert!(socket_path.as_os_str().len() <= 103, "{socket_path:?}");
     }
 
     #[test]
