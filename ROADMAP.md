@@ -9,49 +9,38 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 
 ## P117 | Runtime Lifecycle Authority And Convergence
 
-State: IN PROGRESS — SLICE D SOURCE ACCEPTED
-Current state: the August 19 workstation audit found one healthy dashboard but
-multiple daemon processes and executable generations, 226 Chrome processes,
-218 runtime-profile directories using about 58 GiB, and 21 immutable runtime
-generations with no generation-GC candidates. Existing hot ownership transfer,
-process identity, conservative resource inventory, retained-state pruning, and
-transactional generation GC each protect their local invariant, but no deep
-module owns a browser lane from launch through transfer and final reclamation.
-The resource collector also loses live Chrome profile evidence when Chrome
-rewrites argv, records process groups while terminating only root PIDs, does
-not reclaim present profile directories, and lets historical nonterminal
-transactions pin generations indefinitely. P117 deepens runtime lifecycle
-authority, adds ownership-backed resource reconciliation, unifies retention
-authority, moves named sessions into one runtime host, bounds hot-upgrade
-overlap, enables conservative automatic reclamation, and ends with separately
-authorized controlled workstation convergence. Slice A is source accepted.
-Six sanitized live-shaped fixtures now freeze the confirmed gaps, the existing
-owner registry carries a backward-compatible conservative lifecycle ledger,
-and install doctor exposes a read-only multiplicity report. Current live
-readback correctly reports one dashboard process, zero runtime hosts, seven
-legacy daemons, one executable generation, and typed `drift` without changing
-the runtime. Slice B is source accepted. One concrete lifecycle authority now
-owns managed launch and attach registration, transfer, adoption, reverse,
-finalize, retained preservation, recovery relaunch, and close transitions.
-Owner generations and cleanup obligations move atomically, browser effects are
-generation-fenced, unapproved managed drops preserve the browser and profile,
-and Service State resource summaries project lifecycle accountability without
-becoming writers. The canonical serial Rust suite, strict lint gates, docs,
-contract checks, and an isolated production managed-Chrome smoke pass. Slice C
-is source accepted. One reconciler now joins exact process, process group,
-package launch, profile, owner generation, and cleanup-obligation evidence.
-Normal close and GC share the reviewed process-tree shutdown protocol. Named
-persistent profile data stays protected while its exact closing process tree
-can be reclaimed. The isolated GC smoke proves full helper-tree exit, profile
-lock cleanup, unrelated-Chrome protection, and generation-drift rejection.
-Slice D is source accepted. One retention authority now applies the 24-hour
-ephemeral, seven-day failed or quarantined, and never-automatic persistent
-profile policies. Exact-root quarantine manifests make filesystem reclamation
-idempotent and recoverable after interruption. Generation GC automatically
-finalizes healthy accepted transactions after the rollback window while
-retaining their metadata, the selected generation, the immediately previous
-healthy generation, and exact live references. A 49-transaction and
-21-generation fixture converges to the intended two-generation steady set.
+State: IN PROGRESS — SLICE H SOURCE ACCEPTED, SLICE I PENDING AUTHORIZATION
+Current state: Slices A through H are source accepted. One lifecycle authority
+owns launch, attach, transfer, adoption, rollback, retained preservation,
+recovery, close, and cleanup obligations. The reconciler joins exact process,
+process-group, package-launch, profile, owner-generation, and terminal evidence;
+normal close and GC share the same fenced process-tree shutdown. Profile
+retention applies the 24-hour ephemeral, seven-day failed or quarantined, and
+never-automatic persistent policies. Generation retention preserves current and
+immediate rollback authority while allowing historical transaction metadata to
+outlive binary references.
+
+One runtime host now serves multiple logical lanes with per-lane ordering and
+failure isolation. Transactional convergence bounds overlap to two
+transaction-linked hosts and generations, preserves browser PIDs and durable
+handoffs, and returns to the one-dashboard, one-host, one-selected-generation
+steady state. Automatic reconciliation applies only proven package-owned
+unattended effects, uses bounded backoff and one typed incident, and leaves
+review-gated or ambiguous resources untouched. Cold legacy per-session daemon
+creation and the standalone convergence controller are deleted.
+
+Slice H aligns CLI, HTTP, typed MCP, generated client, Service State, and
+dashboard readback under additive `runtimeLifecycle`. The projection reports
+multiplicity, lifecycle counts, reconciliation, pressure, cleanup obligations,
+retention, and incidents from one reconciled snapshot. A live compatibility
+audit found that nonempty lifecycle records broke the installed release's
+deny-unknown owner reader. The repair persists new lifecycle evidence in a
+versioned sidecar under the existing repository lock while keeping both legacy
+JSON files in their old shape. The timer is enabled and active after the narrow
+privileged-helper workflow, and the authenticated browser remains preserved.
+That helper repair does not establish installed P117 acceptance. Controlled
+installed convergence remains Slice I and still requires explicit live
+authorization.
 
 ### Plan
 
@@ -59,10 +48,9 @@ healthy generation, and exact live references. A 49-transaction and
 
 ### Next Recommendation
 
-Execute Slice E by introducing one user-scoped runtime host and moving named
-session serialization into logical runtime lanes. Preserve per-lane ownership,
-profile, cancellation, stream, and effect fencing while preventing admission
-from launching another per-session daemon.
+After explicit live authorization, execute Slice I through the transactional
+workstation path. Preserve authenticated lanes and handoffs, apply only exact
+eligible cleanup, and prove installed steady state plus rollback readiness.
 
 ## P116 | Runtime Adoption And Transactional Upgrade
 

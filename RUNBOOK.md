@@ -4,6 +4,50 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 168 | 2026-08-20
+
+Scope: accept Plan 0117 Slice H at the source, contract, deterministic-fixture,
+and no-launch runtime boundary without performing Slice I installed
+convergence.
+
+Actions:
+
+- moved lifecycle evidence into a versioned sidecar committed under the shared
+  Service State lock and four-file recovery transaction;
+- preserved the exact legacy `state.json` and `runtime-owner-registry.json`
+  shapes for installed deny-unknown readers;
+- aligned CLI runtime health, HTTP Service Status, typed MCP, generated client,
+  schema, dashboard, help, README, repository skill, and docs site on additive
+  `runtimeLifecycle` readback;
+- derived multiplicity and owner counts from one reconciled snapshot and used
+  monitor receipt time for deterministic cross-ingress observations;
+- made lifecycle-store failures public-safe and made missing monitor or
+  lifecycle authority degrade the overall status;
+- isolated the confirmed-close test from process-wide durable Service State;
+- kept the narrow privileged-helper and timer workflow distinct from P117
+  installed-runtime acceptance.
+
+Validation:
+
+- the repository Rust cadence passes 1,352 parallel-safe tests, 57 intentional
+  ignores, every integration scope, and all serialized environment-sensitive
+  partitions;
+- strict Clippy, Rust formatting, patch whitespace, lifecycle-store rollback,
+  status projection, typed MCP, generated client, fixed-input parity, service
+  parity, and cross-seam gates pass;
+- isolated Service Status CLI and MCP, workstation source-free install, runtime
+  host, dashboard, docs, Guacamole asset, PostgreSQL durability, route-user,
+  and remote-view documentation fixtures pass without launching Chrome in the
+  status smoke.
+
+Result:
+
+- Slice H is accepted at the source and isolated-runtime boundary;
+- the timer is enabled and active after the separate helper workflow, and the
+  authenticated browser remains preserved;
+- no Slice I installed convergence or cleanup was performed by this slice;
+- Slice I remains pending explicit live authorization.
+
 ## Turn 167 | 2026-08-16
 
 Scope: close the remaining Plan 0116 deterministic legacy-daemon adoption gap
