@@ -888,6 +888,10 @@ pub(crate) fn adapt_runtime_census_readbacks(
     }
 
     let mut parent = (0..flattened.len()).collect::<Vec<_>>();
+    let hinted_logical_ids = flattened
+        .iter()
+        .filter_map(|(_, observation)| observation.logical_browser_id_hint.clone())
+        .collect::<BTreeSet<_>>();
     let mut aliases = BTreeMap::<String, usize>::new();
     for (index, (_, observation)) in flattened.iter().enumerate() {
         let mut join_keys = observation.aliases.clone();
@@ -924,7 +928,9 @@ pub(crate) fn adapt_runtime_census_readbacks(
             .cloned()
             .collect::<Vec<_>>();
         let logical_browser_id = hints.iter().next().cloned().unwrap_or_else(|| {
-            if session_aliases.len() == 1 {
+            if session_aliases.len() == 1
+                && !hinted_logical_ids.contains(session_aliases[0].as_str())
+            {
                 session_aliases[0].clone()
             } else {
                 let payload = group_aliases.iter().cloned().collect::<Vec<_>>().join("\n");
@@ -1748,7 +1754,7 @@ fn display_readback(
         .map(|display| {
             let mut aliases = Vec::new();
             if let Some(browser_id) = display.owner_browser_id.as_deref() {
-                push_browser_identity_aliases(&mut aliases, browser_id);
+                push_browser_identity_aliases(state, &mut aliases, browser_id);
                 aliases.push(scoped_presentation_alias(
                     "display",
                     browser_id,
@@ -1787,7 +1793,7 @@ fn presentation_readback(
         .filter(|browser| !browser.view_streams.is_empty())
     {
         let mut aliases = Vec::new();
-        push_browser_identity_aliases(&mut aliases, &browser.id);
+        push_browser_identity_aliases(state, &mut aliases, &browser.id);
         for stream in &browser.view_streams {
             aliases.push(scoped_view_stream_alias(&browser.id, &stream.id));
             if let Some(route_id) = stream.route_id.as_deref() {
@@ -1813,7 +1819,7 @@ fn presentation_readback(
     for route in state.remote_view_routes.values() {
         let mut aliases = Vec::new();
         if let Some(browser_id) = route.browser_id.as_deref() {
-            push_browser_identity_aliases(&mut aliases, browser_id);
+            push_browser_identity_aliases(state, &mut aliases, browser_id);
             aliases.push(scoped_presentation_alias("route", browser_id, &route.id));
             if let Some(display_id) = route.display_allocation_id.as_deref() {
                 aliases.push(scoped_presentation_alias("display", browser_id, display_id));
@@ -1840,11 +1846,11 @@ fn presentation_readback(
         let mut aliases = vec![format!("handoff:{}", handoff.id)];
         let canonical_browser_id = canonical_handoff_browser_id(state, handoff);
         if let Some(browser_id) = handoff.browser_id.as_deref() {
-            push_browser_identity_aliases(&mut aliases, browser_id);
+            push_browser_identity_aliases(state, &mut aliases, browser_id);
         }
         if canonical_browser_id.as_deref() != handoff.browser_id.as_deref() {
             if let Some(browser_id) = canonical_browser_id.as_deref() {
-                push_browser_identity_aliases(&mut aliases, browser_id);
+                push_browser_identity_aliases(state, &mut aliases, browser_id);
             }
         }
         if canonical_browser_id.is_none() {
@@ -1869,7 +1875,7 @@ fn presentation_readback(
             .filter(|value| !value.trim().is_empty());
         let mut aliases = vec![format!("route-pool:{}", entry.id)];
         if let Some(browser_id) = browser_id {
-            push_browser_identity_aliases(&mut aliases, browser_id);
+            push_browser_identity_aliases(state, &mut aliases, browser_id);
             aliases.push(scoped_presentation_alias(
                 "route",
                 browser_id,
@@ -1924,6 +1930,15 @@ fn canonical_handoff_browser_id(
     handoff: &crate::native::service_model::RemoteViewHandoff,
 ) -> Option<String> {
     let browser_id = handoff.browser_id.as_ref()?;
+    if state.browsers.contains_key(browser_id)
+        || state
+            .runtime_owner_registry
+            .owners
+            .values()
+            .any(|owner| owner.browser_id == *browser_id)
+    {
+        return Some(browser_id.clone());
+    }
     let legacy_session = browser_id.strip_prefix("session:")?;
     let Some(session) = state.sessions.get(legacy_session) else {
         return Some(browser_id.clone());
@@ -1942,9 +1957,21 @@ fn scoped_view_stream_alias(browser_id: &str, stream_id: &str) -> String {
     scoped_presentation_alias("view-stream", browser_id, stream_id)
 }
 
-fn push_browser_identity_aliases(aliases: &mut Vec<String>, browser_id: &str) {
+fn push_browser_identity_aliases(
+    state: &crate::native::service_model::ServiceState,
+    aliases: &mut Vec<String>,
+    browser_id: &str,
+) {
     aliases.push(format!("browser:{browser_id}"));
-    if browser_id.starts_with("session:") {
+    if browser_id
+        .strip_prefix("session:")
+        .is_some_and(|session_id| {
+            state
+                .sessions
+                .get(session_id)
+                .is_none_or(|session| session.browser_ids.as_slice() == [browser_id])
+        })
+    {
         aliases.push(browser_id.to_string());
     }
 }
@@ -3304,9 +3331,10 @@ mod tests {
                 readback.source == RuntimeCensusSource::ViewStreamsRoutePoolGuacamoleAndHandoffs
             })
             .unwrap();
+        let state = crate::native::service_model::ServiceState::default();
         for browser_id in ["session:alpha", "session:beta"] {
             let mut aliases = Vec::new();
-            push_browser_identity_aliases(&mut aliases, browser_id);
+            push_browser_identity_aliases(&state, &mut aliases, browser_id);
             aliases.push(scoped_presentation_alias(
                 "route",
                 browser_id,
@@ -3347,6 +3375,69 @@ mod tests {
             .unwrap();
         assert!(alpha.evidence.daemon_live);
         assert!(!beta.evidence.daemon_live);
+    }
+
+    #[test]
+    fn rebound_session_name_does_not_alias_its_historical_browser_id() {
+        use crate::native::service_model::{BrowserSession, RemoteViewRoute, ServiceState};
+
+        let mut state = ServiceState::default();
+        state.sessions.insert(
+            "legacy-lane".to_string(),
+            BrowserSession {
+                id: "legacy-lane".to_string(),
+                browser_ids: vec!["browser-current".to_string()],
+                ..BrowserSession::default()
+            },
+        );
+        state.remote_view_routes.insert(
+            "historical-route".to_string(),
+            RemoteViewRoute {
+                id: "historical-route".to_string(),
+                browser_id: Some("session:legacy-lane".to_string()),
+                session_id: Some("legacy-lane".to_string()),
+                ..RemoteViewRoute::default()
+            },
+        );
+
+        let route = presentation_readback(&state)
+            .unwrap()
+            .observations
+            .remove(0);
+        assert!(route
+            .aliases
+            .contains(&"browser:session:legacy-lane".to_string()));
+        assert!(!route.aliases.contains(&"session:legacy-lane".to_string()));
+
+        let mut readbacks = empty_source_readbacks();
+        *readbacks
+            .iter_mut()
+            .find(|readback| {
+                readback.source == RuntimeCensusSource::ViewStreamsRoutePoolGuacamoleAndHandoffs
+            })
+            .unwrap() = presentation_readback(&state).unwrap();
+        let daemon = readbacks
+            .iter_mut()
+            .find(|readback| readback.source == RuntimeCensusSource::DaemonMetadata)
+            .unwrap();
+        let mut daemon_evidence = base_fragment();
+        daemon_evidence.daemon_live = true;
+        daemon.observations.push(RuntimeCensusObservation {
+            logical_browser_id_hint: None,
+            aliases: vec!["session:legacy-lane".to_string(), "pid:42".to_string()],
+            profile_identity_digest: None,
+            evidence: daemon_evidence,
+        });
+        let round = adapt_runtime_census_readbacks(1, readbacks).unwrap();
+        assert_eq!(round.candidates.len(), 2);
+        assert!(round
+            .candidates
+            .iter()
+            .any(|candidate| candidate.logical_browser_id == "session:legacy-lane"));
+        assert!(round
+            .candidates
+            .iter()
+            .any(|candidate| candidate.logical_browser_id.starts_with("observed-")));
     }
 
     #[test]
