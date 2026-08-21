@@ -898,7 +898,9 @@ pub(crate) async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Resul
     super::super::super::browser::validate_launch_options(
         launch_options.extensions.as_deref(),
         has_cdp,
-        launch_options.profile.as_deref(),
+        (!(runtime_attach_managed && has_cdp))
+            .then_some(launch_options.profile.as_deref())
+            .flatten(),
         storage_state,
         launch_options.allow_file_access,
         launch_options.executable_path.as_deref(),

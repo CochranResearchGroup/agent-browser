@@ -362,9 +362,11 @@ fn write_executable_sha_in_background(executable_sha_path: PathBuf, startup_star
 #[derive(Clone)]
 struct RuntimeLane {
     control_plane: ControlPlaneHandle,
+    stream_client: Option<Arc<RwLock<Option<Arc<CdpClient>>>>>,
     stream_server: Option<Arc<StreamServer>>,
     stream_file: Option<PathBuf>,
     config: crate::runtime_host::RuntimeLaneConfig,
+    configuration_committed: bool,
 }
 
 #[derive(Clone)]
@@ -400,17 +402,25 @@ impl RuntimeHostRouter {
                     .into_iter()
                     .find(|(session, _)| session == initial_session)
                     .map(|(_, config)| config)
-            })
-            .unwrap_or_default();
+            });
         let lanes = Arc::new(crate::runtime_host::RuntimeLaneRegistry::new(
             crate::runtime_host::DEFAULT_MAX_RUNTIME_LANES,
         ));
-        let control_plane = ControlPlaneWorker::start_with_options(
-            DaemonState::new_for_session_with_stream(
+        let initial_state = match initial_config.as_ref() {
+            Some(config) => DaemonState::new_for_runtime_lane_with_stream(
                 initial_session,
-                stream_client,
+                stream_client.clone(),
+                stream_server.clone(),
+                config,
+            )?,
+            None => DaemonState::new_for_session_with_stream(
+                initial_session,
+                stream_client.clone(),
                 stream_server.clone(),
             ),
+        };
+        let control_plane = ControlPlaneWorker::start_with_options(
+            initial_state,
             options.service_reconcile_interval_ms,
             options.service_job_timeout_ms,
             options.service_monitor_interval_ms,
@@ -419,9 +429,11 @@ impl RuntimeHostRouter {
             initial_session.to_string(),
             RuntimeLane {
                 control_plane,
+                stream_client,
                 stream_server,
                 stream_file,
-                config: initial_config,
+                config: initial_config.clone().unwrap_or_default(),
+                configuration_committed: initial_config.is_some(),
             },
         )?;
         Ok(Self {
@@ -453,7 +465,9 @@ impl RuntimeHostRouter {
         config: Option<crate::runtime_host::RuntimeLaneConfig>,
     ) -> Result<RuntimeLane, String> {
         if let Some(lane) = self.lanes.get(session) {
-            return Ok(lane);
+            if lane.configuration_committed || config.is_none() {
+                return Ok(lane);
+            }
         }
         if !crate::runtime_host::admission_enabled() {
             return Err(format!("runtime_host_lane_not_admitted: {session}"));
@@ -461,9 +475,41 @@ impl RuntimeHostRouter {
 
         let _creation_guard = self.creation_lock.lock().await;
         if let Some(lane) = self.lanes.get(session) {
+            if !lane.configuration_committed {
+                if let Some(config) = config.as_ref() {
+                    let old = self
+                        .lanes
+                        .remove(session)
+                        .ok_or_else(|| "runtime_host_bootstrap_lane_disappeared".to_string())?;
+                    old.control_plane.shutdown().await;
+                    let control_plane = ControlPlaneWorker::start_with_options(
+                        DaemonState::new_for_runtime_lane_with_stream(
+                            session,
+                            old.stream_client.clone(),
+                            old.stream_server.clone(),
+                            config,
+                        )?,
+                        config.service_reconcile_interval_ms,
+                        config.service_job_timeout_ms,
+                        config.service_monitor_interval_ms,
+                    );
+                    return self.lanes.insert(
+                        session.to_string(),
+                        RuntimeLane {
+                            control_plane,
+                            stream_client: old.stream_client,
+                            stream_server: old.stream_server,
+                            stream_file: old.stream_file,
+                            config: config.clone(),
+                            configuration_committed: true,
+                        },
+                    );
+                }
+            }
             return Ok(lane);
         }
 
+        let configuration_committed = config.is_some();
         let config = config.unwrap_or_else(|| crate::runtime_host::RuntimeLaneConfig {
             service_reconcile_interval_ms: self.service_reconcile_interval_ms,
             service_job_timeout_ms: self.service_job_timeout_ms,
@@ -495,7 +541,7 @@ impl RuntimeHostRouter {
             control_plane: ControlPlaneWorker::start_with_options(
                 DaemonState::new_for_runtime_lane_with_stream(
                     session,
-                    stream_client,
+                    stream_client.clone(),
                     stream_server.clone(),
                     &config,
                 )?,
@@ -503,9 +549,11 @@ impl RuntimeHostRouter {
                 config.service_job_timeout_ms,
                 config.service_monitor_interval_ms,
             ),
+            stream_client,
             stream_server,
             stream_file,
             config,
+            configuration_committed,
         };
         self.lanes.insert(session.to_string(), lane)
     }
@@ -857,6 +905,13 @@ async fn handle_connection<S>(
                         .entry("runtimeProfile".to_string())
                         .or_insert_with(|| Value::String(runtime_profile.clone()));
                 }
+                if let (Some(profile), Some(object)) =
+                    (lane.config.profile.as_ref(), cmd.as_object_mut())
+                {
+                    object
+                        .entry("profile".to_string())
+                        .or_insert_with(|| Value::String(profile.clone()));
+                }
 
                 if let Some(ref tx) = idle_reset_tx {
                     let _ = tx.try_send(());
@@ -910,8 +965,8 @@ async fn handle_connection<S>(
                         }
                     }
                     router.close_lane(&lane_session).await;
-                    if !crate::runtime_host::admission_enabled() {
-                        // Signal the legacy per-session daemon to exit gracefully.
+                    if !crate::runtime_host::admission_enabled() || router.lanes.is_empty() {
+                        // Signal the daemon or now-empty runtime host to exit gracefully.
                         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                         close_notify.notify_one();
                     }

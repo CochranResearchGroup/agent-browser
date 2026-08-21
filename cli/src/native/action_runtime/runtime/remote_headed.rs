@@ -561,6 +561,22 @@ fn register_current_browser_lifecycle(state: &mut DaemonState) -> Result<(), Str
     };
     let process_identity = crate::process_identity::capture_process_identity(pid, None, None)
         .ok_or_else(|| "runtime_lifecycle_process_identity_unavailable".to_string())?;
+    let cdp_endpoint = manager.get_cdp_url().to_string();
+    let target_ids = manager
+        .pages_list()
+        .into_iter()
+        .map(|page| page.target_id)
+        .collect::<Vec<_>>();
+    let repository = LockedServiceStateRepository::default_json()?;
+    let authority = crate::native::runtime_lifecycle::RuntimeLifecycleAuthority::new(&repository);
+    if let Some(binding) = state.runtime_owner_binding.as_mut() {
+        authority.refresh_managed_lane(binding, &cdp_endpoint, target_ids)?;
+        let reviewed_process_tree = authority.reviewed_process_tree(binding, &process_identity)?;
+        if let Some(manager) = state.browser.as_mut() {
+            manager.mark_lifecycle_managed(reviewed_process_tree);
+        }
+        return Ok(());
+    }
     let registration = crate::native::runtime_lifecycle::ManagedLaneRegistration {
         logical_browser_id: super::capability::service_browser_id(&state.session_id),
         profile_root,
@@ -568,15 +584,9 @@ fn register_current_browser_lifecycle(state: &mut DaemonState) -> Result<(), Str
         process_group_id: crate::process_identity::observe_process_group_id(pid),
         process_identity: process_identity.clone(),
         browser_family: state.engine.clone(),
-        cdp_endpoint: manager.get_cdp_url().to_string(),
-        target_ids: manager
-            .pages_list()
-            .into_iter()
-            .map(|page| page.target_id)
-            .collect(),
+        cdp_endpoint,
+        target_ids,
     };
-    let repository = LockedServiceStateRepository::default_json()?;
-    let authority = crate::native::runtime_lifecycle::RuntimeLifecycleAuthority::new(&repository);
     let binding = authority.register_managed_lane(registration)?;
     let reviewed_process_tree = authority.reviewed_process_tree(&binding, &process_identity)?;
     if let Some(manager) = state.browser.as_mut() {

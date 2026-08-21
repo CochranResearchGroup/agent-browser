@@ -419,6 +419,7 @@ fn cache_runtime_lane_config(session: &str, opts: &DaemonOptions<'_>) {
         .filter(|port| *port > 0);
     let config = crate::runtime_host::RuntimeLaneConfig {
         runtime_profile: opts.runtime_profile.map(str::to_string),
+        profile: opts.profile.map(str::to_string),
         session_name: opts.session_name.map(str::to_string),
         allowed_domains: opts.allowed_domains.map(|domains| domains.join(",")),
         action_policy: opts.action_policy.map(str::to_string),

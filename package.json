@@ -40,6 +40,7 @@
     "test:runtime-host-supervisor-no-launch": "node scripts/smoke-runtime-host-supervisor-no-launch.js",
     "test:runtime-host-multi-lane": "node scripts/smoke-runtime-host-multi-lane.js",
     "test:runtime-host-convergence-no-launch": "node scripts/smoke-runtime-host-convergence-no-launch.js",
+    "test:runtime-host-hot-handoff": "node scripts/smoke-runtime-host-hot-handoff.js",
     "test:dashboard-view-streams": "node --no-warnings --experimental-strip-types scripts/test-dashboard-view-streams.js",
     "test:dashboard-workspace-view-projection": "node --no-warnings --experimental-strip-types scripts/test-dashboard-workspace-view-projection.js",
     "test:dashboard-durable-remote-view-handoff": "node scripts/test-dashboard-durable-remote-view-handoff.js",

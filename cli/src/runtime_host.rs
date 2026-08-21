@@ -83,6 +83,7 @@ pub(crate) fn take_lane_config(command: &mut Value) -> Result<Option<RuntimeLane
 #[serde(default, rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct RuntimeLaneConfig {
     pub(crate) runtime_profile: Option<String>,
+    pub(crate) profile: Option<String>,
     pub(crate) session_name: Option<String>,
     pub(crate) allowed_domains: Option<String>,
     pub(crate) action_policy: Option<String>,
@@ -203,6 +204,13 @@ impl<T: Clone> RuntimeLaneRegistry<T> {
         self.lanes.write().ok()?.remove(lane)
     }
 
+    pub(crate) fn is_empty(&self) -> bool {
+        self.lanes
+            .read()
+            .map(|lanes| lanes.is_empty())
+            .unwrap_or(false)
+    }
+
     #[cfg(test)]
     pub(crate) fn snapshot(&self) -> Vec<String> {
         self.lanes
@@ -263,6 +271,7 @@ mod tests {
         guard.set(RUNTIME_HOST_ENV, "1");
         let config = RuntimeLaneConfig {
             runtime_profile: Some("profile-a".to_string()),
+            profile: Some("/tmp/profile-a".to_string()),
             session_name: Some("durable-auth".to_string()),
             allowed_domains: Some("example.com,*.example.com".to_string()),
             action_policy: Some("/tmp/policy.json".to_string()),

@@ -308,7 +308,9 @@ pub(crate) fn active_browser_profile_mismatch(
     active_browser_profile_mismatch_message(
         optional_command_string(command, "runtimeProfile").as_deref(),
         optional_command_string(command, "profile").as_deref(),
-        browser.runtime_profile_name(),
+        browser
+            .runtime_profile_name()
+            .or(state.attached_runtime_profile.as_deref()),
         browser.browser_user_data_dir(),
         &state.session_id,
     )

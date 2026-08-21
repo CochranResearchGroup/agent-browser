@@ -140,6 +140,30 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
         )
     }
 
+    pub(crate) fn refresh_managed_lane(
+        &self,
+        binding: &mut RuntimeOwnerBinding,
+        cdp_endpoint: &str,
+        mut target_ids: Vec<String>,
+    ) -> Result<(), String> {
+        self.authorize_effect(binding)?;
+        target_ids.sort();
+        target_ids.dedup();
+        if target_ids.is_empty() {
+            return Err("runtime_lifecycle_target_set_empty".to_string());
+        }
+        let transition = self.transition(RuntimeLifecycleIntent::RefreshCurrentOwnerEvidence {
+            claim: binding.claim.clone(),
+            cdp_endpoint_identity_digest: digest_text(cdp_endpoint),
+            target_set_digest: digest_json(&target_ids)?,
+        })?;
+        let RuntimeLifecycleTransition::OwnerEvidenceRefreshed(owner) = transition else {
+            return Err("runtime_lifecycle_refresh_outcome_mismatch".to_string());
+        };
+        binding.claim = OwnerAuthorityClaim::from_owner(&owner);
+        Ok(())
+    }
+
     /// Permit a stale daemon to relinquish its local process handle only after
     /// another generation owns both effects and the cleanup obligation.
     pub(crate) fn authorize_relinquish_after_transfer(
@@ -1023,6 +1047,15 @@ mod tests {
                 .owner(&digest("profile-a"))
                 .unwrap(),
         );
+        let mut candidate_binding = RuntimeOwnerBinding::effect_capable(candidate_claim.clone());
+        authority
+            .refresh_managed_lane(
+                &mut candidate_binding,
+                "ws://127.0.0.1:9555/devtools/browser/refreshed",
+                vec!["target-refreshed".to_string()],
+            )
+            .unwrap();
+        assert_eq!(candidate_binding.claim, candidate_claim);
 
         authority
             .transition(RuntimeLifecycleIntent::ReverseTransfer(

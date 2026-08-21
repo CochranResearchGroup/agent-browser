@@ -1048,7 +1048,7 @@ pub fn launch_chrome(options: &LaunchOptions) -> Result<ChromeProcess, String> {
     validate_profile_browser_family(options, &chrome_path)?;
 
     let max_attempts = 3;
-    let mut last_err = String::new();
+    let mut attempt_errors = Vec::new();
 
     unlock_macos_keychain(options.keychain_password.as_deref())?;
     let linux_keyring_env = unlock_linux_keyring(options.keychain_password.as_deref())?;
@@ -1061,7 +1061,7 @@ pub fn launch_chrome(options: &LaunchOptions) -> Result<ChromeProcess, String> {
                 return Ok(process);
             }
             Err(e) => {
-                last_err = e;
+                attempt_errors.push(format!("attempt {attempt}: {e}"));
                 if attempt < max_attempts {
                     // Use write! instead of eprintln! to avoid panicking
                     // if the daemon's stderr pipe is broken (parent dropped it).
@@ -1077,7 +1077,7 @@ pub fn launch_chrome(options: &LaunchOptions) -> Result<ChromeProcess, String> {
         }
     }
 
-    Err(last_err)
+    Err(attempt_errors.join("\n"))
 }
 
 pub struct ManualChromeLaunch {
@@ -1186,10 +1186,25 @@ pub fn launch_chrome_detached(options: &LaunchOptions) -> Result<ManualChromeLau
         ) {
             Some(identity) => Some(identity),
             None => {
+                let observed = match crate::process_identity::observe_process(child.id()) {
+                    crate::process_identity::ProcessObservation::Observed(identity) => format!(
+                        "executable={:?}, browserFamily={:?}, startTokenPresent={}",
+                        identity.executable_path,
+                        identity.browser_family,
+                        identity.start_token.is_some()
+                    ),
+                    crate::process_identity::ProcessObservation::Missing => {
+                        "process=missing".to_string()
+                    }
+                    crate::process_identity::ProcessObservation::Failed { reason } => {
+                        format!("observationFailed={reason}")
+                    }
+                };
                 let _ = child.kill();
                 let _ = child.wait();
                 return Err(format!(
-                    "Failed to capture process identity for manual browser PID {pid}"
+                    "Failed to capture process identity for manual browser PID {pid}; requestedExecutable={}; {observed}",
+                    chrome_path.display(),
                 ));
             }
         }
@@ -1649,14 +1664,29 @@ fn try_launch_chrome(
         ) {
             Some(identity) => Some(identity),
             None => {
+                let observed = match crate::process_identity::observe_process(child.id()) {
+                    crate::process_identity::ProcessObservation::Observed(identity) => format!(
+                        "executable={:?}, browserFamily={:?}, startTokenPresent={}",
+                        identity.executable_path,
+                        identity.browser_family,
+                        identity.start_token.is_some()
+                    ),
+                    crate::process_identity::ProcessObservation::Missing => {
+                        "process=missing".to_string()
+                    }
+                    crate::process_identity::ProcessObservation::Failed { reason } => {
+                        format!("observationFailed={reason}")
+                    }
+                };
                 let _ = child.kill();
                 let _ = child.wait();
                 let mut outcome = ProcessShutdownOutcome::default();
                 kill_aux_processes(&mut aux_processes, &mut outcome);
                 cleanup_temp_dir(&temp_user_data_dir);
                 return Err(format!(
-                    "Failed to capture process identity for browser PID {}",
-                    child.id()
+                    "Failed to capture process identity for browser PID {}; requestedExecutable={}; {observed}",
+                    child.id(),
+                    chrome_path.display(),
                 ));
             }
         }

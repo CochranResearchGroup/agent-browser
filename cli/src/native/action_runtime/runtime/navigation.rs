@@ -145,6 +145,14 @@ pub(crate) async fn handle_navigate(cmd: &Value, state: &mut DaemonState) -> Res
                 Some(&navigation_session),
             )
             .await;
+        let _ = mgr
+            .client
+            .send_command(
+                "Page.navigate",
+                Some(json!({ "url": "about:blank" })),
+                Some(&navigation_session),
+            )
+            .await;
     }
     let mut data = navigation?;
     if let (Some(object), Some(shared_acquisition)) = (
