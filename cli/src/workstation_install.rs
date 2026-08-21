@@ -4373,6 +4373,21 @@ fn transfer_discovered_runtimes(
                         .reason_codes
                         .push("prior_transaction_session_alias_rebound".to_string());
                 }
+                if runtime_orphan_owner_requires_fencing(&service_state, migration) {
+                    let evidence = adopt_runtime_via_verified_orphan_fallback(
+                        paths,
+                        &candidate_binary,
+                        transaction_id,
+                        &service_state,
+                        migration,
+                        handoffs,
+                        &source_session,
+                        false,
+                        false,
+                    )?;
+                    transfer_evidence.push(evidence);
+                    continue;
+                }
                 let candidate_session = orphan_candidate_session(migration, transaction_id);
                 handoffs.push(PreparedRuntimeHandoff {
                     source_session: source_session.clone(),
@@ -4433,6 +4448,18 @@ fn transfer_discovered_runtimes(
         }
     }
     Ok(transfer_evidence)
+}
+
+fn runtime_orphan_owner_requires_fencing(
+    service_state: &crate::native::service_model::ServiceState,
+    migration: &crate::runtime_adoption::RuntimeMigrationRecord,
+) -> bool {
+    service_state
+        .runtime_owner_registry
+        .owner(&migration.profile_identity_digest)
+        .is_some_and(|owner| {
+            owner.state != crate::runtime_owner_transfer::ProfileOwnerState::Orphaned
+        })
 }
 
 fn preserve_runtime_without_live_source(
@@ -8003,6 +8030,43 @@ mod tests {
             adoption_receipt_id: None,
             reason_codes: vec!["external_owner_preserved".to_string()],
         }
+    }
+
+    #[test]
+    fn orphan_adoption_fences_a_non_orphaned_registry_owner_first() {
+        use crate::runtime_owner_transfer::{ProfileOwner, ProfileOwnerState};
+
+        let mut migration = runtime_migration("session:browser-a");
+        migration.profile_identity_digest = "profile-a".to_string();
+        let mut state = crate::native::service_model::ServiceState::default();
+        let mut owner = ProfileOwner {
+            owner_id: "owner-a".to_string(),
+            profile_identity_digest: migration.profile_identity_digest.clone(),
+            state: ProfileOwnerState::Ready,
+            owner_generation: 4,
+            browser_id: migration.logical_browser_id.clone(),
+            daemon_session_route: "session-a".to_string(),
+            process_instance_digest: "process-a".to_string(),
+            browser_family: "chrome".to_string(),
+            cdp_endpoint_identity_digest: "cdp-a".to_string(),
+            target_set_digest: "targets-a".to_string(),
+            pending_transfer: None,
+            last_transition: None,
+        };
+        state
+            .runtime_owner_registry
+            .owners
+            .insert(migration.profile_identity_digest.clone(), owner.clone());
+
+        assert!(runtime_orphan_owner_requires_fencing(&state, &migration));
+        owner.state = ProfileOwnerState::Orphaned;
+        state
+            .runtime_owner_registry
+            .owners
+            .insert(migration.profile_identity_digest.clone(), owner);
+        assert!(!runtime_orphan_owner_requires_fencing(&state, &migration));
+        state.runtime_owner_registry.owners.clear();
+        assert!(!runtime_orphan_owner_requires_fencing(&state, &migration));
     }
 
     #[test]
