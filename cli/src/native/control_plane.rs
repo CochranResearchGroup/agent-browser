@@ -1835,8 +1835,34 @@ async fn run_worker(
 
 async fn close_browser(state: &mut DaemonState) {
     if state.browser.is_some() {
-        state.close_behavior = CloseBehavior::CloseBrowser;
+        let close_behavior = shutdown_close_behavior(state.runtime_owner_binding.as_ref());
+        if close_behavior == CloseBehavior::Detach {
+            if let Some(manager) = state.browser.as_mut() {
+                manager.relinquish_browser_for_handoff();
+            }
+            state.browser = None;
+            return;
+        }
+        state.close_behavior = close_behavior;
         let _ = handle_close(state).await;
+    }
+}
+
+fn shutdown_close_behavior(
+    binding: Option<&crate::runtime_owner_transfer::RuntimeOwnerBinding>,
+) -> CloseBehavior {
+    let Some(binding) = binding else {
+        return CloseBehavior::CloseBrowser;
+    };
+    let current = LockedServiceStateRepository::default_json()
+        .and_then(|repository| {
+            crate::runtime_owner_transfer::owner_authority_is_current(&repository, &binding.claim)
+        })
+        .unwrap_or(false);
+    if current {
+        CloseBehavior::CloseBrowser
+    } else {
+        CloseBehavior::Detach
     }
 }
 
@@ -1899,6 +1925,58 @@ mod tests {
     use super::super::service_store::{JsonServiceStateStore, ServiceStateStore};
     use super::*;
     use crate::test_utils::EnvGuard;
+
+    #[test]
+    fn shutdown_preserves_browser_when_owner_authority_is_stale() {
+        let home = temp_home("control-plane-stale-owner-shutdown");
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+        let binding = crate::runtime_owner_transfer::RuntimeOwnerBinding {
+            claim: crate::runtime_owner_transfer::OwnerAuthorityClaim {
+                owner_id: "retired-owner".to_string(),
+                profile_identity_digest: "1".repeat(64),
+                owner_generation: 1,
+                logical_browser_id: "browser-a".to_string(),
+                daemon_session_route: "session-a".to_string(),
+                process_instance_digest: "2".repeat(64),
+            },
+            effect_capable: true,
+        };
+
+        assert_eq!(
+            shutdown_close_behavior(Some(&binding)),
+            CloseBehavior::Detach
+        );
+        let repository = LockedServiceStateRepository::default_json().unwrap();
+        repository
+            .mutate(|state| {
+                state.runtime_owner_registry.owners.insert(
+                    binding.claim.profile_identity_digest.clone(),
+                    crate::runtime_owner_transfer::ProfileOwner {
+                        owner_id: binding.claim.owner_id.clone(),
+                        profile_identity_digest: binding.claim.profile_identity_digest.clone(),
+                        state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+                        owner_generation: binding.claim.owner_generation,
+                        browser_id: binding.claim.logical_browser_id.clone(),
+                        daemon_session_route: binding.claim.daemon_session_route.clone(),
+                        process_instance_digest: binding.claim.process_instance_digest.clone(),
+                        browser_family: "chrome".to_string(),
+                        cdp_endpoint_identity_digest: "3".repeat(64),
+                        target_set_digest: "4".repeat(64),
+                        pending_transfer: None,
+                        last_transition: None,
+                    },
+                );
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(
+            shutdown_close_behavior(Some(&binding)),
+            CloseBehavior::CloseBrowser
+        );
+        assert_eq!(shutdown_close_behavior(None), CloseBehavior::CloseBrowser);
+        let _ = std::fs::remove_dir_all(home);
+    }
 
     #[test]
     fn persisted_job_result_excludes_response_only_desktop_pixels() {

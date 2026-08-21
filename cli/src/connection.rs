@@ -459,6 +459,7 @@ pub(crate) fn register_runtime_lane_config(
 fn apply_runtime_host_env(cmd: &mut Command, session: &str, opts: &DaemonOptions) {
     cmd.env(crate::runtime_host::RUNTIME_HOST_PROCESS_ENV, "1")
         .env(crate::runtime_host::RUNTIME_HOST_ENV, "1")
+        .env("AGENT_BROWSER_SOCKET_DIR", get_socket_dir())
         .env("AGENT_BROWSER_SESSION", session);
 
     if opts.headed {
@@ -1665,6 +1666,7 @@ mod tests {
     #[test]
     fn test_apply_runtime_host_env_forwards_lane_and_keychain_settings() {
         let remote_env_guard = EnvGuard::new(&[
+            "AGENT_BROWSER_SOCKET_DIR",
             "AGENT_BROWSER_REMOTE_VIEW_PROVIDER",
             "AGENT_BROWSER_REMOTE_VIEW_URL",
             "AGENT_BROWSER_REMOTE_VIEW_FRAME_URL",
@@ -1675,6 +1677,10 @@ mod tests {
             "AGENT_BROWSER_REMOTE_CONTROL_INPUT_PROVIDER",
             "AGENT_BROWSER_REMOTE_HEADED_DISPLAY",
         ]);
+        remote_env_guard.set(
+            "AGENT_BROWSER_SOCKET_DIR",
+            "/run/user/1000/agent-browser/runtime-hosts/selected",
+        );
         remote_env_guard.set("AGENT_BROWSER_REMOTE_VIEW_PROVIDER", "rdp_gateway");
         remote_env_guard.set("AGENT_BROWSER_REMOTE_VIEW_URL", "/guacamole/#/client/test");
         remote_env_guard.set(
@@ -1756,6 +1762,10 @@ mod tests {
             .any(|(k, v)| { k == "AGENT_BROWSER_USE_REAL_KEYCHAIN" && v.as_deref() == Some("1") }));
         assert!(envs.iter().any(|(k, v)| {
             k == crate::runtime_host::RUNTIME_HOST_PROCESS_ENV && v.as_deref() == Some("1")
+        }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == "AGENT_BROWSER_SOCKET_DIR"
+                && v.as_deref() == Some("/run/user/1000/agent-browser/runtime-hosts/selected")
         }));
         assert!(!envs.iter().any(|(k, _)| k == "AGENT_BROWSER_DAEMON"));
         assert!(envs.iter().any(|(k, v)| {
