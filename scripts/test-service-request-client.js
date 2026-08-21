@@ -1695,12 +1695,22 @@ async function main() {
       browserId: 'session:acs',
       tabId: 'target:target-1',
       serviceTabHandle: tabHandle,
+      controlPlaneAttestation: {
+        schemaVersion: 'agent-browser.service-control-plane-attestation.v1',
+        observedAt: '2026-08-21T22:00:00Z',
+        complete: false,
+        browserOwner: null,
+        processIdentity: null,
+        profileLease: null,
+        handoffReceipt: null,
+        missingProofs: ['browser_owner'],
+      },
       console: { count: 0, returned: 0, messages: [] },
       errors: { count: 0, returned: 0, errors: [] },
       requests: { count: 0, returned: 0, items: [] },
     },
   });
-  await requestServiceDiagnostics({
+  const diagnosticsResponse = await requestServiceDiagnostics({
     baseUrl: 'http://127.0.0.1:4849',
     fetch: diagnosticsRecorder.fetch,
     serviceTabHandle: tabHandle,
@@ -1709,6 +1719,9 @@ async function main() {
   assert.equal(diagnosticsRecorder.calls[0].body.action, 'diagnostics');
   assert.equal(diagnosticsRecorder.calls[0].body.maxConsoleEntries, 5);
   assert.deepEqual(diagnosticsRecorder.calls[0].body.serviceTabHandle, tabHandle);
+  assert.deepEqual(diagnosticsResponse.data.controlPlaneAttestation.missingProofs, [
+    'browser_owner',
+  ]);
   const diagnosticsAliasRecorder = createFetchRecorder({ success: true, data: { ok: true } });
   await getServiceTabDiagnostics({
     baseUrl: 'http://127.0.0.1:4849',

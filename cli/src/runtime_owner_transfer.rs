@@ -148,6 +148,29 @@ impl RuntimeOwnerBinding {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RuntimeOwnerHandoffReceiptAttestation {
+    pub(crate) receipt_id: String,
+    pub(crate) receipt_sha256: String,
+    pub(crate) transition_kind: OwnerTransferTransitionKind,
+    pub(crate) owner_generation: u64,
+    pub(crate) state: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RuntimeOwnerAttestation {
+    pub(crate) owner_id: String,
+    pub(crate) owner_generation: u64,
+    pub(crate) owner_state: ProfileOwnerState,
+    pub(crate) logical_browser_id: String,
+    pub(crate) daemon_session_route: String,
+    pub(crate) process_instance_digest: String,
+    pub(crate) effect_capable: bool,
+    pub(crate) handoff_receipt: Option<RuntimeOwnerHandoffReceiptAttestation>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum OwnerTransferTransitionKind {
@@ -397,7 +420,10 @@ impl RuntimeOwnerRegistry {
         Ok(owner.clone())
     }
 
-    fn binding_for_session(&self, session_id: &str) -> Result<Option<RuntimeOwnerBinding>, String> {
+    pub(crate) fn binding_for_session(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<RuntimeOwnerBinding>, String> {
         let logical_browser_id = format!("session:{session_id}");
         let matches = self
             .owners
@@ -425,6 +451,60 @@ impl RuntimeOwnerRegistry {
             } else {
                 RuntimeOwnerBinding::observation_only(claim)
             }
+        }))
+    }
+
+    pub(crate) fn attestation_for_session(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<RuntimeOwnerAttestation>, String> {
+        let Some(binding) = self.binding_for_session(session_id)? else {
+            return Ok(None);
+        };
+        let owner = self
+            .owners
+            .get(&binding.claim.profile_identity_digest)
+            .ok_or_else(|| "runtime_owner_binding_missing_owner".to_string())?;
+        let receipt = owner.last_transition.as_ref().and_then(|transition| {
+            transition
+                .reverse_receipt
+                .as_ref()
+                .filter(|receipt| {
+                    receipt.candidate_owner_id == owner.owner_id
+                        && receipt.candidate_owner_generation == owner.owner_generation
+                })
+                .or_else(|| {
+                    let receipt = &transition.commit_receipt;
+                    (receipt.candidate_owner_id == owner.owner_id
+                        && receipt.candidate_owner_generation == owner.owner_generation)
+                        .then_some(receipt)
+                })
+        });
+        let handoff_receipt = receipt
+            .map(|receipt| {
+                let serialized = serde_json::to_vec(receipt).map_err(|error| {
+                    format!("could not serialize runtime owner handoff receipt: {error}")
+                })?;
+                Ok::<RuntimeOwnerHandoffReceiptAttestation, String>(
+                    RuntimeOwnerHandoffReceiptAttestation {
+                        receipt_id: receipt.receipt_id.clone(),
+                        receipt_sha256: format!("{:x}", Sha256::digest(serialized)),
+                        transition_kind: receipt.transition_kind,
+                        owner_generation: receipt.candidate_owner_generation,
+                        state: "accepted",
+                    },
+                )
+            })
+            .transpose()?;
+        Ok(Some(RuntimeOwnerAttestation {
+            owner_id: owner.owner_id.clone(),
+            owner_generation: owner.owner_generation,
+            owner_state: owner.state,
+            logical_browser_id: owner.browser_id.clone(),
+            daemon_session_route: owner.daemon_session_route.clone(),
+            process_instance_digest: owner.process_instance_digest.clone(),
+            effect_capable: binding.effect_capable,
+            handoff_receipt,
         }))
     }
 
@@ -1187,6 +1267,41 @@ mod tests {
         assert!(registry.authorizes(&OwnerAuthorityClaim::from_owner(
             registry.owner(&request.profile_identity_digest).unwrap()
         )));
+    }
+
+    #[test]
+    fn current_owner_attestation_requires_and_hashes_current_handoff_receipt() {
+        let mut registry = RuntimeOwnerRegistry::from_owner(owner());
+        let before = registry
+            .attestation_for_session("session-old")
+            .unwrap()
+            .unwrap();
+        assert!(before.effect_capable);
+        assert!(before.handoff_receipt.is_none());
+
+        let request = cooperative_request();
+        registry.begin_transfer(request.clone()).unwrap();
+        let receipt = registry
+            .commit_candidate(CandidateOwnerAttachment::from_request(&request, 8))
+            .unwrap();
+
+        let current = registry
+            .attestation_for_session("session-new")
+            .unwrap()
+            .unwrap();
+        let handoff = current.handoff_receipt.unwrap();
+        assert!(current.effect_capable);
+        assert_eq!(current.owner_generation, 8);
+        assert_eq!(handoff.receipt_id, receipt.receipt_id);
+        assert_eq!(handoff.owner_generation, 8);
+        assert_eq!(handoff.state, "accepted");
+        assert_eq!(handoff.receipt_sha256.len(), 64);
+
+        let superseded = registry
+            .attestation_for_session("session-old")
+            .unwrap()
+            .unwrap();
+        assert!(!superseded.effect_capable);
     }
 
     #[test]

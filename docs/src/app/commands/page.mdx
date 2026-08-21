@@ -171,6 +171,13 @@ handle, timeout, action count, text caps, trace context, per-step page evidence,
 and optional diagnostics on failure. Prefer this action over direct CDP
 `Input`, `DOM`, or small `Runtime` scripts for repeated generic interactions.
 
+Before effect-capable input, request service action `diagnostics` for the valid
+`serviceTabHandle`. Its `controlPlaneAttestation` is complete only when the
+current owner generation, browser process start identity, exclusive profile
+lease, and current owner-transfer handoff receipt agree in one persisted
+service snapshot. Fail closed when `complete` is false or `missingProofs` is
+nonempty.
+
 Use service request `action: "network_capture"` when a client needs capped
 provider-neutral network response evidence against a valid
 `serviceTabHandle`. Recipes can filter by URL pattern, method, resource type,

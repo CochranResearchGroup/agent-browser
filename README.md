@@ -3200,7 +3200,12 @@ request. Use `getServiceTabDiagnostics()` to collect a compact bundle for the
 same handle with URL/title, browser/session/tab/profile metadata, readiness
 rows, route/view metadata, console and page errors, recent request summaries,
 snapshot summary, caller context, trace filters, and an optional screenshot
-path. Use `probeServiceTab()` or `requestServiceProbe()` when a software client
+path. Diagnostics also return `controlPlaneAttestation`; callers should allow
+effect-capable input only when `complete` is true and `missingProofs` is empty.
+That proof requires the current owner generation, browser process start
+identity, exclusive profile lease, and current owner-transfer handoff receipt
+to agree in one persisted service snapshot. Use `probeServiceTab()` or
+`requestServiceProbe()` when a software client
 needs a generic identity, account, readiness, or page-state probe for the same
 leased tab. Probe recipes are provider-neutral and bounded by `timeoutMs` and
 `maxReturnBytes`; clients provide detectors such as `url_title`,

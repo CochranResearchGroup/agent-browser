@@ -424,6 +424,73 @@ export interface ServiceFileTransferData {
   [key: string]: unknown;
 }
 
+export interface ServiceDiagnosticsBrowserOwnerAttestation {
+  ownerId: string;
+  ownerGeneration: number;
+  ownerState: "reserving" | "ready" | "releasing" | "orphaned" | "failed" | string;
+  logicalBrowserId: string;
+  daemonSessionRoute: string;
+  processInstanceDigest: string;
+  effectCapable: boolean;
+  authoritative: boolean;
+  [key: string]: unknown;
+}
+
+export interface ServiceDiagnosticsProcessIdentityAttestation {
+  pid: number;
+  startToken: string;
+  processInstanceDigest: string;
+  matchesOwner: boolean;
+  [key: string]: unknown;
+}
+
+export interface ServiceDiagnosticsProfileLeaseHolder {
+  sessionId: string;
+  serviceName?: string | null;
+  agentName?: string | null;
+  taskName?: string | null;
+  [key: string]: unknown;
+}
+
+export interface ServiceDiagnosticsProfileLeaseAttestation {
+  id?: string | null;
+  mode: "shared" | "exclusive" | "human_takeover" | "released" | "expired" | string;
+  state: "active" | "unproven" | string;
+  holder: ServiceDiagnosticsProfileLeaseHolder;
+  lastObservedAt?: string | null;
+  expiresAt?: string | null;
+  conflictSessionIds: string[];
+  [key: string]: unknown;
+}
+
+export interface ServiceDiagnosticsHandoffReceiptAttestation {
+  id: string;
+  sha256: string;
+  transitionKind: "commit" | "reverse" | string;
+  ownerGeneration: number;
+  state: "accepted" | string;
+  [key: string]: unknown;
+}
+
+export interface ServiceControlPlaneAttestation {
+  schemaVersion: "agent-browser.service-control-plane-attestation.v1";
+  observedAt: string;
+  complete: boolean;
+  browserOwner?: ServiceDiagnosticsBrowserOwnerAttestation | null;
+  processIdentity?: ServiceDiagnosticsProcessIdentityAttestation | null;
+  profileLease?: ServiceDiagnosticsProfileLeaseAttestation | null;
+  handoffReceipt?: ServiceDiagnosticsHandoffReceiptAttestation | null;
+  missingProofs: Array<
+    | "service_state"
+    | "browser_owner"
+    | "process_identity"
+    | "profile_lease"
+    | "handoff_receipt"
+    | string
+  >;
+  [key: string]: unknown;
+}
+
 export interface ServiceDiagnosticsData {
   ok: boolean;
   action: "diagnostics";
@@ -444,6 +511,7 @@ export interface ServiceDiagnosticsData {
   session?: Record<string, unknown> | null;
   tab?: Record<string, unknown> | null;
   profile?: Record<string, unknown> | null;
+  controlPlaneAttestation: ServiceControlPlaneAttestation;
   remoteViewRoutes: Record<string, unknown>[];
   snapshotSummary: Record<string, unknown>;
   screenshot: Record<string, unknown>;
