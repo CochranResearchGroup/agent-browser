@@ -3510,8 +3510,10 @@ fn install_doctor_issues_are_advisory(data: &Value, issues: &[Value]) -> bool {
 /// During the transaction's own post-commit validation, install doctor must
 /// remain globally non-ready because the transaction and admission drain are
 /// still active. The installer may consume the component evidence only when
-/// the sole additional blocker is the exact expected transaction at the exact
-/// `post_commit_validating` revision. This does not weaken ordinary doctor.
+/// the only additional blockers are the exact expected transaction at the
+/// exact `post_commit_validating` revision and the runtime monitor startup gap
+/// created by this installer quiescing and reactivating its units. This does
+/// not weaken ordinary doctor.
 fn install_doctor_reports_expected_upgrade_ready(
     payload: &Value,
     expected: &crate::runtime_adoption::UpgradeTransaction,
@@ -3560,6 +3562,9 @@ fn install_doctor_reports_expected_upgrade_ready(
         .filter(|issue| {
             let code = issue.get("code").and_then(Value::as_str);
             if code == Some("workstation_upgrade_transaction_not_terminal") {
+                return false;
+            }
+            if code == Some("runtime_monitor_not_ready") {
                 return false;
             }
             if code == Some("dashboard_runtime_stale_or_unreadable")
@@ -10082,6 +10087,7 @@ mod tests {
                         "code": "workstation_upgrade_transaction_not_terminal",
                         "state": "post_commit_validating",
                     },
+                    {"code": "runtime_monitor_not_ready"},
                     {"code": "service_duplicate_profile_pressure"},
                 ],
                 "sessionSupervisors": {"sessions": [], "issues": []},
