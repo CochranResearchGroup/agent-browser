@@ -5025,7 +5025,16 @@ fn resolve_runtime_source_session_with_probe(
     candidates.retain(|value| !value.trim().is_empty());
     if candidates.is_empty() {
         if let Some(session) = migration.logical_browser_id.strip_prefix("session:") {
-            candidates.insert(session.to_string());
+            let session_is_unbound_or_matches =
+                service_state.sessions.get(session).is_none_or(|record| {
+                    record
+                        .browser_ids
+                        .iter()
+                        .any(|browser_id| browser_id == &migration.logical_browser_id)
+                });
+            if session_is_unbound_or_matches {
+                candidates.insert(session.to_string());
+            }
         }
     }
     let live_candidates = candidates
@@ -8000,6 +8009,29 @@ mod tests {
         .unwrap();
 
         assert_eq!(source.as_deref(), Some("orphan-verified"));
+    }
+
+    #[test]
+    fn rebound_logical_session_is_not_selected_as_an_orphan_source() {
+        let logical_browser_id = "session:p116-alpha";
+        let mut service_state = crate::native::service_model::ServiceState::default();
+        service_state.sessions.insert(
+            "p116-alpha".to_string(),
+            crate::native::service_model::BrowserSession {
+                id: "p116-alpha".to_string(),
+                browser_ids: vec!["browser-current".to_string()],
+                ..Default::default()
+            },
+        );
+
+        let source = resolve_runtime_source_session_with_probe(
+            &service_state,
+            &runtime_migration(logical_browser_id),
+            |_| true,
+        )
+        .unwrap();
+
+        assert_eq!(source, None);
     }
 
     #[test]

@@ -2153,7 +2153,7 @@ pub(crate) fn build_stable_runtime_census(
                 classify_runtime(&evidence)
             };
         if classification_decision.classification == RuntimeClassification::OrphanAdoptable
-            && selected.logical_browser_id.starts_with("observed-")
+            && selected.session_names.is_empty()
         {
             // Orphan resume requires a stable session route. A profile-only
             // observation remains visible and preserved without effect authority.
@@ -4031,7 +4031,7 @@ mod tests {
 
     #[test]
     fn verified_profile_only_browser_without_session_route_is_preserve_only() {
-        let logical_browser_id = "observed-profile-only".to_string();
+        let logical_browser_id = "session:profile-only".to_string();
         let observed_source = RuntimeCensusSource::OperatingSystemProcessIdentity;
         let round = collect_runtime_census_round(
             17,
