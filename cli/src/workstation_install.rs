@@ -5555,18 +5555,14 @@ fn prepare_dashboard_candidate_for_transaction(
             &candidate_binary,
         )?,
     );
-    let child = Command::new(&candidate_binary)
-        .env("AGENT_BROWSER_DASHBOARD", "1")
-        .env("AGENT_BROWSER_DASHBOARD_BACKEND_ONLY", "1")
-        .env("AGENT_BROWSER_DASHBOARD_PORT", shadow_port.to_string())
-        .env(
-            "AGENT_BROWSER_DASHBOARD_GENERATION",
-            &prepared.transaction.candidate_generation_id,
-        )
-        .env_remove("AGENT_BROWSER_DASHBOARD_INGRESS")
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
+    let runtime_socket_dir =
+        candidate_runtime_host_socket_dir(&prepared.transaction.transaction_id)?;
+    let child = candidate_dashboard_command(
+        &candidate_binary,
+        shadow_port,
+        &prepared.transaction.candidate_generation_id,
+        &runtime_socket_dir,
+    )
         .spawn()
         .map_err(|error| {
             format!(
@@ -5602,6 +5598,26 @@ fn prepare_dashboard_candidate_for_transaction(
         .ok_or_else(|| "candidate dashboard process custody is missing".to_string())?
         .staged_revision = staged.revision;
     Ok(())
+}
+
+fn candidate_dashboard_command(
+    candidate_binary: &Path,
+    shadow_port: u16,
+    generation_id: &str,
+    runtime_socket_dir: &Path,
+) -> Command {
+    let mut command = Command::new(candidate_binary);
+    command
+        .env("AGENT_BROWSER_DASHBOARD", "1")
+        .env("AGENT_BROWSER_DASHBOARD_BACKEND_ONLY", "1")
+        .env("AGENT_BROWSER_DASHBOARD_PORT", shadow_port.to_string())
+        .env("AGENT_BROWSER_DASHBOARD_GENERATION", generation_id)
+        .env("AGENT_BROWSER_SOCKET_DIR", runtime_socket_dir)
+        .env_remove("AGENT_BROWSER_DASHBOARD_INGRESS")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    command
 }
 
 fn wait_for_dashboard_backend(
@@ -9394,6 +9410,32 @@ mod tests {
         assert_eq!(selected.selected_backend().generation_id, generation_id);
         fs::remove_file(ingress_path.with_extension("json.lock")).unwrap();
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn candidate_dashboard_targets_the_transaction_runtime_host() {
+        let binary = Path::new("/opt/agent-browser/candidate/bin/agent-browser");
+        let socket_dir = Path::new("/run/user/1000/agent-browser/runtime-hosts/transaction-a");
+        let command = candidate_dashboard_command(binary, 4850, "generation-candidate", socket_dir);
+        let env = command
+            .get_envs()
+            .map(|(key, value)| {
+                (
+                    key.to_string_lossy().into_owned(),
+                    value.map(|value| value.to_string_lossy().into_owned()),
+                )
+            })
+            .collect::<std::collections::BTreeMap<_, _>>();
+
+        assert_eq!(
+            env.get("AGENT_BROWSER_SOCKET_DIR").and_then(Clone::clone),
+            Some(socket_dir.display().to_string())
+        );
+        assert_eq!(
+            env.get("AGENT_BROWSER_DASHBOARD_GENERATION")
+                .and_then(Clone::clone),
+            Some("generation-candidate".to_string())
+        );
     }
 
     #[test]

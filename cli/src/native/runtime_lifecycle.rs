@@ -247,12 +247,21 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
             .lifecycle_records
             .get(&stale_claim.logical_browser_id)
             .ok_or_else(|| "runtime_lifecycle_relinquish_record_missing".to_string())?;
-        if current.state != crate::runtime_owner_transfer::ProfileOwnerState::Ready
+        let restored_lifecycle_matches = matches!(
+            (current.state, lifecycle.lifecycle_state),
+            (
+                crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+                RuntimeLaneLifecycleState::Ready
+            ) | (
+                crate::runtime_owner_transfer::ProfileOwnerState::Orphaned,
+                RuntimeLaneLifecycleState::Retained
+            )
+        );
+        if !restored_lifecycle_matches
             || current.browser_id != stale_claim.logical_browser_id
             || current.process_instance_digest != stale_claim.process_instance_digest
             || current.owner_generation <= stale_claim.owner_generation
             || lifecycle.owner_generation != current.owner_generation
-            || lifecycle.lifecycle_state != RuntimeLaneLifecycleState::Ready
             || lifecycle.cleanup_obligation_state != CleanupObligationState::Owned
         {
             return Err("runtime_lifecycle_relinquish_authority_unproven".to_string());
@@ -616,7 +625,15 @@ fn apply_transition(
                 .ok_or_else(|| "runtime_lifecycle_owner_missing_after_reverse".to_string())?;
             let mut lifecycle = take_or_bootstrap_lifecycle(registry, &owner)?;
             lifecycle.owner_generation = owner.owner_generation;
-            lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
+            lifecycle.lifecycle_state = match owner.state {
+                crate::runtime_owner_transfer::ProfileOwnerState::Ready => {
+                    RuntimeLaneLifecycleState::Ready
+                }
+                crate::runtime_owner_transfer::ProfileOwnerState::Orphaned => {
+                    RuntimeLaneLifecycleState::Retained
+                }
+                _ => return Err("runtime_lifecycle_reverse_owner_state_invalid".to_string()),
+            };
             lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
             store_lifecycle(registry, lifecycle)?;
             Ok(RuntimeLifecycleTransition::TransferReversed(receipt))
@@ -1257,5 +1274,55 @@ mod tests {
             lifecycle.cleanup_obligation_state,
             CleanupObligationState::Owned
         );
+    }
+
+    #[test]
+    fn reversed_orphan_adoption_authorizes_candidate_relinquish() {
+        let repository = registered_repository();
+        let authority = RuntimeLifecycleAuthority::new(&repository);
+        let orphan = authority
+            .revoke_legacy_owner(&digest("profile-a"), "browser-a", "session-a", "owner-a", 7)
+            .unwrap();
+        let mut request = cooperative_request();
+        request.mode = crate::runtime_adoption::BrowserAdoptionMode::OrphanAdoption;
+        request.expected_owner_id = Some(orphan.owner_id.clone());
+        request.expected_owner_generation = orphan.owner_generation;
+        request.transfer_nonce_digest = digest("orphan-transfer");
+        let proposal = authority.begin_transfer(request.clone()).unwrap();
+        let committed = authority
+            .commit_candidate(CandidateOwnerAttachment::from_request(
+                &request,
+                proposal.candidate_owner_generation,
+            ))
+            .unwrap();
+        let candidate = repository
+            .load_snapshot()
+            .unwrap()
+            .runtime_owner_registry
+            .owner(&digest("profile-a"))
+            .cloned()
+            .unwrap();
+        let candidate_claim = OwnerAuthorityClaim::from_owner(&candidate);
+
+        authority
+            .reverse_transfer(ReverseOwnerTransferRequest {
+                profile_identity_digest: digest("profile-a"),
+                expected_candidate_owner_id: committed.candidate_owner_id,
+                expected_candidate_owner_generation: committed.candidate_owner_generation,
+                transfer_nonce_digest: request.transfer_nonce_digest,
+                reverse_nonce_digest: digest("orphan-reverse"),
+            })
+            .unwrap();
+
+        authority
+            .authorize_relinquish_after_transfer(&candidate_claim)
+            .expect("a reversed orphan adoption must release the candidate daemon");
+        let restored = repository.load_snapshot().unwrap();
+        let owner = restored
+            .runtime_owner_registry
+            .owner(&digest("profile-a"))
+            .unwrap();
+        assert_eq!(owner.state, ProfileOwnerState::Orphaned);
+        assert!(owner.owner_generation > candidate_claim.owner_generation);
     }
 }

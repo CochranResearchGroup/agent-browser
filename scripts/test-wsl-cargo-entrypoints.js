@@ -38,6 +38,17 @@ for (const [name, command] of Object.entries(packageJson.scripts ?? {})) {
   }
 }
 
+const cargoSafeSource = readFileSync(
+  path.join(repoRoot, 'scripts/ci/cargo-safe.sh'),
+  'utf8',
+);
+if (!cargoSafeSource.includes('flock --close "$lock_file"')) {
+  failures.push('scripts/ci/cargo-safe.sh:lock_descriptor_may_reach_cargo_children');
+}
+if (/exec\s+\d+>/.test(cargoSafeSource)) {
+  failures.push('scripts/ci/cargo-safe.sh:inheritable_lock_descriptor');
+}
+
 function visit(directory) {
   for (const entry of readdirSync(directory)) {
     const absolute = path.join(directory, entry);

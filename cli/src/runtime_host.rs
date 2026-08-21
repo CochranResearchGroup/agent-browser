@@ -247,7 +247,7 @@ mod tests {
     #[test]
     fn disabled_admission_preserves_the_forwarding_only_legacy_endpoint() {
         let guard = EnvGuard::new(&[RUNTIME_HOST_ENV]);
-        guard.remove(RUNTIME_HOST_ENV);
+        guard.set(RUNTIME_HOST_ENV, "0");
         assert_eq!(endpoint_key("alpha"), "alpha");
         assert!(attach_lane(serde_json::json!({}), "alpha")
             .get(RUNTIME_HOST_LANE_FIELD)

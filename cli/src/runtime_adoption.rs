@@ -96,7 +96,7 @@ pub(crate) enum UpgradeTransactionState {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct RuntimeMigrationRecord {
     pub(crate) logical_browser_id: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing)]
     pub(crate) session_names: Vec<String>,
     pub(crate) profile_identity_digest: String,
     pub(crate) classification: RuntimeClassification,
@@ -4167,6 +4167,47 @@ mod tests {
             "providerSecret",
         ];
         assert_no_forbidden_keys(&serialized, &forbidden);
+    }
+
+    #[test]
+    fn persisted_runtime_migration_remains_readable_by_the_previous_generation() {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase", deny_unknown_fields)]
+        struct PreviousRuntimeMigrationRecord {
+            logical_browser_id: String,
+            profile_identity_digest: String,
+            classification: RuntimeClassification,
+            disposition: RuntimeDisposition,
+            adoption_receipt_id: Option<String>,
+            reason_codes: Vec<String>,
+        }
+
+        let current = RuntimeMigrationRecord {
+            logical_browser_id: "session:browser-a".to_string(),
+            session_names: vec!["source-a".to_string(), "source-b".to_string()],
+            profile_identity_digest: "a".repeat(64),
+            classification: RuntimeClassification::OrphanAdoptable,
+            disposition: RuntimeDisposition::OrphanAdoption,
+            adoption_receipt_id: None,
+            reason_codes: vec!["verified_browser_without_live_daemon".to_string()],
+        };
+
+        let persisted = serde_json::to_value(current).unwrap();
+        assert!(persisted.get("sessionNames").is_none());
+        let previous: PreviousRuntimeMigrationRecord =
+            serde_json::from_value(persisted).expect("previous generation must read the receipt");
+        assert_eq!(previous.logical_browser_id, "session:browser-a");
+        assert_eq!(previous.profile_identity_digest, "a".repeat(64));
+        assert_eq!(
+            previous.classification,
+            RuntimeClassification::OrphanAdoptable
+        );
+        assert_eq!(previous.disposition, RuntimeDisposition::OrphanAdoption);
+        assert!(previous.adoption_receipt_id.is_none());
+        assert_eq!(
+            previous.reason_codes,
+            vec!["verified_browser_without_live_daemon"]
+        );
     }
 
     fn assert_no_forbidden_keys(value: &Value, forbidden: &[&str]) {
