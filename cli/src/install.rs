@@ -1079,6 +1079,27 @@ fn print_doctor_field(label: &str, value: Option<&serde_json::Value>) {
     println!("{label}: {rendered}");
 }
 
+fn runtime_pressure_ownership_issue(summary: &Value) -> Option<Value> {
+    let observed_processes = summary
+        .get("observedCount")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let observed_rss_bytes = summary
+        .get("observedRssBytes")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    if observed_processes == 0 || observed_rss_bytes < 6 * 1024 * 1024 * 1024 {
+        return None;
+    }
+
+    Some(json!({
+        "code": "runtime_pressure_ownership_unknown",
+        "message": "observed runtime process RSS is high while ownership remains unknown",
+        "observedProcessCount": observed_processes,
+        "observedRssBytes": observed_rss_bytes,
+    }))
+}
+
 fn install_doctor_report(flags: &Flags) -> serde_json::Value {
     install_doctor_trace("current_executable");
     let current_executable = binary_fingerprint(std::env::current_exe().ok());
@@ -1204,21 +1225,8 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
     let monitor_resource_summary = runtime_monitor
         .pointer("/receipt/effects/service/resources/summary")
         .unwrap_or(&Value::Null);
-    let observed_processes = monitor_resource_summary
-        .get("observedCount")
-        .and_then(Value::as_u64)
-        .unwrap_or(0);
-    let total_rss_bytes = monitor_resource_summary
-        .get("totalRssBytes")
-        .and_then(Value::as_u64)
-        .unwrap_or(0);
-    if observed_processes > 0 && total_rss_bytes >= 6 * 1024 * 1024 * 1024 {
-        issues.push(json!({
-            "code": "runtime_pressure_ownership_unknown",
-            "message": "runtime process RSS is high while ownership remains unknown",
-            "observedProcessCount": observed_processes,
-            "totalRssBytes": total_rss_bytes,
-        }));
+    if let Some(issue) = runtime_pressure_ownership_issue(monitor_resource_summary) {
+        issues.push(issue);
     }
 
     json!({
@@ -5676,6 +5684,32 @@ EOF
         }));
 
         assert!(remote_view_helper_status_contract_ready(&report));
+    }
+
+    #[test]
+    fn runtime_pressure_ownership_uses_only_observed_rss() {
+        let protected_pressure = json!({
+            "observedCount": 3,
+            "observedRssBytes": 1024 * 1024 * 1024_u64,
+            "totalRssBytes": 7 * 1024 * 1024 * 1024_u64,
+        });
+        assert!(runtime_pressure_ownership_issue(&protected_pressure).is_none());
+
+        let unknown_pressure = json!({
+            "observedCount": 3,
+            "observedRssBytes": 6 * 1024 * 1024 * 1024_u64,
+            "totalRssBytes": 7 * 1024 * 1024 * 1024_u64,
+        });
+        let issue = runtime_pressure_ownership_issue(&unknown_pressure)
+            .expect("high observed RSS should remain a blocking pressure issue");
+        assert_eq!(
+            issue.get("code").and_then(Value::as_str),
+            Some("runtime_pressure_ownership_unknown")
+        );
+        assert_eq!(
+            issue.get("observedRssBytes").and_then(Value::as_u64),
+            Some(6 * 1024 * 1024 * 1024_u64)
+        );
     }
 
     #[test]
