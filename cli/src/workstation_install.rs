@@ -5525,6 +5525,33 @@ fn begin_post_commit_validation(prepared: &mut PreparedPayloadTransaction) -> Re
 
 /// Starts and stages the generation-specific shadow dashboard before payload
 /// selection. The stable ingress remains bound to its prior selected backend.
+fn candidate_dashboard_command(
+    candidate_binary: &Path,
+    shadow_port: u16,
+    candidate_generation_id: &str,
+    candidate_runtime_host_socket_dir: &Path,
+) -> Command {
+    let mut command = Command::new(candidate_binary);
+    command
+        .env("AGENT_BROWSER_DASHBOARD", "1")
+        .env("AGENT_BROWSER_DASHBOARD_BACKEND_ONLY", "1")
+        .env("AGENT_BROWSER_DASHBOARD_PORT", shadow_port.to_string())
+        .env(
+            "AGENT_BROWSER_DASHBOARD_GENERATION",
+            candidate_generation_id,
+        )
+        .env(crate::runtime_host::RUNTIME_HOST_ENV, "1")
+        .env(
+            "AGENT_BROWSER_SOCKET_DIR",
+            candidate_runtime_host_socket_dir,
+        )
+        .env_remove("AGENT_BROWSER_DASHBOARD_INGRESS")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    command
+}
+
 fn prepare_dashboard_candidate_for_transaction(
     root: &Path,
     args: &WorkstationInstallArgs,
@@ -5542,18 +5569,14 @@ fn prepare_dashboard_candidate_for_transaction(
             &candidate_binary,
         )?,
     );
-    let child = Command::new(&candidate_binary)
-        .env("AGENT_BROWSER_DASHBOARD", "1")
-        .env("AGENT_BROWSER_DASHBOARD_BACKEND_ONLY", "1")
-        .env("AGENT_BROWSER_DASHBOARD_PORT", shadow_port.to_string())
-        .env(
-            "AGENT_BROWSER_DASHBOARD_GENERATION",
-            &prepared.transaction.candidate_generation_id,
-        )
-        .env_remove("AGENT_BROWSER_DASHBOARD_INGRESS")
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
+    let candidate_socket_dir =
+        candidate_runtime_host_socket_dir(&prepared.transaction.transaction_id)?;
+    let child = candidate_dashboard_command(
+        &candidate_binary,
+        shadow_port,
+        &prepared.transaction.candidate_generation_id,
+        &candidate_socket_dir,
+    )
         .spawn()
         .map_err(|error| {
             format!(
@@ -7881,6 +7904,30 @@ fn fail(message: &str, json: bool) -> ! {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn candidate_dashboard_discovers_only_the_candidate_runtime_host() {
+        let socket_dir = Path::new("/tmp/agent-browser-candidate-runtime-host");
+        let command = candidate_dashboard_command(
+            Path::new("/tmp/agent-browser-candidate"),
+            4850,
+            "generation-candidate",
+            socket_dir,
+        );
+        let environment = command
+            .get_envs()
+            .filter_map(|(key, value)| value.map(|value| (key, value)))
+            .collect::<std::collections::BTreeMap<_, _>>();
+
+        assert_eq!(
+            environment.get(std::ffi::OsStr::new("AGENT_BROWSER_SOCKET_DIR")),
+            Some(&socket_dir.as_os_str())
+        );
+        assert_eq!(
+            environment.get(std::ffi::OsStr::new("AGENT_BROWSER_RUNTIME_HOST")),
+            Some(&std::ffi::OsStr::new("1"))
+        );
+    }
 
     #[test]
     fn runtime_monitor_backoff_is_bounded_and_exponential() {
