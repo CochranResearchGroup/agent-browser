@@ -129,7 +129,7 @@ pub fn get_socket_dir() -> PathBuf {
 }
 
 #[cfg(unix)]
-fn get_socket_path(session: &str) -> PathBuf {
+pub(crate) fn get_socket_path(session: &str) -> PathBuf {
     get_socket_dir().join(format!(
         "{}.sock",
         crate::runtime_host::endpoint_key(session)

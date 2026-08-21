@@ -10,9 +10,11 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{RwLock, Semaphore, SemaphorePermit};
 use tokio_tungstenite::tungstenite::Message;
 
+#[cfg(unix)]
+use crate::connection::get_socket_path;
+use crate::connection::{attach_daemon_auth_token, daemon_ready};
 #[cfg(windows)]
-use crate::connection::resolve_port;
-use crate::connection::{attach_daemon_auth_token, daemon_ready, get_socket_dir};
+use crate::connection::{get_socket_dir, resolve_port};
 use crate::flags::{launch_config_status, parse_flags};
 use crate::native::service_access::{
     parse_service_access_plan_query, service_access_plan_for_state,
@@ -3619,7 +3621,7 @@ pub(super) async fn relay_command_to_daemon(
 
     #[cfg(unix)]
     let stream = {
-        let socket_path = get_socket_dir().join(format!("{}.sock", session_name));
+        let socket_path = get_socket_path(session_name);
         tokio::net::UnixStream::connect(&socket_path)
             .await
             .map_err(|e| format!("Failed to connect to daemon: {}", e))?
