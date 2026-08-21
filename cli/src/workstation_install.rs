@@ -4675,8 +4675,11 @@ where
                 }
             },
             Err(error)
-                if error.kind == RuntimeTransactionCommandFailureKind::ObservationOnlyAlias
-                    && selected.is_some()
+                if matches!(
+                    error.kind,
+                    RuntimeTransactionCommandFailureKind::ObservationOnlyAlias
+                        | RuntimeTransactionCommandFailureKind::LegacyTransferredOwnerRejected
+                ) && selected.is_some()
                     && session != primary_session =>
             {
                 if let Err(message) = retire(&session) {
@@ -10203,6 +10206,43 @@ mod tests {
         assert_eq!(selected_session, "owner-route");
         assert_eq!(retired_sessions, vec!["stale-alias"]);
         assert_eq!(retired_aliases, vec!["stale-alias"]);
+    }
+
+    #[test]
+    fn runtime_handoff_prepare_retires_rejected_transferred_alias_after_owner_selection() {
+        let candidates = vec!["owner-route".to_string(), "transferred-alias".to_string()];
+        let mut retired_sessions = Vec::new();
+
+        let (selected_session, _, retired_aliases) = prepare_runtime_handoff_candidates(
+            "session:logical-browser",
+            "owner-route",
+            candidates,
+            |session| {
+                if session == "owner-route" {
+                    Ok(serde_json::json!({
+                        "data": {
+                            "prepared": true,
+                            "browserPresent": true,
+                            "candidateSessionName": "candidate"
+                        }
+                    }))
+                } else {
+                    Err(RuntimeTransactionCommandFailure {
+                        kind: RuntimeTransactionCommandFailureKind::LegacyTransferredOwnerRejected,
+                        message: "runtime_owner_current_evidence_mismatch".to_string(),
+                    })
+                }
+            },
+            |session| {
+                retired_sessions.push(session.to_string());
+                Ok(())
+            },
+        )
+        .expect("a rejected non-owner transfer alias should be retired");
+
+        assert_eq!(selected_session, "owner-route");
+        assert_eq!(retired_sessions, vec!["transferred-alias"]);
+        assert_eq!(retired_aliases, vec!["transferred-alias"]);
     }
 
     #[test]
