@@ -5024,6 +5024,15 @@ fn resolve_runtime_source_session_with_probe(
     }
     candidates.retain(|value| !value.trim().is_empty());
     if candidates.is_empty() {
+        candidates.extend(
+            migration
+                .session_names
+                .iter()
+                .filter(|session| !session.trim().is_empty())
+                .cloned(),
+        );
+    }
+    if candidates.is_empty() {
         if let Some(session) = migration.logical_browser_id.strip_prefix("session:") {
             let session_is_unbound_or_matches =
                 service_state.sessions.get(session).is_none_or(|record| {
@@ -8032,6 +8041,19 @@ mod tests {
         .unwrap();
 
         assert_eq!(source, None);
+    }
+
+    #[test]
+    fn observed_idle_daemon_uses_its_census_bound_session() {
+        let service_state = crate::native::service_model::ServiceState::default();
+        let mut migration = runtime_migration("observed-idle-daemon");
+        migration.session_names = vec!["idle-source".to_string()];
+
+        let source =
+            resolve_runtime_source_session_with_probe(&service_state, &migration, |_| true)
+                .unwrap();
+
+        assert_eq!(source.as_deref(), Some("idle-source"));
     }
 
     #[test]
