@@ -420,10 +420,20 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
                     message: "durable_handoff_session_missing: retained browser adoption requires the original daemon lane".to_string(),
                 }
             })?;
+        let logical_browser_id = retained_handoff
+            .as_ref()
+            .and_then(|handoff| handoff.browser_id.clone())
+            .ok_or_else(|| RouteBoundRuntimeIssue::EffectFailed {
+                operation: "adopt_retained_browser",
+                message: "durable_handoff_browser_missing: retained browser adoption requires the original logical browser identity".to_string(),
+            })?;
         initial_browser = supervisor
             .forward(
                 "adopt_retained_browser",
-                runtime.adopt_retained_browser(AdoptRetainedBrowserRequest { source_session }),
+                runtime.adopt_retained_browser(AdoptRetainedBrowserRequest {
+                    source_session,
+                    logical_browser_id,
+                }),
             )
             .await?;
     }

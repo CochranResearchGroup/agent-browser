@@ -30,6 +30,7 @@ pub(crate) struct LaunchBrowserRequest {
 #[derive(Debug, Clone)]
 pub(crate) struct AdoptRetainedBrowserRequest {
     pub(crate) source_session: String,
+    pub(crate) logical_browser_id: String,
 }
 #[derive(Debug, Clone)]
 pub(crate) struct SwitchTargetRequest {
@@ -288,7 +289,10 @@ impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
     ) -> RouteBoundOpenFuture<'_, RouteBoundBrowserObservation> {
         Box::pin(async move {
             handle_runtime_handoff_resume(
-                &json!({ "sourceSession": request.source_session }),
+                &json!({
+                    "sourceSession": request.source_session,
+                    "logicalBrowserId": request.logical_browser_id,
+                }),
                 self.state,
             )
             .await
