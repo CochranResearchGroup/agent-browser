@@ -38,6 +38,9 @@ modules:
   - id: git-worktree-hygiene
     path: modules/git-worktree-hygiene.md
     tags: [git, branches, worktrees, merge]
+  - id: active-lane-coordination
+    path: modules/active-lane-coordination.md
+    tags: [git, planning, worktrees, coordination]
   - id: commit-history-discipline
     path: modules/commit-history-discipline.md
     tags: [git, commits, history, review]

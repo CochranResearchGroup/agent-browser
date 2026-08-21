@@ -316,6 +316,7 @@ npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
 - re-read documentation-related policy before changing docs, contracts, or canonical authorities
 - re-read validation and closeout policy before claiming work complete
 - re-read runtime or environment-boundary policy before touching live state, tenant state, deploy state, or off-repo operator data
+- re-read branch, commit, and integration policy before starting a multi-file or multi-step implementation slice
 
 ## Policy Entry
 
@@ -346,9 +347,25 @@ Read and follow:
 - `docs/dev/policies/0023-upstream-fork-maintenance.md`
 - `docs/dev/policies/0024-notes-and-memories.md`
 - `docs/dev/policies/0026-subagent-runtime-governance.md`
+- `docs/dev/policies/0028-goal-execution-governance.md`
+- `docs/dev/policies/0029-parallel-plan-design.md`
+- `docs/dev/policies/0031-runtime-vs-product-boundary.md`
+- `docs/dev/policies/0032-runtime-state-governance.md`
+- `docs/dev/policies/0033-tenant-isolation-and-operator-state.md`
+- `docs/dev/policies/0034-fieldwork-productization.md`
+- `docs/dev/policies/0035-monolith-extraction-discipline.md`
+- `docs/dev/policies/0036-architecture-guardrails.md`
+- `docs/dev/policies/0037-active-lane-coordination.md`
+- `docs/dev/policies/0038-multi-agent-reconciliation.md`
+- `docs/dev/policies/0039-policy-harvest-loop.md`
 
 ## Scope
 
 - `AGENTS.md` includes repo-local guidance plus the policy entry section.
 - The durable policy body lives under `docs/dev/policies/`.
 - Keep repo-specific commands, environment details, and operational caveats in this file or adjacent local docs.
+
+## Tenant Boundary Reminder
+
+- Keep tenant-scoped or user-scoped runtime state out of the product repo unless the repo's runtime-state policy explicitly says it belongs in a separately governed tracked state surface.
+- Re-check boundary policy before copying runtime facts, artifacts, or fieldwork output into tracked repo files.

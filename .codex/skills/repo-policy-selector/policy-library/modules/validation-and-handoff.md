@@ -14,6 +14,7 @@ tags:
 - Run the relevant validation for the touched surface before commit, handoff, or merge preparation.
 - Prefer targeted verification that matches the changed area, and widen to broader suites when the impact is user-visible or cross-cutting.
 - Include concrete pass/fail evidence in the handoff or closeout note.
+- For off-main work, bind validation to the exact checkpoint SHA and report branch, remote custody, worktree status, target, integration method, and remaining cleanup or archival disposition.
 - Keep handoff notes concise, explicit about remaining risk, and clear about the next recommended action.
 - When live or manual smoke matters for the changed surface, record whether it was run and what it proved.
 - Prefer validation receipts that bind the result to a durable commit, artifact,
@@ -55,6 +56,7 @@ tags:
   approval when another safe in-scope action remains.
 - Validate the resulting outcome and current external state, not only the
   transcript, diff shape, test count, or agent's narrative of progress.
+- Distinguish `validated`, `integration-ready`, `integrated`, and `cleanup-complete`; none implies the next. Verify target ancestry or a squash/patch receipt before claiming integration, and verify retained refs before removing a worktree or branch.
 - Treat fail-closed gates as successful policy execution when they prevent an
   unsafe or disproven change from integrating. Report the blocked outcome and
   evidence instead of grading effectiveness only by shipped changes.

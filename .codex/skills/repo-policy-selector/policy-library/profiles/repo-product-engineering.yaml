@@ -15,6 +15,7 @@ modules:
   - architecture-guardrails
   - documentation-change-control
   - git-worktree-hygiene
+  - active-lane-coordination
   - commit-history-discipline
   - branch-and-integration-strategy
   - commit-and-push-cadence

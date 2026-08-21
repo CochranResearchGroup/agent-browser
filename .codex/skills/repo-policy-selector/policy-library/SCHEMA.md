@@ -110,6 +110,60 @@ For repos that adopt notes/memory continuity discipline:
 - one dated note may satisfy upgrade tracking, adoption feedback, and continuity capture when it records the decision and reusable lesson clearly
 - when a repo also uses a durable memory system, notes and memories remain the place for richer human-readable continuity unless a more specific shared memory-usage module says otherwise
 
+## Active-Lane Coordination Contract
+
+Multi-track repositories may adopt a default-branch active-lane projection at
+`docs/dev/active-lanes.yaml` or a documented equivalent path. The projection is
+optional outside repositories with concurrent projects, branches, or worktrees.
+
+The catalog uses `schema_version: 1` and a `lanes` list. Every lane requires:
+
+```yaml
+- id: P42
+  objective: Carrier reconciliation
+  plan: docs/dev/plans/0042-YYYY-MM-DD-carrier-reconciliation.md
+  plan_ref: refs/heads/feature/p42-carrier-reconciliation
+  branch: feature/p42-carrier-reconciliation
+  target: main
+  plan_state: OPEN
+  custody_state: ACTIVE_WORKTREE
+  checkpoint: <full-commit-sha>
+  remote_ref: refs/remotes/origin/feature/p42-carrier-reconciliation
+  integration: merge
+  dependencies: []
+  overlaps: []
+  updated_at: YYYY-MM-DD
+```
+
+Optional fields include `reconciled_overlaps`, `validation_status`,
+`validation_ref`, `integration_receipt`, `archive_ref`, `archive_remote_ref`,
+`blocker`, and `disposition`. Lists use inline YAML form in schema version 1 so
+the bundled dependency-free auditor can parse them deterministically.
+
+Rules:
+
+- lane ids and branch ownership are unique
+- plan states are `PLANNED`, `OPEN`, `BLOCKED`, `CLOSED`, or `CANCELLED`
+- custody states are `ACTIVE_WORKTREE`, `PAUSED_REF`, `INTEGRATION_READY`,
+  `INTEGRATED`, `ARCHIVED`, or `DISCARD_APPROVED`
+- referenced dependencies identify another catalog lane
+- plan metadata at `plan_ref:plan` must agree with the catalog for active plans
+- the catalog contains no absolute worktree paths, ephemeral agent ids, secrets,
+  tenant data, or private runtime details
+- the default-branch catalog owns discovery and Git custody projection only;
+  roadmap, branch-local plan, runbook, review, and Git evidence retain their
+  separate authority
+- auditing is read-only; fetching and every mutation remain caller-controlled
+- catalog-only discovery audits registered lanes without enumerating unrelated
+  topic refs; exact repeated branch selectors bound unregistered-plan discovery
+- prefix discovery is an explicit broader survey and may be inappropriate for
+  repositories with large historical branch namespaces
+- audit output reports `local_remote_relation` as `missing`, `local_only`,
+  `remote_only`, `equal`, `local_ahead`, `remote_ahead`, or `diverged`
+- `ACTIVE_WORKTREE` lanes fail closed with `local_ahead_of_remote`,
+  `remote_ahead_of_local`, or `local_remote_diverged` when both tips exist but
+  are unequal
+
 ## Module Contract
 
 Modules live under `modules/*.md`.

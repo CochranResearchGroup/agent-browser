@@ -14,6 +14,7 @@ tags:
 - Commit at meaningful slice boundaries rather than waiting until a large body of work becomes hard to reason about or recover.
 - Make an explicit local checkpoint before risky refactors, rebases, or cleanup that could discard work.
 - Push when remote backup, collaboration, review, CI, or cross-machine continuity materially matters.
+- Push a recoverable checkpoint before worktree closure, handoff to another owner, machine or environment transition, destructive cleanup, or any pause long enough that local custody could become ambiguous.
 - Do not delay pushing important shared work so long that teammates or automation reason from stale branch state.
 - Do not push half-understood or misleading commits to shared branches just to create activity.
 - If the repo allows work-in-progress commits, keep them on private or clearly scoped branches unless the shared workflow says otherwise.
@@ -21,6 +22,9 @@ tags:
   - private branch: checkpoint for backup and continuity as needed
   - shared feature branch: push whenever collaborators or CI need the current state
   - protected branch: push only through the repo's documented integration path
+- Name the source and destination explicitly for consequential pushes, for example `git push origin HEAD:refs/heads/<branch>`, then verify that the intended remote-tracking ref resolves to the pushed SHA. A successful process exit without ref readback is not sufficient custody evidence.
+- Inspect ahead/behind or expected remote-tip state before pushing. Do not overwrite unexpected remote work.
+- Prohibit plain forced pushes. A private-branch rewrite may use an exact expected-value `--force-with-lease=<ref>:<expected-sha>` only when the repository permits rewriting, no dependent lane relies on the old history, and the replacement ref is verified afterward.
 - Be explicit about whether end-of-day or end-of-slice pushing is expected for backup and handoff.
 - In multi-track repos, do not let unpublished local `main` become a hidden holding area for architectural work once other maintainers depend on `main` for routine maintenance or operational continuity.
 - Require handoff clarity about branch intent when different work classes coexist, for example whether a branch is maintenance-safe, migration-only, or still experimental.

@@ -32,15 +32,16 @@ Select the right reusable policy bundle for a repository, then adapt it into rep
    and unused baseline entries. Use `--force` only for pre-adoption assessment;
    active baselines never apply to full or forced audits.
 9. If the repo adopts `goal-execution-governance`, run `scripts/audit_planning_contract.py --goal-only` and require concrete local bounds, execute-by-default continuation, action-specific approval gates, local replan before escalation, at-most-one risk-triggered drift-discovery pass, closed-world verification when review occurs, and minimal material-checkpoint fields.
-10. Validate that the recommended profile and modules exist in the installed library bundle before drafting changes.
-11. Read the referenced policy modules from this policy library before drafting changes.
-12. Decide whether the repo needs:
+10. If the repo adopts `active-lane-coordination`, refresh remote-tracking refs through its normal fetch policy and run `scripts/audit_active_lanes.py` with an explicit default ref. Prefer `--catalog-only` when the catalog is the complete authorized population; use repeated exact `--branch` selectors for bounded unregistered-lane discovery and reserve `--branch-prefix` for explicit broader surveys. Treat missing, unequal, or contradictory custody as a fail-closed planning input, not as permission for the auditor to mutate Git.
+11. Validate that the recommended profile and modules exist in the installed library bundle before drafting changes.
+12. Read the referenced policy modules from this policy library before drafting changes.
+13. Decide whether the repo needs:
    - a starter profile with minimal edits
    - a profile plus module overrides
    - a missing-modules patch when the repo already partially or mostly matches the selected profile
    - a migration-first adoption because plans, notes, or memories are cluttered
    - a custom composition because no single profile fits cleanly
-13. Draft the repo-local policy patch or recommendation, keeping the adopted policy in `docs/dev/policies/` and using `AGENTS.md` as the wire-in entrypoint.
+14. Draft the repo-local policy patch or recommendation, keeping the adopted policy in `docs/dev/policies/` and using `AGENTS.md` as the wire-in entrypoint.
 
 ## Required references
 
@@ -70,6 +71,10 @@ python scripts/plan_policy_upgrade_actions.py --repo-root /path/to/target-repo -
 python scripts/audit_planning_contract.py --repo-root /path/to/repo --json
 python scripts/audit_planning_contract.py --repo-root /path/to/repo --active-only --json
 python scripts/audit_planning_contract.py --repo-root /path/to/repo --plans-dir doc/dev/plans --json
+python scripts/audit_active_lanes.py --repo-root /path/to/repo --default-ref refs/remotes/origin/main --json
+python scripts/audit_active_lanes.py --repo-root /path/to/repo --default-ref refs/remotes/origin/main --catalog-only --json
+python scripts/audit_active_lanes.py --repo-root /path/to/repo --default-ref refs/remotes/origin/main --branch feature/lane-a --branch fix/lane-b --json
+python scripts/audit_active_lanes.py --repo-root /path/to/repo --default-ref refs/heads/main --catalog-path docs/dev/active-lanes.yaml --plans-dir docs/dev/plans
 ```
 
 ## Guardrails
@@ -82,4 +87,5 @@ python scripts/audit_planning_contract.py --repo-root /path/to/repo --plans-dir 
 - Installation, policy enumeration, and repo wiring should be handled deterministically.
 - Downstream install should support a one-shot path that copies a pinned selector bundle into the target repo from either a reviewed git ref or a local bundle path and can draft the initial local policy set immediately.
 - Released selector bundles should carry a deterministic `release-manifest.json` next to the bundled `policy-library/`.
+- `audit_active_lanes.py` is read-only. It never fetches or performs Git, catalog, plan, worktree, branch, or remote mutations; a clean report never grants integration or cleanup authority.
 - Treat the policy library as a source library, not the runtime source of truth for the target repo.

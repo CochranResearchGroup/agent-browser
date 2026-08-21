@@ -1217,6 +1217,21 @@ def detect_signals(repo_root: Path) -> dict:
             ]
         ),
         "mentions_git_policy": "git policy" in text or "worktree" in text or "branch" in text,
+        "mentions_active_lane_coordination": any(
+            phrase in combined or phrase in semantic_text
+            for phrase in [
+                "active lane",
+                "active-lane",
+                "branch registry",
+                "concurrent worktree",
+                "multiple worktrees",
+                "multiple projects",
+                "multi-project",
+                "off-main plan",
+                "off-main work",
+                "parallel worktree",
+            ]
+        ),
         "mentions_closeout": "closeout" in text or "best recommendation" in text,
         "mentions_policy_harvest": "policy" in semantic_text and "harvest" in semantic_text,
         "mentions_policy_library": any(
@@ -2133,8 +2148,19 @@ def choose_profile(signals: dict, installed_library: dict[str, Any]) -> tuple[st
     if signals["mentions_policy_harvest"] and "policy-harvest-loop" not in modules:
         modules.append("policy-harvest-loop")
         reasons.append("repo language suggests reusable policy harvesting")
-    if signals["mentions_git_policy"] and "git-worktree-hygiene" not in modules:
-        modules.append("git-worktree-hygiene")
+    if signals["mentions_git_policy"]:
+        for module_id in (
+            "git-worktree-hygiene",
+            "commit-history-discipline",
+            "branch-and-integration-strategy",
+            "commit-and-push-cadence",
+        ):
+            if module_id not in modules:
+                modules.append(module_id)
+        reasons.append("repo language requests complete Git branch, commit, push, and worktree discipline")
+    if signals["mentions_active_lane_coordination"] and "active-lane-coordination" not in modules:
+        modules.append("active-lane-coordination")
+        reasons.append("repo language indicates concurrent off-main lanes need default-branch discovery")
     if signals["mentions_upstream_fork"] and "upstream-fork-maintenance" not in modules:
         modules.append("upstream-fork-maintenance")
         reasons.append("repo signals indicate private or local work layered on a non-owned upstream")

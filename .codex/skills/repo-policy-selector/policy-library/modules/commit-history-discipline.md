@@ -17,6 +17,9 @@ tags:
 - Write commit subjects that make sense in history on their own without relying on chat context.
 - Include enough detail in the commit body when the reason, risk, migration effect, or operator impact would be unclear from the diff alone.
 - Commit before risky history operations, broad rebases, or destructive cleanup so recoverable checkpoints exist.
+- Also commit at material handoff, context-switch, branch-transfer, worktree-closure, and integration-preparation boundaries. A checkpoint is mandatory before an operation that could make owned work harder to recover.
+- Review both staged and unstaged diffs before committing. A clean commit message cannot make a mixed or incomplete index truthful.
+- Keep temporary work-in-progress commits on a clearly scoped private or feature branch. Before shared integration, preserve useful intermediate history or consolidate it according to the repository's documented merge model without hiding materially distinct changes.
 - Do not create fake cleanliness by squashing materially different changes into one commit if that harms reviewability or future archaeology.
 - Do not create noisy checkpoint spam on shared history when the repo expects a cleaner review-oriented log.
 - Treat commit history as a durable engineering artifact, not just transport for the current turn.

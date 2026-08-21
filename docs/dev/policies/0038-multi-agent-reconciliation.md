@@ -1,13 +1,4 @@
----
-id: multi-agent-reconciliation
-title: Multi-Agent Reconciliation
-summary: Reconcile overlapping agent work explicitly, preserve ownership signals, and use history to resolve conflicts instead of silently overwriting edits.
-tags:
-  - agents
-  - git
-  - reconciliation
-  - blame
----
+# Policy | Multi-Agent Reconciliation
 
 ## Policy
 
@@ -24,7 +15,6 @@ tags:
 - Do not rewrite another agent's work without first understanding the intended change surface.
 - If a collision reveals weak lane boundaries, update the plan or policy so the same overlap is less likely next time.
 - Do not treat an agent session ending as Git closure. The responsible owner must leave a clean published checkpoint and an explicit custody or integration disposition before its worktree can be removed safely.
-
 ## Adoption Notes
 
 Use this module when repos regularly use multiple agents or contributors on adjacent surfaces and need explicit conflict-resolution discipline.

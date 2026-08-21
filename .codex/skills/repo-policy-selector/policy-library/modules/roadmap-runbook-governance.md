@@ -16,6 +16,7 @@ tags:
   - roadmap: master plan, priority map, and lane catalog
   - runbook: dated turn log of what happened
   - progress ledger: completed-history record
+- When an active-lane catalog is adopted, treat it as the current Git-custody and discovery projection, not as a second roadmap. The roadmap continues to own priority; branch-local plans own execution detail; the runbook owns chronology; Git evidence owns custody and integration proof.
 - Treat `ROADMAP.md` as the master plan and revise it cautiously.
 - Do not materially reorder, rename, or reprioritize roadmap lanes unless the user explicitly asks for that change, or unless a narrow correction is required to unblock already-requested work.
 - Use one canonical top-level roadmap item naming convention, for example `P## | <Lane Title>`, rather than mixing free-form phases, lanes, and milestones.

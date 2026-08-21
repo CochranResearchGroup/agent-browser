@@ -21,9 +21,15 @@ tags:
 - Prefer explicit track naming when different work classes coexist, for example maintenance-oriented branches versus architecture-oriented branches.
 - State whether merge commits, rebased histories, or squash merges are preferred for shared history.
 - State when rebasing is normal and when it is no longer appropriate because others may already depend on the branch.
+- Once another lane, person, automation, or review surface depends on a published branch tip, do not rebase or otherwise rewrite it without explicit reconciliation and bounded lease protection.
 - Treat branch protection, review gates, and release branching as part of the workflow contract rather than personal preference.
 - Do not let local habit override the repo's documented integration model.
 - When a repo supports parallel work, document whether reconciliation should happen by rebase, merge, or explicit integration branches.
+- Keep branch lifecycle distinct from worktree lifecycle: a lane may remain active with a worktree, pause as a remotely preserved ref, become integration-ready, prove integration, remain temporarily cleanup-pending, archive, or receive explicit discard approval.
+- Declare integration readiness only when the lane is clean, its tested checkpoint is published and matches the recorded SHA, dependencies and overlaps are reconciled, and the intended target and integration method are explicit.
+- Prove merge integration by target ancestry. For squash or patch integration, preserve a durable receipt that identifies the source checkpoint and resulting target commit; do not infer integration from similar content or a closed pull request alone.
+- Delete topic refs only after integration proof, verified archival, or exceptional discard approval. Routine branch cleanup must not use forced deletion to bypass missing evidence.
+- Use disposable integration branches for cross-lane compatibility experiments. Do not make an exploratory integration branch a hidden source of truth for its component lanes.
 - If current-behavior maintenance and future-architecture work can touch the same surface concurrently, document which class wins by default unless an approved migration slice says otherwise.
 
 ## Adoption Notes
