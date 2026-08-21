@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
-use crate::runtime_owner_transfer::RuntimeOwnerRegistry;
+use crate::runtime_owner_transfer::{RuntimeLifecycleRecord, RuntimeOwnerRegistry};
 
 use super::service_model::{RemoteViewHandoff, ServiceState};
 
@@ -23,6 +23,9 @@ const REMOTE_VIEW_PRESENTATIONS_FILENAME: &str = "remote-view-presentations.json
 const REMOTE_VIEW_PRESENTATIONS_SCHEMA_VERSION: &str = "agent-browser.remote-view-presentations.v1";
 const RUNTIME_OWNER_REGISTRY_FILENAME: &str = "runtime-owner-registry.json";
 const RUNTIME_OWNER_REGISTRY_SCHEMA_VERSION: &str = "agent-browser.runtime-owner-registry.v1";
+const RUNTIME_LIFECYCLE_REGISTRY_FILENAME: &str = "runtime-lifecycle-registry.json";
+const RUNTIME_LIFECYCLE_REGISTRY_SCHEMA_VERSION: &str =
+    "agent-browser.runtime-lifecycle-registry.v1";
 static SERVICE_STATE_MUTATION_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 const DEFAULT_SERVICE_STATE_LOCK_TIMEOUT: Duration = Duration::from_secs(1);
 const SERVICE_STATE_JSON_STACK_BYTES: usize = 8 * 1024 * 1024;
@@ -44,6 +47,17 @@ struct DurableRuntimeOwnerRegistry {
     registry: RuntimeOwnerRegistry,
 }
 
+/// New lifecycle evidence is isolated from the legacy owner-registry shape so
+/// an older runtime can keep serving during a hot upgrade. New readers merge
+/// this sidecar under the same repository lock.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+struct DurableRuntimeLifecycleRegistry {
+    schema_version: String,
+    registry_revision: u64,
+    records: BTreeMap<String, RuntimeLifecycleRecord>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ServiceStateTransaction {
@@ -51,15 +65,19 @@ struct ServiceStateTransaction {
     handoff_payload: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     owner_registry_payload: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    lifecycle_registry_payload: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ServiceStateSaveBoundary {
     HandoffWrite,
     OwnerRegistryWrite,
+    LifecycleRegistryWrite,
     StateWrite,
     HandoffRename,
     OwnerRegistryRename,
+    LifecycleRegistryRename,
     StateRename,
 }
 
@@ -183,10 +201,12 @@ impl ServiceStateStore for JsonServiceStateStore {
         let handoff_registry = load_remote_view_handoff_registry(&self.path)?;
         let presentation_registry = load_remote_view_presentation_registry(&self.path)?;
         let owner_registry = load_runtime_owner_registry(&self.path)?;
+        let lifecycle_registry = load_runtime_lifecycle_registry(&self.path)?;
         if state_file_missing
             && handoff_registry.handoffs.is_empty()
             && presentation_registry.handoffs.is_empty()
             && owner_registry.schema_version.is_empty()
+            && lifecycle_registry.schema_version.is_empty()
         {
             return Ok(ServiceState::default());
         }
@@ -201,6 +221,9 @@ impl ServiceStateStore for JsonServiceStateStore {
         .handoffs;
         if !owner_registry.schema_version.is_empty() {
             state.runtime_owner_registry = owner_registry.registry;
+        }
+        if !lifecycle_registry.schema_version.is_empty() {
+            state.runtime_owner_registry.lifecycle_records = lifecycle_registry.records;
         }
         state.mark_persisted_entity_sources();
         state.refresh_derived_views();
@@ -249,6 +272,9 @@ fn prepare_service_state_transaction(
                 let mut state = state.clone();
                 state.refresh_derived_views();
                 state.remove_builtin_entity_defaults_for_persistence();
+                let lifecycle_registry_payload =
+                    runtime_lifecycle_registry_payload(&state.runtime_owner_registry)?;
+                state.runtime_owner_registry.lifecycle_records.clear();
                 let serialized = serde_json::to_string_pretty(&state)
                     .map_err(|err| format!("Failed to serialize service state: {err}"))?;
                 Ok(ServiceStateTransaction {
@@ -259,6 +285,7 @@ fn prepare_service_state_transaction(
                     owner_registry_payload: Some(runtime_owner_registry_payload(
                         &state.runtime_owner_registry,
                     )?),
+                    lifecycle_registry_payload: Some(lifecycle_registry_payload),
                 })
             })
             .map_err(|err| format!("Failed to start service state JSON serializer: {err}"))?
@@ -423,6 +450,10 @@ fn remote_view_presentation_registry_path(state_path: &Path) -> PathBuf {
 
 fn runtime_owner_registry_path(state_path: &Path) -> PathBuf {
     state_path.with_file_name(RUNTIME_OWNER_REGISTRY_FILENAME)
+}
+
+fn runtime_lifecycle_registry_path(state_path: &Path) -> PathBuf {
+    state_path.with_file_name(RUNTIME_LIFECYCLE_REGISTRY_FILENAME)
 }
 
 fn load_remote_view_handoff_registry(
@@ -605,6 +636,45 @@ fn runtime_owner_registry_payload(registry: &RuntimeOwnerRegistry) -> Result<Str
     ))
 }
 
+fn load_runtime_lifecycle_registry(
+    state_path: &Path,
+) -> Result<DurableRuntimeLifecycleRegistry, String> {
+    let path = runtime_lifecycle_registry_path(state_path);
+    let raw = match fs::read_to_string(&path) {
+        Ok(raw) => raw,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(DurableRuntimeLifecycleRegistry::default())
+        }
+        Err(err) => {
+            return Err(format!(
+                "Failed to read runtime-lifecycle registry {}: {}",
+                path.display(),
+                err
+            ))
+        }
+    };
+    serde_json::from_str(&raw).map_err(|err| {
+        format!(
+            "Invalid runtime-lifecycle registry JSON {}: {}",
+            path.display(),
+            err
+        )
+    })
+}
+
+fn runtime_lifecycle_registry_payload(registry: &RuntimeOwnerRegistry) -> Result<String, String> {
+    let registry = DurableRuntimeLifecycleRegistry {
+        schema_version: RUNTIME_LIFECYCLE_REGISTRY_SCHEMA_VERSION.to_string(),
+        registry_revision: registry.revision,
+        records: registry.lifecycle_records.clone(),
+    };
+    Ok(format!(
+        "{}\n",
+        serde_json::to_string_pretty(&registry)
+            .map_err(|err| format!("Failed to serialize runtime-lifecycle registry: {err}"))?
+    ))
+}
+
 fn service_state_transaction_path(state_path: &Path) -> PathBuf {
     let file_name = state_path
         .file_name()
@@ -678,7 +748,18 @@ fn recover_service_state_transaction(state_path: &Path) -> Result<(), String> {
             return Err(error);
         }
     };
-    let state_temp = match write_temporary(state_path, &transaction.state_payload, "service state")
+    let lifecycle_registry_path = runtime_lifecycle_registry_path(state_path);
+    let lifecycle_registry_temp = match transaction
+        .lifecycle_registry_payload
+        .as_deref()
+        .map(|payload| {
+            write_temporary(
+                &lifecycle_registry_path,
+                payload,
+                "runtime-lifecycle registry",
+            )
+        })
+        .transpose()
     {
         Ok(value) => value,
         Err(error) => {
@@ -689,12 +770,33 @@ fn recover_service_state_transaction(state_path: &Path) -> Result<(), String> {
             return Err(error);
         }
     };
+    let state_temp = match write_temporary(state_path, &transaction.state_payload, "service state")
+    {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = fs::remove_file(&handoff_temp);
+            if let Some(owner_registry_temp) = owner_registry_temp.as_ref() {
+                let _ = fs::remove_file(owner_registry_temp);
+            }
+            if let Some(lifecycle_registry_temp) = lifecycle_registry_temp.as_ref() {
+                let _ = fs::remove_file(lifecycle_registry_temp);
+            }
+            return Err(error);
+        }
+    };
     replace_from_temporary(&handoff_temp, &handoff_path, "remote-view handoff registry")?;
     if let Some(owner_registry_temp) = owner_registry_temp.as_ref() {
         replace_from_temporary(
             owner_registry_temp,
             &owner_registry_path,
             "runtime-owner registry",
+        )?;
+    }
+    if let Some(lifecycle_registry_temp) = lifecycle_registry_temp.as_ref() {
+        replace_from_temporary(
+            lifecycle_registry_temp,
+            &lifecycle_registry_path,
+            "runtime-lifecycle registry",
         )?;
     }
     replace_from_temporary(&state_temp, state_path, "service state")?;
@@ -723,9 +825,11 @@ fn commit_service_state_transaction(
     merge_current_remote_view_handoff_registry(&store.path, &mut transaction)?;
     let handoff_path = remote_view_handoff_registry_path(&store.path);
     let owner_registry_path = runtime_owner_registry_path(&store.path);
+    let lifecycle_registry_path = runtime_lifecycle_registry_path(&store.path);
     let transaction_path = service_state_transaction_path(&store.path);
     let prior_handoff = fs::read(&handoff_path).ok();
     let prior_owner_registry = fs::read(&owner_registry_path).ok();
+    let prior_lifecycle_registry = fs::read(&lifecycle_registry_path).ok();
 
     store.fail_at(ServiceStateSaveBoundary::HandoffWrite)?;
     persist_durable_remote_view_presentations(&store.path, &transaction)?;
@@ -750,10 +854,41 @@ fn commit_service_state_transaction(
             return Err(error);
         }
     };
+    if let Err(error) = store.fail_at(ServiceStateSaveBoundary::LifecycleRegistryWrite) {
+        let _ = fs::remove_file(&handoff_temp);
+        if let Some(owner_registry_temp) = owner_registry_temp.as_ref() {
+            let _ = fs::remove_file(owner_registry_temp);
+        }
+        return Err(error);
+    }
+    let lifecycle_registry_temp = match transaction
+        .lifecycle_registry_payload
+        .as_deref()
+        .map(|payload| {
+            write_temporary(
+                &lifecycle_registry_path,
+                payload,
+                "runtime-lifecycle registry",
+            )
+        })
+        .transpose()
+    {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = fs::remove_file(&handoff_temp);
+            if let Some(owner_registry_temp) = owner_registry_temp.as_ref() {
+                let _ = fs::remove_file(owner_registry_temp);
+            }
+            return Err(error);
+        }
+    };
     if let Err(error) = store.fail_at(ServiceStateSaveBoundary::StateWrite) {
         let _ = fs::remove_file(&handoff_temp);
         if let Some(owner_registry_temp) = owner_registry_temp.as_ref() {
             let _ = fs::remove_file(owner_registry_temp);
+        }
+        if let Some(lifecycle_registry_temp) = lifecycle_registry_temp.as_ref() {
+            let _ = fs::remove_file(lifecycle_registry_temp);
         }
         return Err(error);
     }
@@ -779,6 +914,9 @@ fn commit_service_state_transaction(
         if let Some(owner_registry_temp) = owner_registry_temp.as_ref() {
             let _ = fs::remove_file(owner_registry_temp);
         }
+        if let Some(lifecycle_registry_temp) = lifecycle_registry_temp.as_ref() {
+            let _ = fs::remove_file(lifecycle_registry_temp);
+        }
         let _ = fs::remove_file(&state_temp);
         let _ = fs::remove_file(&transaction_path);
         return Err(error);
@@ -788,6 +926,9 @@ fn commit_service_state_transaction(
     {
         if let Some(owner_registry_temp) = owner_registry_temp.as_ref() {
             let _ = fs::remove_file(owner_registry_temp);
+        }
+        if let Some(lifecycle_registry_temp) = lifecycle_registry_temp.as_ref() {
+            let _ = fs::remove_file(lifecycle_registry_temp);
         }
         let _ = fs::remove_file(&state_temp);
         let _ = fs::remove_file(&transaction_path);
@@ -820,22 +961,64 @@ fn commit_service_state_transaction(
         }
     }
 
+    if let Some(lifecycle_registry_temp) = lifecycle_registry_temp.as_ref() {
+        let lifecycle_registry_result = store
+            .fail_at(ServiceStateSaveBoundary::LifecycleRegistryRename)
+            .and_then(|()| {
+                replace_from_temporary(
+                    lifecycle_registry_temp,
+                    &lifecycle_registry_path,
+                    "runtime-lifecycle registry",
+                )
+            });
+        if let Err(error) = lifecycle_registry_result {
+            let owner_restore_result =
+                restore_file(&owner_registry_path, prior_owner_registry.as_deref());
+            let handoff_restore_result = restore_file(&handoff_path, prior_handoff.as_deref());
+            let _ = fs::remove_file(lifecycle_registry_temp);
+            let _ = fs::remove_file(&state_temp);
+            if owner_restore_result.is_ok() && handoff_restore_result.is_ok() {
+                let _ = fs::remove_file(&transaction_path);
+            }
+            return match (owner_restore_result, handoff_restore_result) {
+                (Ok(()), Ok(())) => Err(error),
+                (owner_result, handoff_result) => Err(format!(
+                    "{error}; service_state_transaction_recovery_required: owner_registry={}, remote_view_handoffs={}",
+                    owner_result.err().unwrap_or_else(|| "restored".to_string()),
+                    handoff_result.err().unwrap_or_else(|| "restored".to_string())
+                )),
+            };
+        }
+    }
+
     let state_result = store
         .fail_at(ServiceStateSaveBoundary::StateRename)
         .and_then(|()| replace_from_temporary(&state_temp, &store.path, "service state"));
     if let Err(error) = state_result {
         let owner_restore_result =
             restore_file(&owner_registry_path, prior_owner_registry.as_deref());
+        let lifecycle_restore_result = restore_file(
+            &lifecycle_registry_path,
+            prior_lifecycle_registry.as_deref(),
+        );
         let handoff_restore_result = restore_file(&handoff_path, prior_handoff.as_deref());
         let _ = fs::remove_file(&state_temp);
-        if owner_restore_result.is_ok() && handoff_restore_result.is_ok() {
+        if owner_restore_result.is_ok()
+            && lifecycle_restore_result.is_ok()
+            && handoff_restore_result.is_ok()
+        {
             let _ = fs::remove_file(&transaction_path);
         }
-        return match (owner_restore_result, handoff_restore_result) {
-            (Ok(()), Ok(())) => Err(error),
-            (owner_result, handoff_result) => Err(format!(
-                "{error}; service_state_transaction_recovery_required: owner_registry={}, remote_view_handoffs={}",
+        return match (
+            owner_restore_result,
+            lifecycle_restore_result,
+            handoff_restore_result,
+        ) {
+            (Ok(()), Ok(()), Ok(())) => Err(error),
+            (owner_result, lifecycle_result, handoff_result) => Err(format!(
+                "{error}; service_state_transaction_recovery_required: owner_registry={}, runtime_lifecycle_registry={}, remote_view_handoffs={}",
                 owner_result.err().unwrap_or_else(|| "restored".to_string()),
+                lifecycle_result.err().unwrap_or_else(|| "restored".to_string()),
                 handoff_result.err().unwrap_or_else(|| "restored".to_string())
             )),
         };
@@ -964,6 +1147,21 @@ mod tests {
             pending_transfer: None,
             last_transition: None,
         }
+    }
+
+    fn runtime_registry(label: &str) -> RuntimeOwnerRegistry {
+        let owner = runtime_owner(label);
+        let mut registry = RuntimeOwnerRegistry::from_owner(owner.clone());
+        registry.lifecycle_records.insert(
+            owner.browser_id.clone(),
+            RuntimeLifecycleRecord {
+                logical_browser_id: owner.browser_id,
+                profile_identity_digest: owner.profile_identity_digest,
+                owner_generation: owner.owner_generation,
+                ..RuntimeLifecycleRecord::default()
+            },
+        );
+        registry
     }
 
     #[test]
@@ -1316,13 +1514,64 @@ mod tests {
     }
 
     #[test]
-    fn three_file_service_state_commit_is_atomic_at_every_write_and_rename_boundary() {
+    fn lifecycle_sidecar_preserves_new_evidence_without_breaking_legacy_registry_readers() {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase", deny_unknown_fields)]
+        struct LegacyRuntimeOwnerRegistry {
+            revision: u64,
+            owners: BTreeMap<String, ProfileOwner>,
+        }
+
+        let path = unique_state_path("legacy-compatible-runtime-lifecycle-registry");
+        let store = JsonServiceStateStore::new(&path);
+        let owner = runtime_owner("lifecycle");
+        let registry = runtime_registry("lifecycle");
+        store
+            .save(&ServiceState {
+                runtime_owner_registry: registry.clone(),
+                ..ServiceState::default()
+            })
+            .expect("runtime lifecycle should save");
+
+        let state_raw = fs::read_to_string(&path).expect("state should be readable");
+        let owner_raw = fs::read_to_string(runtime_owner_registry_path(&path))
+            .expect("owner registry should be readable");
+        let lifecycle_raw = fs::read_to_string(runtime_lifecycle_registry_path(&path))
+            .expect("lifecycle sidecar should be readable");
+        assert!(!state_raw.contains("lifecycleRecords"));
+        assert!(!owner_raw.contains("lifecycleRecords"));
+        assert!(lifecycle_raw.contains("records"));
+        assert!(lifecycle_raw.contains(&owner.browser_id));
+        let state_json: serde_json::Value =
+            serde_json::from_str(&state_raw).expect("state should be valid JSON");
+        let legacy_state_registry: LegacyRuntimeOwnerRegistry =
+            serde_json::from_value(state_json["runtimeOwnerRegistry"].clone())
+                .expect("legacy state reader should accept the embedded registry");
+        let owner_json: serde_json::Value =
+            serde_json::from_str(&owner_raw).expect("owner sidecar should be valid JSON");
+        let legacy_owner_registry: LegacyRuntimeOwnerRegistry =
+            serde_json::from_value(owner_json["registry"].clone())
+                .expect("legacy owner reader should accept the durable registry");
+        assert_eq!(legacy_state_registry.revision, registry.revision);
+        assert_eq!(legacy_state_registry.owners, registry.owners);
+        assert_eq!(legacy_owner_registry.revision, registry.revision);
+        assert_eq!(legacy_owner_registry.owners, registry.owners);
+
+        let loaded = store.load().expect("new reader should merge the sidecar");
+        assert_eq!(loaded.runtime_owner_registry, registry);
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn four_file_service_state_commit_is_atomic_at_every_write_and_rename_boundary() {
         for boundary in [
             ServiceStateSaveBoundary::HandoffWrite,
             ServiceStateSaveBoundary::OwnerRegistryWrite,
+            ServiceStateSaveBoundary::LifecycleRegistryWrite,
             ServiceStateSaveBoundary::StateWrite,
             ServiceStateSaveBoundary::HandoffRename,
             ServiceStateSaveBoundary::OwnerRegistryRename,
+            ServiceStateSaveBoundary::LifecycleRegistryRename,
             ServiceStateSaveBoundary::StateRename,
         ] {
             let path = unique_state_path(&format!("atomic-service-state-{boundary:?}"));
@@ -1337,9 +1586,7 @@ mod tests {
                             ..RemoteViewHandoff::default()
                         },
                     )]),
-                    runtime_owner_registry: RuntimeOwnerRegistry::from_owner(runtime_owner(
-                        "before",
-                    )),
+                    runtime_owner_registry: runtime_registry("before"),
                     ..ServiceState::default()
                 })
                 .expect("baseline state should save");
@@ -1362,9 +1609,7 @@ mod tests {
                             ..RemoteViewHandoff::default()
                         },
                     )]),
-                    runtime_owner_registry: RuntimeOwnerRegistry::from_owner(runtime_owner(
-                        "after",
-                    )),
+                    runtime_owner_registry: runtime_registry("after"),
                     ..ServiceState::default()
                 })
                 .expect_err("injected boundary must fail the transaction");
@@ -1383,6 +1628,14 @@ mod tests {
                 .runtime_owner_registry
                 .owner(&runtime_owner("after").profile_identity_digest)
                 .is_none());
+            assert!(loaded
+                .runtime_owner_registry
+                .lifecycle_records
+                .contains_key("browser-before"));
+            assert!(!loaded
+                .runtime_owner_registry
+                .lifecycle_records
+                .contains_key("browser-after"));
             assert!(!loaded.browsers.contains_key("browser-after"));
             assert!(!service_state_transaction_path(&path).exists());
             let _ = fs::remove_dir_all(path.parent().unwrap());
