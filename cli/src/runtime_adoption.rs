@@ -954,7 +954,14 @@ pub(crate) fn adapt_runtime_census_readbacks(
             merge_evidence(indexes.iter().map(|index| &flattened[*index].1.evidence));
         let mut observation_entries = indexes
             .iter()
-            .map(|index| serde_json::to_string(&flattened[*index]))
+            .map(|index| {
+                let mut observation = flattened[*index].clone();
+                observation
+                    .1
+                    .aliases
+                    .retain(|alias| !alias.starts_with("target-set:"));
+                serde_json::to_string(&observation)
+            })
             .collect::<Result<Vec<_>, _>>()
             .map_err(|error| format!("could not serialize runtime census observation: {error}"))?;
         observation_entries.sort();
@@ -1704,9 +1711,8 @@ fn cdp_target_readback(
         evidence.metadata_present = status.devtools_port.is_some();
         if let Some(port) = status.devtools_port.filter(|_| status.devtools_reachable) {
             match crate::runtime_profile::bounded_cdp_identity_and_target_digest(port) {
-                Ok((browser_digest, target_digest)) => {
+                Ok((browser_digest, _target_digest)) => {
                     aliases.push(format!("cdp-browser:{browser_digest}"));
-                    aliases.push(format!("target-set:{target_digest}"));
                     evidence.cdp_endpoint = EvidenceAgreement::Match;
                     evidence.target_set = EvidenceAgreement::Match;
                 }
@@ -2967,8 +2973,12 @@ mod tests {
     }
 
     #[test]
-    fn candidate_observation_digest_scopes_source_drift_to_identity_evidence() {
-        fn round(cdp_markers: [&str; 2], cdp_revision: &str) -> RuntimeCensusRound {
+    fn target_set_churn_does_not_invalidate_stable_browser_identity() {
+        fn round(
+            cdp_browser: &str,
+            cdp_markers: [&str; 2],
+            cdp_revision: &str,
+        ) -> RuntimeCensusRound {
             let profile_digest = digest_text("profile-a");
             let readbacks = runtime_census_sources()
                 .into_iter()
@@ -2984,7 +2994,8 @@ mod tests {
                             logical_browser_id_hint: Some("browser-a".to_string()),
                             aliases: vec![
                                 "browser:browser-a".to_string(),
-                                format!("source-marker:{marker}"),
+                                format!("cdp-browser:{cdp_browser}"),
+                                format!("target-set:{marker}"),
                             ],
                             profile_identity_digest: Some(profile_digest.clone()),
                             evidence: cooperative_fragment(source),
@@ -3004,16 +3015,26 @@ mod tests {
             adapt_runtime_census_readbacks(23, readbacks).unwrap()
         }
 
-        let first = round(["target-a", "target-b"], "cdp-first");
-        let reordered = round(["target-b", "target-a"], "cdp-reordered");
+        let first = round("browser-one", ["target-a", "target-b"], "cdp-first");
+        let reordered = round("browser-one", ["target-b", "target-a"], "cdp-reordered");
         let reordered_census = build_stable_runtime_census(&first, &reordered).unwrap();
         assert!(reordered_census.activation_allowed);
         assert_eq!(first.candidates, reordered.candidates);
 
-        let changed = round(["target-a", "target-c"], "cdp-changed");
+        let changed = round("browser-one", ["target-a", "target-c"], "cdp-changed");
         let changed_census = build_stable_runtime_census(&first, &changed).unwrap();
-        assert!(!changed_census.activation_allowed);
-        assert!(changed_census.records[0]
+        assert!(changed_census.activation_allowed);
+        assert_eq!(first.candidates, changed.candidates);
+
+        let replaced_browser = round(
+            "browser-two",
+            ["target-a", "target-c"],
+            "cdp-browser-changed",
+        );
+        let replaced_browser_census =
+            build_stable_runtime_census(&first, &replaced_browser).unwrap();
+        assert!(!replaced_browser_census.activation_allowed);
+        assert!(replaced_browser_census.records[0]
             .reason_codes
             .contains(&"runtime_candidate_changed_during_classification".to_string()));
     }
