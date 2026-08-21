@@ -4220,12 +4220,14 @@ fn transfer_discovered_runtimes(
         let source_session = resolve_runtime_source_session(&service_state, migration)?;
         match migration.disposition {
             RuntimeDisposition::CooperativeTransfer => {
-                let source_session = source_session.ok_or_else(|| {
-                    format!(
-                        "runtime_transfer_source_session_missing:{}",
-                        migration.logical_browser_id
-                    )
-                })?;
+                let Some(source_session) = source_session else {
+                    preserve_runtime_without_live_source(migration);
+                    continue;
+                };
+                if !crate::connection::daemon_ready(&source_session) {
+                    preserve_runtime_without_live_source(migration);
+                    continue;
+                }
                 let (source_session, prepared, retired_aliases) = match
                     prepare_runtime_handoff_with_alias_fallback(
                         &old_binary,
@@ -4407,6 +4409,17 @@ fn transfer_discovered_runtimes(
         }
     }
     Ok(transfer_evidence)
+}
+
+fn preserve_runtime_without_live_source(
+    migration: &mut crate::runtime_adoption::RuntimeMigrationRecord,
+) {
+    migration.classification = crate::runtime_adoption::RuntimeClassification::ManualPreserveOnly;
+    migration.disposition = crate::runtime_adoption::RuntimeDisposition::ManualPreservation;
+    let reason = "verified_browser_without_live_source_session_preserved";
+    if !migration.reason_codes.iter().any(|value| value == reason) {
+        migration.reason_codes.push(reason.to_string());
+    }
 }
 
 /// Stops a census-proven browserless daemon while the admission drain prevents
@@ -8054,6 +8067,28 @@ mod tests {
                 .unwrap();
 
         assert_eq!(source.as_deref(), Some("idle-source"));
+    }
+
+    #[test]
+    fn browser_without_a_live_cooperative_source_is_preserved() {
+        let mut migration = runtime_migration("session:preserved-browser");
+        migration.classification =
+            crate::runtime_adoption::RuntimeClassification::CooperativeLiveOwner;
+        migration.disposition = crate::runtime_adoption::RuntimeDisposition::CooperativeTransfer;
+
+        preserve_runtime_without_live_source(&mut migration);
+
+        assert_eq!(
+            migration.classification,
+            crate::runtime_adoption::RuntimeClassification::ManualPreserveOnly
+        );
+        assert_eq!(
+            migration.disposition,
+            crate::runtime_adoption::RuntimeDisposition::ManualPreservation
+        );
+        assert!(migration
+            .reason_codes
+            .contains(&"verified_browser_without_live_source_session_preserved".to_string()));
     }
 
     #[test]
