@@ -4167,6 +4167,7 @@ fn activate_prepared_payload_transaction(
     )?;
     persist_admission_drain(&prepared.admission_drain_path, &prepared.transaction)?;
     if !isolated_root {
+        capture_selected_runtime_host_before_transfer(&mut prepared.transaction)?;
         let transfer_evidence = transfer_discovered_runtimes(
             paths,
             &prepared.staged,
@@ -5476,27 +5477,57 @@ fn stage_candidate_runtime_host_ingress(
         }
         Err(error) => return Err(error),
     };
-    if registry.selected_backend().topology
-        == crate::runtime_host_ingress::RuntimeHostTopology::SingleHost
-        && transaction
+    if selected_runtime_host_capture_required(
+        registry.selected_backend().topology,
+        transaction
             .runtime_host_convergence
             .as_ref()
-            .is_some_and(|convergence| convergence.old_host.is_none())
-    {
-        let selected = registry.selected_backend();
-        let (old_identity, observed_backend) = capture_runtime_host_identity(
-            &selected.socket_dir,
-            &selected.generation_id,
-            &selected.binary_sha256,
-            false,
-        )?;
-        if &observed_backend != selected {
-            return Err("runtime_host_ingress_selected_identity_changed".to_string());
-        }
-        crate::runtime_adoption::record_runtime_host_identity(transaction, false, old_identity)?;
+            .is_some_and(|convergence| convergence.old_host.is_some()),
+    ) {
+        return Err(
+            "runtime_host_ingress_selected_identity_not_captured_before_transfer".to_string(),
+        );
     }
     repository.stage_candidate(registry.revision, &transaction.transaction_id, candidate)?;
     Ok(())
+}
+
+fn selected_runtime_host_capture_required(
+    topology: crate::runtime_host_ingress::RuntimeHostTopology,
+    old_host_present: bool,
+) -> bool {
+    topology == crate::runtime_host_ingress::RuntimeHostTopology::SingleHost && !old_host_present
+}
+
+fn capture_selected_runtime_host_before_transfer(
+    transaction: &mut crate::runtime_adoption::UpgradeTransaction,
+) -> Result<(), String> {
+    let repository = crate::runtime_host_ingress::RuntimeHostIngressRepository::new(
+        crate::runtime_host_ingress::RuntimeHostIngressRepository::default_path(),
+    );
+    let registry = match repository.load() {
+        Ok(registry) => registry,
+        Err(error) if error.contains("Unable to read runtime host ingress state") => return Ok(()),
+        Err(error) => return Err(error),
+    };
+    let selected = registry.selected_backend();
+    let old_host_present = transaction
+        .runtime_host_convergence
+        .as_ref()
+        .is_some_and(|convergence| convergence.old_host.is_some());
+    if !selected_runtime_host_capture_required(selected.topology, old_host_present) {
+        return Ok(());
+    }
+    let (old_identity, observed_backend) = capture_runtime_host_identity(
+        &selected.socket_dir,
+        &selected.generation_id,
+        &selected.binary_sha256,
+        false,
+    )?;
+    if &observed_backend != selected {
+        return Err("runtime_host_ingress_selected_identity_changed".to_string());
+    }
+    crate::runtime_adoption::record_runtime_host_identity(transaction, false, old_identity)
 }
 
 fn run_candidate_agent_json(
@@ -8367,6 +8398,22 @@ mod tests {
             candidate_runtime_host_socket_dir_in(runtime_root, "upgrade-retry")
         );
         assert!(socket_path.as_os_str().len() <= 103, "{socket_path:?}");
+    }
+
+    #[test]
+    fn selected_single_host_is_captured_before_runtime_transfer() {
+        assert!(selected_runtime_host_capture_required(
+            crate::runtime_host_ingress::RuntimeHostTopology::SingleHost,
+            false,
+        ));
+        assert!(!selected_runtime_host_capture_required(
+            crate::runtime_host_ingress::RuntimeHostTopology::SingleHost,
+            true,
+        ));
+        assert!(!selected_runtime_host_capture_required(
+            crate::runtime_host_ingress::RuntimeHostTopology::LegacyPerSession,
+            false,
+        ));
     }
 
     #[cfg(unix)]
