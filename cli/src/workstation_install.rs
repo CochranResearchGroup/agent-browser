@@ -295,9 +295,10 @@ fn valid_upgrade_transaction_id(value: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
 }
 
-/// Closes one exact admission drain only after proving that its failed
-/// transaction has returned to the sealed old generation and no candidate
-/// executable or dashboard ingress retains effect authority.
+/// Closes one exact failed transaction only after proving that it preserved
+/// the sealed old generation and no candidate executable or dashboard ingress
+/// retains effect authority. Pre-admission census blocks have no drain to own;
+/// every later recovery state must still own the matching drain.
 fn recover_operator_required_upgrade_for_root(
     root: &Path,
     expected_transaction_id: &str,
@@ -311,18 +312,6 @@ fn recover_operator_required_upgrade_for_root(
     let paths = install_paths(root);
     let adoption_root = root.join(".agent-browser/runtime-adoption");
     let drain_path = adoption_root.join("admission-drain.json");
-    let drain: Value = serde_json::from_slice(
-        &fs::read(&drain_path).map_err(display_io("read runtime admission drain", &drain_path))?,
-    )
-    .map_err(|error| format!("Runtime admission drain is invalid: {error}"))?;
-    let drain_transaction_id = drain
-        .get("transactionId")
-        .and_then(Value::as_str)
-        .filter(|value| valid_upgrade_transaction_id(value))
-        .ok_or_else(|| "runtime_admission_drain_transaction_invalid".to_string())?;
-    if drain_transaction_id != expected_transaction_id {
-        return Err("workstation_recovery_transaction_does_not_own_admission".to_string());
-    }
     let transaction_path = adoption_root
         .join("transactions")
         .join(format!("{expected_transaction_id}.json"));
@@ -332,24 +321,51 @@ fn recover_operator_required_upgrade_for_root(
             &transaction_path,
         ))?)
         .map_err(|error| format!("Operator recovery transaction is invalid: {error}"))?;
-    if transaction.transaction_id != expected_transaction_id
-        || drain.get("candidateGenerationId").and_then(Value::as_str)
-            != Some(transaction.candidate_generation_id.as_str())
-        || drain
-            .get("transactionRevision")
-            .and_then(Value::as_u64)
-            .is_none_or(|revision| revision > transaction.revision)
-    {
+    if transaction.transaction_id != expected_transaction_id {
         return Err("workstation_recovery_transaction_evidence_mismatch".to_string());
     }
-    let recovery_checkpoint_present = transaction
+    let admission_drain_present = drain_path.is_file();
+    if admission_drain_present {
+        let drain: Value = serde_json::from_slice(
+            &fs::read(&drain_path)
+                .map_err(display_io("read runtime admission drain", &drain_path))?,
+        )
+        .map_err(|error| format!("Runtime admission drain is invalid: {error}"))?;
+        let drain_transaction_id = drain
+            .get("transactionId")
+            .and_then(Value::as_str)
+            .filter(|value| valid_upgrade_transaction_id(value))
+            .ok_or_else(|| "runtime_admission_drain_transaction_invalid".to_string())?;
+        if drain_transaction_id != expected_transaction_id {
+            return Err("workstation_recovery_transaction_does_not_own_admission".to_string());
+        }
+        if drain.get("candidateGenerationId").and_then(Value::as_str)
+            != Some(transaction.candidate_generation_id.as_str())
+            || drain
+                .get("transactionRevision")
+                .and_then(Value::as_u64)
+                .is_none_or(|revision| revision > transaction.revision)
+        {
+            return Err("workstation_recovery_transaction_evidence_mismatch".to_string());
+        }
+    }
+    let operator_recovery_checkpoint_present = transaction
         .checkpoints
         .iter()
         .any(|checkpoint| checkpoint.name == "operator_recovery_verified_old_generation");
-    if transaction.state != UpgradeTransactionState::OperatorRecoveryRequired
-        && !(transaction.state == UpgradeTransactionState::FailedPreservedOldGeneration
-            && recovery_checkpoint_present)
-    {
+    let pre_admission_recovery_checkpoint_present = transaction
+        .checkpoints
+        .iter()
+        .any(|checkpoint| checkpoint.name == "pre_admission_census_block_recovered");
+    let recoverable = match transaction.state {
+        UpgradeTransactionState::OperatorRecoveryRequired => admission_drain_present,
+        UpgradeTransactionState::BlockedAmbiguousRuntime => !admission_drain_present,
+        UpgradeTransactionState::FailedPreservedOldGeneration => {
+            operator_recovery_checkpoint_present || pre_admission_recovery_checkpoint_present
+        }
+        _ => false,
+    };
+    if !recoverable {
         return Err(format!(
             "workstation_recovery_requires_operator_recovery_state:{:?}",
             transaction.state
@@ -400,15 +416,26 @@ fn recover_operator_required_upgrade_for_root(
         return Err("workstation_recovery_runtime_census_ambiguous".to_string());
     }
 
-    let changed = transaction.state == UpgradeTransactionState::OperatorRecoveryRequired;
+    let pre_admission_census_block =
+        transaction.state == UpgradeTransactionState::BlockedAmbiguousRuntime;
+    let changed = matches!(
+        transaction.state,
+        UpgradeTransactionState::OperatorRecoveryRequired
+            | UpgradeTransactionState::BlockedAmbiguousRuntime
+    );
     if changed {
-        transaction.stop_reason = Some("operator_recovery_verified_old_generation".to_string());
+        let checkpoint = if pre_admission_census_block {
+            "pre_admission_census_block_recovered"
+        } else {
+            "operator_recovery_verified_old_generation"
+        };
+        transaction.stop_reason = Some(checkpoint.to_string());
         transaction.terminal_result = Some("old_generation_preserved".to_string());
         persist_upgrade_transition(
             &transaction_path,
             &mut transaction,
             UpgradeTransactionState::FailedPreservedOldGeneration,
-            "operator_recovery_verified_old_generation",
+            checkpoint,
         )?;
     }
     clear_admission_drain(&drain_path)?;
@@ -422,6 +449,7 @@ fn recover_operator_required_upgrade_for_root(
         "candidateProcessAbsent": true,
         "candidateDashboardRouteAbsent": true,
         "runtimeCensusStable": true,
+        "admissionDrainPresent": admission_drain_present,
         "admissionDraining": false,
     }))
 }
@@ -7400,6 +7428,66 @@ mod tests {
             .checkpoints
             .iter()
             .any(|checkpoint| checkpoint.name == "operator_recovery_verified_old_generation"));
+
+        remove_generation_tree(&paths.generations_dir.join(old_generation_id)).unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn operator_recovery_closes_verified_pre_admission_census_block_without_drain() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-pre-admission-recovery-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        fs::create_dir_all(paths.binary.parent().unwrap()).unwrap();
+        fs::create_dir_all(&paths.legacy_support_dir).unwrap();
+        fs::create_dir_all(&paths.unit_dir).unwrap();
+        fs::write(&paths.binary, b"legacy-binary").unwrap();
+        set_executable(&paths.binary).unwrap();
+        fs::write(paths.legacy_support_dir.join("manifest.json"), b"{}\n").unwrap();
+        for unit in WORKSTATION_GENERATION_UNITS {
+            if unit != "agent-browser-dashboard-backend.service" {
+                fs::write(paths.unit_dir.join(unit), format!("legacy {unit}\n")).unwrap();
+            }
+        }
+        let old_generation_id = migrate_legacy_payload_to_generation(&paths).unwrap();
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "generation-candidate".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.old_generation_id = Some(old_generation_id.clone());
+        transaction.state =
+            crate::runtime_adoption::UpgradeTransactionState::BlockedAmbiguousRuntime;
+        transaction.revision = 1;
+        transaction.stop_reason = Some("runtime_census_ambiguous".to_string());
+        let transaction_path = transaction_path(&root, &transaction.transaction_id);
+        write_private_json_atomic(&transaction_path, &transaction).unwrap();
+
+        let report =
+            recover_operator_required_upgrade_for_root(&root, &transaction.transaction_id, true)
+                .unwrap();
+
+        assert_eq!(report["changed"], true);
+        assert_eq!(report["selectedGenerationId"], old_generation_id);
+        assert_eq!(report["admissionDrainPresent"], false);
+        let recovered: crate::runtime_adoption::UpgradeTransaction =
+            serde_json::from_slice(&fs::read(transaction_path).unwrap()).unwrap();
+        assert_eq!(
+            recovered.state,
+            crate::runtime_adoption::UpgradeTransactionState::FailedPreservedOldGeneration
+        );
+        assert_eq!(
+            recovered.terminal_result.as_deref(),
+            Some("old_generation_preserved")
+        );
+        assert!(recovered
+            .checkpoints
+            .iter()
+            .any(|checkpoint| { checkpoint.name == "pre_admission_census_block_recovered" }));
 
         remove_generation_tree(&paths.generations_dir.join(old_generation_id)).unwrap();
         fs::remove_dir_all(root).unwrap();

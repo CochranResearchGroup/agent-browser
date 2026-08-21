@@ -308,6 +308,7 @@ fn upgrade_transition_allowed(
             | (RollbackAfterCommit, OperatorRecoveryRequired)
             | (Accepted, OperatorRecoveryRequired)
             | (OperatorRecoveryRequired, FailedPreservedOldGeneration)
+            | (BlockedAmbiguousRuntime, FailedPreservedOldGeneration)
             | (
                 Planned | CandidatePreflightReady,
                 BlockedCandidateIncompatible
