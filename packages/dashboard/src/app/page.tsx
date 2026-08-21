@@ -181,6 +181,56 @@ type RuntimeHealth = {
   staleSessions?: string[];
   sessionSupervisors?: SessionSupervisorHealth;
   issues?: RuntimeHealthIssue[];
+  runtimeMultiplicity?: {
+    state?: string;
+    steadyState?: boolean;
+    convergenceWindow?: {
+      active?: boolean;
+      state?: string;
+      transactionId?: string;
+      deadline?: string | null;
+    } | null;
+    counts?: {
+      dashboardProcesses?: number;
+      runtimeHosts?: number;
+      legacyDaemons?: number;
+      executableGenerations?: number;
+    };
+    issues?: string[];
+  };
+  runtimeMonitor?: {
+    ready?: boolean;
+    state?: string;
+    fresh?: boolean;
+    ageSeconds?: number | null;
+    receipt?: {
+      consecutiveFailures?: number;
+      effects?: {
+        service?: {
+          resources?: {
+            summary?: {
+              candidateRssBytes?: number;
+              protectedRssBytes?: number;
+              observedRssBytes?: number;
+              totalRssBytes?: number;
+            };
+          };
+          cleanupObligations?: {
+            trackedCount?: number;
+            missingCount?: number;
+          };
+        };
+        generations?: {
+          removed?: unknown[];
+          retained?: unknown[];
+        };
+      };
+      incident?: {
+        type?: string;
+        failureCount?: number;
+      } | null;
+    };
+  };
   workstationUpgrade?: {
     selectedGenerationId?: string | null;
     admissionDraining?: boolean;
@@ -683,6 +733,52 @@ function RuntimeHealthNotice({ state }: { state: RuntimeHealthState }) {
   );
 }
 
+function RuntimeHealthSummary({ state }: { state: RuntimeHealthState }) {
+  const multiplicity = state.health?.runtimeMultiplicity;
+  const monitor = state.health?.runtimeMonitor;
+  if (!multiplicity && !monitor) return null;
+  const counts = multiplicity?.counts;
+  const cleanup = monitor?.receipt?.effects?.service?.cleanupObligations;
+  const pressure = monitor?.receipt?.effects?.service?.resources?.summary;
+	  const generations = monitor?.receipt?.effects?.generations;
+	  const convergenceWindow = multiplicity?.convergenceWindow;
+  const healthy = multiplicity?.steadyState === true
+    && monitor?.ready === true
+    && (cleanup?.missingCount ?? 0) === 0;
+  return (
+    <div
+      className="dashboard-runtime-notice"
+      role="status"
+      data-runtime-health-summary={healthy ? "ready" : "attention"}
+    >
+      {healthy
+        ? <ShieldCheck className="size-4 shrink-0" />
+        : <AlertTriangle className="size-4 shrink-0" />}
+      <div className="min-w-0">
+        <p>{healthy ? "Runtime healthy" : "Runtime convergence"}</p>
+        <span>
+	          Dashboard {counts?.dashboardProcesses ?? "?"}, host {counts?.runtimeHosts ?? "?"}, legacy daemons {counts?.legacyDaemons ?? "?"}, generations {counts?.executableGenerations ?? "?"}.
+	          {convergenceWindow?.active ? ` Convergence window ${convergenceWindow.state ?? "active"}${convergenceWindow.transactionId ? ` (${convergenceWindow.transactionId})` : ""}.` : ""}
+          {cleanup ? ` Cleanup obligations ${cleanup.trackedCount ?? 0} tracked, ${cleanup.missingCount ?? 0} missing.` : ""}
+          {pressure ? ` RSS ${formatRuntimeBytes(pressure.protectedRssBytes)} protected, ${formatRuntimeBytes(pressure.candidateRssBytes)} reclaimable, ${formatRuntimeBytes(pressure.observedRssBytes)} unowned.` : ""}
+          {generations ? ` Last retention pass removed ${generations.removed?.length ?? 0} and retained ${generations.retained?.length ?? 0}.` : ""}
+          {monitor?.state ? ` Monitor ${monitor.state}${monitor.ageSeconds == null ? "" : ` (${monitor.ageSeconds}s old)`}.` : ""}
+          {monitor?.receipt?.incident?.type ? ` Blocking incident ${monitor.receipt.incident.type} after ${monitor.receipt.incident.failureCount ?? "?"} failures.` : ""}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function formatRuntimeBytes(value?: number): string {
+  if (!Number.isFinite(value)) return "?";
+  const bytes = Math.max(0, Number(value));
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KiB`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MiB`;
+  return `${(bytes / 1024 ** 3).toFixed(1)} GiB`;
+}
+
 function DashboardExperience({
   initialSection = "overview",
   user,
@@ -982,10 +1078,11 @@ function DashboardExperience({
       </TabsContent>
     </Tabs>
   );
-  const runtimeNotice = runtimeManifest.issue || runtimeHealth.issue ? (
+  const runtimeNotice = runtimeManifest.issue || runtimeHealth.issue || runtimeHealth.health ? (
     <>
       <RuntimeManifestNotice state={runtimeManifest} />
       <RuntimeHealthNotice state={runtimeHealth} />
+      <RuntimeHealthSummary state={runtimeHealth} />
     </>
   ) : null;
   const appShellProps = {

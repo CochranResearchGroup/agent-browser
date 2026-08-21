@@ -111,6 +111,8 @@ pub(crate) struct ResourceSummary {
     pub(crate) protected_count: usize,
     pub(crate) observed_count: usize,
     pub(crate) candidate_rss_bytes: u64,
+    pub(crate) protected_rss_bytes: u64,
+    pub(crate) observed_rss_bytes: u64,
     pub(crate) total_rss_bytes: u64,
     pub(crate) managed_lane_count: usize,
     pub(crate) cleanup_obligations_owned: usize,
@@ -670,6 +672,16 @@ fn summarize_resources(state: &ServiceState, records: &[ResourceRecord]) -> Reso
         candidate_rss_bytes: records
             .iter()
             .filter(|record| record.disposition == ResourceDisposition::Candidate)
+            .filter_map(|record| record.rss_bytes)
+            .sum(),
+        protected_rss_bytes: records
+            .iter()
+            .filter(|record| record.disposition == ResourceDisposition::Protected)
+            .filter_map(|record| record.rss_bytes)
+            .sum(),
+        observed_rss_bytes: records
+            .iter()
+            .filter(|record| record.disposition == ResourceDisposition::Observed)
             .filter_map(|record| record.rss_bytes)
             .sum(),
         total_rss_bytes: records.iter().filter_map(|record| record.rss_bytes).sum(),
@@ -1625,6 +1637,37 @@ mod tests {
             rss_bytes: Some(10),
             ..ProcessSample::default()
         }
+    }
+
+    #[test]
+    fn resource_summary_separates_protected_reclaimable_and_unowned_rss() {
+        let records = vec![
+            ResourceRecord {
+                pid: 101,
+                rss_bytes: Some(1_024),
+                disposition: ResourceDisposition::Protected,
+                ..ResourceRecord::default()
+            },
+            ResourceRecord {
+                pid: 102,
+                rss_bytes: Some(2_048),
+                disposition: ResourceDisposition::Candidate,
+                ..ResourceRecord::default()
+            },
+            ResourceRecord {
+                pid: 103,
+                rss_bytes: Some(4_096),
+                disposition: ResourceDisposition::Observed,
+                ..ResourceRecord::default()
+            },
+        ];
+
+        let summary = summarize_resources(&ServiceState::default(), &records);
+
+        assert_eq!(summary.protected_rss_bytes, 1_024);
+        assert_eq!(summary.candidate_rss_bytes, 2_048);
+        assert_eq!(summary.observed_rss_bytes, 4_096);
+        assert_eq!(summary.total_rss_bytes, 7_168);
     }
 
     fn owned_closing_candidate(pid: u32, profile_root: &str) -> (ServiceState, ProcessSample) {

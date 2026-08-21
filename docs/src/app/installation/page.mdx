@@ -226,7 +226,14 @@ process and profile cleanup, finalizes eligible retention, and removes
 unreferenced sealed generations. It does not reinstall Chrome, recreate
 Guacamole, quiesce user units, or restart the dashboard. Repeated failures use
 bounded backoff and become a typed incident on the third consecutive failure.
-Ambiguous and reviewable resources remain untouched. Use
+Ambiguous and reviewable resources remain untouched. Workstation installation
+also selects one runtime host for every ordinary named session. Current
+binaries retain legacy socket connectivity for explicit handoff but reject new
+per-session daemon creation. If no host is selected, rerun
+<code>agent-browser install workstation --apply --json</code>. The authenticated
+dashboard summarizes multiplicity, protected, reclaimable, and unowned RSS,
+cleanup obligations, retention results, monitor freshness, and blocking
+reconciliation incidents from the same receipts. Use
 <code>agent-browser install workstation backup --json</code> for the same
 protected PostgreSQL backup operation invoked by the installed timer. Use
 <code>agent-browser install workstation status --json</code> for a redacted

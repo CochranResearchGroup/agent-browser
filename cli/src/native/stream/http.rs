@@ -1918,6 +1918,7 @@ pub(super) async fn ensure_service_daemon_session(session_name: &str) -> Result<
     command
         .args(["--session", session_name, "--json", "stream", "enable"])
         .env_remove("AGENT_BROWSER_DAEMON")
+        .env_remove(crate::runtime_host::RUNTIME_HOST_PROCESS_ENV)
         .env_remove("AGENT_BROWSER_DAEMON_AUTH_TOKEN")
         .env_remove("AGENT_BROWSER_SESSION")
         .env_remove("AGENT_BROWSER_RUNTIME_PROFILE")

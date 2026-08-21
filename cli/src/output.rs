@@ -1963,10 +1963,20 @@ fn format_service_resources_text(data: &serde_json::Value) -> Option<String> {
         .get("candidateRssBytes")
         .and_then(|value| value.as_u64())
         .unwrap_or(0);
+    let protected_rss = summary
+        .get("protectedRssBytes")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let observed_rss = summary
+        .get("observedRssBytes")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
     let mut lines = vec![format!(
-        "Service resources: processes={total} correlated={correlated} protected={protected} candidates={candidates} rss={} candidate_rss={}",
+        "Service resources: processes={total} correlated={correlated} protected={protected} candidates={candidates} rss={} protected_rss={} reclaimable_rss={} unowned_rss={}",
         format_bytes(total_rss),
-        format_bytes(candidate_rss)
+        format_bytes(protected_rss),
+        format_bytes(candidate_rss),
+        format_bytes(observed_rss)
     )];
     if let Some(resources) = data.get("resources").and_then(|value| value.as_array()) {
         for resource in resources
@@ -5484,6 +5494,13 @@ Guacamole, quiesce user units, or restart the dashboard. Failures enter bounded
 backoff, write runtime-monitor.json, and become a typed incident after three
 consecutive effect failures. Reviewable and ambiguous resources remain visible
 and untouched.
+The authenticated dashboard summarizes multiplicity, protected, reclaimable,
+and unowned RSS, cleanup obligations, retention, monitor freshness, and blocking
+incidents from these same receipts.
+Workstation installation selects one runtime host for ordinary named sessions.
+The current binary can reach an existing legacy per-session daemon only for an
+explicit handoff and rejects every new legacy daemon launch. If no runtime host
+is selected, run `agent-browser install workstation --apply --json`.
 Duplicate-profile pressure and inactive optional-supervisor drift remain
 install-doctor advisories without failing workstation route readiness.
 Before Compose can recreate Guacamole, reconciliation aligns the protected

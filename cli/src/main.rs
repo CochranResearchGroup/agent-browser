@@ -1732,8 +1732,9 @@ fn main() {
         }
     }
 
-    // Native daemon mode: when AGENT_BROWSER_DAEMON is set, run as the daemon process
-    if env::var("AGENT_BROWSER_DAEMON").is_ok() {
+    // One admitted runtime-host process owns all logical browser lanes. New
+    // binaries no longer accept the legacy per-session daemon entry point.
+    if env::var(runtime_host::RUNTIME_HOST_PROCESS_ENV).is_ok() {
         // Ignore SIGPIPE so the daemon isn't killed when the parent drops
         // the piped stderr handle after confirming the daemon is ready.
         #[cfg(unix)]
@@ -1744,6 +1745,13 @@ fn main() {
         let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
         rt.block_on(native::daemon::run_daemon(&session));
         return;
+    }
+    if env::var("AGENT_BROWSER_DAEMON").is_ok() {
+        eprintln!(
+            "{} legacy per-session daemon launch is retired; use an admitted runtime host",
+            color::error_indicator()
+        );
+        exit(1);
     }
 
     // Stable dashboard ingress mode. The ingress process survives backend

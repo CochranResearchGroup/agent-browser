@@ -20,6 +20,7 @@ const serviceModeDocs = readFileSync('docs/src/app/service-mode/page.mdx', 'utf8
 const commandsDocs = readFileSync('docs/src/app/commands/page.mdx', 'utf8');
 const skill = readFileSync('skills/agent-browser/SKILL.md', 'utf8');
 const cliOutput = readFileSync('cli/src/output.rs', 'utf8');
+const cliInstall = readFileSync('cli/src/install.rs', 'utf8');
 const dashboardHttp = readFileSync('cli/src/native/stream/http.rs', 'utf8');
 
 assert.match(
@@ -56,6 +57,18 @@ assert.match(
   page,
   /fetch\("\/api\/runtime\/health", \{[\s\S]*cache: "no-store"[\s\S]*credentials: "same-origin"[\s\S]*setInterval\([\s\S]*10_000[\s\S]*<RuntimeHealthNotice state=\{runtimeHealth\} \/>/,
   'Dashboard shell must poll live runtime health and render executable drift before operator UX degrades',
+);
+
+assert.match(
+  page,
+  /runtimeMultiplicity[\s\S]*runtimeMonitor[\s\S]*data-runtime-health-summary[\s\S]*legacy daemons[\s\S]*Convergence window[\s\S]*Cleanup obligations[\s\S]*protected[\s\S]*reclaimable[\s\S]*Last retention pass[\s\S]*Blocking incident/,
+  'Dashboard runtime health must summarize topology, cleanup accountability, retention, and monitor freshness',
+);
+
+assert.match(
+  cliInstall,
+  /health\["runtimeMultiplicity"\][\s\S]*runtime_multiplicity_report_from_doctor_inputs[\s\S]*health\["runtimeMonitor"\][\s\S]*runtime_monitor_status_json/,
+  'Authenticated runtime health must project the shared multiplicity and monitor authorities',
 );
 
 assert.match(

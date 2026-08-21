@@ -2142,15 +2142,16 @@ pub(crate) fn active_runtime_inventory(expected_sha256: Option<&str>) -> serde_j
 pub(crate) fn runtime_health_json() -> serde_json::Value {
     let current_executable = binary_fingerprint(std::env::current_exe().ok());
     let expected_sha256 = current_executable.get("sha256").and_then(Value::as_str);
+    let runtime_inventory = active_runtime_inventory(expected_sha256);
     let mut health = runtime_health_from_inventory_and_supervisors(
-        active_runtime_inventory(expected_sha256),
+        runtime_inventory.clone(),
         crate::session_supervisor::session_supervisor_health_json(),
     );
     health["dashboardIngress"] = crate::dashboard_ingress::dashboard_ingress_status_json();
     #[cfg(not(test))]
     {
-        health["workstationUpgrade"] =
-            crate::workstation_install::workstation_upgrade_status_json().unwrap_or_else(|error| {
+        let workstation_upgrade = crate::workstation_install::workstation_upgrade_status_json()
+            .unwrap_or_else(|error| {
                 json!({
                     "schemaVersion": "agent-browser.workstation-upgrade-status.v1",
                     "success": false,
@@ -2158,6 +2159,20 @@ pub(crate) fn runtime_health_json() -> serde_json::Value {
                     "error": error,
                 })
             });
+        let daemon_listeners = daemon_listener_inventory(
+            current_executable
+                .get("canonicalPath")
+                .and_then(Value::as_str),
+        );
+        health["runtimeMultiplicity"] =
+            crate::runtime_multiplicity::runtime_multiplicity_report_from_doctor_inputs(
+                &daemon_listeners,
+                &runtime_inventory,
+                &json!({ "workstationUpgrade": workstation_upgrade.clone() }),
+                &workstation_upgrade,
+            );
+        health["runtimeMonitor"] = crate::workstation_install::runtime_monitor_status_json();
+        health["workstationUpgrade"] = workstation_upgrade;
     }
     #[cfg(test)]
     {
@@ -2167,6 +2182,24 @@ pub(crate) fn runtime_health_json() -> serde_json::Value {
             "selectedGenerationId": null,
             "admissionDraining": false,
             "latestTransaction": null,
+        });
+        health["runtimeMultiplicity"] = json!({
+            "schemaVersion": "agent-browser.runtime-multiplicity.v1",
+            "state": "unknown",
+            "steadyState": false,
+            "counts": {
+                "dashboardProcesses": 0,
+                "runtimeHosts": 0,
+                "legacyDaemons": 0,
+                "executableGenerations": 0,
+            },
+            "issues": [],
+        });
+        health["runtimeMonitor"] = json!({
+            "schemaVersion": "agent-browser.runtime-monitor-status.v1",
+            "ready": true,
+            "state": "test",
+            "fresh": true,
         });
     }
     health
@@ -5038,6 +5071,21 @@ mod tests {
         assert_eq!(health["ready"], false);
         assert_eq!(health["sessionSupervisors"]["degradedCount"], 1);
         assert_eq!(health["issues"][0]["code"], "restart_exhausted");
+    }
+
+    #[test]
+    fn runtime_health_exposes_shared_multiplicity_and_monitor_summaries() {
+        let health = runtime_health_json();
+
+        assert_eq!(
+            health["runtimeMultiplicity"]["schemaVersion"],
+            "agent-browser.runtime-multiplicity.v1"
+        );
+        assert!(health["runtimeMultiplicity"]["counts"].is_object());
+        assert_eq!(
+            health["runtimeMonitor"]["schemaVersion"],
+            "agent-browser.runtime-monitor-status.v1"
+        );
     }
 
     #[test]

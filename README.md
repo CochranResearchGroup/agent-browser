@@ -249,7 +249,10 @@ process and profile cleanup, finalizes eligible retention, and removes
 unreferenced sealed generations. It does not reinstall Chrome, recreate
 Guacamole, quiesce user units, or restart the dashboard. Repeated failures use
 bounded backoff and become a typed incident on the third consecutive failure;
-ambiguous and reviewable resources remain untouched.
+ambiguous and reviewable resources remain untouched. The authenticated
+dashboard summarizes steady-state multiplicity, protected, reclaimable, and
+unowned RSS, cleanup obligations, retention results, monitor freshness, and
+blocking reconciliation incidents from the same receipts.
 `agent-browser install workstation backup --json` performs the same protected
 PostgreSQL backup operation used by the installed timer.
 
@@ -1061,9 +1064,11 @@ agent-browser session
 The guarded runtime-host foundation can route several named sessions through
 one authenticated daemon process while keeping each session in an independent
 serialized lane. Set `AGENT_BROWSER_RUNTIME_HOST=1` for disposable validation.
-Closing one lane leaves the other lanes running. This migration switch is not
-yet the default for ordinary CLI sessions; the Linux supervisor always uses
-the shared host. Neither path authorizes cleanup of legacy daemons.
+Closing one lane leaves the other lanes running. Workstation installation
+selects this shared host for ordinary CLI sessions. A current binary can still
+connect to an existing legacy per-session daemon for an explicit handoff, but
+it will not create a new legacy daemon. If no runtime host is selected, run
+`agent-browser install workstation --apply --json` before launching a lane.
 
 On Linux, named sessions can run as lanes under one bounded user-scoped runtime
 host service without launching a browser. Each install records the exact
@@ -3986,12 +3991,12 @@ Connect to `ws://localhost:9223` to receive frames and send input:
 
 ## Architecture
 
-agent-browser uses a client-daemon architecture:
+agent-browser uses a client and runtime-host architecture:
 
-1. **Rust CLI** - Parses commands, communicates with daemon
-2. **Rust Daemon** - Pure Rust daemon using direct CDP, no Node.js required
+1. **Rust CLI** - Parses commands and addresses a named logical lane
+2. **Rust runtime host** - Owns all lanes and uses direct CDP, with no Node.js required
 
-The daemon starts automatically on first command and persists between commands for fast subsequent operations. To auto-shutdown the daemon after a period of inactivity, set `AGENT_BROWSER_IDLE_TIMEOUT_MS` (value in milliseconds). When set, the daemon closes the browser and exits after receiving no commands for the specified duration.
+The selected runtime host starts automatically on the first command and persists between commands for fast subsequent operations. New per-session daemon creation is rejected. Existing legacy daemons remain reachable only for an explicit ownership handoff. To auto-shutdown the runtime host after a period of inactivity, set `AGENT_BROWSER_IDLE_TIMEOUT_MS` (value in milliseconds). When set, the host closes its browsers and exits after receiving no commands for the specified duration.
 
 Persisted service browser-health reconciliation runs every 60000 ms while the daemon is alive. Set `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to change the interval. Use `0` to disable the background loop. Due active service monitors are also enqueued every 60000 ms by default; set `AGENT_BROWSER_SERVICE_MONITOR_INTERVAL_MS=0` to disable monitor scheduling. Use `agent-browser service monitors run-due` for an immediate due-monitor pass without waiting for the next scheduler tick. Use `agent-browser service monitors pause <id>` and `agent-browser service monitors resume <id>` when a noisy monitor needs an explicit operator state change. Use `agent-browser service monitors triage <id>` to acknowledge the related monitor incident and clear reviewed failures together, or `agent-browser service monitors reset <id>` when only the failure count should be cleared while keeping retained evidence.
 

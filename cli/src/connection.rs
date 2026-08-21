@@ -456,8 +456,9 @@ pub(crate) fn register_runtime_lane_config(
     }
 }
 
-fn apply_daemon_env(cmd: &mut Command, session: &str, opts: &DaemonOptions) {
-    cmd.env("AGENT_BROWSER_DAEMON", "1")
+fn apply_runtime_host_env(cmd: &mut Command, session: &str, opts: &DaemonOptions) {
+    cmd.env(crate::runtime_host::RUNTIME_HOST_PROCESS_ENV, "1")
+        .env(crate::runtime_host::RUNTIME_HOST_ENV, "1")
         .env("AGENT_BROWSER_SESSION", session);
 
     if opts.headed {
@@ -794,6 +795,16 @@ fn acquire_runtime_host_startup_lock(session: &str) -> Result<Option<DaemonStart
     }
 }
 
+fn require_runtime_host_admission_for_launch() -> Result<(), String> {
+    if crate::runtime_host::admission_enabled() {
+        return Ok(());
+    }
+    Err(
+        "runtime_host_admission_required: new legacy per-session daemon creation is retired; run `agent-browser install workstation --apply --json` to select the single runtime host"
+            .to_string(),
+    )
+}
+
 pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult, String> {
     cache_runtime_lane_config(session, opts);
     let _startup_lock = acquire_runtime_host_startup_lock(session)?;
@@ -843,6 +854,8 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
             }
         }
     }
+
+    require_runtime_host_admission_for_launch()?;
 
     // Clean up any stale socket/pid files before starting fresh
     cleanup_stale_files(session);
@@ -894,8 +907,7 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
         use std::os::unix::process::CommandExt;
 
         let mut cmd = Command::new(&exe_path);
-        cmd.env("AGENT_BROWSER_DAEMON", "1");
-        apply_daemon_env(&mut cmd, session, opts);
+        apply_runtime_host_env(&mut cmd, session, opts);
         cmd.env(DAEMON_AUTH_TOKEN_ENV, &daemon_auth_token);
 
         unsafe {
@@ -919,8 +931,7 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
         use std::os::windows::process::CommandExt;
 
         let mut cmd = Command::new(&exe_path);
-        cmd.env("AGENT_BROWSER_DAEMON", "1");
-        apply_daemon_env(&mut cmd, session, opts);
+        apply_runtime_host_env(&mut cmd, session, opts);
         cmd.env(DAEMON_AUTH_TOKEN_ENV, &daemon_auth_token);
 
         const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
@@ -1290,6 +1301,27 @@ mod tests {
     }
 
     #[test]
+    fn p117_new_legacy_daemon_launch_is_rejected_without_host_admission() {
+        let guard = EnvGuard::new(&[
+            "AGENT_BROWSER_SOCKET_DIR",
+            "AGENT_BROWSER_RUNTIME_HOST_INGRESS_STATE",
+            crate::runtime_host::RUNTIME_HOST_ENV,
+        ]);
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-p117-legacy-launch-rejection-{}",
+            uuid::Uuid::new_v4()
+        ));
+        guard.set("AGENT_BROWSER_SOCKET_DIR", root.to_str().unwrap());
+        guard.remove("AGENT_BROWSER_RUNTIME_HOST_INGRESS_STATE");
+        guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "0");
+
+        let error = require_runtime_host_admission_for_launch().unwrap_err();
+
+        assert!(error.starts_with("runtime_host_admission_required:"));
+        assert!(!root.exists());
+    }
+
+    #[test]
     fn p117_reachable_host_distinguishes_existing_and_new_logical_lanes() {
         let guard = EnvGuard::new(&[
             "AGENT_BROWSER_SOCKET_DIR",
@@ -1631,7 +1663,7 @@ mod tests {
     }
 
     #[test]
-    fn test_apply_daemon_env_forwards_keychain_settings() {
+    fn test_apply_runtime_host_env_forwards_lane_and_keychain_settings() {
         let remote_env_guard = EnvGuard::new(&[
             "AGENT_BROWSER_REMOTE_VIEW_PROVIDER",
             "AGENT_BROWSER_REMOTE_VIEW_URL",
@@ -1708,7 +1740,7 @@ mod tests {
             allow_stale_daemon_handoff: false,
         };
 
-        apply_daemon_env(&mut cmd, "default", &opts);
+        apply_runtime_host_env(&mut cmd, "default", &opts);
         let envs: Vec<(String, Option<String>)> = cmd
             .get_envs()
             .map(|(k, v)| {
@@ -1722,6 +1754,10 @@ mod tests {
         assert!(envs
             .iter()
             .any(|(k, v)| { k == "AGENT_BROWSER_USE_REAL_KEYCHAIN" && v.as_deref() == Some("1") }));
+        assert!(envs.iter().any(|(k, v)| {
+            k == crate::runtime_host::RUNTIME_HOST_PROCESS_ENV && v.as_deref() == Some("1")
+        }));
+        assert!(!envs.iter().any(|(k, _)| k == "AGENT_BROWSER_DAEMON"));
         assert!(envs.iter().any(|(k, v)| {
             k == "AGENT_BROWSER_EXECUTABLE_PATH"
                 && v.as_deref() == Some("/opt/chromium-stealthcdp/chrome")

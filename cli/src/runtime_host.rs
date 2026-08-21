@@ -15,6 +15,7 @@ pub(crate) const RUNTIME_HOST_ENDPOINT_KEY: &str = "runtime-host";
 pub(crate) const RUNTIME_HOST_LANE_FIELD: &str = "_agentBrowserRuntimeLane";
 pub(crate) const RUNTIME_HOST_LANE_CONFIG_FIELD: &str = "_agentBrowserRuntimeLaneConfig";
 pub(crate) const RUNTIME_HOST_ENV: &str = "AGENT_BROWSER_RUNTIME_HOST";
+pub(crate) const RUNTIME_HOST_PROCESS_ENV: &str = "AGENT_BROWSER_RUNTIME_HOST_PROCESS";
 pub(crate) const DEFAULT_MAX_RUNTIME_LANES: usize = 64;
 
 pub(crate) fn admission_enabled() -> bool {

@@ -122,7 +122,13 @@ response includes every installed named daemon supervisor, its restart state,
 fixed stream port, published port, stream reachability, and executable match.
 Port conflicts, executable drift, stopped units, and exhausted restart limits
 therefore degrade the dashboard immediately instead of waiting for browser UX
-to fail.
+to fail. The persistent runtime summary also shows dashboard-process,
+runtime-host, legacy-daemon, and executable-generation counts from the shared
+multiplicity authority. It reports runtime-monitor freshness, tracked and
+missing cleanup obligations, protected versus reclaimable RSS, unowned RSS,
+the most recent generation-retention result, and any blocking repeated-failure
+incident. These are read-only summaries of the same receipts used by
+workstation reconciliation and install doctor.
 <code>agent-browser install doctor --json</code> and
 <code>agent-browser doctor remote-view --json</code> include the same
 <code>dashboardRuntime</code> manifest, so CLI and dashboard readbacks describe

@@ -1244,6 +1244,11 @@ session supervisor remain visible as install-doctor advisories without
 failing route reconciliation. Active supervisor drift remains blocking. Set
 <code>AGENT_BROWSER_RUNTIME_INTERLOCK_INTERVAL</code> before installation to a
 systemd duration such as <code>5min</code> when a different cadence is needed.
+Ordinary named sessions use the workstation-selected single runtime host. A
+current binary can connect to an existing legacy per-session daemon for an
+explicit handoff, but it rejects new legacy daemon creation. Run
+<code>agent-browser install workstation --apply --json</code> if no runtime host
+is selected.
 The fixture repair uses the route-specific user-scoped XRDP secrets and stops
 before display restoration when the schema, users, secrets, managed-row
 ownership, or resulting two-route topology does not pass readiness. It
