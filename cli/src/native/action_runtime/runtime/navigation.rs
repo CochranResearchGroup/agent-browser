@@ -1275,6 +1275,138 @@ fn rebind_runtime_handoff_service_projection_in_state(
     }
     browser_session_ids.remove(next_session_id);
 
+    if !service_state.browsers.contains_key(logical_browser_id) {
+        return Err(
+            "runtime_handoff_rollback_browser_projection_missing: retained browser record disappeared"
+                .to_string(),
+        );
+    }
+
+    let inherited_session = service_state
+        .sessions
+        .values()
+        .filter(|session| {
+            browser_session_ids.contains(&session.id)
+                && session.profile_id.is_some()
+                && !matches!(session.lease, LeaseState::Released | LeaseState::Expired)
+        })
+        .max_by_key(|session| match session.lease {
+            LeaseState::HumanTakeover => 3,
+            LeaseState::Exclusive => 2,
+            LeaseState::Shared => 1,
+            LeaseState::Released | LeaseState::Expired => 0,
+        })
+        .cloned();
+    if let Some(inherited_profile_id) = inherited_session
+        .as_ref()
+        .and_then(|session| session.profile_id.as_deref())
+    {
+        let conflicting_profile_ids = service_state
+            .sessions
+            .values()
+            .filter(|session| browser_session_ids.contains(&session.id))
+            .filter(|session| !matches!(session.lease, LeaseState::Released | LeaseState::Expired))
+            .filter_map(|session| session.profile_id.as_deref())
+            .filter(|profile_id| *profile_id != inherited_profile_id)
+            .collect::<BTreeSet<_>>();
+        if !conflicting_profile_ids.is_empty() {
+            return Err(format!(
+                "runtime_handoff_profile_projection_conflict: retained browser sessions disagree on profile identity ({})",
+                conflicting_profile_ids.into_iter().collect::<Vec<_>>().join(", ")
+            ));
+        }
+    }
+    if let (Some(candidate_profile_id), Some(inherited_profile_id)) = (
+        service_state
+            .sessions
+            .get(next_session_id)
+            .and_then(|session| session.profile_id.as_deref()),
+        inherited_session
+            .as_ref()
+            .and_then(|session| session.profile_id.as_deref()),
+    ) {
+        if candidate_profile_id != inherited_profile_id {
+            return Err(
+                "runtime_handoff_candidate_profile_projection_conflict: candidate session already references a different profile"
+                    .to_string(),
+            );
+        }
+    }
+    let transferred_tab_ids = service_state
+        .tabs
+        .values()
+        .filter(|tab| tab.browser_id == logical_browser_id)
+        .map(|tab| tab.id.clone())
+        .collect::<BTreeSet<_>>();
+
+    for session_id in &browser_session_ids {
+        let Some(session) = service_state.sessions.get_mut(session_id) else {
+            continue;
+        };
+        session.browser_ids.retain(|id| id != logical_browser_id);
+        session
+            .tab_ids
+            .retain(|id| !transferred_tab_ids.contains(id));
+        session.profile_lease_conflict_session_ids.clear();
+        if session.browser_ids.is_empty() && session.tab_ids.is_empty() {
+            session.lease = LeaseState::Released;
+        }
+    }
+
+    let next_session = service_state
+        .sessions
+        .entry(next_session_id.to_string())
+        .or_insert_with(|| BrowserSession {
+            id: next_session_id.to_string(),
+            ..BrowserSession::default()
+        });
+    if next_session.id.is_empty() {
+        next_session.id = next_session_id.to_string();
+    }
+    if let Some(inherited) = inherited_session {
+        if next_session.service_name.is_none() {
+            next_session.service_name = inherited.service_name;
+        }
+        if next_session.agent_name.is_none() {
+            next_session.agent_name = inherited.agent_name;
+        }
+        if next_session.task_name.is_none() {
+            next_session.task_name = inherited.task_name;
+        }
+        next_session.owner = inherited.owner;
+        next_session.lease = inherited.lease;
+        next_session.profile_id = inherited.profile_id;
+        if next_session.profile_selection_reason.is_none() {
+            next_session.profile_selection_reason = inherited.profile_selection_reason;
+        }
+        next_session.profile_lease_disposition = Some(ProfileLeaseDisposition::ReusedBrowser);
+        if next_session.browser_capability_launch.is_none() {
+            next_session.browser_capability_launch = inherited.browser_capability_launch;
+        }
+        next_session.cleanup = inherited.cleanup;
+        if next_session.last_lease_observed_at.is_none() {
+            next_session.last_lease_observed_at = inherited.last_lease_observed_at;
+        }
+        if next_session.expires_at.is_none() {
+            next_session.expires_at = inherited.expires_at;
+        }
+    }
+    next_session.profile_lease_conflict_session_ids.clear();
+    if !next_session
+        .browser_ids
+        .iter()
+        .any(|id| id == logical_browser_id)
+    {
+        next_session
+            .browser_ids
+            .push(logical_browser_id.to_string());
+    }
+    for tab_id in transferred_tab_ids {
+        if !next_session.tab_ids.contains(&tab_id) {
+            next_session.tab_ids.push(tab_id);
+        }
+    }
+
     let browser = service_state
         .browsers
         .get_mut(logical_browser_id)
@@ -1802,9 +1934,91 @@ mod tests {
         .is_err());
     }
     use crate::native::service_model::{
-        BrowserProcess, BrowserTab, DisplayAllocation, RemoteViewHandoff, RemoteViewRoute,
-        ServiceState, ServiceTabHandle,
+        BrowserProcess, BrowserSession, BrowserTab, DisplayAllocation, LeaseState,
+        ProfileLeaseDisposition, RemoteViewHandoff, RemoteViewRoute, ServiceState,
+        ServiceTabHandle,
     };
+
+    #[test]
+    fn handoff_transfers_profile_lease_to_candidate_session() {
+        let logical_browser_id = "browser-a";
+        let mut state = ServiceState {
+            sessions: std::collections::BTreeMap::from([
+                (
+                    "old-owner".to_string(),
+                    BrowserSession {
+                        id: "old-owner".to_string(),
+                        service_name: Some("x".to_string()),
+                        lease: LeaseState::Exclusive,
+                        profile_id: Some("social-profile".to_string()),
+                        profile_lease_disposition: Some(ProfileLeaseDisposition::ReusedBrowser),
+                        browser_ids: vec![logical_browser_id.to_string()],
+                        tab_ids: vec!["tab-a".to_string()],
+                        ..BrowserSession::default()
+                    },
+                ),
+                (
+                    "candidate".to_string(),
+                    BrowserSession {
+                        id: "candidate".to_string(),
+                        ..BrowserSession::default()
+                    },
+                ),
+            ]),
+            browsers: std::collections::BTreeMap::from([(
+                logical_browser_id.to_string(),
+                BrowserProcess {
+                    id: logical_browser_id.to_string(),
+                    active_session_ids: vec!["old-owner".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            tabs: std::collections::BTreeMap::from([(
+                "tab-a".to_string(),
+                BrowserTab {
+                    id: "tab-a".to_string(),
+                    browser_id: logical_browser_id.to_string(),
+                    session_id: Some("old-owner".to_string()),
+                    owner_session_id: Some("old-owner".to_string()),
+                    ..BrowserTab::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        rebind_runtime_handoff_service_projection_in_state(
+            &mut state,
+            logical_browser_id,
+            &std::collections::BTreeSet::from(["old-owner".to_string()]),
+            "candidate",
+        )
+        .unwrap();
+
+        let old_owner = &state.sessions["old-owner"];
+        assert_eq!(old_owner.lease, LeaseState::Released);
+        assert!(old_owner.browser_ids.is_empty());
+        assert!(old_owner.tab_ids.is_empty());
+
+        let candidate = &state.sessions["candidate"];
+        assert_eq!(candidate.service_name.as_deref(), Some("x"));
+        assert_eq!(candidate.lease, LeaseState::Exclusive);
+        assert_eq!(candidate.profile_id.as_deref(), Some("social-profile"));
+        assert_eq!(
+            candidate.profile_lease_disposition,
+            Some(ProfileLeaseDisposition::ReusedBrowser)
+        );
+        assert_eq!(candidate.browser_ids, [logical_browser_id]);
+        assert_eq!(candidate.tab_ids, ["tab-a"]);
+        assert_eq!(
+            state.browsers[logical_browser_id].active_session_ids,
+            ["candidate"]
+        );
+        assert_eq!(state.tabs["tab-a"].session_id.as_deref(), Some("candidate"));
+        assert_eq!(
+            state.tabs["tab-a"].owner_session_id.as_deref(),
+            Some("candidate")
+        );
+    }
 
     #[test]
     fn rollback_restores_browser_and_tab_projection_to_source_session() {
