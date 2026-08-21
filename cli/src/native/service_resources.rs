@@ -240,6 +240,17 @@ pub(crate) fn service_gc_apply_response(
     )
 }
 
+pub(crate) fn service_gc_unattended_response(state: &mut ServiceState) -> Value {
+    let (processes, collection_warnings) = collect_process_samples();
+    service_gc_unattended_response_from_samples(
+        state,
+        processes,
+        collection_warnings,
+        &LiveInspector,
+        &LiveTerminator,
+    )
+}
+
 fn service_resources_response_from_samples(
     state: &ServiceState,
     processes: Vec<ProcessSample>,
@@ -1019,6 +1030,37 @@ fn service_gc_apply_response_from_samples(
         "warnings": resources_response.get("warnings").cloned().unwrap_or_else(|| json!([])),
     });
     append_gc_event(state, &response);
+    response
+}
+
+fn service_gc_unattended_response_from_samples(
+    state: &mut ServiceState,
+    processes: Vec<ProcessSample>,
+    collection_warnings: Vec<String>,
+    inspector: &dyn ProcessInspector,
+    terminator: &dyn ProcessTerminator,
+) -> Value {
+    let resources = service_resources_response_from_samples(
+        state,
+        processes.clone(),
+        collection_warnings.clone(),
+    );
+    let candidates = candidates_from_response(&resources);
+    let token = review_token_for_candidates(&candidates, unix_now_seconds());
+    let mut response = service_gc_apply_response_from_samples(
+        state,
+        processes,
+        collection_warnings,
+        Some(&token),
+        false,
+        inspector,
+        terminator,
+    );
+    response["authority"] = json!("unattended_policy");
+    response["reviewRequired"] = json!(false);
+    if let Some(token) = response.get_mut("token") {
+        token["mode"] = json!("unattended_policy");
+    }
     response
 }
 
@@ -2035,6 +2077,27 @@ mod tests {
         );
 
         assert_eq!(response["applied"], true);
+        assert_eq!(response["counts"]["terminated"], 1);
+        assert_eq!(state.events.len(), 1);
+    }
+
+    #[test]
+    fn unattended_gc_uses_the_same_candidate_and_identity_authority() {
+        let (mut state, candidate) =
+            owned_closing_candidate(607, "/tmp/agent-browser-plan0117-unattended");
+        let response = service_gc_unattended_response_from_samples(
+            &mut state,
+            vec![candidate.clone()],
+            Vec::new(),
+            &FakeInspector {
+                sample: Some(candidate),
+            },
+            &FakeTerminator,
+        );
+
+        assert_eq!(response["authority"], "unattended_policy");
+        assert_eq!(response["reviewRequired"], false);
+        assert_eq!(response["token"]["mode"], "unattended_policy");
         assert_eq!(response["counts"]["terminated"], 1);
         assert_eq!(state.events.len(), 1);
     }
