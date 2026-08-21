@@ -2412,11 +2412,13 @@ pub(crate) fn classify_runtime(evidence: &RuntimeEvidenceSummary) -> RuntimeClas
         };
         return decision(RuntimeClassification::CooperativeLiveOwner, &[reason]);
     }
-    if evidence.browser_live && !evidence.daemon_live && unique_owner_generations.is_empty() {
-        return decision(
-            RuntimeClassification::OrphanAdoptable,
-            &["verified_browser_without_live_daemon"],
-        );
+    if evidence.browser_live && !evidence.daemon_live && unique_owner_generations.len() <= 1 {
+        let reason = if unique_owner_generations.is_empty() {
+            "verified_browser_without_live_daemon"
+        } else {
+            "verified_browser_without_live_daemon_owner_fenced"
+        };
+        return decision(RuntimeClassification::OrphanAdoptable, &[reason]);
     }
     decision(
         RuntimeClassification::InsufficientEvidence,
@@ -4026,6 +4028,22 @@ mod tests {
         assert_eq!(
             classify_runtime(&evidence).classification,
             RuntimeClassification::InsufficientEvidence
+        );
+    }
+
+    #[test]
+    fn verified_browser_with_fenced_owner_and_no_live_daemon_is_orphan_adoptable() {
+        let mut evidence = live_identity_fragment();
+        evidence.owner_generations = vec![20];
+
+        let decision = classify_runtime(&evidence);
+        assert_eq!(
+            decision.classification,
+            RuntimeClassification::OrphanAdoptable
+        );
+        assert_eq!(
+            decision.reason_codes,
+            vec!["verified_browser_without_live_daemon_owner_fenced"]
         );
     }
 
