@@ -12,7 +12,7 @@ use std::sync::{Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::process_identity::RecordedProcessIdentity;
+use crate::process_identity::{RecordedProcessIdentity, VerifiedProcessTermination};
 
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
@@ -255,8 +255,7 @@ pub(crate) fn attach_daemon_auth_token(cmd: &Value, session: &str) -> Result<Val
     Ok(authenticated)
 }
 
-/// Clean up stale socket and PID files for a session
-pub fn cleanup_stale_files(session: &str) {
+fn cleanup_endpoint_control_files(session: &str) {
     let pid_path = get_pid_path(session);
     let _ = fs::remove_file(&pid_path);
     let version_path = get_version_path(session);
@@ -267,9 +266,6 @@ pub fn cleanup_stale_files(session: &str) {
     let _ = fs::remove_file(&token_path);
     let identity_path = get_daemon_identity_path(session);
     let _ = fs::remove_file(&identity_path);
-    let stream_path = get_socket_dir().join(format!("{}.stream", session));
-    let _ = fs::remove_file(&stream_path);
-
     #[cfg(unix)]
     {
         let socket_path = get_socket_path(session);
@@ -281,6 +277,65 @@ pub fn cleanup_stale_files(session: &str) {
         let port_path = get_port_path(session);
         let _ = fs::remove_file(&port_path);
     }
+}
+
+/// Clean up stale metadata owned by a logical session.
+///
+/// Under runtime-host admission, named sessions are lanes. Their lifecycle
+/// must never delete the shared host's identity, authentication, executable,
+/// or socket records.
+pub fn cleanup_stale_files(session: &str) {
+    let stream_path = get_socket_dir().join(format!("{}.stream", session));
+    let _ = fs::remove_file(&stream_path);
+
+    if crate::runtime_host::admission_enabled()
+        && session != crate::runtime_host::RUNTIME_HOST_ENDPOINT_KEY
+    {
+        return;
+    }
+    cleanup_endpoint_control_files(session);
+}
+
+fn prepare_unreachable_endpoint_for_launch(session: &str) -> Result<(), String> {
+    if !crate::runtime_host::admission_enabled() {
+        cleanup_stale_files(session);
+        return Ok(());
+    }
+
+    let identity_path = get_daemon_identity_path(session);
+    if identity_path.is_file() {
+        let identity = load_daemon_process_identity(session)?;
+        if VerifiedProcessTermination::open(&identity)?.is_some() {
+            return Err(format!(
+                "Runtime host process {} is still live but its endpoint is unreachable; preserving shared host metadata and refusing a duplicate host",
+                identity.pid
+            ));
+        }
+        cleanup_endpoint_control_files(crate::runtime_host::RUNTIME_HOST_ENDPOINT_KEY);
+        cleanup_stale_files(session);
+        return Ok(());
+    }
+
+    let endpoint = crate::runtime_host::RUNTIME_HOST_ENDPOINT_KEY;
+    let socket_dir = get_socket_dir();
+    let incomplete_control_metadata = ["pid", "version", "sha256", "token"]
+        .iter()
+        .any(|suffix| socket_dir.join(format!("{endpoint}.{suffix}")).exists());
+    #[cfg(unix)]
+    let incomplete_control_metadata =
+        incomplete_control_metadata || socket_dir.join(format!("{endpoint}.sock")).exists();
+    #[cfg(windows)]
+    let incomplete_control_metadata =
+        incomplete_control_metadata || socket_dir.join(format!("{endpoint}.port")).exists();
+    if incomplete_control_metadata {
+        return Err(
+            "Runtime host endpoint metadata is incomplete; preserving evidence and refusing a duplicate host"
+                .to_string(),
+        );
+    }
+
+    cleanup_stale_files(session);
+    Ok(())
 }
 
 #[cfg(windows)]
@@ -858,8 +913,9 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
 
     require_runtime_host_admission_for_launch()?;
 
-    // Clean up any stale socket/pid files before starting fresh
-    cleanup_stale_files(session);
+    // Remove only identity-proven stale host metadata. A temporarily
+    // unreachable live host must never be replaced by a duplicate process.
+    prepare_unreachable_endpoint_for_launch(session)?;
 
     // Ensure socket directory exists
     let socket_dir = ensure_socket_dir_exists()?;
@@ -1642,8 +1698,13 @@ mod tests {
     fn test_cleanup_stale_files_removes_version_executable_sha_and_process_identity() {
         let dir = std::env::temp_dir().join("ab-test-cleanup-version");
         let _ = fs::create_dir_all(&dir);
-        let _guard = EnvGuard::new(&["AGENT_BROWSER_SOCKET_DIR", "XDG_RUNTIME_DIR"]);
+        let _guard = EnvGuard::new(&[
+            "AGENT_BROWSER_SOCKET_DIR",
+            "XDG_RUNTIME_DIR",
+            crate::runtime_host::RUNTIME_HOST_ENV,
+        ]);
         _guard.set("AGENT_BROWSER_SOCKET_DIR", dir.to_str().unwrap());
+        _guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "0");
 
         let version_path = dir.join("test-session.version");
         let _ = fs::write(&version_path, "0.1.0");
@@ -1661,6 +1722,71 @@ mod tests {
         assert!(!identity_path.exists());
 
         let _ = fs::remove_dir(&dir);
+    }
+
+    #[test]
+    fn p117_runtime_lane_cleanup_preserves_shared_host_control_metadata() {
+        let dir = std::env::temp_dir().join(format!(
+            "ab-test-runtime-lane-cleanup-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let guard = EnvGuard::new(&[
+            "AGENT_BROWSER_SOCKET_DIR",
+            "XDG_RUNTIME_DIR",
+            crate::runtime_host::RUNTIME_HOST_ENV,
+        ]);
+        guard.set("AGENT_BROWSER_SOCKET_DIR", dir.to_str().unwrap());
+        guard.remove("XDG_RUNTIME_DIR");
+        guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+
+        for suffix in ["pid", "version", "sha256", "token", "identity.json", "sock"] {
+            fs::write(dir.join(format!("runtime-host.{suffix}")), "owned").unwrap();
+        }
+        fs::write(dir.join("logical-lane.stream"), "41001").unwrap();
+
+        cleanup_stale_files("logical-lane");
+
+        for suffix in ["pid", "version", "sha256", "token", "identity.json", "sock"] {
+            assert!(dir.join(format!("runtime-host.{suffix}")).exists());
+        }
+        assert!(!dir.join("logical-lane.stream").exists());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn p117_unreachable_live_runtime_host_refuses_duplicate_launch() {
+        let dir = std::env::temp_dir().join(format!(
+            "ab-test-runtime-host-live-fence-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let guard = EnvGuard::new(&[
+            "AGENT_BROWSER_SOCKET_DIR",
+            "XDG_RUNTIME_DIR",
+            crate::runtime_host::RUNTIME_HOST_ENV,
+        ]);
+        guard.set("AGENT_BROWSER_SOCKET_DIR", dir.to_str().unwrap());
+        guard.remove("XDG_RUNTIME_DIR");
+        guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+
+        let executable = std::env::current_exe().unwrap();
+        let identity = crate::process_identity::capture_process_identity(
+            std::process::id(),
+            Some(&executable),
+            None,
+        )
+        .unwrap();
+        write_daemon_process_identity("logical-lane", &identity).unwrap();
+        fs::write(dir.join("runtime-host.pid"), identity.pid.to_string()).unwrap();
+        fs::write(dir.join("runtime-host.sock"), "owned").unwrap();
+
+        let error = prepare_unreachable_endpoint_for_launch("logical-lane").unwrap_err();
+        assert!(error.contains("refusing a duplicate host"));
+        assert!(dir.join("runtime-host.pid").exists());
+        assert!(dir.join("runtime-host.identity.json").exists());
+        assert!(dir.join("runtime-host.sock").exists());
+        fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
@@ -1843,8 +1969,13 @@ mod tests {
     fn test_cleanup_stale_files_removes_auth_token() {
         let dir = std::env::temp_dir().join("ab-test-cleanup-token");
         let _ = fs::create_dir_all(&dir);
-        let _guard = EnvGuard::new(&["AGENT_BROWSER_SOCKET_DIR", "XDG_RUNTIME_DIR"]);
+        let _guard = EnvGuard::new(&[
+            "AGENT_BROWSER_SOCKET_DIR",
+            "XDG_RUNTIME_DIR",
+            crate::runtime_host::RUNTIME_HOST_ENV,
+        ]);
         _guard.set("AGENT_BROWSER_SOCKET_DIR", dir.to_str().unwrap());
+        _guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "0");
 
         let token_path = dir.join("test-session.token");
         let _ = fs::write(&token_path, "secret");
