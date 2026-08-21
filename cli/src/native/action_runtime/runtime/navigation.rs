@@ -586,23 +586,46 @@ async fn handle_runtime_handoff_orphan_adoption(
     let snapshot = repository.load_snapshot()?;
     let logical_browser_id =
         orphan_logical_browser_id_with_hint(&snapshot, source_session, logical_browser_id_hint)?;
-    let browser = snapshot
-        .browsers
-        .get(&logical_browser_id)
-        .cloned()
-        .ok_or_else(|| {
-            format!(
-                "runtime_handoff_orphan_browser_missing: no logical browser is recorded for source session '{source_session}'"
-            )
+    let (browser, recorded, recovered_projection) = match (
+        snapshot.browsers.get(&logical_browser_id).cloned(),
+        snapshot
+            .browser_process_identities
+            .get(&logical_browser_id)
+            .cloned(),
+    ) {
+        (Some(browser), Some(recorded)) => (browser, recorded, false),
+        (None, None) => {
+            let (browser, recorded) =
+                durable_orphan_runtime_evidence(&snapshot, source_session, &logical_browser_id)?;
+            (browser, recorded, true)
+        }
+        _ => return Err(
+            "runtime_handoff_orphan_projection_partial: browser and process evidence must agree"
+                .to_string(),
+        ),
+    };
+    if recovered_projection {
+        repository.mutate(|service_state| {
+            service_state
+                .browsers
+                .insert(logical_browser_id.clone(), browser.clone());
+            service_state
+                .browser_process_identities
+                .insert(logical_browser_id.clone(), recorded.clone());
+            let session = service_state
+                .sessions
+                .entry(source_session.to_string())
+                .or_insert_with(|| BrowserSession {
+                    id: source_session.to_string(),
+                    ..BrowserSession::default()
+                });
+            session.profile_id = browser.profile_id.clone();
+            if !session.browser_ids.contains(&logical_browser_id) {
+                session.browser_ids.push(logical_browser_id.clone());
+            }
+            Ok(())
         })?;
-    let recorded = snapshot
-        .browser_process_identities
-        .get(&logical_browser_id)
-        .cloned()
-        .ok_or_else(|| {
-            "runtime_handoff_orphan_process_identity_missing: exact process evidence is required"
-                .to_string()
-        })?;
+    }
     let browser_pid = browser.pid.ok_or_else(|| {
         "runtime_handoff_orphan_pid_missing: exact browser PID is required".to_string()
     })?;
@@ -914,12 +937,107 @@ fn orphan_logical_browser_id_with_hint(
                 && owner.daemon_session_route == source_session
                 && owner.browser_id == logical_browser_id
         });
-    if (!session_bound && !owner_bound) || !snapshot.browsers.contains_key(logical_browser_id) {
+    let durable_handoff_bound =
+        durable_orphan_runtime_profile(snapshot, source_session, logical_browser_id).is_ok();
+    if (!session_bound && !owner_bound && !durable_handoff_bound)
+        || (!snapshot.browsers.contains_key(logical_browser_id) && !durable_handoff_bound)
+    {
         return Err(format!(
             "runtime_handoff_orphan_browser_hint_mismatch: source session '{source_session}' is not bound to '{logical_browser_id}'"
         ));
     }
     Ok(logical_browser_id.to_string())
+}
+
+fn durable_orphan_runtime_profile(
+    snapshot: &crate::native::service_model::ServiceState,
+    source_session: &str,
+    logical_browser_id: &str,
+) -> Result<String, String> {
+    let owner = snapshot
+        .runtime_owner_registry
+        .owners
+        .values()
+        .find(|owner| {
+            owner.state == crate::runtime_owner_transfer::ProfileOwnerState::Orphaned
+                && owner.daemon_session_route == source_session
+                && owner.browser_id == logical_browser_id
+        })
+        .ok_or_else(|| "runtime_handoff_durable_orphan_owner_mismatch".to_string())?;
+    let mut profiles = snapshot
+        .remote_view_handoffs
+        .values()
+        .filter(|handoff| {
+            handoff.state == "ready"
+                && handoff.browser_id.as_deref() == Some(logical_browser_id)
+                && handoff.session_name.as_deref() == Some(source_session)
+                && handoff
+                    .presentation_receipt
+                    .as_ref()
+                    .is_some_and(|receipt| {
+                        receipt.state == "ready"
+                            && receipt.logical_browser_id == logical_browser_id
+                            && receipt.process_instance_digest.as_deref()
+                                == Some(owner.process_instance_digest.as_str())
+                            && receipt.daemon_owner_generation.is_some_and(|generation| {
+                                generation == owner.owner_generation
+                                    || generation.checked_add(1) == Some(owner.owner_generation)
+                            })
+                    })
+        })
+        .filter_map(|handoff| handoff.profile_id.as_deref())
+        .filter(|profile| !profile.trim().is_empty())
+        .map(str::to_string)
+        .collect::<BTreeSet<_>>();
+    if profiles.len() != 1 {
+        return Err("runtime_handoff_durable_orphan_profile_ambiguous".to_string());
+    }
+    Ok(profiles.pop_first().expect("one durable orphan profile"))
+}
+
+fn durable_orphan_runtime_evidence(
+    snapshot: &crate::native::service_model::ServiceState,
+    source_session: &str,
+    logical_browser_id: &str,
+) -> Result<(BrowserProcess, ServiceBrowserProcessIdentity), String> {
+    let runtime_profile =
+        durable_orphan_runtime_profile(snapshot, source_session, logical_browser_id)?;
+    let runtime_state = read_runtime_state(&runtime_profile)?
+        .ok_or_else(|| "runtime_handoff_durable_orphan_runtime_state_missing".to_string())?;
+    let process_identity = runtime_state
+        .process_identity
+        .clone()
+        .ok_or_else(|| "runtime_handoff_durable_orphan_process_identity_missing".to_string())?;
+    if !crate::runtime_profile::runtime_process_assessment(
+        Some(&runtime_profile),
+        runtime_state.browser_pid,
+    )
+    .authorizes_adoption()
+    {
+        return Err("runtime_handoff_durable_orphan_process_mismatch".to_string());
+    }
+    let cdp_endpoint = runtime_state
+        .ws_url
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "runtime_handoff_durable_orphan_cdp_missing".to_string())?;
+    Ok((
+        BrowserProcess {
+            id: logical_browser_id.to_string(),
+            profile_id: Some(runtime_profile.clone()),
+            host: ServiceBrowserHost::RemoteHeaded,
+            health: ServiceBrowserHealth::Ready,
+            pid: Some(runtime_state.browser_pid),
+            cdp_endpoint: Some(cdp_endpoint),
+            active_session_ids: vec![source_session.to_string()],
+            ..BrowserProcess::default()
+        },
+        ServiceBrowserProcessIdentity {
+            process_identity,
+            user_data_dir: Some(runtime_state.user_data_dir),
+            runtime_profile: Some(runtime_profile),
+        },
+    ))
 }
 
 fn persist_adopted_logical_browser_health(
@@ -1985,6 +2103,81 @@ mod tests {
             Some("session:different")
         )
         .is_err());
+    }
+
+    #[test]
+    fn revoked_owner_accepts_one_exact_ready_durable_handoff_alias() {
+        use crate::native::service_model::{DurableHandoffPresentationReceipt, ViewStreamProvider};
+        use crate::runtime_owner_transfer::{ProfileOwner, ProfileOwnerState};
+
+        let source_session = "orphan-recovered";
+        let logical_browser_id = "session:payment";
+        let process_digest = "2".repeat(64);
+        let mut state = crate::native::service_model::ServiceState::default();
+        state.runtime_owner_registry.owners.insert(
+            "1".repeat(64),
+            ProfileOwner {
+                owner_id: "owner-payment".to_string(),
+                profile_identity_digest: "1".repeat(64),
+                state: ProfileOwnerState::Orphaned,
+                owner_generation: 10,
+                browser_id: logical_browser_id.to_string(),
+                daemon_session_route: source_session.to_string(),
+                process_instance_digest: process_digest.clone(),
+                browser_family: "chrome".to_string(),
+                cdp_endpoint_identity_digest: "3".repeat(64),
+                target_set_digest: "4".repeat(64),
+                pending_transfer: None,
+                last_transition: None,
+            },
+        );
+        state.remote_view_handoffs.insert(
+            "r-payment".to_string(),
+            RemoteViewHandoff {
+                id: "r-payment".to_string(),
+                state: "ready".to_string(),
+                profile_id: Some("default".to_string()),
+                browser_id: Some(logical_browser_id.to_string()),
+                session_name: Some(source_session.to_string()),
+                presentation_receipt: Some(DurableHandoffPresentationReceipt {
+                    schema_version: "agent-browser.durable-handoff-presentation.v1".to_string(),
+                    generation: 7,
+                    dashboard_deployment_generation: "generation-a".to_string(),
+                    logical_browser_id: logical_browser_id.to_string(),
+                    daemon_owner_generation: Some(9),
+                    process_instance_digest: Some(process_digest),
+                    target_id: "target-a".to_string(),
+                    required_stream_provider: ViewStreamProvider::RdpGateway,
+                    observed_stream_provider: ViewStreamProvider::RdpGateway,
+                    route_id: "route-a".to_string(),
+                    display_allocation_id: "display-a".to_string(),
+                    observed_at: "2026-08-21T00:00:00Z".to_string(),
+                    state: "ready".to_string(),
+                }),
+                ..RemoteViewHandoff::default()
+            },
+        );
+
+        assert_eq!(
+            durable_orphan_runtime_profile(&state, source_session, logical_browser_id).unwrap(),
+            "default"
+        );
+        assert_eq!(
+            orphan_logical_browser_id_with_hint(&state, source_session, Some(logical_browser_id))
+                .unwrap(),
+            logical_browser_id
+        );
+        state
+            .remote_view_handoffs
+            .get_mut("r-payment")
+            .unwrap()
+            .presentation_receipt
+            .as_mut()
+            .unwrap()
+            .daemon_owner_generation = Some(8);
+        assert!(
+            durable_orphan_runtime_profile(&state, source_session, logical_browser_id).is_err()
+        );
     }
     use crate::native::service_model::{
         BrowserProcess, BrowserSession, BrowserTab, DisplayAllocation, LeaseState,
