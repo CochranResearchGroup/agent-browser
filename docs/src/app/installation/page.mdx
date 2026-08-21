@@ -219,8 +219,14 @@ the database unchanged. It also reuses the retained Compose project label so
 the existing containers are reconciled in place. A retained container without
 a usable password or project label fails closed.
 
-Use <code>agent-browser install workstation reconcile --json</code> to rerun
-the installed convergence controller without reinstalling the payload. Use
+Use <code>agent-browser install workstation reconcile --json</code> to run the
+same lightweight maintenance authority as the installed timer. It reconciles
+route users through the non-PAM helper, applies only identity-proven unattended
+process and profile cleanup, finalizes eligible retention, and removes
+unreferenced sealed generations. It does not reinstall Chrome, recreate
+Guacamole, quiesce user units, or restart the dashboard. Repeated failures use
+bounded backoff and become a typed incident on the third consecutive failure.
+Ambiguous and reviewable resources remain untouched. Use
 <code>agent-browser install workstation backup --json</code> for the same
 protected PostgreSQL backup operation invoked by the installed timer. Use
 <code>agent-browser install workstation status --json</code> for a redacted
@@ -258,11 +264,12 @@ For a persistent local dashboard and self-healing RDP route plane, run
 <code>bash scripts/install-dashboard-user-service.sh</code> from the checkout.
 Alongside <code>agent-browser-dashboard.service</code>, it installs
 <code>agent-browser-runtime-interlock.timer</code>. The interlock runs after
-boot and five minutes after each completed pass by default, hands stale daemon
-sessions proven by install doctor to the current executable without closing
-their browsers, restores missing route displays, and records its latest
-receipt under
-<code>~/.agent-browser/convergence/local-runtime-latest.json</code>. Set
+boot and five minutes after each completed pass by default. It invokes the
+installed lightweight workstation reconciler directly, reconciles route users
+through the non-PAM helper, applies only identity-proven unattended cleanup,
+advances retention, and records bounded backoff under
+<code>~/.agent-browser/convergence/runtime-monitor.json</code>. It does not
+require a checkout or pnpm. Set
 <code>AGENT_BROWSER_RUNTIME_INTERLOCK_INTERVAL</code> before installation to a
 systemd duration such as <code>5min</code> to change the cadence.
 

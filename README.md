@@ -242,8 +242,14 @@ but no longer pins every generation it names.
 cleanup. A later explicit `--apply` retains the selected generation, the
 immediately previous healthy rollback generation, and exact live-process,
 named-supervisor, active-transaction, and open-rollback references.
-`agent-browser install workstation reconcile --json` reruns the installed
-convergence controller without reinstalling the payload.
+`agent-browser install workstation reconcile --json` runs the same lightweight
+maintenance authority as the installed interlock timer. It reconciles route
+users through the non-PAM helper, applies only identity-proven unattended
+process and profile cleanup, finalizes eligible retention, and removes
+unreferenced sealed generations. It does not reinstall Chrome, recreate
+Guacamole, quiesce user units, or restart the dashboard. Repeated failures use
+bounded backoff and become a typed incident on the third consecutive failure;
+ambiguous and reviewable resources remain untouched.
 `agent-browser install workstation backup --json` performs the same protected
 PostgreSQL backup operation used by the installed timer.
 
@@ -1792,15 +1798,13 @@ and retains 14 dumps by default. Its helper is copied under
 startup failures, and does not depend on a mutable checkout. A paired `.keep`
 file protects a dump from automatic retention. Set
 `AGENT_BROWSER_GUACAMOLE_BACKUP_RETENTION` to a positive integer to change that
-retention. At
-boot and five minutes after each completed pass, the interlock runs bounded local convergence without
-replacing installed artifacts: it hands doctor-confirmed stale daemon sessions
-to the current executable without closing their browsers, reconciles retained
-service state, recreates or migrates the supported Guacamole route fixtures
-with distinct route-specific users when doctor reports missing fixtures or a
-collapsed same-user display, restores missing Guacamole/XRDP route displays,
-reapplies route-display access when required, and writes the latest receipt to
-`~/.agent-browser/convergence/local-runtime-latest.json`. Set
+retention. At boot and five minutes after each completed pass, the interlock
+runs the installed lightweight maintenance authority without replacing
+installed artifacts. It reconciles route-user credentials through the non-PAM
+helper, applies only identity-proven unattended process and retained-state
+cleanup, finalizes eligible retention, and removes unreferenced sealed
+generations. It records current state and bounded backoff in
+`~/.agent-browser/convergence/runtime-monitor.json`. Set
 `AGENT_BROWSER_RUNTIME_INTERLOCK_INTERVAL` before installation to another
 systemd duration such as `5min` when a different cadence is needed.
 Run `pnpm status:rdp-guac-postgres` to verify cluster identity and mount

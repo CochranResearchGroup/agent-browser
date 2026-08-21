@@ -1132,6 +1132,8 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
     let session_supervisors = crate::session_supervisor::session_supervisor_health_json();
     install_doctor_trace("workstation_payload");
     let workstation_payload = workstation_payload_status();
+    install_doctor_trace("runtime_monitor");
+    let runtime_monitor = crate::workstation_install::runtime_monitor_status_json();
     install_doctor_trace("runtime_multiplicity");
     let runtime_multiplicity =
         crate::runtime_multiplicity::runtime_multiplicity_report_from_doctor_inputs(
@@ -1162,6 +1164,60 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
             .cloned()
             .unwrap_or_default(),
     );
+    if workstation_payload.get("ready").and_then(Value::as_bool) == Some(true)
+        && runtime_monitor.get("ready").and_then(Value::as_bool) != Some(true)
+    {
+        issues.push(json!({
+            "code": "runtime_monitor_not_ready",
+            "message": "the installed runtime monitor is missing, stale, or in effect backoff",
+            "state": runtime_monitor.get("state").cloned().unwrap_or(Value::Null),
+            "nextAction": "inspect_runtime_monitor_receipt",
+        }));
+    }
+    issues.extend(
+        runtime_multiplicity
+            .get("issues")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(|code| {
+                json!({
+                    "code": format!("runtime_multiplicity_{code}"),
+                    "message": "runtime process or executable multiplicity is outside the allowed steady state or convergence window",
+                })
+            }),
+    );
+    let missing_cleanup_obligations = runtime_monitor
+        .pointer("/receipt/effects/service/cleanupObligations/missingCount")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    if missing_cleanup_obligations > 0 {
+        issues.push(json!({
+            "code": "runtime_cleanup_obligations_missing",
+            "message": "managed browser process identities exist without lifecycle cleanup obligations",
+            "count": missing_cleanup_obligations,
+        }));
+    }
+    let monitor_resource_summary = runtime_monitor
+        .pointer("/receipt/effects/service/resources/summary")
+        .unwrap_or(&Value::Null);
+    let observed_processes = monitor_resource_summary
+        .get("observedCount")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let total_rss_bytes = monitor_resource_summary
+        .get("totalRssBytes")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    if observed_processes > 0 && total_rss_bytes >= 6 * 1024 * 1024 * 1024 {
+        issues.push(json!({
+            "code": "runtime_pressure_ownership_unknown",
+            "message": "runtime process RSS is high while ownership remains unknown",
+            "observedProcessCount": observed_processes,
+            "totalRssBytes": total_rss_bytes,
+        }));
+    }
 
     json!({
         "success": issues.is_empty(),
@@ -1179,6 +1235,7 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
             "liveDashboardRuntime": live_dashboard_runtime,
             "runtimeInventory": runtime_inventory,
             "runtimeMultiplicity": runtime_multiplicity,
+            "runtimeMonitor": runtime_monitor,
             "daemonListenerInventory": daemon_listener_inventory,
             "runtimeConvergence": runtime_convergence,
             "sessionSupervisors": session_supervisors,

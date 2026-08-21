@@ -149,8 +149,8 @@ assert.doesNotMatch(
 
 assert.match(
   installer,
-  /Description=agent-browser runtime health interlock[\s\S]*converge:local-runtime -- --apply --skip-publish --json/,
-  'dashboard service installation must install the runtime-health interlock service',
+  /Description=agent-browser runtime health interlock[\s\S]*ExecStart=\$AGENT_BROWSER_BIN install workstation reconcile --json/,
+  'dashboard service installation must route the interlock through the installed reconciler',
 );
 
 assert.match(
@@ -185,8 +185,14 @@ assert.doesNotMatch(
 
 assert.match(
   installer,
-  /Environment=PATH=\$PATH[\s\S]*Environment=AGENT_BROWSER_BIN=\$AGENT_BROWSER_BIN[\s\S]*Environment=PNPM_BIN=\$PNPM_BIN[\s\S]*Environment=AGENT_BROWSER_ROUTE_DISPLAY_AGENT_BROWSER_CMD=\$AGENT_BROWSER_BIN/,
-  'runtime-health interlock must bind command paths explicitly for the systemd user environment',
+  /Environment=PATH=\$PATH[\s\S]*ExecStart=\$AGENT_BROWSER_BIN install workstation reconcile --json/,
+  'runtime-health interlock must bind the installed command path explicitly for the systemd user environment',
+);
+
+assert.doesNotMatch(
+  installer,
+  /converge:local-runtime|PNPM_BIN|WorkingDirectory=\$ROOT_DIR/,
+  'runtime-health interlock must not depend on pnpm or a mutable checkout',
 );
 
 assert.match(

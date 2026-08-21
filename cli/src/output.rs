@@ -5471,12 +5471,19 @@ Real-host apply starts a shadow candidate dashboard on the second port after
 ingress. After runtime transfer it waits up to five minutes for an authenticated
 candidate journey committed with dashboard ingress commit. Stable ingress stays
 on the old backend until that receipt exists, then moves to the managed
-candidate backend on the next port. Workstation gc
-is a separate reviewed operation. It retains the selected generation and every
+candidate backend on the next port. Workstation gc remains available as a
+reviewed operator operation. It retains the selected generation and every
 generation referenced by a live process, supervisor, rollback-capable, failed,
 or unclosed transaction. Dry run reports candidates without deleting them.
-If reconciliation fails, their exact prior active states are restored and a
-private workstation-last-failure.json diagnostic receipt is written.
+The installed runtime interlock and the operator-facing workstation reconcile
+command run the same lightweight maintenance authority. Each pass reconciles
+route-user credentials through the non-PAM helper, applies only identity-proven
+unattended process and profile GC classes, finalizes eligible retention, and
+removes unreferenced sealed generations. It does not install Chrome, recreate
+Guacamole, quiesce user units, or restart the dashboard. Failures enter bounded
+backoff, write runtime-monitor.json, and become a typed incident after three
+consecutive effect failures. Reviewable and ambiguous resources remain visible
+and untouched.
 Duplicate-profile pressure and inactive optional-supervisor drift remain
 install-doctor advisories without failing workstation route readiness.
 Before Compose can recreate Guacamole, reconciliation aligns the protected
@@ -5492,7 +5499,7 @@ XRDP restart, and display-access maintenance uses only the fixed passwordless
 helper and fails closed instead of prompting. Compatible installed helper
 versions are retained across byte-only bundle drift.
 Routine workstation reconciliation preserves live XRDP desktops and applies
-route-user or credential changes at the next login without restarting sesman.
+route-user credential changes at the next login without restarting sesman.
 Host preparation includes display inspection, visual-proof tools, and a
 path-scoped AppArmor userns policy for managed Chrome on Ubuntu 24.04. It does
 not require that policy when the kernel disables AppArmor or does not restrict
@@ -5898,11 +5905,10 @@ Runtime-health interlock:
   PostgreSQL backup timer. Use pnpm status:rdp-guac-postgres to verify mount
   and cluster identity continuity, pnpm backup:rdp-guac-postgres for an
   immediate checksummed dump, and pnpm drill:rdp-guac-postgres-restore for an
-  isolated restore proof. The interlock closes only
-  doctor-proven stale daemon sessions, recreates or migrates supported
-  Guacamole route fixtures to distinct route-specific users, and restores
-  missing RDP route displays. Live inferred display allocation takes
-  precedence over persisted display hints.
+  isolated restore proof. The interlock invokes the installed lightweight
+  workstation reconciler directly. It reconciles route users through the
+  non-PAM helper, applies only identity-proven unattended cleanup, advances
+  retention, and records bounded backoff without requiring a checkout or pnpm.
 
 Examples:
   agent-browser doctor windows-browser

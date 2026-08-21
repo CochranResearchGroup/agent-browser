@@ -120,8 +120,11 @@ host generation remains read-only. Duplicate-profile pressure and executable dri
 an inactive optional session supervisor remain visible as install-doctor
 advisories without failing workstation route reconciliation. Active supervisor
 drift remains blocking. Use `agent-browser install workstation reconcile
---json` for an
-explicit installed-controller recovery pass and `agent-browser install
+--json` for an explicit pass through the same lightweight maintenance authority
+as the installed timer. It applies only unattended cleanup classes, preserves
+reviewable or ambiguous resources, reconciles route users through the non-PAM
+helper, and records bounded backoff or a repeated-failure incident in
+`~/.agent-browser/convergence/runtime-monitor.json`. Use `agent-browser install
 workstation backup --json` for the protected PostgreSQL backup operation. Use
 `agent-browser install workstation status --json` for a redacted view of the
 selected generation, latest transaction, runtime dispositions, blocker, and

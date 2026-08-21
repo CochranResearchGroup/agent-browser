@@ -774,90 +774,7 @@ fn run_workstation_generation_gc(args: &[String], json: bool) {
         } else {
             None
         };
-        if mode == InstallMode::Apply
-            && root
-                .join(".agent-browser/runtime-adoption/admission-drain.json")
-                .exists()
-        {
-            return Err("generation_gc_blocked_by_active_admission_drain".to_string());
-        }
-        let retention = generation_retention_plan(&root, &paths, mode == InstallMode::Apply)?;
-        let finalizable_transaction_ids = retention.finalizable_transaction_ids.clone();
-        let references = retention.references;
-        let mut retained = Vec::new();
-        let mut candidates = Vec::new();
-        let entries = match fs::read_dir(&paths.generations_dir) {
-            Ok(entries) => entries,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                return Ok(serde_json::json!({
-                    "schemaVersion": "agent-browser.workstation-generation-gc.v1",
-                    "success": true,
-                    "mode": if mode == InstallMode::Apply { "apply" } else { "dry-run" },
-                    "selectedGenerationId": selected_generation_id(&paths),
-                    "previousHealthyGenerationId": retention.previous_healthy_generation_id,
-                    "finalizableTransactionIds": finalizable_transaction_ids.clone(),
-                    "finalizedTransactionIds": if mode == InstallMode::Apply {
-                        finalizable_transaction_ids.clone()
-                    } else {
-                        Vec::<String>::new()
-                    },
-                    "candidates": [],
-                    "retained": [],
-                    "removed": [],
-                }));
-            }
-            Err(error) => {
-                return Err(format!(
-                    "Unable to read runtime generations {}: {error}",
-                    paths.generations_dir.display()
-                ));
-            }
-        };
-        for entry in entries.filter_map(Result::ok) {
-            if !entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false) {
-                continue;
-            }
-            let generation_id = entry.file_name().to_string_lossy().to_string();
-            if let Some(reasons) = references.get(&generation_id) {
-                retained.push(serde_json::json!({
-                    "generationId": generation_id,
-                    "reasonCodes": reasons,
-                }));
-            } else {
-                validate_sealed_generation_tree(&entry.path())?;
-                candidates.push(generation_id);
-            }
-        }
-        candidates.sort();
-        retained.sort_by(|left, right| {
-            left.get("generationId")
-                .and_then(Value::as_str)
-                .cmp(&right.get("generationId").and_then(Value::as_str))
-        });
-        let mut removed = Vec::new();
-        if mode == InstallMode::Apply {
-            for generation_id in &candidates {
-                let generation_path = paths.generations_dir.join(generation_id);
-                remove_generation_tree(&generation_path)?;
-                removed.push(generation_id.clone());
-            }
-        }
-        Ok(serde_json::json!({
-            "schemaVersion": "agent-browser.workstation-generation-gc.v1",
-            "success": true,
-            "mode": if mode == InstallMode::Apply { "apply" } else { "dry-run" },
-            "selectedGenerationId": selected_generation_id(&paths),
-            "previousHealthyGenerationId": retention.previous_healthy_generation_id,
-            "finalizableTransactionIds": finalizable_transaction_ids.clone(),
-            "finalizedTransactionIds": if mode == InstallMode::Apply {
-                finalizable_transaction_ids.clone()
-            } else {
-                Vec::<String>::new()
-            },
-            "candidates": candidates,
-            "retained": retained,
-            "removed": removed,
-        }))
+        workstation_generation_gc_locked(&root, &paths, mode)
     })();
     match result {
         Ok(report) if json => println!(
@@ -884,6 +801,97 @@ fn run_workstation_generation_gc(args: &[String], json: bool) {
         ),
         Err(error) => fail(&error, json),
     }
+}
+
+fn workstation_generation_gc_locked(
+    root: &Path,
+    paths: &InstallPaths,
+    mode: InstallMode,
+) -> Result<Value, String> {
+    if mode == InstallMode::Apply
+        && root
+            .join(".agent-browser/runtime-adoption/admission-drain.json")
+            .exists()
+    {
+        return Err("generation_gc_blocked_by_active_admission_drain".to_string());
+    }
+    let retention = generation_retention_plan(root, paths, mode == InstallMode::Apply)?;
+    let finalizable_transaction_ids = retention.finalizable_transaction_ids.clone();
+    let references = retention.references;
+    let mut retained = Vec::new();
+    let mut candidates = Vec::new();
+    let entries = match fs::read_dir(&paths.generations_dir) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return Ok(serde_json::json!({
+                "schemaVersion": "agent-browser.workstation-generation-gc.v1",
+                "success": true,
+                "mode": if mode == InstallMode::Apply { "apply" } else { "dry-run" },
+                "selectedGenerationId": selected_generation_id(paths),
+                "previousHealthyGenerationId": retention.previous_healthy_generation_id,
+                "finalizableTransactionIds": finalizable_transaction_ids.clone(),
+                "finalizedTransactionIds": if mode == InstallMode::Apply {
+                    finalizable_transaction_ids.clone()
+                } else {
+                    Vec::<String>::new()
+                },
+                "candidates": [],
+                "retained": [],
+                "removed": [],
+            }));
+        }
+        Err(error) => {
+            return Err(format!(
+                "Unable to read runtime generations {}: {error}",
+                paths.generations_dir.display()
+            ));
+        }
+    };
+    for entry in entries.filter_map(Result::ok) {
+        if !entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false) {
+            continue;
+        }
+        let generation_id = entry.file_name().to_string_lossy().to_string();
+        if let Some(reasons) = references.get(&generation_id) {
+            retained.push(serde_json::json!({
+                "generationId": generation_id,
+                "reasonCodes": reasons,
+            }));
+        } else {
+            validate_sealed_generation_tree(&entry.path())?;
+            candidates.push(generation_id);
+        }
+    }
+    candidates.sort();
+    retained.sort_by(|left, right| {
+        left.get("generationId")
+            .and_then(Value::as_str)
+            .cmp(&right.get("generationId").and_then(Value::as_str))
+    });
+    let mut removed = Vec::new();
+    if mode == InstallMode::Apply {
+        for generation_id in &candidates {
+            let generation_path = paths.generations_dir.join(generation_id);
+            remove_generation_tree(&generation_path)?;
+            removed.push(generation_id.clone());
+        }
+    }
+    Ok(serde_json::json!({
+        "schemaVersion": "agent-browser.workstation-generation-gc.v1",
+        "success": true,
+        "mode": if mode == InstallMode::Apply { "apply" } else { "dry-run" },
+        "selectedGenerationId": selected_generation_id(paths),
+        "previousHealthyGenerationId": retention.previous_healthy_generation_id,
+        "finalizableTransactionIds": finalizable_transaction_ids.clone(),
+        "finalizedTransactionIds": if mode == InstallMode::Apply {
+            finalizable_transaction_ids.clone()
+        } else {
+            Vec::<String>::new()
+        },
+        "candidates": candidates,
+        "retained": retained,
+        "removed": removed,
+    }))
 }
 
 #[cfg(test)]
@@ -1459,40 +1467,281 @@ struct WorkstationReconcileReport {
 }
 
 fn run_workstation_reconcile(json: bool) {
-    match reconcile_workstation() {
-        Ok(report) => {
-            print_reconcile_report(&report, json);
-        }
+    match reconcile_runtime_maintenance() {
+        Ok(report) if json => println!(
+            "{}",
+            serde_json::to_string_pretty(&report)
+                .unwrap_or_else(|_| r#"{"success":false,"error":"serialization failed"}"#.into())
+        ),
+        Ok(report) => println!(
+            "Runtime reconciliation {}: {}.",
+            report
+                .get("state")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown"),
+            report
+                .get("summary")
+                .and_then(Value::as_str)
+                .unwrap_or("no summary")
+        ),
         Err(error) => fail(&error, json),
     }
 }
 
-fn reconcile_workstation() -> Result<WorkstationReconcileReport, String> {
+fn reconcile_runtime_maintenance() -> Result<Value, String> {
     if !cfg!(target_os = "linux") {
-        return Err("workstation reconciliation is only supported on Linux".to_string());
+        return Err("runtime reconciliation is only supported on Linux".to_string());
     }
     let root = workstation_root()?;
     let paths = install_paths(&root);
-    let _lock = WorkstationLock::acquire(&root)?;
-    match reconcile_workstation_locked(&root, &paths) {
-        Ok(report) => Ok(report),
-        Err(error) => {
-            let receipt_path =
-                root.join(".agent-browser/convergence/workstation-last-failure.json");
-            let receipt = workstation_reconcile_failure_receipt(&error);
-            match write_private_json(&receipt_path, &receipt) {
-                Ok(()) => Err(format!(
-                    "{error}; failure receipt: {}",
-                    receipt_path.display()
-                )),
-                Err(receipt_error) => Err(format!(
-                    "{error}; failed to write workstation reconciliation failure receipt: {receipt_error}"
-                )),
+    let receipt_path = root.join(".agent-browser/convergence/runtime-monitor.json");
+    let previous = read_runtime_monitor_receipt(&receipt_path)?;
+    let now = runtime_monitor_epoch_seconds();
+    let previous_failures = previous
+        .as_ref()
+        .and_then(|value| value.get("consecutiveFailures"))
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let next_eligible = previous
+        .as_ref()
+        .and_then(|value| value.get("nextEligibleAtEpochSeconds"))
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    if next_eligible > now {
+        let report = serde_json::json!({
+            "schemaVersion": "agent-browser.runtime-monitor.v1",
+            "success": true,
+            "state": "backoff",
+            "skipped": true,
+            "observedAt": runtime_adoption_timestamp(),
+            "observedAtEpochSeconds": now,
+            "consecutiveFailures": previous_failures,
+            "nextEligibleAtEpochSeconds": next_eligible,
+            "incident": previous.as_ref().and_then(|value| value.get("incident")).cloned(),
+            "summary": "effect backoff remains active",
+            "receiptPath": receipt_path.display().to_string(),
+        });
+        write_private_json_atomic(&receipt_path, &report)?;
+        return Ok(report);
+    }
+
+    let started_at = runtime_adoption_timestamp();
+    let result: Result<Value, String> = (|| {
+        let _lock = WorkstationLock::acquire(&root)?;
+        require_installed_payload(&paths)?;
+        ensure_route_users(&paths, &workstation_command_env(&paths))?;
+        use crate::native::service_store::ServiceStateRepository;
+        let repository =
+            crate::native::service_store::LockedServiceStateRepository::default_json()?;
+        let service_effects = repository.mutate(|state| {
+            let process_gc = crate::native::service_resources::service_gc_unattended_response(state);
+            if process_gc.get("applied").and_then(Value::as_bool) != Some(true) {
+                return Err(format!(
+                    "unattended_process_gc_failed:{}",
+                    process_gc
+                        .get("error")
+                        .and_then(Value::as_str)
+                        .unwrap_or("candidate_effect_failed")
+                ));
             }
+            let retained_state = crate::native::service_retained_state::service_commands::automatically_prune_retained_service_state(state, true);
+            let profile_errors = retained_state
+                .pointer("/removed/orphanedProfileErrors")
+                .and_then(Value::as_object)
+                .map(|errors| errors.len())
+                .unwrap_or(0);
+            if profile_errors != 0 {
+                return Err(format!(
+                    "unattended_profile_retention_failed:{profile_errors}"
+                ));
+            }
+            let resources = crate::native::service_resources::service_resources_response(state);
+            let lifecycle_record_count = state
+                .runtime_owner_registry
+                .lifecycle_records
+                .len();
+            let missing_cleanup_obligation_count = state
+                .browsers
+                .keys()
+                .filter(|browser_id| {
+                    state.browser_process_identities.contains_key(*browser_id)
+                        && !state
+                            .runtime_owner_registry
+                            .lifecycle_records
+                            .contains_key(*browser_id)
+                })
+                .count();
+            Ok(serde_json::json!({
+                "processGc": process_gc,
+                "retainedState": retained_state,
+                "resources": resources,
+                "cleanupObligations": {
+                    "trackedCount": lifecycle_record_count,
+                    "missingCount": missing_cleanup_obligation_count,
+                },
+            }))
+        })?;
+        let generation_gc = workstation_generation_gc_locked(&root, &paths, InstallMode::Apply)?;
+        Ok(serde_json::json!({
+            "routeUsers": {
+                "reconciled": true,
+                "credentialContract": "non_pam_sha512",
+            },
+            "service": service_effects,
+            "generations": generation_gc,
+        }))
+    })();
+
+    match result {
+        Ok(effects) => {
+            let report = serde_json::json!({
+                "schemaVersion": "agent-browser.runtime-monitor.v1",
+                "success": true,
+                "state": "healthy",
+                "skipped": false,
+                "startedAt": started_at,
+                "completedAt": runtime_adoption_timestamp(),
+                "observedAtEpochSeconds": runtime_monitor_epoch_seconds(),
+                "consecutiveFailures": 0,
+                "nextEligibleAtEpochSeconds": Value::Null,
+                "incident": Value::Null,
+                "effects": effects,
+                "summary": "unattended reconciliation and retention completed",
+                "receiptPath": receipt_path.display().to_string(),
+            });
+            write_private_json_atomic(&receipt_path, &report)?;
+            Ok(report)
+        }
+        Err(error) => {
+            let consecutive_failures = previous_failures.saturating_add(1);
+            let backoff_seconds = runtime_monitor_backoff_seconds(consecutive_failures);
+            let next_eligible_at = now.saturating_add(backoff_seconds);
+            let incident = (consecutive_failures >= 3).then(|| serde_json::json!({
+                "type": "runtime_reconciliation_repeated_failure",
+                "severity": "error",
+                "state": "active",
+                "failureCount": consecutive_failures,
+                "reason": error.clone(),
+                "recommendedAction": "Inspect the runtime monitor receipt and install doctor before retrying effects.",
+            }));
+            let report = serde_json::json!({
+                "schemaVersion": "agent-browser.runtime-monitor.v1",
+                "success": false,
+                "state": if incident.is_some() { "incident" } else { "degraded" },
+                "skipped": false,
+                "startedAt": started_at,
+                "completedAt": runtime_adoption_timestamp(),
+                "observedAtEpochSeconds": runtime_monitor_epoch_seconds(),
+                "consecutiveFailures": consecutive_failures,
+                "nextEligibleAtEpochSeconds": next_eligible_at,
+                "backoffSeconds": backoff_seconds,
+                "incident": incident,
+                "error": error,
+                "summary": "unattended reconciliation failed and entered bounded backoff",
+                "receiptPath": receipt_path.display().to_string(),
+            });
+            write_private_json_atomic(&receipt_path, &report)?;
+            Err(format!(
+                "runtime reconciliation failed; receipt: {}",
+                receipt_path.display()
+            ))
         }
     }
 }
 
+fn read_runtime_monitor_receipt(path: &Path) -> Result<Option<Value>, String> {
+    match fs::read(path) {
+        Ok(body) => serde_json::from_slice(&body).map(Some).map_err(|error| {
+            format!(
+                "Invalid runtime monitor receipt {}: {error}",
+                path.display()
+            )
+        }),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!(
+            "Unable to read runtime monitor receipt {}: {error}",
+            path.display()
+        )),
+    }
+}
+
+fn runtime_monitor_epoch_seconds() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+fn runtime_monitor_backoff_seconds(consecutive_failures: u64) -> u64 {
+    let exponent = consecutive_failures.saturating_sub(1).min(3) as u32;
+    300_u64.saturating_mul(2_u64.saturating_pow(exponent))
+}
+
+pub(crate) fn runtime_monitor_status_json() -> Value {
+    let root = match workstation_root() {
+        Ok(root) => root,
+        Err(error) => {
+            return serde_json::json!({
+                "schemaVersion": "agent-browser.runtime-monitor-status.v1",
+                "ready": false,
+                "state": "unavailable",
+                "error": error,
+            });
+        }
+    };
+    let receipt_path = root.join(".agent-browser/convergence/runtime-monitor.json");
+    let now = runtime_monitor_epoch_seconds();
+    match read_runtime_monitor_receipt(&receipt_path) {
+        Ok(Some(receipt)) => {
+            let observed_at = receipt
+                .get("observedAtEpochSeconds")
+                .and_then(Value::as_u64);
+            let age_seconds = observed_at.map(|observed| now.saturating_sub(observed));
+            let fresh = age_seconds.is_some_and(|age| age <= 900);
+            let healthy = receipt.get("state").and_then(Value::as_str) == Some("healthy")
+                && receipt.get("success").and_then(Value::as_bool) == Some(true);
+            serde_json::json!({
+                "schemaVersion": "agent-browser.runtime-monitor-status.v1",
+                "ready": fresh && healthy,
+                "state": if !fresh { "stale" } else { receipt.get("state").and_then(Value::as_str).unwrap_or("unknown") },
+                "fresh": fresh,
+                "ageSeconds": age_seconds,
+                "maximumAgeSeconds": 900,
+                "receiptPath": receipt_path,
+                "receipt": receipt,
+            })
+        }
+        Ok(None) => {
+            let paths = install_paths(&root);
+            let generation_age = fs::symlink_metadata(&paths.current_selector)
+                .and_then(|metadata| metadata.modified())
+                .ok()
+                .and_then(|modified| std::time::SystemTime::now().duration_since(modified).ok())
+                .map(|age| age.as_secs());
+            let grace = generation_age.is_some_and(|age| age <= 900);
+            serde_json::json!({
+                "schemaVersion": "agent-browser.runtime-monitor-status.v1",
+                "ready": grace,
+                "state": if grace { "bootstrap_grace" } else { "missing" },
+                "fresh": false,
+                "ageSeconds": Value::Null,
+                "maximumAgeSeconds": 900,
+                "receiptPath": receipt_path,
+            })
+        }
+        Err(error) => serde_json::json!({
+            "schemaVersion": "agent-browser.runtime-monitor-status.v1",
+            "ready": false,
+            "state": "invalid",
+            "fresh": false,
+            "maximumAgeSeconds": 900,
+            "receiptPath": receipt_path,
+            "error": error,
+        }),
+    }
+}
+
+#[cfg(test)]
 fn workstation_reconcile_failure_receipt(error: &str) -> Value {
     let recorded_at_unix_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1505,13 +1754,6 @@ fn workstation_reconcile_failure_receipt(error: &str) -> Value {
         "recordedAtUnixMs": recorded_at_unix_ms,
         "error": error,
     })
-}
-
-fn reconcile_workstation_locked(
-    root: &Path,
-    paths: &InstallPaths,
-) -> Result<WorkstationReconcileReport, String> {
-    reconcile_workstation_locked_for_upgrade(root, paths, None, &[])
 }
 
 fn reconcile_workstation_locked_for_upgrade(
@@ -1893,21 +2135,6 @@ fn ensure_guacamole_header_user(
 
 fn guacamole_header_user_ready(stdout: &[u8]) -> bool {
     String::from_utf8_lossy(stdout).trim() == "1"
-}
-
-fn print_reconcile_report(report: &WorkstationReconcileReport, json: bool) {
-    if json {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(report)
-                .unwrap_or_else(|_| r#"{"success":false,"error":"serialization failed"}"#.into())
-        );
-    } else {
-        println!("Workstation reconciliation complete.");
-        println!("  Version: {}", report.version);
-        println!("  Routes: {}", report.route_pool.len());
-        println!("  Receipt: {}", report.receipt_path);
-    }
 }
 
 fn run_workstation_backup(json: bool) {
@@ -7516,6 +7743,15 @@ fn fail(message: &str, json: bool) -> ! {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn runtime_monitor_backoff_is_bounded_and_exponential() {
+        assert_eq!(runtime_monitor_backoff_seconds(1), 300);
+        assert_eq!(runtime_monitor_backoff_seconds(2), 600);
+        assert_eq!(runtime_monitor_backoff_seconds(3), 1200);
+        assert_eq!(runtime_monitor_backoff_seconds(4), 2400);
+        assert_eq!(runtime_monitor_backoff_seconds(99), 2400);
+    }
 
     fn runtime_migration(
         logical_browser_id: &str,

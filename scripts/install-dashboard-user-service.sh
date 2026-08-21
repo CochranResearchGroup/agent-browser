@@ -9,26 +9,13 @@ INTERLOCK_TIMER_PATH="$UNIT_DIR/agent-browser-runtime-interlock.timer"
 POSTGRES_BACKUP_UNIT_PATH="$UNIT_DIR/agent-browser-guacamole-postgres-backup.service"
 POSTGRES_BACKUP_TIMER_PATH="$UNIT_DIR/agent-browser-guacamole-postgres-backup.timer"
 AGENT_BROWSER_BIN="${AGENT_BROWSER_BIN:-$(command -v agent-browser || true)}"
-PNPM_BIN="${PNPM_BIN:-$(command -v pnpm || true)}"
-FLOCK_BIN="${FLOCK_BIN:-$(command -v flock || true)}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOCAL_LIB_DIR="${AGENT_BROWSER_LOCAL_LIB_DIR:-$HOME/.local/lib/agent-browser}"
 POSTGRES_DURABILITY_BIN="$LOCAL_LIB_DIR/guacamole-postgres-durability.sh"
 INTERLOCK_INTERVAL="${AGENT_BROWSER_RUNTIME_INTERLOCK_INTERVAL:-5min}"
-INTERLOCK_LOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/agent-browser-runtime-interlock.lock"
 
 if [[ -z "$AGENT_BROWSER_BIN" ]]; then
   echo "agent-browser was not found on PATH. Set AGENT_BROWSER_BIN to the installed binary path." >&2
-  exit 1
-fi
-
-if [[ -z "$PNPM_BIN" ]]; then
-  echo "pnpm was not found on PATH. Set PNPM_BIN to its absolute path." >&2
-  exit 1
-fi
-
-if [[ -z "$FLOCK_BIN" ]]; then
-  echo "flock was not found on PATH. Set FLOCK_BIN to its absolute path." >&2
   exit 1
 fi
 
@@ -70,12 +57,8 @@ Wants=agent-browser-dashboard.service network-online.target
 
 [Service]
 Type=oneshot
-WorkingDirectory=$ROOT_DIR
 Environment=PATH=$PATH
-Environment=AGENT_BROWSER_BIN=$AGENT_BROWSER_BIN
-Environment=PNPM_BIN=$PNPM_BIN
-Environment=AGENT_BROWSER_ROUTE_DISPLAY_AGENT_BROWSER_CMD=$AGENT_BROWSER_BIN
-ExecStart=$FLOCK_BIN --nonblock $INTERLOCK_LOCK $PNPM_BIN --silent converge:local-runtime -- --apply --skip-publish --json
+ExecStart=$AGENT_BROWSER_BIN install workstation reconcile --json
 TimeoutStartSec=5min
 
 [Install]

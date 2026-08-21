@@ -557,7 +557,12 @@ try {
   );
   assert.ok(existsSync(baselineGenerationRoot), 'gc dry-run must not delete candidates');
 
-  const generationStoreBeforeReconcile = treeManifest(generationStore);
+  const generationStoreBeforeReconcile = new Map(
+    readdirSync(generationStore).map((generationId) => [
+      generationId,
+      treeManifest(join(generationStore, generationId)),
+    ]),
+  );
   const selectorBeforeReconcile = readlinkSync(currentSelector);
   const reconcile = runInstaller(installRoot, ['reconcile', '--json']);
   assert.notEqual(
@@ -570,17 +575,30 @@ try {
     /Usage:/,
     'workstation reconcile must be accepted as an operational command',
   );
-  JSON.parse(reconcile.stdout);
+  const reconcilePayload = JSON.parse(reconcile.stdout);
+  assert.equal(reconcile.status, 0, reconcile.stderr);
+  assert.equal(reconcilePayload.schemaVersion, 'agent-browser.runtime-monitor.v1');
+  assert.equal(reconcilePayload.state, 'healthy');
+  assert.equal(reconcilePayload.effects?.generations?.mode, 'apply');
   assert.equal(
     readlinkSync(currentSelector),
     selectorBeforeReconcile,
     'workstation reconcile must not select or replace a payload generation',
   );
-  assert.deepEqual(
-    treeManifest(generationStore),
-    generationStoreBeforeReconcile,
-    'workstation reconcile must not mutate immutable payload generations',
-  );
+  for (const generationId of reconcilePayload.effects.generations.removed) {
+    assert.equal(
+      existsSync(join(generationStore, generationId)),
+      false,
+      `workstation reconcile must remove unreferenced generation ${generationId}`,
+    );
+  }
+  for (const retained of reconcilePayload.effects.generations.retained) {
+    assert.deepEqual(
+      treeManifest(join(generationStore, retained.generationId)),
+      generationStoreBeforeReconcile.get(retained.generationId),
+      `workstation reconcile must not mutate retained generation ${retained.generationId}`,
+    );
+  }
 
   const selectedAfterUpgrade = resolve(dirname(currentSelector), readlinkSync(currentSelector));
   const generationManifestPath = join(selectedAfterUpgrade, 'generation.json');

@@ -1229,17 +1229,16 @@ port other than `4848`. The next port must remain available for the backend.
 
 The installer also enables the user-scoped
 <code>agent-browser-runtime-interlock.timer</code>. It runs after boot and
-five minutes after each completed pass by default. Each pass closes only doctor-proven stale daemon
-sessions, reconciles retained service state, recreates or migrates the
-supported Guacamole route fixtures to distinct route-specific users when
-doctor reports missing fixtures or a collapsed same-user display, restores
-missing Guacamole/XRDP route displays, reapplies display
-access when required, and records
-<code>~/.agent-browser/convergence/local-runtime-latest.json</code>. It does
-not publish or replace the installed binary. If a pass fails after quiescing
-the managed dashboard or timers, it restores their exact prior active states
-and records the failure in
-<code>~/.agent-browser/convergence/workstation-last-failure.json</code>.
+five minutes after each completed pass by default. Each pass uses the same
+lightweight maintenance authority as
+<code>agent-browser install workstation reconcile --json</code>. It reconciles
+route-user credentials through the non-PAM helper, applies only
+identity-proven unattended process and retained-state cleanup, finalizes
+eligible retention, and removes unreferenced sealed generations. It does not
+publish or replace the installed binary, recreate Guacamole, quiesce user
+units, or restart the dashboard. It records current state and bounded backoff
+in <code>~/.agent-browser/convergence/runtime-monitor.json</code> and emits a
+typed incident after three consecutive effect failures.
 Duplicate-profile pressure and executable drift in an inactive optional
 session supervisor remain visible as install-doctor advisories without
 failing route reconciliation. Active supervisor drift remains blocking. Set
