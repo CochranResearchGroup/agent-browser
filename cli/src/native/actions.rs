@@ -468,12 +468,13 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
                     Ok(repository) => repository,
                     Err(error) => return error_response(&id, &error),
                 };
-            if let Err(error) = crate::runtime_owner_transfer::require_owner_effect_authority(
-                &repository,
-                binding,
-                action,
-            ) {
-                return error_response(&id, &error);
+            if crate::runtime_owner_transfer::action_requires_owner_effect_authority(action) {
+                if let Err(error) =
+                    crate::native::runtime_lifecycle::RuntimeLifecycleAuthority::new(&repository)
+                        .authorize_effect(binding)
+                {
+                    return error_response(&id, &error);
+                }
             }
         }
     }

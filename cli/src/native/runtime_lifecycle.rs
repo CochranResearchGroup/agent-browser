@@ -8,18 +8,6 @@ use crate::runtime_owner_transfer::{
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 
-/// One-slice compatibility surface while callers move under this module.
-/// Slice G must delete these wrappers after the runtime-host migration.
-pub(crate) const P117_TEMPORARY_LIFECYCLE_FACADES: &[&str] = &[
-    "register_current_owner",
-    "begin_owner_transfer",
-    "commit_candidate_owner",
-    "abort_owner_transfer",
-    "reverse_candidate_owner",
-    "revoke_legacy_daemon_owner",
-    "require_owner_effect_authority",
-];
-
 #[derive(Debug, Clone)]
 pub(crate) struct ManagedLaneRegistration {
     pub(crate) logical_browser_id: String,
@@ -117,6 +105,84 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
             state.runtime_owner_registry = registry;
             Ok(transition)
         })
+    }
+
+    pub(crate) fn register_current_owner(
+        &self,
+        owner: ProfileOwner,
+    ) -> Result<ProfileOwner, String> {
+        match self.transition(RuntimeLifecycleIntent::RegisterCurrentOwner(owner))? {
+            RuntimeLifecycleTransition::OwnerRegistered(owner) => Ok(owner),
+            _ => Err("runtime_lifecycle_registration_outcome_mismatch".to_string()),
+        }
+    }
+
+    pub(crate) fn begin_transfer(
+        &self,
+        request: OwnerTransferRequest,
+    ) -> Result<OwnerTransferProposal, String> {
+        match self.transition(RuntimeLifecycleIntent::BeginTransfer(request))? {
+            RuntimeLifecycleTransition::TransferPrepared(proposal) => Ok(proposal),
+            _ => Err("runtime_lifecycle_transfer_prepare_outcome_mismatch".to_string()),
+        }
+    }
+
+    pub(crate) fn commit_candidate(
+        &self,
+        attachment: CandidateOwnerAttachment,
+    ) -> Result<OwnerTransferReceipt, String> {
+        match self.transition(RuntimeLifecycleIntent::CommitCandidate(attachment))? {
+            RuntimeLifecycleTransition::CandidateCommitted(receipt) => Ok(receipt),
+            _ => Err("runtime_lifecycle_candidate_commit_outcome_mismatch".to_string()),
+        }
+    }
+
+    pub(crate) fn abort_transfer(
+        &self,
+        profile_identity_digest: &str,
+        expected_owner_id: &str,
+        expected_owner_generation: u64,
+        transfer_nonce_digest: &str,
+    ) -> Result<bool, String> {
+        match self.transition(RuntimeLifecycleIntent::AbortTransfer {
+            profile_identity_digest: profile_identity_digest.to_string(),
+            expected_owner_id: expected_owner_id.to_string(),
+            expected_owner_generation,
+            transfer_nonce_digest: transfer_nonce_digest.to_string(),
+        })? {
+            RuntimeLifecycleTransition::TransferAborted(aborted) => Ok(aborted),
+            _ => Err("runtime_lifecycle_transfer_abort_outcome_mismatch".to_string()),
+        }
+    }
+
+    pub(crate) fn reverse_transfer(
+        &self,
+        request: ReverseOwnerTransferRequest,
+    ) -> Result<OwnerTransferReceipt, String> {
+        match self.transition(RuntimeLifecycleIntent::ReverseTransfer(request))? {
+            RuntimeLifecycleTransition::TransferReversed(receipt) => Ok(receipt),
+            _ => Err("runtime_lifecycle_reverse_outcome_mismatch".to_string()),
+        }
+    }
+
+    pub(crate) fn revoke_legacy_owner(
+        &self,
+        profile_identity_digest: &str,
+        logical_browser_id: &str,
+        expected_daemon_session_route: &str,
+        expected_owner_id: &str,
+        expected_owner_generation: u64,
+    ) -> Result<ProfileOwner, String> {
+        match self.transition(RuntimeLifecycleIntent::RevokeLegacyOwner {
+            profile_identity_digest: profile_identity_digest.to_string(),
+            logical_browser_id: logical_browser_id.to_string(),
+            expected_daemon_session_route: expected_daemon_session_route.to_string(),
+            expected_owner_id: expected_owner_id.to_string(),
+            expected_owner_generation,
+        })? {
+            RuntimeLifecycleTransition::LegacyOwnerRevoked(owner) => Ok(owner),
+            _ => Err("runtime_lifecycle_legacy_revoke_outcome_mismatch".to_string()),
+        }
     }
 
     /// Fence one browser side effect against the current lifecycle owner.
@@ -829,19 +895,6 @@ mod tests {
         assert_eq!(
             lifecycle.cleanup_obligation_state,
             crate::runtime_owner_transfer::CleanupObligationState::Owned
-        );
-    }
-
-    #[test]
-    fn temporary_facade_inventory_is_explicit_and_bounded() {
-        assert_eq!(P117_TEMPORARY_LIFECYCLE_FACADES.len(), 7);
-        assert_eq!(
-            P117_TEMPORARY_LIFECYCLE_FACADES
-                .iter()
-                .copied()
-                .collect::<std::collections::BTreeSet<_>>()
-                .len(),
-            P117_TEMPORARY_LIFECYCLE_FACADES.len()
         );
     }
 

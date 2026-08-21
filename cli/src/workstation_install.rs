@@ -4635,14 +4635,14 @@ fn revoke_legacy_daemon_effect_authority(
     if let Some(expected_owner) = expected_owner {
         let repository =
             crate::native::service_store::LockedServiceStateRepository::default_json()?;
-        crate::runtime_owner_transfer::revoke_legacy_daemon_owner(
-            &repository,
-            &expected_owner.profile_identity_digest,
-            &expected_owner.browser_id,
-            &expected_owner.daemon_session_route,
-            &expected_owner.owner_id,
-            expected_owner.owner_generation,
-        )?;
+        crate::native::runtime_lifecycle::RuntimeLifecycleAuthority::new(&repository)
+            .revoke_legacy_owner(
+                &expected_owner.profile_identity_digest,
+                &expected_owner.browser_id,
+                &expected_owner.daemon_session_route,
+                &expected_owner.owner_id,
+                expected_owner.owner_generation,
+            )?;
     }
     Ok(())
 }

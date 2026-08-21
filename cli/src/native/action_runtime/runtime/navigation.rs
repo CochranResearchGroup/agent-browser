@@ -318,9 +318,8 @@ pub(crate) async fn handle_runtime_handoff_prepare(
         }
         owner
     } else {
-        crate::runtime_owner_transfer::register_current_owner(
-            &repository,
-            crate::runtime_owner_transfer::ProfileOwner {
+        crate::native::runtime_lifecycle::RuntimeLifecycleAuthority::new(&repository)
+            .register_current_owner(crate::runtime_owner_transfer::ProfileOwner {
                 owner_id: owner_id.clone(),
                 profile_identity_digest: profile_identity_digest.clone(),
                 state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
@@ -333,17 +332,15 @@ pub(crate) async fn handle_runtime_handoff_prepare(
                 target_set_digest: target_set_digest.clone(),
                 pending_transfer: None,
                 last_transition: None,
-            },
-        )?
+            })?
     };
     let transfer_nonce_digest = runtime_handoff_digest(&format!(
         "{}:{prepared_at}:{process_instance_digest}:{target_set_digest}",
         state.session_id
     ));
     let candidate_session = format!("handoff-{}", &transfer_nonce_digest[..16]);
-    let proposal = crate::runtime_owner_transfer::begin_owner_transfer(
-        &repository,
-        crate::runtime_owner_transfer::OwnerTransferRequest {
+    let proposal = crate::native::runtime_lifecycle::RuntimeLifecycleAuthority::new(&repository)
+        .begin_transfer(crate::runtime_owner_transfer::OwnerTransferRequest {
             mode: crate::runtime_adoption::BrowserAdoptionMode::CooperativeTransfer,
             logical_browser_id: current_owner.browser_id.clone(),
             profile_identity_digest: profile_identity_digest.clone(),
@@ -357,8 +354,7 @@ pub(crate) async fn handle_runtime_handoff_prepare(
             target_set_digest,
             selected_target_identity_digest,
             transfer_nonce_digest,
-        },
-    )?;
+        })?;
     state.runtime_owner_binding = Some(
         crate::runtime_owner_transfer::RuntimeOwnerBinding::effect_capable(
             crate::runtime_owner_transfer::OwnerAuthorityClaim::from_owner(&current_owner),
@@ -525,7 +521,8 @@ pub(crate) async fn handle_runtime_handoff_resume(
     };
     let repository = runtime_handoff_service_repository()?;
     let owner_receipt =
-        crate::runtime_owner_transfer::commit_candidate_owner(&repository, attachment)?;
+        crate::native::runtime_lifecycle::RuntimeLifecycleAuthority::new(&repository)
+            .commit_candidate(attachment)?;
     let candidate_owner = repository
         .load_snapshot()?
         .runtime_owner_registry
@@ -692,9 +689,8 @@ async fn handle_runtime_handoff_orphan_adoption(
     let transfer_nonce_digest = runtime_handoff_digest(&format!(
         "orphan:{logical_browser_id}:{process_instance_digest}:{target_set_digest}"
     ));
-    let proposal = crate::runtime_owner_transfer::begin_owner_transfer(
-        &repository,
-        crate::runtime_owner_transfer::OwnerTransferRequest {
+    let proposal = crate::native::runtime_lifecycle::RuntimeLifecycleAuthority::new(&repository)
+        .begin_transfer(crate::runtime_owner_transfer::OwnerTransferRequest {
             mode: crate::runtime_adoption::BrowserAdoptionMode::OrphanAdoption,
             logical_browser_id: logical_browser_id.clone(),
             profile_identity_digest: profile_identity_digest.clone(),
@@ -711,21 +707,20 @@ async fn handle_runtime_handoff_orphan_adoption(
             target_set_digest,
             selected_target_identity_digest,
             transfer_nonce_digest,
-        },
-    )?;
+        })?;
     let descriptor = RuntimeHandoffDescriptor {
         active_target_id: Some(manager.active_target_id()?.to_string()),
         owner_transfer: Some(proposal.clone()),
         ..provisional
     };
     let path = write_runtime_handoff(&descriptor)?;
-    let receipt = crate::runtime_owner_transfer::commit_candidate_owner(
-        &repository,
-        crate::runtime_owner_transfer::CandidateOwnerAttachment::from_request(
-            &proposal.request,
-            proposal.candidate_owner_generation,
-        ),
-    )?;
+    let receipt = crate::native::runtime_lifecycle::RuntimeLifecycleAuthority::new(&repository)
+        .commit_candidate(
+            crate::runtime_owner_transfer::CandidateOwnerAttachment::from_request(
+                &proposal.request,
+                proposal.candidate_owner_generation,
+            ),
+        )?;
     let candidate_owner = repository
         .load_snapshot()?
         .runtime_owner_registry
@@ -1081,13 +1076,13 @@ pub(crate) fn handle_runtime_handoff_abort(state: &mut DaemonState) -> Result<Va
             "runtime_handoff_abort_after_commit: candidate owner already committed".to_string(),
         );
     }
-    let aborted = crate::runtime_owner_transfer::abort_owner_transfer(
-        &repository,
-        &proposal.request.profile_identity_digest,
-        &binding.claim.owner_id,
-        binding.claim.owner_generation,
-        &proposal.request.transfer_nonce_digest,
-    )?;
+    let aborted = crate::native::runtime_lifecycle::RuntimeLifecycleAuthority::new(&repository)
+        .abort_transfer(
+            &proposal.request.profile_identity_digest,
+            &binding.claim.owner_id,
+            binding.claim.owner_generation,
+            &proposal.request.transfer_nonce_digest,
+        )?;
     let retry_record_removed = fs::remove_file(runtime_handoff_path(&state.session_id)).is_ok();
     Ok(json!({
         "aborted": aborted,
@@ -1149,16 +1144,14 @@ pub(crate) async fn handle_runtime_handoff_rollback(
         "reverse:{}:{}",
         proposal.request.transfer_nonce_digest, state.session_id
     ));
-    let receipt = crate::runtime_owner_transfer::reverse_candidate_owner(
-        &repository,
-        crate::runtime_owner_transfer::ReverseOwnerTransferRequest {
+    let receipt = crate::native::runtime_lifecycle::RuntimeLifecycleAuthority::new(&repository)
+        .reverse_transfer(crate::runtime_owner_transfer::ReverseOwnerTransferRequest {
             profile_identity_digest: proposal.request.profile_identity_digest.clone(),
             expected_candidate_owner_id: proposal.request.candidate_owner_id.clone(),
             expected_candidate_owner_generation: proposal.candidate_owner_generation,
             transfer_nonce_digest: proposal.request.transfer_nonce_digest.clone(),
             reverse_nonce_digest,
-        },
-    )?;
+        })?;
     restore_runtime_handoff_service_projection(
         &repository,
         &binding.claim.logical_browser_id,

@@ -3996,13 +3996,13 @@ mod tests {
             &[
                 "let descriptor = read_runtime_handoff(&source_session)?;",
                 "BrowserManager::connect_cdp_for_handoff(",
-                "commit_candidate_owner(&repository, attachment)",
+                ".commit_candidate(attachment)?",
             ],
         );
         assert_source_order(
             handoff,
             &[
-                "begin_owner_transfer(",
+                ".begin_transfer(",
                 "let path = write_runtime_handoff(&descriptor)?;",
                 "\"oldOwnerEffectCapable\": true",
                 "handle_runtime_handoff_finalize(",
@@ -4018,7 +4018,7 @@ mod tests {
                 "BrowserManager::connect_cdp_for_handoff(&cdp_url, None)",
                 "BrowserAdoptionMode::OrphanAdoption",
                 "write_runtime_handoff(&descriptor)?",
-                "commit_candidate_owner(",
+                ".commit_candidate(",
                 "persist_adopted_logical_browser_health(",
             ],
         );
