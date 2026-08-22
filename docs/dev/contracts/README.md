@@ -3,6 +3,13 @@
 This directory holds machine-readable schemas for service API records that
 software clients and MCP agents are expected to consume directly.
 
+MCP agents should begin shared, authenticated, profile-sensitive, or
+operator-visible work with `agent-browser://operating-guide`. This read-only
+resource publishes the versioned intent-first workflow, the separate browser
+acquisition, operator presentation, and runtime maintenance axes, and the
+caller versus Agent Browser ownership boundary. It is guidance rather than an
+HTTP contract and does not mutate service state.
+
 ## Service Job Record v1
 
 `service-job-record.v1.schema.json` describes service job records returned by:

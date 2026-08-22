@@ -5,6 +5,7 @@ agent-browser ships with skills that teach AI coding agents how to use it for sp
 ## Available Skills
 
 - **agent-browser** — General browser automation: navigation, snapshots, forms, screenshots, data extraction, sessions, authentication, diffing, and the full command reference.
+- **agent-browser-service** — Shared and authenticated browser operations: managed profiles, retained-browser reuse, Guacamole/RDP presentation, route capacity, and scoped runtime troubleshooting.
 - **dogfood** — Systematic exploratory testing. Navigates an app like a real user, finds bugs and UX issues, and produces a structured report with screenshots and repro videos.
 - **electron** — Automate any Electron app (VS Code, Slack, Discord, Figma, etc.) by connecting to its built-in Chrome DevTools Protocol port. This is how agent-browser drives native desktop apps like the Slack macOS app.
 - **slack** — Browser-based Slack automation. Check unreads, navigate channels, search conversations, send messages, and extract data — no API tokens needed.
@@ -14,6 +15,7 @@ agent-browser ships with skills that teach AI coding agents how to use it for sp
 
 ```bash
 npx skills add vercel-labs/agent-browser --skill agent-browser
+npx skills add CochranResearchGroup/agent-browser --skill agent-browser-service
 npx skills add vercel-labs/agent-browser --skill dogfood
 npx skills add vercel-labs/agent-browser --skill electron
 npx skills add vercel-labs/agent-browser --skill slack
@@ -31,6 +33,20 @@ Example agent interactions:
 - "Open example.com and fill out the contact form"
 - "Take a screenshot of the dashboard after logging in"
 - "Compare staging and production versions of the homepage"
+
+## agent-browser-service
+
+Use this focused skill when a browser must retain authentication, share a
+managed profile, reuse an existing service-owned browser, or become visible to
+an operator through Guacamole or RDP. It teaches agents to begin with
+`service_access_plan`, keep browser acquisition separate from operator
+presentation and runtime maintenance, and let Agent Browser own leases, route
+selection, handoffs, reconciliation, and garbage collection.
+
+For example, a checked-out route pool can block a requested operator view
+without blocking ordinary browser automation. Likewise, a global doctor
+advisory is maintenance evidence until the requested action or scoped
+readiness result classifies it as blocking.
 
 ## dogfood
 

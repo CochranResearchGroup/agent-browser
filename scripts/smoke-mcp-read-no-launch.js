@@ -27,7 +27,9 @@ const targetServiceId = 'google';
 let mcp;
 
 const MCP_TOOL_ALLOWLIST = [
-  'service_access_plan', 'service_request', 'desktop_capture', 'service_job_cancel', 'service_browser_retry',
+  'service_access_plan', 'service_request', 'desktop_capture', 'desktop_locate',
+  'desktop_prompt_observe', 'desktop_interact', 'service_job_cancel', 'service_browser_retry',
+  'service_status',
   'service_incidents', 'service_remedies_apply', 'service_profile_upsert',
   'service_profile_delete', 'service_profile_freshness_update',
   'service_profile_seeding_handoff_update', 'service_session_upsert',
@@ -57,7 +59,7 @@ const MCP_TOOL_ALLOWLIST = [
 ];
 
 const MCP_RESOURCE_ALLOWLIST = [
-  'agent-browser://contracts', 'agent-browser://access-plan',
+  'agent-browser://operating-guide', 'agent-browser://contracts', 'agent-browser://access-plan',
   'agent-browser://browser-capability-registry', 'agent-browser://incidents',
   'agent-browser://profiles', 'agent-browser://sessions', 'agent-browser://browsers',
   'agent-browser://display-allocations', 'agent-browser://remote-view-routes',
@@ -76,7 +78,7 @@ const MCP_TEMPLATE_ALLOWLIST = [
 ];
 
 function mcpToolResultClassification(name) {
-  if (name === 'desktop_capture') return 'bounded_ephemeral_desktop_observation';
+  if (name.startsWith('desktop_')) return 'bounded_desktop_observation_or_interaction';
   if (name === 'browser_command') return 'explicit_full_status_rejection';
   if (name.startsWith('browser_')) return 'narrow_browser_result';
   if (['service_access_plan', 'service_incidents', 'service_trace',
@@ -239,11 +241,27 @@ try {
       ),
       'MCP resource template inventory drifted from the frozen allowlist',
     );
-    assertMcpDoesNotProduceFullStatus(inventory, 'MCP inventory');
-    assert(
-      !JSON.stringify(inventory).includes('service_status'),
-      'MCP inventory advertised service_status',
+    const operatingGuideUri = 'agent-browser://operating-guide';
+    const operatingGuide = parseMcpJsonResource(
+      await mcp.send('resources/read', { uri: operatingGuideUri }),
+      operatingGuideUri,
+      'MCP operating guide resource',
     );
+    assert(
+      operatingGuide.schemaVersion === 'agent-browser.operating-guide.v1',
+      `operating guide version mismatch: ${JSON.stringify(operatingGuide)}`,
+    );
+    assert(
+      operatingGuide.readinessAxes?.browserAcquisition &&
+        operatingGuide.readinessAxes?.operatorPresentation &&
+        operatingGuide.readinessAxes?.runtimeMaintenance,
+      `operating guide axes missing: ${JSON.stringify(operatingGuide)}`,
+    );
+    assert(
+      operatingGuide.ownership?.agentBrowser?.includes('classify and apply garbage collection'),
+      `operating guide ownership missing: ${JSON.stringify(operatingGuide)}`,
+    );
+    assertMcpDoesNotProduceFullStatus(inventory, 'MCP inventory');
     for (const tool of inventory.tools.tools ?? []) {
       const classification = mcpToolResultClassification(tool.name);
       assert(classification, `MCP tool ${tool.name} has no frozen narrower-result classification`);

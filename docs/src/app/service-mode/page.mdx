@@ -6,6 +6,60 @@ The model is intentionally broader than the CLI. Agents usually interact through
 
 The normal request model is identity-first. A caller asks for a tab or browser action plus `serviceName`, `agentName`, `taskName`, and the target site or login identity. agent-browser selects or reuses the managed profile, manages any profile lease, queues browser-control work, and records the trace state. Direct profile selection is for known-login overrides and bring-your-own-profile workflows.
 
+## Use service mode as an agent
+
+For shared or authenticated work, read `agent-browser://operating-guide`, then
+call `service_access_plan` with caller attribution and the target identity.
+Copy the selected profile, retained-browser route hints, lease policy, and
+browser posture into `service_request`. Request a remote view only when a
+person needs to see or control the browser, or when the selected site policy
+requires that posture.
+
+Keep these readiness axes separate:
+
+<table>
+  <thead>
+    <tr>
+      <th>Axis</th>
+      <th>Deciding evidence</th>
+      <th>Agent behavior</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Browser acquisition</td>
+      <td>Access plan, profile allocation, and service request result</td>
+      <td>Follow the selected profile, reuse hints, and lease action.</td>
+    </tr>
+    <tr>
+      <td>Operator presentation</td>
+      <td>Route preflight, remote-view result, and requested-scope doctor evidence</td>
+      <td>Wait or request an explicit route switch only when presentation is required.</td>
+    </tr>
+    <tr>
+      <td>Runtime maintenance</td>
+      <td>Multiplicity, cleanup candidates, blocking incidents, and install doctor</td>
+      <td>Treat global warnings as advisories unless scoped evidence or the request makes them blocking.</td>
+    </tr>
+  </tbody>
+</table>
+
+Agent Browser owns profile selection, lease serialization, retained-browser
+reuse, route selection and parking, durable handoffs, browser close,
+reconciliation, and garbage collection. A consumer agent must not create a
+duplicate profile, close another workload, release another viewer, or run
+cleanup to make its own request succeed.
+
+```bash
+agent-browser mcp read agent-browser://operating-guide
+agent-browser --json service access-plan \
+  --service-name BooksReceipts \
+  --agent-name receipt-agent \
+  --task-name review-bill \
+  --target-service-id bill \
+  --account-id soylei
+```
+
 ## What service mode provides
 
 - A queued worker path for browser-control actions so concurrent clients are dispatched in order instead of competing directly for CDP.

@@ -2,6 +2,20 @@
 
 Browser automation CLI for AI agents. Fast native Rust CLI.
 
+## Shared browser work for agents
+
+For shared, authenticated, profile-sensitive, or operator-visible work, read
+`agent-browser://operating-guide` and call `service_access_plan` before
+`service_request`. Agent Browser owns profile selection, retained-browser
+reuse, lease serialization, route selection, durable handoffs, reconciliation,
+and garbage collection.
+
+Keep browser acquisition, Guacamole/RDP presentation, and runtime maintenance
+as separate readiness axes. A checked-out route pool blocks only a required
+operator view, and a global doctor advisory blocks work only when the requested
+action or scoped readiness evidence says it does. Use the packaged
+`agent-browser-service` skill for the complete agent workflow.
+
 ## Installation
 
 ### GitHub Release Binary (recommended)

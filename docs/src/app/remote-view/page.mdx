@@ -30,6 +30,28 @@ Require `requestedScope.status` and `remoteControl.status` to be `ready`.
 Review `globalAdvisories`, but do not let unrelated stale sessions replace the
 requested-subject result.
 
+## Handle a checked-out route pool
+
+Route occupancy describes operator presentation, not browser acquisition. If
+the requested work does not need a visible desktop, follow the service access
+plan and do not reserve or disturb a Guacamole route. A checked-out route pool
+does not by itself prove that a managed profile, retained browser, or new
+service-owned tab is unavailable.
+
+When presentation is required, use
+`service_remote_view_route_preflight` or a scoped remote-view doctor result.
+Reuse the requested browser's existing route when possible. If every route is
+non-parkable because an active controller is protected, wait and report
+`route_pool_exhausted` as a presentation blocker. Request
+`service_remote_view_route_switch` only for an explicit presentation
+reassignment. Agent Browser decides whether another route can be parked while
+preserving its browser process and profile.
+
+Do not close another browser, release another viewer, take over a controller,
+or run runtime cleanup to free a route. Add route capacity only after measured
+demand shows that the configured pool cannot serve the required number of
+simultaneous non-preemptible operator desktops.
+
 ## Open the browser and copy the durable link
 
 Follow these steps to create one operator-visible browser handoff:

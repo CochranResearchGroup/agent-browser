@@ -45,6 +45,7 @@ const CHALLENGES_RESOURCE: &str = "agent-browser://challenges";
 const INCIDENTS_RESOURCE: &str = "agent-browser://incidents";
 const INCIDENT_ACTIVITY_PREFIX: &str = "agent-browser://incidents/";
 const INCIDENT_ACTIVITY_SUFFIX: &str = "/activity";
+const OPERATING_GUIDE_RESOURCE: &str = "agent-browser://operating-guide";
 const ACCESS_PLAN_TEMPLATE: &str = "agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,runtimeProfile,browserBuild,browserHost,viewStreamProvider,controlInputProvider,displayIsolation}";
 const PROFILE_LOOKUP_RESOURCE: &str = "agent-browser://profiles/lookup";
 const PROFILE_LOOKUP_TEMPLATE: &str = "agent-browser://profiles/lookup{?query,hostname,profileId,profileName,serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,authenticationState,freshnessState,tag,url,readinessProfileId,browserBuild}";
@@ -151,6 +152,12 @@ fn mcp_command_response_with_config(
 
 fn service_mcp_resources() -> Vec<Value> {
     vec![
+        json!({
+            "uri": OPERATING_GUIDE_RESOURCE,
+            "name": "Agent operating guide",
+            "mimeType": "application/json",
+            "description": "Intent-first guide that separates browser acquisition, operator presentation, and runtime maintenance while keeping lifecycle authority inside Agent Browser"
+        }),
         json!({
             "uri": SERVICE_CONTRACTS_RESOURCE,
             "name": "Service contracts",
@@ -303,6 +310,86 @@ fn service_mcp_resource_templates() -> Vec<Value> {
     ]
 }
 
+/// Return the compact operating contract that external agents should read
+/// before combining profile, route, doctor, or cleanup evidence.
+fn service_operating_guide() -> Value {
+    json!({
+        "schemaVersion": "agent-browser.operating-guide.v1",
+        "summary": "Declare intent, read the access plan, request browser work through the service control plane, and acquire operator presentation only when required.",
+        "workflow": [
+            {
+                "step": "declare_intent",
+                "fields": ["serviceName", "agentName", "taskName", "targetServiceId", "siteId", "loginId", "accountId", "url"]
+            },
+            {
+                "step": "read_access_plan",
+                "tool": SERVICE_ACCESS_PLAN_MCP_TOOL_NAME,
+                "resource": SERVICE_ACCESS_PLAN_MCP_RESOURCE
+            },
+            {
+                "step": "request_browser_work",
+                "tool": "service_request",
+                "rule": "Copy selected profile, browser reuse, session, lease, and posture hints from the access plan."
+            },
+            {
+                "step": "acquire_presentation_if_required",
+                "preflightTool": SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME,
+                "rule": "Guacamole or RDP capacity is a presentation concern unless the requested browser posture requires that route."
+            }
+        ],
+        "readinessAxes": {
+            "browserAcquisition": {
+                "evidence": ["accessPlan.decision", "accessPlan.decision.profileReuse", "service request result", "profile allocation"],
+                "owner": "agent-browser",
+                "callerRule": "Do not create a duplicate profile or browser lane to escape another workload."
+            },
+            "operatorPresentation": {
+                "evidence": ["route preflight", "remote_view_open result", "operatorVisible", "requestedScope"],
+                "owner": "agent-browser",
+                "callerRule": "A checked-out route does not by itself prove that browser acquisition is blocked. Wait or request an explicit route switch only when presentation is required."
+            },
+            "runtimeMaintenance": {
+                "evidence": ["runtimeMultiplicity", "serviceResources", "runtimeLifecycle.blockingIncident", "install doctor issues"],
+                "owner": "agent-browser",
+                "callerRule": "A global doctor advisory blocks a request only when scoped readiness or the request result says it does."
+            }
+        },
+        "ownership": {
+            "caller": [
+                "declare target and account intent",
+                "state whether a person needs presentation",
+                "follow returned reuse and readiness actions",
+                "report the exact blocked axis"
+            ],
+            "agentBrowser": [
+                "select profiles",
+                "serialize profile leases",
+                "reuse retained browsers",
+                "select or park routes",
+                "issue durable handoffs",
+                "close owned browsers",
+                "reconcile runtime state",
+                "classify and apply garbage collection"
+            ]
+        },
+        "prohibitions": [
+            "Do not close another workload to free a route.",
+            "Do not release another viewer or take over a controller without explicit authority.",
+            "Do not run GC, delete a profile, or kill a process from a consumer task.",
+            "Do not share raw Guacamole or provider URLs; share only a ready durable handoff URL.",
+            "Do not describe the whole runtime as unhealthy when only one readiness axis is blocked."
+        ],
+        "blockedReportFields": [
+            "browserAcquisition",
+            "operatorPresentation",
+            "runtimeMaintenance",
+            "typedCodeOrField",
+            "safeNextAction",
+            "effectsNotTaken"
+        ]
+    })
+}
+
 fn read_service_mcp_resource(
     uri: &str,
     configured_service_state: &ServiceState,
@@ -316,6 +403,7 @@ fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Resu
     let mut state = state.clone();
     state.refresh_profile_readiness();
     let contents = match uri {
+        OPERATING_GUIDE_RESOURCE => service_operating_guide(),
         SERVICE_CONTRACTS_RESOURCE => service_contracts_metadata(),
         SERVICE_ACCESS_PLAN_MCP_RESOURCE => {
             service_access_plan_for_state(&state, Default::default())
@@ -679,7 +767,7 @@ fn initialize_result(params: Option<&Value>) -> Value {
             "title": "Agent Browser",
             "version": env!("CARGO_PKG_VERSION"),
         },
-        "instructions": "agent-browser service resources plus queued browser-control tools. Include serviceName, agentName, and taskName on tools/call whenever possible.",
+        "instructions": "For shared, authenticated, profile-sensitive, or operator-visible work, read agent-browser://operating-guide and call service_access_plan before service_request. Keep browser acquisition, operator presentation, and runtime maintenance separate. Include serviceName, agentName, and taskName on tools/call whenever possible.",
     })
 }
 
@@ -688,7 +776,7 @@ fn service_mcp_tools() -> Vec<Value> {
         json!({
             "name": SERVICE_ACCESS_PLAN_MCP_TOOL_NAME,
             "title": "Read service access plan",
-            "description": "Return the same no-launch service-owned access recommendation as agent-browser://access-plan and HTTP GET /api/service/access-plan. Use this before service_request so agent-browser owns profile selection, readiness, site policy, provider, challenge, and browser posture decisions.",
+            "description": "Return the same no-launch service-owned access recommendation as agent-browser://access-plan and HTTP GET /api/service/access-plan. Use this before service_request so Agent Browser owns profile selection, retained-browser reuse, lease waiting, readiness, site policy, provider, challenge, and browser posture. Route occupancy and global doctor advisories are separate evidence and must not replace this request-scoped plan.",
             "inputSchema": {
                 "type": "object",
                 "additionalProperties": false,
@@ -798,7 +886,7 @@ fn service_mcp_tools() -> Vec<Value> {
         json!({
             "name": "service_request",
             "title": "Queue service browser request",
-            "description": "Queue one intent-based browser request through the service control plane. Use serviceName, agentName, taskName, siteId or loginId, action, and params so agent-browser can select the managed profile and dispatch through the browser queue.",
+            "description": "Queue one intent-based browser request through the service control plane. Use serviceName, agentName, taskName, target identity, action, and params from service_access_plan so Agent Browser owns profile, retained-browser, lease, queue, and lifecycle decisions. Do not create a duplicate profile, close another workload, or run cleanup to satisfy the request.",
             "inputSchema": {
                 "type": "object",
                 "additionalProperties": false,
@@ -1210,7 +1298,7 @@ fn service_mcp_tools() -> Vec<Value> {
         json!({
             "name": "service_status",
             "title": "Read service status",
-            "description": "Read the same reconciled Service Status projection as CLI and HTTP, including additive runtimeLifecycle multiplicity, lifecycle, reconciliation, retention, pressure, cleanup-obligation, and blocking-incident readback.",
+            "description": "Read the same reconciled Service Status projection as CLI and HTTP, including runtimeLifecycle multiplicity, reconciliation, retention, pressure, cleanup obligations, and blocking incidents. This is runtime-maintenance evidence: a global warning blocks browser acquisition or presentation only when scoped readiness or the requested action classifies it as blocking.",
             "inputSchema": {
                 "type": "object",
                 "additionalProperties": false,
@@ -2063,7 +2151,7 @@ fn service_mcp_tools() -> Vec<Value> {
         json!({
             "name": SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME,
             "title": "Preflight remote-view route readiness",
-            "description": "Evaluate the retained RDP/Guacamole remote-view route readiness evidence without launching Chrome. Use this before remote_view_open to inspect route URL, Guacamole, RDP backend, display access, and route desktop readiness.",
+            "description": "Evaluate retained RDP/Guacamole presentation readiness without launching Chrome. Use this before remote_view_open when a person needs a visible desktop. A checked-out or exhausted route pool blocks presentation for that request; it does not by itself authorize closing another workload or prove that unrelated browser automation is blocked.",
             "inputSchema": {
                 "type": "object",
                 "additionalProperties": false,
@@ -10495,6 +10583,7 @@ mod tests {
         assert_eq!(
             uris,
             vec![
+                OPERATING_GUIDE_RESOURCE,
                 SERVICE_CONTRACTS_RESOURCE,
                 SERVICE_ACCESS_PLAN_MCP_RESOURCE,
                 SERVICE_BROWSER_CAPABILITY_REGISTRY_RESOURCE,
@@ -10655,6 +10744,9 @@ mod tests {
         assert_eq!(response["result"]["protocolVersion"], MCP_PROTOCOL_VERSION);
         assert!(response["result"]["capabilities"]["resources"].is_object());
         assert!(response["result"]["capabilities"]["tools"].is_object());
+        let instructions = response["result"]["instructions"].as_str().unwrap();
+        assert!(instructions.contains(OPERATING_GUIDE_RESOURCE));
+        assert!(instructions.contains("browser acquisition, operator presentation"));
     }
 
     #[test]
@@ -10734,6 +10826,32 @@ mod tests {
     }
 
     #[test]
+    fn read_operating_guide_separates_agent_readiness_axes_and_ownership() {
+        let resource = read_service_mcp_resource_from_state(
+            OPERATING_GUIDE_RESOURCE,
+            &ServiceState::default(),
+        )
+        .unwrap();
+
+        assert_eq!(resource["uri"], OPERATING_GUIDE_RESOURCE);
+        assert_eq!(
+            resource["contents"]["schemaVersion"],
+            "agent-browser.operating-guide.v1"
+        );
+        assert!(resource["contents"]["readinessAxes"]["browserAcquisition"].is_object());
+        assert!(resource["contents"]["readinessAxes"]["operatorPresentation"].is_object());
+        assert!(resource["contents"]["readinessAxes"]["runtimeMaintenance"].is_object());
+        assert_eq!(
+            resource["contents"]["workflow"][1]["tool"],
+            SERVICE_ACCESS_PLAN_MCP_TOOL_NAME
+        );
+        let serialized = serde_json::to_string(&resource).unwrap();
+        assert!(serialized.contains("checked-out route does not by itself prove"));
+        assert!(serialized.contains("Do not close another workload"));
+        assert!(serialized.contains("Do not run GC"));
+    }
+
+    #[test]
     fn read_browser_capability_registry_resource_returns_advisory_registry() {
         let state = ServiceState {
             browser_capability_registry: crate::native::service_model::BrowserCapabilityRegistry {
@@ -10808,6 +10926,18 @@ mod tests {
             service_access_plan["inputSchema"]["properties"]["controlInputProvider"].is_object()
         );
         assert!(service_access_plan["inputSchema"]["properties"]["displayIsolation"].is_object());
+        assert!(service_access_plan["description"]
+            .as_str()
+            .unwrap()
+            .contains("Route occupancy and global doctor advisories are separate evidence"));
+        let service_request = tools
+            .iter()
+            .find(|tool| tool["name"] == "service_request")
+            .expect("service_request schema should be listed");
+        assert!(service_request["description"]
+            .as_str()
+            .unwrap()
+            .contains("Do not create a duplicate profile"));
         let service_job_cancel = tools
             .iter()
             .find(|tool| tool["name"] == "service_job_cancel")
@@ -10830,6 +10960,18 @@ mod tests {
             service_status["inputSchema"]["properties"]["fullTabHistory"]["type"],
             "boolean"
         );
+        assert!(service_status["description"]
+            .as_str()
+            .unwrap()
+            .contains("global warning blocks browser acquisition or presentation only"));
+        let route_preflight = tools
+            .iter()
+            .find(|tool| tool["name"] == SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME)
+            .expect("route preflight schema should be listed");
+        assert!(route_preflight["description"]
+            .as_str()
+            .unwrap()
+            .contains("blocks presentation for that request"));
         let service_incidents = tools
             .iter()
             .find(|tool| tool["name"] == "service_incidents")

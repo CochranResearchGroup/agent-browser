@@ -248,12 +248,18 @@ function selectRecommendations(files, base) {
     add('diff -q skills/agent-browser/SKILL.md /home/ecochran76/.codex/shared/skills/agent-browser/SKILL.md', 'repo and installed agent-browser skill must stay synced');
   }
 
+  if (files.some((file) => file.startsWith('skills/agent-browser-service/'))) {
+    add('uv run --with pyyaml python /home/ecochran76/.codex/shared/skills/.system/skill-creator/scripts/quick_validate.py skills/agent-browser-service', 'focused service-mode skill changed');
+    add('diff -qr skills/agent-browser-service /home/ecochran76/.codex/shared/skills/agent-browser-service', 'repo and installed agent-browser-service skill must stay synced');
+  }
+
   if (
     files.some(
       (file) =>
         file === 'AGENTS.md' ||
         file === 'README.md' ||
         file === 'skills/agent-browser/SKILL.md' ||
+        file.startsWith('skills/agent-browser-service/') ||
         file === 'docs/src/app/remote-view/page.mdx' ||
         file === 'docs/src/lib/docs-navigation.ts',
     )
