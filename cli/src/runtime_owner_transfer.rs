@@ -606,9 +606,11 @@ impl RuntimeOwnerRegistry {
         }
         let target_set_matches = request.mode == BrowserAdoptionMode::OrphanAdoption
             || request.target_set_digest == owner.target_set_digest;
+        let logical_browser_matches = request.mode == BrowserAdoptionMode::OrphanAdoption
+            || request.logical_browser_id == owner.browser_id;
         if request.expected_owner_id.as_deref() != Some(owner.owner_id.as_str())
             || request.expected_owner_generation != owner.owner_generation
-            || request.logical_browser_id != owner.browser_id
+            || !logical_browser_matches
             || request.process_instance_digest != owner.process_instance_digest
             || request.browser_family != owner.browser_family
             || request.cdp_endpoint_identity_digest != owner.cdp_endpoint_identity_digest
@@ -1402,6 +1404,51 @@ mod tests {
         let restored = registry.owner(&digest("profile")).unwrap();
         assert_eq!(restored.state, ProfileOwnerState::Orphaned);
         assert!(!registry.authorizes(&OwnerAuthorityClaim::from_owner(restored)));
+    }
+
+    #[test]
+    fn orphan_adoption_rebinds_historical_logical_id_only_with_exact_identity() {
+        let mut registry = RuntimeOwnerRegistry::default();
+        let mut orphan = owner();
+        orphan.state = ProfileOwnerState::Orphaned;
+        orphan.browser_id = "browser-historical".to_string();
+        registry
+            .owners
+            .insert(orphan.profile_identity_digest.clone(), orphan.clone());
+        let mut request = cooperative_request();
+        request.mode = BrowserAdoptionMode::OrphanAdoption;
+        request.expected_owner_id = Some(orphan.owner_id);
+        request.expected_owner_generation = orphan.owner_generation;
+        request.candidate_owner_id = "owner-adopter".to_string();
+        request.logical_browser_id = "browser-current".to_string();
+
+        let mut mismatched_registry = registry.clone();
+        let mut mismatched_request = request.clone();
+        mismatched_request.process_instance_digest = digest("different-process");
+        assert_eq!(
+            mismatched_registry
+                .begin_transfer(mismatched_request)
+                .unwrap_err()
+                .code,
+            OwnerTransferFailureCode::OwnerCompareAndSwapMismatch
+        );
+
+        let proposal = registry.begin_transfer(request.clone()).unwrap();
+        let receipt = registry
+            .commit_candidate(CandidateOwnerAttachment::from_request(
+                &request,
+                proposal.candidate_owner_generation,
+            ))
+            .unwrap();
+
+        assert_eq!(receipt.logical_browser_id, "browser-current");
+        assert_eq!(
+            registry
+                .owner(&request.profile_identity_digest)
+                .unwrap()
+                .browser_id,
+            "browser-current"
+        );
     }
 
     #[test]

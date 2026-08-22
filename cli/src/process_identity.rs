@@ -38,6 +38,60 @@ pub enum ProcessObservation {
     Failed { reason: String },
 }
 
+/// Return a browser command-line option from either a conventional argv entry
+/// or a platform observation that retained the executable and flags together.
+pub(crate) fn command_line_option_value<'a>(
+    arguments: &'a [String],
+    option: &str,
+) -> Option<&'a str> {
+    for (index, argument) in arguments.iter().enumerate() {
+        if let Some(value) = argument.strip_prefix(&format!("{option}=")) {
+            return Some(value);
+        }
+        if argument == option {
+            return arguments.get(index + 1).map(String::as_str);
+        }
+
+        let mut search_from = 0;
+        while let Some(relative_start) = argument[search_from..].find(option) {
+            let start = search_from + relative_start;
+            let boundary_is_valid = start == 0
+                || argument[..start]
+                    .chars()
+                    .next_back()
+                    .is_some_and(char::is_whitespace);
+            let suffix = &argument[start + option.len()..];
+            if boundary_is_valid {
+                let value = suffix
+                    .strip_prefix('=')
+                    .or_else(|| {
+                        suffix
+                            .chars()
+                            .next()
+                            .is_some_and(char::is_whitespace)
+                            .then_some(suffix)
+                    })
+                    .map(str::trim_start);
+                if let Some(value) = value.filter(|value| !value.is_empty()) {
+                    let value = if let Some(quote) =
+                        value.chars().next().filter(|c| matches!(c, '\'' | '"'))
+                    {
+                        let quoted = &value[quote.len_utf8()..];
+                        &quoted[..quoted.find(quote).unwrap_or(quoted.len())]
+                    } else {
+                        &value[..value.find(char::is_whitespace).unwrap_or(value.len())]
+                    };
+                    if !value.is_empty() {
+                        return Some(value);
+                    }
+                }
+            }
+            search_from = start + option.len();
+        }
+    }
+    None
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LegacyProfileProof {
     Unproven,

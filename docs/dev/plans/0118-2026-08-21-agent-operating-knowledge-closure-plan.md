@@ -2,7 +2,7 @@
 
 Date: 2026-08-21
 
-State: IMPLEMENTED; LIVE MCP INSTALL BLOCKED
+State: ACCEPTED
 
 Lane: P118
 
@@ -206,6 +206,57 @@ or weaker census rule was used. The installed MCP resource remains absent
 until those runtime identities are reconciled by a separate reviewed repair
 and the transactional installer succeeds.
 
+Subsequent repair work resolved the original three census ambiguities and
+proved the source operating guide in isolated release candidates. It also
+closed terminal-browser projection, historical owner aliasing, shared-host PID
+joining, and stale owner to reused-profile joining defects. The latest
+candidate digest is
+`266024cca43fbe243cc9139c9af36a9a2fb3382e85aac1f082327273a774eb34`.
+
+Live transaction `upgrade-7ab1af56-f2d4-43d4-9981-61bcbc30a240`
+still failed before generation selection. The remaining seam is exact:
+`p0204-a06` and `plan0233-qbo-owned` are ready named lanes behind the selected
+single runtime host, but the census route probe resolves the legacy socket
+directory instead of the selected runtime-host ingress directory. They are
+therefore misclassified as fenced orphans. The fallback then looks for a
+per-session daemon identity that a shared host intentionally does not expose,
+and rollback reports `runtime_lifecycle_relinquish_record_missing`.
+
+Recovery verified the exact retained candidate identity, stopped only that
+candidate, restored admission, removed candidate ingress, and sealed the
+transaction as `failed_preserved_old_generation`. The selected generation is
+still `0.28.0-fb5a8ef317c2-9cf9b4f6919d`. No browser, profile, route, viewer,
+or authenticated workload was closed. The next repair must make the named-lane
+readiness probe resolve through selected runtime-host ingress. Adding route
+capacity or weakening owner evidence is not an acceptable workaround.
+
+The ingress-aware readiness repair and the remaining transactional adoption
+seams are now closed. Release candidate
+`9062cd9bf8ec2ecd6dbe0a3d1f23f0a600677be1ee1c743a3e7b7f5fdbfde568`
+was accepted by transaction
+`upgrade-fc81e16c-654c-4aae-b748-10dfa20af107` as installed generation
+`0.28.0-9062cd9bf8ec-b5f50b43bc88`. Authenticated dashboard acceptance reused
+durable handoff `r539344`, produced a ready presentation receipt at generation
+33, and committed dashboard ingress revision 186 without launching or closing
+a browser.
+
+Post-install runtime census reports exactly one dashboard process, one runtime
+host, one executable generation, and zero legacy daemons. The runtime monitor
+is ready after one bounded reconciliation. All eight profiles are preserved.
+The three retained ready browsers are preserved with their original logical
+browser IDs, PIDs, and profile IDs: PID 16807 for `last30days-facebook`, PID
+60208 for `default`, and PID 46155 for `qbo-soylei`. Their active session aliases
+were transactionally rebound to the accepted owner generation.
+
+Install doctor remains nonzero for two non-blocking historical bookkeeping
+findings. One inactive, dead Odollo session-supervisor manifest names the prior
+executable generation, and one managed process identity lacks a lifecycle
+cleanup obligation. Service process GC reports zero candidates, zero
+terminations, and no reclaimed pressure. Neither finding changes the accepted
+runtime multiplicity or the scoped browser-acquisition decision. The inactive
+named lane was neither removed nor restarted because that would require
+separate workload authority.
+
 ## Validation Evidence
 
 - Focused MCP Rust tests: pass.
@@ -221,3 +272,16 @@ and the transactional installer succeeds.
 - Candidate operating-guide readback: pass.
 - Live transactional install: blocked safely before selection as recorded
   above.
+- Runtime-adoption focused tests after the repair: 45 passed.
+- Strict Clippy after the repair: pass.
+- Latest live transaction recovery: pass; old generation preserved and
+  admission reopened.
+- Final runtime-adoption suite: 46 passed.
+- Final runtime-lifecycle suite: 9 passed.
+- Selected-ingress and unreachable identity-fencing regressions: pass.
+- Final Rust formatting, strict Clippy, and release build: pass.
+- Installed binary digest and selected generation: exact match.
+- Installed `agent-browser://operating-guide` listing and readback: pass.
+- Installed focused skill source equality and validator: pass.
+- Accepted live transaction and authenticated dashboard receipt: pass.
+- Post-install profile and retained-browser preservation: pass.

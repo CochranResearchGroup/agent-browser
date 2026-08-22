@@ -231,7 +231,9 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
     }
 
     /// Permit a stale daemon to relinquish its local process handle only after
-    /// another generation owns both effects and the cleanup obligation.
+    /// another generation owns both effects and the cleanup obligation. A
+    /// verified orphan adoption may canonicalize a historical browser alias,
+    /// so the restored current owner's lifecycle key is authoritative.
     pub(crate) fn authorize_relinquish_after_transfer(
         &self,
         stale_claim: &OwnerAuthorityClaim,
@@ -245,7 +247,7 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
             .ok_or_else(|| "runtime_lifecycle_relinquish_owner_missing".to_string())?;
         let lifecycle = registry
             .lifecycle_records
-            .get(&stale_claim.logical_browser_id)
+            .get(&current.browser_id)
             .ok_or_else(|| "runtime_lifecycle_relinquish_record_missing".to_string())?;
         let restored_lifecycle_matches = matches!(
             (current.state, lifecycle.lifecycle_state),
@@ -258,9 +260,9 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
             )
         );
         if !restored_lifecycle_matches
-            || current.browser_id != stale_claim.logical_browser_id
             || current.process_instance_digest != stale_claim.process_instance_digest
             || current.owner_generation <= stale_claim.owner_generation
+            || lifecycle.profile_identity_digest != stale_claim.profile_identity_digest
             || lifecycle.owner_generation != current.owner_generation
             || lifecycle.cleanup_obligation_state != CleanupObligationState::Owned
         {
@@ -1277,7 +1279,7 @@ mod tests {
     }
 
     #[test]
-    fn reversed_orphan_adoption_authorizes_candidate_relinquish() {
+    fn reversed_orphan_adoption_with_rebound_alias_authorizes_candidate_relinquish() {
         let repository = registered_repository();
         let authority = RuntimeLifecycleAuthority::new(&repository);
         let orphan = authority
@@ -1285,6 +1287,7 @@ mod tests {
             .unwrap();
         let mut request = cooperative_request();
         request.mode = crate::runtime_adoption::BrowserAdoptionMode::OrphanAdoption;
+        request.logical_browser_id = "session:canonical-browser".to_string();
         request.expected_owner_id = Some(orphan.owner_id.clone());
         request.expected_owner_generation = orphan.owner_generation;
         request.transfer_nonce_digest = digest("orphan-transfer");
@@ -1303,6 +1306,10 @@ mod tests {
             .cloned()
             .unwrap();
         let candidate_claim = OwnerAuthorityClaim::from_owner(&candidate);
+        assert_eq!(
+            candidate_claim.logical_browser_id,
+            "session:canonical-browser"
+        );
 
         authority
             .reverse_transfer(ReverseOwnerTransferRequest {

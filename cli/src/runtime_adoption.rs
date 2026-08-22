@@ -1090,6 +1090,11 @@ pub(crate) fn collect_host_runtime_census_round() -> Result<RuntimeCensusRound, 
     let daemon_inventory = crate::install::active_runtime_inventory(None);
 
     let (registry_revision, mut readbacks) = service_census_readbacks(&service_state)?;
+    let mut daemon_runtime_observations = daemon_observations(&daemon_inventory);
+    daemon_runtime_observations.extend(owner_route_daemon_observations_with_probe(
+        &service_state,
+        crate::connection::daemon_ready_through_selected_ingress,
+    ));
     readbacks.extend([
         runtime_profile_readback(&runtime_profiles)?,
         value_readback(
@@ -1100,7 +1105,7 @@ pub(crate) fn collect_host_runtime_census_round() -> Result<RuntimeCensusRound, 
         value_readback(
             RuntimeCensusSource::DaemonMetadata,
             &daemon_inventory,
-            daemon_observations(&daemon_inventory),
+            daemon_runtime_observations,
         )?,
         process_identity_readback(
             &service_state,
@@ -1139,15 +1144,24 @@ fn service_browser_readback(
         .values()
         .map(|browser| -> Result<_, String> {
             let process = state.browser_process_identities.get(&browser.id);
-            let browser_live = matches!(
-                browser.health,
-                BrowserHealth::Ready
-                    | BrowserHealth::Degraded
-                    | BrowserHealth::Unreachable
-                    | BrowserHealth::CdpDisconnected
-                    | BrowserHealth::Reconnecting
-                    | BrowserHealth::Closing
-            );
+            let observed_terminal_exit = browser.pid.is_none()
+                && browser.cdp_endpoint.is_none()
+                && process.is_none()
+                && browser
+                    .last_health_observation
+                    .as_ref()
+                    .and_then(|observation| observation.process_exit_cause.as_deref())
+                    .is_some_and(|cause| !cause.trim().is_empty());
+            let browser_live = !observed_terminal_exit
+                && matches!(
+                    browser.health,
+                    BrowserHealth::Ready
+                        | BrowserHealth::Degraded
+                        | BrowserHealth::Unreachable
+                        | BrowserHealth::CdpDisconnected
+                        | BrowserHealth::Reconnecting
+                        | BrowserHealth::Closing
+                );
             let profile = browser
                 .profile_id
                 .as_deref()
@@ -1254,19 +1268,10 @@ fn browser_user_data_dir_from_observation(
         return None;
     };
     observed.browser_family.as_ref()?;
-    command_line_option_value(observed.command_line.as_deref()?, "--user-data-dir")
-}
-
-fn command_line_option_value<'a>(arguments: &'a [String], option: &str) -> Option<&'a str> {
-    for (index, argument) in arguments.iter().enumerate() {
-        if let Some(value) = argument.strip_prefix(&format!("{option}=")) {
-            return Some(value);
-        }
-        if argument == option {
-            return arguments.get(index + 1).map(String::as_str);
-        }
-    }
-    None
+    crate::process_identity::command_line_option_value(
+        observed.command_line.as_deref()?,
+        "--user-data-dir",
+    )
 }
 
 fn runtime_profile_readback(
@@ -1348,10 +1353,7 @@ fn profile_owner_readback(
             if owner.state != crate::runtime_owner_transfer::ProfileOwnerState::Orphaned {
                 evidence.owner_generations.push(owner.owner_generation);
             }
-            let mut aliases = vec![
-                format!("browser:{}", owner.browser_id),
-                format!("profile-digest:{}", owner.profile_identity_digest),
-            ];
+            let mut aliases = vec![format!("browser:{}", owner.browser_id)];
             // An orphaned owner's daemon route is historical metadata, not an
             // effect-capable session identity. Multiple preserved orphans may
             // legitimately carry the same placeholder route.
@@ -1360,8 +1362,20 @@ fn profile_owner_readback(
             {
                 aliases.push(format!("session:{}", owner.daemon_session_route));
             }
+            let logical_browser_id_hint = if let Some(canonical_browser_id) =
+                canonical_exact_owner_browser_id(state, owner)
+            {
+                aliases.push(format!("profile-digest:{}", owner.profile_identity_digest));
+                let canonical_alias = format!("browser:{canonical_browser_id}");
+                if !aliases.contains(&canonical_alias) {
+                    aliases.push(canonical_alias);
+                }
+                canonical_browser_id
+            } else {
+                owner.browser_id.clone()
+            };
             RuntimeCensusObservation {
-                logical_browser_id_hint: Some(owner.browser_id.clone()),
+                logical_browser_id_hint: Some(logical_browser_id_hint),
                 aliases,
                 profile_identity_digest: Some(owner.profile_identity_digest.clone()),
                 evidence,
@@ -1404,6 +1418,46 @@ fn profile_owner_readback(
     })
 }
 
+fn canonical_exact_owner_browser_id(
+    state: &crate::native::service_model::ServiceState,
+    owner: &crate::runtime_owner_transfer::ProfileOwner,
+) -> Option<String> {
+    let candidates = state
+        .browsers
+        .values()
+        .filter(|browser| {
+            (browser.id == format!("session:{}", owner.daemon_session_route)
+                || browser
+                    .active_session_ids
+                    .iter()
+                    .any(|session| session == &owner.daemon_session_route))
+                && state
+                    .browser_process_identities
+                    .get(&browser.id)
+                    .is_some_and(|identity| {
+                        let profile_path = identity
+                            .user_data_dir
+                            .clone()
+                            .or_else(|| browser.pid.and_then(observed_browser_user_data_dir));
+                        browser.pid == Some(identity.process_identity.pid)
+                            && crate::native::runtime_lifecycle::digest_json(
+                                &identity.process_identity,
+                            )
+                            .is_ok_and(|digest| digest == owner.process_instance_digest)
+                            && profile_path.as_deref().is_some_and(|path| {
+                                canonical_profile_digest(path)
+                                    .is_ok_and(|digest| digest == owner.profile_identity_digest)
+                            })
+                    })
+        })
+        .map(|browser| browser.id.clone())
+        .collect::<Vec<_>>();
+    let [browser_id] = candidates.as_slice() else {
+        return None;
+    };
+    Some(browser_id.clone())
+}
+
 fn supervisor_observations(value: &serde_json::Value) -> Vec<RuntimeCensusObservation> {
     value
         .get("sessions")
@@ -1413,8 +1467,10 @@ fn supervisor_observations(value: &serde_json::Value) -> Vec<RuntimeCensusObserv
         .filter_map(|session| {
             let name = session.get("session")?.as_str()?;
             let mut aliases = vec![format!("session:{name}")];
-            if let Some(pid) = session.get("mainPid").and_then(serde_json::Value::as_u64) {
-                aliases.push(format!("pid:{pid}"));
+            if !supervisor_uses_shared_runtime_host(session) {
+                if let Some(pid) = session.get("mainPid").and_then(serde_json::Value::as_u64) {
+                    aliases.push(format!("pid:{pid}"));
+                }
             }
             let runtime_profile = session
                 .get("manifest")
@@ -1427,11 +1483,16 @@ fn supervisor_observations(value: &serde_json::Value) -> Vec<RuntimeCensusObserv
                 .get("ready")
                 .and_then(serde_json::Value::as_bool)
                 .unwrap_or(false);
+            let shared_runtime_host = supervisor_uses_shared_runtime_host(session);
             let mut evidence = base_fragment();
-            evidence.daemon_live = session
-                .get("mainPid")
-                .and_then(serde_json::Value::as_u64)
-                .is_some();
+            evidence.daemon_live = if shared_runtime_host {
+                ready
+            } else {
+                session
+                    .get("mainPid")
+                    .and_then(serde_json::Value::as_u64)
+                    .is_some()
+            };
             evidence.daemon_cooperative = ready;
             evidence.metadata_present = true;
             Some(RuntimeCensusObservation {
@@ -1444,6 +1505,11 @@ fn supervisor_observations(value: &serde_json::Value) -> Vec<RuntimeCensusObserv
         .collect()
 }
 
+fn supervisor_uses_shared_runtime_host(row: &serde_json::Value) -> bool {
+    row.get("unit").and_then(serde_json::Value::as_str)
+        == Some("agent-browser-runtime-host.service")
+}
+
 fn daemon_observations(value: &serde_json::Value) -> Vec<RuntimeCensusObservation> {
     value
         .get("runtimes")
@@ -1453,6 +1519,13 @@ fn daemon_observations(value: &serde_json::Value) -> Vec<RuntimeCensusObservatio
         .flatten()
         .filter_map(|runtime| {
             let session = runtime.get("session")?.as_str()?;
+            // The shared host endpoint is runtime infrastructure, not a
+            // browser lane. Its process identity is handled by the dedicated
+            // runtime-host convergence record and must never be retired as an
+            // idle per-session daemon.
+            if session == crate::runtime_host::RUNTIME_HOST_ENDPOINT_KEY {
+                return None;
+            }
             let mut aliases = vec![format!("session:{session}")];
             if let Some(pid) = runtime.get("pid").and_then(serde_json::Value::as_u64) {
                 aliases.push(format!("pid:{pid}"));
@@ -1472,6 +1545,46 @@ fn daemon_observations(value: &serde_json::Value) -> Vec<RuntimeCensusObservatio
                 profile_identity_digest: None,
                 evidence,
             })
+        })
+        .collect()
+}
+
+fn owner_route_daemon_observations_with_probe(
+    state: &crate::native::service_model::ServiceState,
+    mut route_ready: impl FnMut(&str) -> bool,
+) -> Vec<RuntimeCensusObservation> {
+    state
+        .runtime_owner_registry
+        .owners
+        .values()
+        .filter(|owner| {
+            owner.state == crate::runtime_owner_transfer::ProfileOwnerState::Ready
+                && !owner.daemon_session_route.trim().is_empty()
+                && route_ready(&owner.daemon_session_route)
+        })
+        .map(|owner| {
+            let mut aliases = vec![
+                format!("browser:{}", owner.browser_id),
+                format!("session:{}", owner.daemon_session_route),
+            ];
+            let logical_browser_id_hint = canonical_exact_owner_browser_id(state, owner)
+                .inspect(|browser_id| {
+                    let alias = format!("browser:{browser_id}");
+                    if !aliases.contains(&alias) {
+                        aliases.push(alias);
+                    }
+                })
+                .unwrap_or_else(|| owner.browser_id.clone());
+            let mut evidence = base_fragment();
+            evidence.daemon_live = true;
+            evidence.daemon_cooperative = true;
+            evidence.metadata_present = true;
+            RuntimeCensusObservation {
+                logical_browser_id_hint: Some(logical_browser_id_hint),
+                aliases,
+                profile_identity_digest: Some(owner.profile_identity_digest.clone()),
+                evidence,
+            }
         })
         .collect()
 }
@@ -1630,6 +1743,9 @@ fn add_value_process_aliases(
         .into_iter()
         .flatten()
     {
+        if supervisor_uses_shared_runtime_host(row) {
+            continue;
+        }
         let pid = row
             .get("pid")
             .or_else(|| row.get("mainPid"))
@@ -1931,14 +2047,16 @@ fn canonical_handoff_browser_id(
     handoff: &crate::native::service_model::RemoteViewHandoff,
 ) -> Option<String> {
     let browser_id = handoff.browser_id.as_ref()?;
-    if state.browsers.contains_key(browser_id)
-        || state
-            .runtime_owner_registry
-            .owners
-            .values()
-            .any(|owner| owner.browser_id == *browser_id)
-    {
+    if state.browsers.contains_key(browser_id) {
         return Some(browser_id.clone());
+    }
+    if let Some(owner) = state
+        .runtime_owner_registry
+        .owners
+        .values()
+        .find(|owner| owner.browser_id == *browser_id)
+    {
+        return canonical_exact_owner_browser_id(state, owner).or_else(|| Some(browser_id.clone()));
     }
     let legacy_session = browser_id.strip_prefix("session:")?;
     let Some(session) = state.sessions.get(legacy_session) else {
@@ -2487,6 +2605,7 @@ mod tests {
     use serde_json::Value;
 
     use super::*;
+    use crate::process_identity::command_line_option_value;
 
     const CENSUS_CORPUS: &str =
         include_str!("../../docs/dev/fixtures/runtime-adoption/census-classification.v1.json");
@@ -3220,6 +3339,29 @@ mod tests {
     }
 
     #[test]
+    fn daemon_inventory_excludes_the_shared_runtime_host_endpoint() {
+        let observations = daemon_observations(&serde_json::json!({
+            "runtimes": [
+                {
+                    "session": "runtime-host",
+                    "pid": 41,
+                    "pidRunning": true,
+                    "state": "converged"
+                },
+                {
+                    "session": "idle-daemon",
+                    "pid": 42,
+                    "pidRunning": true,
+                    "state": "converged"
+                }
+            ]
+        }));
+
+        assert_eq!(observations.len(), 1);
+        assert_eq!(observations[0].aliases, ["session:idle-daemon", "pid:42"]);
+    }
+
+    #[test]
     fn presentation_stream_aliases_are_scoped_to_their_browser() {
         use crate::native::service_model::{BrowserProcess, ServiceState, ViewStream};
 
@@ -3573,6 +3715,170 @@ mod tests {
     }
 
     #[test]
+    fn combined_process_command_line_exposes_browser_profile_option() {
+        let arguments = vec![
+            "/opt/chrome/chrome --remote-debugging-port=9222 --user-data-dir=/tmp/agent-browser-profile --no-first-run"
+                .to_string(),
+        ];
+
+        assert_eq!(
+            crate::process_identity::command_line_option_value(&arguments, "--user-data-dir"),
+            Some("/tmp/agent-browser-profile")
+        );
+    }
+
+    #[test]
+    fn shared_runtime_host_pid_never_joins_independent_supervisor_lanes() {
+        let shared = serde_json::json!({
+            "sessions": [
+                {
+                    "session": "lane-a",
+                    "mainPid": 3110,
+                    "unit": "agent-browser-runtime-host.service",
+                    "ready": true
+                },
+                {
+                    "session": "lane-b",
+                    "mainPid": 3110,
+                    "unit": "agent-browser-runtime-host.service",
+                    "ready": true
+                }
+            ]
+        });
+        let observations = supervisor_observations(&shared);
+        let mut seeds = BTreeMap::new();
+        add_value_process_aliases(shared.get("sessions"), &mut seeds);
+
+        assert_eq!(observations.len(), 2);
+        assert!(observations
+            .iter()
+            .all(|observation| observation.aliases.len() == 1));
+        assert!(observations
+            .iter()
+            .all(|observation| observation.evidence.daemon_live
+                && observation.evidence.daemon_cooperative));
+        assert!(seeds.is_empty());
+
+        let legacy = serde_json::json!({
+            "sessions": [{
+                "session": "legacy-lane",
+                "mainPid": 4220,
+                "unit": "agent-browser-session@legacy-lane.service",
+                "ready": true
+            }]
+        });
+        assert!(supervisor_observations(&legacy)[0]
+            .aliases
+            .contains(&"pid:4220".to_string()));
+        assert!(supervisor_observations(&legacy)[0].evidence.daemon_live);
+        let mut legacy_seeds = BTreeMap::new();
+        add_value_process_aliases(legacy.get("sessions"), &mut legacy_seeds);
+        assert!(legacy_seeds[&4220].aliases.contains("session:legacy-lane"));
+    }
+
+    #[test]
+    fn unverified_ready_owner_does_not_join_a_new_browser_by_profile_digest() {
+        use crate::native::service_model::ServiceState;
+        use crate::runtime_owner_transfer::{ProfileOwner, ProfileOwnerState};
+
+        let profile_digest = canonical_profile_digest("/tmp/reused-profile").unwrap();
+        let mut state = ServiceState::default();
+        state.runtime_owner_registry.owners.insert(
+            profile_digest.clone(),
+            ProfileOwner {
+                owner_id: "stale-owner".to_string(),
+                profile_identity_digest: profile_digest.clone(),
+                state: ProfileOwnerState::Ready,
+                owner_generation: 4,
+                browser_id: "session:old-browser".to_string(),
+                daemon_session_route: "old-browser".to_string(),
+                process_instance_digest: digest_text("old-process"),
+                browser_family: "chrome".to_string(),
+                cdp_endpoint_identity_digest: digest_text("old-cdp"),
+                target_set_digest: digest_text("old-targets"),
+                pending_transfer: None,
+                last_transition: None,
+            },
+        );
+
+        let observation = profile_owner_readback(&state)
+            .unwrap()
+            .observations
+            .remove(0);
+
+        assert_eq!(
+            observation.logical_browser_id_hint.as_deref(),
+            Some("session:old-browser")
+        );
+        assert!(!observation
+            .aliases
+            .contains(&format!("profile-digest:{profile_digest}")));
+    }
+
+    #[test]
+    fn ready_owner_route_proves_the_named_lane_without_a_shared_host_pid() {
+        use crate::native::service_model::ServiceState;
+        use crate::runtime_owner_transfer::{ProfileOwner, ProfileOwnerState};
+
+        let profile_digest = canonical_profile_digest("/tmp/shared-lane-profile").unwrap();
+        let mut state = ServiceState::default();
+        state.runtime_owner_registry.owners.insert(
+            profile_digest.clone(),
+            ProfileOwner {
+                owner_id: "shared-owner".to_string(),
+                profile_identity_digest: profile_digest,
+                state: ProfileOwnerState::Ready,
+                owner_generation: 8,
+                browser_id: "session:shared-lane".to_string(),
+                daemon_session_route: "shared-lane".to_string(),
+                process_instance_digest: digest_text("shared-process"),
+                browser_family: "chrome".to_string(),
+                cdp_endpoint_identity_digest: digest_text("shared-cdp"),
+                target_set_digest: digest_text("shared-targets"),
+                pending_transfer: None,
+                last_transition: None,
+            },
+        );
+
+        let observations =
+            owner_route_daemon_observations_with_probe(&state, |session| session == "shared-lane");
+
+        assert_eq!(observations.len(), 1);
+        assert_eq!(
+            observations[0].aliases,
+            ["browser:session:shared-lane", "session:shared-lane"]
+        );
+        assert!(observations[0].evidence.daemon_live);
+        assert!(observations[0].evidence.daemon_cooperative);
+    }
+
+    #[test]
+    fn browser_with_observed_terminal_exit_is_retained_as_metadata_not_live_runtime() {
+        use crate::native::service_model::{
+            BrowserHealth, BrowserHealthObservation, BrowserProcess, ServiceState,
+        };
+
+        let mut state = ServiceState::default();
+        state.browsers.insert(
+            "closed-browser".to_string(),
+            BrowserProcess {
+                id: "closed-browser".to_string(),
+                health: BrowserHealth::Degraded,
+                last_health_observation: Some(BrowserHealthObservation {
+                    process_exit_cause: Some("operator_requested_close".to_string()),
+                    ..BrowserHealthObservation::default()
+                }),
+                ..BrowserProcess::default()
+            },
+        );
+
+        let readback = service_browser_readback(&state).unwrap();
+
+        assert!(!readback.observations[0].evidence.browser_live);
+        assert!(readback.observations[0].evidence.metadata_present);
+    }
+
+    #[test]
     fn coarse_service_profile_ids_are_not_runtime_identity_join_keys() {
         use crate::native::service_model::{
             BrowserProcess, BrowserSession, DisplayAllocation, ServiceState,
@@ -3733,6 +4039,111 @@ mod tests {
             .observations
             .iter()
             .all(|observation| observation.evidence.owner_generations.is_empty()));
+    }
+
+    #[test]
+    fn exact_owner_route_canonicalizes_historical_browser_alias_across_revocation() {
+        use crate::native::service_model::{
+            BrowserProcess, RemoteViewHandoff, ServiceBrowserProcessIdentity, ServiceState,
+        };
+        use crate::process_identity::RecordedProcessIdentity;
+        use crate::runtime_owner_transfer::{ProfileOwner, ProfileOwnerState};
+
+        let route = "current-route";
+        let current_browser_id = format!("session:{route}");
+        let profile_path = "/tmp/agent-browser-owner-profile";
+        let profile_digest = canonical_profile_digest(profile_path).unwrap();
+        let process_identity = RecordedProcessIdentity {
+            pid: 4242,
+            start_token: "linux:boot:42".to_string(),
+            executable_path: Some("/opt/chrome/chrome".to_string()),
+            browser_family: Some("chrome".to_string()),
+        };
+        let process_digest =
+            crate::native::runtime_lifecycle::digest_json(&process_identity).unwrap();
+        let mut state = ServiceState::default();
+        state.browsers.insert(
+            current_browser_id.clone(),
+            BrowserProcess {
+                id: current_browser_id.clone(),
+                pid: Some(process_identity.pid),
+                ..BrowserProcess::default()
+            },
+        );
+        state.browser_process_identities.insert(
+            current_browser_id.clone(),
+            ServiceBrowserProcessIdentity {
+                process_identity,
+                user_data_dir: Some(profile_path.to_string()),
+                runtime_profile: Some("default".to_string()),
+            },
+        );
+        state.runtime_owner_registry.owners.insert(
+            profile_digest.clone(),
+            ProfileOwner {
+                owner_id: "owner-current".to_string(),
+                profile_identity_digest: profile_digest.clone(),
+                state: ProfileOwnerState::Ready,
+                owner_generation: 9,
+                browser_id: "session:historical-route".to_string(),
+                daemon_session_route: route.to_string(),
+                process_instance_digest: process_digest,
+                browser_family: "chrome".to_string(),
+                cdp_endpoint_identity_digest: digest_text("cdp"),
+                target_set_digest: digest_text("targets"),
+                pending_transfer: None,
+                last_transition: None,
+            },
+        );
+        state.remote_view_handoffs.insert(
+            "retained-handoff".to_string(),
+            RemoteViewHandoff {
+                id: "retained-handoff".to_string(),
+                browser_id: Some("session:historical-route".to_string()),
+                ..RemoteViewHandoff::default()
+            },
+        );
+
+        let readback = profile_owner_readback(&state).unwrap();
+        let presentation = presentation_readback(&state).unwrap();
+
+        assert_eq!(readback.observations.len(), 1);
+        assert_eq!(
+            readback.observations[0].logical_browser_id_hint.as_deref(),
+            Some(current_browser_id.as_str())
+        );
+        assert!(readback.observations[0]
+            .aliases
+            .contains(&"browser:session:historical-route".to_string()));
+        assert_eq!(presentation.observations.len(), 1);
+        assert_eq!(
+            presentation.observations[0]
+                .logical_browser_id_hint
+                .as_deref(),
+            Some(current_browser_id.as_str())
+        );
+
+        state
+            .runtime_owner_registry
+            .owners
+            .get_mut(&profile_digest)
+            .unwrap()
+            .state = ProfileOwnerState::Orphaned;
+        let orphaned_owner = profile_owner_readback(&state).unwrap();
+        let orphaned_presentation = presentation_readback(&state).unwrap();
+
+        assert_eq!(
+            orphaned_owner.observations[0]
+                .logical_browser_id_hint
+                .as_deref(),
+            Some(current_browser_id.as_str())
+        );
+        assert_eq!(
+            orphaned_presentation.observations[0]
+                .logical_browser_id_hint
+                .as_deref(),
+            Some(current_browser_id.as_str())
+        );
     }
 
     #[test]

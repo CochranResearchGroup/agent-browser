@@ -475,23 +475,12 @@ fn observation_command_line_matches_profile(
     let Some(arguments) = observed.command_line.as_deref() else {
         return false;
     };
-    let requested_port = command_line_option_value(arguments, "--remote-debugging-port")
-        .and_then(|value| value.parse::<u16>().ok());
-    command_line_option_value(arguments, "--user-data-dir")
+    let requested_port =
+        crate::process_identity::command_line_option_value(arguments, "--remote-debugging-port")
+            .and_then(|value| value.parse::<u16>().ok());
+    crate::process_identity::command_line_option_value(arguments, "--user-data-dir")
         .is_some_and(|value| paths_refer_to_same_location(Path::new(value), user_data_dir))
         && (requested_port == Some(0) || requested_port == Some(devtools_port))
-}
-
-fn command_line_option_value<'a>(arguments: &'a [String], option: &str) -> Option<&'a str> {
-    for (index, argument) in arguments.iter().enumerate() {
-        if let Some(value) = argument.strip_prefix(&format!("{option}=")) {
-            return Some(value);
-        }
-        if argument == option {
-            return arguments.get(index + 1).map(String::as_str);
-        }
-    }
-    None
 }
 
 fn runtime_state_for_user_data_dir(user_data_dir: &Path, pid: u32) -> Option<RuntimeState> {

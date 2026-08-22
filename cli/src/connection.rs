@@ -386,6 +386,41 @@ pub fn daemon_ready(session: &str) -> bool {
     }
 }
 
+/// Probe a named route through the transactionally selected runtime-host
+/// ingress even while normal lane admission is temporarily drained.
+///
+/// Upgrade census runs with host admission disabled so no new work enters the
+/// old generation. That must not make a reachable selected single host look
+/// like an unreachable legacy per-session daemon.
+pub(crate) fn daemon_ready_through_selected_ingress(session: &str) -> bool {
+    let Some(socket_dir) = crate::runtime_host_ingress::selected_socket_dir() else {
+        return daemon_ready(session);
+    };
+
+    #[cfg(unix)]
+    {
+        UnixStream::connect(socket_dir.join(format!(
+            "{}.sock",
+            crate::runtime_host::RUNTIME_HOST_ENDPOINT_KEY
+        )))
+        .is_ok()
+    }
+    #[cfg(windows)]
+    {
+        let port_path = socket_dir.join(format!(
+            "{}.port",
+            crate::runtime_host::RUNTIME_HOST_ENDPOINT_KEY
+        ));
+        fs::read_to_string(port_path)
+            .ok()
+            .and_then(|port| port.trim().parse::<u16>().ok())
+            .and_then(|port| format!("127.0.0.1:{port}").parse().ok())
+            .is_some_and(|address| {
+                TcpStream::connect_timeout(&address, Duration::from_millis(50)).is_ok()
+            })
+    }
+}
+
 fn daemon_startup_ready(session: &str) -> bool {
     daemon_ready(session)
         && (!crate::runtime_host::admission_enabled()
@@ -1331,6 +1366,50 @@ mod tests {
             get_socket_path("named-lane"),
             root.join("candidate-host/runtime-host.sock")
         );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn selected_ingress_probe_remains_live_while_lane_admission_is_drained() {
+        let fixture_id = uuid::Uuid::new_v4().simple().to_string();
+        let root = std::env::temp_dir().join(format!("ab-ip-{}", &fixture_id[..8]));
+        let selected_socket_dir = root.join("selected-host");
+        let state_path = root.join("runtime-host-ingress.json");
+        fs::create_dir_all(&selected_socket_dir).unwrap();
+        let guard = EnvGuard::new(&[
+            "AGENT_BROWSER_SOCKET_DIR",
+            "XDG_RUNTIME_DIR",
+            "AGENT_BROWSER_RUNTIME_HOST_INGRESS_STATE",
+            crate::runtime_host::RUNTIME_HOST_ENV,
+        ]);
+        guard.remove("AGENT_BROWSER_SOCKET_DIR");
+        guard.set("XDG_RUNTIME_DIR", root.join("legacy").to_str().unwrap());
+        guard.set(
+            "AGENT_BROWSER_RUNTIME_HOST_INGRESS_STATE",
+            state_path.to_str().unwrap(),
+        );
+        guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "0");
+        let repository =
+            crate::runtime_host_ingress::RuntimeHostIngressRepository::new(&state_path);
+        repository
+            .initialize(crate::runtime_host_ingress::RuntimeHostBackend {
+                topology: crate::runtime_host_ingress::RuntimeHostTopology::SingleHost,
+                generation_id: "selected-generation".to_string(),
+                socket_dir: selected_socket_dir.clone(),
+                binary_sha256: "a".repeat(64),
+                host_id: "selected-host".to_string(),
+                pid: 41002,
+                socket_identity: "unix:1:3".to_string(),
+            })
+            .unwrap();
+        let _listener =
+            std::os::unix::net::UnixListener::bind(selected_socket_dir.join("runtime-host.sock"))
+                .unwrap();
+
+        assert!(!daemon_ready("named-lane"));
+        assert!(daemon_ready_through_selected_ingress("named-lane"));
+
         let _ = fs::remove_dir_all(root);
     }
 

@@ -5006,15 +5006,26 @@ fn revoke_legacy_daemon_effect_authority(
     expected_owner: Option<&crate::runtime_owner_transfer::ProfileOwner>,
     source_authority_unavailable: &mut bool,
 ) -> Result<(), String> {
-    let identity = crate::connection::load_daemon_process_identity(source_session)?;
-    let authorized_binary_hashes =
-        authorized_runtime_generation_binary_hashes(&paths.generations_dir)?;
-    revoke_verified_legacy_daemon_process(
-        &identity,
-        &authorized_binary_hashes,
-        LEGACY_DAEMON_EXIT_TIMEOUT,
-        source_authority_unavailable,
+    let identity = legacy_daemon_identity_for_revocation(
+        source_session,
+        crate::connection::load_daemon_process_identity,
+        crate::connection::daemon_ready,
     )?;
+    if let Some(identity) = identity {
+        let authorized_binary_hashes =
+            authorized_runtime_generation_binary_hashes(&paths.generations_dir)?;
+        revoke_verified_legacy_daemon_process(
+            &identity,
+            &authorized_binary_hashes,
+            LEGACY_DAEMON_EXIT_TIMEOUT,
+            source_authority_unavailable,
+        )?;
+    } else {
+        // No route can accept effects and no process identity exists to signal.
+        // The owner-generation transition below is the effect-authority fence;
+        // any stale in-memory binding will fail its next registry check.
+        *source_authority_unavailable = true;
+    }
 
     let deadline = std::time::Instant::now() + LEGACY_DAEMON_EXIT_TIMEOUT;
     while crate::connection::daemon_ready(source_session) {
@@ -5044,6 +5055,20 @@ fn revoke_legacy_daemon_effect_authority(
             )?;
     }
     Ok(())
+}
+
+fn legacy_daemon_identity_for_revocation(
+    session: &str,
+    load_identity: impl FnOnce(&str) -> Result<crate::process_identity::RecordedProcessIdentity, String>,
+    route_ready: impl FnOnce(&str) -> bool,
+) -> Result<Option<crate::process_identity::RecordedProcessIdentity>, String> {
+    match load_identity(session) {
+        Ok(identity) => Ok(Some(identity)),
+        Err(_error) if !route_ready(session) => Ok(None),
+        Err(error) => Err(format!(
+            "legacy_daemon_identity_unavailable_while_reachable:{session}:{error}"
+        )),
+    }
 }
 
 fn revoke_verified_legacy_daemon_process(
@@ -11004,6 +11029,25 @@ mod tests {
         browser.kill().unwrap();
         browser.wait().unwrap();
         fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn identityless_legacy_daemon_can_be_registry_fenced_only_when_unreachable() {
+        let missing = |_session: &str| {
+            Err::<crate::process_identity::RecordedProcessIdentity, _>(
+                "daemon process identity is unavailable".to_string(),
+            )
+        };
+
+        assert!(
+            legacy_daemon_identity_for_revocation("stale-lane", missing, |_| false)
+                .unwrap()
+                .is_none()
+        );
+
+        let error =
+            legacy_daemon_identity_for_revocation("live-lane", missing, |_| true).unwrap_err();
+        assert!(error.starts_with("legacy_daemon_identity_unavailable_while_reachable:live-lane:"));
     }
 
     #[test]
