@@ -1932,14 +1932,12 @@ pub(crate) async fn handle_close(state: &mut DaemonState) -> Result<Value, Strin
             managed_close_claim,
             browser_terminal_evidence(&shutdown_outcome),
         ) {
-            RuntimeLifecycleAuthority::new(&runtime_handoff_service_repository()?).transition(
-                RuntimeLifecycleIntent::CompleteClose {
-                    logical_browser_id: claim.logical_browser_id,
-                    profile_identity_digest: claim.profile_identity_digest,
-                    expected_owner_generation: claim.owner_generation,
+            RuntimeLifecycleAuthority::new(&runtime_handoff_service_repository()?)
+                .complete_close_and_release_binding(
+                    &mut state.runtime_owner_binding,
+                    claim,
                     terminal_evidence,
-                },
-            )?;
+                )?;
         }
     }
     Ok(json!({ "closed" : true }))

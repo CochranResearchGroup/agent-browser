@@ -462,20 +462,26 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
                     Err(error) => return error_response(&id, &error),
                 };
         }
-        if let Some(binding) = state.runtime_owner_binding.as_mut() {
+        let owner_admission = if let Some(binding) = state.runtime_owner_binding.as_mut() {
             let repository =
                 match crate::native::service_store::LockedServiceStateRepository::default_json() {
                     Ok(repository) => repository,
                     Err(error) => return error_response(&id, &error),
                 };
-            if crate::runtime_owner_transfer::action_requires_owner_effect_authority(action) {
-                if let Err(error) =
-                    crate::native::runtime_lifecycle::RuntimeLifecycleAuthority::new(&repository)
-                        .authorize_effect(binding)
-                {
-                    return error_response(&id, &error);
-                }
+            match crate::native::runtime_lifecycle::RuntimeLifecycleAuthority::new(&repository)
+                .admit_action_effect(binding, action, &state.session_id)
+            {
+                Ok(admission) => Some(admission),
+                Err(error) => return error_response(&id, &error),
             }
+        } else {
+            None
+        };
+        if matches!(
+            owner_admission,
+            Some(crate::native::runtime_lifecycle::RuntimeEffectAdmission::TerminalReplacement)
+        ) {
+            state.runtime_owner_binding = None;
         }
     }
     // PoC 4 and PoC 5 have no configured production providers. Resolve that static

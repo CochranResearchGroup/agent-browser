@@ -210,3 +210,27 @@ scripts/ci/cargo-safe.sh clippy --manifest-path cli/Cargo.toml -- -D warnings
 - `diagnosing-bugs` for regression-first reproduction and hypothesis ranking.
 - `agent-browser` and `agent-browser-service` for isolated runtime validation.
 - `handoff` for the accepted-commit return packet.
+
+## Reconciliation Outcome
+
+The active Agent Browser owner reconciled the five source files on 2026-08-22.
+The terminal-replacement admission design was retained. The misplaced
+remote-view fixture edit was corrected so the reattach regression now starts
+with an `AttachedExisting` browser and proves that its display allocation
+remains `RemoteHeaded`.
+
+Source validation passed:
+
+- Rust formatting check;
+- terminal-replacement admission regression;
+- retained-browser reattach regression;
+- strict Clippy with warnings denied;
+- route-confusion no-launch gates; and
+- three `cdp_screencast_view_stream` regressions.
+
+The selected CDP tab-streaming live smoke did not reach the changed behavior.
+Its disposable harness attempted retired legacy per-session daemon creation and
+was rejected with `runtime_host_admission_required`. No admission bypass was
+used. Exact replacement-browser desktop capture remains a separate live
+acceptance boundary; this reconciliation commits the source repair without
+claiming that runtime proof.

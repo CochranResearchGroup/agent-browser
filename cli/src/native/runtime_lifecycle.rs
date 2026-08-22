@@ -84,6 +84,12 @@ pub(crate) enum RuntimeLifecycleTransition {
     LaneUpdated(RuntimeLifecycleRecord),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RuntimeEffectAdmission {
+    CurrentOwner,
+    TerminalReplacement,
+}
+
 /// Concrete lifecycle owner backed by the existing locked Service State
 /// repository and runtime-owner registry.
 pub(crate) struct RuntimeLifecycleAuthority<'a, R: ServiceStateRepository> {
@@ -204,6 +210,65 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
             "runtime_owner_generation_stale: daemon is no longer the effect-capable browser owner"
                 .to_string(),
         )
+    }
+
+    /// Admit an ordinary owner effect, or release the in-memory observation
+    /// binding that would otherwise make an exact terminal replacement
+    /// unreachable. The replacement still has to win the registry transition
+    /// in `register_managed_lane` before it receives effect authority.
+    pub(crate) fn admit_action_effect(
+        &self,
+        binding: &mut RuntimeOwnerBinding,
+        action: &str,
+        candidate_session: &str,
+    ) -> Result<RuntimeEffectAdmission, String> {
+        if action == "remote_view_open"
+            && binding.claim.logical_browser_id == format!("session:{candidate_session}")
+        {
+            let registry = self.repository.load_snapshot()?.runtime_owner_registry;
+            let owner = registry.owner(&binding.claim.profile_identity_digest);
+            let lifecycle = registry
+                .lifecycle_records
+                .get(&binding.claim.logical_browser_id);
+            if registry.authorizes(&binding.claim)
+                && owner.is_some_and(|owner| owner.pending_transfer.is_none())
+                && lifecycle.is_some_and(|lifecycle| {
+                    lifecycle.profile_identity_digest == binding.claim.profile_identity_digest
+                        && lifecycle.owner_generation == binding.claim.owner_generation
+                        && lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Terminal
+                        && lifecycle.cleanup_obligation_state == CleanupObligationState::Satisfied
+                })
+            {
+                return Ok(RuntimeEffectAdmission::TerminalReplacement);
+            }
+        }
+        self.authorize_effect(binding)?;
+        Ok(RuntimeEffectAdmission::CurrentOwner)
+    }
+
+    pub(crate) fn complete_close_and_release_binding(
+        &self,
+        binding: &mut Option<RuntimeOwnerBinding>,
+        claim: OwnerAuthorityClaim,
+        terminal_evidence: Vec<String>,
+    ) -> Result<RuntimeLifecycleRecord, String> {
+        if !binding
+            .as_ref()
+            .is_some_and(|binding| binding.claim == claim)
+        {
+            return Err("runtime_lifecycle_close_binding_mismatch".to_string());
+        }
+        let transition = self.transition(RuntimeLifecycleIntent::CompleteClose {
+            logical_browser_id: claim.logical_browser_id,
+            profile_identity_digest: claim.profile_identity_digest,
+            expected_owner_generation: claim.owner_generation,
+            terminal_evidence,
+        })?;
+        let RuntimeLifecycleTransition::LaneUpdated(record) = transition else {
+            return Err("runtime_lifecycle_close_outcome_mismatch".to_string());
+        };
+        *binding = None;
+        Ok(record)
     }
 
     pub(crate) fn refresh_managed_lane(
@@ -999,6 +1064,82 @@ mod tests {
                 .unwrap()
                 .target_set_digest,
             initial_target_set_digest
+        );
+    }
+
+    #[test]
+    fn terminal_replacement_admission_releases_only_the_matching_observation_binding() {
+        let repository = MemoryRepository::default();
+        let authority = RuntimeLifecycleAuthority::new(&repository);
+        let registration = ManagedLaneRegistration {
+            logical_browser_id: "session:replacement".to_string(),
+            profile_root: std::env::temp_dir().join("agent-browser-lifecycle-admission"),
+            daemon_session_route: "previous-route".to_string(),
+            process_group_id: Some(4199),
+            process_identity: crate::process_identity::RecordedProcessIdentity {
+                pid: 4199,
+                start_token: "linux:boot:4199".to_string(),
+                executable_path: Some("/opt/agent-browser/chrome".to_string()),
+                browser_family: Some("chrome".to_string()),
+            },
+            browser_family: "chrome".to_string(),
+            cdp_endpoint: "ws://127.0.0.1:9554/devtools/browser/old".to_string(),
+            target_ids: vec!["target-old".to_string()],
+        };
+        let binding = authority.register_managed_lane(registration).unwrap();
+        let mut ready_owner = binding.clone();
+        assert_eq!(
+            authority
+                .admit_action_effect(&mut ready_owner, "remote_view_open", "replacement")
+                .unwrap(),
+            RuntimeEffectAdmission::CurrentOwner
+        );
+        authority
+            .transition(RuntimeLifecycleIntent::BeginClose {
+                claim: binding.claim.clone(),
+            })
+            .unwrap();
+        let mut binding_slot = Some(binding.clone());
+        authority
+            .complete_close_and_release_binding(
+                &mut binding_slot,
+                binding.claim.clone(),
+                vec![
+                    "exact_process_exited".to_string(),
+                    "profile_lock_released".to_string(),
+                ],
+            )
+            .unwrap();
+        assert!(binding_slot.is_none());
+
+        let mut observation_binding = RuntimeOwnerBinding::observation_only(binding.claim.clone());
+        assert_eq!(
+            authority
+                .admit_action_effect(&mut observation_binding, "remote_view_open", "replacement",)
+                .unwrap(),
+            RuntimeEffectAdmission::TerminalReplacement
+        );
+
+        let mut wrong_action = RuntimeOwnerBinding::observation_only(binding.claim.clone());
+        assert!(authority
+            .admit_action_effect(&mut wrong_action, "navigate", "replacement")
+            .is_err());
+
+        let mut wrong_session = RuntimeOwnerBinding::observation_only(binding.claim.clone());
+        assert!(authority
+            .admit_action_effect(&mut wrong_session, "remote_view_open", "other-session")
+            .is_err());
+
+        let mut terminal_current_owner = binding;
+        assert_eq!(
+            authority
+                .admit_action_effect(
+                    &mut terminal_current_owner,
+                    "remote_view_open",
+                    "replacement",
+                )
+                .unwrap(),
+            RuntimeEffectAdmission::TerminalReplacement
         );
     }
 

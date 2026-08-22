@@ -431,7 +431,11 @@ pub(crate) async fn handle_service_remote_view_route_checkout(
         display_allocation.display_isolation = route_binding.display_isolation.clone();
         if let Some(browser) = browser_snapshot.as_ref() {
             display_allocation.profile_id = browser.profile_id.clone();
-            display_allocation.host = Some(browser.host);
+            // A replacement browser can be adopted as `attached_existing` while it
+            // still owns a service-managed remote-headed display.  The allocation
+            // describes that display workspace, not the browser adoption path, so
+            // keep its remote-headed identity for desktop capture validation.
+            display_allocation.host = Some(ServiceBrowserHost::RemoteHeaded);
             display_allocation.pid_hints = browser
                 .pid
                 .map(|browser_pid| json!({ "browserPid": browser_pid }));

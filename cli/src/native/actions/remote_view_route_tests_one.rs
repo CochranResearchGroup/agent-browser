@@ -588,7 +588,7 @@ async fn test_remote_view_browser_reattach_reuses_retained_browser_without_dupli
                 "session:rdp-a".to_string(),
                 BrowserProcess {
                     id: "session:rdp-a".to_string(),
-                    host: ServiceBrowserHost::RemoteHeaded,
+                    host: ServiceBrowserHost::AttachedExisting,
                     health: ServiceBrowserHealth::Ready,
                     display_allocation_id: Some("display-a".to_string()),
                     active_session_ids: vec!["rdp-a".to_string()],
@@ -638,6 +638,10 @@ async fn test_remote_view_browser_reattach_reuses_retained_browser_without_dupli
     assert_eq!(browser.view_streams.len(), 1);
     assert_eq!(browser.view_streams[0].route_id.as_deref(), Some("route-a"));
     assert_eq!(persisted.route_pool["pool-a"].state, "checked_out");
+    assert_eq!(
+        persisted.display_allocations["display-a"].host,
+        Some(ServiceBrowserHost::RemoteHeaded)
+    );
     assert_eq!(
         persisted.remote_view_routes["route-a"]
             .display_allocation_id
