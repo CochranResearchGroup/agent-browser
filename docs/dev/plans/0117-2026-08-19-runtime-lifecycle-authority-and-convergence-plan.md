@@ -2,7 +2,7 @@
 
 Date: 2026-08-19
 
-State: IN PROGRESS — SLICE D SOURCE ACCEPTED
+State: ACCEPTED
 
 Lane: P117
 
@@ -19,6 +19,27 @@ Slice C receipt:
 
 Slice D receipt:
 `docs/dev/notes/0117-4-2026-08-20-runtime-lifecycle-slice-d-source-acceptance.md`
+
+Slice E receipt:
+`docs/dev/notes/0117-5-2026-08-20-runtime-lifecycle-slice-e-source-acceptance.md`
+
+Slice F receipt:
+`docs/dev/notes/0117-6-2026-08-20-runtime-lifecycle-slice-f-source-acceptance.md`
+
+Slice G receipt:
+`docs/dev/notes/0117-7-2026-08-20-runtime-lifecycle-slice-g-source-acceptance.md`
+
+Slice H receipt:
+`docs/dev/notes/0117-8-2026-08-20-runtime-lifecycle-slice-h-source-acceptance.md`
+
+Slice I admission receipt:
+`docs/dev/notes/0117-9-2026-08-20-runtime-lifecycle-slice-i-admission-reconciliation.md`
+
+Installed repair receipt:
+`docs/dev/notes/0117-10-2026-08-21-runtime-convergence-repair-acceptance.md`
+
+Terminal installed acceptance receipt:
+`docs/dev/notes/0117-11-2026-08-22-installed-runtime-convergence-acceptance.md`
 
 Depends on:
 

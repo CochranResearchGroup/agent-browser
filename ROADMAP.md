@@ -1,7 +1,7 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-08-20
+Updated: 2026-08-22
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
@@ -9,51 +9,24 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 
 ## P117 | Runtime Lifecycle Authority And Convergence
 
-State: IN PROGRESS — SLICE I ADMITTED, LIVE APPLY PENDING AUTHORIZATION
-Current state: Slices A through H are source accepted. One lifecycle authority
-owns launch, attach, transfer, adoption, rollback, retained preservation,
-recovery, close, and cleanup obligations. The reconciler joins exact process,
-process-group, package-launch, profile, owner-generation, and terminal evidence;
-normal close and GC share the same fenced process-tree shutdown. Profile
-retention applies the 24-hour ephemeral, seven-day failed or quarantined, and
-never-automatic persistent policies. Generation retention preserves current and
-immediate rollback authority while allowing historical transaction metadata to
-outlive binary references.
+State: ACCEPTED
+Current state: Plan 0117 is accepted at source and installed-runtime boundaries.
+One lifecycle authority owns launch, attach, transfer, adoption, rollback,
+retained preservation, recovery, close, and cleanup obligations. Transactional
+cutover transfers effect authority before retiring the old shared host once by
+exact process identity. Idle lanes cannot terminate that host early, and launch
+admission prevents a conflicting managed browser from starting before durable
+ownership is proven.
 
-One runtime host now serves multiple logical lanes with per-lane ordering and
-failure isolation. Transactional convergence bounds overlap to two
-transaction-linked hosts and generations, preserves browser PIDs and durable
-handoffs, and returns to the one-dashboard, one-host, one-selected-generation
-steady state. Automatic reconciliation applies only proven package-owned
-unattended effects, uses bounded backoff and one typed incident, and leaves
-review-gated or ambiguous resources untouched. Cold legacy per-session daemon
-creation and the standalone convergence controller are deleted.
-
-Slice H aligns CLI, HTTP, typed MCP, generated client, Service State, and
-dashboard readback under additive `runtimeLifecycle`. The projection reports
-multiplicity, lifecycle counts, reconciliation, pressure, cleanup obligations,
-retention, and incidents from one reconciled snapshot. A live compatibility
-audit found that nonempty lifecycle records broke the installed release's
-deny-unknown owner reader. The repair persists new lifecycle evidence in a
-versioned sidecar under the existing repository lock while keeping both legacy
-JSON files in their old shape. The timer is enabled and active after the narrow
-privileged-helper workflow, and the authenticated browser remains preserved.
-That helper repair does not establish installed P117 acceptance. Controlled
-installed convergence remains Slice I and still requires explicit live
-authorization.
-
-The Slice I candidate has now absorbed the compatible profile-owner maintenance
-lane and repairs stale handoff leases from canonical single-browser profile
-authority while rejecting ambiguous multi-browser repair. The official Rust
-cadence and isolated hot-handoff and convergence smokes pass. Optimized
-candidate SHA-256 is
-`2431fdc51d44403bac5b9b26024ad3a6c405366ea3e26f8fa3c553dfab7dc523`, and
-workstation dry-run admission is successful and non-mutating. Fresh installed
-readback still shows three listener daemons, duplicate inherited `default`
-leases, 26 retained generations, and 219 profile directories consuming about
-58 GiB. Process GC has no candidates; retained-state pruning has only the inert
-`display-orphan` candidate. No live install, reconciliation, or cleanup was
-performed from the Plan 0117 worktree.
+Installed generation `0.28.0-aa21c5fe8a6d-25828e3b8aed` is selected from
+binary SHA-256
+`aa21c5fe8a6dd75f1422bd84147756f984ea8662fc5d9a1ea3afac1c37eed452`.
+Accepted transaction `upgrade-52684512-bfc2-4c30-971b-ab166eaa5364`
+preserved the authenticated browser and durable handoff `r520477`. Final doctor
+reports one dashboard, one runtime host, one executable generation, zero legacy
+daemons, converged status, and no issues. Service GC has zero candidates;
+reviewed generation GC removed only the obsolete rollback generation and left
+one selected generation on disk.
 
 ### Plan
 
@@ -61,9 +34,9 @@ performed from the Plan 0117 worktree.
 
 ### Next Recommendation
 
-After explicit live authorization, execute Slice I through the transactional
-workstation path. Preserve authenticated lanes and handoffs, apply only exact
-eligible cleanup, and prove installed steady state plus rollback readiness.
+Preserve P117 as the accepted lifecycle and convergence foundation. Continue
+ordinary work through the single-host service path, and reserve formal release
+work for the explicit many-to-many Guacamole/RDP release milestone.
 
 ## P116 | Runtime Adoption And Transactional Upgrade
 

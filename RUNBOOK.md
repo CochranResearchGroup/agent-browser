@@ -4,6 +4,48 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 170 | 2026-08-22
+
+Scope: complete Plan 0117 installed convergence, preserve the authenticated
+browser and durable handoff through hot upgrade, reclaim reviewed obsolete
+runtime material, and close Plan 0121.
+
+Actions:
+
+- repaired cross-host handoff descriptor staging, canonical lifecycle identity,
+  supervisor rebinding, rollback retention, and exact operator recovery;
+- made shared-host idle lanes defer process retirement until generation cutover;
+- made accepted cutover finalize transferred browser lanes before terminating
+  the old host once through exact generation, socket, PID, and start identity;
+- added prelaunch managed-owner admission and postlaunch persistence rollback;
+- restored one finalized source lane by attaching its existing managed browser,
+  without launching another browser or creating another durable handoff;
+- accepted the exact optimized candidate, finalized the reviewed transaction,
+  and removed only the obsolete rollback generation.
+
+Validation:
+
+- Rust formatting, strict Clippy, 85 workstation tests, 12 lifecycle tests, 8
+  retention tests, and 11 supervisor tests pass;
+- source-free install, host provision, fresh-VM, Guacamole asset, PostgreSQL
+  durability, route-user synchronization, remote-view docs, and production docs
+  gates pass;
+- candidate SHA-256 is
+  `aa21c5fe8a6dd75f1422bd84147756f984ea8662fc5d9a1ea3afac1c37eed452`;
+- final install doctor reports one dashboard, one runtime host, one executable
+  generation, zero legacy daemons, converged status, and no issues;
+- durable handoff `r520477` resolves ready and returns HTTP 200 after cutover.
+
+Result:
+
+- Plan 0117 and Plan 0121 are complete;
+- transaction `upgrade-52684512-bfc2-4c30-971b-ab166eaa5364` is accepted and
+  finalized;
+- service GC has zero candidates and generation GC removed only
+  `0.28.0-bcfab70c2be9-7ad9e5b748d3`;
+- the installed runtime is converged on
+  `0.28.0-aa21c5fe8a6d-25828e3b8aed` with the authenticated browser preserved.
+
 ## Turn 169 | 2026-08-20
 
 Scope: reconcile concurrent profile-owner maintenance into the Plan 0117
