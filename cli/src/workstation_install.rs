@@ -1692,6 +1692,30 @@ fn reconcile_runtime_maintenance() -> Result<Value, String> {
             write_private_json_atomic(&receipt_path, &report)?;
             Ok(report)
         }
+        Err(error) if runtime_monitor_blocked_by_active_upgrade(&root, &error) => {
+            let report = serde_json::json!({
+                "schemaVersion": "agent-browser.runtime-monitor.v1",
+                "success": true,
+                "state": "healthy",
+                "skipped": true,
+                "startedAt": started_at,
+                "completedAt": runtime_adoption_timestamp(),
+                "observedAtEpochSeconds": runtime_monitor_epoch_seconds(),
+                "consecutiveFailures": 0,
+                "nextEligibleAtEpochSeconds": Value::Null,
+                "incident": Value::Null,
+                "effects": {
+                    "activeUpgrade": {
+                        "state": "in_progress",
+                        "maintenanceOwner": "workstation_install",
+                    },
+                },
+                "summary": "active workstation upgrade owns reconciliation; unattended pass skipped",
+                "receiptPath": receipt_path.display().to_string(),
+            });
+            write_private_json_atomic(&receipt_path, &report)?;
+            Ok(report)
+        }
         Err(error) => {
             let consecutive_failures = previous_failures.saturating_add(1);
             let backoff_seconds = runtime_monitor_backoff_seconds(consecutive_failures);
@@ -1755,6 +1779,13 @@ fn runtime_monitor_epoch_seconds() -> u64 {
 fn runtime_monitor_backoff_seconds(consecutive_failures: u64) -> u64 {
     let exponent = consecutive_failures.saturating_sub(1).min(3) as u32;
     300_u64.saturating_mul(2_u64.saturating_pow(exponent))
+}
+
+fn runtime_monitor_blocked_by_active_upgrade(root: &Path, error: &str) -> bool {
+    error.starts_with("workstation reconciliation is already active:")
+        && root
+            .join(".agent-browser/runtime-adoption/admission-drain.json")
+            .is_file()
 }
 
 pub(crate) fn runtime_monitor_status_json() -> Value {
@@ -8127,6 +8158,28 @@ fn fail(message: &str, json: bool) -> ! {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn runtime_monitor_treats_upgrade_owned_lock_contention_as_a_skip() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-runtime-monitor-upgrade-lock-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let drain = root.join(".agent-browser/runtime-adoption/admission-drain.json");
+        fs::create_dir_all(drain.parent().unwrap()).unwrap();
+        fs::write(&drain, b"{}").unwrap();
+
+        assert!(runtime_monitor_blocked_by_active_upgrade(
+            &root,
+            "workstation reconciliation is already active: fixture"
+        ));
+        assert!(!runtime_monitor_blocked_by_active_upgrade(
+            &root,
+            "unattended_process_gc_failed:fixture"
+        ));
+
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn runtime_monitor_backoff_is_bounded_and_exponential() {

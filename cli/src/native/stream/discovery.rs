@@ -20,11 +20,7 @@ pub(super) fn discover_sessions() -> String {
             if let Some(session) = name_str.strip_suffix(".stream") {
                 if let Ok(port_str) = std::fs::read_to_string(entry.path()) {
                     if let Ok(port) = port_str.trim().parse::<u16>() {
-                        let pid_path = dir.join(format!(
-                            "{}.pid",
-                            crate::runtime_host::endpoint_key(session)
-                        ));
-                        if is_process_alive(&pid_path) {
+                        if session_runtime_process_is_alive(&dir, session) {
                             let engine_path = dir.join(format!("{}.engine", session));
                             let engine = std::fs::read_to_string(&engine_path)
                                 .ok()
@@ -438,9 +434,32 @@ fn is_process_alive(pid_path: &Path) -> bool {
     }
 }
 
+fn session_runtime_process_is_alive(socket_dir: &Path, session: &str) -> bool {
+    let session_pid_path = socket_dir.join(format!(
+        "{}.pid",
+        crate::runtime_host::endpoint_key(session)
+    ));
+    is_process_alive(&session_pid_path) || is_process_alive(&socket_dir.join("runtime-host.pid"))
+}
+
 #[cfg(all(test, target_family = "unix"))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn runtime_host_lane_uses_the_singular_host_pid_for_discovery() {
+        let root = temp_profile_dir("agent-browser-runtime-host-discovery");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(
+            root.join("runtime-host.pid"),
+            std::process::id().to_string(),
+        )
+        .unwrap();
+
+        assert!(session_runtime_process_is_alive(&root, "candidate-lane"));
+
+        let _ = std::fs::remove_dir_all(root);
+    }
     use std::net::TcpListener;
     use std::thread;
     use std::time::{SystemTime, UNIX_EPOCH};

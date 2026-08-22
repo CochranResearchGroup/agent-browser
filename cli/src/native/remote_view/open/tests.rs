@@ -28,6 +28,7 @@ impl RouteBoundOpenClock for FakeClock {
 
 struct ScriptedRuntime {
     events: Arc<Mutex<Vec<&'static str>>>,
+    adoption_requests: Arc<Mutex<Vec<AdoptRetainedBrowserRequest>>>,
     observation: RouteBoundBrowserObservation,
     launch_issue: Option<RouteBoundRuntimeIssue>,
     operator_access: Option<Value>,
@@ -39,6 +40,7 @@ impl ScriptedRuntime {
     fn new() -> Self {
         Self {
             events: Arc::new(Mutex::new(Vec::new())),
+            adoption_requests: Arc::new(Mutex::new(Vec::new())),
             observation: RouteBoundBrowserObservation {
                 browser_present: false,
                 browser_pid: None,
@@ -78,10 +80,11 @@ impl RouteBoundOpenRuntime for ScriptedRuntime {
 
     fn adopt_retained_browser(
         &mut self,
-        _request: AdoptRetainedBrowserRequest,
+        request: AdoptRetainedBrowserRequest,
     ) -> RouteBoundOpenFuture<'_, RouteBoundBrowserObservation> {
         Box::pin(async move {
             self.events.lock().unwrap().push("adopt_retained_browser");
+            self.adoption_requests.lock().unwrap().push(request);
             if let Some(issue) = self.adoption_issue.clone() {
                 return Err(issue);
             }
@@ -922,6 +925,14 @@ async fn durable_resolution_adopts_the_exact_browser_without_provider_redirect()
         *runtime.events.lock().unwrap(),
         vec!["observe_browser", "adopt_retained_browser"]
     );
+    let adoption_requests = runtime.adoption_requests.lock().unwrap();
+    assert_eq!(adoption_requests.len(), 1);
+    assert_eq!(adoption_requests[0].source_session, "im-receipts");
+    assert_eq!(
+        adoption_requests[0].logical_browser_id,
+        "session:im-receipts"
+    );
+    drop(adoption_requests);
     let retained = store.load().unwrap();
     assert_eq!(
         retained.remote_view_routes["route-a"].browser_id.as_deref(),
