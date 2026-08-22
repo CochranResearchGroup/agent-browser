@@ -138,8 +138,12 @@ pub(crate) fn plan_generation_retention(
         .filter_map(|transaction| transaction_timestamp(transaction).map(|at| (at, transaction)))
         .collect::<Vec<_>>();
     accepted.sort_by_key(|(at, _)| *at);
+    let active_accepted_transaction_id = accepted.last().and_then(|(_, latest)| {
+        (Some(latest.candidate_generation_id.as_str()) == selected)
+            .then_some(latest.transaction_id.as_str())
+    });
     if let Some((_, latest)) = accepted.last() {
-        if Some(latest.candidate_generation_id.as_str()) == selected {
+        if Some(latest.transaction_id.as_str()) == active_accepted_transaction_id {
             plan.previous_healthy_generation_id = latest.old_generation_id.clone();
         }
     }
@@ -155,6 +159,11 @@ pub(crate) fn plan_generation_retention(
             UpgradeTransactionState::Accepted => {
                 if !healthy_accepted_transaction(transaction) {
                     add_transaction_references(&mut plan.references, transaction);
+                    continue;
+                }
+                if Some(transaction.transaction_id.as_str()) != active_accepted_transaction_id {
+                    plan.finalizable_transaction_ids
+                        .push(transaction.transaction_id.clone());
                     continue;
                 }
                 let open = transaction_timestamp(transaction)
@@ -557,6 +566,42 @@ mod tests {
         );
         assert!(!plan.references.contains_key("ancient"));
         assert_eq!(plan.finalizable_transaction_ids, vec!["new", "old"]);
+    }
+
+    #[test]
+    fn superseded_accepted_transactions_do_not_multiply_rollback_generations() {
+        let transactions = vec![
+            accepted(
+                "current",
+                "generation-previous",
+                "generation-current",
+                "2026-08-20T11:00:00Z",
+            ),
+            accepted(
+                "superseded",
+                "generation-ancient",
+                "generation-previous",
+                "2026-08-20T10:00:00Z",
+            ),
+        ];
+
+        let plan = plan_generation_retention(
+            Some("generation-current"),
+            &transactions,
+            at("2026-08-20T12:00:00Z"),
+        );
+
+        assert_eq!(plan.references.len(), 2);
+        assert!(plan.references.contains_key("generation-current"));
+        assert_eq!(
+            plan.references["generation-previous"],
+            vec![
+                "previous_healthy_rollback_generation",
+                "transaction_old_generation",
+            ]
+        );
+        assert!(!plan.references.contains_key("generation-ancient"));
+        assert_eq!(plan.finalizable_transaction_ids, vec!["superseded"]);
     }
 
     #[test]

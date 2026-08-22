@@ -361,20 +361,26 @@ fn install_supervisor(
             ));
         }
     }
-    let executable = env::current_exe()
+    let invoking_executable = env::current_exe()
         .map_err(|error| format!("could not resolve current executable: {error}"))?
         .canonicalize()
         .map_err(|error| format!("could not canonicalize current executable: {error}"))?;
+    let accepted_selected_executable = accepted_workstation_selected_executable();
+    let executable = accepted_selected_executable
+        .clone()
+        .unwrap_or(invoking_executable);
     let executable_path = executable.display().to_string();
     let executable_sha256 = sha256_file(&executable)?;
     if let Some(stale) = existing_manifests.iter().find(|manifest| {
         manifest.executable_path != executable_path
             || manifest.executable_sha256 != executable_sha256
     }) {
-        return Err(format!(
-            "runtime_host_convergence_required: supervised lane {} records another executable generation",
-            stale.session
-        ));
+        if accepted_selected_executable.is_none() {
+            return Err(format!(
+                "runtime_host_convergence_required: supervised lane {} records another executable generation",
+                stale.session
+            ));
+        }
     }
     let manifest = SessionSupervisorManifest {
         schema_version: SUPERVISOR_SCHEMA_VERSION.to_string(),
@@ -405,6 +411,141 @@ fn install_supervisor(
         "streamPort": request.stream_port,
         "browserLaunched": false,
     }))
+}
+
+/// Rebinds durable lane manifests after the workstation candidate is accepted.
+/// The selected transaction already owns every runtime lane, so the previous
+/// user unit is stopped and left enabled for the next boot without starting a
+/// second host beside the accepted candidate process.
+pub(crate) fn rebind_supervisors_after_accepted_upgrade(
+    executable: &Path,
+) -> Result<Value, String> {
+    let paths = default_paths()?;
+    let manifests = supervised_manifests(&paths)?;
+    if manifests.is_empty() {
+        return Ok(json!({
+            "schemaVersion": SUPERVISOR_SCHEMA_VERSION,
+            "state": "not_configured",
+            "reboundCount": 0,
+            "browserLaunched": false,
+        }));
+    }
+    let executable = executable
+        .canonicalize()
+        .map_err(|error| format!("could not canonicalize selected executable: {error}"))?;
+    let executable_path = executable.display().to_string();
+    let executable_sha256 = sha256_file(&executable)?;
+    let rebound = manifests
+        .into_iter()
+        .map(|mut manifest| {
+            manifest.executable_path = executable_path.clone();
+            manifest.executable_sha256 = executable_sha256.clone();
+            manifest.provenance = SessionSupervisorProvenance {
+                package_version: env!("CARGO_PKG_VERSION").to_string(),
+                installed_at: current_timestamp(),
+                installed_by: "accepted workstation upgrade".to_string(),
+            };
+            validate_manifest(&manifest)?;
+            Ok(manifest)
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+
+    let unit = unit_name(&rebound[0].session);
+    run_systemctl(&["--user", "stop", &unit])?;
+    for manifest in &rebound {
+        write_manifest_and_unit(&paths, manifest)?;
+    }
+    run_systemctl(&["--user", "daemon-reload"])?;
+    run_systemctl(&["--user", "enable", &unit])?;
+    Ok(json!({
+        "schemaVersion": SUPERVISOR_SCHEMA_VERSION,
+        "state": "rebound",
+        "reboundCount": rebound.len(),
+        "executablePath": executable_path,
+        "browserLaunched": false,
+        "unitStarted": false,
+    }))
+}
+
+/// A completed workstation transaction may rebind stale lane manifests to the
+/// exact selected executable. A clean candidate rollback may use the preserved
+/// selected generation only while its authenticated ingress receipt is still
+/// current. Every other pre-acceptance state fails closed.
+fn accepted_workstation_selected_executable() -> Option<PathBuf> {
+    let Ok(status) = crate::workstation_install::workstation_upgrade_status_json() else {
+        return None;
+    };
+    let root = env::var_os("AGENT_BROWSER_WORKSTATION_ROOT")
+        .map(PathBuf::from)
+        .or_else(dirs::home_dir);
+    let root = root?;
+    let selected = status.get("selectedGenerationId").and_then(Value::as_str)?;
+    let selected_executable = root
+        .join(".local/lib/agent-browser/generations")
+        .join(selected)
+        .join("bin/agent-browser");
+    let Ok(selected_executable) = selected_executable.canonicalize() else {
+        return None;
+    };
+    workstation_status_authorizes_supervisor_rebind(&status).then_some(selected_executable)
+}
+
+fn workstation_status_authorizes_supervisor_rebind(status: &Value) -> bool {
+    if status.get("admissionDraining").and_then(Value::as_bool) == Some(true) {
+        return false;
+    }
+    let accepted = status.get("ready").and_then(Value::as_bool) == Some(true)
+        && status
+            .pointer("/readiness/runtimeConvergenceReady")
+            .and_then(Value::as_bool)
+            == Some(true);
+    if accepted {
+        return true;
+    }
+
+    let Some(selected) = status.get("selectedGenerationId").and_then(Value::as_str) else {
+        return false;
+    };
+    status
+        .pointer("/latestTransaction/state")
+        .and_then(Value::as_str)
+        == Some("failed_preserved_old_generation")
+        && status
+            .pointer("/latestTransaction/terminalResult")
+            .and_then(Value::as_str)
+            == Some("old_generation_preserved")
+        && status
+            .pointer("/latestTransaction/oldGenerationId")
+            .and_then(Value::as_str)
+            == Some(selected)
+        && status
+            .pointer("/readiness/payloadReady")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && status
+            .pointer("/readiness/selectedGenerationReady")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && status
+            .pointer("/dashboardIngress/dashboardIngressReady")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && status
+            .pointer("/dashboardIngress/operatorJourneyReady")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && status
+            .pointer("/dashboardIngress/selectedBackend/generationId")
+            .and_then(Value::as_str)
+            == Some(selected)
+        && status
+            .pointer("/dashboardIngress/presentationReceipt/state")
+            .and_then(Value::as_str)
+            == Some("ready")
+        && status
+            .pointer("/dashboardIngress/presentationReceipt/coordinatorGeneration")
+            .and_then(Value::as_str)
+            == Some(selected)
 }
 
 fn legacy_supervisor_is_active(
@@ -1087,6 +1228,53 @@ mod tests {
                 installed_by: "agent-browser session supervisor install".to_string(),
             },
         }
+    }
+
+    #[test]
+    fn accepted_converged_workstation_authorizes_selected_manifest_rebinding() {
+        let ready = json!({
+            "ready": true,
+            "admissionDraining": false,
+            "readiness": {"runtimeConvergenceReady": true}
+        });
+        assert!(workstation_status_authorizes_supervisor_rebind(&ready));
+
+        let mut draining = ready.clone();
+        draining["admissionDraining"] = json!(true);
+        assert!(!workstation_status_authorizes_supervisor_rebind(&draining));
+
+        let preserved = json!({
+            "ready": false,
+            "selectedGenerationId": "generation-old",
+            "admissionDraining": false,
+            "readiness": {
+                "payloadReady": true,
+                "selectedGenerationReady": true,
+                "runtimeConvergenceReady": false
+            },
+            "latestTransaction": {
+                "state": "failed_preserved_old_generation",
+                "terminalResult": "old_generation_preserved",
+                "oldGenerationId": "generation-old"
+            },
+            "dashboardIngress": {
+                "dashboardIngressReady": true,
+                "operatorJourneyReady": true,
+                "selectedBackend": {"generationId": "generation-old"},
+                "presentationReceipt": {
+                    "state": "ready",
+                    "coordinatorGeneration": "generation-old"
+                }
+            }
+        });
+        assert!(workstation_status_authorizes_supervisor_rebind(&preserved));
+
+        let mut mismatched_receipt = preserved.clone();
+        mismatched_receipt["dashboardIngress"]["presentationReceipt"]["coordinatorGeneration"] =
+            json!("generation-candidate");
+        assert!(!workstation_status_authorizes_supervisor_rebind(
+            &mismatched_receipt
+        ));
     }
 
     #[test]

@@ -1166,6 +1166,17 @@ agent-browser session supervisor status messages-v4 --json
 agent-browser session supervisor remove messages-v4
 ```
 
+After an accepted workstation convergence, repeat <code>supervisor install</code>
+with the lane&apos;s existing stream port to rebind stale executable metadata to
+the exact selected generation. A clean candidate rollback may rebind only
+while the preserved selected generation owns the authenticated ingress
+presentation receipt. Other pre-acceptance generation drift remains a hard
+stop.
+During a hot upgrade, the old supervisor manifest is transitional only while
+one candidate runtime host owns convergence. Acceptance stops the old
+supervisor unit, rebinds its manifests to the selected generation, and leaves
+it enabled without launching a second host.
+
 ## Chrome profiles
 
 ```bash
@@ -1257,6 +1268,8 @@ publish or replace the installed binary, recreate Guacamole, quiesce user
 units, or restart the dashboard. It records current state and bounded backoff
 in <code>~/.agent-browser/convergence/runtime-monitor.json</code> and emits a
 typed incident after three consecutive effect failures.
+After finalization marks the old generation retirable, readiness no longer
+requires reviewed GC to retain that obsolete rollback payload.
 Duplicate-profile pressure and executable drift in an inactive optional
 session supervisor remain visible as install-doctor advisories without
 failing route reconciliation. Active supervisor drift remains blocking. Set

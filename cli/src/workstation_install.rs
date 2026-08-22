@@ -411,6 +411,13 @@ fn recover_operator_required_upgrade_for_root(
 
     let mut live_process_references = std::collections::BTreeMap::new();
     collect_process_generation_references(&paths, &mut live_process_references);
+    if live_process_references.contains_key(&transaction.candidate_generation_id)
+        && operator_recovery_can_stop_rolled_back_candidate_host(&transaction)
+    {
+        stop_candidate_runtime_host(&paths, &transaction)?;
+        live_process_references.clear();
+        collect_process_generation_references(&paths, &mut live_process_references);
+    }
     if live_process_references.contains_key(&transaction.candidate_generation_id) {
         return Err("workstation_recovery_candidate_process_still_live".to_string());
     }
@@ -496,6 +503,32 @@ fn recover_operator_required_upgrade_for_root(
         "admissionDrainPresent": admission_drain_present,
         "admissionDraining": false,
     }))
+}
+
+fn operator_recovery_can_stop_rolled_back_candidate_host(
+    transaction: &crate::runtime_adoption::UpgradeTransaction,
+) -> bool {
+    use crate::runtime_adoption::{RuntimeLaneTransferState, UpgradeTransactionState};
+
+    transaction.state == UpgradeTransactionState::OperatorRecoveryRequired
+        && transaction
+            .runtime_host_convergence
+            .as_ref()
+            .is_some_and(|convergence| {
+                convergence.candidate_host.is_some()
+                    && !convergence.lanes.is_empty()
+                    && convergence.lanes.iter().all(|lane| {
+                        lane.state == RuntimeLaneTransferState::RolledBack
+                            && lane.rollback_owner_generation.is_some_and(|rollback| {
+                                lane.owner_generation_after
+                                    .is_some_and(|candidate| rollback > candidate)
+                            })
+                            && lane
+                                .rollback_receipt_id
+                                .as_deref()
+                                .is_some_and(|receipt| !receipt.trim().is_empty())
+                    })
+            })
 }
 
 fn run_workstation_upgrade_status(json: bool) {
@@ -722,10 +755,15 @@ fn workstation_upgrade_readiness(
                             | UpgradeTransactionState::OperatorRecoveryRequired
                             | UpgradeTransactionState::FailedEffectUncertain
                     );
-            let rollback_ready = transaction
-                .old_generation_id
-                .as_deref()
-                .is_none_or(generation_ready);
+            // Finalization explicitly relinquishes rollback authority, so
+            // reviewed GC may remove the old payload without degrading the
+            // selected runtime's readiness.
+            let rollback_ready = transaction.state
+                == UpgradeTransactionState::OldGenerationRetirable
+                || transaction
+                    .old_generation_id
+                    .as_deref()
+                    .is_none_or(generation_ready);
             (
                 serde_json::to_value(transaction.state)
                     .unwrap_or_else(|_| Value::String("unknown".to_string())),
@@ -1462,6 +1500,19 @@ fn run_workstation_install(args: &[String]) {
                     .map_or(error.clone(), |rollback| format!("{error}; {rollback}")),
                 parsed.json,
             );
+        }
+        if !isolated_root {
+            if let Err(error) =
+                crate::session_supervisor::rebind_supervisors_after_accepted_upgrade(&paths.binary)
+            {
+                fail(
+                    &format!(
+                        "workstation upgrade was accepted but supervisor rebinding failed: {error}"
+                    ),
+                    parsed.json,
+                );
+            }
+            phases.push("session-supervisors-rebound");
         }
     }
 
@@ -3617,6 +3668,7 @@ fn install_doctor_reports_expected_upgrade_ready(
         .count();
     let shadow_dashboard_transition_ready =
         expected_upgrade_shadow_dashboard_transition_ready(upgrade, expected);
+    let supervisor_transition_ready = expected_upgrade_supervisor_transition_ready(data, expected);
     let remaining_issues = issues
         .iter()
         .filter(|issue| {
@@ -3637,6 +3689,9 @@ fn install_doctor_reports_expected_upgrade_ready(
             {
                 return false;
             }
+            if code == Some("executable_drift") && supervisor_transition_ready {
+                return false;
+            }
             !(code == Some("active_runtime_stale_executable")
                 && issue
                     .get("session")
@@ -3650,6 +3705,46 @@ fn install_doctor_reports_expected_upgrade_ready(
         .cloned()
         .collect::<Vec<_>>();
     transaction_issue_count == 1 && install_doctor_issues_are_advisory(data, &remaining_issues)
+}
+
+fn expected_upgrade_supervisor_transition_ready(
+    data: &Value,
+    expected: &crate::runtime_adoption::UpgradeTransaction,
+) -> bool {
+    let Some(old_generation) = expected.old_generation_id.as_deref() else {
+        return false;
+    };
+    let expected_suffix = format!("/generations/{old_generation}/bin/agent-browser");
+    let supervisors = data
+        .pointer("/sessionSupervisors/sessions")
+        .and_then(Value::as_array);
+    let supervisor_issues = data
+        .pointer("/sessionSupervisors/issues")
+        .and_then(Value::as_array);
+    let runtime_hosts = data
+        .pointer("/runtimeMultiplicity/runtimeHosts")
+        .and_then(Value::as_array);
+    supervisors.is_some_and(|sessions| {
+        !sessions.is_empty()
+            && sessions.iter().all(|session| {
+                session
+                    .pointer("/manifest/executablePath")
+                    .and_then(Value::as_str)
+                    .is_some_and(|path| path.ends_with(&expected_suffix))
+            })
+    }) && supervisor_issues.is_some_and(|issues| {
+        !issues.is_empty()
+            && issues
+                .iter()
+                .all(|issue| issue.get("code").and_then(Value::as_str) == Some("executable_drift"))
+    }) && runtime_hosts.is_some_and(|hosts| {
+        hosts.len() == 1
+            && hosts[0].get("generationId").and_then(Value::as_str)
+                == Some(expected.candidate_generation_id.as_str())
+    }) && data
+        .pointer("/runtimeMultiplicity/legacyDaemons")
+        .and_then(Value::as_array)
+        .is_some_and(Vec::is_empty)
 }
 
 fn expected_upgrade_runtime_pressure_is_review_only(data: &Value) -> bool {
@@ -4234,10 +4329,13 @@ fn activate_prepared_payload_transaction(
             &mut prepared.transaction.runtime_migrations,
             &mut prepared.runtime_handoffs,
         )?;
-        let (host_identity, candidate_backend) = capture_candidate_runtime_host_identity(
-            &prepared.transaction.transaction_id,
+        let candidate_socket_dir =
+            candidate_runtime_host_socket_dir(&prepared.transaction.transaction_id)?;
+        let (host_identity, candidate_backend) = capture_runtime_host_identity(
+            &candidate_socket_dir,
             &prepared.transaction.candidate_generation_id,
             &prepared.transaction.candidate_binary_sha256,
+            true,
         )?;
         crate::runtime_adoption::record_runtime_host_identity(
             &mut prepared.transaction,
@@ -4399,6 +4497,13 @@ fn transfer_discovered_runtimes(
                         format!("runtime_transfer_candidate_session_missing:{source_session}")
                     })?
                     .to_string();
+                let candidate_socket_dir = candidate_runtime_host_socket_dir(transaction_id)?;
+                stage_candidate_runtime_handoff_descriptor(
+                    &crate::connection::get_socket_dir(),
+                    &candidate_socket_dir,
+                    &source_session,
+                    &prepared,
+                )?;
                 handoffs.push(PreparedRuntimeHandoff {
                     source_session: source_session.clone(),
                     candidate_session: candidate_session.clone(),
@@ -4515,10 +4620,13 @@ fn transfer_discovered_runtimes(
                             migration.logical_browser_id
                         )
                     })?;
-                    retire_idle_daemon(&source_session)?;
-                    migration
-                        .reason_codes
-                        .push("idle_daemon_retired".to_string());
+                    let reason = match retire_idle_runtime(&source_session)? {
+                        IdleRuntimeRetirement::SharedLaneDeferred => {
+                            "idle_shared_lane_deferred_to_host_cutover"
+                        }
+                        IdleRuntimeRetirement::StandaloneDaemonRetired => "idle_daemon_retired",
+                    };
+                    migration.reason_codes.push(reason.to_string());
                 }
             }
             RuntimeDisposition::RejectedAmbiguity => {
@@ -4564,6 +4672,24 @@ fn preserve_runtime_without_live_source(
 /// period is force-stopped through the same verified process handle. No browser
 /// process is signaled or closed.
 fn retire_idle_daemon(session: &str) -> Result<(), String> {
+    retire_idle_runtime(session).map(|_| ())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IdleRuntimeRetirement {
+    SharedLaneDeferred,
+    StandaloneDaemonRetired,
+}
+
+/// An idle lane on the selected shared host does not own the host process.
+/// Leave it in the old host until generation cutover retires that host once.
+/// Only a standalone daemon has process-level retirement authority here.
+fn retire_idle_runtime(session: &str) -> Result<IdleRuntimeRetirement, String> {
+    if crate::runtime_host::endpoint_key(session) == crate::runtime_host::RUNTIME_HOST_ENDPOINT_KEY
+    {
+        return Ok(IdleRuntimeRetirement::SharedLaneDeferred);
+    }
+
     let mut identity = crate::connection::load_daemon_process_identity(session)?;
     let process = match crate::process_identity::VerifiedProcessTermination::open(&identity) {
         Ok(process) => process,
@@ -4580,7 +4706,7 @@ fn retire_idle_daemon(session: &str) -> Result<(), String> {
         if crate::connection::daemon_ready(session) {
             return Err(format!("idle_daemon_identity_changed:{session}"));
         }
-        return Ok(());
+        return Ok(IdleRuntimeRetirement::StandaloneDaemonRetired);
     };
     retire_verified_idle_daemon_process(
         &process,
@@ -4590,7 +4716,7 @@ fn retire_idle_daemon(session: &str) -> Result<(), String> {
     if crate::connection::daemon_ready(session) {
         return Err(format!("idle_daemon_session_rebound:{session}"));
     }
-    Ok(())
+    Ok(IdleRuntimeRetirement::StandaloneDaemonRetired)
 }
 
 #[cfg(target_os = "linux")]
@@ -5418,25 +5544,6 @@ fn candidate_runtime_host_socket_dir_in(runtime_root: &Path, transaction_id: &st
     runtime_root.join(&digest[..16])
 }
 
-fn capture_candidate_runtime_host_identity(
-    transaction_id: &str,
-    generation_id: &str,
-    binary_sha256: &str,
-) -> Result<
-    (
-        crate::runtime_adoption::RuntimeHostIdentityEvidence,
-        crate::runtime_host_ingress::RuntimeHostBackend,
-    ),
-    String,
-> {
-    capture_runtime_host_identity(
-        &candidate_runtime_host_socket_dir(transaction_id)?,
-        generation_id,
-        binary_sha256,
-        true,
-    )
-}
-
 fn capture_runtime_host_identity(
     socket_dir: &Path,
     generation_id: &str,
@@ -5453,32 +5560,38 @@ fn capture_runtime_host_identity(
     let identity_path = socket_dir.join("runtime-host.identity.json");
     let sha_path = socket_dir.join("runtime-host.sha256");
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    let executable_sha256 = loop {
-        if let Ok(value) = fs::read_to_string(&sha_path) {
-            let value = value.trim();
-            if value.len() == 64 && value != "pending" {
-                break value.to_string();
-            }
+    let (manifest, identity) = loop {
+        let manifest = fs::read(&manifest_path)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok());
+        let identity = fs::read(&identity_path)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok());
+        if let (Some(manifest), Some(identity)) = (manifest, identity) {
+            break (manifest, identity);
         }
         if std::time::Instant::now() >= deadline {
-            return Err("runtime_host_executable_identity_not_ready".to_string());
+            return Err(format!(
+                "runtime_host_executable_identity_not_ready: socketDir={} manifestReady={} identityReady={}",
+                socket_dir.display()
+                , manifest_path.is_file()
+                , identity_path.is_file()
+            ));
         }
         std::thread::sleep(std::time::Duration::from_millis(25));
     };
+    let manifest: crate::runtime_host::RuntimeHostManifest = manifest;
+    let identity: crate::process_identity::RecordedProcessIdentity = identity;
+    let executable_sha256 = manifest.executable_generation.clone();
     if executable_sha256 != binary_sha256 {
         return Err("runtime_host_executable_identity_mismatch".to_string());
     }
-    let manifest: crate::runtime_host::RuntimeHostManifest = serde_json::from_slice(
-        &fs::read(&manifest_path)
-            .map_err(display_io("read runtime host manifest", &manifest_path))?,
-    )
-    .map_err(|error| format!("runtime_host_manifest_invalid: {error}"))?;
-    let identity: crate::process_identity::RecordedProcessIdentity =
-        serde_json::from_slice(&fs::read(&identity_path).map_err(display_io(
-            "read runtime host process identity",
-            &identity_path,
-        ))?)
-        .map_err(|error| format!("runtime_host_process_identity_invalid: {error}"))?;
+    if let Ok(sidecar_sha256) = fs::read_to_string(&sha_path) {
+        let sidecar_sha256 = sidecar_sha256.trim();
+        if sidecar_sha256 != "pending" && sidecar_sha256 != executable_sha256 {
+            return Err("runtime_host_executable_identity_sidecar_mismatch".to_string());
+        }
+    }
     if manifest.schema_version != "agent-browser.runtime-host.v1"
         || manifest.pid != identity.pid
         || manifest.executable_generation != executable_sha256
@@ -5594,6 +5707,10 @@ fn stage_candidate_runtime_host_ingress(
     };
     if selected_runtime_host_capture_required(
         registry.selected_backend().topology,
+        matches!(
+            crate::process_identity::observe_process(registry.selected_backend().pid),
+            crate::process_identity::ProcessObservation::Missing
+        ),
         transaction
             .runtime_host_convergence
             .as_ref()
@@ -5609,9 +5726,12 @@ fn stage_candidate_runtime_host_ingress(
 
 fn selected_runtime_host_capture_required(
     topology: crate::runtime_host_ingress::RuntimeHostTopology,
+    selected_host_absent: bool,
     old_host_present: bool,
 ) -> bool {
-    topology == crate::runtime_host_ingress::RuntimeHostTopology::SingleHost && !old_host_present
+    topology == crate::runtime_host_ingress::RuntimeHostTopology::SingleHost
+        && !selected_host_absent
+        && !old_host_present
 }
 
 fn capture_selected_runtime_host_before_transfer(
@@ -5630,7 +5750,20 @@ fn capture_selected_runtime_host_before_transfer(
         .runtime_host_convergence
         .as_ref()
         .is_some_and(|convergence| convergence.old_host.is_some());
-    if !selected_runtime_host_capture_required(selected.topology, old_host_present) {
+    let selected_host_absent = match crate::process_identity::observe_process(selected.pid) {
+        crate::process_identity::ProcessObservation::Missing => true,
+        crate::process_identity::ProcessObservation::Observed(_) => false,
+        crate::process_identity::ProcessObservation::Failed { reason } => {
+            return Err(format!(
+                "runtime_host_ingress_selected_process_observation_failed: {reason}"
+            ))
+        }
+    };
+    if !selected_runtime_host_capture_required(
+        selected.topology,
+        selected_host_absent,
+        old_host_present,
+    ) {
         return Ok(());
     }
     let (old_identity, observed_backend) = capture_runtime_host_identity(
@@ -5652,12 +5785,104 @@ fn run_candidate_agent_json(
     command_args: &[&str],
 ) -> Result<Value, String> {
     let socket_dir = candidate_runtime_host_socket_dir(transaction_id)?;
-    fs::create_dir_all(&socket_dir).map_err(display_io(
+    run_candidate_agent_json_in_socket_dir(binary, session, &socket_dir, command_args)
+}
+
+fn run_candidate_agent_json_in_socket_dir(
+    binary: &Path,
+    session: &str,
+    socket_dir: &Path,
+    command_args: &[&str],
+) -> Result<Value, String> {
+    fs::create_dir_all(socket_dir).map_err(display_io(
         "create candidate runtime host socket directory",
-        &socket_dir,
+        socket_dir,
     ))?;
-    run_agent_json_detailed_in_socket_dir(binary, session, command_args, Some((&socket_dir, true)))
+    run_agent_json_detailed_in_socket_dir(binary, session, command_args, Some((socket_dir, true)))
         .map_err(|error| error.message)
+}
+
+fn stage_candidate_runtime_handoff_descriptor(
+    source_socket_dir: &Path,
+    candidate_socket_dir: &Path,
+    source_session: &str,
+    prepared: &Value,
+) -> Result<PathBuf, String> {
+    if !crate::validation::is_valid_session_name(source_session) {
+        return Err(crate::validation::session_name_error(source_session));
+    }
+    let expected_name = format!("{source_session}.handoff.json");
+    let expected_source = source_socket_dir.join(&expected_name);
+    let reported_source = prepared
+        .pointer("/data/handoffPath")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(PathBuf::from)
+        .ok_or_else(|| format!("runtime_handoff_prepare_path_missing:{source_session}"))?;
+    let expected_source = fs::canonicalize(&expected_source).map_err(display_io(
+        "resolve prepared runtime handoff descriptor",
+        &expected_source,
+    ))?;
+    let reported_source = fs::canonicalize(&reported_source).map_err(display_io(
+        "resolve reported runtime handoff descriptor",
+        &reported_source,
+    ))?;
+    if reported_source != expected_source {
+        return Err(format!(
+            "runtime_handoff_prepare_path_mismatch:{source_session}"
+        ));
+    }
+    let descriptor_bytes = fs::read(&reported_source).map_err(display_io(
+        "read prepared runtime handoff descriptor",
+        &reported_source,
+    ))?;
+    let descriptor: Value = serde_json::from_slice(&descriptor_bytes).map_err(|error| {
+        format!("runtime_handoff_prepare_descriptor_invalid:{source_session}:{error}")
+    })?;
+    if descriptor.get("schemaVersion").and_then(Value::as_u64) != Some(2)
+        || descriptor.get("sessionName").and_then(Value::as_str) != Some(source_session)
+    {
+        return Err(format!(
+            "runtime_handoff_prepare_descriptor_identity_mismatch:{source_session}"
+        ));
+    }
+    let candidate_session = prepared
+        .pointer("/data/candidateSessionName")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| format!("runtime_transfer_candidate_session_missing:{source_session}"))?;
+    if descriptor
+        .pointer("/ownerTransfer/request/candidateDaemonSessionRoute")
+        .and_then(Value::as_str)
+        != Some(candidate_session)
+    {
+        return Err(format!(
+            "runtime_handoff_prepare_candidate_identity_mismatch:{source_session}"
+        ));
+    }
+    fs::create_dir_all(candidate_socket_dir).map_err(display_io(
+        "create candidate runtime host socket directory",
+        candidate_socket_dir,
+    ))?;
+    let candidate_path = candidate_socket_dir.join(expected_name);
+    write_private_json_atomic(&candidate_path, &descriptor)?;
+    Ok(candidate_path)
+}
+
+fn clear_candidate_runtime_handoff_descriptor(
+    transaction_id: &str,
+    source_session: &str,
+) -> Result<(), String> {
+    let path = candidate_runtime_host_socket_dir(transaction_id)?
+        .join(format!("{source_session}.handoff.json"));
+    match fs::remove_file(&path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!(
+            "Unable to remove candidate runtime handoff descriptor {}: {error}",
+            path.display()
+        )),
+    }
 }
 
 fn run_agent_json(binary: &Path, session: &str, command_args: &[&str]) -> Result<Value, String> {
@@ -6154,6 +6379,9 @@ fn finalize_runtime_handoffs(prepared: &mut PreparedPayloadTransaction) -> Resul
             handoff.source_finalized = true;
         }
     }
+    if source_is_runtime_host {
+        retire_finalized_source_runtime_host(&prepared.transaction, &source_backend)?;
+    }
     prove_finalized_source_exit(&prepared.transaction, &prepared.runtime_handoffs)?;
     for handoff in prepared
         .runtime_handoffs
@@ -6164,6 +6392,65 @@ fn finalize_runtime_handoffs(prepared: &mut PreparedPayloadTransaction) -> Resul
             &mut prepared.transaction,
             &handoff.candidate_session,
         )?;
+        clear_candidate_runtime_handoff_descriptor(
+            &prepared.transaction.transaction_id,
+            &handoff.source_session,
+        )?;
+    }
+    Ok(())
+}
+
+/// A shared runtime host owns several lanes, so finalizing one lane must not
+/// stop its process. Once every transferred browser lane has been finalized,
+/// generation cutover retires the old host exactly once. Idle lanes are host
+/// bookkeeping and do not retain process-level authority.
+fn retire_finalized_source_runtime_host(
+    transaction: &crate::runtime_adoption::UpgradeTransaction,
+    source_backend: &crate::runtime_host_ingress::RuntimeHostBackend,
+) -> Result<(), String> {
+    let convergence = transaction
+        .runtime_host_convergence
+        .as_ref()
+        .ok_or_else(|| "runtime_host_convergence_missing".to_string())?;
+    let evidence = convergence
+        .old_host
+        .as_ref()
+        .ok_or_else(|| "runtime_source_host_identity_missing".to_string())?;
+    if source_backend.generation_id != evidence.generation_id
+        || source_backend.binary_sha256 != evidence.binary_sha256
+        || source_backend.pid != evidence.pid
+        || source_backend.socket_identity != evidence.socket_identity
+    {
+        return Err("runtime_source_host_backend_identity_changed_before_stop".to_string());
+    }
+    let identity_path = source_backend.socket_dir.join("runtime-host.identity.json");
+    let identity: crate::process_identity::RecordedProcessIdentity =
+        serde_json::from_slice(&fs::read(&identity_path).map_err(display_io(
+            "read source runtime host identity",
+            &identity_path,
+        ))?)
+        .map_err(|error| format!("runtime_source_host_identity_invalid: {error}"))?;
+    if identity.pid != evidence.pid || identity.start_token != evidence.process_start_token {
+        return Err("runtime_source_host_process_identity_changed_before_stop".to_string());
+    }
+    let Some(process) = crate::process_identity::VerifiedProcessTermination::open(&identity)?
+    else {
+        return Ok(());
+    };
+    process.signal(crate::process_identity::VerifiedProcessSignal::Terminate)?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while process.is_running()? && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    if process.is_running()? {
+        process.signal(crate::process_identity::VerifiedProcessSignal::Kill)?;
+    }
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while process.is_running()? && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    if process.is_running()? {
+        return Err("runtime_source_host_exit_timeout".to_string());
     }
     Ok(())
 }
@@ -6471,6 +6758,12 @@ fn rollback_runtime_handoffs(prepared: &mut PreparedPayloadTransaction) -> Resul
                 },
                 Err(error) => failures.push(error),
             }
+        }
+        if let Err(error) = clear_candidate_runtime_handoff_descriptor(
+            &prepared.transaction.transaction_id,
+            &source_session,
+        ) {
+            failures.push(error);
         }
         if requires_recovery {
             if source_finalized {
@@ -8158,6 +8451,92 @@ fn fail(message: &str, json: bool) -> ! {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::EnvGuard;
+
+    #[test]
+    fn shared_runtime_host_idle_lanes_do_not_retire_the_host_process() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-shared-idle-lane-retirement-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let guard = EnvGuard::new(&[
+            crate::runtime_host::RUNTIME_HOST_ENV,
+            "AGENT_BROWSER_SOCKET_DIR",
+        ]);
+        guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+        guard.set("AGENT_BROWSER_SOCKET_DIR", root.to_str().unwrap());
+
+        assert_eq!(
+            retire_idle_runtime("shared-idle-alpha").unwrap(),
+            IdleRuntimeRetirement::SharedLaneDeferred
+        );
+        assert_eq!(
+            retire_idle_runtime("shared-idle-beta").unwrap(),
+            IdleRuntimeRetirement::SharedLaneDeferred
+        );
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn finalized_shared_runtime_host_is_retired_once_by_exact_identity() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-finalized-shared-host-retirement-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let socket_dir = root.join("runtime-host");
+        fs::create_dir_all(&socket_dir).unwrap();
+        let mut child = Command::new("sleep").arg("60").spawn().unwrap();
+        let identity = crate::process_identity::capture_process_identity(child.id(), None, None)
+            .expect("capture fixture process identity");
+        write_private_json_atomic(&socket_dir.join("runtime-host.identity.json"), &identity)
+            .unwrap();
+
+        let generation_id = "generation-old";
+        let binary_sha256 = "a".repeat(64);
+        let socket_identity = "unix:fixture:old-host";
+        let backend = crate::runtime_host_ingress::RuntimeHostBackend {
+            topology: crate::runtime_host_ingress::RuntimeHostTopology::SingleHost,
+            generation_id: generation_id.to_string(),
+            socket_dir: socket_dir.clone(),
+            binary_sha256: binary_sha256.clone(),
+            host_id: "runtime-host:fixture".to_string(),
+            pid: identity.pid,
+            socket_identity: socket_identity.to_string(),
+        };
+        let paths = install_paths(&root);
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "generation-candidate".to_string(),
+            "b".repeat(64),
+            "c".repeat(64),
+        );
+        transaction.runtime_host_convergence =
+            Some(crate::runtime_adoption::RuntimeHostConvergenceRecord {
+                schema_version: "agent-browser.runtime-host-convergence.v1".to_string(),
+                deadline_at: runtime_adoption_timestamp(),
+                deadline_unix_seconds: time::OffsetDateTime::now_utc().unix_timestamp() + 30,
+                queue_transfer_policy: "drain_then_commit".to_string(),
+                old_host: Some(crate::runtime_adoption::RuntimeHostIdentityEvidence {
+                    endpoint_key: crate::runtime_host::RUNTIME_HOST_ENDPOINT_KEY.to_string(),
+                    generation_id: generation_id.to_string(),
+                    binary_sha256,
+                    pid: identity.pid,
+                    process_start_token: identity.start_token.clone(),
+                    socket_identity: socket_identity.to_string(),
+                    observation_only: false,
+                }),
+                candidate_host: None,
+                lanes: Vec::new(),
+            });
+
+        retire_finalized_source_runtime_host(&transaction, &backend).unwrap();
+        assert!(child.wait().unwrap().code().is_none());
+
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn runtime_monitor_treats_upgrade_owned_lock_contention_as_a_skip() {
@@ -8538,17 +8917,137 @@ mod tests {
     }
 
     #[test]
+    fn candidate_identity_uses_the_synchronous_manifest_while_sha_sidecar_is_pending() {
+        let fixture = env::temp_dir().join(format!(
+            "agent-browser-candidate-identity-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&fixture).unwrap();
+        let binary_sha256 = workstation_bytes_sha256(b"candidate-binary");
+        fs::write(
+            fixture.join("runtime-host.json"),
+            serde_json::to_vec(&crate::runtime_host::RuntimeHostManifest {
+                schema_version: "agent-browser.runtime-host.v1".to_string(),
+                host_id: "runtime-host:4100".to_string(),
+                pid: 4100,
+                executable_generation: binary_sha256.clone(),
+                socket_identity: "unix:fixture-runtime-host".to_string(),
+                authentication_record: "runtime-host.token".to_string(),
+                max_lanes: crate::runtime_host::DEFAULT_MAX_RUNTIME_LANES,
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            fixture.join("runtime-host.identity.json"),
+            serde_json::to_vec(&crate::process_identity::RecordedProcessIdentity {
+                pid: 4100,
+                start_token: "linux:boot:4100".to_string(),
+                executable_path: Some("/opt/agent-browser".to_string()),
+                browser_family: None,
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        fs::write(fixture.join("runtime-host.sha256"), "pending").unwrap();
+
+        let (identity, backend) =
+            capture_runtime_host_identity(&fixture, "candidate-generation", &binary_sha256, true)
+                .expect("the synchronous manifest is the executable identity authority");
+
+        assert_eq!(identity.binary_sha256, binary_sha256);
+        assert_eq!(backend.pid, 4100);
+        fs::remove_dir_all(fixture).unwrap();
+    }
+
+    #[test]
+    fn cooperative_handoff_descriptor_is_staged_for_the_candidate_host() {
+        let fixture = env::temp_dir().join(format!(
+            "agent-browser-candidate-handoff-stage-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        let source_dir = fixture.join("selected-host");
+        let candidate_dir = fixture.join("candidate-host");
+        fs::create_dir_all(&source_dir).unwrap();
+        let source_session = "source-owner";
+        let candidate_session = "handoff-candidate";
+        let source_path = source_dir.join(format!("{source_session}.handoff.json"));
+        fs::write(
+            &source_path,
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "schemaVersion": 2,
+                "sessionName": source_session,
+                "ownerTransfer": {
+                    "request": {
+                        "candidateDaemonSessionRoute": candidate_session
+                    }
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let prepared = serde_json::json!({
+            "data": {
+                "handoffPath": source_path,
+                "candidateSessionName": candidate_session
+            }
+        });
+
+        let staged = stage_candidate_runtime_handoff_descriptor(
+            &source_dir,
+            &candidate_dir,
+            source_session,
+            &prepared,
+        )
+        .expect("candidate host must receive the exact prepared descriptor");
+
+        assert_eq!(
+            staged,
+            candidate_dir.join(format!("{source_session}.handoff.json"))
+        );
+        let staged_descriptor: Value = serde_json::from_slice(&fs::read(staged).unwrap()).unwrap();
+        assert_eq!(
+            staged_descriptor.get("sessionName").and_then(Value::as_str),
+            Some(source_session)
+        );
+        let mismatched_candidate = serde_json::json!({
+            "data": {
+                "handoffPath": source_path,
+                "candidateSessionName": "different-candidate"
+            }
+        });
+        assert!(stage_candidate_runtime_handoff_descriptor(
+            &source_dir,
+            &candidate_dir,
+            source_session,
+            &mismatched_candidate,
+        )
+        .is_err());
+        fs::remove_dir_all(fixture).unwrap();
+    }
+
+    #[test]
     fn selected_single_host_is_captured_before_runtime_transfer() {
         assert!(selected_runtime_host_capture_required(
             crate::runtime_host_ingress::RuntimeHostTopology::SingleHost,
+            false,
+            false,
+        ));
+        assert!(!selected_runtime_host_capture_required(
+            crate::runtime_host_ingress::RuntimeHostTopology::SingleHost,
+            false,
+            true,
+        ));
+        assert!(!selected_runtime_host_capture_required(
+            crate::runtime_host_ingress::RuntimeHostTopology::LegacyPerSession,
+            false,
             false,
         ));
         assert!(!selected_runtime_host_capture_required(
             crate::runtime_host_ingress::RuntimeHostTopology::SingleHost,
             true,
-        ));
-        assert!(!selected_runtime_host_capture_required(
-            crate::runtime_host_ingress::RuntimeHostTopology::LegacyPerSession,
             false,
         ));
     }
@@ -9015,6 +9514,103 @@ mod tests {
 
         remove_generation_tree(&paths.generations_dir.join(old_generation_id)).unwrap();
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn operator_recovery_stops_only_a_receipted_rolled_back_candidate_host() {
+        use crate::runtime_adoption::{
+            RuntimeHostConvergenceRecord, RuntimeHostIdentityEvidence, RuntimeLaneTransferRecord,
+            RuntimeLaneTransferState, UpgradeTransactionState,
+        };
+
+        let root = PathBuf::from("/tmp/agent-browser-rolled-back-host-fixture");
+        let paths = install_paths(&root);
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "generation-candidate".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.state = UpgradeTransactionState::OperatorRecoveryRequired;
+        transaction.runtime_host_convergence = Some(RuntimeHostConvergenceRecord {
+            schema_version: "agent-browser.runtime-host-convergence.v1".to_string(),
+            deadline_at: "2026-08-22T00:00:00Z".to_string(),
+            deadline_unix_seconds: 0,
+            queue_transfer_policy: "drain_then_commit".to_string(),
+            old_host: None,
+            candidate_host: Some(RuntimeHostIdentityEvidence {
+                endpoint_key: "runtime-host".to_string(),
+                generation_id: "generation-candidate".to_string(),
+                binary_sha256: "a".repeat(64),
+                pid: 41,
+                process_start_token: "linux:boot:41".to_string(),
+                socket_identity: "unix:1:41".to_string(),
+                observation_only: true,
+            }),
+            lanes: vec![RuntimeLaneTransferRecord {
+                session_name: "source".to_string(),
+                candidate_session_name: Some("candidate".to_string()),
+                source_generation_id: Some("generation-old".to_string()),
+                candidate_generation_id: "generation-candidate".to_string(),
+                state: RuntimeLaneTransferState::RolledBack,
+                owner_generation_before: Some(4),
+                owner_generation_after: Some(5),
+                rollback_owner_generation: Some(6),
+                observation_receipt_id: Some("observation".to_string()),
+                commit_receipt_id: Some("commit".to_string()),
+                rollback_receipt_id: Some("rollback".to_string()),
+                queued_work_count: 0,
+            }],
+        });
+        assert!(operator_recovery_can_stop_rolled_back_candidate_host(
+            &transaction
+        ));
+
+        transaction.runtime_host_convergence.as_mut().unwrap().lanes[0].rollback_receipt_id = None;
+        assert!(!operator_recovery_can_stop_rolled_back_candidate_host(
+            &transaction
+        ));
+    }
+
+    #[test]
+    fn post_commit_supervisor_drift_requires_one_candidate_host_and_old_manifests() {
+        let root = PathBuf::from("/tmp/agent-browser-supervisor-transition-fixture");
+        let paths = install_paths(&root);
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "generation-candidate".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.old_generation_id = Some("generation-old".to_string());
+        let ready = serde_json::json!({
+            "sessionSupervisors": {
+                "sessions": [{
+                    "manifest": {
+                        "executablePath": "/home/test/generations/generation-old/bin/agent-browser"
+                    }
+                }],
+                "issues": [{"code": "executable_drift"}]
+            },
+            "runtimeMultiplicity": {
+                "runtimeHosts": [{"generationId": "generation-candidate"}],
+                "legacyDaemons": []
+            }
+        });
+        assert!(expected_upgrade_supervisor_transition_ready(
+            &ready,
+            &transaction
+        ));
+
+        let mut duplicate = ready.clone();
+        duplicate["runtimeMultiplicity"]["runtimeHosts"] = serde_json::json!([
+            {"generationId": "generation-candidate"},
+            {"generationId": "generation-old"}
+        ]);
+        assert!(!expected_upgrade_supervisor_transition_ready(
+            &duplicate,
+            &transaction
+        ));
     }
 
     #[cfg(unix)]
@@ -9610,6 +10206,19 @@ mod tests {
             &ingress,
         );
         assert_eq!(accepted["ready"], true);
+
+        transaction.state =
+            crate::runtime_adoption::UpgradeTransactionState::OldGenerationRetirable;
+        transaction.old_generation_id = Some("generation-already-collected".to_string());
+        let finalized = workstation_upgrade_readiness(
+            &paths,
+            Some(generation_id),
+            Some(&transaction),
+            false,
+            &ingress,
+        );
+        assert_eq!(finalized["rollbackReady"], true);
+        assert_eq!(finalized["ready"], true);
         fs::set_permissions(&generation_root, fs::Permissions::from_mode(0o755)).unwrap();
         fs::remove_dir_all(root).unwrap();
     }

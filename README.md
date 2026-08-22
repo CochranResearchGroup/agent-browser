@@ -252,6 +252,8 @@ axis is unproved. An accepted generation retains rollback authority for 24
 hours. Generation GC then finalizes the accepted transaction automatically
 after rechecking the locked ledger. The transaction remains durable history,
 but no longer pins every generation it names.
+Once the transaction is `old_generation_retirable`, `rollbackReady` remains
+true after reviewed GC removes that obsolete rollback generation.
 `agent-browser install workstation gc --dry-run --json` previews old-generation
 cleanup. A later explicit `--apply` retains the selected generation, the
 immediately previous healthy rollback generation, and exact live-process,
@@ -1096,6 +1098,15 @@ host service without launching a browser. Each install records the exact
 executable and fixed loopback stream port in a lane manifest. Status reports
 shared-host executable drift, port conflicts, restart exhaustion, and whether
 the lane stream is reachable.
+After an accepted workstation convergence, repeating `supervisor install` for
+the same lane and port may rebind its stale manifest to the exact selected
+generation. A clean candidate rollback may do the same only when that selected
+generation still owns the authenticated ingress presentation receipt. Other
+pre-acceptance executable drift fails closed.
+During a hot upgrade, exact old-generation supervisor drift is transitional
+only while one candidate runtime host owns convergence. Acceptance stops the
+old supervisor unit, rewrites its lane manifests to the selected generation,
+and leaves the unit enabled without launching a second host.
 
 ```bash
 # Install one named lane and start or reuse the shared runtime host

@@ -48,6 +48,15 @@ closes and removes only that lane. Other lanes remain active, and the shared
 host stops after the final lane is removed. Runtime profiles, browser storage,
 service state, and unrelated user services remain preserved. Browser work
 begins only after an authenticated effectful request.
+After an accepted workstation convergence, repeat <code>supervisor install</code>
+with the lane&apos;s existing fixed port to rebind a stale manifest to the exact
+selected generation. A clean candidate rollback may rebind only while the
+preserved selected generation owns the authenticated ingress presentation
+receipt. Other pre-acceptance executable drift remains a hard stop.
+During a hot upgrade, the old supervisor manifest is transitional only while
+one candidate runtime host owns convergence. Acceptance stops the old
+supervisor unit, rebinds its manifests to the selected generation, and leaves
+it enabled without launching a second host.
 Legacy <code>agent-browser-session@&lt;name&gt;.service</code> starts are oneshot
 forwarders that admit the named lane into the shared host and cannot launch a
 per-session daemon.

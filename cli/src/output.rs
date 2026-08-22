@@ -5374,11 +5374,17 @@ Usage: agent-browser session [operation]
 Manage isolated browser sessions. Each session has its own browser
 instance with separate cookies, storage, and state.
 
+Supervisor rebinds target the accepted selected generation. A clean candidate
+rollback may rebind only while that generation retains the authenticated
+ingress presentation receipt. Other pre-acceptance drift fails closed.
+Hot-upgrade acceptance stops the old supervisor unit, rebinds its manifests to
+the selected generation, and leaves it enabled without launching another host.
+
 Operations:
   (none)               Show current session name
   list                 List all active sessions
   supervisor install <session> --stream-port <port>
-                       Install one named lane under the Linux runtime host service
+                       Install or rebind one named lane under the selected Linux runtime host
   supervisor status <session>
                        Report shared host, executable, restart, and lane-port readiness
   supervisor remove <session>
@@ -5485,6 +5491,8 @@ candidate backend on the next port. Workstation gc remains available as a
 reviewed operator operation. It retains the selected generation and every
 generation referenced by a live process, supervisor, rollback-capable, failed,
 or unclosed transaction. Dry run reports candidates without deleting them.
+After finalization marks the old generation retirable, readiness no longer
+requires that reviewed GC retain the obsolete rollback payload.
 The installed runtime interlock and the operator-facing workstation reconcile
 command run the same lightweight maintenance authority. Each pass reconciles
 route-user credentials through the non-PAM helper, applies only identity-proven

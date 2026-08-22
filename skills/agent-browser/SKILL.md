@@ -148,8 +148,10 @@ window. `agent-browser install workstation gc --apply --json` automatically
 finalizes an eligible accepted transaction while retaining its durable
 metadata. It keeps the selected and immediately previous healthy generations
 plus exact live-process, supervisor, active-transaction, and open-rollback
-references. Run the dry-run first. This
-branch remains a release no-go until the disposable Ubuntu and release gates
+references. Run the dry-run first. Once the transaction is
+`old_generation_retirable`, `rollbackReady` remains true after reviewed GC
+removes that obsolete rollback generation. This branch remains a release no-go
+until the disposable Ubuntu and release gates
 pass.
 
 If status reports `operator_recovery_required`, use only the exact transaction
@@ -1794,6 +1796,15 @@ exhaustion, and missing lane stream readiness. `remove` closes only the named
 lane, preserves other lanes, runtime profiles, browser storage, and service
 state, and stops the host only after the final supervised lane is removed. The
 host remains no-launch until an authenticated effectful request arrives.
+After workstation convergence is accepted, repeat `supervisor install` with
+the lane's existing fixed port to rebind a stale manifest to the exact selected
+generation. A clean candidate rollback may rebind only when the preserved
+selected generation still owns the authenticated ingress presentation receipt.
+Other pre-acceptance executable drift remains a hard stop.
+During a hot upgrade, the old supervisor manifest is transitional only while
+one candidate host owns convergence. Acceptance stops the old supervisor unit,
+rebinds its manifests to the selected generation, and leaves it enabled without
+launching a second host.
 Legacy `agent-browser-session@<name>.service` starts are oneshot forwarders into
 the shared host and cannot launch a per-session daemon.
 

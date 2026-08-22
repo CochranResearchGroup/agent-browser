@@ -493,6 +493,34 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
             OwnerAuthorityClaim::from_owner(&registered),
         ))
     }
+
+    /// Reject a new managed browser process before launch when the profile is
+    /// still owned by a non-terminal lane. Registration repeats this check
+    /// after launch so a concurrent owner transition still fails closed.
+    pub(crate) fn ensure_managed_lane_launch_allowed(
+        &self,
+        profile_root: &std::path::Path,
+    ) -> Result<(), String> {
+        let profile_identity_digest =
+            crate::runtime_profile::canonical_profile_identity_digest(profile_root)?;
+        let registry = self.repository.load_snapshot()?.runtime_owner_registry;
+        let Some(owner) = registry.owner(&profile_identity_digest) else {
+            return Ok(());
+        };
+        let terminal_and_satisfied = registry
+            .lifecycle_records
+            .get(&owner.browser_id)
+            .is_some_and(|lifecycle| {
+                lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Terminal
+                    && lifecycle.cleanup_obligation_state == CleanupObligationState::Satisfied
+                    && lifecycle.owner_generation == owner.owner_generation
+            });
+        if terminal_and_satisfied {
+            Ok(())
+        } else {
+            Err("runtime_lifecycle_existing_owner_requires_explicit_transition".to_string())
+        }
+    }
 }
 
 fn digest_text(value: &str) -> String {
@@ -812,7 +840,7 @@ fn take_or_bootstrap_lifecycle(
         return Err("runtime_lifecycle_record_ambiguous".to_string());
     }
     if let Some(key) = matching_keys.first() {
-        let lifecycle = if key == &owner.browser_id {
+        let mut lifecycle = if key == &owner.browser_id {
             registry
                 .lifecycle_records
                 .get(key)
@@ -827,6 +855,7 @@ fn take_or_bootstrap_lifecycle(
         if lifecycle.profile_identity_digest != owner.profile_identity_digest {
             return Err("runtime_lifecycle_profile_identity_mismatch".to_string());
         }
+        lifecycle.logical_browser_id = owner.browser_id.clone();
         return Ok(lifecycle);
     }
     Ok(RuntimeLifecycleRecord {
@@ -1065,6 +1094,60 @@ mod tests {
                 .target_set_digest,
             initial_target_set_digest
         );
+    }
+
+    #[test]
+    fn managed_lane_launch_admission_rejects_live_owner_before_process_start() {
+        let repository = MemoryRepository::default();
+        let authority = RuntimeLifecycleAuthority::new(&repository);
+        let profile_root = std::env::temp_dir().join("agent-browser-lifecycle-prelaunch-admission");
+        let profile_identity_digest =
+            crate::runtime_profile::canonical_profile_identity_digest(&profile_root).unwrap();
+        let mut current = owner();
+        current.profile_identity_digest = profile_identity_digest.clone();
+        current.browser_id = "session:prelaunch-owner".to_string();
+        repository
+            .mutate(|state| {
+                state.runtime_owner_registry = RuntimeOwnerRegistry::from_owner(current.clone());
+                state.runtime_owner_registry.lifecycle_records.insert(
+                    current.browser_id.clone(),
+                    RuntimeLifecycleRecord {
+                        logical_browser_id: current.browser_id.clone(),
+                        profile_identity_digest,
+                        owner_generation: current.owner_generation,
+                        lifecycle_state: RuntimeLaneLifecycleState::Ready,
+                        cleanup_obligation_state: CleanupObligationState::Owned,
+                        process_group_id: Some(4100),
+                        package_launch_identity_digest: Some(digest("launch")),
+                        terminal_evidence: Vec::new(),
+                    },
+                );
+                Ok(())
+            })
+            .unwrap();
+
+        assert_eq!(
+            authority
+                .ensure_managed_lane_launch_allowed(&profile_root)
+                .unwrap_err(),
+            "runtime_lifecycle_existing_owner_requires_explicit_transition"
+        );
+
+        repository
+            .mutate(|state| {
+                let lifecycle = state
+                    .runtime_owner_registry
+                    .lifecycle_records
+                    .get_mut(&current.browser_id)
+                    .unwrap();
+                lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Terminal;
+                lifecycle.cleanup_obligation_state = CleanupObligationState::Satisfied;
+                Ok(())
+            })
+            .unwrap();
+        authority
+            .ensure_managed_lane_launch_allowed(&profile_root)
+            .unwrap();
     }
 
     #[test]
@@ -1422,6 +1505,21 @@ mod tests {
     #[test]
     fn reversed_orphan_adoption_with_rebound_alias_authorizes_candidate_relinquish() {
         let repository = registered_repository();
+        repository
+            .mutate(|state| {
+                let mut lifecycle = state
+                    .runtime_owner_registry
+                    .lifecycle_records
+                    .remove("browser-a")
+                    .expect("registered owner must have lifecycle accountability");
+                lifecycle.logical_browser_id = "session:historical-alias".to_string();
+                state
+                    .runtime_owner_registry
+                    .lifecycle_records
+                    .insert(lifecycle.logical_browser_id.clone(), lifecycle);
+                Ok(())
+            })
+            .unwrap();
         let authority = RuntimeLifecycleAuthority::new(&repository);
         let orphan = authority
             .revoke_legacy_owner(&digest("profile-a"), "browser-a", "session-a", "owner-a", 7)
@@ -1472,5 +1570,13 @@ mod tests {
             .unwrap();
         assert_eq!(owner.state, ProfileOwnerState::Orphaned);
         assert!(owner.owner_generation > candidate_claim.owner_generation);
+        assert!(restored
+            .runtime_owner_registry
+            .lifecycle_records
+            .contains_key(&owner.browser_id));
+        assert!(!restored
+            .runtime_owner_registry
+            .lifecycle_records
+            .contains_key("session:historical-alias"));
     }
 }

@@ -1111,6 +1111,13 @@ pub(crate) async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Resul
         }
     }
     let remote_focus_options = launch_options.clone();
+    if engine.as_deref().unwrap_or("chrome") == "chrome" {
+        if let Some(profile_root) = remote_focus_options.profile.as_deref() {
+            let repository = LockedServiceStateRepository::default_json()?;
+            crate::native::runtime_lifecycle::RuntimeLifecycleAuthority::new(&repository)
+                .ensure_managed_lane_launch_allowed(Path::new(profile_root))?;
+        }
+    }
     state.reset_input_state();
     state.attached_runtime_profile = None;
     state.attached_browser_pid = None;
@@ -1126,17 +1133,37 @@ pub(crate) async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Resul
             .and_then(|mgr| mgr.runtime_profile_name()),
         leave_open,
     );
+    if let Err(error) = persist_current_browser_health(
+        state,
+        service_host,
+        ServiceBrowserHealth::Ready,
+        Some(metadata),
+    ) {
+        let runtime_profile = state
+            .browser
+            .as_ref()
+            .and_then(|manager| manager.runtime_profile_name().map(str::to_string));
+        let cleanup = match state.browser.as_mut() {
+            Some(manager) => manager.close_with_outcome().await,
+            None => Ok(BrowserShutdownOutcome::default()),
+        };
+        state.browser = None;
+        state.launch_hash = None;
+        state.close_behavior = CloseBehavior::CloseBrowser;
+        state.update_stream_client().await;
+        if let (Some(runtime_profile), Ok(outcome)) = (runtime_profile.as_deref(), cleanup.as_ref())
+        {
+            if outcome.controlled_relaunch_ready() {
+                let _ = clear_runtime_state(runtime_profile);
+            }
+        }
+        return Err(format!("{error}; launched_browser_cleanup={cleanup:?}"));
+    }
     state.launch_hash = Some(new_hash);
     state.subscribe_to_browser_events();
     state.start_fetch_handler();
     state.start_dialog_handler();
     state.update_stream_client().await;
-    persist_current_browser_health(
-        state,
-        service_host,
-        ServiceBrowserHealth::Ready,
-        Some(metadata),
-    )?;
     {
         let df = state.domain_filter.read().await;
         let has_domain_filter = df.is_some();
