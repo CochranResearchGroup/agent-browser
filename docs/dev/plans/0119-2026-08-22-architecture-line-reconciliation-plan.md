@@ -147,3 +147,59 @@ branches until their acceptance ledger is complete.
 - Six other auxiliary worktrees are patch-equivalent, absorbed, or superseded
   retirement candidates; two dirty candidates are exact copies of pushed
   commits `5684fb6e` and `b86b75a2`.
+
+## Source Commit Disposition Ledger
+
+### `fix/runtime-host-ingress-stale-selected-20260821`
+
+- `4c39e52f` is integrated as `4a8901b7`. The current ingress repository now
+  fences rollback by selected transaction ID and can restore only the exact
+  dead selected backend before restaging.
+
+### `fix/p0204-retained-browser-routing`
+
+- `74a5b4d0` is integrated through the current route-bound runtime interface as
+  part of `545daca9`. Adoption passes both source session and durable logical
+  browser identity.
+- `b0a97190` is intentionally superseded by the stronger candidate-host
+  bootstrap in `candidate_dashboard_command`. The candidate receives its
+  transaction socket directory, generation, and runtime-host mode while
+  deliberately omitting backend-only mode. The regression
+  `candidate_dashboard_targets_the_transaction_runtime_host` proves this
+  current invariant.
+- `e88fd3d9` is integrated through current workstation and stream-discovery
+  interfaces as part of `545daca9`. A singular runtime-host PID is accepted as
+  lane liveness evidence, and monitor lock contention is a healthy skip only
+  while an admission-drain record proves upgrade ownership.
+
+### `fix/legacy-retained-profile-route-20260815`
+
+- `1cffcfbf` is integrated through the current profile-mismatch seam as part of
+  `be8a7273`. Metadata-free retained connections are accepted only when the
+  service repository proves the exact browser, session, profile, and PID or CDP
+  identity.
+- `640310f6` is integrated through the profile-lease metadata seam as part of
+  `be8a7273`. An attributed service tab handle routes to an existing tab and
+  does not acquire a launch-profile lane.
+- `fab9b1d1` is integrated through the browser lifecycle seam as part of
+  `be8a7273`. Handle release closes only its target, does not reinitialize an
+  unrelated tab, preserves the last tab, and reports whether CDP acknowledged
+  the close.
+- `5d69c525` is retained as historical git evidence and is intentionally not
+  replayed into `RUNBOOK.md`. Its runtime claims describe the 2026-08-15 live
+  census and are not current acceptance evidence. The durable behavior it
+  records is represented by the three integrated source commits above.
+
+## Validation Progress
+
+- Runtime-host-ingress module: 6 tests passed.
+- Exact logical browser adoption: 2 focused regressions passed.
+- Candidate host discovery and monitor ownership: 2 focused regressions
+  passed.
+- Exact retained-profile route proof: 2 focused regressions passed.
+- Attributed service tab lease bypass: 1 focused regression passed.
+- Selected service-tab release projection: 1 focused regression passed.
+- Rust formatting and diff hygiene pass for every committed slice so far.
+
+Final selector-driven validation, strict Clippy, remote readback, and worktree
+retirement remain open.
