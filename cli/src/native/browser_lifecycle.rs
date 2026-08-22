@@ -527,11 +527,17 @@ pub(crate) mod action_commands {
                 "no_live_browser", "error" : Value::Null, "result" : Value::Null, }
             );
         };
-        match mgr.tab_close_target_id(target_id).await {
+        match mgr.tab_close_target_id_for_release(target_id).await {
             Ok(result) => {
+                let closed = result
+                    .get("closeCommandAcknowledged")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
                 json!(
-                    { "attempted" : true, "closed" : true, "skippedReason" : Value::Null,
-                    "error" : Value::Null, "result" : result, }
+                    { "attempted" : true, "closed" : closed, "skippedReason" :
+                    (!closed).then_some("physical_close_failed"), "error" : result
+                    .get("closeCommandError").cloned().unwrap_or(Value::Null), "result" :
+                    result, }
                 )
             }
             Err(error) => {

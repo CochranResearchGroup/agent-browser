@@ -2109,6 +2109,117 @@ fn test_shared_profile_attach_target_ignores_incompatible_retained_browser() {
     assert!(matches!(decision, ServiceProfileLeaseGate::Reject { .. }));
     let _ = fs::remove_dir_all(&home);
 }
+
+fn retained_profile_route_state() -> ServiceState {
+    ServiceState {
+        profiles: BTreeMap::from([(
+            "managed-one-time-route".to_string(),
+            BrowserProfile {
+                id: "managed-one-time-route".to_string(),
+                name: "Managed one-time route".to_string(),
+                user_data_dir: Some("/tmp/agent-browser-managed-one-time-route".to_string()),
+                ..BrowserProfile::default()
+            },
+        )]),
+        browsers: BTreeMap::from([(
+            "session:carrier-evidence".to_string(),
+            BrowserProcess {
+                id: "session:carrier-evidence".to_string(),
+                profile_id: Some("managed-one-time-route".to_string()),
+                health: ServiceBrowserHealth::Ready,
+                pid: Some(4242),
+                cdp_endpoint: Some("http://127.0.0.1:39111/devtools/browser/current".to_string()),
+                active_session_ids: vec!["carrier-evidence".to_string()],
+                ..BrowserProcess::default()
+            },
+        )]),
+        sessions: BTreeMap::from([(
+            "carrier-evidence".to_string(),
+            BrowserSession {
+                id: "carrier-evidence".to_string(),
+                profile_id: Some("managed-one-time-route".to_string()),
+                browser_ids: vec!["session:carrier-evidence".to_string()],
+                ..BrowserSession::default()
+            },
+        )]),
+        ..ServiceState::default()
+    }
+}
+
+#[test]
+fn test_retained_profile_route_accepts_exact_current_owner() {
+    let state = retained_profile_route_state();
+    let command = json!({
+        "action": "tab_new",
+        "runtimeProfile": "managed-one-time-route",
+        "profile": "/tmp/agent-browser-managed-one-time-route",
+        "browserId": "session:carrier-evidence",
+        "sessionName": "carrier-evidence"
+    });
+    assert!(retained_route_matches_selected_profile(
+        &command,
+        "carrier-evidence",
+        Some(4242),
+        "ws://127.0.0.1:39111/devtools/browser/current",
+        &state,
+    ));
+}
+
+#[test]
+fn test_retained_profile_route_rejects_unproven_owner() {
+    let state = retained_profile_route_state();
+    let command = json!({
+        "action": "tab_new",
+        "runtimeProfile": "managed-one-time-route",
+        "profile": "/tmp/agent-browser-managed-one-time-route",
+        "browserId": "session:carrier-evidence",
+        "sessionName": "carrier-evidence"
+    });
+    for (field, value) in [
+        ("browserId", "session:other-browser"),
+        ("sessionName", "other-session"),
+        ("runtimeProfile", "other-profile"),
+        ("profile", "/tmp/other-profile"),
+    ] {
+        let mut mismatched = command.clone();
+        mismatched[field] = json!(value);
+        assert!(!retained_route_matches_selected_profile(
+            &mismatched,
+            "carrier-evidence",
+            Some(4242),
+            "ws://127.0.0.1:39111/devtools/browser/current",
+            &state,
+        ));
+    }
+    assert!(!retained_route_matches_selected_profile(
+        &command,
+        "carrier-evidence",
+        Some(9999),
+        "ws://127.0.0.1:49999/devtools/browser/wrong",
+        &state,
+    ));
+}
+
+#[test]
+fn test_service_profile_lease_gate_defers_to_attributed_tab_handle() {
+    let command = json!({
+        "action": "cdp_attach",
+        "serviceName": "Odollo",
+        "runtimeProfile": "default",
+        "serviceTabHandle": {
+            "browserId": "browser-existing",
+            "tabId": "tab:carrier-evidence",
+            "targetId": "target-carrier-evidence"
+        }
+    });
+    assert!(service_profile_lease_metadata_for_command(&command).is_none());
+    assert!(matches!(
+        service_profile_lease_gate(&command, "existing-session", Some(0))
+            .expect("attributed tab handle should bypass launch-profile leasing"),
+        ServiceProfileLeaseGate::Ready
+    ));
+}
+
 #[test]
 fn test_service_profile_lease_gate_allows_duplicate_lane_route_hints() {
     let guard = EnvGuard::new(&["HOME"]);
