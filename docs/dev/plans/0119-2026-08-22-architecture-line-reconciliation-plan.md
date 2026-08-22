@@ -2,7 +2,7 @@
 
 Date: 2026-08-22
 
-State: ACTIVE
+State: COMPLETE
 
 Lane: P119
 
@@ -201,5 +201,42 @@ branches until their acceptance ledger is complete.
 - Selected service-tab release projection: 1 focused regression passed.
 - Rust formatting and diff hygiene pass for every committed slice so far.
 
-Final selector-driven validation, strict Clippy, remote readback, and worktree
-retirement remain open.
+Selector-driven validation completed successfully:
+
+- `git diff acf74662 --check`;
+- Rust formatting and strict Clippy with warnings denied;
+- all 79 `workstation_install` tests;
+- workstation install fixture, host-provision fixture, fresh VM harness,
+  Guacamole asset validation, PostgreSQL durability contract, and route-specific
+  Guacamole user sync contract.
+
+## Worktree And Branch Retirement
+
+The nine auxiliary worktrees were removed after a fresh status and recovery
+audit. The two dirty worktrees were force-removed only after exact proof:
+
+- the owner-alias worktree patch ID matched pushed commit `5684fb6e`;
+- every modified Plan 0118 build file matched its blob in pushed commit
+  `b86b75a2`.
+
+The disposable Plan 0116 baseline was also retired. Its local-only commits are
+superseded by named current contracts: privileged-helper `verify-install`, the
+atomic generation-selector doctor regression, the sealed dashboard backend,
+and the versioned runtime owner and lifecycle sidecars with the
+`durable_runtime_owner_registry_survives_a_legacy_state_writer` regression.
+
+All retired local branch labels were deleted. The three source repair branches
+remain on `origin` as temporary historical audit anchors, but they are not
+active development or maintenance lines. The local checkout now contains one
+architecture worktree and only the `architecture-deepening-20260809` and
+`main` branches.
+
+## Integration Strategy After Plan 0119
+
+`architecture-deepening-20260809` is the authoritative architecture line for
+this completed reconciliation. Promotion to `main` is a separate reviewed
+integration seam because the architecture line remains substantially ahead of
+the fork's `main`, while the fork's `main` also remains behind upstream. Do not
+combine architecture promotion with upstream synchronization in one history
+rewrite. First review and promote the architecture line into `origin/main`;
+then reconcile `upstream/main` in a separately validated maintenance plan.
