@@ -1623,6 +1623,11 @@ pub fn merge_reconciled_service_state(
     if reconciled.reconciliation.is_some() {
         target.reconciliation = reconciled.reconciliation.clone();
     }
+    if reconciled.runtime_owner_registry != before.runtime_owner_registry
+        && target.runtime_owner_registry == before.runtime_owner_registry
+    {
+        target.runtime_owner_registry = reconciled.runtime_owner_registry.clone();
+    }
 
     for (id, reconciled_browser) in &reconciled.browsers {
         match target.browsers.get_mut(id) {
@@ -3786,6 +3791,50 @@ mod tests {
             .iter()
             .any(|event| event.kind == ServiceEventKind::Reconciliation));
         let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn repository_reconcile_persists_completed_closing_runtime_lifecycle() {
+        use crate::runtime_owner_transfer::{CleanupObligationState, RuntimeLaneLifecycleState};
+
+        let home = temp_home("service-health-reconcile-closing-repository");
+        let profile_root = home.join("profile");
+        fs::create_dir_all(&profile_root).unwrap();
+        let absent_process_group = (2_000_000..2_001_000)
+            .find(|process_group_id| !process_group_is_running(*process_group_id))
+            .unwrap();
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+        store
+            .save(&closing_runtime_lifecycle_state(
+                &profile_root,
+                absent_process_group,
+            ))
+            .unwrap();
+
+        reconcile_service_state_in_repository(&repository)
+            .await
+            .unwrap();
+
+        let persisted = store.load().unwrap();
+        let lifecycle = &persisted.runtime_owner_registry.lifecycle_records["browser-closing"];
+        assert_eq!(
+            lifecycle.lifecycle_state,
+            RuntimeLaneLifecycleState::Terminal
+        );
+        assert_eq!(
+            lifecycle.cleanup_obligation_state,
+            CleanupObligationState::Satisfied
+        );
+        assert_eq!(
+            lifecycle.terminal_evidence,
+            vec![
+                format!("service_reconcile_process_group_absent:{absent_process_group}"),
+                "service_reconcile_profile_lock_absent".to_string(),
+            ]
+        );
+        let _ = fs::remove_dir_all(home);
     }
 
     #[test]
