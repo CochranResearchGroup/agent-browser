@@ -15,13 +15,15 @@ import {
 
 const fixture = mkdtempSync(join(tmpdir(), 'agent-browser-development-runtime-'));
 const fakeBinary = join(fixture, 'agent-browser');
+const fakeBrowser = join(fixture, 'chrome');
+writeFileSync(fakeBrowser, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
 writeFileSync(
   fakeBinary,
   `#!/bin/sh
 if [ "\${1:-}" = "--version" ]; then
   echo "agent-browser 0.28.0-fixture"
 else
-  printf '%s|%s|%s|%s|%s\\n' "$HOME" "$AGENT_BROWSER_RUNTIME_ENVIRONMENT" "$AGENT_BROWSER_RUNTIME_HOST" "$AGENT_BROWSER_SOCKET_DIR" "$AGENT_BROWSER_DASHBOARD_AUTH_DIR"
+  printf '%s|%s|%s|%s|%s|%s\\n' "$HOME" "$AGENT_BROWSER_RUNTIME_ENVIRONMENT" "$AGENT_BROWSER_RUNTIME_HOST" "$AGENT_BROWSER_SOCKET_DIR" "$AGENT_BROWSER_DASHBOARD_AUTH_DIR" "$AGENT_BROWSER_EXECUTABLE_PATH"
 fi
 `,
   { mode: 0o755 },
@@ -30,6 +32,7 @@ const env = {
   ...process.env,
   AGENT_BROWSER_DEV_USER_HOME: join(fixture, 'user'),
   AGENT_BROWSER_DEV_RUNTIME_DIR: join(fixture, 'run', 'agent-browser-dev'),
+  AGENT_BROWSER_DEV_BROWSER_EXECUTABLE: fakeBrowser,
   AGENT_BROWSER_DEV_SKIP_SYSTEMD: '1',
 };
 
@@ -39,11 +42,13 @@ try {
   assert.equal(descriptor.backendPort, 4949);
   assert.equal(descriptor.laneStreamPort, 4951);
   assert.equal(descriptor.ingressService, 'agent-browser-dev');
+  assert.equal(descriptor.browserExecutable, fakeBrowser);
   const units = renderDevelopmentUnits(descriptor, '/candidate/bin/agent-browser');
   for (const source of Object.values(units)) {
     assert.match(source, /AGENT_BROWSER_RUNTIME_ENVIRONMENT=development/);
     assert.match(source, /AGENT_BROWSER_RUNTIME_HOST=1/);
     assert.match(source, /AGENT_BROWSER_SOCKET_DIR=/);
+    assert.match(source, new RegExp(`AGENT_BROWSER_EXECUTABLE_PATH=${fakeBrowser}`));
     assert.doesNotMatch(source, /\.local\/bin\/agent-browser\n/);
   }
   assert.match(units['agent-browser-dev-dashboard.service'], /AGENT_BROWSER_DASHBOARD_PORT=4948/);
@@ -59,7 +64,33 @@ try {
   }).trim();
   assert.equal(
     launcherEnvironment,
-    `${descriptor.pseudoHome}|development|1|${descriptor.socketDir}|${descriptor.authDir}`,
+    `${descriptor.pseudoHome}|development|1|${descriptor.socketDir}|${descriptor.authDir}|${fakeBrowser}`,
+  );
+  const diagnosticBrowser = join(fixture, 'diagnostic-chrome');
+  const overriddenLauncherEnvironment = execFileSync(descriptor.executable, ['print-env'], {
+    encoding: 'utf8',
+    env: { ...process.env, AGENT_BROWSER_EXECUTABLE_PATH: diagnosticBrowser },
+  }).trim();
+  assert.equal(
+    overriddenLauncherEnvironment,
+    `${descriptor.pseudoHome}|development|1|${descriptor.socketDir}|${descriptor.authDir}|${diagnosticBrowser}`,
+  );
+  assert.throws(
+    () => installDevelopmentRuntime({
+      binary: fakeBinary,
+      env: { ...env, AGENT_BROWSER_DEV_BROWSER_EXECUTABLE: join(fixture, 'missing-chrome') },
+      activate: false,
+    }),
+    /Development browser executable/,
+  );
+  const fakeWindowsBrowser = join(fixture, 'chrome.exe');
+  writeFileSync(fakeWindowsBrowser, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  assert.throws(
+    () => developmentRuntimeDescriptor({
+      ...env,
+      AGENT_BROWSER_DEV_BROWSER_EXECUTABLE: fakeWindowsBrowser,
+    }),
+    /incompatible with the Linux profile root/,
   );
   const laneManifest = JSON.parse(readFileSync(descriptor.laneManifest, 'utf8'));
   assert.equal(laneManifest.session, 'development-default');

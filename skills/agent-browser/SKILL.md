@@ -802,6 +802,14 @@ Use `pnpm smoke:development-dashboard-auth -- --dashboard-url <dev-url>` for a
 credential-safe authenticated ingress check. It verifies login, cookie-backed
 session status, authenticated service API access, and development manifest
 identity without printing credentials.
+The publisher pins a Linux-compatible browser executable into the stable
+launcher and development units. Use `AGENT_BROWSER_DEV_BROWSER_EXECUTABLE`
+only before publication and only with an absolute reviewed path. Run
+`pnpm smoke:development-browser-launch` after publication for three disposable
+open, URL-read, close, and process-residue cycles.
+Development service GC requires positive development-environment ownership.
+Never apply a candidate merely because a global Xvfb, Chrome, or Agent Browser
+process is absent from development Service State.
 
 The repository Cargo wrapper admits at most two bounded builds by default, with
 four Cargo jobs per build and aggregate cgroup limits on WSL. Admission is based

@@ -121,6 +121,86 @@ pub(crate) struct ResourceSummary {
     pub(crate) cleanup_obligations_unknown: usize,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ResourceRuntimeEnvironment {
+    Production,
+    Development {
+        state_root: PathBuf,
+        install_root: PathBuf,
+        socket_dir: PathBuf,
+    },
+}
+
+impl ResourceRuntimeEnvironment {
+    fn current() -> Self {
+        if std::env::var("AGENT_BROWSER_RUNTIME_ENVIRONMENT").as_deref() != Ok("development") {
+            return Self::Production;
+        }
+        let home = std::env::var_os("HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("/nonexistent-agent-browser-development-home"));
+        let install_root = std::env::current_exe()
+            .ok()
+            .and_then(|path| {
+                path.ancestors()
+                    .find(|ancestor| {
+                        ancestor
+                            .file_name()
+                            .is_some_and(|name| name == "generations")
+                    })
+                    .and_then(Path::parent)
+                    .map(Path::to_path_buf)
+            })
+            .unwrap_or_else(|| home.join(".local/lib/agent-browser-dev"));
+        let socket_dir = std::env::var_os("AGENT_BROWSER_SOCKET_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("/nonexistent-agent-browser-development-socket"));
+        Self::Development {
+            state_root: home.join(".agent-browser"),
+            install_root,
+            socket_dir,
+        }
+    }
+
+    fn requires_positive_ownership(&self) -> bool {
+        matches!(self, Self::Development { .. })
+    }
+
+    fn proves_ownership(&self, process: &ProcessSample, correlation: &ResourceCorrelation) -> bool {
+        let Self::Development {
+            state_root,
+            install_root,
+            socket_dir,
+        } = self
+        else {
+            return true;
+        };
+        if correlation.browser_id.is_some() {
+            return true;
+        }
+        if correlation
+            .profile_path
+            .as_deref()
+            .is_some_and(|path| Path::new(path).starts_with(state_root))
+        {
+            return true;
+        }
+        if process
+            .executable
+            .as_deref()
+            .is_some_and(|path| Path::new(path).starts_with(install_root))
+        {
+            return true;
+        }
+        process.command.iter().any(|argument| {
+            let path = Path::new(argument);
+            path.starts_with(state_root)
+                || path.starts_with(install_root)
+                || path.starts_with(socket_dir)
+        })
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(default, rename_all = "camelCase")]
 pub(crate) struct ResourceAuthoritySnapshot {
@@ -258,8 +338,26 @@ fn service_resources_response_from_samples(
     processes: Vec<ProcessSample>,
     collection_warnings: Vec<String>,
 ) -> Value {
-    let snapshot =
-        service_resource_authority_snapshot_from_samples(state, processes, collection_warnings);
+    service_resources_response_from_samples_for_environment(
+        state,
+        processes,
+        collection_warnings,
+        ResourceRuntimeEnvironment::current(),
+    )
+}
+
+fn service_resources_response_from_samples_for_environment(
+    state: &ServiceState,
+    processes: Vec<ProcessSample>,
+    collection_warnings: Vec<String>,
+    environment: ResourceRuntimeEnvironment,
+) -> Value {
+    let snapshot = service_resource_authority_snapshot_from_samples_for_environment(
+        state,
+        processes,
+        collection_warnings,
+        &environment,
+    );
     json!({
         "summary": snapshot.summary,
         "resources": snapshot.resources,
@@ -272,6 +370,7 @@ fn service_resources_response_from_samples(
             "temporaryProfileMinAgeSeconds": TEMP_PROFILE_MIN_AGE_SECONDS,
             "reviewTokenTtlSeconds": GC_REVIEW_TOKEN_TTL_SECONDS,
             "applySupported": true,
+            "requiresRuntimeEnvironmentOwnershipForCandidates": environment.requires_positive_ownership(),
         },
     })
 }
@@ -281,10 +380,24 @@ pub(crate) fn service_resource_authority_snapshot_from_samples(
     processes: Vec<ProcessSample>,
     collection_warnings: Vec<String>,
 ) -> ResourceAuthoritySnapshot {
+    service_resource_authority_snapshot_from_samples_for_environment(
+        state,
+        processes,
+        collection_warnings,
+        &ResourceRuntimeEnvironment::current(),
+    )
+}
+
+fn service_resource_authority_snapshot_from_samples_for_environment(
+    state: &ServiceState,
+    processes: Vec<ProcessSample>,
+    collection_warnings: Vec<String>,
+    environment: &ResourceRuntimeEnvironment,
+) -> ResourceAuthoritySnapshot {
     let dashboard_main_pid = current_dashboard_main_pid();
     let mut records = processes
         .into_iter()
-        .filter_map(|process| classify_process(state, dashboard_main_pid, process))
+        .filter_map(|process| classify_process(state, dashboard_main_pid, process, environment))
         .collect::<Vec<_>>();
     records.sort_by_key(|record| record.pid);
 
@@ -492,6 +605,7 @@ fn classify_process(
     state: &ServiceState,
     dashboard_main_pid: Option<u32>,
     process: ProcessSample,
+    environment: &ResourceRuntimeEnvironment,
 ) -> Option<ResourceRecord> {
     let command_text = process.command.join(" ");
     let profile_path = command_arg_value(&process.command, "--user-data-dir");
@@ -600,6 +714,20 @@ fn classify_process(
         } else {
             reasons.push("no_safe_gc_predicate_matched".to_string());
         }
+    }
+
+    if disposition == ResourceDisposition::Candidate
+        && environment.requires_positive_ownership()
+        && !environment.proves_ownership(&process, &correlation)
+    {
+        // An isolated environment sees the host-wide process table but only its
+        // own Service State. Missing local correlation cannot authorize cleanup
+        // of a process owned by production or another runtime environment.
+        disposition = ResourceDisposition::Protected;
+        reasons.clear();
+        reasons.push("runtime_environment_ownership_unproven".to_string());
+        gc_action = None;
+        reviewed_tree = None;
     }
 
     let candidate_identity = gc_action.as_ref().map(|action| GcCandidateIdentity {
@@ -1093,7 +1221,13 @@ fn candidate_identity_still_matches(
         return false;
     };
     let dashboard_main_pid = current_dashboard_main_pid();
-    classify_process(state, dashboard_main_pid, sample).is_some_and(|current| {
+    classify_process(
+        state,
+        dashboard_main_pid,
+        sample,
+        &ResourceRuntimeEnvironment::current(),
+    )
+    .is_some_and(|current| {
         current.disposition == ResourceDisposition::Candidate
             && current
                 .candidate_identity
@@ -2063,6 +2197,72 @@ mod tests {
         assert_eq!(
             response["resources"][0]["reasons"][0],
             "retained_display_allocation"
+        );
+    }
+
+    #[test]
+    fn development_resources_do_not_claim_uncorrelated_remote_display() {
+        let response = service_resources_response_from_samples_for_environment(
+            &ServiceState::default(),
+            vec![sample(
+                506,
+                &["/usr/bin/Xvfb", ":92", "-screen", "0", "1280x720x24"],
+                Some(3600),
+            )],
+            Vec::new(),
+            ResourceRuntimeEnvironment::Development {
+                state_root: PathBuf::from("/home/dev/.agent-browser"),
+                install_root: PathBuf::from("/home/dev/.local/lib/agent-browser-dev"),
+                socket_dir: PathBuf::from("/run/user/1000/agent-browser-dev"),
+            },
+        );
+        assert_eq!(response["summary"]["candidateCount"], 0);
+        assert_eq!(response["resources"][0]["disposition"], "protected");
+        assert_eq!(
+            response["resources"][0]["reasons"][0],
+            "runtime_environment_ownership_unproven"
+        );
+    }
+
+    #[test]
+    fn production_resources_preserve_orphan_remote_display_candidate_behavior() {
+        let response = service_resources_response_from_samples_for_environment(
+            &ServiceState::default(),
+            vec![sample(
+                507,
+                &["/usr/bin/Xvfb", ":93", "-screen", "0", "1280x720x24"],
+                Some(3600),
+            )],
+            Vec::new(),
+            ResourceRuntimeEnvironment::Production,
+        );
+        assert_eq!(response["summary"]["candidateCount"], 1);
+        assert_eq!(response["resources"][0]["disposition"], "candidate");
+        assert_eq!(
+            response["resources"][0]["reasons"][0],
+            "orphaned_remote_display_process"
+        );
+    }
+
+    #[test]
+    fn development_resources_keep_exact_owned_lifecycle_candidate() {
+        let profile_root = "/home/dev/.agent-browser/runtime-profiles/disposable/user-data";
+        let (state, candidate) = owned_closing_candidate(508, profile_root);
+        let response = service_resources_response_from_samples_for_environment(
+            &state,
+            vec![candidate],
+            Vec::new(),
+            ResourceRuntimeEnvironment::Development {
+                state_root: PathBuf::from("/home/dev/.agent-browser"),
+                install_root: PathBuf::from("/home/dev/.local/lib/agent-browser-dev"),
+                socket_dir: PathBuf::from("/run/user/1000/agent-browser-dev"),
+            },
+        );
+        assert_eq!(response["summary"]["candidateCount"], 1);
+        assert_eq!(response["resources"][0]["disposition"], "candidate");
+        assert_eq!(
+            response["resources"][0]["reasons"][0],
+            "lifecycle_owned_closing_process_tree_after_grace"
         );
     }
 

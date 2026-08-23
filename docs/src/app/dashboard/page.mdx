@@ -28,6 +28,10 @@ The isolated runtime host starts from the durable
 <code>development-default</code> lane manifest on fixed stream port 4951.
 The stable <code>agent-browser-dev</code> launcher selects the same dev
 pseudo-home, socket, auth store, and environment identity for direct CLI use.
+It also pins one Linux-compatible browser executable so a Linux-only managed
+profile cannot accidentally inherit a Windows browser manifest. Set
+<code>AGENT_BROWSER_DEV_BROWSER_EXECUTABLE</code> before publication only for a
+reviewed absolute executable.
 
 Use <code>pnpm development-runtime:status</code> for a readback and
 <code>pnpm development-runtime:doctor</code> for the acceptance checks. The
@@ -41,11 +45,18 @@ Use <code>pnpm smoke:development-dashboard-auth -- --dashboard-url
 https://agent-browser-dev.ecochran.dyndns.org</code> to verify login, the
 session cookie, authenticated service API access, and the development manifest
 without printing dashboard credentials.
+Run <code>pnpm smoke:development-browser-launch</code> to verify three
+disposable open, URL-read, close, and process-residue cycles through the stable
+development command. The smoke also proves that production identities remain
+unchanged.
 
 Old development generations are collected with
 <code>pnpm development-runtime:gc</code>. The collector always retains the
 selected generation, running generation executables, and the configured number
 of newest rollback candidates.
+Service resource GC is separately fail-closed: an OS process must have positive
+development-environment ownership before it can become a development cleanup
+candidate. Absence from the isolated development ledger is not ownership.
 
 `dashboard start` keeps port 4848 as stable ingress and starts the current
 generation backend on the next port. The ingress retains the prior selected
