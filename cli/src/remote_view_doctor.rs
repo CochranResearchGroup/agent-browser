@@ -780,21 +780,32 @@ fn inspect_xrdp() -> Value {
 }
 
 fn inspect_rdp_users() -> Value {
-    let users = [
-        "agent-browser-rdp",
-        "agent-browser-rdp-a",
-        "agent-browser-rdp-b",
-    ]
-    .iter()
-    .map(|user| inspect_user(user))
-    .collect::<Vec<_>>();
+    let inventory = crate::native::presentation_inventory::StaticRouteInventory::from_environment()
+        .unwrap_or_default();
+    let mut route_specific_users = inventory
+        .route_users()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    route_specific_users.sort();
+    route_specific_users.dedup();
+    let existing_user = env::var("AGENT_BROWSER_RDP_EXISTING_USERNAME")
+        .or_else(|_| env::var("XRDP_AGENT_BROWSER_USERNAME"))
+        .unwrap_or_else(|_| "agent-browser-rdp".to_string());
+    let mut expected_users = route_specific_users.clone();
+    expected_users.push(existing_user.clone());
+    expected_users.sort();
+    expected_users.dedup();
+    let users = expected_users
+        .iter()
+        .map(|user| inspect_user(user))
+        .collect::<Vec<_>>();
     let existing_count = users
         .iter()
         .filter(|user| user.get("exists").and_then(Value::as_bool) == Some(true))
         .count();
     json!({
-        "expectedExistingUser": "agent-browser-rdp",
-        "routeSpecificUsers": ["agent-browser-rdp-a", "agent-browser-rdp-b"],
+        "expectedExistingUser": existing_user,
+        "routeSpecificUsers": route_specific_users,
         "entries": users,
         "existingCount": existing_count,
     })
@@ -996,16 +1007,21 @@ fn route_xsession_starts_terminal(template: &str) -> bool {
 }
 
 fn inspect_route_display_access(route_displays: &Value) -> Value {
+    let routes = route_displays
+        .pointer("/data/routeInventory")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     let mut entries = Vec::new();
-    for label in ["A", "B"] {
-        let Some(route) = route_displays
-            .pointer(&format!("/data/routeSpecificUsers/{label}"))
-            .or_else(|| route_displays.pointer(&format!("/data/routes/{label}")))
-        else {
-            continue;
-        };
+    for (index, route) in routes.iter().enumerate() {
+        let route_id = route
+            .get("id")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("route-{}", index + 1));
         let user = route
-            .get("user")
+            .pointer("/target/routeUser")
+            .or_else(|| route.pointer("/routeSpecific/user"))
             .and_then(Value::as_str)
             .unwrap_or("")
             .to_string();
@@ -1019,7 +1035,7 @@ fn inspect_route_display_access(route_displays: &Value) -> Value {
         }
         let probe = run_display_access_probe(display_name.as_str());
         entries.push(json!({
-            "route": label,
+            "route": route_id,
             "routeUser": user,
             "displayName": display_name,
             "accessible": probe["success"].as_bool() == Some(true),
@@ -1027,7 +1043,7 @@ fn inspect_route_display_access(route_displays: &Value) -> Value {
         }));
     }
     let expected_count = if nested_bool(route_displays, &["data", "success"]) {
-        2
+        routes.len()
     } else {
         0
     };
@@ -1036,7 +1052,7 @@ fn inspect_route_display_access(route_displays: &Value) -> Value {
         .filter(|entry| entry["accessible"].as_bool() == Some(true))
         .count();
     json!({
-        "ready": expected_count > 0 && accessible_count >= expected_count,
+        "ready": expected_count > 0 && accessible_count == expected_count,
         "expectedCount": expected_count,
         "accessibleCount": accessible_count,
         "entries": entries,
@@ -1576,16 +1592,29 @@ fn selected_single_route_display(route_displays: &Value, route_entry: &Value) ->
             return Some(display.trim().to_string());
         }
     }
-    for pointer in [
-        "/data/routes/A/displayName",
-        "/data/routes/B/displayName",
-        "/data/existingUserRoutes/0/displayName",
-        "/data/routeSpecificUsers/A/displayName",
-        "/data/routeSpecificUsers/B/displayName",
-    ] {
-        if let Some(display) = route_displays.pointer(pointer).and_then(Value::as_str) {
-            if !display.trim().is_empty() {
+    if let Some(routes) = route_displays
+        .pointer("/data/routeInventory")
+        .and_then(Value::as_array)
+    {
+        for route in routes {
+            let display = route
+                .get("displayName")
+                .or_else(|| route.pointer("/target/displayName"))
+                .and_then(Value::as_str);
+            if let Some(display) = display.filter(|display| !display.trim().is_empty()) {
                 return Some(display.trim().to_string());
+            }
+        }
+    }
+    if let Some(routes) = route_displays
+        .pointer("/data/existingUserRoutes")
+        .and_then(Value::as_array)
+    {
+        for route in routes {
+            if let Some(display) = route.get("displayName").and_then(Value::as_str) {
+                if !display.trim().is_empty() {
+                    return Some(display.trim().to_string());
+                }
             }
         }
     }
@@ -4181,5 +4210,24 @@ EOF
         let unsafe_route =
             ["doctor", "remote-view", "--route-id", "../route?bad"].map(str::to_string);
         assert!(parse_doctor_args(&unsafe_route).is_err());
+    }
+
+    #[test]
+    fn route_display_access_preserves_four_canonical_inventory_entries() {
+        let report = inspect_route_display_access(&json!({
+            "data": {
+                "success": true,
+                "routeInventory": [
+                    {"id":"route-1","displayName":":81","target":{"routeUser":"rdp-1"}},
+                    {"id":"route-2","displayName":":82","target":{"routeUser":"rdp-2"}},
+                    {"id":"route-3","displayName":":83","target":{"routeUser":"rdp-3"}},
+                    {"id":"route-4","displayName":":84","target":{"routeUser":"rdp-4"}}
+                ]
+            }
+        }));
+
+        assert_eq!(report["expectedCount"], 4);
+        assert_eq!(report["entries"].as_array().unwrap().len(), 4);
+        assert_eq!(report["entries"][3]["route"], "route-4");
     }
 }

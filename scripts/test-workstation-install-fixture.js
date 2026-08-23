@@ -379,7 +379,12 @@ try {
     (path) => basename(path) === 'sync-rdp-guac-route-specific-user-pool.sh',
   );
   const routeSyncSource = readFileSync(routeSync, 'utf8');
-  assert.match(routeSyncSource, /python3 \/dev\/fd\/3 3<<'PY'/);
+  assert.match(routeSyncSource, /ROUTE_USER_HELPER=.*rdp-route-user-pool\.py/);
+  assert.match(
+    routeSyncSource,
+    /printf '%s' "\$ROUTE_USER_POOL_JSON" \| python3 "\$ROUTE_USER_HELPER" sql/,
+    'canonical route-user JSON must reach the SQL renderer through stdin',
+  );
   assert.equal(
     /python3 - \\\n[^]*?\$PASS_A/.test(routeSyncSource),
     false,

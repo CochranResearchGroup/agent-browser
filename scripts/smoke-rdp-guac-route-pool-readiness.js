@@ -8,6 +8,12 @@ import {
   routeDisplayInspectorPath,
   selectRouteDisplayName,
 } from './lib/rdp-route-display-selection.js';
+import {
+  canonicalRouteInventory,
+  legacyRouteLabel,
+  legacyTwoRouteInventory,
+  selectManagedRouteCandidates,
+} from './lib/rdp-route-inventory.js';
 
 const reportOnly = process.argv.includes('--report-only');
 const allowSharedTarget = process.argv.includes('--allow-shared-target');
@@ -565,7 +571,7 @@ function inspectRouteDisplays() {
   if (result.status !== 0) return {};
   try {
     const parsed = JSON.parse(result.stdout.trim());
-    return parsed.env || {};
+    return parsed;
   } catch {
     return {};
   }
@@ -586,52 +592,51 @@ function redactConnection(connection) {
   };
 }
 
-const inferredRouteDisplays = inspectRouteDisplays();
+function configuredRouteInventory() {
+  const raw = process.env.AGENT_BROWSER_RDP_ROUTE_POOL_JSON;
+  return raw ? canonicalRouteInventory(JSON.parse(raw)) : legacyTwoRouteInventory(process.env);
+}
 
-function routeTargetDisplayName(index) {
-  const label = index === 0 ? 'A' : 'B';
+const configuredRoutes = configuredRouteInventory();
+const inferredRouteInspection = inspectRouteDisplays();
+
+function routeConfiguration(connection, index, inventory) {
+  const connectionId = String(connection.connectionId || '');
+  return inventory.find((route) =>
+    String(route.connectionId || '') === connectionId ||
+    route.routeId === `guacamole:${connectionId}` ||
+    (route.connectionName && route.connectionName === connection.connectionName),
+  ) || inventory[index] || null;
+}
+
+function routeTargetDisplayName(connection, index) {
+  const configured = routeConfiguration(connection, index, configuredRoutes);
+  const inferred = routeConfiguration(connection, index, inferredRouteInspection.routeInventory || []);
   return selectRouteDisplayName({
-    configuredDisplayName: process.env[`AGENT_BROWSER_RDP_ROUTE_${label}_DISPLAY_NAME`],
-    inferredDisplayName: inferredRouteDisplays[`AGENT_BROWSER_RDP_ROUTE_${label}_DISPLAY_NAME`],
+    configuredDisplayName: configured?.target?.displayName,
+    inferredDisplayName: inferred?.target?.displayName || inferred?.displayName,
   });
 }
 
 function routeTargetUser(connection, index) {
-  const label = index === 0 ? 'A' : 'B';
-  const configured = process.env[`AGENT_BROWSER_RDP_ROUTE_${label}_USERNAME`] ||
-    inferredRouteDisplays[`AGENT_BROWSER_RDP_ROUTE_${label}_USERNAME`];
-  if (configured) return configured;
-  if (/^Agent Browser RDP Existing User Route [AB]$/.test(connection.connectionName || '')) {
+  const configured = routeConfiguration(connection, index, configuredRoutes);
+  const inferred = routeConfiguration(connection, index, inferredRouteInspection.routeInventory || []);
+  const routeUser = configured?.target?.routeUser || inferred?.target?.routeUser;
+  if (routeUser) return routeUser;
+  if (/^Agent Browser RDP Existing User Route (?:[AB]|\d+)$/.test(connection.connectionName || '')) {
     return process.env.AGENT_BROWSER_RDP_USERNAME || 'agent-browser-rdp';
-  }
-  if (/^Agent Browser RDP Route [AB]$/.test(connection.connectionName || '')) {
-    return label === 'A'
-      ? (process.env.AGENT_BROWSER_RDP_ROUTE_A_USERNAME || 'agent-browser-rdp-a')
-      : (process.env.AGENT_BROWSER_RDP_ROUTE_B_USERNAME || 'agent-browser-rdp-b');
   }
   return null;
 }
 
 function routePoolCandidates(connections) {
-  const routeSpecific = connections.filter((connection) =>
-    /^Agent Browser RDP Route [AB]$/.test(connection.connectionName || ''),
-  );
-  if (routeSpecific.length >= 2) return routeSpecific.slice(0, 2);
-
-  const existingUser = connections.filter((connection) =>
-    /^Agent Browser RDP Existing User Route [AB]$/.test(connection.connectionName || ''),
-  );
-  if (existingUser.length >= 2) return existingUser.slice(0, 2);
-
-  const managed = connections.filter((connection) =>
-    /^Agent Browser RDP (Existing User Route|Route) [AB]$/.test(connection.connectionName || ''),
-  );
-  return (managed.length >= 2 ? managed : connections).slice(0, 2);
+  return selectManagedRouteCandidates(connections);
 }
 
 function routePoolEntry(connection, index, routeBases, routeReadiness) {
-  const label = index === 0 ? 'a' : 'b';
-  const displayName = routeTargetDisplayName(index);
+  const configured = routeConfiguration(connection, index, configuredRoutes);
+  const legacyLabel = legacyRouteLabel(index);
+  const displayName = routeTargetDisplayName(connection, index);
   const routeUser = routeTargetUser(connection, index);
   const clientId = guacamoleClientId(connection.connectionId);
   const localEmbedUrl = routeBases.localBase ? `${routeBases.localBase}#/client/${clientId}` : null;
@@ -640,7 +645,9 @@ function routePoolEntry(connection, index, routeBases, routeReadiness) {
   const frameUrl = localEmbedUrl || publicOperatorUrl || healthUrl;
   const externalUrl = publicOperatorUrl || frameUrl;
   return {
-    id: `guacamole-rdp-${label}`,
+    id: configured?.id || (legacyLabel && /^Agent Browser RDP Route [AB]$/.test(connection.connectionName || '')
+      ? `guacamole-rdp-${legacyLabel.toLowerCase()}`
+      : `guacamole-rdp-${connection.connectionId}`),
     routeId: `guacamole:${connection.connectionId}`,
     connectionId: connection.connectionId,
     connectionName: connection.connectionName,
@@ -737,16 +744,16 @@ const rdpTcpProbes = guacdReady
     ]));
 const routeDisplayProbes = new Map(selectedConnections.map((connection, index) => [
   connection.connectionId,
-  routeDisplayProbe(routeTargetDisplayName(index)),
+  routeDisplayProbe(routeTargetDisplayName(connection, index)),
 ]));
 const redactedConnections = connections.map(redactConnection);
 const targetIdentities = connections.map(targetIdentity);
 const selectedTargetIdentities = selectedConnections.map(targetIdentity);
 const distinctTargetIdentities = new Set(targetIdentities);
 const distinctSelectedTargetIdentities = new Set(selectedTargetIdentities);
-const hasTwoConnections = connections.length >= 2;
-const hasTwoSelectedConnections = selectedConnections.length >= 2;
-const hasTwoDistinctTargets = distinctSelectedTargetIdentities.size >= 2;
+const hasMinimumConnections = connections.length >= 2;
+const hasMinimumSelectedConnections = selectedConnections.length >= 2;
+const allSelectedTargetsDistinct = distinctSelectedTargetIdentities.size === selectedConnections.length;
 const selectedRdpTargetsReady = selectedConnections.length > 0 &&
   selectedConnections.every((connection) => rdpTcpProbes.get(connection.connectionId)?.ok === true);
 const selectedRouteDisplaysReady = selectedConnections.length > 0 &&
@@ -760,12 +767,12 @@ const ready = Boolean(
     guacamoleLoginProbe.ok &&
     query.ok &&
     permissions.ok &&
-    hasTwoSelectedConnections &&
+    hasMinimumSelectedConnections &&
     selectedRdpTargetsReady &&
     selectedRouteDisplaysReady &&
-    (hasTwoDistinctTargets || allowSharedTarget),
+    (allSelectedTargetsDistinct || allowSharedTarget),
 );
-const routePoolJson = ready || hasTwoSelectedConnections
+const routePoolJson = ready || hasMinimumSelectedConnections
   ? selectedConnections.map((connection, index) => {
       const rdpProbe = rdpTcpProbes.get(connection.connectionId);
       const displayProbe = routeDisplayProbes.get(connection.connectionId);
@@ -887,12 +894,12 @@ const components = [
   {
     component: 'guacamole_rdp_connections',
     ...readiness(
-      query.ok && hasTwoConnections ? 'ready' : 'blocked',
+      query.ok && hasMinimumConnections ? 'ready' : 'blocked',
       query.ok
         ? `found ${connections.length} RDP Guacamole connection(s)`
         : query.error,
-      query.ok && hasTwoConnections ? 'none' : 'provision_second_guacamole_rdp_connection',
-      query.ok && hasTwoConnections
+      query.ok && hasMinimumConnections ? 'none' : 'provision_second_guacamole_rdp_connection',
+      query.ok && hasMinimumConnections
         ? 'At least two Guacamole RDP connection records are present.'
         : 'Provision at least two Guacamole RDP connections before running the many-to-many live gate.',
     ),
@@ -913,11 +920,11 @@ const components = [
   {
     component: 'distinct_rdp_targets',
     ...readiness(
-      hasTwoSelectedConnections && (hasTwoDistinctTargets || allowSharedTarget) ? 'ready' : 'blocked',
+      hasMinimumSelectedConnections && (allSelectedTargetsDistinct || allowSharedTarget) ? 'ready' : 'blocked',
       `found ${distinctSelectedTargetIdentities.size} distinct selected target identity key(s) across ${selectedConnections.length} selected route candidate(s); ${distinctTargetIdentities.size} distinct target identity key(s) across ${connections.length} RDP connection(s)`,
-      hasTwoSelectedConnections && (hasTwoDistinctTargets || allowSharedTarget) ? 'none' : 'provision_distinct_rdp_targets',
-      hasTwoSelectedConnections && hasTwoDistinctTargets
-        ? 'The selected route candidates point at distinct target identities.'
+      hasMinimumSelectedConnections && (allSelectedTargetsDistinct || allowSharedTarget) ? 'none' : 'provision_distinct_rdp_targets',
+      hasMinimumSelectedConnections && allSelectedTargetsDistinct
+        ? 'Every selected route candidate points at a distinct target identity.'
         : 'P03 requires routes that do not collapse onto the same shared desktop. Use distinct RDP targets or pass --allow-shared-target only for diagnostics.',
     ),
   },

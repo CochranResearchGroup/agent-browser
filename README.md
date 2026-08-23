@@ -2734,14 +2734,17 @@ and install the narrow sudoers rule. Open a new shell or run
 `newgrp agent-browser` after applying it. Then run
 `pnpm setup:rdp-guac-route-pool` only after the doctor or display inspector
 proves the existing route topology collapsed to one display, or when a
-reviewed operator override passes `--force`. It creates or updates two local
-XRDP users, creates or updates two Guacamole RDP connections, grants Guacamole
+reviewed operator override passes `--force`. It creates or updates every local
+XRDP user declared by `AGENT_BROWSER_RDP_ROUTE_USER_POOL_JSON`, creates or
+updates the matching Guacamole RDP connections, grants Guacamole
 read permission, stores generated XRDP passwords under the user-scoped
 Guacamole secret file, restarts XRDP, and then tells you to rerun the
 route-pool readiness smoke. The setup command requires the installed
 passwordless helper and fails closed when bootstrap is incomplete. It never
 falls back to direct interactive sudo and does not print the generated
-passwords. Route-pool users get an idle Openbox session
+passwords. The inventory is a JSON array with `id`, `connectionName`, and
+`routeUser`; `legacyConnectionName` is optional. When it is absent, the legacy
+two-route environment is adapted for compatibility. Route-pool users get an idle Openbox session
 that keeps XRDP alive without starting a foreground terminal, so browser-control
 routes begin on a terminal-free desktop. This bootstrap only creates distinct
 RDP sessions; P03 is complete only after the many-to-many live gate proves
@@ -2763,10 +2766,11 @@ refuses to auto-import over a partial `guacamole_*` schema, a stale Docker
 Desktop WSL bind attachment, a recorded cluster-identity change, or a wholly
 absent schema for a recorded identity. These gates prevent a restart from
 silently replacing recoverable database state with a blank schema.
-After opening both route sessions, run
+After opening the configured route sessions, run
 `pnpm inspect:rdp-route-displays` to map the route users to active XRDP display
-names and print `AGENT_BROWSER_RDP_ROUTE_A_DISPLAY_NAME` and
-`AGENT_BROWSER_RDP_ROUTE_B_DISPLAY_NAME` for the live gate. Pass `--shell` to
+names and print the full `AGENT_BROWSER_RDP_ROUTE_POOL_JSON` inventory for the
+live gate. The first two legacy display variables remain compatibility output.
+Pass `--shell` to
 the display inspector or route-pool readiness smoke when you want copyable
 `export ...` lines instead of JSON. If the agent user cannot launch onto those
 XRDP-owned displays, run `pnpm grant:rdp-route-display-access -- --dry-run` to
@@ -2783,10 +2787,10 @@ allocation inferred from Xorg over persisted display hints.
 Use `pnpm test:rdp-guac-many-to-many-live` for the Slice H many-to-many gate.
 It prefers the installed `agent-browser` command and, when route variables are
 not already set, hydrates `AGENT_BROWSER_RDP_ROUTE_POOL_JSON` and route-display
-variables from `agent-browser doctor remote-view --json`. The gate still
-accepts two distinct route-pool entries through `AGENT_BROWSER_RDP_ROUTE_POOL_JSON`
-or paired `AGENT_BROWSER_RDP_ROUTE_A_*` and `AGENT_BROWSER_RDP_ROUTE_B_*`
-variables. It auto-discovers common local viewer browsers when
+variables from `agent-browser doctor remote-view --json`. The gate requires at
+least two distinct entries and preserves every entry in
+`AGENT_BROWSER_RDP_ROUTE_POOL_JSON`. Paired legacy route variables are accepted
+through the compatibility adapter. It auto-discovers common local viewer browsers when
 `AGENT_BROWSER_RDP_TEST_CLIENT_A_EXECUTABLE` and
 `AGENT_BROWSER_RDP_TEST_CLIENT_B_EXECUTABLE` are unset. The harness requires
 local embeddable Guacamole frame URLs by default; set
@@ -2794,9 +2798,8 @@ local embeddable Guacamole frame URLs by default; set
 `AGENT_BROWSER_RDP_TEST_ALLOW_PUBLIC_GUAC_URL=1` only for a reviewed public
 ingress diagnostic.
 Route entries may include `target.displayName` in
-`AGENT_BROWSER_RDP_ROUTE_POOL_JSON`, or
-`AGENT_BROWSER_RDP_ROUTE_A_DISPLAY_NAME` and
-`AGENT_BROWSER_RDP_ROUTE_B_DISPLAY_NAME` for paired environment variables.
+`AGENT_BROWSER_RDP_ROUTE_POOL_JSON`; paired display variables remain a legacy
+two-route input handled by the compatibility adapter.
 When display targets are present, the smoke launches each browser directly on
 that route's XRDP display with `displayIsolation="shared_display"` and requires
 the two display names to be distinct. When display targets are absent, it uses

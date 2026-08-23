@@ -4,7 +4,7 @@ Date: 2026-08-23
 
 State: IN PROGRESS
 
-Execution state: `slice_a_source_accepted`
+Execution state: `slice_b_source_accepted`
 
 Lane: P124
 

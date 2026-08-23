@@ -91,6 +91,8 @@ const OPEN_ROUTE_DISPLAYS_SCRIPT: &str =
     include_str!("../../scripts/open-rdp-guac-route-displays.js");
 const ROUTE_DISPLAY_SELECTION_SCRIPT: &str =
     include_str!("../../scripts/lib/rdp-route-display-selection.js");
+const ROUTE_INVENTORY_SCRIPT: &str = include_str!("../../scripts/lib/rdp-route-inventory.js");
+const ROUTE_USER_POOL_SCRIPT: &str = include_str!("../../scripts/lib/rdp-route-user-pool.py");
 const ENSURE_POSTGRES_SCRIPT: &str = include_str!("../../scripts/ensure-rdp-guac-postgres.sh");
 const POSTGRES_DURABILITY_SCRIPT: &str =
     include_str!("../../scripts/guacamole-postgres-durability.sh");
@@ -99,7 +101,7 @@ const SYNC_ROUTE_POOL_SCRIPT: &str =
 const GRANT_ROUTE_DISPLAY_ACCESS_SCRIPT: &str =
     include_str!("../../scripts/grant-rdp-route-display-access.sh");
 const CONTROLLER_PACKAGE_JSON: &str = "{\n  \"private\": true,\n  \"type\": \"module\"\n}\n";
-const CONTROLLER_ASSETS: [(&str, &str, bool); 10] = [
+const CONTROLLER_ASSETS: [(&str, &str, bool); 12] = [
     (
         "scripts/smoke-rdp-guac-route-pool-readiness.js",
         ROUTE_POOL_READINESS_SCRIPT,
@@ -143,6 +145,16 @@ const CONTROLLER_ASSETS: [(&str, &str, bool); 10] = [
     (
         "scripts/lib/rdp-route-display-selection.js",
         ROUTE_DISPLAY_SELECTION_SCRIPT,
+        false,
+    ),
+    (
+        "scripts/lib/rdp-route-inventory.js",
+        ROUTE_INVENTORY_SCRIPT,
+        false,
+    ),
+    (
+        "scripts/lib/rdp-route-user-pool.py",
+        ROUTE_USER_POOL_SCRIPT,
         false,
     ),
     ("package.json", CONTROLLER_PACKAGE_JSON, false),
@@ -2958,36 +2970,44 @@ fn route_readiness(
 }
 
 fn validate_canonical_route_pool(route_pool: &[Value]) -> Result<(), String> {
-    if route_pool.len() != 2 {
+    if route_pool.len() < 2 {
         return Err(format!(
-            "Canonical route pool must contain exactly two routes, found {}",
+            "Canonical route pool must contain at least two routes, found {}",
             route_pool.len()
         ));
     }
-    let expected = [
-        ("guacamole-rdp-a", "guacamole:1"),
-        ("guacamole-rdp-b", "guacamole:2"),
-    ];
-    let mut displays = Vec::new();
-    for (id, route_id) in expected {
-        let route = route_pool
-            .iter()
-            .find(|route| route.get("id").and_then(Value::as_str) == Some(id))
-            .ok_or_else(|| format!("Canonical route pool is missing {id}"))?;
-        if route.get("routeId").and_then(Value::as_str) != Some(route_id) {
-            return Err(format!(
-                "{id} did not resolve to canonical route {route_id}"
-            ));
-        }
+    let mut ids = std::collections::BTreeSet::new();
+    let mut route_ids = std::collections::BTreeSet::new();
+    let mut displays = std::collections::BTreeSet::new();
+    for (index, route) in route_pool.iter().enumerate() {
+        let id = route
+            .get("id")
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| format!("Canonical route at index {index} is missing an id"))?;
+        let route_id = route
+            .get("routeId")
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| format!("Canonical route {id} is missing a routeId"))?;
         let display = route
             .pointer("/target/displayName")
             .and_then(Value::as_str)
             .filter(|display| !display.is_empty())
             .ok_or_else(|| format!("{id} is missing a selected route display"))?;
-        displays.push(display.to_string());
-    }
-    if displays[0] == displays[1] {
-        return Err("Canonical route pool resolved both routes to one display".to_string());
+        if !ids.insert(id) {
+            return Err(format!("Canonical route pool contains duplicate id {id}"));
+        }
+        if !route_ids.insert(route_id) {
+            return Err(format!(
+                "Canonical route pool contains duplicate routeId {route_id}"
+            ));
+        }
+        if !displays.insert(display) {
+            return Err(format!(
+                "Canonical route pool resolved multiple routes to display {display}"
+            ));
+        }
     }
     Ok(())
 }
@@ -3057,38 +3077,23 @@ fn validate_service_reconcile_payload(payload: &Value) -> Result<(), String> {
 }
 
 fn update_canonical_runtime_env(root: &Path, route_pool: &[Value]) -> Result<(), String> {
-    let route_a = route_pool
-        .iter()
-        .find(|route| route.get("id").and_then(Value::as_str) == Some("guacamole-rdp-a"))
-        .ok_or_else(|| "Canonical route A is missing".to_string())?;
-    let route_b = route_pool
-        .iter()
-        .find(|route| route.get("id").and_then(Value::as_str) == Some("guacamole-rdp-b"))
-        .ok_or_else(|| "Canonical route B is missing".to_string())?;
-    let route_url = route_a
-        .pointer("/routeDescriptor/localEmbedUrl")
-        .or_else(|| route_a.get("frameUrl"))
-        .and_then(Value::as_str)
-        .ok_or_else(|| "Canonical route A is missing a local operator URL".to_string())?;
-    let display_a = route_a
-        .pointer("/target/displayName")
-        .and_then(Value::as_str)
-        .ok_or_else(|| "Canonical route A is missing a display".to_string())?;
-    let display_b = route_b
-        .pointer("/target/displayName")
-        .and_then(Value::as_str)
-        .ok_or_else(|| "Canonical route B is missing a display".to_string())?;
+    let route_environment =
+        crate::native::presentation_inventory::runtime_route_environment(route_pool)?;
     let header_user = env::var("USER").unwrap_or_else(|_| "agent-browser".to_string());
-    upsert_env_values(
-        &root.join(".agent-browser/.env"),
-        &[
-            ("AGENT_BROWSER_REMOTE_VIEW_PROVIDER", "rdp_gateway"),
-            ("AGENT_BROWSER_REMOTE_VIEW_URL", route_url),
-            ("AGENT_BROWSER_GUACAMOLE_HEADER_USER", &header_user),
-            ("AGENT_BROWSER_RDP_ROUTE_A_DISPLAY_NAME", display_a),
-            ("AGENT_BROWSER_RDP_ROUTE_B_DISPLAY_NAME", display_b),
-        ],
-    )
+    let mut values = vec![
+        ("AGENT_BROWSER_REMOTE_VIEW_PROVIDER", "rdp_gateway"),
+        (
+            "AGENT_BROWSER_REMOTE_VIEW_URL",
+            &route_environment.remote_view_url,
+        ),
+        ("AGENT_BROWSER_GUACAMOLE_HEADER_USER", &header_user),
+        (
+            "AGENT_BROWSER_RDP_ROUTE_POOL_JSON",
+            &route_environment.route_pool_json,
+        ),
+    ];
+    values.extend(route_environment.legacy_display_env_values()?);
+    upsert_env_values(&root.join(".agent-browser/.env"), &values)
 }
 
 fn env_file_value(path: &Path, key: &str) -> Option<String> {
@@ -10693,11 +10698,26 @@ mod tests {
     }
 
     #[test]
+    fn canonical_route_pool_accepts_four_opaque_distinct_routes() {
+        let route_pool = (0..4)
+            .map(|index| {
+                serde_json::json!({
+                    "id": format!("route-slot-{index}"),
+                    "routeId": format!("guacamole:{}", 20 + index),
+                    "target": {"displayName": format!(":{}", 30 + index)}
+                })
+            })
+            .collect::<Vec<_>>();
+
+        validate_canonical_route_pool(&route_pool).unwrap();
+    }
+
+    #[test]
     fn canonical_route_pool_rejects_route_or_display_drift() {
-        let wrong_route = vec![
+        let duplicate_route = vec![
             serde_json::json!({
                 "id": "guacamole-rdp-a",
-                "routeId": "guacamole:4",
+                "routeId": "guacamole:2",
                 "target": {"displayName": ":10"}
             }),
             serde_json::json!({
@@ -10706,9 +10726,9 @@ mod tests {
                 "target": {"displayName": ":11"}
             }),
         ];
-        assert!(validate_canonical_route_pool(&wrong_route)
+        assert!(validate_canonical_route_pool(&duplicate_route)
             .unwrap_err()
-            .contains("guacamole:1"));
+            .contains("duplicate routeId"));
 
         let collapsed_display = vec![
             serde_json::json!({
@@ -10724,7 +10744,7 @@ mod tests {
         ];
         assert!(validate_canonical_route_pool(&collapsed_display)
             .unwrap_err()
-            .contains("one display"));
+            .contains("multiple routes"));
     }
 
     #[test]

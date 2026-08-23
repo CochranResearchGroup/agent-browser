@@ -1514,17 +1514,17 @@ fn route_display_names() -> HashSet<String> {
 }
 
 fn env_route_display_names() -> HashSet<String> {
-    let mut names = HashSet::new();
-    for key in [
-        "AGENT_BROWSER_RDP_ROUTE_A_DISPLAY_NAME",
-        "AGENT_BROWSER_RDP_ROUTE_B_DISPLAY_NAME",
-        "AGENT_BROWSER_REMOTE_HEADED_DISPLAY",
-    ] {
-        if let Ok(value) = env::var(key) {
-            let value = value.trim();
-            if is_x11_display_name(value) {
-                names.insert(value.to_string());
-            }
+    let inventory = crate::native::presentation_inventory::StaticRouteInventory::from_environment()
+        .unwrap_or_default();
+    let mut names = inventory
+        .display_names()
+        .filter(|value| is_x11_display_name(value))
+        .map(str::to_string)
+        .collect::<HashSet<_>>();
+    if let Ok(value) = env::var("AGENT_BROWSER_REMOTE_HEADED_DISPLAY") {
+        let value = value.trim();
+        if is_x11_display_name(value) {
+            names.insert(value.to_string());
         }
     }
     names
@@ -1532,15 +1532,17 @@ fn env_route_display_names() -> HashSet<String> {
 
 fn inspect_route_display_names() -> HashSet<String> {
     let mut names = HashSet::new();
-    let route_users = [
-        env::var("AGENT_BROWSER_RDP_ROUTE_A_USERNAME")
-            .unwrap_or_else(|_| "agent-browser-rdp-a".to_string()),
-        env::var("AGENT_BROWSER_RDP_ROUTE_B_USERNAME")
-            .unwrap_or_else(|_| "agent-browser-rdp-b".to_string()),
+    let inventory = crate::native::presentation_inventory::StaticRouteInventory::from_environment()
+        .unwrap_or_default();
+    let mut route_users = inventory
+        .route_users()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    route_users.push(
         env::var("AGENT_BROWSER_RDP_EXISTING_USERNAME")
             .or_else(|_| env::var("XRDP_AGENT_BROWSER_USERNAME"))
             .unwrap_or_else(|_| "agent-browser-rdp".to_string()),
-    ];
+    );
 
     if let Ok(output) = Command::new("ps")
         .args(["-eo", "user:64=,comm=,args="])

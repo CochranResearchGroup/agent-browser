@@ -114,7 +114,7 @@ try {
   writeSecrets({ includeRouteBPassword: false });
   const missingSecret = run(['--dry-run']);
   assert.equal(missingSecret.status, 1, 'missing route-specific secrets must fail closed');
-  assert.match(missingSecret.stderr, /XRDP_AGENT_BROWSER_ROUTE_B_PASSWORD/);
+  assert.match(missingSecret.stderr, /route_user_inventory_password_missing/);
 
   console.log('RDP Guacamole route-specific user sync behavior passed');
 } finally {

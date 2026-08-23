@@ -5848,6 +5848,12 @@ Environment:
                                --route-pool-entry-json is supplied, remote-view
                                open carries this pool in the request so a fresh
                                caller preflight can override stale daemon state.
+  AGENT_BROWSER_RDP_ROUTE_USER_POOL_JSON
+                               Optional JSON array for workstation route-user
+                               setup. Each entry declares id, connectionName,
+                               routeUser, and optional legacyConnectionName.
+                               Passwords are generated and stored in the
+                               user-scoped Guacamole secret file.
 
 Global placement:
   Global flags such as --runtime-profile, --session, --session-name,
@@ -5905,6 +5911,8 @@ Options:
 Environment:
   AGENT_BROWSER_RDP_ROUTE_POOL_JSON
                        JSON route-pool array copied into remote-view open requests when no inline route entry is supplied
+  AGENT_BROWSER_RDP_ROUTE_USER_POOL_JSON
+                       Optional arbitrary-size route-user inventory consumed by workstation route setup
 
 Post-setup validation:
   When profileSmoke.available is true, run pnpm test:wsl-windows-chromium-profile-live

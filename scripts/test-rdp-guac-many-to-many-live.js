@@ -17,6 +17,11 @@ import {
   configureRemoteHeadedContext,
   loadAgentBrowserEnvFromRealHome,
 } from './smoke-remote-headed-utils.js';
+import {
+  canonicalRouteInventory,
+  legacyRouteLabel,
+  legacyTwoRouteInventory,
+} from './lib/rdp-route-inventory.js';
 
 loadAgentBrowserEnvFromRealHome();
 
@@ -155,22 +160,9 @@ function runChecked(command, args, label) {
 function parseRoutePoolConfig() {
   if (envValue('AGENT_BROWSER_RDP_ROUTE_POOL_JSON')) {
     const parsed = JSON.parse(envValue('AGENT_BROWSER_RDP_ROUTE_POOL_JSON'));
-    assert(Array.isArray(parsed), 'AGENT_BROWSER_RDP_ROUTE_POOL_JSON must be an array');
-    return parsed;
+    return canonicalRouteInventory(parsed);
   }
-  const route = (label) => ({
-    id: envValue(`AGENT_BROWSER_RDP_ROUTE_${label}_POOL_ENTRY_ID`) || `pool-${label.toLowerCase()}`,
-    routeId: envValue(`AGENT_BROWSER_RDP_ROUTE_${label}_ID`),
-    connectionId: envValue(`AGENT_BROWSER_RDP_ROUTE_${label}_CONNECTION_ID`),
-    connectionName: envValue(`AGENT_BROWSER_RDP_ROUTE_${label}_CONNECTION_NAME`),
-    frameUrl: envValue(`AGENT_BROWSER_RDP_ROUTE_${label}_FRAME_URL`),
-    externalUrl: envValue(`AGENT_BROWSER_RDP_ROUTE_${label}_EXTERNAL_URL`),
-    providerMode: envValue(`AGENT_BROWSER_RDP_ROUTE_${label}_PROVIDER_MODE`) || 'simultaneous_view',
-    target: {
-      displayName: envValue(`AGENT_BROWSER_RDP_ROUTE_${label}_DISPLAY_NAME`),
-    },
-  });
-  return [route('A'), route('B')].filter((item) => item.routeId || item.connectionId || item.frameUrl);
+  return legacyTwoRouteInventory(process.env);
 }
 
 function routeIdentity(route) {
@@ -178,11 +170,13 @@ function routeIdentity(route) {
 }
 
 function normalizeRouteConfig(route, index) {
-  const label = index === 0 ? 'A' : 'B';
-  const routeId = route.routeId || (route.connectionId ? `guacamole:${route.connectionId}` : `route-${label.toLowerCase()}`);
-  const envDisplayName = envValue(`AGENT_BROWSER_RDP_ROUTE_${label}_DISPLAY_NAME`);
+  const legacyLabel = legacyRouteLabel(index);
+  const routeId = route.routeId || (route.connectionId ? `guacamole:${route.connectionId}` : `route-${index + 1}`);
+  const envDisplayName = legacyLabel
+    ? envValue(`AGENT_BROWSER_RDP_ROUTE_${legacyLabel}_DISPLAY_NAME`)
+    : null;
   return {
-    id: route.id || `pool-${label.toLowerCase()}`,
+    id: route.id || `route-${index + 1}`,
     routeId,
     connectionId: route.connectionId || null,
     connectionName: route.connectionName || null,
@@ -199,25 +193,25 @@ function normalizeRouteConfig(route, index) {
 }
 
 function requireDistinctRoutePool() {
-  const routePool = parseRoutePoolConfig().slice(0, 2).map(normalizeRouteConfig);
+  const routePool = parseRoutePoolConfig().map(normalizeRouteConfig);
   assert(
     routePool.length >= 2,
-    'Two distinct route-pool entries are required. Set AGENT_BROWSER_RDP_ROUTE_POOL_JSON or AGENT_BROWSER_RDP_ROUTE_A_* and AGENT_BROWSER_RDP_ROUTE_B_*.',
+    'At least two distinct route-pool entries are required. Set AGENT_BROWSER_RDP_ROUTE_POOL_JSON; legacy two-route inputs remain supported through the compatibility adapter.',
   );
   for (const route of routePool) {
     assert(route.routeId || route.connectionId, `Route entry is missing routeId or connectionId: ${JSON.stringify(route)}`);
     assert(route.frameUrl || route.externalUrl, `Route entry is missing frameUrl or externalUrl: ${JSON.stringify(route)}`);
   }
+  const identities = routePool.map(routeIdentity);
   assert(
-    routeIdentity(routePool[0]) && routeIdentity(routePool[0]) !== routeIdentity(routePool[1]),
+    identities.every(Boolean) && new Set(identities).size === identities.length,
     `Route entries must have distinct connectionId, routeId, or URL identity: ${JSON.stringify(routePool)}`,
   );
-  const displayA = routePool[0].target?.displayName;
-  const displayB = routePool[1].target?.displayName;
-  if (displayA || displayB) {
+  const displays = routePool.map((route) => route.target?.displayName).filter(Boolean);
+  if (displays.length > 0) {
     assert(
-      displayA && displayB && displayA !== displayB,
-      `Route entries with displayName targets must declare two distinct displayName values: ${JSON.stringify(routePool)}`,
+      displays.length === routePool.length && new Set(displays).size === displays.length,
+      `Route entries with displayName targets must declare distinct displayName values: ${JSON.stringify(routePool)}`,
     );
   }
   return routePool;
@@ -1156,9 +1150,8 @@ try {
     agentBrowserCommand: context.env.AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD || 'scripts/ci/cargo-safe.sh run --manifest-path cli/Cargo.toml',
     routePoolConfigHint: {
       json: 'AGENT_BROWSER_RDP_ROUTE_POOL_JSON',
-      routeA: 'AGENT_BROWSER_RDP_ROUTE_A_ID, AGENT_BROWSER_RDP_ROUTE_A_FRAME_URL, AGENT_BROWSER_RDP_ROUTE_A_CONNECTION_ID',
-      routeB: 'AGENT_BROWSER_RDP_ROUTE_B_ID, AGENT_BROWSER_RDP_ROUTE_B_FRAME_URL, AGENT_BROWSER_RDP_ROUTE_B_CONNECTION_ID',
-      doctor: 'agent-browser doctor remote-view --json can supply AGENT_BROWSER_RDP_ROUTE_POOL_JSON and display-name variables when the route pool is ready',
+      compatibility: 'legacy two-route variables are accepted only through the route inventory compatibility adapter',
+      doctor: 'agent-browser doctor remote-view --json can supply AGENT_BROWSER_RDP_ROUTE_POOL_JSON when the route pool is ready',
     },
   });
   console.error(err.stack || err.message);

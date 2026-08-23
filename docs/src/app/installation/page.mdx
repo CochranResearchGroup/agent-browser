@@ -24,6 +24,8 @@ agent-browser install workstation gc --dry-run --json  # Preview safe old-genera
 This is the fastest option. Commands run through the native Rust CLI directly
 with sub-millisecond parsing overhead.
 
+For source-checkout capacity work, `AGENT_BROWSER_RDP_ROUTE_USER_POOL_JSON` may declare an arbitrary bounded list of route users and Guacamole connection names. This source configuration does not change the installed production runtime until a separately authorized workstation reconciliation applies it.
+
 ## Package-manager channels
 
 npm, Homebrew, and Cargo are not authoritative release channels for this fork.

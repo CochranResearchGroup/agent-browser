@@ -64,19 +64,20 @@ except Exception as exc:
     print(f"failed to parse display report: {exc}", file=sys.stderr)
     sys.exit(1)
 
-routes = report.get("routeSpecificUsers") or {}
-for label in ("A", "B"):
-    route = routes.get(label) or {}
-    user = route.get("user")
-    display = route.get("displayName")
+routes = report.get("routeInventory") or []
+for index, route in enumerate(routes):
+    route_id = route.get("id") or f"route-{index + 1}"
+    user = ((route.get("target") or {}).get("routeUser")
+            or (route.get("routeSpecific") or {}).get("user"))
+    display = route.get("displayName") or (route.get("target") or {}).get("displayName")
     if not user or not display:
         continue
-    print(f"{label}\t{user}\t{display}")
+    print(f"{route_id}\t{user}\t{display}")
 PY
 )"
 
 if [[ -z "$ROUTES" ]]; then
-  echo "No active route-specific displays found. Open routes A and B first, then rerun." >&2
+  echo "No active route-specific displays found. Open every configured route first, then rerun." >&2
   exit 1
 fi
 

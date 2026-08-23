@@ -3,6 +3,10 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import {
+  canonicalRouteInventory,
+  selectManagedRouteCandidates,
+} from './lib/rdp-route-inventory.js';
 
 const reportOnly = process.argv.includes('--report-only');
 const dryRun = process.argv.includes('--dry-run');
@@ -100,7 +104,7 @@ function routePoolFromEnv() {
   if (!raw) return null;
   const parsed = JSON.parse(raw);
   if (!Array.isArray(parsed)) throw new Error('AGENT_BROWSER_RDP_ROUTE_POOL_JSON must be an array');
-  return parsed;
+  return canonicalRouteInventory(parsed);
 }
 
 function routePoolFromDoctor() {
@@ -113,11 +117,8 @@ function routePoolFromDatabase() {
 SELECT connection_id, connection_name
 FROM guacamole_connection
 WHERE parent_id IS NULL
-  AND connection_name IN ('Agent Browser RDP Route A', 'Agent Browser RDP Route B')
-ORDER BY CASE connection_name
-  WHEN 'Agent Browser RDP Route A' THEN 1
-  WHEN 'Agent Browser RDP Route B' THEN 2
-END;
+  AND connection_name ~ '^Agent Browser RDP (Existing User Route|Route) ([AB]|[0-9]+)$'
+ORDER BY connection_id;
 `.trim();
   const result = commandResult('docker', [
     'exec',
@@ -135,7 +136,7 @@ END;
   ]);
   if (result.status !== 0) return null;
   const rows = result.stdout.trim().split(/\r?\n/).filter(Boolean).map((line) => line.split('\t'));
-  if (rows.length !== 2 || rows.some(([id, name]) => !id || !name)) return null;
+  if (rows.length < 2 || rows.some(([id, name]) => !id || !name)) return null;
   const agentHome = process.env.AGENT_BROWSER_HOME || join(process.env.HOME || '', '.agent-browser');
   const guacamolePort = envFileValue(
     join(agentHome, 'guacamole', '.env'),
@@ -144,11 +145,15 @@ END;
   const baseUrl = process.env.AGENT_BROWSER_GUACAMOLE_BASE_URL ||
     `http://127.0.0.1:${guacamolePort}/guacamole/`;
   const dataSource = process.env.AGENT_BROWSER_GUACAMOLE_DATA_SOURCE || 'postgresql';
-  return rows.map(([connectionId, connectionName], index) => {
+  const connections = selectManagedRouteCandidates(rows.map(([connectionId, connectionName]) => ({
+    connectionId,
+    connectionName,
+  })));
+  return canonicalRouteInventory(connections.map(({ connectionId, connectionName }) => {
     const clientId = Buffer.from(`${connectionId}\0c\0${dataSource}`, 'utf8').toString('base64');
     const frameUrl = `${baseUrl.replace(/\/?$/, '/')}#/client/${clientId}`;
     return {
-      id: `guacamole-rdp-${index === 0 ? 'a' : 'b'}`,
+      id: `guacamole-rdp-${connectionId}`,
       routeId: `guacamole:${connectionId}`,
       connectionId,
       connectionName,
@@ -156,7 +161,7 @@ END;
       routeDescriptor: { localEmbedUrl: frameUrl },
       target: {},
     };
-  });
+  }));
 }
 
 function envFileValue(path, key) {
@@ -178,8 +183,21 @@ function routeUrl(route) {
     null;
 }
 
-function routeLabel(index) {
-  return index === 0 ? 'A' : 'B';
+function routeLabel(route, index) {
+  return route.id || route.routeId || `route-${index + 1}`;
+}
+
+function routeSlug(route, index) {
+  return routeLabel(route, index).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `route-${index + 1}`;
+}
+
+function inspectedRoute(inspection, route, index) {
+  const inventory = inspection.data?.routeInventory || [];
+  return inventory.find((candidate) =>
+    candidate.id === route.id ||
+    candidate.routeId === route.routeId ||
+    (candidate.connectionId && candidate.connectionId === route.connectionId),
+  ) || inventory[index] || null;
 }
 
 function loadGuacamoleCredentials() {
@@ -281,10 +299,11 @@ function requestGuacamoleToken(baseUrl, auth) {
 }
 
 function openRoute(route, index) {
-  const label = routeLabel(index);
+  const label = routeLabel(route, index);
+  const slug = routeSlug(route, index);
   const url = routeUrl(route);
-  if (!url) throw new Error(`route_${label.toLowerCase()}_url_missing: ${JSON.stringify(route)}`);
-  const existingDisplay = inspectRouteDisplays().data?.routeSpecificUsers?.[label]?.displayName;
+  if (!url) throw new Error(`route_${slug}_url_missing: ${JSON.stringify(route)}`);
+  const existingDisplay = inspectedRoute(inspectRouteDisplays(), route, index)?.displayName;
   if (existingDisplay) {
     return {
       label,
@@ -310,7 +329,7 @@ function openRoute(route, index) {
   }
   const token = acquireGuacamoleToken(url);
   if (!token.ok) {
-    throw new Error(`guacamole_route_${label.toLowerCase()}_login_failed: ${JSON.stringify({
+    throw new Error(`guacamole_route_${slug}_login_failed: ${JSON.stringify({
       authMode: token.authMode,
       statusCode: token.statusCode,
       error: token.error,
@@ -321,11 +340,9 @@ function openRoute(route, index) {
   const profileRoot = process.env.AGENT_BROWSER_RDP_ROUTE_VIEWER_PROFILE_ROOT ||
     join(agentHome, 'guacamole-route-viewers');
   mkdirSync(profileRoot, { recursive: true });
-  const session = process.env[`AGENT_BROWSER_RDP_ROUTE_${label}_VIEWER_SESSION`] ||
-    `rdp-guac-route-${label.toLowerCase()}-viewer`;
-  const profile = process.env[`AGENT_BROWSER_RDP_ROUTE_${label}_VIEWER_PROFILE`] ||
-    join(profileRoot, label.toLowerCase());
-  const executable = process.env[`AGENT_BROWSER_RDP_ROUTE_${label}_VIEWER_EXECUTABLE`] ||
+  const session = route.viewerSession || `rdp-guac-${slug}-viewer`;
+  const profile = route.viewerProfile || join(profileRoot, slug);
+  const executable = route.viewerExecutable ||
     process.env.AGENT_BROWSER_RDP_ROUTE_VIEWER_EXECUTABLE ||
     null;
 
@@ -344,7 +361,7 @@ function openRoute(route, index) {
   const opened = runAgentBrowser(openArgs, `open Guacamole route ${label}`);
   const headerUser = guacamoleHeaderUser();
   if (token.authMode !== 'header' || !headerUser) {
-    throw new Error(`guacamole_route_${label.toLowerCase()}_header_auth_required`);
+    throw new Error(`guacamole_route_${slug}_header_auth_required`);
   }
   runAgentBrowser([
     '--json',
@@ -361,7 +378,7 @@ function openRoute(route, index) {
     'open',
     url,
   ], `reload authenticated Guacamole route ${label}`);
-  const displayName = waitForRouteDisplay(label);
+  const displayName = waitForRouteDisplay(route, index);
   return {
     label,
     session,
@@ -400,15 +417,17 @@ function navigateRoute(args, label) {
   }
 }
 
-function waitForRouteDisplay(label) {
+function waitForRouteDisplay(route, index) {
+  const label = routeLabel(route, index);
+  const slug = routeSlug(route, index);
   const deadline = Date.now() + routeDisplayTimeoutMs;
   do {
     const inspection = inspectRouteDisplays();
-    const displayName = inspection.data?.routeSpecificUsers?.[label]?.displayName;
+    const displayName = inspectedRoute(inspection, route, index)?.displayName;
     if (displayName) return displayName;
     sleep(5000);
   } while (Date.now() < deadline);
-  throw new Error(`route_${label.toLowerCase()}_display_timeout: no route-specific Xorg display appeared`);
+  throw new Error(`route_${slug}_display_timeout: no route-specific Xorg display appeared`);
 }
 
 function inspectRouteDisplays() {
@@ -429,12 +448,12 @@ function sleep(ms) {
 
 let output;
 try {
-  const routes = (routePoolFromEnv() || routePoolFromDatabase() || routePoolFromDoctor()).slice(0, 2);
+  const routes = canonicalRouteInventory(routePoolFromEnv() || routePoolFromDatabase() || routePoolFromDoctor());
   if (routes.length < 2) {
     throw new Error(`route_pool_missing: expected at least two route-pool entries, got ${routes.length}`);
   }
   const selectedRoutes = routes.map((route, index) => ({
-    label: routeLabel(index),
+    label: routeLabel(route, index),
     id: route.id || null,
     routeId: route.routeId || null,
     connectionId: route.connectionId || null,
@@ -447,7 +466,7 @@ try {
       success: true,
       status: 'dry_run',
       selectedRoutes,
-      nextStep: 'Run node scripts/open-rdp-guac-route-displays.js to open both Guacamole route clients and inspect XRDP display allocation.',
+      nextStep: 'Run node scripts/open-rdp-guac-route-displays.js to open every configured Guacamole route client and inspect XRDP display allocation.',
     };
   } else {
     const openedRoutes = routes.map((route, index) => openRoute(route, index));

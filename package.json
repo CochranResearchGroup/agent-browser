@@ -73,6 +73,8 @@
     "test:guacamole-postgres-durability": "node scripts/test-guacamole-postgres-durability.js",
     "test:rdp-guac-route-specific-user-sync": "node scripts/test-rdp-guac-route-specific-user-sync.js",
     "test:rdp-route-display-selection": "node scripts/test-rdp-route-display-selection.js",
+    "test:rdp-route-inventory": "node scripts/test-rdp-route-inventory.js",
+    "test:rdp-route-user-pool": "node scripts/test-rdp-route-user-pool.js",
     "test:p46-stress-scenario": "node scripts/run-p46-stress-scenario.js",
     "test:p47-viewer-client-separation": "node scripts/test-p47-viewer-client-separation.js",
     "test:p47-scenario-harness": "node scripts/test-p47-scenario-harness.js",

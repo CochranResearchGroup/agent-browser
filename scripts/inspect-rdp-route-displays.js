@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process';
+import {
+  canonicalRouteInventory,
+  legacyRouteLabel,
+  legacyTwoRouteDisplaySubjects,
+} from './lib/rdp-route-inventory.js';
 
-const userA = process.env.AGENT_BROWSER_RDP_ROUTE_A_USERNAME || 'agent-browser-rdp-a';
-const userB = process.env.AGENT_BROWSER_RDP_ROUTE_B_USERNAME || 'agent-browser-rdp-b';
 const existingUser = process.env.AGENT_BROWSER_RDP_EXISTING_USERNAME ||
   process.env.XRDP_AGENT_BROWSER_USERNAME ||
   'agent-browser-rdp';
-const preferredRouteADisplay = process.env.AGENT_BROWSER_RDP_ROUTE_A_DISPLAY_NAME || null;
-const preferredRouteBDisplay = process.env.AGENT_BROWSER_RDP_ROUTE_B_DISPLAY_NAME || null;
 const shellOutput = process.argv.includes('--shell');
 const includeWindows = process.argv.includes('--windows') || process.argv.includes('--display-content');
 
@@ -122,9 +123,14 @@ function attachDisplayContent(route) {
   };
 }
 
+function configuredRouteSubjects() {
+  const raw = process.env.AGENT_BROWSER_RDP_ROUTE_POOL_JSON;
+  if (!raw) return legacyTwoRouteDisplaySubjects(process.env);
+  return canonicalRouteInventory(JSON.parse(raw));
+}
+
 const rows = processRows();
-const routeA = inspectUser(rows, userA, preferredRouteADisplay);
-const routeB = inspectUser(rows, userB, preferredRouteBDisplay);
+const configuredRoutes = configuredRouteSubjects();
 const existingUserRoutes = rows
   .filter((row) => row.user === existingUser)
   .filter((row) => /^(Xorg|Xvnc|Xvfb)$/i.test(row.command) || /\b(Xorg|Xvnc|Xvfb)\b/i.test(row.args))
@@ -136,61 +142,80 @@ const existingUserRoutes = rows
   }))
   .filter((row) => row.displayName);
 const existingDisplays = [...new Set(existingUserRoutes.map((row) => row.displayName))];
-const effectiveRouteA = routeA.displayName ? routeA : {
-  user: existingUser,
-  displayName: existingDisplays[0] || null,
-  candidates: existingUserRoutes,
-};
-const effectiveRouteB = routeB.displayName ? routeB : {
-  user: existingUser,
-  displayName: existingDisplays[1] || null,
-  candidates: existingUserRoutes,
-};
-const displays = [effectiveRouteA.displayName, effectiveRouteB.displayName].filter(Boolean);
-const success = Boolean(
-  effectiveRouteA.displayName &&
-    effectiveRouteB.displayName &&
-    effectiveRouteA.displayName !== effectiveRouteB.displayName,
+const routeInventory = configuredRoutes.map((route, index) => {
+  const routeUser = route.target?.routeUser || existingUser;
+  const routeSpecific = inspectUser(rows, routeUser, route.target?.displayName || null);
+  const effective = routeSpecific.displayName
+    ? routeSpecific
+    : {
+        user: existingUser,
+        displayName: existingDisplays[index] || null,
+        candidates: existingUserRoutes,
+      };
+  return attachDisplayContent({
+    ...route,
+    target: {
+      ...route.target,
+      routeUser: effective.user,
+      displayName: effective.displayName,
+    },
+    displayName: effective.displayName,
+    routeSpecific,
+    candidates: effective.candidates,
+  });
+});
+const displays = routeInventory.map((route) => route.displayName).filter(Boolean);
+const success = routeInventory.length >= 2 &&
+  displays.length === routeInventory.length &&
+  new Set(displays).size === displays.length;
+const legacyRouteSpecificUsers = Object.fromEntries(
+  routeInventory.flatMap((route, index) => {
+    const label = legacyRouteLabel(index);
+    return label ? [[label, route.routeSpecific]] : [];
+  }),
 );
+const canonicalRoutePoolJson = routeInventory.map((route) => ({
+  ...route,
+  target: {
+    ...route.target,
+    displayName: route.displayName,
+  },
+  routeSpecific: undefined,
+  candidates: undefined,
+  displayName: undefined,
+  displayContent: undefined,
+}));
 
 const result = {
   success,
   status: success ? 'ready' : 'blocked',
-  routes: {
-    A: attachDisplayContent(effectiveRouteA),
-    B: attachDisplayContent(effectiveRouteB),
-  },
-  routeSpecificUsers: {
-    A: attachDisplayContent(routeA),
-    B: attachDisplayContent(routeB),
-  },
+  routeInventory,
+  routeSpecificUsers: legacyRouteSpecificUsers,
   existingUserRoutes,
   env: success
     ? {
-        AGENT_BROWSER_RDP_ROUTE_A_DISPLAY_NAME: effectiveRouteA.displayName,
-        AGENT_BROWSER_RDP_ROUTE_B_DISPLAY_NAME: effectiveRouteB.displayName,
+        AGENT_BROWSER_RDP_ROUTE_POOL_JSON: JSON.stringify(canonicalRoutePoolJson),
       }
     : {},
   nextStep: success
     ? 'Export these display-name variables with the route pool JSON before running the reviewed many-to-many live gate.'
-    : 'Open both RDP route sessions, then rerun this display inspection helper.',
+    : 'Open every configured RDP route session, then rerun this display inspection helper.',
 };
 
 if (displays.length > 1 && new Set(displays).size !== displays.length) {
   result.nextStep = 'The route users appear to share one display. P03 requires distinct route displays for this host-XRDP topology.';
 }
 
-if (!success && existingUserRoutes.length === 1 && !routeA.displayName && !routeB.displayName) {
+if (!success && existingUserRoutes.length === 1 && routeInventory.every((route) => !route.routeSpecific?.displayName)) {
   result.nextStep = 'The existing agent-browser-rdp user has one active display only. If both Guacamole route clients are already open, use a route-specific user or XRDP policy isolation fallback before rerunning this helper.';
 }
 
-if (!success && existingUserRoutes.length === 1 && (effectiveRouteA.displayName || effectiveRouteB.displayName)) {
+if (!success && existingUserRoutes.length === 1 && routeInventory.some((route) => route.routeSpecific?.displayName)) {
   result.nextStep = 'Only one existing-user RDP display is active. If both Guacamole route clients are already open, the host is collapsing existing-user routes onto one desktop; use a route-specific user or XRDP policy isolation fallback.';
 }
 
 if (shellOutput && success) {
-  console.log(`export AGENT_BROWSER_RDP_ROUTE_A_DISPLAY_NAME=${shellQuote(effectiveRouteA.displayName)}`);
-  console.log(`export AGENT_BROWSER_RDP_ROUTE_B_DISPLAY_NAME=${shellQuote(effectiveRouteB.displayName)}`);
+  console.log(`export AGENT_BROWSER_RDP_ROUTE_POOL_JSON=${shellQuote(result.env.AGENT_BROWSER_RDP_ROUTE_POOL_JSON)}`);
 } else {
   console.log(JSON.stringify(result, null, 2));
 }
