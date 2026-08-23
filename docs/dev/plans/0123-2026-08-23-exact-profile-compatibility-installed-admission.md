@@ -4,7 +4,7 @@ Date: 2026-08-23
 
 State: OPEN
 
-Execution state: `read_only_admission_accepted_live_apply_requires_explicit_authorization`
+Execution state: `source_published_read_only_admission_accepted_live_apply_requires_explicit_authorization`
 
 Lane: P123
 
@@ -24,8 +24,9 @@ for the same selected profile before any browser acquisition.
 
 ## Current Read-Only Admission
 
-- Local `main` is clean and two commits ahead of `origin/main` at candidate
-  source commit `5fd4be88b2e35b4a6fe3e9e16f20ece8e20301f4`.
+- Candidate source commit `5fd4be88b2e35b4a6fe3e9e16f20ece8e20301f4`
+  and its Plan 0123 admission commit `f697969de3ec89e631d3148626348fa9777c7ea8`
+  are published on `origin/main`; exact remote readback matched `f697969d`.
 - The remote baseline is
   `8c81de89e8103f9d990af7fbb7bb752d6473d1e9`.
 - The optimized candidate reports version `0.28.0` and SHA-256
@@ -43,21 +44,27 @@ for the same selected profile before any browser acquisition.
 - The dry-run intentionally does not create an upgrade transaction or runtime
   census receipt. Real apply must collect two matching read-only census rounds
   before candidate staging, admission drain, or ownership transfer.
+- Service resource inventory reports zero GC candidates, zero warnings, five
+  owned cleanup obligations, and zero unknown or transferring obligations.
+  Service GC and generation GC dry-runs both report zero candidates; one
+  selected generation is retained.
+- The retained Service baseline contains four browser records: three ready and
+  one degraded. The exact managed retained browser is
+  `session:plan0117-final-runtime` on profile `last30days-facebook`; external or
+  ambiguous rows remain preservation-only inputs, not cleanup candidates.
 
 ## Remaining Execution
 
-1. Publish the accepted Plan 0122 source and this admission plan through the
-   normal `main` integration path, then verify the remote commit.
-2. Obtain explicit authority for the live transactional workstation apply.
-3. Re-read source, installed, runtime, retained-browser, durable-handoff,
+1. Obtain explicit authority for the live transactional workstation apply.
+2. Re-read source, installed, runtime, retained-browser, durable-handoff,
    process, and disk state immediately before apply. Stop on drift or ambiguity.
-4. Create the supported workstation backup and retain its recovery locator.
-5. Apply the exact candidate binary. Require stable closed-world census,
+3. Create the supported workstation backup and retain its recovery locator.
+4. Apply the exact candidate binary. Require stable closed-world census,
    candidate dashboard readiness, preserved browser and handoff identities,
    accepted transaction state, and rollback viability.
-6. Re-run installed doctor, workstation status, runtime census, resources, and
+5. Re-run installed doctor, workstation status, runtime census, resources, and
    operating-system process readback. Do not perform opportunistic GC.
-7. Run the attributed access plan and its recommended no-launch capability
+6. Run the attributed access plan and its recommended no-launch capability
    preflight for the consuming profile. Require exact compatibility identity
    agreement and `wouldLaunch=false` before any browser or provider request.
 
@@ -84,3 +91,11 @@ for the same selected profile before any browser acquisition.
 - Do not launch a browser or contact a provider during installed qualification.
 - Do not expose private command lines, profile paths, provider URLs,
   credentials, or raw handoff routes in tracked evidence.
+
+## Publication Receipt
+
+Push `8c81de89..f697969d` advanced `origin/main` successfully. A direct remote
+readback returned
+`f697969de3ec89e631d3148626348fa9777c7ea8`, and local divergence became zero.
+Publication changed source history only; the installed generation and running
+service remained unchanged.

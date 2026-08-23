@@ -10,13 +10,15 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 ## P123 | Exact Profile Compatibility Installed Admission
 
 State: OPEN
-Current state: the Plan 0122 repair is accepted at source and candidate-build
-boundaries. Candidate commit `5fd4be88` produced optimized binary SHA-256
+Current state: the Plan 0122 repair and Plan 0123 admission are published on
+`origin/main` through exact remote commit `f697969d`. Candidate commit
+`5fd4be88` produced optimized binary SHA-256
 `ae49edfd9d71161543c8378c06688876984f891b46cedca5272de1e77ca2f811`.
 Installed doctor is green and converged on the prior generation. Candidate
 workstation dry-run is planned, supported, and non-mutating with effective
-groups, no missing commands, and sufficient disk. Publication is the next
-source step; live transactional apply remains an explicit authorization gate.
+groups, no missing commands, and sufficient disk. Resource and both GC
+dry-runs have zero candidates or warnings. Live transactional apply remains an
+explicit authorization gate.
 
 ### Plan
 
@@ -24,9 +26,9 @@ source step; live transactional apply remains an explicit authorization gate.
 
 ### Next Recommendation
 
-Publish the accepted source, then obtain explicit live authority before the
-transactional apply. Re-run all admission evidence immediately before apply
-and require installed no-launch agreement before any browser acquisition.
+Obtain explicit live authority before the transactional apply. Re-run all
+admission evidence immediately before apply and require installed no-launch
+agreement before any browser acquisition.
 
 ## P122 | Exact Profile Capability Compatibility
 

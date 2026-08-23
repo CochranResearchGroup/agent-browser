@@ -34,7 +34,10 @@ Validation:
 Result:
 
 - Plan 0123 read-only admission is accepted;
-- source publication is the next normal integration step;
+- commits `990e6b31`, `5fd4be88`, and `f697969d` are published on `origin/main`
+  with exact remote readback and zero divergence;
+- service resource inventory and both GC dry-runs report zero candidates and
+  zero warnings, while all retained and observed browser rows remain preserved;
 - live transactional apply still requires explicit authority and a fresh
   pre-apply readback.
 
