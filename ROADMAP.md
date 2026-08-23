@@ -7,6 +7,26 @@ This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
 
+## P127 | Development Presentation Provider Isolation
+
+State: IN PROGRESS
+Current state: Slice A is accepted. The source authority defines a development-only provider
+root, secrets, state, receipts, service and database identities, nonproduction
+ports, arbitrary six-route inventory, four-slot warm policy, exact manifest
+drift checks, and a development pseudo-home skill target. The development skill
+copy is current and installed doctor remains green. No provider resource or
+production surface has been changed.
+
+### Plan
+
+- `docs/dev/plans/0127-2026-08-23-development-presentation-provider-isolation-plan.md`
+
+### Next Recommendation
+
+Accept the provider-free source and development skill packet, then review the
+separate privileged provider deployment adapter before creating Guacamole,
+XRDP, display, database, route-user, or ingress resources.
+
 ## P126 | Pre-Development Runtime Safety And Browser Launch Stabilization
 
 State: ACCEPTED

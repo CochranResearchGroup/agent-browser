@@ -42,6 +42,9 @@ try {
   assert.equal(descriptor.backendPort, 4949);
   assert.equal(descriptor.laneStreamPort, 4951);
   assert.equal(descriptor.ingressService, 'agent-browser-dev');
+  assert.equal(descriptor.presentationProvider.ports.guacamole, 8093);
+  assert.equal(descriptor.presentationProvider.warmSlots, 4);
+  assert.equal(descriptor.presentationProvider.hardMaxSlots, 6);
   assert.equal(descriptor.browserExecutable, fakeBrowser);
   const units = renderDevelopmentUnits(descriptor, '/candidate/bin/agent-browser');
   for (const source of Object.values(units)) {

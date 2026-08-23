@@ -795,6 +795,15 @@ the Development badge and its runtime manifest must report
 route to production Guacamole. Its seeded `development-default` runtime lane
 uses fixed stream port 4951. Use `pnpm development-runtime:gc` for safe
 unselected-generation cleanup.
+Use `pnpm development-runtime:skill-sync` to publish this repository skill into
+the development pseudo-home and `pnpm development-runtime:skill-status` to
+verify its tree digest. These commands never replace the shared user-scoped
+production skill.
+The development doctor reports its presentation provider independently. An
+absent provider is an explicit, nonblocking `unconfigured` state for CDP and
+dashboard work. Provider-backed desktop acceptance must set
+`AGENT_BROWSER_DEV_PRESENTATION_PROVIDER_REQUIRED=1` and must not reuse
+production Guacamole, XRDP, display, route, database, secret, or cleanup state.
 The stable `agent-browser-dev` command is an environment-owning launcher, not a
 plain binary alias. Direct commands therefore inherit the dev pseudo-home,
 socket, auth store, and runtime identity automatically.

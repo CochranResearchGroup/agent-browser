@@ -19,6 +19,12 @@ import {
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import {
+  developmentAgentSkillStatus,
+  developmentPresentationProviderDescriptor,
+  doctorDevelopmentPresentationProvider,
+  synchronizeDevelopmentAgentSkill,
+} from './development-presentation-provider.js';
 
 export const DEVELOPMENT_RUNTIME_SCHEMA = 'agent-browser.development-runtime.v1';
 
@@ -35,6 +41,7 @@ export function developmentRuntimeDescriptor(env = process.env) {
       join(env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.() ?? 1000}`, 'agent-browser-dev'),
   );
   const browserExecutable = resolveDevelopmentBrowserExecutable(env, pseudoHome);
+  const presentationProvider = developmentPresentationProviderDescriptor(env);
   return {
     schemaVersion: DEVELOPMENT_RUNTIME_SCHEMA,
     environment: 'development',
@@ -64,6 +71,7 @@ export function developmentRuntimeDescriptor(env = process.env) {
     shadowPort: Number(env.AGENT_BROWSER_DEV_SHADOW_PORT || 4950),
     localHost: 'agent-browser-dev.localhost',
     ingressService: 'agent-browser-dev',
+    presentationProvider,
     units: [
       'agent-browser-dev-runtime-host.service',
       'agent-browser-dev-dashboard-backend.service',
@@ -214,6 +222,7 @@ export function installDevelopmentRuntime({ binary, env = process.env, activate 
       systemctl(['restart', ...descriptor.units], env);
       waitForDevelopmentManifest(descriptor, generationBinary, env);
     }
+    synchronizeDevelopmentAgentSkill({ env });
     const after = productionSnapshot(env);
     assertProductionUnchanged(before, after);
     return {
@@ -279,6 +288,8 @@ export function developmentRuntimeStatus({ env = process.env } = {}) {
     store: privateFileStatus(join(descriptor.authDir, 'dashboard-auth.json')),
     bootstrap: privateFileStatus(join(descriptor.authDir, 'dashboard-auth.env')),
   };
+  const presentationProvider = doctorDevelopmentPresentationProvider({ env }).status;
+  const developmentSkill = developmentAgentSkillStatus({ env });
   return {
     schemaVersion: DEVELOPMENT_RUNTIME_SCHEMA,
     descriptor,
@@ -292,6 +303,8 @@ export function developmentRuntimeStatus({ env = process.env } = {}) {
     localIngressManifest,
     ports,
     auth,
+    presentationProvider,
+    developmentSkill,
     ready:
       Boolean(selectedGeneration) &&
       Boolean(executable) &&
@@ -308,6 +321,7 @@ export function developmentRuntimeStatus({ env = process.env } = {}) {
 
 export function doctorDevelopmentRuntime({ env = process.env } = {}) {
   const status = developmentRuntimeStatus({ env });
+  const presentationProviderDoctor = doctorDevelopmentPresentationProvider({ env });
   const checks = [
     check('selected-generation', Boolean(status.selectedGeneration), status.selectedGeneration),
     check('stable-executable', Boolean(status.stableExecutable), status.stableExecutable),
@@ -340,6 +354,8 @@ export function doctorDevelopmentRuntime({ env = process.env } = {}) {
     }),
     check('backend-manifest', status.backendManifest?.runtimeEnvironment === 'development', status.backendManifest?.runtimeEnvironment),
     check('local-ingress', status.localIngressManifest?.runtimeEnvironment === 'development', status.localIngressManifest?.runtimeEnvironment),
+    check('development-skill', status.developmentSkill.ready, status.developmentSkill.state),
+    ...presentationProviderDoctor.checks,
   ];
   return { success: checks.every((item) => item.ok), checks, status };
 }

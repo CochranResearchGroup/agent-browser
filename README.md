@@ -70,6 +70,8 @@ scripts/ci/cargo-safe.sh build --release --manifest-path cli/Cargo.toml
 pnpm development-runtime:install
 pnpm development-runtime:doctor
 pnpm development-runtime:gc
+pnpm development-runtime:skill-sync
+pnpm development-runtime:skill-status
 pnpm smoke:development-browser-launch
 pnpm smoke:development-dashboard-auth -- --dashboard-url https://agent-browser-dev.ecochran.dyndns.org
 ```
@@ -78,6 +80,15 @@ The dashboard labels this runtime `Development`, and its runtime manifest
 reports `runtimeEnvironment: "development"`. The Cooper service inventory owns
 the separate `agent-browser-dev` local and external ingress routes. Initial dev
 publication is dashboard-only and does not borrow production Guacamole routes.
+The skill commands publish and verify guidance only inside the development
+pseudo-home. They do not replace the shared user-scoped production skill.
+
+Development presentation-provider status is included in the development
+doctor. An absent provider is reported as unconfigured and remains nonblocking
+for dashboard-only work. Once configured, exact namespace or manifest drift is
+blocking. Set `AGENT_BROWSER_DEV_PRESENTATION_PROVIDER_REQUIRED=1` only for a
+provider-backed acceptance run. Provider provisioning remains a separately
+reviewed privileged operation.
 
 Cargo builds use resource-aware admission rather than a repository-wide
 full-lifetime lock. The default policy admits at most two four-job builds while

@@ -41,6 +41,18 @@ development dashboard displays a persistent Development badge, and
 entry named <code>agent-browser-dev</code> owns external ingress. It initially
 publishes only the dashboard and must not route its Guacamole path to the
 production provider.
+Publish experimental agent guidance with
+<code>pnpm development-runtime:skill-sync</code> and verify it with
+<code>pnpm development-runtime:skill-status</code>. The target is inside the
+development pseudo-home, not the shared user-scoped production skill.
+
+The development doctor also reports presentation-provider state. A missing
+provider is explicitly <code>unconfigured</code> and nonblocking for dashboard
+and CDP work. Provider-backed acceptance sets
+<code>AGENT_BROWSER_DEV_PRESENTATION_PROVIDER_REQUIRED=1</code>; once a provider
+manifest exists, namespace or manifest drift is blocking. Development
+Guacamole, XRDP, display, route, database, secret, cleanup, and ingress effects
+remain a separately reviewed operation.
 Use <code>pnpm smoke:development-dashboard-auth -- --dashboard-url
 https://agent-browser-dev.ecochran.dyndns.org</code> to verify login, the
 session cookie, authenticated service API access, and the development manifest

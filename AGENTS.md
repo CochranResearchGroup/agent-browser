@@ -124,6 +124,13 @@ This is a Rust codebase. The browser automation daemon lives in `cli/src/native/
 - Development service GC requires positive development-environment ownership.
   A process that is merely absent from development Service State is foreign or
   unknown, not a cleanup candidate.
+- Use `pnpm development-runtime:skill-sync` to publish repository guidance into
+  the development pseudo-home. Do not overwrite the shared user-scoped skill
+  when validating experimental behavior.
+- The development presentation provider is optional for dashboard-only work.
+  Provider-backed acceptance must set
+  `AGENT_BROWSER_DEV_PRESENTATION_PROVIDER_REQUIRED=1` and pass the exact
+  development provider doctor without borrowing production resources.
 
 ## RDP and Remote-View Handoffs
 

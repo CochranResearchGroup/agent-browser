@@ -62,19 +62,19 @@ serialization rather than provider readiness and is not acceptable evidence.
 
 ## Exact Remaining Gate
 
-A separately reviewed development presentation-provider namespace is required.
-It must own development-only Guacamole/XRDP users and connections, displays,
-route inventory, privileges, ports, cleanup inventory, and ingress behavior.
-It must not reuse production routes or production provider state. Once that
-namespace and its readiness doctor exist, rerun only the unmet Slice G gates
-against `agent-browser-dev`.
+A separately reviewed development presentation-provider deployment is
+required. Plan 0127 Slice A now owns the source descriptor, collision guards,
+manifest drift doctor, arbitrary six-route inventory, and development-only
+skill path. The provider remains explicitly unconfigured. Slice B must create
+the development-only Guacamole/XRDP users and connections, displays, route
+inventory, privileges, ports, cleanup inventory, and ingress behavior without
+reusing production provider state. Once that deployment and readiness doctor
+exist, rerun only the unmet Slice G gates against `agent-browser-dev`.
 
 The repository Agent Browser skill contains the accepted CDP-first evidence
-guidance, but the shared installed skill intentionally remains unchanged. The
-files differ in the final readback. Updating the shared skill would change
-production-agent behavior outside the isolated development runtime, so it
-requires either a dev-only skill namespace or a separately reviewed global
-guidance rollout.
+guidance. Plan 0127 now publishes that guidance into the development
+pseudo-home while the shared installed production skill intentionally remains
+unchanged.
 
 Plan 0124 remains in progress. Source Slices A through F are accepted; the
 installed development binary, dashboard, ingress, browser, CDP, policy, and GC

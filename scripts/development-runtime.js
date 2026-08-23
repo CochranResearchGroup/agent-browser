@@ -7,6 +7,10 @@ import {
   garbageCollectDevelopmentRuntime,
   installDevelopmentRuntime,
 } from './lib/development-runtime.js';
+import {
+  developmentAgentSkillStatus,
+  synchronizeDevelopmentAgentSkill,
+} from './lib/development-presentation-provider.js';
 
 const args = process.argv.slice(2).filter((arg) => arg !== '--');
 const command = args.shift() || 'status';
@@ -30,6 +34,12 @@ try {
     if (!Number.isInteger(retain) || retain < 1) throw new Error('--retain must be a positive integer');
     rejectArgs(args);
     result = garbageCollectDevelopmentRuntime({ retain });
+  } else if (command === 'skill-sync') {
+    rejectArgs(args);
+    result = synchronizeDevelopmentAgentSkill();
+  } else if (command === 'skill-status') {
+    rejectArgs(args);
+    result = developmentAgentSkillStatus();
   } else if (command === 'help' || command === '--help' || command === '-h') {
     printHelp();
     process.exit(0);
@@ -70,11 +80,15 @@ function printSummary(command, result) {
     console.log(`Production unchanged: ${result.production.unchanged}`);
   } else if (command === 'gc') {
     console.log(`Removed ${result.removed.length} unreferenced development generation(s)`);
+  } else if (command === 'skill-sync' || command === 'skill-status') {
+    console.log(`Development skill: ${result.state || (result.success ? 'current' : 'unavailable')}`);
+    console.log(`Target: ${result.target}`);
   } else {
     const status = result.status || result;
     console.log(`Development runtime ready: ${status.ready}`);
     console.log(`Selected generation: ${status.selectedGeneration || 'none'}`);
     console.log(`Dashboard: http://127.0.0.1:${status.descriptor.dashboardPort}`);
+    console.log(`Presentation provider: ${status.presentationProvider.state}`);
     if (result.checks) {
       for (const item of result.checks) console.log(`${item.ok ? 'PASS' : 'FAIL'} ${item.name}: ${item.observed}`);
     }
@@ -89,6 +103,8 @@ Commands:
   status                                    Read development runtime identity and health
   doctor                                    Validate units, executable, and manifest identity
   gc [--retain <count>]                     Remove unselected, non-running old generations
+  skill-sync                                Publish the repository skill into the development pseudo-home
+  skill-status                              Compare the development skill with its repository source
 
 All commands accept --json.`);
 }
