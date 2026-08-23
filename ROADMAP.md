@@ -52,15 +52,14 @@ production outside that experimental acceptance boundary.
 
 ## P124 | Scalable Desktop Evidence And Presentation Capacity
 
-State: PLANNED
-Current state: P110 established display-bound capture, synthetic perception,
-guarded interaction, and browser-external prompt evidence, while P67 proved
-that retained browsers can outnumber presentation routes. The installed and
-source readiness path still assumes route A and B and truncates Guacamole
-candidates to two. Desktop capture proves only browser-window visibility and
-does not reserve capacity, stage and prove a maximized topmost scene, coordinate
-visible mutation with human viewers, restore the prior scene, or own elastic
-slot garbage collection.
+State: IN PROGRESS
+Current state: Slice A is source accepted. Provider-free contracts now freeze
+CDP-first evidence selection, paired browser-external evidence, pre-trigger
+staging, full capture-ready identity, passive-viewer and human-controller
+posture, authority-safe restoration, arbitrary-N route and slot inventory,
+four-slot reserves, typed pressure queueing, FIFO plus bounded aging, and exact
+or quarantined lifecycle cleanup. An architecture guard records the existing
+fixed-two migration baseline and rejects new canonical A/B assumptions.
 
 P124 replaces that fixed model with arbitrary-N presentation slots, a four-slot
 warm installed acceptance profile, elastic scale-out to a configured and
@@ -75,10 +74,10 @@ ownership remains independent from presentation capacity.
 
 ### Next Recommendation
 
-Execute Slice A only: freeze provider-free red fixtures and architecture guards
-for evidence selection, arbitrary-N inventory, four-slot warm capacity,
-priority admission, scene proof, restoration, elastic lifecycle, and exact GC.
-Do not change the current workstation or provision live desktop resources.
+Begin Slice B only after advancing the governing plan. Generalize the static
+route inventory to arbitrary N while retaining legacy A/B parsing in one
+compatibility adapter. Do not dynamically provision or remove provider
+resources, and keep the current workstation unchanged.
 
 ## P123 | Exact Profile Compatibility Installed Admission
 

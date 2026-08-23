@@ -50,6 +50,9 @@ pub mod desktop_capture;
 #[allow(dead_code)]
 pub(crate) mod desktop_control_coordinator;
 #[allow(dead_code)]
+#[cfg(test)]
+pub(crate) mod desktop_evidence;
+#[allow(dead_code)]
 pub(crate) mod desktop_interaction;
 #[allow(dead_code)]
 pub mod desktop_locator;
@@ -75,6 +78,13 @@ pub mod page_capture;
 pub mod page_injection;
 #[allow(dead_code)]
 pub mod policy;
+#[allow(dead_code)]
+#[cfg(test)]
+pub(crate) mod presentation_capacity;
+#[cfg(test)]
+pub(crate) mod presentation_inventory;
+#[cfg(test)]
+pub(crate) mod presentation_lifecycle;
 #[allow(dead_code)]
 pub mod providers;
 #[allow(dead_code)]
