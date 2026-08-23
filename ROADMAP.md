@@ -7,6 +7,27 @@ This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
 
+## P126 | Absent Closing Lifecycle Reconciliation
+
+State: OPEN
+Current state: an accepted upgrade exposed a lifecycle convergence gap. The
+recorded browser process and Service records are absent, but the exact owner
+generation remains `closing/owned`, so launch admission correctly blocks a
+replacement. Plan 0126 adds a fail-closed reconciliation transition for the
+exact absent-process, absent-lock case without changing the selected named
+profile.
+
+### Plan
+
+- `docs/dev/plans/0126-2026-08-23-absent-closing-lifecycle-reconciliation.md`
+
+### Next Recommendation
+
+Complete deterministic validation, checkpoint the repair, and run one bounded
+live reconciliation. Resume the consuming browser workflow only after the
+lifecycle reads `terminal/satisfied` and access planning reports no owner
+conflict.
+
 ## P125 | Development Runtime Isolation And Build Capacity
 
 State: ACCEPTED

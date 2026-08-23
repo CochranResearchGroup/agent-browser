@@ -6226,6 +6226,7 @@ Notes:
   - Text service providers focuses provider identity, kind, enabled state, config reference, and capabilities.
   - Text service challenges focuses detected challenge kind, state, tab, provider, policy decision, human approval, and result.
   - Persisted browser records are probed for dead PIDs, unreachable CDP endpoints, and failed target-list probes.
+  - Reconciliation completes an owned closing runtime lifecycle only when its exact owner generation still matches, the recorded process group is absent, the matching registered profile path is present, and its profile lock is absent. Live, locked, unmatched, and ambiguous lanes remain unchanged.
   - Non-ready browsers close their known tabs during reconciliation so stale tab state does not look active.
   - Reconciliation emits a reconciliation event with details.action=session_tab_ownership_repaired when it removes stale session/tab ownership links.
   - The reconciliation snapshot records lastReconciledAt, browserCount, changedBrowsers, and lastError. service_reconcile responses also include expiredSessionLeases, expiredSessionLeaseCount, remoteViewRepair counts, and routePoolRefresh results. Pass --authoritative-route-pool-json with a readiness-verified JSON array to refresh retained route definitions without replacing a conflicting active allocation.

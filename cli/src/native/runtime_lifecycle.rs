@@ -802,6 +802,34 @@ fn apply_transition(
     }
 }
 
+/// Complete a closing lane inside an already locked Service State mutation.
+///
+/// Service reconciliation uses this seam only after independently proving
+/// that the recorded process group and profile lock are both absent. The
+/// lifecycle compare-and-swap remains authoritative for the exact logical
+/// browser, profile identity, and owner generation.
+pub(crate) fn complete_reconciled_close(
+    registry: &mut RuntimeOwnerRegistry,
+    logical_browser_id: String,
+    profile_identity_digest: String,
+    expected_owner_generation: u64,
+    terminal_evidence: Vec<String>,
+) -> Result<RuntimeLifecycleRecord, String> {
+    let transition = apply_transition(
+        registry,
+        RuntimeLifecycleIntent::CompleteClose {
+            logical_browser_id,
+            profile_identity_digest,
+            expected_owner_generation,
+            terminal_evidence,
+        },
+    )?;
+    let RuntimeLifecycleTransition::LaneUpdated(record) = transition else {
+        return Err("runtime_lifecycle_reconciled_close_outcome_mismatch".to_string());
+    };
+    Ok(record)
+}
+
 fn update_effect_owned_lane(
     registry: &mut RuntimeOwnerRegistry,
     claim: &OwnerAuthorityClaim,
