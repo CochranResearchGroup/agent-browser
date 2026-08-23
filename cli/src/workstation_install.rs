@@ -409,19 +409,6 @@ fn recover_operator_required_upgrade_for_root(
         }));
     }
 
-    let mut live_process_references = std::collections::BTreeMap::new();
-    collect_process_generation_references(&paths, &mut live_process_references);
-    if live_process_references.contains_key(&transaction.candidate_generation_id)
-        && operator_recovery_can_stop_rolled_back_candidate_host(&transaction)
-    {
-        stop_candidate_runtime_host(&paths, &transaction)?;
-        live_process_references.clear();
-        collect_process_generation_references(&paths, &mut live_process_references);
-    }
-    if live_process_references.contains_key(&transaction.candidate_generation_id) {
-        return Err("workstation_recovery_candidate_process_still_live".to_string());
-    }
-
     let dashboard_ingress_path = env::var_os("AGENT_BROWSER_DASHBOARD_INGRESS_STATE")
         .map(PathBuf::from)
         .unwrap_or_else(|| root.join(".agent-browser/dashboard-ingress.json"));
@@ -435,8 +422,22 @@ fn recover_operator_required_upgrade_for_root(
         .pointer("/candidateBackend/generationId")
         .and_then(Value::as_str)
         == Some(transaction.candidate_generation_id.as_str());
+    let candidate_fallback = dashboard_ingress
+        .pointer("/fallbackBackend/generationId")
+        .and_then(Value::as_str)
+        == Some(transaction.candidate_generation_id.as_str());
     if candidate_selected || candidate_staged {
         return Err("workstation_recovery_candidate_dashboard_still_routed".to_string());
+    }
+    if candidate_fallback {
+        let repository =
+            crate::dashboard_ingress::DashboardIngressRepository::new(&dashboard_ingress_path);
+        let registry = repository.load()?;
+        repository.retire_fallback(registry.revision, &transaction.candidate_generation_id)?;
+        if !isolated_root {
+            let command_env = workstation_command_env(&paths);
+            restart_stable_dashboard_ingress(&paths, &paths.support_dir, &command_env)?;
+        }
     }
     let runtime_host_ingress_path =
         crate::runtime_host_ingress::RuntimeHostIngressRepository::default_path();
@@ -452,6 +453,19 @@ fn recover_operator_required_upgrade_for_root(
         {
             return Err("workstation_recovery_candidate_runtime_host_still_routed".to_string());
         }
+    }
+
+    let mut live_process_references = std::collections::BTreeMap::new();
+    collect_process_generation_references(&paths, &mut live_process_references);
+    if live_process_references.contains_key(&transaction.candidate_generation_id)
+        && operator_recovery_can_stop_rolled_back_candidate_host(&transaction)
+    {
+        stop_candidate_runtime_host(&paths, &transaction)?;
+        live_process_references.clear();
+        collect_process_generation_references(&paths, &mut live_process_references);
+    }
+    if live_process_references.contains_key(&transaction.candidate_generation_id) {
+        return Err("workstation_recovery_candidate_process_still_live".to_string());
     }
 
     let census = if isolated_root {
@@ -3186,11 +3200,36 @@ fn restart_stable_dashboard_ingress(
     )?;
     run_required(
         "systemctl",
+        &[
+            "--user",
+            "restart",
+            "agent-browser-dashboard-backend.service",
+        ],
+        support_root,
+        command_env,
+        false,
+        "restart dashboard backend on selected generation",
+    )?;
+    run_required(
+        "systemctl",
         &["--user", "restart", "agent-browser-dashboard.service"],
         support_root,
         command_env,
         false,
         "restart stable dashboard ingress on selected generation",
+    )?;
+    run_required(
+        "systemctl",
+        &[
+            "--user",
+            "is-active",
+            "--quiet",
+            "agent-browser-dashboard-backend.service",
+        ],
+        &paths.support_dir,
+        command_env,
+        false,
+        "verify refreshed dashboard backend",
     )?;
     run_required(
         "systemctl",
@@ -6710,9 +6749,15 @@ fn rollback_dashboard_candidate_for_transaction(
     let repository = crate::dashboard_ingress::DashboardIngressRepository::new(&state_path);
     let registry = repository.load()?;
     if registry.selected_backend().generation_id == candidate_generation_id {
-        repository
-            .rollback_selected_candidate(registry.revision, candidate_generation_id)
-            .map(|_| ())
+        let rolled_back =
+            repository.rollback_selected_candidate(registry.revision, candidate_generation_id)?;
+        if rolled_back
+            .fallback_backend()
+            .is_some_and(|fallback| fallback.generation_id == candidate_generation_id)
+        {
+            repository.retire_fallback(rolled_back.revision, candidate_generation_id)?;
+        }
+        Ok(())
     } else if registry
         .candidate_backend()
         .is_some_and(|candidate| candidate.generation_id == candidate_generation_id)

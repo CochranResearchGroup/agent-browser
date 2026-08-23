@@ -402,6 +402,25 @@ impl DashboardIngressRepository {
         })
     }
 
+    pub(crate) fn retire_fallback(
+        &self,
+        expected_revision: u64,
+        expected_generation: &str,
+    ) -> Result<DashboardIngressRegistry, String> {
+        self.mutate(expected_revision, |registry| {
+            let Some(fallback) = registry.fallback_backend() else {
+                return Ok(());
+            };
+            if fallback.generation_id != expected_generation {
+                return Err("dashboard fallback generation changed before retirement".to_string());
+            }
+            registry.fallback_backend = None;
+            registry.fallback_presentation_receipt = None;
+            registry.revision = registry.revision.saturating_add(1);
+            Ok(())
+        })
+    }
+
     fn mutate(
         &self,
         expected_revision: u64,
@@ -1338,6 +1357,42 @@ mod tests {
         assert_eq!(registry.last_presentation_receipt(), Some(&old_receipt));
         assert!(registry.candidate_backend().is_none());
         assert_eq!(registry.fallback_backend(), Some(&managed_candidate));
+    }
+
+    #[test]
+    fn recovery_retires_only_the_exact_failed_fallback_generation() {
+        let path = temp_registry_path("retire-fallback");
+        let repository = DashboardIngressRepository::new(&path);
+        let old = DashboardBackend::new("generation-old", 4850, "old-manifest");
+        let candidate = DashboardBackend::new("generation-new", 4851, "new-manifest");
+        let mut registry = DashboardIngressRegistry::new(old.clone());
+        registry.stage_candidate(candidate.clone()).unwrap();
+        registry
+            .commit_candidate(CandidateOperatorJourney::ready(ready_evidence(
+                &candidate.generation_id,
+            )))
+            .unwrap();
+        registry
+            .rollback_selected_candidate(&candidate.generation_id)
+            .unwrap();
+        write_registry_atomic(&path, &registry).unwrap();
+        let rolled_back = repository.load().unwrap();
+
+        assert_eq!(rolled_back.selected_backend(), &old);
+        assert_eq!(rolled_back.fallback_backend(), Some(&candidate));
+        assert!(repository
+            .retire_fallback(rolled_back.revision, "generation-other")
+            .unwrap_err()
+            .contains("fallback generation changed"));
+
+        let retired = repository
+            .retire_fallback(rolled_back.revision, &candidate.generation_id)
+            .unwrap();
+        assert!(retired.fallback_backend().is_none());
+        assert!(retired.fallback_presentation_receipt.is_none());
+        assert_eq!(retired.selected_backend(), &old);
+        let _ = fs::remove_file(path.with_extension("json.lock"));
+        let _ = fs::remove_file(path);
     }
 
     #[test]
