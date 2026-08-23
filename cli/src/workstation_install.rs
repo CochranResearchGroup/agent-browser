@@ -5773,6 +5773,28 @@ fn selected_runtime_host_capture_required(
         && !old_host_present
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SelectedRuntimeHostCaptureAction {
+    Skip,
+    CaptureExact,
+    RefreshIdentity,
+}
+
+fn selected_runtime_host_capture_action(
+    topology: crate::runtime_host_ingress::RuntimeHostTopology,
+    selected_host_absent: bool,
+    old_host_present: bool,
+) -> SelectedRuntimeHostCaptureAction {
+    if old_host_present || topology != crate::runtime_host_ingress::RuntimeHostTopology::SingleHost
+    {
+        SelectedRuntimeHostCaptureAction::Skip
+    } else if selected_host_absent {
+        SelectedRuntimeHostCaptureAction::RefreshIdentity
+    } else {
+        SelectedRuntimeHostCaptureAction::CaptureExact
+    }
+}
+
 fn capture_selected_runtime_host_before_transfer(
     transaction: &mut crate::runtime_adoption::UpgradeTransaction,
 ) -> Result<(), String> {
@@ -5798,12 +5820,32 @@ fn capture_selected_runtime_host_before_transfer(
             ))
         }
     };
-    if !selected_runtime_host_capture_required(
+    let capture_action = selected_runtime_host_capture_action(
         selected.topology,
         selected_host_absent,
         old_host_present,
-    ) {
+    );
+    if capture_action == SelectedRuntimeHostCaptureAction::Skip {
         return Ok(());
+    }
+    if capture_action == SelectedRuntimeHostCaptureAction::RefreshIdentity {
+        let expected_selected = selected.clone();
+        let (old_identity, observed_backend) = capture_runtime_host_identity(
+            &selected.socket_dir,
+            &selected.generation_id,
+            &selected.binary_sha256,
+            false,
+        )?;
+        repository.refresh_selected_backend_identity(
+            registry.revision,
+            &expected_selected,
+            observed_backend,
+        )?;
+        return crate::runtime_adoption::record_runtime_host_identity(
+            transaction,
+            false,
+            old_identity,
+        );
     }
     let (old_identity, observed_backend) = capture_runtime_host_identity(
         &selected.socket_dir,
@@ -9110,6 +9152,30 @@ mod tests {
             true,
             false,
         ));
+        assert_eq!(
+            selected_runtime_host_capture_action(
+                crate::runtime_host_ingress::RuntimeHostTopology::SingleHost,
+                false,
+                false,
+            ),
+            SelectedRuntimeHostCaptureAction::CaptureExact,
+        );
+        assert_eq!(
+            selected_runtime_host_capture_action(
+                crate::runtime_host_ingress::RuntimeHostTopology::SingleHost,
+                true,
+                false,
+            ),
+            SelectedRuntimeHostCaptureAction::RefreshIdentity,
+        );
+        assert_eq!(
+            selected_runtime_host_capture_action(
+                crate::runtime_host_ingress::RuntimeHostTopology::SingleHost,
+                true,
+                true,
+            ),
+            SelectedRuntimeHostCaptureAction::Skip,
+        );
     }
 
     #[test]

@@ -202,6 +202,35 @@ impl RuntimeHostIngressRegistry {
         Ok(())
     }
 
+    fn refresh_selected_backend_identity(
+        &mut self,
+        expected_selected: &RuntimeHostBackend,
+        replacement: RuntimeHostBackend,
+    ) -> Result<(), String> {
+        if self.active_transaction_id.is_some() || self.candidate_backend.is_some() {
+            return Err(
+                "runtime host ingress transaction changed before identity refresh".to_string(),
+            );
+        }
+        if &self.selected_backend != expected_selected {
+            return Err(
+                "runtime host selected backend changed before identity refresh".to_string(),
+            );
+        }
+        replacement.validate()?;
+        if replacement.topology != RuntimeHostTopology::SingleHost
+            || replacement.generation_id != expected_selected.generation_id
+            || replacement.socket_dir != expected_selected.socket_dir
+            || replacement.binary_sha256 != expected_selected.binary_sha256
+        {
+            return Err("runtime host replacement identity changed selected scope".to_string());
+        }
+        self.selected_backend = replacement;
+        self.selected_transaction_id = None;
+        self.revision = self.revision.saturating_add(1);
+        Ok(())
+    }
+
     fn require_transaction(&self, transaction_id: &str) -> Result<(), String> {
         if self.active_transaction_id.as_deref() != Some(transaction_id) {
             return Err("runtime host ingress transaction changed".to_string());
@@ -296,6 +325,17 @@ impl RuntimeHostIngressRepository {
                 expected_selected_pid,
                 expected_fallback_generation,
             )
+        })
+    }
+
+    pub(crate) fn refresh_selected_backend_identity(
+        &self,
+        expected_revision: u64,
+        expected_selected: &RuntimeHostBackend,
+        replacement: RuntimeHostBackend,
+    ) -> Result<RuntimeHostIngressRegistry, String> {
+        self.mutate(expected_revision, |registry| {
+            registry.refresh_selected_backend_identity(expected_selected, replacement)
         })
     }
 
@@ -576,6 +616,35 @@ mod tests {
             .unwrap();
         assert_eq!(restaged.selected_backend(), &old);
         assert_eq!(restaged.candidate_backend(), Some(&candidate));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn selected_backend_identity_refresh_is_revision_and_scope_fenced() {
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-runtime-host-ingress-refresh-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let repository = RuntimeHostIngressRepository::new(root.join("ingress.json"));
+        let selected = backend(&root, "old", 101);
+        let initial = repository.initialize(selected.clone()).unwrap();
+        let mut replacement = selected.clone();
+        replacement.pid = 303;
+        replacement.host_id = "host-old-restarted".to_string();
+        replacement.socket_identity = "socket-old-restarted".to_string();
+
+        let refreshed = repository
+            .refresh_selected_backend_identity(initial.revision, &selected, replacement.clone())
+            .unwrap();
+        assert_eq!(refreshed.selected_backend(), &replacement);
+        assert_eq!(refreshed.revision, initial.revision + 1);
+
+        let mut wrong_scope = replacement.clone();
+        wrong_scope.generation_id = "other-generation".to_string();
+        assert!(repository
+            .refresh_selected_backend_identity(refreshed.revision, &replacement, wrong_scope,)
+            .unwrap_err()
+            .contains("changed selected scope"));
         let _ = fs::remove_dir_all(root);
     }
 
