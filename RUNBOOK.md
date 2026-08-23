@@ -4,6 +4,45 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 181 | 2026-08-23
+
+Scope: install P124 in the isolated development environment and execute every
+currently runnable Slice G gate without touching production.
+
+Actions:
+
+- built and installed development generation `0.28.0-76c3dddafb22` through the
+  P125 publisher, which reported production unchanged;
+- validated development doctor, local and external ingress, authenticated
+  dashboard, policy projection, three browser launch/close cycles, live CDP tab
+  streaming, zero retained dev browser/session records, service GC dry-run,
+  and generation cleanup;
+- removed four unreferenced development generations while retaining the
+  selected generation and one rollback generation;
+- refused to borrow production Guacamole/RDP routes or fabricate presentation
+  slots when the development environment reported no presentation capacity;
+- recorded the exact partial acceptance and remaining provider gate in
+  `docs/dev/notes/0124-7-2026-08-23-controlled-development-install-partial-acceptance.md`.
+
+Validation:
+
+- development generation, all three units, ports 4948, 4949, and 4951, auth,
+  manifests, executable selection, browser executable, backend, and local
+  ingress passed their environment-owned doctor;
+- external authenticated dashboard, three browser launch cycles, and live CDP
+  tab streaming passed;
+- development service GC found zero candidates and Service State retained zero
+  browsers and sessions after cleanup;
+- production non-interference passed in the development publisher.
+
+Result:
+
+- P124 is `slice_g_development_installed_partial_provider_namespace_blocked`;
+- source Slices A through F and the non-provider installed-development surface
+  are accepted;
+- four-to-six provider-backed presentation acceptance requires a new isolated
+  development Guacamole/XRDP/display namespace.
+
 ## Turn 180 | 2026-08-23
 
 Scope: implement and accept P124 Slice F agent and operator product surfaces.
