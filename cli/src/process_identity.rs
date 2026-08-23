@@ -314,6 +314,10 @@ impl VerifiedProcessTermination {
     }
 }
 
+pub fn recorded_process_is_running(recorded: &RecordedProcessIdentity) -> Result<bool, String> {
+    verify_recorded_process_observation(recorded, observe_process(recorded.pid))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VerifiedProcessSignal {
     Terminate,
@@ -1087,6 +1091,23 @@ mod tests {
             ownership(Some(&recorded), observed, LegacyProfileProof::Unproven,),
             RuntimeProcessOwnership::MatchingBrowser
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn exact_process_liveness_observation_does_not_require_a_pidfd() {
+        let executable = std::env::current_exe().unwrap();
+        let recorded = capture_process_identity(std::process::id(), Some(&executable), None)
+            .expect("the test process identity should be observable");
+        assert!(recorded_process_is_running(&recorded).unwrap());
+
+        let missing = RecordedProcessIdentity {
+            pid: u32::MAX,
+            start_token: "linux:missing:0".to_string(),
+            executable_path: recorded.executable_path,
+            browser_family: recorded.browser_family,
+        };
+        assert!(!recorded_process_is_running(&missing).unwrap());
     }
 
     #[test]

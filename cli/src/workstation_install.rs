@@ -6472,6 +6472,9 @@ fn retire_finalized_source_runtime_host(
     if identity.pid != evidence.pid || identity.start_token != evidence.process_start_token {
         return Err("runtime_source_host_process_identity_changed_before_stop".to_string());
     }
+    if wait_for_recorded_process_exit(&identity, std::time::Duration::from_secs(5))? {
+        return Ok(());
+    }
     let Some(process) = crate::process_identity::VerifiedProcessTermination::open(&identity)?
     else {
         return Ok(());
@@ -6492,6 +6495,22 @@ fn retire_finalized_source_runtime_host(
         return Err("runtime_source_host_exit_timeout".to_string());
     }
     Ok(())
+}
+
+fn wait_for_recorded_process_exit(
+    identity: &crate::process_identity::RecordedProcessIdentity,
+    timeout: std::time::Duration,
+) -> Result<bool, String> {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        if !crate::process_identity::recorded_process_is_running(identity)? {
+            return Ok(true);
+        }
+        if std::time::Instant::now() >= deadline {
+            return Ok(false);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
 }
 
 fn prove_finalized_source_exit(
@@ -6515,12 +6534,8 @@ fn prove_finalized_source_exit(
         if !seen.insert((identity.pid, identity.start_token.clone())) {
             continue;
         }
-        let Some(process) = crate::process_identity::VerifiedProcessTermination::open(identity)?
-        else {
-            continue;
-        };
         let local_deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        while process.is_running()? {
+        while crate::process_identity::recorded_process_is_running(identity)? {
             if time::OffsetDateTime::now_utc().unix_timestamp() >= deadline_unix_seconds {
                 return Err(format!(
                     "runtime_source_exit_deadline_expired:{}",
@@ -9615,6 +9630,26 @@ mod tests {
         assert!(!operator_recovery_can_stop_rolled_back_candidate_host(
             &transaction
         ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn finalized_runtime_host_grace_observes_self_exit_before_pidfd_fallback() {
+        let mut child = Command::new("sh")
+            .args(["-c", "sleep 0.05"])
+            .spawn()
+            .unwrap();
+        let executable = PathBuf::from(format!("/proc/{}/exe", child.id()))
+            .canonicalize()
+            .unwrap();
+        let identity =
+            crate::process_identity::capture_process_identity(child.id(), Some(&executable), None)
+                .unwrap();
+
+        assert!(
+            wait_for_recorded_process_exit(&identity, std::time::Duration::from_secs(1)).unwrap()
+        );
+        child.wait().unwrap();
     }
 
     #[test]
