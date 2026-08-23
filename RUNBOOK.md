@@ -4,6 +4,40 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 172 | 2026-08-23
+
+Scope: qualify the exact Plan 0122 source for publication and installed-runtime
+admission without changing the installed generation or any browser workload.
+
+Actions:
+
+- verified local source, remote baseline, installed binary, selected
+  generation, workstation status, and installed doctor;
+- built the exact optimized candidate from commit `5fd4be88`;
+- ran the candidate's non-mutating workstation dry-run;
+- corrected the expanded Plan 0122 baseline SHA to the authoritative commit;
+- opened Plan 0123 for separately authorized transactional installation and
+  installed no-launch qualification.
+
+Validation:
+
+- candidate SHA-256 is
+  `ae49edfd9d71161543c8378c06688876984f891b46cedca5272de1e77ca2f811`;
+- installed doctor has zero issues and reports one dashboard, one runtime host,
+  one executable generation, zero legacy daemons, and converged state;
+- candidate dry-run returns success, planned state, and `mutated=false` on a
+  supported host with effective groups, no missing commands, and sufficient
+  disk;
+- no upgrade transaction, runtime census receipt, admission drain, payload
+  staging, installation, browser, provider, or tenant effect occurred.
+
+Result:
+
+- Plan 0123 read-only admission is accepted;
+- source publication is the next normal integration step;
+- live transactional apply still requires explicit authority and a fresh
+  pre-apply readback.
+
 ## Turn 171 | 2026-08-23
 
 Scope: reconcile access-plan profile compatibility with executable no-launch

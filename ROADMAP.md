@@ -7,6 +7,27 @@ This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
 
+## P123 | Exact Profile Compatibility Installed Admission
+
+State: OPEN
+Current state: the Plan 0122 repair is accepted at source and candidate-build
+boundaries. Candidate commit `5fd4be88` produced optimized binary SHA-256
+`ae49edfd9d71161543c8378c06688876984f891b46cedca5272de1e77ca2f811`.
+Installed doctor is green and converged on the prior generation. Candidate
+workstation dry-run is planned, supported, and non-mutating with effective
+groups, no missing commands, and sufficient disk. Publication is the next
+source step; live transactional apply remains an explicit authorization gate.
+
+### Plan
+
+- `docs/dev/plans/0123-2026-08-23-exact-profile-compatibility-installed-admission.md`
+
+### Next Recommendation
+
+Publish the accepted source, then obtain explicit live authority before the
+transactional apply. Re-run all admission evidence immediately before apply
+and require installed no-launch agreement before any browser acquisition.
+
 ## P122 | Exact Profile Capability Compatibility
 
 State: COMPLETE

@@ -2,7 +2,7 @@
 
 Date: 2026-08-23
 
-Source baseline: `8c81de89c0e97b0ae5b930d9cd8db0aca3371b43`
+Source baseline: `8c81de89e8103f9d990af7fbb7bb752d6473d1e9`
 
 Implementation commit: `990e6b31`
 
