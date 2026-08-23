@@ -4,6 +4,42 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 178 | 2026-08-23
+
+Scope: confirm isolated development prerequisites and accept P124 Slice D at
+the provider-free source boundary.
+
+Actions:
+
+- verified the accepted P125 development runtime through its environment-owned
+  doctor and direct unit, port, selector, and executable readback;
+- promoted the desktop-evidence decision model into an injected transaction
+  coordinator spanning CDP, capacity, staging, window semantics, trigger,
+  frame capture, authorized input, verification, restoration, handoff, release,
+  and cleanup seams;
+- enforced CDP-only page evidence, paired absence evidence for browser-external
+  prompts, pre-trigger staging, human precedence, two-sided capture-ready proof,
+  terminal drift receipts, and the independent P110 input gate;
+- recorded source acceptance in
+  `docs/dev/notes/0124-4-2026-08-23-desktop-evidence-episode-slice-d-source-acceptance.md`.
+
+Validation:
+
+- the development doctor passed with one selected generation and all three
+  isolated services on their expected ports;
+- 14 focused desktop-evidence tests, Rust formatting, strict Clippy, and diff
+  hygiene passed;
+- Build Admission reported active capacity two and ran each admitted Rust
+  command with four Cargo jobs;
+- production remained read-only and no provider, browser, dashboard, install,
+  or ingress effect occurred.
+
+Result:
+
+- P124 is `slice_d_source_accepted`;
+- Slice E elastic lifecycle and garbage collection is the next bounded
+  source-only packet.
+
 ## Turn 177 | 2026-08-23
 
 Scope: diagnose, repair, and accept P126 before new feature development.

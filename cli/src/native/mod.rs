@@ -50,7 +50,6 @@ pub mod desktop_capture;
 #[allow(dead_code)]
 pub(crate) mod desktop_control_coordinator;
 #[allow(dead_code)]
-#[cfg(test)]
 pub(crate) mod desktop_evidence;
 #[allow(dead_code)]
 pub(crate) mod desktop_interaction;
