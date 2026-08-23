@@ -28,12 +28,15 @@ pub struct ResolvedProfile {
 pub struct RuntimeState {
     pub runtime_profile: String,
     pub user_data_dir: String,
+    #[serde(default, deserialize_with = "deserialize_nullable_pid_as_zero")]
     pub browser_pid: u32,
     /// Process-start and executable evidence that distinguishes the launched
     /// browser instance from a later unrelated process that reuses its PID.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub process_identity: Option<RecordedProcessIdentity>,
+    #[serde(default, deserialize_with = "deserialize_nullable_bool_as_false")]
     pub headed: bool,
+    #[serde(default, deserialize_with = "deserialize_nullable_string_as_empty")]
     pub launch_mode: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub devtools_port: Option<u16>,
@@ -43,6 +46,27 @@ pub struct RuntimeState {
     /// endpoint. This keeps manual authentication browsers discoverable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub launch_record: Option<RuntimeLaunchRecord>,
+}
+
+fn deserialize_nullable_pid_as_zero<'de, D>(deserializer: D) -> Result<u32, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(Option::<u32>::deserialize(deserializer)?.unwrap_or_default())
+}
+
+fn deserialize_nullable_bool_as_false<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(Option::<bool>::deserialize(deserializer)?.unwrap_or_default())
+}
+
+fn deserialize_nullable_string_as_empty<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(Option::<String>::deserialize(deserializer)?.unwrap_or_default())
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -973,6 +997,53 @@ mod tests {
             status.user_data_dir,
             configured_user_data_dir.display().to_string()
         );
+    }
+
+    #[test]
+    fn test_runtime_state_accepts_nullable_legacy_browser_pid_as_idle() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = env::temp_dir().join(format!(
+            "runtime-null-pid-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+
+        let runtime_profile = "legacy-null-pid-runtime";
+        let user_data_dir = runtime_profile_user_data_dir(runtime_profile).unwrap();
+        fs::create_dir_all(&user_data_dir).unwrap();
+        let state_path = runtime_profile_state_path(runtime_profile).unwrap();
+        fs::write(
+            &state_path,
+            serde_json::to_string_pretty(&serde_json::json!({
+                "runtimeProfile": runtime_profile,
+                "userDataDir": user_data_dir,
+                "browserPid": null,
+                "processIdentity": null,
+                "headed": null,
+                "launchMode": null,
+                "devtoolsPort": null,
+                "wsUrl": null
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let state = read_runtime_state(runtime_profile).unwrap().unwrap();
+        assert_eq!(state.browser_pid, 0);
+        assert!(!state.headed);
+        assert!(state.launch_mode.is_empty());
+
+        let status = runtime_status_with_user_data_dir(runtime_profile, None).unwrap();
+        assert_eq!(status.browser_pid, Some(0));
+        assert!(!status.browser_alive);
+        assert_eq!(status.devtools_port, None);
+
+        fs::remove_dir_all(&home).unwrap();
     }
 
     #[test]
