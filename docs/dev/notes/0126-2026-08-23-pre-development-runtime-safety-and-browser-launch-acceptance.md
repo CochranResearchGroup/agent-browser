@@ -56,11 +56,15 @@ dry-runs now report:
 - development policy:
   `requiresRuntimeEnvironmentOwnershipForCandidates=true`.
 
-One diagnostic shell briefly appeared as a production remote-display candidate
-because its command text contained the display executable name. The shell had
-already exited, and a clean single-purpose production dry-run returned zero.
-This is retained evidence that production command-substring classification
-deserves later hardening. It did not authorize or cause an effect.
+Follow-up resolution on 2026-08-23: remote-display classification now requires
+the sampled executable basename to be exactly `xvfb`; arbitrary command
+arguments cannot supply process kind. A red regression reproduced the
+diagnostic-shell false positive, then passed with the repair while real Xvfb
+and retained-display fixtures remained green. Installed development generation
+`0.28.0-16cf2763100d` excluded a live zsh process carrying
+`Xvfb-diagnostic` in argv from both service resources and GC. Production
+remained on its prior generation and the only before-and-after changes were
+live CPU, RSS, lease timestamp, and readiness timestamp observations.
 
 ## Reviewed Terminal Cleanup
 

@@ -607,11 +607,10 @@ fn classify_process(
     process: ProcessSample,
     environment: &ResourceRuntimeEnvironment,
 ) -> Option<ResourceRecord> {
-    let command_text = process.command.join(" ");
     let profile_path = command_arg_value(&process.command, "--user-data-dir");
     let cdp_port = command_arg_value(&process.command, "--remote-debugging-port")
         .and_then(|value| value.parse::<u16>().ok());
-    let kind = resource_kind(&process, &command_text, profile_path.as_deref(), cdp_port);
+    let kind = resource_kind(&process, profile_path.as_deref(), cdp_port);
     if kind == ResourceKind::Other {
         return None;
     }
@@ -914,7 +913,6 @@ fn correlate_process(
 
 fn resource_kind(
     process: &ProcessSample,
-    command_text: &str,
     profile_path: Option<&str>,
     cdp_port: Option<u16>,
 ) -> ResourceKind {
@@ -924,7 +922,13 @@ fn resource_kind(
         .or_else(|| process.command.first().map(String::as_str))
         .unwrap_or_default()
         .to_ascii_lowercase();
-    if executable.contains("xvfb") || command_text.contains("Xvfb") {
+    let executable_name = Path::new(&executable)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(&executable);
+    // Process arguments can contain diagnostic prose or commands naming Xvfb.
+    // Remote-display authority requires the sampled executable itself.
+    if executable_name == "xvfb" {
         return ResourceKind::RemoteDisplay;
     }
     if executable.contains("agent-browser") {
@@ -2242,6 +2246,26 @@ mod tests {
             response["resources"][0]["reasons"][0],
             "orphaned_remote_display_process"
         );
+    }
+
+    #[test]
+    fn resources_do_not_classify_shell_arguments_as_remote_displays() {
+        let response = service_resources_response_from_samples_for_environment(
+            &ServiceState::default(),
+            vec![sample(
+                509,
+                &[
+                    "/usr/bin/zsh",
+                    "-c",
+                    "inspect the Xvfb process table without starting a display",
+                ],
+                Some(5),
+            )],
+            Vec::new(),
+            ResourceRuntimeEnvironment::Production,
+        );
+        assert_eq!(response["summary"]["candidateCount"], 0);
+        assert_eq!(response["resources"], json!([]));
     }
 
     #[test]
