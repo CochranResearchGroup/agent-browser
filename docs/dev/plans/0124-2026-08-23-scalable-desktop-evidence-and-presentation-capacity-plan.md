@@ -12,6 +12,7 @@ Authority: SOURCE-ONLY | NO LIVE DESKTOP OR INSTALL EFFECTS
 
 Depends on:
 
+- `docs/dev/plans/0126-2026-08-23-pre-development-runtime-safety-and-browser-launch-stabilization.md`
 - `VISION.md`
 - `docs/dev/plans/0125-2026-08-23-development-runtime-isolation-and-build-capacity-plan.md`
 - `docs/dev/plans/0110-2026-08-12-desktop-perception-interaction-foundation-plan.md`

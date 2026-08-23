@@ -4,6 +4,49 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 177 | 2026-08-23
+
+Scope: diagnose, repair, and accept P126 before new feature development.
+
+Actions:
+
+- reproduced development Chrome exit code zero before DevTools and proved the
+  selected Windows-mounted browser was incompatible with the Linux-only
+  development profile root;
+- pinned a validated Linux browser executable through the development
+  descriptor, stable launcher, units, status, doctor, and generation manifest;
+- required positive development Runtime Environment ownership before service
+  GC can admit any global process as a candidate;
+- added deterministic publisher and service-resource regressions plus a
+  three-cycle installed browser launch and residue smoke;
+- reinstalled only the development generation and preserved production
+  identities through every installed effect;
+- terminated exact stale test process group `72225` after repeated PID, start
+  token, executable, profile, process-group, and no-service-owner checks, then
+  moved its test home and two closed diagnostic profiles to trash;
+- synchronized the repository and installed Agent Browser skill guidance.
+
+Validation:
+
+- the original stable development launch succeeds without a caller override;
+- three consecutive open, URL-read, close, and no-residue cycles pass with
+  production identity unchanged;
+- development doctor passes with selected generation
+  `0.28.0-b3dc87dcc29a` and browser `/opt/google/chrome/chrome`;
+- fresh production and development GC dry-runs both report zero candidates;
+- focused Rust tests, development publisher fixtures, Rust format, strict
+  Clippy, docs build, remote-view docs, release fixtures, skill sync, and diff
+  hygiene pass;
+- production remains on generation
+  `0.28.0-4b975a51aa89-d0782705d5ff`, runtime host PID 75310, and dashboard PIDs
+  87827 and 87877 with three retained browsers and 63 sessions.
+
+Result:
+
+- P126 is `ACCEPTED` at source and installed-development boundaries;
+- production remained read-only and active;
+- P124 Slice A is the next bounded source-only packet.
+
 ## Turn 176 | 2026-08-23
 
 Scope: implement and accept P125 without interrupting active production use.

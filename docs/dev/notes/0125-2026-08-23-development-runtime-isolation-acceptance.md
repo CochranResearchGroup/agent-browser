@@ -71,6 +71,12 @@ processes with projected RSS of 83.5 MiB. It made no change because apply
 requires a reviewed short-lived token. This preserves the service GC authority
 boundary while exposing current cleanup pressure.
 
+Follow-up correction on 2026-08-23: production resource authority protects the
+same three PIDs through retained display allocations. Their development
+candidate classification is therefore a cross-environment ownership defect,
+not valid development cleanup authority. Plan 0126 blocks the token and repairs
+candidate admission before new development begins.
+
 ## Build Admission
 
 The WSL Cargo wrapper now holds an exclusive lock only while reconciling and

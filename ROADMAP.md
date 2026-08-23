@@ -7,6 +7,27 @@ This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
 
+## P126 | Pre-Development Runtime Safety And Browser Launch Stabilization
+
+State: ACCEPTED
+Current state: development GC now requires positive development-environment
+ownership before admitting any process as a candidate. The development
+publisher pins `/opt/google/chrome/chrome` through its stable launcher and all
+three units. Doctor passes, three consecutive disposable launch cycles pass,
+and both production and development GC dry-runs finish with zero candidates.
+The exact two-day-old test Chrome group was terminated after repeated identity
+and no-owner proof, and its temporary home was moved to trash.
+
+### Plan
+
+- `docs/dev/plans/0126-2026-08-23-pre-development-runtime-safety-and-browser-launch-stabilization.md`
+
+### Next Recommendation
+
+Begin only P124 Slice A in source and provider-free fixtures. Keep installed
+experiments on the accepted development Runtime Environment and preserve
+production as a separate effect boundary.
+
 ## P125 | Development Runtime Isolation And Build Capacity
 
 State: ACCEPTED
@@ -54,8 +75,7 @@ ownership remains independent from presentation capacity.
 
 ### Next Recommendation
 
-Execute P125 first. Then execute Slice A only: freeze provider-free red
-fixtures and architecture guards
+Execute Slice A only: freeze provider-free red fixtures and architecture guards
 for evidence selection, arbitrary-N inventory, four-slot warm capacity,
 priority admission, scene proof, restoration, elastic lifecycle, and exact GC.
 Do not change the current workstation or provision live desktop resources.
