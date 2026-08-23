@@ -38,8 +38,12 @@ tick then exposed a terminal-replacement defect before either provider was
 navigated. The source repair now moves the lifecycle record to a collision-free
 new ID at exactly the next generation and retains one cleanup obligation. A
 second source repair records successful auxiliary cleanup so a graceful browser
-exit cannot become a false force-kill failure. Provider-free validation is in
-progress; no workstation upgrade or provider retry is part of this packet.
+exit cannot become a false force-kill failure. Canonical Rust CI, workstation
+fixtures, documentation validation, and three provider-free development-browser
+open/read/close cycles pass on development generation
+`0.28.0-b1a74a64a0dc`; production remains unchanged. Route-bound
+same-profile replacement acceptance remains open; it does not block unrelated
+Agent Browser work.
 
 ### Plan
 
@@ -47,9 +51,9 @@ progress; no workstation upgrade or provider retry is part of this packet.
 
 ### Next Recommendation
 
-Finish the provider-free source and isolated-development validation for normal
-close and same-profile replacement. Keep the accepted workstation installation
-and authenticated provider state unchanged.
+Prove the remaining route-bound same-profile replacement against a harmless
+local fixture when an isolated presentation route is available. Keep the
+accepted workstation installation and authenticated provider state unchanged.
 
 ## P125 | Development Runtime Isolation And Build Capacity
 

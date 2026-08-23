@@ -4,6 +4,51 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 179 | 2026-08-23
+
+Scope: continue unaffected P127 source and provider-free development-runtime
+work after the workstation upgrade gate closed.
+
+Actions:
+
+- repaired shutdown aggregation so a graceful browser exit followed by
+  successful auxiliary cleanup cannot be classified as a force-kill failure;
+- merged current `origin/main` and reconciled the plan-number collision by
+  retaining accepted P126 and renumbering this lane to P127;
+- isolated unit tests from the operator's installed runtime-ingress registry
+  unless a test explicitly opts in, and aligned a stale dashboard test with
+  the deliberate removal of unknown-session fallback;
+- published the candidate only to the isolated development runtime as
+  generation `0.28.0-b1a74a64a0dc` with SHA-256
+  `b1a74a64a0dc0a80bb145a7334b741b7376c04b06829f77c72aa2ca955d9f22f`;
+- ran three disposable provider-free `about:blank` open, URL-read, and close
+  cycles without navigating to X, LinkedIn, or another provider.
+
+Validation:
+
+- canonical Rust CI passed: 1,412 parallel-safe tests, 57 ignored tests, all
+  isolated environment-mutating modules, and integration partitions passed;
+- strict Clippy, Rust formatting, diff hygiene, route-confusion gates, all
+  selected workstation and Guacamole fixtures, docs build, remote-view handoff
+  docs, and installed skill parity passed;
+- development doctor passed with all three units using the selected
+  development generation;
+- post-smoke development readback found zero sessions, zero active incidents,
+  and zero force-kill failure classifications;
+- the development publisher and smoke both reported the production generation
+  remained `0.28.0-4b975a51aa89-d0782705d5ff` with installed SHA-256
+  `4b975a51aa892241ea73cc6e8acef42bb67d781c8b9be43edbc1086f4d7956f8`.
+
+Result:
+
+- provider-free normal close and shutdown classification are accepted in the
+  isolated development runtime;
+- deterministic lifecycle coverage accepts exact next-generation
+  same-profile replacement;
+- production and authenticated provider profiles were not changed or opened;
+- P127 remains `OPEN` only for harmless route-bound same-profile replacement
+  acceptance, which does not block unrelated Agent Browser work.
+
 ## Turn 178 | 2026-08-23
 
 Scope: reconcile the preserved named-profile lifecycle and diagnose one bounded

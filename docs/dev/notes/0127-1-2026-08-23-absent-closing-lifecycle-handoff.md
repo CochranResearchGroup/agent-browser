@@ -8,17 +8,16 @@ Lane: P127
 
 Branch: `fix/reconcile-absent-closing-lifecycle`
 
-Published source checkpoint: `cd23311e2fcd0934a1d5e9d7b3a6b93cf4d0f847`
+Published source checkpoint before this closeout: `750b17e8`
 
 Prior handoff checkpoint: `b7561ae48e6af46446b2e9d4c88d61c46fb13f04`
 
-Target: `main` at source baseline
-`e3945810b3e15c507c00dd0218656735f266fcc0`
+Target: `main` at merged checkpoint
+`7b235254`
 
 ## Outcome So Far
 
-The source repair is published, clean, and equal to its remote branch. It
-contains three checkpoints:
+The source repair has six material checkpoints:
 
 1. `71e57e1b` reconciles an exact absent-process and absent-lock
    `closing/owned` lifecycle through the existing `CompleteClose`
@@ -27,18 +26,27 @@ contains three checkpoints:
    overwriting a concurrent registry mutation.
 3. `cd23311e` permits an exact `terminal/satisfied` owner to advance one
    generation under a collision-free new logical browser ID.
+4. `e517beea` records successful auxiliary cleanup as a successful force-kill
+   outcome after graceful browser exit.
+5. `f11f3bd4` merges current `origin/main` and resolves the planning collision
+   by preserving accepted P126 and renumbering this lane to P127.
+6. `750b17e8` isolates unit tests from implicit installed-ingress state and
+   aligns the unknown-session dashboard regression with current behavior.
 
-The plan records passing source validation for 12 lifecycle tests, 50 focused
-Service Health tests, formatting, strict Clippy, and diff hygiene. Current
-source therefore permits an exact satisfied terminal owner to be replaced at
-the next generation.
+Canonical Rust CI, strict Clippy, formatting, diff hygiene, route-confusion
+gates, the selected workstation and Guacamole fixtures, docs build,
+remote-view handoff docs, and installed skill parity pass. Current source
+therefore permits an exact satisfied terminal owner to be replaced at the next
+generation.
 
-The immediate stale-owner blocker has cleared. Fresh live readback on
-2026-08-23 found the affected lifecycle `terminal/satisfied`, no incident for
-that lifecycle, and no global lifecycle blocking incident. This does not prove
-the complete close and replacement lifecycle. The false force-kill
-classification remains unproven as fixed, and no successful same-profile,
-route-bound replacement has completed.
+The immediate stale-owner blocker has cleared. The candidate is accepted in
+the isolated development runtime as generation `0.28.0-b1a74a64a0dc` at
+SHA-256
+`b1a74a64a0dc0a80bb145a7334b741b7376c04b06829f77c72aa2ca955d9f22f`.
+Development doctor and three disposable provider-free `about:blank`
+open/read/close cycles pass. Post-smoke readback found zero sessions, zero
+active incidents, and zero force-kill failure classifications. The remaining
+unproved surface is one harmless route-bound same-profile replacement.
 
 The workstation upgrade is complete and is not an open gate for this lane. Do
 not describe another workstation upgrade as the next action. Plan 0127 remains
@@ -56,7 +64,7 @@ For this lane, continue source and provider-free lifecycle validation in the
 isolated development worktree. Do not initiate another workstation upgrade or
 open an authenticated provider merely to test lifecycle behavior.
 
-Fresh read-only evidence on 2026-08-23 established:
+Fresh evidence on 2026-08-23 established:
 
 - workstation transaction
   `upgrade-0df91191-ad9b-4eb9-aa85-2f92e9729563` is accepted;
@@ -68,17 +76,15 @@ Fresh read-only evidence on 2026-08-23 established:
   draining;
 - the service reports one current runtime-host process and no lifecycle
   blocking incident;
-- the shared runtime-host supervisor unit is stopped, even though the current
-  runtime-host process is still observed;
-- two presentation incidents are active. The P127 maintenance packet owns the
-  orphaned display allocation on `guacamole:1`. The separate route-pool
-  exhaustion incident belongs to another active presentation scope and must
-  not be silently folded into this lane.
+- the development publisher and smoke both report the production identity
+  unchanged;
+- development doctor passes on generation `0.28.0-b1a74a64a0dc`;
+- three provider-free development-browser close cycles leave zero development
+  sessions and zero active development incidents.
 
-These axes are independent. The supervisor warning and route incident require
-bounded runtime maintenance, but they do not make all Agent Browser work
-unavailable. Only work requiring the affected presentation route or the
-unvalidated lifecycle should pause.
+The remaining route-bound acceptance is a scoped presentation criterion. It
+does not make the workstation, provider profiles, or unrelated Agent Browser
+work unavailable.
 
 ## Incident Contract
 
@@ -106,21 +112,19 @@ Live processes, present locks, missing profiles, identity mismatches,
 generation mismatches, pending transfers, and logical-ID collisions remain
 fail closed.
 
-## Unresolved Companion Observation
+## Resolved Companion Observation
 
-The originating close also produced an internally inconsistent shutdown
+The originating close produced an internally inconsistent shutdown
 report: the close request reported success, the polite close reported success,
 and the recorded process was absent, while Service Health still recorded
 `browser_shutdown_force_kill_failed` and escalated to
 `os_degraded_possible`.
 
-Plan 0127 repairs deterministic convergence from the resulting stale state. It
-does not, by itself, prove that the ordinary close path now avoids an
-unnecessary force-kill attempt or writes `terminal/satisfied` immediately.
-Do not close this observation by inference. The next packet must reproduce or
-disprove it with a provider-free close fixture, repair the classification if
-reproduced, and prove one harmless same-profile close and route-bound
-replacement without opening the target provider.
+Commit `e517beea` repairs that aggregation error, its regression passes, and
+three provider-free development-browser close cycles complete without a
+force-kill failure classification. This companion observation is resolved for
+the provider-free close path. Route-bound replacement remains separate and
+open.
 
 The supported remedy also failed after the service browser row had already
 been removed. The reconciliation repair is now the intended recovery path for
@@ -133,17 +137,12 @@ Use these sources in order:
 
 1. Fresh read-only workstation, Service Health, lifecycle, supervisor, and
    presentation readback.
-2. Cross-repo upgrade acceptance in the books-receipts repository, file
-   `docs/dev/validation/0232-i2q-agent-browser-upgrade-and-profile-gate-accepted.md`.
-3. Cross-repo probe and sandbox evidence in the books-receipts repository,
-   file
-   `docs/dev/validation/0232-i2r-auth-probe-and-sandbox-target-gate.md`.
-4. Current source and tests on this branch.
-5. `docs/dev/plans/0127-2026-08-23-absent-closing-lifecycle-reconciliation.md`
+2. Current source and tests on this branch.
+3. `docs/dev/plans/0127-2026-08-23-absent-closing-lifecycle-reconciliation.md`
    for source history. Its installation language is superseded by the accepted
    workstation state above.
-6. The current `ROADMAP.md` and `RUNBOOK.md` entries on this branch.
-7. This handoff note.
+4. The current `ROADMAP.md` and `RUNBOOK.md` entries on this branch.
+5. This handoff note.
 
 Chat, Graphiti recall, and old runtime snapshots are locators, not current
 proof. Keep tenant identifiers, profile paths, authentication state, and raw
@@ -167,12 +166,13 @@ agent-browser --json service status
 agent-browser --json service incidents --state active --limit 50
 ```
 
-Expected Git checkpoint before this correction:
+Expected Git checkpoint before this closeout commit:
 
 - branch `fix/reconcile-absent-closing-lifecycle`;
-- HEAD `b7561ae48e6af46446b2e9d4c88d61c46fb13f04`;
-- local and remote divergence `0 0`;
-- worktree clean before this correction was added.
+- HEAD `750b17e8`;
+- local is one commit ahead of the remote branch before this documentation
+  closeout;
+- worktree is clean before this closeout edit.
 
 The installed CLI reported `agent-browser 0.28.0` on 2026-08-23. Use the
 workstation-status receipt above for installed identity. The version string
@@ -188,28 +188,18 @@ Use CodeGraph to inspect the structural flow beginning at
 
 1. Keep the accepted workstation installation unchanged. Do not run an upgrade
    or reopen the installation handoff.
-2. Re-run the focused source validation from Plan 0127 if branch custody or
-   source has changed.
-3. Use the isolated development runtime and provider-free fixtures to
-   reproduce the polite-close and force-kill contradiction. Repair the close
-   classification if it reproduces.
-4. Diagnose the stopped supervisor and the orphaned `guacamole:1` display as
-   separate runtime-maintenance and presentation axes. Preserve the observed
-   runtime host and every unrelated browser, route, and controller lease.
-5. Prove one harmless same-profile close and route-bound replacement against a
+2. Re-run the validated source surface only if branch custody or source has
+   changed.
+3. Prove one harmless same-profile close and route-bound replacement against a
    local fixture page. Do not navigate to the provider, inspect authentication,
    or capture private page content.
-6. Require immediate `terminal/satisfied` close convergence, consistent
+4. Require immediate `terminal/satisfied` close convergence, consistent
    shutdown outcome fields, next-generation replacement admission, and a
    healthy route lease with no orphaned display.
-7. Record source identity, runtime identity, lifecycle before and after,
-   process and lock evidence, supervisor state, route and display disposition,
-   and rollback in a durable validation receipt.
-8. Keep the consuming Books Receipts mutation saga blocked. The sandbox
-   inventory contains zero disposable transactions. A human must explicitly
-   designate or create one disposable sandbox card transaction and separately
-   authorize the mutation test.
-9. Close Plan 0127 only when the normal-close lifecycle and harmless
+5. Record source identity, runtime identity, lifecycle before and after,
+   process and lock evidence, route and display disposition, and rollback in a
+   durable validation receipt.
+6. Close Plan 0127 only when the harmless
    route-bound replacement are evidenced. Otherwise record the exact scoped
    blocker without globally blocking unrelated Agent Browser work.
 
@@ -226,10 +216,6 @@ The final acceptance must prove all of the following:
 - successful polite close does not generate a false force-kill failure;
 - the service browser row and runtime lifecycle cannot disagree after normal
   close;
-- the shared runtime-host supervisor is active and ready, or has an explicit
-  nonblocking disposition consistent with the observed runtime host;
-- the `guacamole:1` orphaned display is reconciled without disturbing an
-  unrelated route or browser;
 - route, display, browser, and profile ownership are released or retained
   according to their explicit contracts;
 - a harmless local fixture passes same-profile route-bound replacement without
@@ -249,16 +235,13 @@ The final acceptance must prove all of the following:
 - Do not prune an unrelated retained display, release another route, close
   another browser, or restart a shared component without exact scoped evidence
   and authority.
-- Do not merge P127 while the plan remains `OPEN` or while the normal-close
-  companion observation lacks a disposition.
+- Do not merge P127 while the plan remains `OPEN`.
 - Do not copy tenant-specific runtime evidence into this repository.
 
 ## Handoff Recommendation
 
-Continue on the existing P127 branch with one bounded maintenance packet: fix
-or disprove the false force-kill classification, reconcile the stopped
-supervisor and orphaned `guacamole:1` display within their own axes, then prove
-a harmless same-profile close and route-bound replacement on a local fixture.
-Do not reopen the workstation upgrade, do not open the provider, do not claim
-the empty sandbox is a lawful mutation target, and do not globally block
+Continue on the existing P127 branch only for one bounded route-bound
+acceptance packet: prove a harmless same-profile close and replacement on a
+local fixture when an isolated presentation route is available. Do not reopen
+the workstation upgrade, do not open the provider, and do not globally block
 unrelated Agent Browser work.

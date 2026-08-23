@@ -54,9 +54,12 @@ owner was `session:plan0117-final-runtime` while the bounded feed service uses
 7. A graceful exact-process exit with successful auxiliary-process cleanup
    records the force-kill attempt as successful and does not create a false
    `force_kill_failed` classification.
-8. Provider-free isolated-development fixtures prove normal-close convergence
-   and one same-profile, next-generation replacement without changing the
-   accepted workstation installation or opening a provider.
+8. Provider-free isolated-development fixtures prove normal-close convergence,
+   while deterministic lifecycle coverage proves one same-profile,
+   next-generation replacement without changing the accepted workstation
+   installation or opening a provider.
+9. A harmless route-bound local fixture proves the same-profile replacement
+   across the presentation handoff before this lane closes.
 
 ## Non-Goals
 
@@ -113,9 +116,32 @@ owner was `session:plan0117-final-runtime` while the bounded feed service uses
   auxiliary-process cleanup now records a successful force-kill outcome instead
   of becoming `browser_shutdown_force_kill_failed`. Its focused regression
   passes.
-- Provider-free acceptance remains open. No second provider tick was run, and
-  the failed prior tick provides no evidence about X or LinkedIn authentication,
-  retrieval, or filtering.
+- Merge checkpoint `f11f3bd4` incorporates current `origin/main` at
+  `7b235254` and preserves accepted P126 while assigning this lane P127.
+- Commit `750b17e8` prevents an operator's installed ingress registry from
+  silently opting unit tests into runtime-host admission, while preserving
+  installed product behavior. It also aligns the unknown-session dashboard
+  test with the intentional removal of arbitrary first-session fallback.
+- Canonical Rust CI passes, including 1,412 parallel-safe tests, every isolated
+  environment-mutating test module, and the integration partitions. Strict
+  Clippy, Rust formatting, diff hygiene, route-confusion gates, the selected
+  workstation and Guacamole fixtures, docs build, remote-view handoff docs,
+  and installed skill parity also pass.
+- The candidate was published only to development generation
+  `0.28.0-b1a74a64a0dc` at SHA-256
+  `b1a74a64a0dc0a80bb145a7334b741b7376c04b06829f77c72aa2ca955d9f22f`.
+  Development doctor passes, and three disposable provider-free `about:blank`
+  open/read/close cycles pass with zero remaining sessions, zero active
+  incidents, and zero force-kill failure classifications.
+- Production remained selected at generation
+  `0.28.0-4b975a51aa89-d0782705d5ff` with installed SHA-256
+  `4b975a51aa892241ea73cc6e8acef42bb67d781c8b9be43edbc1086f4d7956f8`.
+  No production install, provider navigation, profile mutation, or second
+  provider tick occurred.
+- Source and provider-free development acceptance are complete. The plan
+  remains open only for harmless route-bound same-profile replacement
+  acceptance; this scoped presentation criterion does not block unrelated
+  Agent Browser work.
 
 ## Bounds
 
@@ -123,5 +149,5 @@ owner was `session:plan0117-final-runtime` while the bounded feed service uses
 - one live lifecycle reconciliation attempt;
 - one consuming X and LinkedIn tick after restored admission;
 - one provider-free normal-close and same-profile replacement acceptance pass;
-- no profile mutation, process termination, runtime installation, or provider
-  retry outside those bounds.
+- no profile mutation, process termination, production runtime installation,
+  or provider retry outside those bounds.
