@@ -4,6 +4,35 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 171 | 2026-08-23
+
+Scope: reconcile access-plan profile compatibility with executable no-launch
+preflight without launching a browser or changing installed or tenant state.
+
+Actions:
+
+- reproduced an account-selected `bill-soylei` plan borrowing a compatible row
+  from another profile on the same host and executable;
+- added one exact profile-host-executable predicate in the Service model;
+- used the shared predicate in access-plan evidence selection and executable
+  capability preflight;
+- added a deterministic provider-free red-to-green regression fixture.
+
+Validation:
+
+- formatting, strict Clippy, 34 service-model tests, 41 access-plan tests, and
+  4 capability-preflight tests pass;
+- API/MCP parity, generated-client checks, client type checks, and diff hygiene
+  pass;
+- no browser, provider, tenant, profile, authentication, lease, or installed
+  runtime effect occurred.
+
+Result:
+
+- Plan 0122 is complete at the source and provider-free validation boundary;
+- access plans no longer overstate selected-profile compatibility;
+- installed qualification remains a separate governed consuming-workflow step.
+
 ## Turn 170 | 2026-08-22
 
 Scope: complete Plan 0117 installed convergence, preserve the authenticated

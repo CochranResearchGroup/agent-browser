@@ -1,11 +1,32 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-08-22
+Updated: 2026-08-23
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
+
+## P122 | Exact Profile Capability Compatibility
+
+State: COMPLETE
+Current state: read-only access planning and executable no-launch preflight now
+share one exact profile, host, and executable compatibility predicate. An
+account-selected profile cannot borrow a compatible declaration from another
+profile merely because the host or executable matches. The provider-free
+regression fixture, affected Rust suites, strict Clippy, API/MCP parity,
+generated-client checks, and client type checks pass. Installed-runtime and
+tenant qualification remain outside this source-complete lane.
+
+### Plan
+
+- `docs/dev/plans/0122-2026-08-23-exact-profile-capability-compatibility.md`
+
+### Next Recommendation
+
+Promote this source through the governed installed-runtime transaction only
+when a consuming workflow has explicit authority, then repeat access-plan and
+no-launch preflight readback for the same selected profile before browser use.
 
 ## P117 | Runtime Lifecycle Authority And Convergence
 
