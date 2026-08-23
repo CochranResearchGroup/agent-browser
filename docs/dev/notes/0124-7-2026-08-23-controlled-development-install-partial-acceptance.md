@@ -69,6 +69,13 @@ It must not reuse production routes or production provider state. Once that
 namespace and its readiness doctor exist, rerun only the unmet Slice G gates
 against `agent-browser-dev`.
 
+The repository Agent Browser skill contains the accepted CDP-first evidence
+guidance, but the shared installed skill intentionally remains unchanged. The
+files differ in the final readback. Updating the shared skill would change
+production-agent behavior outside the isolated development runtime, so it
+requires either a dev-only skill namespace or a separately reviewed global
+guidance rollout.
+
 Plan 0124 remains in progress. Source Slices A through F are accepted; the
 installed development binary, dashboard, ingress, browser, CDP, policy, and GC
 boundaries are accepted; provider-backed presentation acceptance is not.
