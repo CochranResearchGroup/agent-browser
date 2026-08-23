@@ -985,6 +985,14 @@ pub fn run_install_doctor(flags: &Flags) {
         report.pointer("/data/serviceResources/readinessImpactingCandidates"),
     );
     print_doctor_field(
+        "desktop evidence page transport",
+        report.pointer("/data/desktopEvidencePolicy/pageEvidenceTransport"),
+    );
+    print_doctor_field(
+        "desktop evidence configured input",
+        report.pointer("/data/desktopEvidencePolicy/configuredProductionInput"),
+    );
+    print_doctor_field(
         "remote-view privileges ready",
         report.pointer("/data/remoteViewPrivileges/ready"),
     );
@@ -1240,6 +1248,7 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
             "launchConfig": launch_config,
             "service": service,
             "serviceResources": service_resources,
+            "desktopEvidencePolicy": crate::native::desktop_evidence::DesktopEvidenceCoordinator::policy_projection(),
             "remoteViewPrivileges": remote_view_privileges,
             "dashboardRuntime": dashboard_runtime,
             "liveDashboardRuntime": live_dashboard_runtime,

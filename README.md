@@ -3371,6 +3371,17 @@ state counts, admitted and hard limits, human and recovery reserves, queued
 demand by priority, oldest wait age, and redacted binding warnings. A logical
 browser consumes no slot until presentation is explicitly requested, and
 reading capacity never launches a browser or opens a route.
+Service status also exposes the redacted `desktopEvidencePolicy` used by the
+CLI, HTTP API, MCP, generated client, and dashboard. Use CDP for DOM,
+accessibility, viewport, canvas, and page-pixel evidence. Request a desktop
+evidence episode only for browser chrome, extension UI, password-manager or
+passkey prompts, native dialogs, OS windows, or stacking and occlusion that CDP
+cannot observe. A generic CDP timeout or failure is diagnostic evidence, not
+permission to fall back to desktop capture. Browser-external classification
+requires paired CDP absence evidence, and capture requires an exact
+capture-ready proof before and after the frame. Biometric, secure-desktop, PIN,
+master-password, and consent surfaces return a human continuation. Configured
+production desktop input remains unavailable pending Plan 0110 acceptance.
 When the bound browser already has a live same-origin target for the requested
 URL, route-bound repeat opens reuse that target and include
 `tabAcquisitionDecision="reused_compatible_target"` plus

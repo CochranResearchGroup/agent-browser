@@ -8,6 +8,44 @@ Static route-user setup accepts `AGENT_BROWSER_RDP_ROUTE_USER_POOL_JSON` as an a
 
 Service status includes `presentationCapacity` when durable presentation-slot authority is configured. The read-only projection reports arbitrary-size slot state counts, admitted and hard limits, human and recovery reserves, queued demand, oldest wait age, and redacted binding warnings. Reading it never launches a browser or opens a route. Logical CDP-only browsers remain separate from scarce operator-visible presentation capacity.
 
+Service status also includes `desktopEvidencePolicy`, the redacted decision
+contract shared by CLI, HTTP, MCP, generated clients, and the dashboard.
+
+<table>
+  <thead>
+    <tr>
+      <th>Evidence need</th>
+      <th>Transport</th>
+      <th>Required behavior</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>DOM, accessibility, viewport, canvas, or page pixels</td>
+      <td>CDP</td>
+      <td>Allocate no presentation slot.</td>
+    </tr>
+    <tr>
+      <td>Browser chrome, extension UI, password-manager or passkey prompt, native dialog, OS window, stacking, or occlusion</td>
+      <td>Desktop evidence episode</td>
+      <td>Pair CDP absence evidence with pre-trigger staging and exact capture-ready proof before and after capture.</td>
+    </tr>
+    <tr>
+      <td>Generic CDP timeout or failure</td>
+      <td>Diagnostic</td>
+      <td>Do not infer permission for desktop fallback.</td>
+    </tr>
+    <tr>
+      <td>Biometric, secure desktop, PIN, master password, or consent</td>
+      <td>Human continuation</td>
+      <td>Return the durable handoff and perform no configured desktop input.</td>
+    </tr>
+  </tbody>
+</table>
+
+Configured production desktop input remains unavailable until Plan 0110 is
+accepted independently.
+
 The normal request model is identity-first. A caller asks for a tab or browser action plus `serviceName`, `agentName`, `taskName`, and the target site or login identity. agent-browser selects or reuses the managed profile, manages any profile lease, queues browser-control work, and records the trace state. Direct profile selection is for known-login overrides and bring-your-own-profile workflows.
 
 ## Use service mode as an agent

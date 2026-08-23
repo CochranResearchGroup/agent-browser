@@ -823,6 +823,7 @@ export interface ServiceStatusResponse {
   manualBrowsers?: ServiceManualRuntimeBrowser[];
   retainedDisplayAllocations?: ServiceRetainedDisplayAllocationSummary;
   presentationCapacity?: ServicePresentationCapacityProjection;
+  desktopEvidencePolicy?: ServiceDesktopEvidencePolicyProjection;
   browserSessionAuthority?: ServiceBrowserSessionAuthoritySnapshot;
   statusProjection?: ServiceStatusProjection;
   runtimeLifecycle?: ServiceRuntimeLifecycleStatus;
@@ -879,6 +880,17 @@ export interface ServicePresentationCapacityProjection {
   queuedByPriority: Record<string, number>;
   oldestWaitTicks?: number | null;
   bindingWarnings: string[];
+}
+
+export interface ServiceDesktopEvidencePolicyProjection {
+  schemaVersion: 'agent-browser.desktop-evidence-policy.v1';
+  pageEvidenceTransport: 'cdp';
+  desktopEvidenceSurfaces: string[];
+  humanContinuationSurfaces: string[];
+  captureReadyProofRequired: true;
+  pairedPageAbsenceRequired: true;
+  genericCdpFailureAuthorizesDesktop: false;
+  configuredProductionInput: 'unavailable_pending_plan_0110';
 }
 
 export interface ServiceStatusMcpToolCallOptions {

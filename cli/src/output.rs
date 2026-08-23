@@ -2830,6 +2830,32 @@ fn format_service_status_text(data: &serde_json::Value) -> Option<String> {
         ));
     }
 
+    if let Some(policy) = data.get("desktopEvidencePolicy") {
+        lines.push(format!(
+            "Desktop evidence: page_transport={} capture_ready_proof={} paired_page_absence={} generic_cdp_failure_fallback={} configured_input={}",
+            policy
+                .get("pageEvidenceTransport")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown"),
+            policy
+                .get("captureReadyProofRequired")
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false),
+            policy
+                .get("pairedPageAbsenceRequired")
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false),
+            policy
+                .get("genericCdpFailureAuthorizesDesktop")
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false),
+            policy
+                .get("configuredProductionInput")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown"),
+        ));
+    }
+
     if let Some(retained_displays) = data.get("retainedDisplayAllocations") {
         let count = retained_displays
             .get("count")
@@ -6384,6 +6410,7 @@ Notes:
   - CLI service profiles lookup, HTTP GET /api/service/profiles/lookup, and MCP agent-browser://profiles/lookup{?query,hostname,profileId,profileName,serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,authenticationState,freshnessState,tag,url,readinessProfileId,browserBuild} rank the authoritative profile catalog and return match evidence plus launch, add-tab, view, seed, wait, or holder-inspection guidance. Identity searches never fall back to an unrelated generic browser-build default.
   - Service status includes manualBrowsers for live detached headed runtime launches, including PID, profile path, target URL, display, browser family/build, CDP availability, remote-view route, and the next safe operator action.
   - Service status includes presentationCapacity when durable slot authority is configured. It reports warm and active slots, admitted and hard limits, protected reserves, queued demand, and redacted binding warnings without launching a browser or opening a route.
+  - Service status includes desktopEvidencePolicy. Use CDP for page evidence. Reserve desktop presentation only for browser chrome, extension UI, password-manager or passkey prompts, native dialogs, OS windows, or stacking evidence that CDP cannot observe. A generic CDP failure is diagnostic and does not authorize desktop fallback.
   - Current service status includes additive statusProjection provenance and freshness for host-local observations. service_state remains authority; unavailable means unknown. Derive staleness from validUntil. Legacy v1 fields remain supported.
   - Current service status also includes additive runtimeLifecycle readback. CLI JSON, HTTP GET /api/service/status, typed MCP service_status, the generated client, Service State, and the dashboard share its multiplicity, lifecycle-owner, reconciliation, retention, pressure, cleanup-obligation, and blocking-incident model. A convergence_window is transaction-bound overlap, not steady state.
   - Reconciliation expires active session leases whose recorded browser ownership no longer exists, so stale retained sessions cannot continue to hold a profile.
@@ -7832,6 +7859,13 @@ mod tests {
                 "queuedByPriority": { "observation": 2 },
                 "oldestWaitTicks": 3,
                 "bindingWarnings": []
+            },
+            "desktopEvidencePolicy": {
+                "pageEvidenceTransport": "cdp",
+                "captureReadyProofRequired": true,
+                "pairedPageAbsenceRequired": true,
+                "genericCdpFailureAuthorizesDesktop": false,
+                "configuredProductionInput": "unavailable_pending_plan_0110"
             }
         });
 
@@ -7851,6 +7885,9 @@ mod tests {
         ));
         assert!(rendered.contains(
             "Presentation capacity: warm=2/4 admitted=4 hard_max=6 human_reserved=1 recovery_reserved=1 queued=2 binding_warnings=0"
+        ));
+        assert!(rendered.contains(
+            "Desktop evidence: page_transport=cdp capture_ready_proof=true paired_page_absence=true generic_cdp_failure_fallback=false configured_input=unavailable_pending_plan_0110"
         ));
         assert!(rendered.contains("Profiles: 1"));
         assert!(rendered.contains(

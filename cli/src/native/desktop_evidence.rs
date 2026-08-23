@@ -388,7 +388,47 @@ pub(crate) struct DesktopEpisodeAdapters<'a> {
 
 pub(crate) struct DesktopEvidenceCoordinator;
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DesktopEvidencePolicyProjection {
+    pub(crate) schema_version: &'static str,
+    pub(crate) page_evidence_transport: &'static str,
+    pub(crate) desktop_evidence_surfaces: Vec<&'static str>,
+    pub(crate) human_continuation_surfaces: Vec<&'static str>,
+    pub(crate) capture_ready_proof_required: bool,
+    pub(crate) paired_page_absence_required: bool,
+    pub(crate) generic_cdp_failure_authorizes_desktop: bool,
+    pub(crate) configured_production_input: &'static str,
+}
+
 impl DesktopEvidenceCoordinator {
+    pub(crate) fn policy_projection() -> DesktopEvidencePolicyProjection {
+        DesktopEvidencePolicyProjection {
+            schema_version: "agent-browser.desktop-evidence-policy.v1",
+            page_evidence_transport: "cdp",
+            desktop_evidence_surfaces: vec![
+                "browser_chrome",
+                "extension_ui",
+                "password_manager_prompt",
+                "passkey_chooser",
+                "native_dialog",
+                "os_window",
+                "stacking_or_occlusion",
+            ],
+            human_continuation_surfaces: vec![
+                "biometric",
+                "secure_desktop",
+                "pin",
+                "master_password",
+                "consent",
+            ],
+            capture_ready_proof_required: true,
+            paired_page_absence_required: true,
+            generic_cdp_failure_authorizes_desktop: false,
+            configured_production_input: "unavailable_pending_plan_0110",
+        }
+    }
+
     pub(crate) fn run(
         request: DesktopEpisodeRequest,
         adapters: &mut DesktopEpisodeAdapters<'_>,
@@ -945,6 +985,20 @@ mod tests {
             decision.reason,
             EvidenceDecisionReason::PageEvidenceAvailableThroughCdp
         );
+    }
+
+    #[test]
+    fn policy_projection_is_redacted_and_preserves_the_independent_input_gate() {
+        let value = serde_json::to_value(DesktopEvidenceCoordinator::policy_projection()).unwrap();
+        assert_eq!(value["pageEvidenceTransport"], "cdp");
+        assert_eq!(value["captureReadyProofRequired"], true);
+        assert_eq!(value["genericCdpFailureAuthorizesDesktop"], false);
+        assert_eq!(
+            value["configuredProductionInput"],
+            "unavailable_pending_plan_0110"
+        );
+        assert!(value.get("routeId").is_none());
+        assert!(value.get("displayName").is_none());
     }
 
     #[test]

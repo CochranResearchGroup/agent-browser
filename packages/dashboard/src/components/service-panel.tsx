@@ -24,6 +24,7 @@ import {
   Minimize2,
   MoreHorizontal,
   RadioTower,
+  ScanSearch,
   ServerCog,
   ShieldCheck,
   Trash2,
@@ -438,12 +439,21 @@ type PresentationCapacityProjection = {
   bindingWarnings?: string[];
 };
 
+type DesktopEvidencePolicyProjection = {
+  pageEvidenceTransport?: string;
+  captureReadyProofRequired?: boolean;
+  pairedPageAbsenceRequired?: boolean;
+  genericCdpFailureAuthorizesDesktop?: boolean;
+  configuredProductionInput?: string;
+};
+
 type ServiceStatusData = {
   control_plane?: ControlPlaneSnapshot;
   service_state?: ServiceState;
   profileAllocations?: ServiceProfileAllocation[];
   browserSessionAuthority?: WorkspaceBrowserSessionAuthority | null;
   presentationCapacity?: PresentationCapacityProjection | null;
+  desktopEvidencePolicy?: DesktopEvidencePolicyProjection | null;
   statusProjection?: WorkspaceNodeInput["statusProjection"];
 };
 
@@ -8040,6 +8050,15 @@ export function ServicePanel({
                 : "Logical browsers do not consume a slot until presentation is requested"}
               icon={Maximize2}
               tone={(status?.presentationCapacity?.bindingWarnings?.length ?? 0) > 0 ? "warn" : "neutral"}
+            />
+            <ServiceStatusLight
+              label="Evidence"
+              value={status?.desktopEvidencePolicy?.pageEvidenceTransport === "cdp" ? "CDP first" : "unknown"}
+              detail={status?.desktopEvidencePolicy
+                ? `Desktop requires capture-ready proof; generic CDP failure fallback ${status.desktopEvidencePolicy.genericCdpFailureAuthorizesDesktop ? "enabled" : "disabled"}`
+                : "Use desktop evidence only for browser-external or operating-system surfaces"}
+              icon={ScanSearch}
+              tone={status?.desktopEvidencePolicy?.configuredProductionInput === "unavailable_pending_plan_0110" ? "neutral" : "warn"}
             />
             <ServiceStatusLight
               label="Reconciled"

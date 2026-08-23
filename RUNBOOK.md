@@ -4,6 +4,41 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 180 | 2026-08-23
+
+Scope: implement and accept P124 Slice F agent and operator product surfaces.
+
+Actions:
+
+- added the redacted `desktopEvidencePolicy` to Service Status, CLI output,
+  install doctor, generated client types, and the dashboard;
+- documented the CDP-first evidence decision, browser-external desktop cases,
+  capture-ready proof, generic-failure prohibition, sensitive human
+  continuation, and independent P110 input gate in every required user-facing
+  surface;
+- retained logical browsers, presentation capacity, and evidence transport as
+  separate dashboard concepts;
+- recorded source acceptance in
+  `docs/dev/notes/0124-6-2026-08-23-desktop-evidence-product-surface-slice-f-source-acceptance.md`.
+
+Validation:
+
+- 15 desktop-evidence, 18 status-projection, 2 status-formatter, and 18 install
+  doctor focused Rust tests passed;
+- the generated service client suite, dashboard inspector contract, dashboard
+  production build, documentation production build, Rust formatting, strict
+  Clippy, and diff hygiene passed;
+- service API and MCP parity, remote-view handoff docs, and the selected
+  source-free workstation, host, VM, Guacamole, PostgreSQL, route-user, and
+  payload-provenance fixtures passed;
+- no live or installed effect occurred.
+
+Result:
+
+- P124 is `slice_f_source_accepted`;
+- Slice G controlled installed acceptance in the isolated development runtime
+  is next.
+
 ## Turn 179 | 2026-08-23
 
 Scope: implement and accept P124 Slice E elastic presentation lifecycle and

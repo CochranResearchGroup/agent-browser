@@ -302,6 +302,8 @@ pub(crate) struct ServiceStatusResponse {
     )]
     pub(crate) presentation_capacity:
         Option<super::presentation_capacity::PresentationCapacityProjection>,
+    #[serde(rename = "desktopEvidencePolicy")]
+    pub(crate) desktop_evidence_policy: super::desktop_evidence::DesktopEvidencePolicyProjection,
     #[serde(rename = "browserSessionAuthority")]
     pub(crate) browser_session_authority: BrowserSessionAuthoritySnapshot,
     #[serde(rename = "closedTabProjection")]
@@ -477,6 +479,8 @@ impl ServiceStatusProjector {
                 &authority_state,
             ),
             presentation_capacity,
+            desktop_evidence_policy:
+                super::desktop_evidence::DesktopEvidenceCoordinator::policy_projection(),
             browser_session_authority: input.browser_session_authority,
             closed_tab_projection,
             launch_config: input.launch_config,

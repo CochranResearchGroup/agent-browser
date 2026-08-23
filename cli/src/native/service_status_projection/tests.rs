@@ -231,6 +231,14 @@ async fn unavailable_observations_are_typed_unknown_and_keep_legacy_manual_array
         "2026-08-09T21:00:05.000Z"
     );
     assert_eq!(
+        value["desktopEvidencePolicy"]["pageEvidenceTransport"],
+        "cdp"
+    );
+    assert_eq!(
+        value["desktopEvidencePolicy"]["configuredProductionInput"],
+        "unavailable_pending_plan_0110"
+    );
+    assert_eq!(
         value["runtimeLifecycle"]["schemaVersion"],
         "agent-browser.runtime-lifecycle-status.v1"
     );
