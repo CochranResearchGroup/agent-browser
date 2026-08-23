@@ -10,9 +10,9 @@ use crate::native::browser_navigation::{
 use crate::native::network::resolve_fetch_paused;
 use crate::native::network_archive::{har_cdp_protocol_to_http_version, har_extract_headers};
 use crate::native::service_model::{
-    retained_display_allocation_candidates, service_profile_allocations,
-    service_profile_seeding_handoff, service_profile_sources, BrowserBuild,
-    BrowserCapabilityRegistry, BrowserHealth as ServiceBrowserHealth,
+    browser_profile_compatibility_matches, retained_display_allocation_candidates,
+    service_profile_allocations, service_profile_seeding_handoff, service_profile_sources,
+    BrowserBuild, BrowserCapabilityRegistry, BrowserHealth as ServiceBrowserHealth,
     BrowserHost as ServiceBrowserHost, BrowserProcess, BrowserProfile, BrowserSession, BrowserTab,
     ControlInputProvider, DisplayAllocation, JobState as ServiceJobState, LeaseState, MonitorState,
     ProfileAllocationPolicy, ProfileClass, ProfileKeyringPolicy, ProfileLeaseDisposition,
@@ -209,10 +209,7 @@ pub(crate) fn profile_compatibility_gate(
         .profile_compatibility
         .iter()
         .filter(|compatibility| {
-            registry_string_field(compatibility, "profileId").as_deref() == Some(profile_id)
-                && registry_string_field(compatibility, "hostId").as_deref() == Some(host_id)
-                && registry_string_field(compatibility, "executableId").as_deref()
-                    == Some(executable_id)
+            browser_profile_compatibility_matches(compatibility, profile_id, host_id, executable_id)
         })
         .collect::<Vec<_>>();
     let blocked = matching_rows.iter().any(|compatibility| {

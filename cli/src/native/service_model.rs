@@ -2317,6 +2317,17 @@ impl BrowserCapabilityRegistry {
     }
 }
 
+pub(crate) fn browser_profile_compatibility_matches(
+    compatibility: &Value,
+    profile_id: &str,
+    host_id: &str,
+    executable_id: &str,
+) -> bool {
+    compatibility.get("profileId").and_then(Value::as_str) == Some(profile_id)
+        && compatibility.get("hostId").and_then(Value::as_str) == Some(host_id)
+        && compatibility.get("executableId").and_then(Value::as_str) == Some(executable_id)
+}
+
 /// Durable intent and latest attachment for an operator remote-view URL.
 ///
 /// Route, display, and browser target identifiers are retained only as the

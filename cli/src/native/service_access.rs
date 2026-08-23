@@ -14,13 +14,14 @@ use sha2::{Digest, Sha256};
 use super::service_contracts::SERVICE_REQUEST_ACTIONS;
 use super::service_lifecycle::{select_service_profile_for_request, ProfileSelectionRequest};
 use super::service_model::{
-    builtin_site_policy, service_profile_seeding_handoff, service_site_policy_id_for_url,
-    BrowserBuild, BrowserHealth, BrowserHost, BrowserProcess, BrowserProfile, BrowserSession,
-    Challenge, ChallengeKind, ChallengePolicy, ChallengeState, ControlInputProvider,
-    InteractionMode, LeaseState, ProfileOrigin, ProfileSelectionReason, ProviderCapability,
-    ServiceEntitySource, ServiceIncidentEscalation, ServiceIncidentState, ServiceProvider,
-    ServiceState, SitePolicy, ViewStreamProvider, SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
-    SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
+    browser_profile_compatibility_matches, builtin_site_policy, service_profile_seeding_handoff,
+    service_site_policy_id_for_url, BrowserBuild, BrowserHealth, BrowserHost, BrowserProcess,
+    BrowserProfile, BrowserSession, Challenge, ChallengeKind, ChallengePolicy, ChallengeState,
+    ControlInputProvider, InteractionMode, LeaseState, ProfileOrigin, ProfileSelectionReason,
+    ProviderCapability, ServiceEntitySource, ServiceIncidentEscalation, ServiceIncidentState,
+    ServiceProvider, ServiceState, SitePolicy, ViewStreamProvider,
+    SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
+    SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
 };
 
 /// Parsed access-plan selector shared by HTTP and MCP resources.
@@ -566,13 +567,21 @@ fn browser_capability_evidence_for_access_plan(
         .profile_compatibility
         .iter()
         .filter(|compatibility| {
-            selected_profile_id.as_ref().is_some_and(|profile_id| {
-                string_field(compatibility, "profileId")
-                    .is_some_and(|candidate| candidate == *profile_id)
-            }) || string_field(compatibility, "hostId").is_some_and(|id| host_ids.contains(&id))
-                || string_field(compatibility, "executableId").is_some_and(|id| {
-                    executable_ids.contains(&id) || executable_ids_from_bindings.contains(&id)
+            selected_profile_id.as_deref().is_some_and(|profile_id| {
+                host_ids.iter().any(|host_id| {
+                    executable_ids
+                        .iter()
+                        .chain(executable_ids_from_bindings.iter())
+                        .any(|executable_id| {
+                            browser_profile_compatibility_matches(
+                                compatibility,
+                                profile_id,
+                                host_id,
+                                executable_id,
+                            )
+                        })
                 })
+            })
         })
         .cloned()
         .collect::<Vec<_>>();
@@ -4746,6 +4755,67 @@ mod tests {
         assert_eq!(
             plan["browserCapabilityEvidence"]["counts"]["browserExecutables"],
             1
+        );
+    }
+
+    #[test]
+    fn service_access_plan_does_not_borrow_profile_compatibility_from_another_profile() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "bill-soylei".to_string(),
+                BrowserProfile {
+                    id: "bill-soylei".to_string(),
+                    name: "BILL SoyLei".to_string(),
+                    target_service_ids: vec!["bill".to_string()],
+                    account_ids: vec!["soylei".to_string()],
+                    authenticated_service_ids: vec!["bill".to_string()],
+                    browser_build: Some(BrowserBuild::StockChrome),
+                    ..BrowserProfile::default()
+                },
+            )]),
+            browser_capability_registry: BrowserCapabilityRegistry {
+                browser_hosts: vec![json!({"id": "tenant-desktop"})],
+                browser_executables: vec![json!({
+                    "id": "tenant-chrome",
+                    "hostId": "tenant-desktop",
+                    "buildLabel": "stock_chrome"
+                })],
+                browser_capabilities: vec![json!({
+                    "id": "tenant-chrome-capability",
+                    "hostId": "tenant-desktop",
+                    "executableId": "tenant-chrome"
+                })],
+                profile_compatibility: vec![json!({
+                    "id": "other-tenant-profile-compatible",
+                    "profileId": "bill-other-tenant",
+                    "hostId": "tenant-desktop",
+                    "executableId": "tenant-chrome",
+                    "compatible": true
+                })],
+                ..BrowserCapabilityRegistry::default()
+            },
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                service_name: Some("BillCLI".to_string()),
+                target_service_ids: vec!["bill".to_string()],
+                account_ids: vec!["soylei".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(plan["selectedProfile"]["id"], "bill-soylei");
+        assert_eq!(
+            plan["browserCapabilityEvidence"]["counts"]["profileCompatibility"],
+            0
+        );
+        assert_eq!(
+            plan["decision"]["launchPosture"]["browserBuildSelection"]["profileCompatibility"]
+                ["status"],
+            "not_declared"
         );
     }
 
