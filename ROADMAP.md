@@ -11,8 +11,8 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 
 State: OPEN
 Current state: the Plan 0122 repair and Plan 0123 admission are published on
-`origin/main` through exact remote commit `f697969d`. Candidate commit
-`5fd4be88` produced optimized binary SHA-256
+`origin/main` with zero local divergence. Candidate commit `5fd4be88` produced
+optimized binary SHA-256
 `ae49edfd9d71161543c8378c06688876984f891b46cedca5272de1e77ca2f811`.
 Installed doctor is green and converged on the prior generation. Candidate
 workstation dry-run is planned, supported, and non-mutating with effective

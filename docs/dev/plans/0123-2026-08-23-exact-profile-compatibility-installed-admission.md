@@ -94,8 +94,8 @@ for the same selected profile before any browser acquisition.
 
 ## Publication Receipt
 
-Push `8c81de89..f697969d` advanced `origin/main` successfully. A direct remote
-readback returned
-`f697969de3ec89e631d3148626348fa9777c7ea8`, and local divergence became zero.
-Publication changed source history only; the installed generation and running
-service remained unchanged.
+The initial push `8c81de89..f697969d` advanced `origin/main` successfully. A
+direct remote readback returned
+`f697969de3ec89e631d3148626348fa9777c7ea8`, and the later plan closeout also
+reached `origin/main` with zero local divergence. Publication changed source
+history only; the installed generation and running service remained unchanged.
