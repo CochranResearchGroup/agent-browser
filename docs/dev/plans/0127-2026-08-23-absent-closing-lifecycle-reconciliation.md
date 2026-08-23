@@ -2,7 +2,7 @@
 
 Date: 2026-08-23
 
-State: OPEN
+State: CLOSED
 
 Lane: P127
 
@@ -138,10 +138,30 @@ owner was `session:plan0117-final-runtime` while the bounded feed service uses
   `4b975a51aa892241ea73cc6e8acef42bb67d781c8b9be43edbc1086f4d7956f8`.
   No production install, provider navigation, profile mutation, or second
   provider tick occurred.
-- Source and provider-free development acceptance are complete. The plan
-  remains open only for harmless route-bound same-profile replacement
-  acceptance; this scoped presentation criterion does not block unrelated
-  Agent Browser work.
+- Source and provider-free development acceptance were complete before the
+  final route-bound packet.
+- The operator subsequently authorized a production hotfix while unrelated
+  feature work remained active. The transactional installer accepted
+  generation `0.28.0-a89625b870c3-1e2c09b12ebc` from binary SHA-256
+  `a89625b870c3cda3cde9b41f27271ebe36d60683b1235c4196c4be337bb39ea6`
+  in transaction `upgrade-7d9a2776-2c7e-458c-8e4c-eb2bbe989c46`.
+- The final repair prevents a terminal owner binding for an exited process
+  from being refreshed against a newly launched PID. Exact same-process
+  refresh remains allowed; a new process must pass the terminal replacement
+  compare-and-swap.
+- A provider-free route-bound fixture replaced the exact same logical browser
+  and profile at owner generation 3, reached operator-visible `ready`, and
+  closed to `terminal/satisfied` with `exact_process_exited` and
+  `profile_lock_released` evidence. Five readbacks found no browser or session
+  record, Route B available, and zero cleanup candidates. Plan 0127 is closed.
+
+## Authority Change
+
+The original packet excluded another production installation. The operator's
+later explicit hotfix instruction superseded that bound only for the
+transactional workstation apply and its provider-free acceptance. It did not
+authorize provider navigation, profile reseeding, unrelated browser closure,
+or feature-lane integration.
 
 ## Bounds
 

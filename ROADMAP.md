@@ -30,20 +30,16 @@ production as a separate effect boundary.
 
 ## P127 | Absent Closing Lifecycle Reconciliation
 
-State: OPEN
-Current state: source and bounded live reconciliation repaired the exact
-absent-process, absent-lock `closing/owned` lane to `terminal/satisfied` while
-preserving the named authenticated profile. The first consuming X and LinkedIn
-tick then exposed a terminal-replacement defect before either provider was
-navigated. The source repair now moves the lifecycle record to a collision-free
-new ID at exactly the next generation and retains one cleanup obligation. A
-second source repair records successful auxiliary cleanup so a graceful browser
-exit cannot become a false force-kill failure. Canonical Rust CI, workstation
-fixtures, documentation validation, and three provider-free development-browser
-open/read/close cycles pass on development generation
-`0.28.0-b1a74a64a0dc`; production remains unchanged. Route-bound
-same-profile replacement acceptance remains open; it does not block unrelated
-Agent Browser work.
+State: CLOSED
+Current state: exact absent-process and absent-lock reconciliation, graceful
+close classification, collision-free terminal replacement, stale handoff
+retry recovery, and new-process lifecycle registration are repaired. The
+transactional workstation installer accepted production generation
+`0.28.0-a89625b870c3-1e2c09b12ebc`. A provider-free same-profile route-bound
+replacement advanced exactly to owner generation 3, reached operator-visible
+`ready`, and closed to `terminal/satisfied`; browser and session records were
+absent afterward, Route B was available, and cleanup candidates were zero.
+The development generation and unrelated feature work remained unchanged.
 
 ### Plan
 
@@ -51,9 +47,9 @@ Agent Browser work.
 
 ### Next Recommendation
 
-Prove the remaining route-bound same-profile replacement against a harmless
-local fixture when an isolated presentation route is available. Keep the
-accepted workstation installation and authenticated provider state unchanged.
+Review and integrate the closed P127 branch through the normal protected-main
+workflow. Keep the accepted workstation generation unchanged unless source or
+installed identity changes.
 
 ## P125 | Development Runtime Isolation And Build Capacity
 

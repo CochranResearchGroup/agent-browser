@@ -2,7 +2,12 @@
 
 Date: 2026-08-23
 
-State: HANDOFF OPEN
+State: SUPERSEDED
+
+Superseded by
+`docs/dev/notes/0127-2-2026-08-23-absent-closing-lifecycle-hotfix-acceptance.md`.
+The instructions below preserve the pre-hotfix handoff history and are no
+longer current operator guidance.
 
 Lane: P127
 

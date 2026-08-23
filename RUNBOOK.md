@@ -4,6 +4,36 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 180 | 2026-08-23
+
+Scope: qualify and transactionally install the P127 absent-closing lifecycle
+hotfix while preserving concurrent feature work.
+
+Actions:
+
+- repaired candidate-dashboard startup timing, exact reversed stale handoff
+  retries, old-daemon retry cleanup, and stale in-memory lifecycle bindings;
+- validated focused regressions, formatting, and strict Clippy, then built
+  candidate SHA-256
+  `a89625b870c3cda3cde9b41f27271ebe36d60683b1235c4196c4be337bb39ea6`;
+- accepted workstation transaction
+  `upgrade-7d9a2776-2c7e-458c-8e4c-eb2bbe989c46` using an authenticated
+  provider-free presentation receipt;
+- proved exact same-profile route-bound replacement at owner generation 3 and
+  closed the fixture through its current owner.
+
+Result:
+
+- production selects generation `0.28.0-a89625b870c3-1e2c09b12ebc` with all
+  workstation readiness axes true and rollback ready;
+- the replacement closed to `terminal/satisfied` with exact process-exit and
+  profile-lock evidence, leaving no browser or session record, Route B
+  available, and zero cleanup candidates;
+- the isolated development generation and unrelated feature-work checkout
+  remained unchanged;
+- P127 is `CLOSED`. The next action is protected-main review and integration,
+  not another workstation upgrade.
+
 ## Turn 179 | 2026-08-23
 
 Scope: continue unaffected P127 source and provider-free development-runtime
