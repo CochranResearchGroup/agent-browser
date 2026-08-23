@@ -4,6 +4,36 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 179 | 2026-08-23
+
+Scope: implement and accept P124 Slice E elastic presentation lifecycle and
+exact garbage-collection authority.
+
+Actions:
+
+- promoted presentation lifecycle from test-only fixtures to a provider-free
+  authority over the durable presentation-capacity inventory;
+- added pressure and hard-limit admission, one-slot scale-out, exact lifecycle
+  and owned-resource identity, cooldown, reference-aware scale-in, rollback
+  quarantine, and cleanup obligations;
+- removed the prior duplicate private slot inventory;
+- recorded source acceptance in
+  `docs/dev/notes/0124-5-2026-08-23-elastic-presentation-lifecycle-slice-e-source-acceptance.md`.
+
+Validation:
+
+- 7 focused lifecycle tests passed, including three repeated elastic cycles
+  converging to the warm minimum with no retained elastic identities;
+- pressure rejection and retained references produced no provider or garbage
+  collector call;
+- Rust formatting, strict Clippy, and diff hygiene passed;
+- no live or installed effect occurred.
+
+Result:
+
+- P124 is `slice_e_source_accepted`;
+- Slice F agent and operator product surfaces are next.
+
 ## Turn 178 | 2026-08-23
 
 Scope: confirm isolated development prerequisites and accept P124 Slice D at

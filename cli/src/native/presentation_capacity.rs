@@ -236,6 +236,10 @@ impl PressureAdmission {
     pub(crate) fn admit(admitted_maximum: usize) -> Self {
         Self { admitted_maximum }
     }
+
+    pub(crate) fn admitted_maximum(self) -> usize {
+        self.admitted_maximum
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

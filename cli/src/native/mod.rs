@@ -80,7 +80,7 @@ pub mod policy;
 #[allow(dead_code)]
 pub(crate) mod presentation_capacity;
 pub(crate) mod presentation_inventory;
-#[cfg(test)]
+#[allow(dead_code)]
 pub(crate) mod presentation_lifecycle;
 #[allow(dead_code)]
 pub mod providers;
