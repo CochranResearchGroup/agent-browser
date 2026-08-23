@@ -47,6 +47,14 @@ described below.
 
 ## Current Runtime Interpretation
 
+Operator directive:
+
+> The workstation upgrade gate is closed. Continue unaffected Agent Browser
+> work normally. Pause only work requiring the affected lifecycle or
+> presentation route. P126 should continue in its development worktree with
+> provider-free lifecycle and route acceptance; do not initiate another
+> workstation upgrade.
+
 Fresh read-only evidence on 2026-08-23 established:
 
 - workstation transaction
