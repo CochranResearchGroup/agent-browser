@@ -822,6 +822,7 @@ export interface ServiceStatusResponse {
   profileAllocations: ServiceProfileAllocation[];
   manualBrowsers?: ServiceManualRuntimeBrowser[];
   retainedDisplayAllocations?: ServiceRetainedDisplayAllocationSummary;
+  presentationCapacity?: ServicePresentationCapacityProjection;
   browserSessionAuthority?: ServiceBrowserSessionAuthoritySnapshot;
   statusProjection?: ServiceStatusProjection;
   runtimeLifecycle?: ServiceRuntimeLifecycleStatus;
@@ -865,6 +866,19 @@ export interface ServiceStatusResponse {
     [key: string]: unknown;
   };
   [key: string]: unknown;
+}
+
+export interface ServicePresentationCapacityProjection {
+  totalSlots: number;
+  slotIds: string[];
+  configuredHardMaximum: number;
+  pressureAdmittedMaximum: number;
+  slotCounts: Record<string, number>;
+  humanProtectedCapacity: number;
+  recoveryReservedCapacity: number;
+  queuedByPriority: Record<string, number>;
+  oldestWaitTicks?: number | null;
+  bindingWarnings: string[];
 }
 
 export interface ServiceStatusMcpToolCallOptions {

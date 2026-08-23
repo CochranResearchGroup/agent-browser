@@ -1,7 +1,9 @@
 //! Arbitrary-N presentation slot inventory, admission, and queue authority.
 
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+
+use super::service_model::ServiceState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -28,6 +30,18 @@ pub(crate) struct PresentationSlot {
     pub(crate) lease_request_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) lease_priority: Option<PresentationPriority>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) route_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) display_allocation_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) browser_id: Option<String>,
+    #[serde(default)]
+    pub(crate) scene_generation: u64,
+    #[serde(default)]
+    pub(crate) restoration_pending: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) cleanup_obligation_ids: Vec<String>,
 }
 
 impl PresentationSlot {
@@ -37,7 +51,23 @@ impl PresentationSlot {
             state: PresentationSlotState::WarmIdle,
             lease_request_id: None,
             lease_priority: None,
+            route_id: None,
+            display_allocation_id: None,
+            browser_id: None,
+            scene_generation: 0,
+            restoration_pending: false,
+            cleanup_obligation_ids: Vec::new(),
         }
+    }
+
+    pub(crate) fn with_binding(
+        mut self,
+        route_id: impl Into<String>,
+        display_allocation_id: impl Into<String>,
+    ) -> Self {
+        self.route_id = Some(route_id.into());
+        self.display_allocation_id = Some(display_allocation_id.into());
+        self
     }
 }
 
@@ -51,11 +81,14 @@ pub(crate) enum PresentationPriority {
     Convenience,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct PresentationRequest {
-    id: String,
-    priority: PresentationPriority,
-    queued_at: Option<u64>,
+    pub(crate) id: String,
+    pub(crate) priority: PresentationPriority,
+    pub(crate) browser_id: Option<String>,
+    pub(crate) requires_staging: bool,
+    pub(crate) queued_at: Option<u64>,
 }
 
 impl PresentationRequest {
@@ -63,6 +96,8 @@ impl PresentationRequest {
         Self {
             id: id.into(),
             priority: PresentationPriority::Observation,
+            browser_id: None,
+            requires_staging: false,
             queued_at: None,
         }
     }
@@ -71,6 +106,8 @@ impl PresentationRequest {
         Self {
             id: id.into(),
             priority: PresentationPriority::Recovery,
+            browser_id: None,
+            requires_staging: false,
             queued_at: None,
         }
     }
@@ -79,23 +116,45 @@ impl PresentationRequest {
         Self {
             id: id.into(),
             priority: PresentationPriority::HumanControl,
+            browser_id: None,
+            requires_staging: false,
             queued_at: None,
         }
     }
+
+    pub(crate) fn for_browser(mut self, browser_id: impl Into<String>) -> Self {
+        self.browser_id = Some(browser_id.into());
+        self
+    }
+
+    pub(crate) fn requiring_staging(mut self) -> Self {
+        self.requires_staging = true;
+        self
+    }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum CapacityLimitingResource {
     ReservedCapacity,
     PressureAdmission,
     WarmSlot,
+    BrowserExclusion,
+    HumanController,
+    ViewerStagingConflict,
+    AcquisitionLease,
+    DurableHandoff,
+    QueueBound,
+    InvalidRequest,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum CapacityNextSafeAction {
     WaitForCapacity,
+    RetryAfterQueueChange,
+    RequestHumanTakeover,
+    PreserveCurrentPresentation,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -111,6 +170,21 @@ pub(crate) enum CapacityDecision {
         limiting_resource: CapacityLimitingResource,
         next_safe_action: CapacityNextSafeAction,
     },
+    Rejected {
+        request_id: String,
+        limiting_resource: CapacityLimitingResource,
+        next_safe_action: CapacityNextSafeAction,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SlotTransitionReceipt {
+    pub(crate) slot_id: String,
+    pub(crate) request_id: String,
+    pub(crate) previous_state: PresentationSlotState,
+    pub(crate) state: PresentationSlotState,
+    pub(crate) scene_generation: u64,
 }
 
 impl CapacityDecision {
@@ -121,13 +195,16 @@ impl CapacityDecision {
     pub(crate) fn queue_position(&self) -> Option<usize> {
         match self {
             Self::Queued { queue_position, .. } => Some(*queue_position),
-            Self::Granted { .. } => None,
+            Self::Granted { .. } | Self::Rejected { .. } => None,
         }
     }
 
     pub(crate) fn limiting_resource(&self) -> Option<CapacityLimitingResource> {
         match self {
             Self::Queued {
+                limiting_resource, ..
+            }
+            | Self::Rejected {
                 limiting_resource, ..
             } => Some(*limiting_resource),
             Self::Granted { .. } => None,
@@ -142,6 +219,12 @@ pub(crate) struct PresentationCapacityConfig {
     pub(crate) hard_maximum: usize,
     pub(crate) human_priority_reserve: usize,
     pub(crate) recovery_reserve: usize,
+    #[serde(default = "default_max_queue_depth")]
+    pub(crate) max_queue_depth: usize,
+}
+
+const fn default_max_queue_depth() -> usize {
+    64
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -162,17 +245,53 @@ pub(crate) struct PresentationCapacityProjection {
     pub(crate) slot_ids: Vec<String>,
     pub(crate) configured_hard_maximum: usize,
     pub(crate) pressure_admitted_maximum: usize,
+    pub(crate) slot_counts: BTreeMap<String, usize>,
+    pub(crate) human_protected_capacity: usize,
+    pub(crate) recovery_reserved_capacity: usize,
+    pub(crate) queued_by_priority: BTreeMap<String, usize>,
+    pub(crate) oldest_wait_ticks: Option<u64>,
+    pub(crate) binding_warnings: Vec<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
 pub(crate) struct PresentationCapacityAuthority {
-    config: PresentationCapacityConfig,
-    slots: Vec<PresentationSlot>,
-    queued_requests: Vec<PresentationRequest>,
-    queue_clock: u64,
+    pub(crate) config: PresentationCapacityConfig,
+    pub(crate) slots: Vec<PresentationSlot>,
+    pub(crate) queued_requests: Vec<PresentationRequest>,
+    pub(crate) queue_clock: u64,
+}
+
+impl Default for PresentationCapacityAuthority {
+    fn default() -> Self {
+        Self {
+            config: PresentationCapacityConfig {
+                warm_minimum: 0,
+                hard_maximum: 0,
+                human_priority_reserve: 0,
+                recovery_reserve: 0,
+                max_queue_depth: default_max_queue_depth(),
+            },
+            slots: Vec::new(),
+            queued_requests: Vec::new(),
+            queue_clock: 0,
+        }
+    }
 }
 
 impl PresentationCapacityAuthority {
+    fn browser_is_excluded(&self, request: &PresentationRequest) -> bool {
+        request.browser_id.as_ref().is_some_and(|browser_id| {
+            self.slots.iter().any(|slot| {
+                slot.browser_id.as_deref() == Some(browser_id.as_str())
+                    && slot.state != PresentationSlotState::WarmIdle
+                    && slot.lease_request_id.as_deref() != Some(request.id.as_str())
+            }) || self.queued_requests.iter().any(|queued| {
+                queued.id != request.id && queued.browser_id.as_deref() == Some(browser_id.as_str())
+            })
+        })
+    }
+
     fn protected_reserve(&self, priority: PresentationPriority) -> usize {
         match priority {
             PresentationPriority::HumanControl | PresentationPriority::ExistingEffect => 0,
@@ -203,6 +322,26 @@ impl PresentationCapacityAuthority {
         if ids.len() != slots.len() || ids.contains("") {
             return Err("presentation_slot_identity_invalid".to_string());
         }
+        for (field, values) in [
+            (
+                "route",
+                slots
+                    .iter()
+                    .filter_map(|slot| slot.route_id.as_deref())
+                    .collect::<Vec<_>>(),
+            ),
+            (
+                "display",
+                slots
+                    .iter()
+                    .filter_map(|slot| slot.display_allocation_id.as_deref())
+                    .collect::<Vec<_>>(),
+            ),
+        ] {
+            if values.iter().collect::<BTreeSet<_>>().len() != values.len() {
+                return Err(format!("presentation_slot_{field}_identity_duplicate"));
+            }
+        }
         Ok(Self {
             config,
             slots,
@@ -211,61 +350,331 @@ impl PresentationCapacityAuthority {
         })
     }
 
+    /// Builds durable slot candidates only from service-authoritative ready
+    /// route, display, and pool records. Missing capacity remains missing.
+    pub(crate) fn from_service_state(
+        config: PresentationCapacityConfig,
+        state: &ServiceState,
+    ) -> Result<Self, String> {
+        let mut slots = state
+            .route_pool
+            .values()
+            .filter_map(|entry| {
+                let route_id = entry.current_route_allocation_id.as_deref()?;
+                let route = state.remote_view_routes.get(route_id)?;
+                let display_id = route.display_allocation_id.as_deref()?;
+                let display = state.display_allocations.get(display_id)?;
+                let pool_ready = matches!(entry.state.as_str(), "available" | "checked_out")
+                    && entry
+                        .readiness
+                        .as_ref()
+                        .and_then(|value| value.get("state"))
+                        .and_then(serde_json::Value::as_str)
+                        == Some("ready");
+                let route_ready = route.state == "ready";
+                let display_ready = matches!(display.state.as_str(), "ready" | "active");
+                (pool_ready && route_ready && display_ready).then(|| {
+                    let mut slot = PresentationSlot::warm_idle(format!("slot:{}", entry.id))
+                        .with_binding(route.id.clone(), display.id.clone());
+                    slot.browser_id = route.browser_id.clone();
+                    if slot.browser_id.is_some() {
+                        slot.state = PresentationSlotState::Active;
+                    }
+                    slot
+                })
+            })
+            .collect::<Vec<_>>();
+        slots.sort_by(|left, right| left.id.cmp(&right.id));
+        Self::new(config, slots)
+    }
+
     pub(crate) fn projection(&self, pressure: PressureAdmission) -> PresentationCapacityProjection {
+        self.projection_with_service_state(pressure, None)
+    }
+
+    pub(crate) fn projection_with_service_state(
+        &self,
+        pressure: PressureAdmission,
+        service_state: Option<&ServiceState>,
+    ) -> PresentationCapacityProjection {
+        let mut slot_counts = BTreeMap::new();
+        for slot in &self.slots {
+            *slot_counts
+                .entry(slot_state_name(slot.state).to_string())
+                .or_insert(0) += 1;
+        }
+        let mut queued_by_priority = BTreeMap::new();
+        for request in &self.queued_requests {
+            *queued_by_priority
+                .entry(priority_name(request.priority).to_string())
+                .or_insert(0) += 1;
+        }
         PresentationCapacityProjection {
             total_slots: self.slots.len(),
             slot_ids: self.slots.iter().map(|slot| slot.id.clone()).collect(),
             configured_hard_maximum: self.config.hard_maximum,
             pressure_admitted_maximum: pressure.admitted_maximum.min(self.config.hard_maximum),
+            slot_counts,
+            human_protected_capacity: self.config.human_priority_reserve,
+            recovery_reserved_capacity: self.config.recovery_reserve,
+            queued_by_priority,
+            oldest_wait_ticks: self
+                .queued_requests
+                .iter()
+                .filter_map(|request| request.queued_at)
+                .min()
+                .map(|queued_at| self.queue_clock.saturating_sub(queued_at)),
+            binding_warnings: service_state
+                .map(|state| self.binding_warnings(state))
+                .unwrap_or_default(),
         }
     }
 
     pub(crate) fn request(
         &mut self,
-        mut request: PresentationRequest,
+        request: PresentationRequest,
         pressure: PressureAdmission,
     ) -> CapacityDecision {
+        self.request_with_service_state(request, pressure, None)
+    }
+
+    pub(crate) fn request_with_service_state(
+        &mut self,
+        request: PresentationRequest,
+        pressure: PressureAdmission,
+        service_state: Option<&ServiceState>,
+    ) -> CapacityDecision {
         self.queue_clock = self.queue_clock.saturating_add(1);
+        if request.id.trim().is_empty()
+            || self
+                .queued_requests
+                .iter()
+                .any(|queued| queued.id == request.id)
+            || self
+                .slots
+                .iter()
+                .any(|slot| slot.lease_request_id.as_deref() == Some(request.id.as_str()))
+        {
+            return CapacityDecision::Rejected {
+                request_id: request.id,
+                limiting_resource: CapacityLimitingResource::InvalidRequest,
+                next_safe_action: CapacityNextSafeAction::PreserveCurrentPresentation,
+            };
+        }
+        if self.browser_is_excluded(&request) {
+            return self.enqueue_or_reject(request, CapacityLimitingResource::BrowserExclusion);
+        }
         let admitted_maximum = pressure.admitted_maximum.min(self.config.hard_maximum);
         let eligible_slots = self.slots.len().min(admitted_maximum);
-        let free_slots = self
+        let candidates = self
             .slots
             .iter()
             .take(eligible_slots)
             .filter(|slot| slot.state == PresentationSlotState::WarmIdle)
+            .map(|slot| {
+                (
+                    slot.id.clone(),
+                    service_state.and_then(|state| slot_admission_conflict(state, slot, &request)),
+                )
+            })
+            .collect::<Vec<_>>();
+        let free_slots = candidates
+            .iter()
+            .filter(|(_, conflict)| conflict.is_none())
             .count();
         let protected_reserve = self.protected_reserve(request.priority);
         if free_slots > protected_reserve {
+            let selected_id = candidates
+                .iter()
+                .find(|(_, conflict)| conflict.is_none())
+                .map(|(id, _)| id.clone())
+                .expect("free slot count and candidate inventory must agree");
             let slot = self
                 .slots
                 .iter_mut()
-                .take(eligible_slots)
-                .find(|slot| slot.state == PresentationSlotState::WarmIdle)
+                .find(|slot| slot.id == selected_id)
                 .expect("free slot count and inventory must agree");
             slot.state = PresentationSlotState::Reserved;
             slot.lease_request_id = Some(request.id.clone());
             slot.lease_priority = Some(request.priority);
+            slot.browser_id = request.browser_id.clone();
             return CapacityDecision::Granted {
                 request_id: request.id,
                 slot_id: slot.id.clone(),
             };
         }
 
-        let limiting_resource = if eligible_slots < self.slots.len() {
-            CapacityLimitingResource::PressureAdmission
-        } else if free_slots > 0 && protected_reserve > 0 {
-            CapacityLimitingResource::ReservedCapacity
-        } else {
-            CapacityLimitingResource::WarmSlot
-        };
+        let limiting_resource = candidates
+            .iter()
+            .filter_map(|(_, conflict)| *conflict)
+            .min()
+            .unwrap_or({
+                if eligible_slots < self.slots.len() {
+                    CapacityLimitingResource::PressureAdmission
+                } else if free_slots > 0 && protected_reserve > 0 {
+                    CapacityLimitingResource::ReservedCapacity
+                } else {
+                    CapacityLimitingResource::WarmSlot
+                }
+            });
+        self.enqueue_or_reject(request, limiting_resource)
+    }
+
+    fn enqueue_or_reject(
+        &mut self,
+        mut request: PresentationRequest,
+        limiting_resource: CapacityLimitingResource,
+    ) -> CapacityDecision {
+        if self.queued_requests.len() >= self.config.max_queue_depth {
+            return CapacityDecision::Rejected {
+                request_id: request.id,
+                limiting_resource: CapacityLimitingResource::QueueBound,
+                next_safe_action: CapacityNextSafeAction::RetryAfterQueueChange,
+            };
+        }
         request.queued_at = Some(self.queue_clock);
         self.queued_requests.push(request.clone());
+        let queue_position = queue_order(&self.queued_requests, self.queue_clock)
+            .iter()
+            .position(|index| self.queued_requests[*index].id == request.id)
+            .map(|index| index + 1)
+            .expect("queued request must have a queue position");
         CapacityDecision::Queued {
             request_id: request.id,
-            queue_position: self.queued_requests.len(),
+            queue_position,
             limiting_resource,
-            next_safe_action: CapacityNextSafeAction::WaitForCapacity,
+            next_safe_action: match limiting_resource {
+                CapacityLimitingResource::HumanController => {
+                    CapacityNextSafeAction::RequestHumanTakeover
+                }
+                _ => CapacityNextSafeAction::WaitForCapacity,
+            },
         }
+    }
+
+    pub(crate) fn binding_warnings(&self, state: &ServiceState) -> Vec<String> {
+        let mut warnings = BTreeSet::new();
+        for slot in &self.slots {
+            if let Some(route_id) = slot.route_id.as_deref() {
+                if !state.remote_view_routes.contains_key(route_id)
+                    && !state
+                        .route_pool
+                        .values()
+                        .any(|entry| entry.route_id == route_id)
+                {
+                    warnings.insert(format!("slot_route_missing:{}:{}", slot.id, route_id));
+                }
+            }
+            if let Some(display_id) = slot.display_allocation_id.as_deref() {
+                if !state.display_allocations.contains_key(display_id) {
+                    warnings.insert(format!("slot_display_missing:{}:{}", slot.id, display_id));
+                }
+            }
+            if let Some(browser_id) = slot.browser_id.as_deref() {
+                if !state.browsers.contains_key(browser_id) {
+                    warnings.insert(format!("slot_browser_missing:{}:{}", slot.id, browser_id));
+                }
+            }
+        }
+        warnings.into_iter().collect()
+    }
+
+    pub(crate) fn transition_slot(
+        &mut self,
+        slot_id: &str,
+        request_id: &str,
+        next: PresentationSlotState,
+        service_state: Option<&ServiceState>,
+    ) -> Result<SlotTransitionReceipt, String> {
+        let slot = self
+            .slots
+            .iter_mut()
+            .find(|slot| slot.id == slot_id)
+            .ok_or_else(|| "presentation_slot_not_found".to_string())?;
+        if slot.lease_request_id.as_deref() != Some(request_id) {
+            return Err("presentation_slot_lease_mismatch".to_string());
+        }
+        let allowed = matches!(
+            (slot.state, next),
+            (
+                PresentationSlotState::Reserved,
+                PresentationSlotState::Staging
+            ) | (
+                PresentationSlotState::Staging,
+                PresentationSlotState::CaptureReady
+            ) | (
+                PresentationSlotState::CaptureReady,
+                PresentationSlotState::Active
+            ) | (
+                PresentationSlotState::Active,
+                PresentationSlotState::Restoring
+            ) | (
+                PresentationSlotState::Restoring,
+                PresentationSlotState::WarmIdle
+            )
+        );
+        if !allowed {
+            return Err("presentation_slot_transition_invalid".to_string());
+        }
+        if next == PresentationSlotState::Staging {
+            let request = PresentationRequest {
+                id: request_id.to_string(),
+                priority: slot
+                    .lease_priority
+                    .unwrap_or(PresentationPriority::Observation),
+                browser_id: slot.browser_id.clone(),
+                requires_staging: true,
+                queued_at: None,
+            };
+            if let Some(conflict) =
+                service_state.and_then(|state| slot_admission_conflict(state, slot, &request))
+            {
+                return Err(format!(
+                    "presentation_slot_staging_blocked:{}",
+                    limiting_resource_name(conflict)
+                ));
+            }
+            slot.scene_generation = slot.scene_generation.saturating_add(1);
+        }
+        let previous_state = slot.state;
+        slot.state = next;
+        if next == PresentationSlotState::Restoring {
+            slot.restoration_pending = true;
+        } else if next == PresentationSlotState::WarmIdle {
+            slot.restoration_pending = false;
+            slot.lease_request_id = None;
+            slot.lease_priority = None;
+            slot.browser_id = None;
+        }
+        Ok(SlotTransitionReceipt {
+            slot_id: slot.id.clone(),
+            request_id: request_id.to_string(),
+            previous_state,
+            state: next,
+            scene_generation: slot.scene_generation,
+        })
+    }
+
+    pub(crate) fn quarantine_slot(
+        &mut self,
+        slot_id: &str,
+        cleanup_obligation_id: impl Into<String>,
+    ) -> Result<(), String> {
+        let obligation = cleanup_obligation_id.into();
+        if obligation.trim().is_empty() {
+            return Err("presentation_cleanup_obligation_invalid".to_string());
+        }
+        let slot = self
+            .slots
+            .iter_mut()
+            .find(|slot| slot.id == slot_id)
+            .ok_or_else(|| "presentation_slot_not_found".to_string())?;
+        slot.state = PresentationSlotState::Quarantined;
+        if !slot.cleanup_obligation_ids.contains(&obligation) {
+            slot.cleanup_obligation_ids.push(obligation);
+            slot.cleanup_obligation_ids.sort();
+        }
+        Ok(())
     }
 
     pub(crate) fn release_and_dispatch(
@@ -273,11 +682,21 @@ impl PresentationCapacityAuthority {
         slot_id: &str,
         pressure: PressureAdmission,
     ) -> Option<CapacityDecision> {
+        self.release_and_dispatch_with_service_state(slot_id, pressure, None)
+    }
+
+    pub(crate) fn release_and_dispatch_with_service_state(
+        &mut self,
+        slot_id: &str,
+        pressure: PressureAdmission,
+        service_state: Option<&ServiceState>,
+    ) -> Option<CapacityDecision> {
         self.queue_clock = self.queue_clock.saturating_add(1);
         let slot = self.slots.iter_mut().find(|slot| slot.id == slot_id)?;
         slot.state = PresentationSlotState::WarmIdle;
         slot.lease_request_id = None;
         slot.lease_priority = None;
+        slot.browser_id = None;
 
         let admitted_maximum = pressure.admitted_maximum.min(self.config.hard_maximum);
         let eligible_slots = self.slots.len().min(admitted_maximum);
@@ -291,7 +710,16 @@ impl PresentationCapacityAuthority {
             .queued_requests
             .iter()
             .enumerate()
-            .filter(|(_, request)| free_slots > self.protected_reserve(request.priority))
+            .filter(|(_, request)| {
+                !self.browser_is_excluded(request)
+                    && free_slots > self.protected_reserve(request.priority)
+                    && self.slots.iter().take(eligible_slots).any(|slot| {
+                        slot.state == PresentationSlotState::WarmIdle
+                            && service_state
+                                .and_then(|state| slot_admission_conflict(state, slot, request))
+                                .is_none()
+                    })
+            })
             .min_by_key(|(index, request)| {
                 (
                     effective_priority_rank(request, self.queue_clock),
@@ -301,14 +729,23 @@ impl PresentationCapacityAuthority {
             })
             .map(|(index, _)| index)?;
         let request = self.queued_requests.remove(queue_index);
-        let slot = self
+        let selected_id = self
             .slots
-            .iter_mut()
+            .iter()
             .take(eligible_slots)
-            .find(|slot| slot.state == PresentationSlotState::WarmIdle)?;
+            .find(|slot| {
+                slot.state == PresentationSlotState::WarmIdle
+                    && service_state
+                        .and_then(|state| slot_admission_conflict(state, slot, &request))
+                        .is_none()
+            })?
+            .id
+            .clone();
+        let slot = self.slots.iter_mut().find(|slot| slot.id == selected_id)?;
         slot.state = PresentationSlotState::Reserved;
         slot.lease_request_id = Some(request.id.clone());
         slot.lease_priority = Some(request.priority);
+        slot.browser_id = request.browser_id.clone();
         Some(CapacityDecision::Granted {
             request_id: request.id,
             slot_id: slot.id.clone(),
@@ -337,6 +774,105 @@ fn effective_priority_rank(request: &PresentationRequest, now: u64) -> u8 {
     base - bounded_boost
 }
 
+fn queue_order(requests: &[PresentationRequest], now: u64) -> Vec<usize> {
+    let mut indices = (0..requests.len()).collect::<Vec<_>>();
+    indices.sort_by_key(|index| {
+        let request = &requests[*index];
+        (
+            effective_priority_rank(request, now),
+            request.queued_at.unwrap_or(u64::MAX),
+            *index,
+        )
+    });
+    indices
+}
+
+fn slot_admission_conflict(
+    state: &ServiceState,
+    slot: &PresentationSlot,
+    request: &PresentationRequest,
+) -> Option<CapacityLimitingResource> {
+    let route_id = slot.route_id.as_deref();
+    let display_id = slot.display_allocation_id.as_deref();
+    if state.remote_view_acquisition_leases.values().any(|lease| {
+        matches!(lease.state.as_str(), "pending" | "active" | "rolling_back")
+            && (route_id == Some(lease.route_id.as_str())
+                || display_id == Some(lease.display_allocation_id.as_str()))
+    }) {
+        return Some(CapacityLimitingResource::AcquisitionLease);
+    }
+    if let Some(route) = route_id.and_then(|id| state.remote_view_routes.get(id)) {
+        if route.controller_lease_id.is_some()
+            && !matches!(
+                request.priority,
+                PresentationPriority::HumanControl | PresentationPriority::ExistingEffect
+            )
+        {
+            return Some(CapacityLimitingResource::HumanController);
+        }
+        if request.requires_staging
+            && route.viewer_lease_ids.iter().any(|lease_id| {
+                state.viewer_leases.get(lease_id).is_some_and(|lease| {
+                    lease.viewer_role != "controller"
+                        && matches!(lease.state.as_str(), "requested" | "active" | "ready")
+                })
+            })
+        {
+            return Some(CapacityLimitingResource::ViewerStagingConflict);
+        }
+    }
+    if state.remote_view_handoffs.values().any(|handoff| {
+        route_id == handoff.last_route_id.as_deref()
+            && matches!(handoff.state.as_str(), "ready" | "resolving" | "active")
+            && handoff.browser_id.as_deref() != request.browser_id.as_deref()
+            && request.priority != PresentationPriority::Recovery
+    }) {
+        return Some(CapacityLimitingResource::DurableHandoff);
+    }
+    None
+}
+
+fn slot_state_name(state: PresentationSlotState) -> &'static str {
+    match state {
+        PresentationSlotState::Absent => "absent",
+        PresentationSlotState::Provisioning => "provisioning",
+        PresentationSlotState::WarmIdle => "warm_idle",
+        PresentationSlotState::Reserved => "reserved",
+        PresentationSlotState::Staging => "staging",
+        PresentationSlotState::CaptureReady => "capture_ready",
+        PresentationSlotState::Active => "active",
+        PresentationSlotState::Restoring => "restoring",
+        PresentationSlotState::Cooling => "cooling",
+        PresentationSlotState::Reclaiming => "reclaiming",
+        PresentationSlotState::Quarantined => "quarantined",
+    }
+}
+
+fn priority_name(priority: PresentationPriority) -> &'static str {
+    match priority {
+        PresentationPriority::HumanControl => "human_control",
+        PresentationPriority::Recovery => "recovery",
+        PresentationPriority::ExistingEffect => "existing_effect",
+        PresentationPriority::Observation => "observation",
+        PresentationPriority::Convenience => "convenience",
+    }
+}
+
+fn limiting_resource_name(resource: CapacityLimitingResource) -> &'static str {
+    match resource {
+        CapacityLimitingResource::ReservedCapacity => "reserved_capacity",
+        CapacityLimitingResource::PressureAdmission => "pressure_admission",
+        CapacityLimitingResource::WarmSlot => "warm_slot",
+        CapacityLimitingResource::BrowserExclusion => "browser_exclusion",
+        CapacityLimitingResource::HumanController => "human_controller",
+        CapacityLimitingResource::ViewerStagingConflict => "viewer_staging_conflict",
+        CapacityLimitingResource::AcquisitionLease => "acquisition_lease",
+        CapacityLimitingResource::DurableHandoff => "durable_handoff",
+        CapacityLimitingResource::QueueBound => "queue_bound",
+        CapacityLimitingResource::InvalidRequest => "invalid_request",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -353,6 +889,7 @@ mod tests {
                     hard_maximum: count,
                     human_priority_reserve: usize::from(count > 0),
                     recovery_reserve: usize::from(count > 1),
+                    max_queue_depth: 8,
                 },
                 slots,
             )
@@ -374,6 +911,7 @@ mod tests {
                 hard_maximum: 6,
                 human_priority_reserve: 1,
                 recovery_reserve: 1,
+                max_queue_depth: 8,
             },
             (0..4)
                 .map(|index| PresentationSlot::warm_idle(format!("slot-{index}")))
@@ -410,6 +948,7 @@ mod tests {
                 hard_maximum: 1,
                 human_priority_reserve: 0,
                 recovery_reserve: 0,
+                max_queue_depth: 8,
             },
             vec![PresentationSlot::warm_idle("slot-0")],
         )
@@ -449,6 +988,7 @@ mod tests {
                 hard_maximum: 4,
                 human_priority_reserve: 0,
                 recovery_reserve: 0,
+                max_queue_depth: 8,
             },
             vec![
                 PresentationSlot::warm_idle("slot-0"),
@@ -476,6 +1016,7 @@ mod tests {
                 hard_maximum: 1,
                 human_priority_reserve: 0,
                 recovery_reserve: 0,
+                max_queue_depth: 8,
             },
             vec![PresentationSlot::warm_idle("slot-0")],
         )
@@ -505,5 +1046,304 @@ mod tests {
                 slot_id: "slot-0".to_string(),
             })
         );
+    }
+
+    fn one_slot_authority(max_queue_depth: usize) -> PresentationCapacityAuthority {
+        PresentationCapacityAuthority::new(
+            PresentationCapacityConfig {
+                warm_minimum: 1,
+                hard_maximum: 1,
+                human_priority_reserve: 0,
+                recovery_reserve: 0,
+                max_queue_depth,
+            },
+            vec![PresentationSlot::warm_idle("slot-1").with_binding("route-1", "display-1")],
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn active_human_controller_blocks_automation_but_not_human_continuation() {
+        let mut state = ServiceState::default();
+        state.remote_view_routes.insert(
+            "route-1".to_string(),
+            super::super::service_model::RemoteViewRoute {
+                id: "route-1".to_string(),
+                controller_lease_id: Some("controller-1".to_string()),
+                ..Default::default()
+            },
+        );
+        let mut automated = one_slot_authority(8);
+        let blocked = automated.request_with_service_state(
+            PresentationRequest::observation("observe").for_browser("browser-1"),
+            PressureAdmission::admit(1),
+            Some(&state),
+        );
+        assert_eq!(
+            blocked.limiting_resource(),
+            Some(CapacityLimitingResource::HumanController)
+        );
+
+        let mut human = one_slot_authority(8);
+        assert!(human
+            .request_with_service_state(
+                PresentationRequest::human("continue").for_browser("browser-1"),
+                PressureAdmission::admit(1),
+                Some(&state),
+            )
+            .is_granted());
+    }
+
+    #[test]
+    fn passive_viewer_allows_ready_capture_but_blocks_visible_staging() {
+        let mut state = ServiceState::default();
+        state.viewer_leases.insert(
+            "viewer-1".to_string(),
+            super::super::service_model::ViewerLease {
+                id: "viewer-1".to_string(),
+                route_id: Some("route-1".to_string()),
+                state: "active".to_string(),
+                ..Default::default()
+            },
+        );
+        state.remote_view_routes.insert(
+            "route-1".to_string(),
+            super::super::service_model::RemoteViewRoute {
+                id: "route-1".to_string(),
+                viewer_lease_ids: vec!["viewer-1".to_string()],
+                ..Default::default()
+            },
+        );
+        let mut staging = one_slot_authority(8);
+        assert_eq!(
+            staging
+                .request_with_service_state(
+                    PresentationRequest::observation("stage")
+                        .for_browser("browser-1")
+                        .requiring_staging(),
+                    PressureAdmission::admit(1),
+                    Some(&state),
+                )
+                .limiting_resource(),
+            Some(CapacityLimitingResource::ViewerStagingConflict)
+        );
+
+        let mut capture = one_slot_authority(8);
+        assert!(capture
+            .request_with_service_state(
+                PresentationRequest::observation("capture").for_browser("browser-1"),
+                PressureAdmission::admit(1),
+                Some(&state),
+            )
+            .is_granted());
+    }
+
+    #[test]
+    fn queue_is_bounded_and_one_browser_cannot_hold_two_presentations() {
+        let mut authority = PresentationCapacityAuthority::new(
+            PresentationCapacityConfig {
+                warm_minimum: 2,
+                hard_maximum: 2,
+                human_priority_reserve: 0,
+                recovery_reserve: 0,
+                max_queue_depth: 1,
+            },
+            vec![
+                PresentationSlot::warm_idle("slot-1"),
+                PresentationSlot::warm_idle("slot-2"),
+            ],
+        )
+        .unwrap();
+        let pressure = PressureAdmission::admit(2);
+        assert!(authority
+            .request(
+                PresentationRequest::observation("first").for_browser("browser-1"),
+                pressure,
+            )
+            .is_granted());
+        assert_eq!(
+            authority
+                .request(
+                    PresentationRequest::observation("second").for_browser("browser-1"),
+                    pressure,
+                )
+                .limiting_resource(),
+            Some(CapacityLimitingResource::BrowserExclusion)
+        );
+        assert_eq!(
+            authority
+                .request(
+                    PresentationRequest::observation("third").for_browser("browser-1"),
+                    pressure,
+                )
+                .limiting_resource(),
+            Some(CapacityLimitingResource::QueueBound)
+        );
+        assert_eq!(
+            authority.release_and_dispatch("slot-2", pressure),
+            None,
+            "releasing another slot must not bypass per-browser exclusion"
+        );
+        assert_eq!(
+            authority.release_and_dispatch("slot-1", pressure),
+            Some(CapacityDecision::Granted {
+                request_id: "second".to_string(),
+                slot_id: "slot-1".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn durable_service_state_and_projection_preserve_capacity_authority() {
+        let mut state = ServiceState {
+            presentation_capacity: Some(one_slot_authority(8)),
+            ..Default::default()
+        };
+        state.presentation_capacity.as_mut().unwrap().request(
+            PresentationRequest::observation("queued"),
+            PressureAdmission::admit(0),
+        );
+        let encoded = serde_json::to_value(&state).unwrap();
+        assert_eq!(
+            encoded.pointer("/presentationCapacity/slots/0/id"),
+            Some(&serde_json::json!("slot-1"))
+        );
+        let decoded: ServiceState = serde_json::from_value(encoded).unwrap();
+        let authority = decoded.presentation_capacity.as_ref().unwrap();
+        let projection =
+            authority.projection_with_service_state(PressureAdmission::admit(1), Some(&decoded));
+        assert_eq!(projection.total_slots, 1);
+        assert_eq!(projection.queued_by_priority.get("observation"), Some(&1));
+        assert_eq!(projection.binding_warnings.len(), 2);
+    }
+
+    #[test]
+    fn service_inventory_derivation_never_manufactures_unready_capacity() {
+        use super::super::service_model::{DisplayAllocation, RemoteViewRoute, RoutePoolEntry};
+
+        let config = PresentationCapacityConfig {
+            warm_minimum: 4,
+            hard_maximum: 6,
+            human_priority_reserve: 1,
+            recovery_reserve: 1,
+            max_queue_depth: 8,
+        };
+        let mut state = ServiceState::default();
+        for (id, ready) in [("one", true), ("two", false)] {
+            let route_id = format!("route-{id}");
+            let display_id = format!("display-{id}");
+            state.display_allocations.insert(
+                display_id.clone(),
+                DisplayAllocation {
+                    id: display_id.clone(),
+                    state: if ready { "ready" } else { "allocating" }.to_string(),
+                    ..Default::default()
+                },
+            );
+            state.remote_view_routes.insert(
+                route_id.clone(),
+                RemoteViewRoute {
+                    id: route_id.clone(),
+                    display_allocation_id: Some(display_id),
+                    state: if ready { "ready" } else { "allocating" }.to_string(),
+                    ..Default::default()
+                },
+            );
+            state.route_pool.insert(
+                id.to_string(),
+                RoutePoolEntry {
+                    id: id.to_string(),
+                    route_id: format!("provider-{id}"),
+                    state: "available".to_string(),
+                    current_route_allocation_id: Some(route_id),
+                    readiness: Some(serde_json::json!({
+                        "state": if ready { "ready" } else { "blocked" }
+                    })),
+                    ..Default::default()
+                },
+            );
+        }
+
+        let authority = PresentationCapacityAuthority::from_service_state(config, &state).unwrap();
+        assert_eq!(authority.slots.len(), 1);
+        assert_eq!(authority.slots[0].id, "slot:one");
+        assert_eq!(authority.config.warm_minimum, 4);
+    }
+
+    #[test]
+    fn slot_authority_fences_scene_transitions_and_quarantines_uncertain_cleanup() {
+        let mut authority = one_slot_authority(8);
+        assert!(authority
+            .request(
+                PresentationRequest::observation("episode-1").for_browser("browser-1"),
+                PressureAdmission::admit(1),
+            )
+            .is_granted());
+        assert_eq!(
+            authority
+                .transition_slot(
+                    "slot-1",
+                    "wrong-episode",
+                    PresentationSlotState::Staging,
+                    None,
+                )
+                .unwrap_err(),
+            "presentation_slot_lease_mismatch"
+        );
+        let staging = authority
+            .transition_slot("slot-1", "episode-1", PresentationSlotState::Staging, None)
+            .unwrap();
+        assert_eq!(staging.scene_generation, 1);
+        authority
+            .transition_slot(
+                "slot-1",
+                "episode-1",
+                PresentationSlotState::CaptureReady,
+                None,
+            )
+            .unwrap();
+        authority
+            .transition_slot("slot-1", "episode-1", PresentationSlotState::Active, None)
+            .unwrap();
+        authority
+            .quarantine_slot("slot-1", "cleanup:episode-1")
+            .unwrap();
+        assert_eq!(authority.slots[0].state, PresentationSlotState::Quarantined);
+        assert_eq!(
+            authority.slots[0].cleanup_obligation_ids,
+            vec!["cleanup:episode-1"]
+        );
+    }
+
+    #[test]
+    fn controller_arriving_after_reservation_fences_staging() {
+        let mut authority = one_slot_authority(8);
+        authority.request(
+            PresentationRequest::observation("episode-1").for_browser("browser-1"),
+            PressureAdmission::admit(1),
+        );
+        let mut state = ServiceState::default();
+        state.remote_view_routes.insert(
+            "route-1".to_string(),
+            super::super::service_model::RemoteViewRoute {
+                id: "route-1".to_string(),
+                controller_lease_id: Some("human-controller".to_string()),
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(
+            authority
+                .transition_slot(
+                    "slot-1",
+                    "episode-1",
+                    PresentationSlotState::Staging,
+                    Some(&state),
+                )
+                .unwrap_err(),
+            "presentation_slot_staging_blocked:human_controller"
+        );
+        assert_eq!(authority.slots[0].state, PresentationSlotState::Reserved);
+        assert_eq!(authority.slots[0].scene_generation, 0);
     }
 }

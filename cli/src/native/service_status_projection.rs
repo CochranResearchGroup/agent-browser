@@ -296,6 +296,12 @@ pub(crate) struct ServiceStatusResponse {
     pub(crate) manual_browsers: Vec<crate::runtime_profile::ManualRuntimeBrowser>,
     #[serde(rename = "retainedDisplayAllocations")]
     pub(crate) retained_display_allocations: Value,
+    #[serde(
+        rename = "presentationCapacity",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub(crate) presentation_capacity:
+        Option<super::presentation_capacity::PresentationCapacityProjection>,
     #[serde(rename = "browserSessionAuthority")]
     pub(crate) browser_session_authority: BrowserSessionAuthoritySnapshot,
     #[serde(rename = "closedTabProjection")]
@@ -449,6 +455,18 @@ impl ServiceStatusProjector {
         let response_state =
             compatibility::apply_legacy_observation_mirrors(&response_state, &observations)?;
 
+        let presentation_capacity =
+            authority_state
+                .presentation_capacity
+                .as_ref()
+                .map(|capacity| {
+                    capacity.projection_with_service_state(
+                        super::presentation_capacity::PressureAdmission::admit(
+                            capacity.config.hard_maximum,
+                        ),
+                        Some(&authority_state),
+                    )
+                });
         let response = ServiceStatusResponse {
             control_plane: input.control_plane,
             profile_allocations: super::service_model::service_profile_allocations(
@@ -458,6 +476,7 @@ impl ServiceStatusProjector {
             retained_display_allocations: super::service_model::retained_display_allocation_summary(
                 &authority_state,
             ),
+            presentation_capacity,
             browser_session_authority: input.browser_session_authority,
             closed_tab_projection,
             launch_config: input.launch_config,

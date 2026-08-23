@@ -2395,6 +2395,11 @@ pub struct ServiceState {
     pub remote_view_acquisition_leases: BTreeMap<String, RemoteViewAcquisitionLease>,
     pub remote_view_handoffs: BTreeMap<String, RemoteViewHandoff>,
     pub viewer_leases: BTreeMap<String, ViewerLease>,
+    /// Durable scarce presentation-slot inventory and admission authority.
+    /// Logical browsers remain separate and survive slot release or parking.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) presentation_capacity:
+        Option<super::presentation_capacity::PresentationCapacityAuthority>,
     pub profiles: BTreeMap<String, BrowserProfile>,
     pub browsers: BTreeMap<String, BrowserProcess>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]

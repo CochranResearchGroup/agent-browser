@@ -136,6 +136,36 @@ async fn project(state: ServiceState, full_tab_history: bool) -> ServiceStatusRe
     .unwrap()
 }
 
+#[tokio::test]
+async fn status_projects_durable_presentation_capacity_without_launching() {
+    use crate::native::presentation_capacity::{
+        PresentationCapacityAuthority, PresentationCapacityConfig, PresentationSlot,
+    };
+
+    let mut state = ServiceState::default();
+    state.presentation_capacity = Some(
+        PresentationCapacityAuthority::new(
+            PresentationCapacityConfig {
+                warm_minimum: 1,
+                hard_maximum: 4,
+                human_priority_reserve: 1,
+                recovery_reserve: 1,
+                max_queue_depth: 8,
+            },
+            vec![PresentationSlot::warm_idle("slot-1")],
+        )
+        .unwrap(),
+    );
+
+    let response = project(state, false).await;
+    let capacity = response
+        .presentation_capacity
+        .expect("configured capacity must be projected");
+    assert_eq!(capacity.total_slots, 1);
+    assert_eq!(capacity.configured_hard_maximum, 4);
+    assert_eq!(capacity.slot_counts.get("warm_idle"), Some(&1));
+}
+
 fn closed_tab(id: &str) -> BrowserTab {
     BrowserTab {
         id: id.to_string(),

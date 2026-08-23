@@ -6,6 +6,8 @@ The model is intentionally broader than the CLI. Agents usually interact through
 
 Static route-user setup accepts `AGENT_BROWSER_RDP_ROUTE_USER_POOL_JSON` as an arbitrary bounded JSON array. Each entry declares `id`, `connectionName`, and `routeUser`; `legacyConnectionName` is optional. Setup generates missing passwords into the user-scoped Guacamole secret file and preserves every configured route. When the array is absent, the legacy two-route environment is handled only by the compatibility adapter. The full `AGENT_BROWSER_RDP_ROUTE_POOL_JSON` emitted by inspection is canonical.
 
+Service status includes `presentationCapacity` when durable presentation-slot authority is configured. The read-only projection reports arbitrary-size slot state counts, admitted and hard limits, human and recovery reserves, queued demand, oldest wait age, and redacted binding warnings. Reading it never launches a browser or opens a route. Logical CDP-only browsers remain separate from scarce operator-visible presentation capacity.
+
 The normal request model is identity-first. A caller asks for a tab or browser action plus `serviceName`, `agentName`, `taskName`, and the target site or login identity. agent-browser selects or reuses the managed profile, manages any profile lease, queues browser-control work, and records the trace state. Direct profile selection is for known-login overrides and bring-your-own-profile workflows.
 
 ## Use service mode as an agent

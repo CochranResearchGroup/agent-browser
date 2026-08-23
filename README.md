@@ -3364,6 +3364,13 @@ fresh route-pool array into the `remote_view_open` request unless the caller
 already supplied `--route-pool-entry-json`. This keeps route-pool readiness
 output request-scoped and prevents a long-running daemon from selecting a
 stale retained route record.
+
+Service status exposes `presentationCapacity` when durable presentation-slot
+authority is configured. This read-only projection reports arbitrary-size slot
+state counts, admitted and hard limits, human and recovery reserves, queued
+demand by priority, oldest wait age, and redacted binding warnings. A logical
+browser consumes no slot until presentation is explicitly requested, and
+reading capacity never launches a browser or opens a route.
 When the bound browser already has a live same-origin target for the requested
 URL, route-bound repeat opens reuse that target and include
 `tabAcquisitionDecision="reused_compatible_target"` plus

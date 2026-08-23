@@ -79,7 +79,6 @@ pub mod page_injection;
 #[allow(dead_code)]
 pub mod policy;
 #[allow(dead_code)]
-#[cfg(test)]
 pub(crate) mod presentation_capacity;
 pub(crate) mod presentation_inventory;
 #[cfg(test)]

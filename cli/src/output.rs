@@ -2790,6 +2790,46 @@ fn format_service_status_text(data: &serde_json::Value) -> Option<String> {
         ));
     }
 
+    if let Some(capacity) = data.get("presentationCapacity") {
+        let total = capacity
+            .get("totalSlots")
+            .and_then(|value| value.as_u64())
+            .unwrap_or(0);
+        let warm = capacity
+            .pointer("/slotCounts/warm_idle")
+            .and_then(|value| value.as_u64())
+            .unwrap_or(0);
+        let queued = capacity
+            .get("queuedByPriority")
+            .and_then(|value| value.as_object())
+            .map(|counts| counts.values().filter_map(serde_json::Value::as_u64).sum())
+            .unwrap_or(0u64);
+        let warnings = capacity
+            .get("bindingWarnings")
+            .and_then(|value| value.as_array())
+            .map(Vec::len)
+            .unwrap_or(0);
+        lines.push(format!(
+            "Presentation capacity: warm={warm}/{total} admitted={} hard_max={} human_reserved={} recovery_reserved={} queued={queued} binding_warnings={warnings}",
+            capacity
+                .get("pressureAdmittedMaximum")
+                .and_then(|value| value.as_u64())
+                .unwrap_or(0),
+            capacity
+                .get("configuredHardMaximum")
+                .and_then(|value| value.as_u64())
+                .unwrap_or(0),
+            capacity
+                .get("humanProtectedCapacity")
+                .and_then(|value| value.as_u64())
+                .unwrap_or(0),
+            capacity
+                .get("recoveryReservedCapacity")
+                .and_then(|value| value.as_u64())
+                .unwrap_or(0),
+        ));
+    }
+
     if let Some(retained_displays) = data.get("retainedDisplayAllocations") {
         let count = retained_displays
             .get("count")
@@ -6343,6 +6383,7 @@ Notes:
   - HTTP GET /api/service/contracts and MCP agent-browser://contracts expose matching service request schema IDs, contract versions, routes, MCP tool names, and supported actions for compatibility checks. Contracts include no-launch remote-view allocation collections for display allocations, remote-view routes, route pool entries, and viewer leases.
   - CLI service profiles lookup, HTTP GET /api/service/profiles/lookup, and MCP agent-browser://profiles/lookup{?query,hostname,profileId,profileName,serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,authenticationState,freshnessState,tag,url,readinessProfileId,browserBuild} rank the authoritative profile catalog and return match evidence plus launch, add-tab, view, seed, wait, or holder-inspection guidance. Identity searches never fall back to an unrelated generic browser-build default.
   - Service status includes manualBrowsers for live detached headed runtime launches, including PID, profile path, target URL, display, browser family/build, CDP availability, remote-view route, and the next safe operator action.
+  - Service status includes presentationCapacity when durable slot authority is configured. It reports warm and active slots, admitted and hard limits, protected reserves, queued demand, and redacted binding warnings without launching a browser or opening a route.
   - Current service status includes additive statusProjection provenance and freshness for host-local observations. service_state remains authority; unavailable means unknown. Derive staleness from validUntil. Legacy v1 fields remain supported.
   - Current service status also includes additive runtimeLifecycle readback. CLI JSON, HTTP GET /api/service/status, typed MCP service_status, the generated client, Service State, and the dashboard share its multiplicity, lifecycle-owner, reconciliation, retention, pressure, cleanup-obligation, and blocking-incident model. A convergence_window is transaction-bound overlap, not steady state.
   - Reconciliation expires active session leases whose recorded browser ownership no longer exists, so stale retained sessions cannot continue to hold a profile.
@@ -7780,6 +7821,17 @@ mod tests {
                 "candidateReasons": {},
                 "explanation": "Retained display allocations are historical service-state records.",
                 "cleanupCommand": "agent-browser service prune-retained --display-allocations --dry-run"
+            },
+            "presentationCapacity": {
+                "totalSlots": 4,
+                "configuredHardMaximum": 6,
+                "pressureAdmittedMaximum": 4,
+                "slotCounts": { "warm_idle": 2, "active": 2 },
+                "humanProtectedCapacity": 1,
+                "recoveryReservedCapacity": 1,
+                "queuedByPriority": { "observation": 2 },
+                "oldestWaitTicks": 3,
+                "bindingWarnings": []
             }
         });
 
@@ -7796,6 +7848,9 @@ mod tests {
         ));
         assert!(rendered.contains(
             "Retained display allocations: total=3 apply_safe=2 retained=1 classes=diagnostic-retained=1,safe-orphan-display=1,stale-route-reference=1"
+        ));
+        assert!(rendered.contains(
+            "Presentation capacity: warm=2/4 admitted=4 hard_max=6 human_reserved=1 recovery_reserved=1 queued=2 binding_warnings=0"
         ));
         assert!(rendered.contains("Profiles: 1"));
         assert!(rendered.contains(

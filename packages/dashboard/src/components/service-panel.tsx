@@ -426,11 +426,24 @@ type ServiceState = {
   providers?: Record<string, unknown>;
 };
 
+type PresentationCapacityProjection = {
+  totalSlots?: number;
+  configuredHardMaximum?: number;
+  pressureAdmittedMaximum?: number;
+  slotCounts?: Record<string, number>;
+  humanProtectedCapacity?: number;
+  recoveryReservedCapacity?: number;
+  queuedByPriority?: Record<string, number>;
+  oldestWaitTicks?: number | null;
+  bindingWarnings?: string[];
+};
+
 type ServiceStatusData = {
   control_plane?: ControlPlaneSnapshot;
   service_state?: ServiceState;
   profileAllocations?: ServiceProfileAllocation[];
   browserSessionAuthority?: WorkspaceBrowserSessionAuthority | null;
+  presentationCapacity?: PresentationCapacityProjection | null;
   statusProjection?: WorkspaceNodeInput["statusProjection"];
 };
 
@@ -8016,6 +8029,17 @@ export function ServicePanel({
               icon={RadioTower}
               tone={healthTone(control?.browser_health ?? serviceState?.controlPlane?.browserHealth)}
               onClick={() => selectWorkspaceTab("browsers")}
+            />
+            <ServiceStatusLight
+              label="Presentation"
+              value={status?.presentationCapacity
+                ? `${status.presentationCapacity.slotCounts?.warm_idle ?? 0}/${status.presentationCapacity.totalSlots ?? 0} warm`
+                : "not configured"}
+              detail={status?.presentationCapacity
+                ? `${Object.values(status.presentationCapacity.queuedByPriority ?? {}).reduce((sum, count) => sum + count, 0)} queued; ${status.presentationCapacity.humanProtectedCapacity ?? 0} human and ${status.presentationCapacity.recoveryReservedCapacity ?? 0} recovery reserved`
+                : "Logical browsers do not consume a slot until presentation is requested"}
+              icon={Maximize2}
+              tone={(status?.presentationCapacity?.bindingWarnings?.length ?? 0) > 0 ? "warn" : "neutral"}
             />
             <ServiceStatusLight
               label="Reconciled"
