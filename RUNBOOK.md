@@ -4,6 +4,51 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 177 | 2026-08-23
+
+Scope: reconcile the preserved named-profile lifecycle and diagnose one bounded
+X and LinkedIn feed tick after the Agent Browser upgrade.
+
+Actions:
+
+- verified installed version `0.28.0`, selected generation
+  `0.28.0-4b975a51aa89-d0782705d5ff`, one dashboard, one runtime host, zero
+  legacy daemons, and no live browser for the selected profile;
+- implemented exact absent-process and absent-lock completion for matching
+  `closing/owned` lifecycle records, then repaired repository merge so the
+  completed transition persists;
+- reconciled the selected profile to `terminal/satisfied` without replacing,
+  reseeding, reauthenticating, launching, or killing its browser;
+- ran the one authorized X and LinkedIn tick and traced both pre-navigation
+  failures to terminal replacement rejecting the service's new logical browser
+  ID;
+- repaired terminal replacement so a collision-free next-generation owner may
+  move the lifecycle record to a new logical ID, while pending transfers,
+  duplicate profile records, and key collisions remain fail-closed;
+- recomputed package launch identity after generation advance and added
+  cross-logical-ID and collision regression tests.
+
+Validation:
+
+- all 12 `native::runtime_lifecycle::tests` pass;
+- all 50 `native::service_health::tests` pass;
+- strict Clippy, formatting, and diff hygiene pass;
+- the bounded tick `tick-7224876f30d729e41ff5435b387be4df`
+  launched and politely closed both browser processes, released both profile
+  locks, and rolled back route and display leases;
+- X job `r923698` and LinkedIn job `r841495` each observed zero posts because
+  `remote_view_open` failed before provider navigation.
+
+Result:
+
+- the authenticated profile is preserved and the stale lifecycle is
+  `terminal/satisfied`;
+- the newly exposed replacement defect is repaired and validated in source;
+- P126 remains `OPEN` because the corrected binary is not installed and no
+  provider retrieval has yet occurred;
+- no second tick was run, so this turn yields no X or LinkedIn authentication,
+  retrieval, acceptance, or filtering conclusion.
+
 ## Turn 176 | 2026-08-23
 
 Scope: implement and accept P125 without interrupting active production use.

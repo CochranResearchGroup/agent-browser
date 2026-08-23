@@ -10,12 +10,15 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 ## P126 | Absent Closing Lifecycle Reconciliation
 
 State: OPEN
-Current state: an accepted upgrade exposed a lifecycle convergence gap. The
-recorded browser process and Service records are absent, but the exact owner
-generation remains `closing/owned`, so launch admission correctly blocks a
-replacement. Plan 0126 adds a fail-closed reconciliation transition for the
-exact absent-process, absent-lock case without changing the selected named
-profile.
+Current state: source and bounded live reconciliation repaired the exact
+absent-process, absent-lock `closing/owned` lane to `terminal/satisfied` while
+preserving the named authenticated profile. The first consuming X and LinkedIn
+tick then exposed a terminal-replacement defect: the next generation was
+rejected when the service used a new logical browser ID, before either provider
+was navigated. The bounded source remediation now moves the lifecycle record to
+a collision-free new ID at exactly the next generation and retains one cleanup
+obligation. Deterministic Rust and Service Health validation passes; the repair
+is not installed and consuming-workflow acceptance remains open.
 
 ### Plan
 
@@ -23,10 +26,11 @@ profile.
 
 ### Next Recommendation
 
-Complete deterministic validation, checkpoint the repair, and run one bounded
-live reconciliation. Resume the consuming browser workflow only after the
-lifecycle reads `terminal/satisfied` and access planning reports no owner
-conflict.
+Publish the validated source checkpoint, then obtain explicit authority for a
+new transactional Agent Browser installation. After installed no-launch
+readback proves the selected generation and lifecycle contract, run at most one
+new X and LinkedIn feed tick; do not infer provider authentication or scraper
+quality from the pre-navigation failure.
 
 ## P125 | Development Runtime Isolation And Build Capacity
 

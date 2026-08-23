@@ -8,7 +8,7 @@ Lane: P126
 
 Branch: `fix/reconcile-absent-closing-lifecycle`
 
-Source baseline: `05a0c5f3e0470b23b7ba644631dea613601c574f`
+Source baseline: `e3945810b3e15c507c00dd0218656735f266fcc0`
 
 ## Goal
 
@@ -25,6 +25,13 @@ admission correctly rejected a replacement browser with
 `runtime_lifecycle_existing_owner_requires_explicit_transition` even though no
 live browser, service browser record, or service session remained.
 
+The first consuming tick then exposed a second lifecycle defect. Reconciliation
+had correctly produced `terminal/satisfied`, but terminal replacement required
+the incoming service lane to reuse the prior logical browser ID. The existing
+owner was `session:plan0117-final-runtime` while the bounded feed service uses
+`session:last30days-home-feed`, so both providers failed before navigation with
+`runtime_lifecycle_terminal_replacement_rejected`.
+
 ## Acceptance Criteria
 
 1. Reconciliation completes only an exact `closing/owned` lifecycle whose
@@ -39,7 +46,12 @@ live browser, service browser record, or service session remained.
    Health test surface pass.
 5. A live bounded reconciliation completes the observed stale lane without
    launching, killing, replacing, or modifying the authenticated profile.
-6. The consuming X and LinkedIn feed workflow can pass launch admission and
+6. An exact `terminal/satisfied` owner can be replaced under a new logical
+   browser ID only at the next owner generation, with no pending transfer,
+   duplicate profile lifecycle, or logical-ID collision. The old lifecycle key
+   is removed, the record moves to the new ID, and one cleanup obligation is
+   retained.
+7. The consuming X and LinkedIn feed workflow can pass launch admission and
    run one fresh tick against the existing selected profile.
 
 ## Non-Goals
@@ -60,6 +72,35 @@ live browser, service browser record, or service session remained.
    LinkedIn feed tick only if admission is restored.
 4. Record source, live, and consuming-workflow evidence and close or block the
    lane.
+
+## Execution Checkpoint
+
+- Commits `71e57e1b` and `ffd5aae6` implement exact absent-process/absent-lock
+  convergence and persist the reconciled registry transition.
+- The isolated candidate reconciled the selected profile digest
+  `0921530e77a78f65acb295bfcaadc9200fb5b4b22e958fc6152a00f0fce2ca59`
+  from `closing/owned` to `terminal/satisfied` with evidence
+  `service_reconcile_process_group_absent:27742` and
+  `service_reconcile_profile_lock_absent`. The owner and authenticated profile
+  were preserved.
+- Access planning then returned `launch_new_browser` with no manual action or
+  owner conflict.
+- The one authorized consuming tick
+  `tick-7224876f30d729e41ff5435b387be4df` completed degraded. X job `r923698`
+  and LinkedIn job `r841495` each launched and politely closed one browser, but
+  both failed `remote_view_open` with
+  `runtime_lifecycle_terminal_replacement_rejected` before provider navigation.
+  Both process identities exited, profile locks were released, and route and
+  display leases rolled back.
+- The bounded remediation now permits an exact next-generation terminal
+  replacement to move to a collision-free new logical browser ID and
+  recomputes the package launch identity for that generation. The 12 lifecycle
+  tests, 50 service-health tests, strict Clippy, formatting, and diff hygiene
+  pass.
+- Acceptance criterion 7 remains open. The corrected source has not been
+  transactionally installed, and no second provider tick was run. The failed
+  tick provides no evidence about X or LinkedIn authentication, retrieval, or
+  filtering.
 
 ## Bounds
 
