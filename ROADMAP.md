@@ -7,30 +7,49 @@ This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
 
-## P126 | Absent Closing Lifecycle Reconciliation
+## P126 | Pre-Development Runtime Safety And Browser Launch Stabilization
+
+State: ACCEPTED
+Current state: development GC now requires positive development-environment
+ownership before admitting any process as a candidate. The development
+publisher pins `/opt/google/chrome/chrome` through its stable launcher and all
+three units. Doctor passes, three consecutive disposable launch cycles pass,
+and both production and development GC dry-runs finish with zero candidates.
+The exact two-day-old test Chrome group was terminated after repeated identity
+and no-owner proof, and its temporary home was moved to trash.
+
+### Plan
+
+- `docs/dev/plans/0126-2026-08-23-pre-development-runtime-safety-and-browser-launch-stabilization.md`
+
+### Next Recommendation
+
+Begin only P124 Slice A in source and provider-free fixtures. Keep installed
+experiments on the accepted development Runtime Environment and preserve
+production as a separate effect boundary.
+
+## P127 | Absent Closing Lifecycle Reconciliation
 
 State: OPEN
 Current state: source and bounded live reconciliation repaired the exact
 absent-process, absent-lock `closing/owned` lane to `terminal/satisfied` while
 preserving the named authenticated profile. The first consuming X and LinkedIn
-tick then exposed a terminal-replacement defect: the next generation was
-rejected when the service used a new logical browser ID, before either provider
-was navigated. The bounded source remediation now moves the lifecycle record to
-a collision-free new ID at exactly the next generation and retains one cleanup
-obligation. Deterministic Rust and Service Health validation passes; the repair
-is not installed and consuming-workflow acceptance remains open.
+tick then exposed a terminal-replacement defect before either provider was
+navigated. The source repair now moves the lifecycle record to a collision-free
+new ID at exactly the next generation and retains one cleanup obligation. A
+second source repair records successful auxiliary cleanup so a graceful browser
+exit cannot become a false force-kill failure. Provider-free validation is in
+progress; no workstation upgrade or provider retry is part of this packet.
 
 ### Plan
 
-- `docs/dev/plans/0126-2026-08-23-absent-closing-lifecycle-reconciliation.md`
+- `docs/dev/plans/0127-2026-08-23-absent-closing-lifecycle-reconciliation.md`
 
 ### Next Recommendation
 
-Publish the validated source checkpoint, then obtain explicit authority for a
-new transactional Agent Browser installation. After installed no-launch
-readback proves the selected generation and lifecycle contract, run at most one
-new X and LinkedIn feed tick; do not infer provider authentication or scraper
-quality from the pre-navigation failure.
+Finish the provider-free source and isolated-development validation for normal
+close and same-profile replacement. Keep the accepted workstation installation
+and authenticated provider state unchanged.
 
 ## P125 | Development Runtime Isolation And Build Capacity
 
@@ -79,8 +98,7 @@ ownership remains independent from presentation capacity.
 
 ### Next Recommendation
 
-Execute P125 first. Then execute Slice A only: freeze provider-free red
-fixtures and architecture guards
+Execute Slice A only: freeze provider-free red fixtures and architecture guards
 for evidence selection, arbitrary-N inventory, four-slot warm capacity,
 priority admission, scene proof, restoration, elastic lifecycle, and exact GC.
 Do not change the current workstation or provision live desktop resources.

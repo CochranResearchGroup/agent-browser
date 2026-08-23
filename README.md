@@ -70,6 +70,7 @@ scripts/ci/cargo-safe.sh build --release --manifest-path cli/Cargo.toml
 pnpm development-runtime:install
 pnpm development-runtime:doctor
 pnpm development-runtime:gc
+pnpm smoke:development-browser-launch
 pnpm smoke:development-dashboard-auth -- --dashboard-url https://agent-browser-dev.ecochran.dyndns.org
 ```
 
@@ -84,9 +85,17 @@ preserving host memory, swap, CPU, and disk reserves. Under live system pressure
 it can safely admit only one build until resources recover.
 
 The stable `agent-browser-dev` command is an environment-owning launcher. It
-selects the dev pseudo-home, socket, and auth store before executing the current
-immutable generation, so direct CLI commands cannot silently fall through to
-production state.
+selects the dev pseudo-home, socket, auth store, and a Linux-compatible browser
+executable before executing the current immutable generation, so direct CLI
+commands cannot silently fall through to production state or an incompatible
+Windows browser manifest. Set `AGENT_BROWSER_DEV_BROWSER_EXECUTABLE` before
+installation only when a different absolute executable has been reviewed.
+
+Development service GC also requires positive development ownership before a
+process can become a candidate. Global Xvfb, Chrome, or Agent Browser processes
+that are absent from the isolated development ledger remain protected as
+foreign or unknown. Run the three-cycle browser-launch smoke after every
+development publication.
 
 ### Linux Dependencies
 

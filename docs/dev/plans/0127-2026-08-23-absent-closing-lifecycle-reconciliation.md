@@ -1,10 +1,10 @@
-# Plan 0126: Absent Closing Lifecycle Reconciliation
+# Plan 0127: Absent Closing Lifecycle Reconciliation
 
 Date: 2026-08-23
 
 State: OPEN
 
-Lane: P126
+Lane: P127
 
 Branch: `fix/reconcile-absent-closing-lifecycle`
 
@@ -51,8 +51,12 @@ owner was `session:plan0117-final-runtime` while the bounded feed service uses
    duplicate profile lifecycle, or logical-ID collision. The old lifecycle key
    is removed, the record moves to the new ID, and one cleanup obligation is
    retained.
-7. The consuming X and LinkedIn feed workflow can pass launch admission and
-   run one fresh tick against the existing selected profile.
+7. A graceful exact-process exit with successful auxiliary-process cleanup
+   records the force-kill attempt as successful and does not create a false
+   `force_kill_failed` classification.
+8. Provider-free isolated-development fixtures prove normal-close convergence
+   and one same-profile, next-generation replacement without changing the
+   accepted workstation installation or opening a provider.
 
 ## Non-Goals
 
@@ -60,6 +64,9 @@ owner was `session:plan0117-final-runtime` while the bounded feed service uses
 - terminating a live or ambiguous process tree;
 - weakening ordinary owner-generation or launch-admission checks;
 - changing provider scraping or content-quality policy;
+- navigating to X, LinkedIn, or another authenticated provider during this
+  provider-free packet;
+- running another workstation upgrade;
 - formal release publication.
 
 ## Work Units
@@ -68,9 +75,14 @@ owner was `session:plan0117-final-runtime` while the bounded feed service uses
    fail-closed tests.
 2. Validate, checkpoint, and run one bounded live reconciliation through the
    candidate binary.
-3. Re-read installed lifecycle and access-plan state, then run one X and
-   LinkedIn feed tick only if admission is restored.
-4. Record source, live, and consuming-workflow evidence and close or block the
+3. Re-read installed lifecycle and access-plan state, then run the one already
+   authorized X and LinkedIn feed tick only if admission is restored.
+4. Reproduce the graceful-close and force-kill contradiction in a
+   provider-free fixture, repair the classification, and validate the wider
+   shutdown surface.
+5. Prove provider-free normal-close convergence and same-profile replacement
+   in the isolated development runtime without changing production.
+6. Record source and provider-free acceptance evidence and close or block the
    lane.
 
 ## Execution Checkpoint
@@ -97,15 +109,19 @@ owner was `session:plan0117-final-runtime` while the bounded feed service uses
   recomputes the package launch identity for that generation. The 12 lifecycle
   tests, 50 service-health tests, strict Clippy, formatting, and diff hygiene
   pass.
-- Acceptance criterion 7 remains open. The corrected source has not been
-  transactionally installed, and no second provider tick was run. The failed
-  tick provides no evidence about X or LinkedIn authentication, retrieval, or
-  filtering.
+- Commit `e517beea` repairs the graceful-exit aggregation bug: successful
+  auxiliary-process cleanup now records a successful force-kill outcome instead
+  of becoming `browser_shutdown_force_kill_failed`. Its focused regression
+  passes.
+- Provider-free acceptance remains open. No second provider tick was run, and
+  the failed prior tick provides no evidence about X or LinkedIn authentication,
+  retrieval, or filtering.
 
 ## Bounds
 
 - one source implementation attempt plus one bounded remediation pass;
 - one live lifecycle reconciliation attempt;
 - one consuming X and LinkedIn tick after restored admission;
+- one provider-free normal-close and same-profile replacement acceptance pass;
 - no profile mutation, process termination, runtime installation, or provider
   retry outside those bounds.

@@ -1,10 +1,10 @@
-# Plan 0126 Handoff: Absent Closing Lifecycle
+# Plan 0127 Handoff: Absent Closing Lifecycle
 
 Date: 2026-08-23
 
 State: HANDOFF OPEN
 
-Lane: P126
+Lane: P127
 
 Branch: `fix/reconcile-absent-closing-lifecycle`
 
@@ -41,7 +41,7 @@ classification remains unproven as fixed, and no successful same-profile,
 route-bound replacement has completed.
 
 The workstation upgrade is complete and is not an open gate for this lane. Do
-not describe another workstation upgrade as the next action. Plan 0126 remains
+not describe another workstation upgrade as the next action. Plan 0127 remains
 `OPEN` only for the bounded lifecycle and presentation repair and acceptance
 described below.
 
@@ -50,10 +50,11 @@ described below.
 Operator directive:
 
 > The workstation upgrade gate is closed. Continue unaffected Agent Browser
-> work normally. Pause only work requiring the affected lifecycle or
-> presentation route. P126 should continue in its development worktree with
-> provider-free lifecycle and route acceptance; do not initiate another
-> workstation upgrade.
+> work normally.
+
+For this lane, continue source and provider-free lifecycle validation in the
+isolated development worktree. Do not initiate another workstation upgrade or
+open an authenticated provider merely to test lifecycle behavior.
 
 Fresh read-only evidence on 2026-08-23 established:
 
@@ -69,7 +70,7 @@ Fresh read-only evidence on 2026-08-23 established:
   blocking incident;
 - the shared runtime-host supervisor unit is stopped, even though the current
   runtime-host process is still observed;
-- two presentation incidents are active. The P126 maintenance packet owns the
+- two presentation incidents are active. The P127 maintenance packet owns the
   orphaned display allocation on `guacamole:1`. The separate route-pool
   exhaustion incident belongs to another active presentation scope and must
   not be silently folded into this lane.
@@ -113,7 +114,7 @@ and the recorded process was absent, while Service Health still recorded
 `browser_shutdown_force_kill_failed` and escalated to
 `os_degraded_possible`.
 
-Plan 0126 repairs deterministic convergence from the resulting stale state. It
+Plan 0127 repairs deterministic convergence from the resulting stale state. It
 does not, by itself, prove that the ordinary close path now avoids an
 unnecessary force-kill attempt or writes `terminal/satisfied` immediately.
 Do not close this observation by inference. The next packet must reproduce or
@@ -138,7 +139,7 @@ Use these sources in order:
    file
    `docs/dev/validation/0232-i2r-auth-probe-and-sandbox-target-gate.md`.
 4. Current source and tests on this branch.
-5. `docs/dev/plans/0126-2026-08-23-absent-closing-lifecycle-reconciliation.md`
+5. `docs/dev/plans/0127-2026-08-23-absent-closing-lifecycle-reconciliation.md`
    for source history. Its installation language is superseded by the accepted
    workstation state above.
 6. The current `ROADMAP.md` and `RUNBOOK.md` entries on this branch.
@@ -176,7 +177,7 @@ Expected Git checkpoint before this correction:
 The installed CLI reported `agent-browser 0.28.0` on 2026-08-23. Use the
 workstation-status receipt above for installed identity. The version string
 alone is not identity proof, but the accepted transaction closes the existing
-installation gate. Do not run another workstation upgrade for P126.
+installation gate. Do not run another workstation upgrade for P127.
 
 Use CodeGraph to inspect the structural flow beginning at
 `handle_service_browser_close`, through runtime close and
@@ -187,7 +188,7 @@ Use CodeGraph to inspect the structural flow beginning at
 
 1. Keep the accepted workstation installation unchanged. Do not run an upgrade
    or reopen the installation handoff.
-2. Re-run the focused source validation from Plan 0126 if branch custody or
+2. Re-run the focused source validation from Plan 0127 if branch custody or
    source has changed.
 3. Use the isolated development runtime and provider-free fixtures to
    reproduce the polite-close and force-kill contradiction. Repair the close
@@ -208,7 +209,7 @@ Use CodeGraph to inspect the structural flow beginning at
    inventory contains zero disposable transactions. A human must explicitly
    designate or create one disposable sandbox card transaction and separately
    authorize the mutation test.
-9. Close Plan 0126 only when the normal-close lifecycle and harmless
+9. Close Plan 0127 only when the normal-close lifecycle and harmless
    route-bound replacement are evidenced. Otherwise record the exact scoped
    blocker without globally blocking unrelated Agent Browser work.
 
@@ -248,13 +249,13 @@ The final acceptance must prove all of the following:
 - Do not prune an unrelated retained display, release another route, close
   another browser, or restart a shared component without exact scoped evidence
   and authority.
-- Do not merge P126 while the plan remains `OPEN` or while the normal-close
+- Do not merge P127 while the plan remains `OPEN` or while the normal-close
   companion observation lacks a disposition.
 - Do not copy tenant-specific runtime evidence into this repository.
 
 ## Handoff Recommendation
 
-Continue on the existing P126 branch with one bounded maintenance packet: fix
+Continue on the existing P127 branch with one bounded maintenance packet: fix
 or disprove the false force-kill classification, reconcile the stopped
 supervisor and orphaned `guacamole:1` display within their own axes, then prove
 a harmless same-profile close and route-bound replacement on a local fixture.

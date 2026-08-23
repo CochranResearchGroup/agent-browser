@@ -110,6 +110,21 @@ Match the existing style in that file.
 
 This is a Rust codebase. The browser automation daemon lives in `cli/src/native/` (daemon, actions, browser, CDP client, snapshot, state). The `--engine` flag selects Chrome vs Lightpanda. The `install` command downloads Chrome from Chrome for Testing directly.
 
+## Isolated Development Runtime
+
+- Use `agent-browser-dev` and the `development-runtime:*` package scripts for
+  experimental installed validation. Do not publish experimental binaries into
+  production.
+- The development publisher pins a Linux-compatible browser executable. Set
+  `AGENT_BROWSER_DEV_BROWSER_EXECUTABLE` only to an absolute reviewed
+  executable before installation.
+- Run `pnpm smoke:development-browser-launch` after development publication.
+  It performs three disposable open, URL-read, close, and residue checks while
+  preserving production identity.
+- Development service GC requires positive development-environment ownership.
+  A process that is merely absent from development Service State is foreign or
+  unknown, not a cleanup candidate.
+
 ## RDP and Remote-View Handoffs
 
 - Give operators only the authenticated, opaque

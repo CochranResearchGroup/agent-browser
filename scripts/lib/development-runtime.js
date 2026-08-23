@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
+  accessSync,
   chmodSync,
   copyFileSync,
   existsSync,
@@ -14,6 +15,7 @@ import {
   statSync,
   symlinkSync,
   writeFileSync,
+  constants as fsConstants,
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -32,6 +34,7 @@ export function developmentRuntimeDescriptor(env = process.env) {
     env.AGENT_BROWSER_DEV_RUNTIME_DIR ||
       join(env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.() ?? 1000}`, 'agent-browser-dev'),
   );
+  const browserExecutable = resolveDevelopmentBrowserExecutable(env, pseudoHome);
   return {
     schemaVersion: DEVELOPMENT_RUNTIME_SCHEMA,
     environment: 'development',
@@ -42,6 +45,7 @@ export function developmentRuntimeDescriptor(env = process.env) {
     pseudoHome,
     stateDir: join(pseudoHome, '.agent-browser'),
     authDir: join(pseudoHome, '.agent-browser', 'dashboard-auth'),
+    browserExecutable,
     laneManifest: join(
       pseudoHome,
       '.config',
@@ -75,6 +79,7 @@ export function renderDevelopmentUnits(descriptor, generationBinary) {
     `Environment=AGENT_BROWSER_RUNTIME_HOST=1`,
     `Environment=AGENT_BROWSER_SOCKET_DIR=${descriptor.socketDir}`,
     `Environment=AGENT_BROWSER_DASHBOARD_AUTH_DIR=${descriptor.authDir}`,
+    `Environment=AGENT_BROWSER_EXECUTABLE_PATH=${descriptor.browserExecutable}`,
   ].join('\n');
   return {
     'agent-browser-dev-runtime-host.service': `[Unit]
@@ -171,6 +176,7 @@ export function installDevelopmentRuntime({ binary, env = process.env, activate 
     version,
     sha256,
     sourceBinary,
+    browserExecutable: descriptor.browserExecutable,
     installedAt: new Date().toISOString(),
   });
   mkdirSync(dirname(descriptor.laneManifest), { recursive: true, mode: 0o700 });
@@ -291,6 +297,7 @@ export function developmentRuntimeStatus({ env = process.env } = {}) {
       Boolean(executable) &&
       Boolean(stableExecutable) &&
       launcher?.includes(`exec ${shellQuote(executable)} "$@"`) === true &&
+      launcher?.includes(`export AGENT_BROWSER_EXECUTABLE_PATH=${shellQuote(descriptor.browserExecutable)}`) === true &&
       laneManifest?.schemaVersion === 'agent-browser.session-supervisor.v1' &&
       laneManifest?.executablePath === executable &&
       Object.values(units).every((unit) => unit.activeState === 'active') &&
@@ -319,6 +326,18 @@ export function doctorDevelopmentRuntime({ env = process.env } = {}) {
     check('auth:bootstrap', status.auth.bootstrap.private, status.auth.bootstrap),
     check('manifest-environment', status.manifest?.runtimeEnvironment === 'development', status.manifest?.runtimeEnvironment),
     check('manifest-executable', status.manifest?.executable?.path === status.executable, status.manifest?.executable?.path),
+    check('browser-executable', executableFile(status.descriptor.browserExecutable), status.descriptor.browserExecutable),
+    check('launcher-browser-executable',
+      readFileSync(status.stableExecutable, 'utf8').includes(`export AGENT_BROWSER_EXECUTABLE_PATH=${shellQuote(status.descriptor.browserExecutable)}`),
+      status.descriptor.browserExecutable,
+    ),
+    ...status.descriptor.units.map((name) => {
+      const source = readFileSync(join(status.descriptor.systemdDir, name), 'utf8');
+      return check(`unit-browser-executable:${name}`,
+        source.includes(`Environment=AGENT_BROWSER_EXECUTABLE_PATH=${status.descriptor.browserExecutable}`),
+        status.descriptor.browserExecutable,
+      );
+    }),
     check('backend-manifest', status.backendManifest?.runtimeEnvironment === 'development', status.backendManifest?.runtimeEnvironment),
     check('local-ingress', status.localIngressManifest?.runtimeEnvironment === 'development', status.localIngressManifest?.runtimeEnvironment),
   ];
@@ -333,8 +352,46 @@ export AGENT_BROWSER_RUNTIME_ENVIRONMENT=development
 export AGENT_BROWSER_RUNTIME_HOST=1
 export AGENT_BROWSER_SOCKET_DIR=${shellQuote(descriptor.socketDir)}
 export AGENT_BROWSER_DASHBOARD_AUTH_DIR=${shellQuote(descriptor.authDir)}
+if [ -z "\${AGENT_BROWSER_EXECUTABLE_PATH:-}" ]; then
+  export AGENT_BROWSER_EXECUTABLE_PATH=${shellQuote(descriptor.browserExecutable)}
+fi
 exec ${shellQuote(generationBinary)} "$@"
 `;
+}
+
+function resolveDevelopmentBrowserExecutable(env, pseudoHome) {
+  // Development profiles live in the Linux pseudo-home. Pin a compatible host
+  // executable so ambient production or Windows manifests cannot select one.
+  const explicit = env.AGENT_BROWSER_DEV_BROWSER_EXECUTABLE;
+  if (explicit && !explicit.startsWith('/')) {
+    throw new Error(`Development browser executable must be an absolute path: ${explicit}`);
+  }
+  const candidates = explicit
+    ? [explicit]
+    : [
+        '/opt/google/chrome/chrome',
+        '/usr/bin/google-chrome',
+        '/usr/bin/google-chrome-stable',
+        '/usr/bin/chromium',
+        '/usr/bin/chromium-browser',
+      ];
+  const selected = candidates.find(executableFile);
+  if (!selected) {
+    throw new Error(`Development browser executable is unavailable: ${candidates.join(', ')}`);
+  }
+  if (selected.toLowerCase().endsWith('.exe') && !pseudoHome.startsWith('/mnt/')) {
+    throw new Error(`Development browser executable is incompatible with the Linux profile root: ${selected}`);
+  }
+  return resolve(selected);
+}
+
+function executableFile(path) {
+  try {
+    accessSync(path, fsConstants.X_OK);
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
 }
 
 export function garbageCollectDevelopmentRuntime({ env = process.env, retain = 2 } = {}) {
