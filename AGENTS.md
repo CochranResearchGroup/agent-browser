@@ -143,15 +143,20 @@ scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml
 Runs all unit tests (~320 tests). These are fast and don't require Chrome.
 
 On WSL, every Cargo command that can compile code must run through
-`scripts/ci/cargo-safe.sh`. The wrapper serializes repository Cargo builds,
-defaults to four parallel Cargo jobs, and runs the compiler in a user-systemd scope with
-`MemoryHigh=20G`, `MemoryMax=24G`, and `MemorySwapMax=4G`. It fails closed when
-the WSL user-systemd manager is unavailable. Do not invoke `cargo check`,
+`scripts/ci/cargo-safe.sh`. The wrapper admits up to two concurrent repository
+Cargo invocations when current memory, swap, CPU, disk, and active claims can
+preserve the configured host reserve. Each invocation defaults to four Cargo
+jobs and runs in a user-systemd scope with `MemoryHigh=20G`, `MemoryMax=24G`,
+and `MemorySwapMax=4G`; all admitted scopes share an aggregate
+`agent-browser-cargo.slice` capped at `MemoryHigh=28G`, `MemoryMax=32G`, and
+`MemorySwapMax=4G`. It fails closed when the WSL user-systemd manager is
+unavailable. Do not invoke `cargo check`,
 `cargo build`, `cargo clippy`, or `cargo test` directly from WSL agent sessions.
 Set `AGENT_BROWSER_CARGO_BUILD_JOBS` only when a particular build needs a
-different bounded parallelism level. The repository lock still permits only
-one Agent Browser Cargo invocation at a time, while the cgroup cap applies to
-the aggregate compiler process tree.
+different bounded parallelism level. Capacity admission holds an exclusive
+lock only while reconciling claims; Cargo does not hold that lock. A third
+invocation waits with a typed pressure reason, and admission automatically
+drops below two when current resources cannot preserve the reserve.
 
 ### End-to-End Tests
 

@@ -88,8 +88,12 @@ pub(crate) fn runtime_manifest_json_for_executable(path: &Path) -> Result<Value,
 fn runtime_manifest_json_uncached() -> Value {
     let dashboard = dashboard_asset_manifest();
     let executable = executable_manifest();
+    let runtime_environment = std::env::var("AGENT_BROWSER_RUNTIME_ENVIRONMENT").ok();
     json!({
         "schemaVersion": "agent-browser.runtime-manifest.v1",
+        // The deployment-owned environment identity lets operators distinguish
+        // production from an isolated development runtime without path heuristics.
+        "runtimeEnvironment": runtime_environment_label(runtime_environment.as_deref()),
         "packageVersion": env!("CARGO_PKG_VERSION"),
         "serviceContractVersion": "service-ui-runtime.v1",
         "dashboard": dashboard,
@@ -108,6 +112,13 @@ fn runtime_manifest_json_uncached() -> Value {
             "viewStreams": 3
         }
     })
+}
+
+fn runtime_environment_label(configured: Option<&str>) -> &'static str {
+    match configured {
+        Some("development") => "development",
+        _ => "production",
+    }
 }
 
 fn dashboard_asset_manifest() -> Value {
@@ -5766,7 +5777,7 @@ fn content_type_for_dashboard_asset(ext: &str) -> &'static str {
 #[cfg(test)]
 mod dashboard_asset_tests {
     use super::{
-        content_type_for_dashboard_asset, runtime_manifest_json,
+        content_type_for_dashboard_asset, runtime_environment_label, runtime_manifest_json,
         runtime_manifest_json_for_executable, serve_embedded_file,
         try_acquire_frame_snapshot_permit,
     };
@@ -5829,6 +5840,10 @@ mod dashboard_asset_tests {
             "agent-browser.runtime-manifest.v1"
         );
         assert_eq!(manifest["packageVersion"], env!("CARGO_PKG_VERSION"));
+        assert!(matches!(
+            manifest["runtimeEnvironment"].as_str(),
+            Some("production" | "development")
+        ));
         assert_eq!(manifest["serviceContractVersion"], "service-ui-runtime.v1");
         assert!(manifest["dashboard"]["assetCount"].as_u64().unwrap_or(0) > 0);
         assert_eq!(
@@ -5853,6 +5868,17 @@ mod dashboard_asset_tests {
             .unwrap()
             .iter()
             .any(|feature| feature.as_str() == Some("workspace.noRetainedLiveRail")));
+    }
+
+    #[test]
+    fn runtime_environment_identity_is_closed_to_known_values() {
+        assert_eq!(runtime_environment_label(None), "production");
+        assert_eq!(runtime_environment_label(Some("production")), "production");
+        assert_eq!(
+            runtime_environment_label(Some("development")),
+            "development"
+        );
+        assert_eq!(runtime_environment_label(Some("unexpected")), "production");
     }
 
     #[test]

@@ -4,6 +4,174 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 176 | 2026-08-23
+
+Scope: implement and accept P125 without interrupting active production use.
+
+Actions:
+
+- replaced the full-lifetime Cargo mutex with resource-aware Build Admission,
+  capped at two bounded invocations and reduced by current memory, swap, CPU,
+  disk, live-claim, and user-systemd evidence;
+- implemented the isolated immutable `agent-browser-dev` publisher, launcher,
+  pseudo-home, state, socket, auth, runtime lane, three user units, doctor,
+  rollback, and generation cleanup;
+- added runtime-environment identity to the manifest and a visible Development
+  dashboard badge;
+- published separate local and external Cooper inventory routes with no
+  development `/guacamole` binding;
+- replaced the development generation, stopped and restarted only development
+  units, and moved disposable development smoke profiles to trash after proving
+  no matching process remained;
+- recorded exact acceptance in
+  `docs/dev/notes/0125-2026-08-23-development-runtime-isolation-acceptance.md`.
+
+Validation:
+
+- two real Cargo commands were admitted concurrently when live capacity
+  allowed; observed workstation pressure reduced admission and produced a
+  typed wait;
+- the installed development doctor passes unit, executable, process, port,
+  lane, auth, manifest, and local-ingress checks;
+- local and external authenticated dashboard smokes return the development
+  manifest and exact selected generation;
+- production before/after receipts preserve its selected generation, three
+  process identities, binary and dashboard digests, durable handoff digest,
+  three browser identities, and 63 prior session identities;
+- source, Rust, dashboard, documentation, contract, client, and diff-hygiene
+  gates pass;
+- a final development service GC dry-run reported three reviewed candidates
+  totaling 83.5 MiB and made no change.
+
+Result:
+
+- P125 is `ACCEPTED` at source, installed development, and ingress boundaries;
+- production remained read-only and active;
+- later installed P124 work now has a dedicated experimental runtime;
+- fresh Chrome launch remains a recorded host-level diagnostic follow-up after
+  an earlier isolated development-profile launch proved process and profile
+  separation.
+
+## Turn 175 | 2026-08-23
+
+Scope: freeze and begin P125 so experimental installation and compilation can
+proceed without interrupting production Agent Browser use.
+
+Actions:
+
+- inspected the selected production binary, generation store, runtime host,
+  dashboard pair, sockets, ports, authentication path, Cooper inventory, and
+  Cargo wrapper;
+- confirmed production is active on dashboard ports 4848 and 4849 with its
+  Guacamole path on 8092, while no `agent-browser-dev` Cooper inventory exists;
+- measured 47 GiB available memory, 12 GiB free swap, 20 logical CPU cores,
+  and 706 GiB free disk during active workstation use;
+- defined Runtime Environment, Development Runtime, Build Admission, and
+  Environment Receipt in the repository glossary;
+- wrote P125 with exact development identities, initial two-build admission
+  policy, development-only installation and ingress authority, and mandatory
+  production non-interference acceptance;
+- made P124 depend on P125 before installed experimental desktop work.
+
+Validation:
+
+- Graphiti was healthy; its broad query returned older source facts but no
+  authoritative existing development-runtime design;
+- CodeGraph exposed the production path and runtime-host blast radius and the
+  current distributed HOME, socket, auth, installer, and unit decisions;
+- the repository policy selector recommended the existing operations-platform
+  profile and the active planning audit returned zero findings;
+- no production process, unit, browser, provider, or ingress effect occurred.
+
+Result:
+
+- P125 is `OPEN` with execution authorized for source and the isolated
+  development environment;
+- production is explicitly read-only;
+- implementation begins with Build Admission and the development publisher.
+
+## Turn 174 | 2026-08-23
+
+Scope: plan scalable desktop-evidence admission and presentation capacity
+before adding more desktop-mode features, without changing source behavior or
+live runtime state.
+
+Actions:
+
+- reconciled P110 desktop perception, P60 capacity exhaustion, P67 retained
+  browser reattachment, P117 lifecycle ownership, current route selection,
+  desktop capture readiness, window focus, viewer/controller leases, and
+  garbage-collection authority;
+- confirmed the current Guacamole readiness implementation recognizes route A
+  and B and truncates selected candidates to two;
+- defined Desktop Evidence Episode, Presentation Slot, Warm Presentation Pool,
+  and Capture-Ready Proof in the repository glossary;
+- wrote Plan 0124 to make presentation capacity arbitrary-N, accept four warm
+  slots with controlled elastic scale-out to six, keep CDP work slot-free,
+  prioritize humans and recovery, stage and restore exact scenes, and reclaim
+  only unreferenced presentation resources through exact lifecycle authority;
+- preserved the unrelated runtime-profile repair and P110 fieldwork changes
+  already present in the shared worktree.
+
+Validation:
+
+- planning and architecture policies were re-read;
+- Graphiti group `agent_browser_main` returned 12 facts across five episodes;
+  relevant route-capacity and viewer-contention leads were verified against
+  P60, P67, and current source;
+- CodeGraph confirmed the route-selection, desktop-context, and fixed
+  readiness-script impact surfaces;
+- no browser, route, display, provider, installed runtime, or tenant effect
+  occurred.
+
+Result:
+
+- P124 is `PLANNED` with `architecture_frozen_source_not_started`;
+- two presentation slots are now a legacy installed configuration, not the
+  product architecture or target capacity;
+- the first bounded packet is provider-free Slice A fixtures and architecture
+  guards only.
+
+## Turn 173 | 2026-08-23
+
+Scope: preserve redacted productization lessons from the operator-authorized
+LastPass passkey and email-verification rehearsal without changing source or
+live runtime state.
+
+Actions:
+
+- reconciled the private fieldwork receipt with P110, the service
+  authentication roadmap, control-plane attestation, runtime boundaries, and
+  fieldwork-productization policy;
+- recorded the observed authentication state machine, LastPass adapter
+  boundary, second-factor orchestration phases, deterministic image pipeline,
+  XTEST input-provider requirements, stop taxonomy, privacy rules, and staged
+  productization sequence;
+- retained only the private artifact identifier and completion-receipt digest,
+  excluding private pixels, account identity, message content, one-time codes,
+  provider URLs, and runtime paths;
+- linked the fieldwork note from P110 without changing its state.
+
+Validation:
+
+- `git diff --check` passed;
+- every repository authority linked by the fieldwork note exists;
+- a changed-note privacy scan found none of the excluded private identifiers;
+- `pnpm validation:select -- --base HEAD` selected the expected documentation
+  hygiene check;
+- the documentation production build completed successfully with 35 static
+  pages generated.
+
+Result:
+
+- the fieldwork is classified `REFACTOR BEFORE KEEP`;
+- P110 remains `ALL FIVE POCS SOURCE ACCEPTED | LIVE FOUNDATION ACCEPTANCE
+  BLOCKED` because the click did not use a production input provider,
+  controller lease, cross-process fence, or canonical `desktop_interact`
+  receipt;
+- the next bounded step is a separately authorized controlled-provider plan
+  beginning with synthetic LastPass and second-factor fixtures.
+
 ## Turn 172 | 2026-08-23
 
 Scope: qualify the exact Plan 0122 source for publication and installed-runtime

@@ -781,6 +781,33 @@ post-commit failure. A verified ownerless browser can enter through `resume`
 without an old daemon proposal. Do not use `close` to repair executable drift
 because it terminates an owned browser. The local publisher inventories active
 named supervisors and performs this transaction automatically.
+
+Repository feature development uses the isolated `agent-browser-dev` runtime
+instead of publishing candidates into production. Build the dashboard, build
+the Rust binary through `scripts/ci/cargo-safe.sh`, and run
+`pnpm development-runtime:install`. Verify it with
+`pnpm development-runtime:doctor`. The development installation has its own
+executable, immutable generation store, pseudo-home, socket directory, auth
+store, user services, and dashboard ports 4948 and 4949. Its dashboard must show
+the Development badge and its runtime manifest must report
+`runtimeEnvironment: "development"`. The Cooper inventory entry
+`agent-browser-dev` owns its external ingress. Do not attach the initial dev
+route to production Guacamole. Its seeded `development-default` runtime lane
+uses fixed stream port 4951. Use `pnpm development-runtime:gc` for safe
+unselected-generation cleanup.
+The stable `agent-browser-dev` command is an environment-owning launcher, not a
+plain binary alias. Direct commands therefore inherit the dev pseudo-home,
+socket, auth store, and runtime identity automatically.
+Use `pnpm smoke:development-dashboard-auth -- --dashboard-url <dev-url>` for a
+credential-safe authenticated ingress check. It verifies login, cookie-backed
+session status, authenticated service API access, and development manifest
+identity without printing credentials.
+
+The repository Cargo wrapper admits at most two bounded builds by default, with
+four Cargo jobs per build and aggregate cgroup limits on WSL. Admission is based
+on current memory, swap, CPU, disk, and live claims, so pressure may temporarily
+reduce concurrency to one. Do not bypass the wrapper or interpret pressure
+throttling as a global serialization requirement.
 Set `runtimeProfiles.<name>.browserFamily` to `chrome`, `chromium`, `brave`,
 `edge`, or `unknown`. Do not attach patched Chromium to a Chrome-owned profile
 or otherwise mix browser families unless the operator explicitly forces it with

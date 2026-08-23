@@ -42,11 +42,18 @@ const cargoSafeSource = readFileSync(
   path.join(repoRoot, 'scripts/ci/cargo-safe.sh'),
   'utf8',
 );
-if (!cargoSafeSource.includes('flock --close "$lock_file"')) {
-  failures.push('scripts/ci/cargo-safe.sh:lock_descriptor_may_reach_cargo_children');
+for (const required of [
+  'Agent Browser Cargo build capacity',
+  'MemoryHigh=$aggregate_memory_high',
+  '--slice="$cargo_slice"',
+  'exec {admission_fd}>&-',
+]) {
+  if (!cargoSafeSource.includes(required)) {
+    failures.push(`scripts/ci/cargo-safe.sh:missing_capacity_contract:${required}`);
+  }
 }
-if (/exec\s+\d+>/.test(cargoSafeSource)) {
-  failures.push('scripts/ci/cargo-safe.sh:inheritable_lock_descriptor');
+if (cargoSafeSource.includes('flock --close "$lock_file"')) {
+  failures.push('scripts/ci/cargo-safe.sh:full_lifetime_serialization_present');
 }
 
 function visit(directory) {

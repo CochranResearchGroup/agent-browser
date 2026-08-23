@@ -40,6 +40,38 @@ _Avoid_: URL readiness, route health
 An opaque public identity that can reacquire current route and browser evidence without exposing an ephemeral provider address.
 _Avoid_: Guacamole URL, provider URL
 
+**Desktop evidence episode**:
+A bounded observation or interaction transaction that owns evidence selection, presentation admission, scene proof, capture, verification, restoration, and release for one browser workspace.
+_Avoid_: Desktop screenshot request, capture mode
+
+**Presentation slot**:
+Scarce operator-visible desktop capacity binding one route, display, current scene, human posture, readiness generation, and cleanup obligation without owning the retained browser lifecycle.
+_Avoid_: Route, virtual desktop
+
+**Warm presentation pool**:
+The ready minimum of presentation slots retained for low-latency human, recovery, and desktop-evidence admission while elastic slots may be added or reclaimed within pressure limits.
+_Avoid_: Two-route pool, fixed desktops
+
+**Capture-ready proof**:
+Fresh evidence that the exact authorized browser scene is staged, topmost, maximized or at approved geometry, unoccluded, and still bound to its route, display, process, viewer, controller, and geometry identities.
+_Avoid_: Browser visible, route ready
+
+**Runtime environment**:
+An isolated installation authority that owns one executable selector, generation store, runtime state root, socket namespace, supervisor identities, dashboard and authentication state, port allocation, provider namespace, garbage-collection scope, and acceptance receipts.
+_Avoid_: Install mode, alternate port
+
+**Development runtime**:
+A non-production Runtime Environment for experimental builds whose installation, execution, validation, and reclamation cannot select, restart, mutate, or claim acceptance for the production Runtime Environment.
+_Avoid_: Debug binary, staging flag
+
+**Build admission**:
+A bounded claim on current host compilation capacity derived from memory, swap, CPU, disk, active build claims, and configured reserves.
+_Avoid_: Cargo lock, unlimited parallel build
+
+**Environment receipt**:
+Evidence that binds an installation, process, dashboard, ingress, validation, or cleanup result to exactly one Runtime Environment identity.
+_Avoid_: Install log, shared status
+
 **Provider fallback**:
 A best-effort retained-route outcome that preserves an existing browser without claiming normal managed control or creating another ownership lane.
 _Avoid_: Successful reopen, automatic recovery

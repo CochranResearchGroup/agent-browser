@@ -91,6 +91,7 @@ export function AppShell({
   onNewSessionRequest,
   authenticatedUser,
   onLogout,
+  runtimeEnvironment = "production",
   runtimeNotice,
   children,
 }: {
@@ -99,6 +100,7 @@ export function AppShell({
   onNewSessionRequest?: () => void;
   authenticatedUser?: string;
   onLogout?: () => void;
+  runtimeEnvironment?: "production" | "development";
   runtimeNotice?: ReactNode;
   children: ReactNode;
 }) {
@@ -128,8 +130,15 @@ export function AppShell({
               <p className="truncate text-sm font-black tracking-[-0.03em] text-foreground">
                 Agent Browser
               </p>
-              <span className="rounded-full border border-foreground/10 bg-foreground/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.22em] text-muted-foreground">
-                Service Lab
+              <span
+                data-runtime-environment={runtimeEnvironment}
+                className={
+                  runtimeEnvironment === "development"
+                    ? "rounded-full border border-amber-400/50 bg-amber-400/15 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.22em] text-amber-700 dark:text-amber-300"
+                    : "rounded-full border border-foreground/10 bg-foreground/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.22em] text-muted-foreground"
+                }
+              >
+                {runtimeEnvironment === "development" ? "Development" : "Service Lab"}
               </span>
             </div>
             <p className="truncate text-[11px] text-muted-foreground">

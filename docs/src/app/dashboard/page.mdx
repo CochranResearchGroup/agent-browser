@@ -15,6 +15,38 @@ Then open `http://localhost:4848` in your browser to see the live dashboard.
 
 All sessions automatically stream to the dashboard. No extra flags are needed.
 
+## Development dashboard
+
+Experimental workstation builds have a separate runtime at
+<code>http://127.0.0.1:4948</code>. Run <code>pnpm build:dashboard</code>, build
+the Rust candidate through <code>scripts/ci/cargo-safe.sh</code>, then run
+<code>pnpm development-runtime:install</code>. The installer stages an immutable
+development generation and activates only the
+<code>agent-browser-dev-&#42;.service</code> user units. It does not replace or
+restart the production executable, runtime host, or dashboard.
+The isolated runtime host starts from the durable
+<code>development-default</code> lane manifest on fixed stream port 4951.
+The stable <code>agent-browser-dev</code> launcher selects the same dev
+pseudo-home, socket, auth store, and environment identity for direct CLI use.
+
+Use <code>pnpm development-runtime:status</code> for a readback and
+<code>pnpm development-runtime:doctor</code> for the acceptance checks. The
+development dashboard displays a persistent Development badge, and
+<code>/api/runtime/manifest</code> reports
+<code>runtimeEnvironment: "development"</code>. The separate Cooper inventory
+entry named <code>agent-browser-dev</code> owns external ingress. It initially
+publishes only the dashboard and must not route its Guacamole path to the
+production provider.
+Use <code>pnpm smoke:development-dashboard-auth -- --dashboard-url
+https://agent-browser-dev.ecochran.dyndns.org</code> to verify login, the
+session cookie, authenticated service API access, and the development manifest
+without printing dashboard credentials.
+
+Old development generations are collected with
+<code>pnpm development-runtime:gc</code>. The collector always retains the
+selected generation, running generation executables, and the configured number
+of newest rollback candidates.
+
 `dashboard start` keeps port 4848 as stable ingress and starts the current
 generation backend on the next port. The ingress retains the prior selected
 backend as a draining fallback. It changes selection only after a shadow

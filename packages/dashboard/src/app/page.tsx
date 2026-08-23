@@ -130,6 +130,7 @@ type RemoteViewHandoffApiResponse = {
 
 type RuntimeManifest = {
   schemaVersion?: string;
+  runtimeEnvironment?: "production" | "development";
   packageVersion?: string;
   serviceContractVersion?: string;
   supportedUiFeatures?: string[];
@@ -1123,6 +1124,7 @@ function DashboardExperience({
     onNewSessionRequest: openNewSession,
     authenticatedUser: user.displayName || user.username,
     onLogout,
+    runtimeEnvironment: runtimeManifest.manifest?.runtimeEnvironment ?? "production",
     runtimeNotice,
   };
 

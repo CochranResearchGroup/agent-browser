@@ -7,6 +7,59 @@ This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
 
+## P125 | Development Runtime Isolation And Build Capacity
+
+State: ACCEPTED
+Current state: the isolated `agent-browser-dev` executable, immutable
+generation store, pseudo-home, state, socket namespace, systemd units,
+dashboard and auth surface, and Cooper ingress are installed and accepted.
+Repeated development publication, replacement, stop/start, and cleanup left
+the exact production process, executable, dashboard, browser, session, and
+handoff identities unchanged. Resource-aware Build Admission now permits two
+bounded Cargo invocations when live capacity allows and queues work under
+pressure.
+
+### Plan
+
+- `docs/dev/plans/0125-2026-08-23-development-runtime-isolation-and-build-capacity-plan.md`
+
+### Next Recommendation
+
+Begin P124 Slice A in source and provider-free fixtures. Use the accepted
+development Runtime Environment for later installed P124 experiments and keep
+production outside that experimental acceptance boundary.
+
+## P124 | Scalable Desktop Evidence And Presentation Capacity
+
+State: PLANNED
+Current state: P110 established display-bound capture, synthetic perception,
+guarded interaction, and browser-external prompt evidence, while P67 proved
+that retained browsers can outnumber presentation routes. The installed and
+source readiness path still assumes route A and B and truncates Guacamole
+candidates to two. Desktop capture proves only browser-window visibility and
+does not reserve capacity, stage and prove a maximized topmost scene, coordinate
+visible mutation with human viewers, restore the prior scene, or own elastic
+slot garbage collection.
+
+P124 replaces that fixed model with arbitrary-N presentation slots, a four-slot
+warm installed acceptance profile, elastic scale-out to a configured and
+pressure-admitted maximum, a deep Desktop Evidence Episode, human-priority
+admission, capture-ready scene proof, restoration, and exact lifecycle cleanup.
+Ordinary CDP work consumes no presentation slot, while retained browser
+ownership remains independent from presentation capacity.
+
+### Plan
+
+- `docs/dev/plans/0124-2026-08-23-scalable-desktop-evidence-and-presentation-capacity-plan.md`
+
+### Next Recommendation
+
+Execute P125 first. Then execute Slice A only: freeze provider-free red
+fixtures and architecture guards
+for evidence selection, arbitrary-N inventory, four-slot warm capacity,
+priority admission, scene proof, restoration, elastic lifecycle, and exact GC.
+Do not change the current workstation or provision live desktop resources.
+
 ## P123 | Exact Profile Compatibility Installed Admission
 
 State: OPEN
@@ -343,6 +396,16 @@ separate aggregate planning-only entry gate. Every individual operation
 receipt remains live closed. No production desktop provider or controlled live
 recipe was authorized or exercised.
 
+Separately authorized live fieldwork on 2026-08-22 demonstrated that fresh
+service-bound desktop capture, deterministic OCR and geometry checks, and one
+raw XTEST click can select a uniquely matched LastPass passkey and reach an
+authenticated application. The redacted productization findings are recorded
+in
+`docs/dev/notes/0110-f1-2026-08-23-passkey-and-two-factor-authentication-fieldwork.md`.
+This off-contract experiment does not clear P110 live Foundation Acceptance:
+the effect did not use a production Agent Browser input provider, controller
+lease, cross-process fence, or canonical `desktop_interact` receipt.
+
 ### Vision
 
 Make agent-browser capable of perceiving and interacting with the complete
@@ -573,6 +636,7 @@ passes.
 - `VISION.md`
 - `docs/dev/plans/0110-2026-08-12-desktop-perception-interaction-foundation-plan.md`
 - `docs/dev/plans/0110-1-2026-08-12-p110-poc1-display-bound-frame-capture-plan.md`
+- `docs/dev/notes/0110-f1-2026-08-23-passkey-and-two-factor-authentication-fieldwork.md`
 - `docs/dev/plans/0110-2-2026-08-12-p110-poc2-deterministic-fixture-location-plan.md`
 - `docs/dev/plans/0110-3-2026-08-12-p110-poc3-guarded-desktop-interaction-plan.md`
 - `docs/dev/plans/0110-4-2026-08-12-p110-poc4-browser-external-prompt-perception-plan.md`

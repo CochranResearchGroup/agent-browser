@@ -55,6 +55,39 @@ pnpm link --global  # Makes agent-browser available globally
 agent-browser install
 ```
 
+### Isolated development runtime
+
+On the maintained Linux workstation, experimental source builds run beside the
+production installation. They use the `agent-browser-dev` executable, separate
+immutable generations and state, dedicated user services, and dashboard ports
+4948 and 4949. A seeded `development-default` runtime lane uses fixed stream
+port 4951. Build and activate a candidate without replacing or restarting
+production:
+
+```bash
+pnpm build:dashboard
+scripts/ci/cargo-safe.sh build --release --manifest-path cli/Cargo.toml
+pnpm development-runtime:install
+pnpm development-runtime:doctor
+pnpm development-runtime:gc
+pnpm smoke:development-dashboard-auth -- --dashboard-url https://agent-browser-dev.ecochran.dyndns.org
+```
+
+The dashboard labels this runtime `Development`, and its runtime manifest
+reports `runtimeEnvironment: "development"`. The Cooper service inventory owns
+the separate `agent-browser-dev` local and external ingress routes. Initial dev
+publication is dashboard-only and does not borrow production Guacamole routes.
+
+Cargo builds use resource-aware admission rather than a repository-wide
+full-lifetime lock. The default policy admits at most two four-job builds while
+preserving host memory, swap, CPU, and disk reserves. Under live system pressure
+it can safely admit only one build until resources recover.
+
+The stable `agent-browser-dev` command is an environment-owning launcher. It
+selects the dev pseudo-home, socket, and auth store before executing the current
+immutable generation, so direct CLI commands cannot silently fall through to
+production state.
+
 ### Linux Dependencies
 
 On Linux, install system dependencies:
