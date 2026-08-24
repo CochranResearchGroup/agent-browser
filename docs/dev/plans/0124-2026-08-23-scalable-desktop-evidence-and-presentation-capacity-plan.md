@@ -4,7 +4,7 @@ Date: 2026-08-23
 
 State: IN PROGRESS
 
-Execution state: `slice_h_paired_cdp_browser_external_source_accepted_live_missing`
+Execution state: `slice_h_browser_external_live_accepted_remaining_multi_party_acceptance`
 
 Lane: P124
 
@@ -419,10 +419,22 @@ quarantines the exact slot when rollback or restoration cannot be verified.
 Service scene generations and slot states bind the staged transaction without
 persisting native window handles. Source evidence is recorded in
 `docs/dev/notes/0124-15-2026-08-24-reversible-scene-staging-source-acceptance.md`.
-The remaining installed boundary is paired CDP and browser-external trigger
-composition, plus human, viewer, CDP, and retained-browser acceptance.
-Configured production input remains outside this plan's live authority until
-Plan 0110 is independently accepted.
+Paired CDP and browser-external trigger composition is now accepted in one
+bounded development-runtime episode. The exact checked-out route and display
+survived repeated Service State refresh, stale handoff history did not create
+phantom capacity pressure, the frame and episode receipts were durably
+redacted, and the retained browser remained healthy through restoration and
+slot release. A final-generation open and close cycle also proved that live
+ownership survives refresh and closed ownership converges back to the
+provider-inventory `available` state without a ghost browser. Evidence is
+recorded in
+`docs/dev/notes/0124-17-2026-08-24-browser-external-live-acceptance.md`.
+
+The remaining installed boundary is active-human and passive-viewer
+precedence, concurrent observation plus recovery admission, CDP-only slot
+neutrality, and retained authenticated-browser survival through route movement
+and unrelated scale-in. Configured production input remains outside this
+plan's live authority until Plan 0110 is independently accepted.
 
 After source acceptance and separate explicit live authority:
 
