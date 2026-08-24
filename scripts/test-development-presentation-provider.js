@@ -22,7 +22,14 @@ import {
   renderDevelopmentPresentationProviderBundle,
   stageDevelopmentPresentationProviderBundle,
 } from './lib/development-presentation-provider-deployment.js';
-import { developmentPresentationProviderSystemPreflight } from './lib/development-presentation-provider-system-effects.js';
+import {
+  createDevelopmentPresentationLifecycleSystemEffects,
+  developmentPresentationProviderSystemPreflight,
+} from './lib/development-presentation-provider-system-effects.js';
+import {
+  scaleInDevelopmentPresentation,
+  scaleOutDevelopmentPresentation,
+} from './lib/development-presentation-lifecycle.js';
 
 const fixture = mkdtempSync(join(tmpdir(), 'agent-browser-dev-provider-'));
 const userHome = join(fixture, 'user');
@@ -338,6 +345,207 @@ try {
   assert.equal(reconciled.state, 'provider_ready_ingress_pending');
   assert.deepEqual(reconciled.completedSteps, ['reconcile-provider-authority']);
   assert.deepEqual(effectCalls, []);
+
+  const scaleCalls = [];
+  const scaledObservation = structuredClone(readyObservation);
+  scaledObservation.displays.push({
+    displayReservationId: descriptor.routes[4].displayReservationId,
+    displayName: ':35',
+    user: descriptor.routes[4].user,
+    ready: true,
+  });
+  let scaleObservation = readyObservation;
+  const scaled = scaleOutDevelopmentPresentation({
+    env,
+    effects: {
+      snapshotProduction: () => ({ identity: 'production-fixture' }),
+      assertProductionUnchanged: (before, after) => assert.deepEqual(after, before),
+      pressureAdmission: () => ({ admittedMaximum: 6, reasons: [] }),
+      observe: () => scaleObservation,
+      provisionRoute: (route) => {
+        scaleCalls.push(`provision:${route.routeId}`);
+        scaleObservation = scaledObservation;
+      },
+      grantDisplayAccess: (display) => scaleCalls.push(`grant:${display.displayReservationId}`),
+    },
+  });
+  assert.equal(scaled.state, 'provisioned');
+  assert.equal(scaled.routeId, 'development-route-5');
+  assert.equal(scaled.beforeSlots, 4);
+  assert.equal(scaled.afterSlots, 5);
+  assert.deepEqual(scaleCalls, ['provision:development-route-5', 'grant:development-display-5']);
+
+  let failedScaleObservation = readyObservation;
+  const failedScale = scaleOutDevelopmentPresentation({
+    env,
+    effects: {
+      snapshotProduction: () => ({ identity: 'production-fixture' }),
+      assertProductionUnchanged: (before, after) => assert.deepEqual(after, before),
+      pressureAdmission: () => ({ admittedMaximum: 6, reasons: [] }),
+      observe: () => failedScaleObservation,
+      provisionRoute: () => { failedScaleObservation = scaledObservation; },
+      grantDisplayAccess: () => { throw new Error('fixture grant failure'); },
+    },
+  });
+  assert.equal(failedScale.state, 'quarantined');
+  assert.equal(failedScale.success, false);
+  assert.equal(failedScale.reason, 'provision_failed');
+  assert.equal(failedScale.routeId, 'development-route-5');
+  assert.equal(failedScale.afterSlots, 5);
+  assert.match(failedScale.error, /fixture grant failure/);
+
+  let pressureProvisioned = false;
+  const pressureDeferred = scaleOutDevelopmentPresentation({
+    env,
+    effects: {
+      snapshotProduction: () => ({ identity: 'production-fixture' }),
+      pressureAdmission: () => ({ admittedMaximum: 4, reasons: ['memory_reserve'] }),
+      observe: () => readyObservation,
+      provisionRoute: () => { pressureProvisioned = true; },
+    },
+  });
+  assert.equal(pressureDeferred.state, 'deferred');
+  assert.equal(pressureDeferred.reason, 'pressure_admission');
+  assert.equal(pressureProvisioned, false);
+
+  const reclaimCalls = [];
+  let reclaimObservation = scaledObservation;
+  const reclaimed = scaleInDevelopmentPresentation({
+    env,
+    effects: {
+      snapshotProduction: () => ({ identity: 'production-fixture' }),
+      assertProductionUnchanged: (before, after) => assert.deepEqual(after, before),
+      observe: () => reclaimObservation,
+      referenceCheck: (route) => ({
+        routeId: route.routeId,
+        blockers: [],
+        ambiguities: [],
+      }),
+      reclaimRoute: (route) => {
+        reclaimCalls.push(`reclaim:${route.routeId}`);
+        reclaimObservation = readyObservation;
+      },
+    },
+  });
+  assert.equal(reclaimed.state, 'reclaimed');
+  assert.equal(reclaimed.routeId, 'development-route-5');
+  assert.equal(reclaimed.beforeSlots, 5);
+  assert.equal(reclaimed.afterSlots, 4);
+  assert.deepEqual(reclaimCalls, ['reclaim:development-route-5']);
+
+  let blockedReclaim = false;
+  const referenceDeferred = scaleInDevelopmentPresentation({
+    env,
+    effects: {
+      snapshotProduction: () => ({ identity: 'production-fixture' }),
+      observe: () => scaledObservation,
+      referenceCheck: (route) => ({
+        routeId: route.routeId,
+        blockers: ['viewer_lease:fixture'],
+        ambiguities: [],
+      }),
+      reclaimRoute: () => { blockedReclaim = true; },
+    },
+  });
+  assert.equal(referenceDeferred.state, 'deferred');
+  assert.equal(referenceDeferred.reason, 'referenced');
+  assert.equal(blockedReclaim, false);
+
+  const referenceQuarantined = scaleInDevelopmentPresentation({
+    env,
+    effects: {
+      snapshotProduction: () => ({ identity: 'production-fixture' }),
+      observe: () => scaledObservation,
+      referenceCheck: (route) => ({
+        routeId: route.routeId,
+        blockers: [],
+        ambiguities: ['service_binding_missing'],
+      }),
+      reclaimRoute: () => assert.fail('ambiguous route must not be reclaimed'),
+    },
+  });
+  assert.equal(referenceQuarantined.state, 'quarantined');
+  assert.equal(referenceQuarantined.reason, 'reference_ambiguity');
+
+  const cooldownDeferred = scaleInDevelopmentPresentation({
+    env,
+    effects: {
+      snapshotProduction: () => ({ identity: 'production-fixture' }),
+      observe: () => scaledObservation,
+      cooldownStatus: () => ({ ready: false, elapsedMs: 100, requiredMs: 5000 }),
+      referenceCheck: () => assert.fail('cooldown must defer before reference qualification'),
+      reclaimRoute: () => assert.fail('cooldown route must not be reclaimed'),
+    },
+  });
+  assert.equal(cooldownDeferred.state, 'deferred');
+  assert.equal(cooldownDeferred.reason, 'cooldown_not_elapsed');
+
+  const reclaimFailed = scaleInDevelopmentPresentation({
+    env,
+    effects: {
+      snapshotProduction: () => ({ identity: 'production-fixture' }),
+      assertProductionUnchanged: (before, after) => assert.deepEqual(after, before),
+      observe: () => scaledObservation,
+      referenceCheck: (route) => ({ routeId: route.routeId, blockers: [], ambiguities: [] }),
+      reclaimRoute: () => { throw new Error('fixture termination failure'); },
+    },
+  });
+  assert.equal(reclaimFailed.state, 'quarantined');
+  assert.equal(reclaimFailed.success, false);
+  assert.equal(reclaimFailed.reason, 'reclaim_failed');
+  assert.equal(reclaimFailed.routeId, 'development-route-5');
+  assert.match(reclaimFailed.error, /fixture termination failure/);
+
+  const referencedRoute = descriptor.routes[4];
+  const serviceState = {
+    remoteViewRoutes: {
+      [referencedRoute.routeId]: {
+        browserId: null,
+        sessionId: null,
+        viewerLeaseIds: [],
+        controllerLeaseId: null,
+      },
+    },
+    displayAllocations: {
+      [referencedRoute.displayReservationId]: {
+        ownerBrowserId: null,
+        ownerSessionId: null,
+      },
+    },
+    routePool: { [referencedRoute.slotId]: { id: referencedRoute.slotId } },
+    remoteViewAcquisitionLeases: {},
+    viewerLeases: {
+      'viewer-exact': { routeId: referencedRoute.routeId },
+      'viewer-other': { routeId: `${referencedRoute.routeId}0` },
+    },
+    remoteViewHandoffs: {
+      'handoff-exact': { binding: { routeId: referencedRoute.routeId } },
+      'handoff-other': { binding: { routeId: `${referencedRoute.routeId}0` } },
+    },
+    presentationCapacity: {
+      slots: [{ id: `slot:${referencedRoute.slotId}`, restorationPending: false }],
+    },
+  };
+  const referenceEffects = createDevelopmentPresentationLifecycleSystemEffects({
+    env,
+    productionSnapshot: () => ({ identity: 'production-fixture' }),
+    assertProductionUnchanged: () => {},
+    run(command, args) {
+      if (command.endsWith('/agent-browser-dev') && args.at(-2) === 'service') {
+        return {
+          status: 0,
+          stdout: JSON.stringify({ data: { service_state: serviceState } }),
+          stderr: '',
+        };
+      }
+      throw new Error(`Unexpected reference command: ${command} ${args.join(' ')}`);
+    },
+  });
+  assert.deepEqual(referenceEffects.referenceCheck(referencedRoute, descriptor), {
+    routeId: referencedRoute.routeId,
+    blockers: ['handoff:handoff-exact', 'viewer_lease:viewer-exact'],
+    ambiguities: [],
+  });
 
   rmSync(descriptor.manifest, { force: true });
   let quarantined = null;

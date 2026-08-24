@@ -139,7 +139,12 @@ try {
   assert.doesNotThrow(() => assertProductionUnchanged(productionBefore, productionAfter));
   productionAfter.serviceIdentities.browsers[0].pid = 21;
   assert.throws(() => assertProductionUnchanged(productionBefore, productionAfter), /browsers identity changed/);
-  execFileSync('node', ['scripts/development-runtime.js', 'help'], { cwd: process.cwd() });
+  const developmentHelp = execFileSync('node', ['scripts/development-runtime.js', 'help'], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+  });
+  assert.match(developmentHelp, /provider-scale-out --apply/);
+  assert.match(developmentHelp, /provider-scale-in --apply/);
   console.log('Development runtime fixture passed');
 } finally {
   rmSync(fixture, { recursive: true, force: true });

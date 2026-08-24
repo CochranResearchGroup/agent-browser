@@ -4,9 +4,11 @@ import {
   constants as fsConstants,
   existsSync,
   readFileSync,
+  statSync,
   statfsSync,
 } from 'node:fs';
 import { join } from 'node:path';
+import { cpus } from 'node:os';
 import {
   developmentPresentationProviderDescriptor,
   validateDevelopmentPresentationProviderIsolation,
@@ -364,6 +366,195 @@ where e.name = ${operator} and e.type = 'USER' and p.permission = 'READ'
         'stop quarantined development provider');
     },
   };
+}
+
+/** Live elastic lifecycle effects, bounded to one descriptor-owned route. */
+export function createDevelopmentPresentationLifecycleSystemEffects(options = {}) {
+  const env = options.env || process.env;
+  const run = options.run || commandResult;
+  const base = createDevelopmentPresentationProviderSystemEffects({ ...options, env, run });
+  const helper = env.AGENT_BROWSER_PRIVILEGED_HELPER ||
+    '/usr/local/libexec/agent-browser/agent-browser-privileged-helper';
+  const operatorUser = env.AGENT_BROWSER_DEV_OPERATOR_USER || env.USER;
+  return {
+    ...base,
+    pressureAdmission(descriptor) {
+      const memoryAvailableBytes = meminfoBytes('MemAvailable');
+      const swapFreeBytes = meminfoBytes('SwapFree');
+      const swapTotalBytes = meminfoBytes('SwapTotal');
+      const loadOne = Number(readFileSync('/proc/loadavg', 'utf8').split(/\s+/)[0] || 0);
+      const cpuCount = Math.max(1, cpus().length);
+      const fileParts = readFileSync('/proc/sys/fs/file-nr', 'utf8').trim().split(/\s+/).map(Number);
+      const fileHandlesAllocated = fileParts[0] || 0;
+      const fileHandlesMaximum = fileParts[2] || 0;
+      const reasons = [];
+      if (memoryAvailableBytes < MIN_AVAILABLE_MEMORY_BYTES) reasons.push('memory_reserve');
+      if (swapTotalBytes > 0 && swapFreeBytes < 1024 ** 3) reasons.push('swap_reserve');
+      if (loadOne > cpuCount * 0.9) reasons.push('cpu_load');
+      if (fileHandlesMaximum > 0 && fileHandlesAllocated / fileHandlesMaximum > 0.8) {
+        reasons.push('file_handle_reserve');
+      }
+      return {
+        admittedMaximum: reasons.length === 0 ? descriptor.hardMaxSlots : descriptor.warmSlots,
+        reasons,
+        readings: {
+          memoryAvailableBytes,
+          swapFreeBytes,
+          swapTotalBytes,
+          loadOne,
+          cpuCount,
+          fileHandlesAllocated,
+          fileHandlesMaximum,
+        },
+      };
+    },
+    provisionRoute(route, descriptor) {
+      const observation = base.observe(descriptor);
+      const connectionId = observation.database.routes
+        .find((candidate) => candidate.connectionName === route.connectionName)?.connectionId;
+      if (!connectionId) throw new Error(`Development route connection is missing: ${route.routeId}`);
+      const baseUrl = `http://127.0.0.1:${descriptor.ports.guacamole}/guacamole/`;
+      const clientId = Buffer.from(`${connectionId}\0c\0postgresql`, 'utf8').toString('base64');
+      const inventory = [{
+        id: route.routeId,
+        routeId: `guacamole:${connectionId}`,
+        connectionId,
+        connectionName: route.connectionName,
+        frameUrl: `${baseUrl}#/client/${clientId}`,
+        externalUrl: `${baseUrl}#/client/${clientId}`,
+        viewerSession: route.viewerSession,
+        viewerProfile: route.viewerProfile,
+        target: {
+          routeUser: route.user,
+          displayReservationId: route.displayReservationId,
+        },
+      }];
+      runRequired(run, process.execPath, [
+        join(process.cwd(), 'scripts', 'open-rdp-guac-route-displays.js'),
+        '--wait-ms',
+        '1000',
+      ], {
+        env: {
+          ...env,
+          HOME: descriptor.pseudoHome,
+          AGENT_BROWSER_HOME: join(descriptor.pseudoHome, '.agent-browser'),
+          AGENT_BROWSER_ROUTE_DISPLAY_AGENT_BROWSER_CMD: join(descriptor.userHome, '.local', 'bin', 'agent-browser-dev'),
+          AGENT_BROWSER_RDP_ROUTE_POOL_JSON: JSON.stringify(inventory),
+          AGENT_BROWSER_GUACAMOLE_BASE_URL: baseUrl,
+          AGENT_BROWSER_GUACAMOLE_HEADER_USER: operatorUser,
+          AGENT_BROWSER_ROUTE_DISPLAY_FORCE_VIEWER: '1',
+          AGENT_BROWSER_REMOTE_VIEW_SCRIPT_ROOT: join(process.cwd(), 'scripts'),
+        },
+        timeout: 600000,
+      }, `provision ${route.routeId}`);
+    },
+    cooldownStatus(_route, descriptor) {
+      const requiredMs = Number(env.AGENT_BROWSER_DEV_PRESENTATION_COOLDOWN_MS || 5000);
+      const modifiedAt = statSync(descriptor.inventoryPath).mtimeMs;
+      const elapsedMs = Math.max(0, Date.now() - modifiedAt);
+      return { ready: elapsedMs >= requiredMs, elapsedMs, requiredMs };
+    },
+    referenceCheck(route, descriptor) {
+      const command = join(descriptor.userHome, '.local', 'bin', 'agent-browser-dev');
+      const result = run(command, ['--json', 'service', 'status'], {
+        env: {
+          ...env,
+          HOME: descriptor.pseudoHome,
+          AGENT_BROWSER_HOME: join(descriptor.pseudoHome, '.agent-browser'),
+        },
+        timeout: 30000,
+      });
+      if (result.error || result.status !== 0) {
+        return {
+          routeId: route.routeId,
+          blockers: [],
+          ambiguities: [`service_status_unavailable:${commandError(result) || result.status}`],
+        };
+      }
+      let status;
+      try {
+        status = JSON.parse(result.stdout);
+      } catch {
+        return { routeId: route.routeId, blockers: [], ambiguities: ['service_status_json_invalid'] };
+      }
+      return exactRouteReferences(status?.data?.service_state || status?.data?.serviceState || {}, route);
+    },
+    reclaimRoute(route, descriptor) {
+      const command = join(descriptor.userHome, '.local', 'bin', 'agent-browser-dev');
+      const close = run(command, [
+        '--json',
+        '--session', route.viewerSession,
+        '--profile', route.viewerProfile,
+        'close',
+      ], {
+        env: {
+          ...env,
+          HOME: descriptor.pseudoHome,
+          AGENT_BROWSER_HOME: join(descriptor.pseudoHome, '.agent-browser'),
+        },
+        timeout: 30000,
+      });
+      if (close.error || (close.status !== 0 && !/not found|no browser|not running/i.test(`${close.stdout}${close.stderr}`))) {
+        throw new Error(`close ${route.viewerSession} failed: ${commandError(close) || close.status}`);
+      }
+      runRequired(run, 'sudo', [
+        '-n', helper, 'terminate-rdp-route-session', '--user', route.user,
+      ], {}, `terminate ${route.routeId}`);
+      const processes = run('ps', ['-u', route.user, '-o', 'pid=,args=']);
+      if (processes.status === 0 && processes.stdout.trim()) {
+        throw new Error(`Development route processes remain after reclaim: ${route.routeId}`);
+      }
+    },
+  };
+}
+
+function exactRouteReferences(serviceState, route) {
+  const blockers = [];
+  const ambiguities = [];
+  const remoteRoute = serviceState.remoteViewRoutes?.[route.routeId];
+  const display = serviceState.displayAllocations?.[route.displayReservationId];
+  const pool = serviceState.routePool?.[route.slotId];
+  if (!remoteRoute || !display || !pool) ambiguities.push('service_binding_missing');
+  if (remoteRoute?.browserId) blockers.push(`browser:${remoteRoute.browserId}`);
+  if (remoteRoute?.sessionId) blockers.push(`session:${remoteRoute.sessionId}`);
+  for (const leaseId of remoteRoute?.viewerLeaseIds || []) blockers.push(`viewer_lease:${leaseId}`);
+  if (remoteRoute?.controllerLeaseId) blockers.push(`controller_lease:${remoteRoute.controllerLeaseId}`);
+  if (display?.ownerBrowserId) blockers.push(`display_browser:${display.ownerBrowserId}`);
+  if (display?.ownerSessionId) blockers.push(`display_session:${display.ownerSessionId}`);
+  for (const [id, lease] of Object.entries(serviceState.remoteViewAcquisitionLeases || {})) {
+    if (lease?.routeId === route.routeId || lease?.routePoolEntryId === route.slotId) {
+      blockers.push(`acquisition_lease:${id}`);
+    }
+  }
+  for (const [id, lease] of Object.entries(serviceState.viewerLeases || {})) {
+    if (lease?.routeId === route.routeId || lease?.routePoolEntryId === route.slotId) {
+      blockers.push(`viewer_lease:${id}`);
+    }
+  }
+  for (const [id, handoff] of Object.entries(serviceState.remoteViewHandoffs || {})) {
+    if (containsExactValue(handoff, route.routeId) || containsExactValue(handoff, route.slotId)) {
+      blockers.push(`handoff:${id}`);
+    }
+  }
+  const slot = serviceState.presentationCapacity?.slots?.find((candidate) => candidate.id === `slot:${route.slotId}`);
+  if (slot?.browserId) blockers.push(`slot_browser:${slot.browserId}`);
+  if (slot?.leaseRequestId) blockers.push(`slot_lease:${slot.leaseRequestId}`);
+  if (slot?.restorationPending === true) blockers.push('restoration_pending');
+  for (const id of slot?.cleanupObligationIds || []) blockers.push(`cleanup_obligation:${id}`);
+  return {
+    routeId: route.routeId,
+    blockers: [...new Set(blockers)].sort(),
+    ambiguities: [...new Set(ambiguities)].sort(),
+  };
+}
+
+function containsExactValue(value, expected) {
+  if (value === expected) return true;
+  if (Array.isArray(value)) return value.some((candidate) => containsExactValue(candidate, expected));
+  if (value && typeof value === 'object') {
+    return Object.values(value).some((candidate) => containsExactValue(candidate, expected));
+  }
+  return false;
 }
 
 function commandResult(command, args, options = {}) {

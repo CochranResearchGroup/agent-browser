@@ -659,7 +659,7 @@ function assertChecks(checks, message) {
   if (failed.length) throw new Error(`${message}: ${failed.join(', ')}`);
 }
 
-function writeProviderAuthority(descriptor, observation) {
+export function writeProviderAuthority(descriptor, observation) {
   const databaseRoutes = new Map(
     observation.database.routes.map((route) => [route.connectionName, route]),
   );
@@ -678,7 +678,7 @@ function writeProviderAuthority(descriptor, observation) {
       frameUrl: clientId
         ? `http://127.0.0.1:${descriptor.ports.guacamole}/guacamole/#/client/${clientId}`
         : null,
-      state: route.ordinal <= descriptor.warmSlots ? 'ready' : 'absent',
+      state: displays.get(route.displayReservationId)?.ready === true ? 'ready' : 'absent',
     };
   });
   mkdirSync(descriptor.stateDir, { recursive: true, mode: 0o700 });

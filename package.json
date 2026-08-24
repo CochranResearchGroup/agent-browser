@@ -40,6 +40,8 @@
     "development-runtime:provider-status": "node scripts/development-runtime.js provider-status",
     "development-runtime:provider-preflight": "node scripts/development-runtime.js provider-preflight",
     "development-runtime:provider-apply": "node scripts/development-runtime.js provider-apply",
+    "development-runtime:provider-scale-out": "node scripts/development-runtime.js provider-scale-out",
+    "development-runtime:provider-scale-in": "node scripts/development-runtime.js provider-scale-in",
     "test:development-runtime": "node scripts/test-development-runtime.js",
     "test:development-presentation-provider": "node scripts/test-development-presentation-provider.js",
     "test:presentation-capacity-architecture": "node scripts/test-presentation-capacity-architecture.js",

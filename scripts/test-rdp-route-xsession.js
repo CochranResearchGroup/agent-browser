@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const files = ['scripts/libexec/agent-browser-privileged-helper'];
 
@@ -123,6 +125,45 @@ for (const file of files) {
       'agent-browser-managed-chrome',
     );
     assert.equal(typeof report.managedChromeSandboxPolicy?.loaded, 'boolean');
+
+    const fixture = mkdtempSync(join(tmpdir(), 'agent-browser-route-helper-'));
+    const commandLog = join(fixture, 'commands.log');
+    try {
+      writeFileSync(join(fixture, 'id'), '#!/bin/sh\nprintf "0\\n"\n', { mode: 0o755 });
+      writeFileSync(
+        join(fixture, 'getent'),
+        '#!/bin/sh\nprintf "%s:x:2001:2001:agent-browser route-pool RDP session:/home/%s:/bin/bash\\n" "$2" "$2"\n',
+        { mode: 0o755 },
+      );
+      writeFileSync(
+        join(fixture, 'loginctl'),
+        `#!/bin/sh\nprintf '%s\\n' "$*" >>${JSON.stringify(commandLog)}\n`,
+        { mode: 0o755 },
+      );
+      writeFileSync(join(fixture, 'pgrep'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+      const terminate = spawnSync('bash', [file, 'terminate-rdp-route-session', '--user', 'agent-browser-rdp-dev-6'], {
+        encoding: 'utf8',
+        env: { ...process.env, PATH: `${fixture}:${process.env.PATH}` },
+      });
+      assert.equal(terminate.status, 0, terminate.stderr);
+      assert.equal(
+        readFileSync(commandLog, 'utf8'),
+        'show-user agent-browser-rdp-dev-6 --property=State --value\nterminate-user agent-browser-rdp-dev-6\n',
+      );
+
+      const rejected = spawnSync('bash', [file, 'terminate-rdp-route-session', '--user', 'ecochran76'], {
+        encoding: 'utf8',
+        env: { ...process.env, PATH: `${fixture}:${process.env.PATH}` },
+      });
+      assert.equal(rejected.status, 2);
+      assert.match(rejected.stderr, /route user must be agent-browser-rdp/);
+      assert.equal(
+        readFileSync(commandLog, 'utf8'),
+        'show-user agent-browser-rdp-dev-6 --property=State --value\nterminate-user agent-browser-rdp-dev-6\n',
+      );
+    } finally {
+      rmSync(fixture, { recursive: true, force: true });
+    }
   }
 }
 

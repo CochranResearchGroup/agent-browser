@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-HELPER_VERSION="2026-06-23.p44-route-desktop-v4"
+HELPER_VERSION="2026-06-23.p44-route-desktop-v5"
 
 usage() {
   cat <<'EOF'
@@ -12,6 +12,7 @@ Commands:
   verify-install --group <group> --sudoers <path> --sha256 <digest> [--apparmor-profile-name <name>]
   status-json
   ensure-rdp-route-user --user <user>
+  terminate-rdp-route-session --user <user>
   restart-xrdp
   grant-display-access --operator-user <user> --route-user <user> --display <display>
 
@@ -148,7 +149,7 @@ status_json() {
     apparmor_profile_loaded="true"
   fi
   cat <<EOF
-{"schemaVersion":1,"helperVersion":"$HELPER_VERSION","routeDesktopSession":{"ready":true,"state":"browser_control_ready_template","terminalStartupDetected":false,"startsWindowManager":true,"keepsSessionAlive":true},"displayAccess":{"supportsFilesystemX11Socket":true,"supportsAbstractX11Socket":true,"boundedXhostTimeoutSeconds":2},"routeUserCredentialUpdate":{"pamBypassed":true,"cryptMethod":"SHA512","shaRounds":100000},"managedChromeSandboxPolicy":{"profileName":"agent-browser-managed-chrome","loaded":$apparmor_profile_loaded}}
+{"schemaVersion":1,"helperVersion":"$HELPER_VERSION","routeDesktopSession":{"ready":true,"state":"browser_control_ready_template","terminalStartupDetected":false,"startsWindowManager":true,"keepsSessionAlive":true},"routeSessionTermination":{"supported":true,"exactRouteUser":true,"idempotentWhenAbsent":true},"displayAccess":{"supportsFilesystemX11Socket":true,"supportsAbstractX11Socket":true,"boundedXhostTimeoutSeconds":2},"routeUserCredentialUpdate":{"pamBypassed":true,"cryptMethod":"SHA512","shaRounds":100000},"managedChromeSandboxPolicy":{"profileName":"agent-browser-managed-chrome","loaded":$apparmor_profile_loaded}}
 EOF
 }
 
@@ -214,6 +215,55 @@ ensure_rdp_route_user() {
   usermod -aG ssl-cert xrdp >/dev/null 2>&1 || true
   write_xsession "$user_name"
   echo "ensured RDP route user $user_name"
+}
+
+terminate_rdp_route_session() {
+  require_root
+  local user_name=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --user)
+        user_name="$(arg_value "$1" "${2:-}")"
+        shift 2
+        ;;
+      *)
+        echo "Unknown terminate-rdp-route-session argument: $1" >&2
+        exit 2
+        ;;
+    esac
+  done
+
+  if [[ -z "$user_name" ]]; then
+    echo "terminate-rdp-route-session requires --user" >&2
+    exit 2
+  fi
+  require_route_user "$user_name"
+
+  local passwd_entry
+  passwd_entry="$(getent passwd "$user_name" || true)"
+  if [[ -z "$passwd_entry" ]]; then
+    echo "route user does not exist: $user_name" >&2
+    exit 2
+  fi
+  local account_name _password _uid _gid comment home_dir shell
+  IFS=: read -r account_name _password _uid _gid comment home_dir shell <<<"$passwd_entry"
+  if [[ "$account_name" != "$user_name" \
+    || "$comment" != "agent-browser route-pool RDP session" \
+    || "$home_dir" != "/home/$user_name" \
+    || "$shell" != "/bin/bash" ]]; then
+    echo "route user identity drifted: $user_name" >&2
+    exit 2
+  fi
+
+  if loginctl show-user "$user_name" --property=State --value >/dev/null 2>&1; then
+    loginctl terminate-user "$user_name"
+  fi
+  if pgrep -u "$user_name" >/dev/null 2>&1; then
+    echo "route user processes remain after termination: $user_name" >&2
+    exit 1
+  fi
+  echo "terminated RDP route session $user_name"
 }
 
 restart_xrdp() {
@@ -296,6 +346,10 @@ case "${1:-}" in
   ensure-rdp-route-user)
     shift
     ensure_rdp_route_user "$@"
+    ;;
+  terminate-rdp-route-session)
+    shift
+    terminate_rdp_route_session "$@"
     ;;
   restart-xrdp)
     shift

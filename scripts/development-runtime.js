@@ -21,8 +21,13 @@ import {
 } from './lib/development-presentation-provider-deployment.js';
 import {
   createDevelopmentPresentationProviderSystemEffects,
+  createDevelopmentPresentationLifecycleSystemEffects,
   developmentPresentationProviderSystemPreflight,
 } from './lib/development-presentation-provider-system-effects.js';
+import {
+  scaleInDevelopmentPresentation,
+  scaleOutDevelopmentPresentation,
+} from './lib/development-presentation-lifecycle.js';
 
 const args = process.argv.slice(2).filter((arg) => arg !== '--');
 const command = args.shift() || 'status';
@@ -90,6 +95,21 @@ try {
         assertProductionUnchanged,
       }),
     });
+  } else if (command === 'provider-scale-out' || command === 'provider-scale-in') {
+    const apply = removeFlag(args, '--apply');
+    rejectArgs(args);
+    if (!apply) throw new Error(`${command} requires --apply`);
+    const providerStatus = developmentRuntimeStatus().presentationProvider;
+    if (providerStatus.ready !== true) {
+      throw new Error(`${command} requires a ready development presentation provider`);
+    }
+    const effects = createDevelopmentPresentationLifecycleSystemEffects({
+      productionSnapshot,
+      assertProductionUnchanged,
+    });
+    result = command === 'provider-scale-out'
+      ? scaleOutDevelopmentPresentation({ effects })
+      : scaleInDevelopmentPresentation({ effects });
   } else if (command === 'help' || command === '--help' || command === '-h') {
     printHelp();
     process.exit(0);
@@ -100,6 +120,8 @@ try {
   else printSummary(command, result);
   if (command === 'doctor' && result.success === false) process.exitCode = 1;
   if (command === 'status' && result.ready !== true) process.exitCode = 1;
+  if ((command === 'provider-scale-out' || command === 'provider-scale-in') &&
+      result.success === false) process.exitCode = 1;
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
@@ -156,6 +178,12 @@ function printSummary(command, result) {
     console.log(`Ingress published: ${result.ingressPublished}`);
     console.log(`Production unchanged: ${result.productionUnchanged}`);
     console.log(`Receipt: ${result.receipt}`);
+  } else if (command === 'provider-scale-out' || command === 'provider-scale-in') {
+    console.log(`Development presentation lifecycle: ${result.state}`);
+    console.log(`Route: ${result.routeId || 'none'}`);
+    console.log(`Slots: ${result.beforeSlots} -> ${result.afterSlots}`);
+    console.log(`Production unchanged: ${result.productionUnchanged}`);
+    console.log(`Receipt: ${result.receipt}`);
   } else {
     const status = result.status || result;
     console.log(`Development runtime ready: ${status.ready}`);
@@ -183,6 +211,8 @@ Commands:
   provider-status                           Read development provider configuration and readiness
   provider-preflight                        Validate fresh provider admission without effects
   provider-apply --apply --defer-ingress   Provision the isolated provider and stop before ingress
+  provider-scale-out --apply               Activate exactly one admitted elastic presentation slot
+  provider-scale-in --apply                Reclaim exactly one unreferenced elastic presentation slot
 
 All commands accept --json.`);
 }
