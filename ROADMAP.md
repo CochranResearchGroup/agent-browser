@@ -7,6 +7,28 @@ This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
 
+## P128 | Runtime Lifecycle Hotfix Collection
+
+State: OPEN
+Current state: fresh runtime evidence proves one scoped BILL named-profile
+ownership contradiction, while the workstation remains converged. The accepted
+absent-closing branch is not yet integrated into current main, a failed
+terminal replacement left a protected live browser without service ownership,
+and one historical stopped supervisor warning still makes standalone install
+doctor nonzero. Work is isolated on
+`hotfix/runtime-lifecycle-collection`; current development-presentation work
+and production provider state remain untouched.
+
+### Plan
+
+- `docs/dev/plans/0128-2026-08-23-runtime-lifecycle-hotfix-collection.md`
+
+### Next Recommendation
+
+Reconcile the accepted lifecycle branch with current main, establish red
+provider-free reproductions for failed-launch residue and exact named-profile
+recovery, and keep workstation apply behind an exact transactional census.
+
 ## P127 | Development Presentation Provider Isolation
 
 State: IN PROGRESS
