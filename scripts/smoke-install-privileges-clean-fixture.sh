@@ -236,6 +236,32 @@ if [[ "$helper_sha_after_second_apply" != "$helper_sha_before_second_apply" ]]; 
   exit 1
 fi
 
+# An installed helper without exact, idempotent route-session termination is
+# not compatible with elastic presentation lifecycle. It must be replaced
+# before scale-out can create resources that the runtime cannot reclaim.
+sed -i \
+  's/,"routeSessionTermination":{"supported":true,"exactRouteUser":true,"idempotentWhenAbsent":true}//' \
+  "$HELPER_PATH"
+if "$HELPER_PATH" status-json | grep -q 'routeSessionTermination'; then
+  echo "Stale-helper fixture still advertises route-session termination." >&2
+  exit 1
+fi
+
+sudo_v_count_before_stale_apply="$(grep -c '^SUDO -v$' "$LOG" || true)"
+run_installer >/tmp/agent-browser-install-privileges-clean-fixture-stale.out
+sudo_v_count_after_stale_apply="$(grep -c '^SUDO -v$' "$LOG" || true)"
+
+if [[ "$sudo_v_count_after_stale_apply" != "$((sudo_v_count_before_stale_apply + 1))" ]]; then
+  echo "Stale helper replacement must cross exactly one sudo -v boundary." >&2
+  cat "$LOG" >&2
+  exit 1
+fi
+
+if ! cmp -s "$ROOT/scripts/libexec/agent-browser-privileged-helper" "$HELPER_PATH"; then
+  echo "Stale helper without route-session termination was not replaced." >&2
+  exit 1
+fi
+
 # A formerly compatible helper that advertises the non-PAM fields below the
 # redaction-triggering legacy object name is unsafe. It must cross the
 # intentional authorization boundary and be replaced, even when its remaining

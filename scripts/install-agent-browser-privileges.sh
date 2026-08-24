@@ -271,6 +271,10 @@ helper_contract_ready() {
     '"state":"browser_control_ready_template"' \
     '"startsWindowManager":true' \
     '"keepsSessionAlive":true' \
+    '"routeSessionTermination":{' \
+    '"supported":true' \
+    '"exactRouteUser":true' \
+    '"idempotentWhenAbsent":true' \
     '"supportsFilesystemX11Socket":true' \
     '"supportsAbstractX11Socket":true' \
     '"boundedXhostTimeoutSeconds":2' \
