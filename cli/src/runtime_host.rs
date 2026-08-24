@@ -89,6 +89,25 @@ pub(crate) fn take_lane_config(command: &mut Value) -> Result<Option<RuntimeLane
         .map_err(|error| format!("runtime_host_lane_config_invalid: {error}"))
 }
 
+/// Whether daemon-lane profile defaults may be projected into this command.
+///
+/// Desktop observation and interaction actions resolve an already retained
+/// service browser by opaque identity. Their bounded contracts deliberately
+/// reject profile and runtime-profile routing, so lane defaults must remain
+/// control-plane metadata instead of becoming caller-visible action fields.
+pub(crate) fn command_accepts_lane_profile_defaults(command: &Value) -> bool {
+    !matches!(
+        command.get("action").and_then(Value::as_str),
+        Some(
+            "desktop_capture"
+                | "desktop_locate"
+                | "desktop_evidence_observe"
+                | "desktop_prompt_observe"
+                | "desktop_interact"
+        )
+    )
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct RuntimeLaneConfig {
@@ -303,6 +322,27 @@ mod tests {
         let mut command = attach_lane_config(serde_json::json!({"action": "status"}), &config);
         assert_eq!(take_lane_config(&mut command).unwrap(), Some(config));
         assert!(command.get(RUNTIME_HOST_LANE_CONFIG_FIELD).is_none());
+    }
+
+    #[test]
+    fn bounded_desktop_commands_do_not_accept_lane_profile_defaults() {
+        for action in [
+            "desktop_capture",
+            "desktop_locate",
+            "desktop_evidence_observe",
+            "desktop_prompt_observe",
+            "desktop_interact",
+        ] {
+            assert!(!command_accepts_lane_profile_defaults(
+                &serde_json::json!({"action": action})
+            ));
+        }
+        assert!(command_accepts_lane_profile_defaults(
+            &serde_json::json!({"action": "navigate"})
+        ));
+        assert!(command_accepts_lane_profile_defaults(
+            &serde_json::json!({"action": "remote_view_open"})
+        ));
     }
 
     #[tokio::test]
