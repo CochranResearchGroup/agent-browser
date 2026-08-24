@@ -2,7 +2,15 @@
 
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readlinkSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -106,6 +114,21 @@ try {
   assert.equal(laneManifest.executablePath, installed.generation.binary);
   assert.match(readFileSync(join(descriptor.systemdDir, descriptor.units[0]), 'utf8'), new RegExp(installed.generation.binary));
 
+  const laneManifestBeforeRejectedInstall = readFileSync(descriptor.laneManifest, 'utf8');
+  const currentBeforeRejectedInstall = readlinkSync(descriptor.current);
+  assert.throws(
+    () => installDevelopmentRuntime({
+      binary: fakeBinary,
+      env,
+      activate: false,
+      snapshotProduction: () => ({ identity: 'production-fixture' }),
+      verifyProduction: () => { throw new Error('fixture production drift'); },
+    }),
+    /fixture production drift/,
+  );
+  assert.equal(readFileSync(descriptor.laneManifest, 'utf8'), laneManifestBeforeRejectedInstall);
+  assert.equal(readlinkSync(descriptor.current), currentBeforeRejectedInstall);
+
   const obsoleteGeneration = join(descriptor.generations, '0.27.0-obsolete');
   mkdirSync(obsoleteGeneration, { recursive: true });
   utimesSync(obsoleteGeneration, new Date(0), new Date(0));
@@ -137,6 +160,24 @@ try {
   productionAfter.stateFiles.serviceState.sha256 = 'mutable-b';
   productionAfter.serviceIdentities.sessions.push({ key: 'session-b', id: 'session-b' });
   assert.doesNotThrow(() => assertProductionUnchanged(productionBefore, productionAfter));
+  productionBefore.processes.push({
+    pid: 11,
+    startToken: '101',
+    executable: '/production/generation-a/bin/agent-browser',
+    stable: false,
+  });
+  assert.doesNotThrow(() => assertProductionUnchanged(productionBefore, productionAfter));
+  productionBefore.processes.push({
+    pid: 12,
+    startToken: '102',
+    executable: '/production/generation-a/bin/agent-browser',
+    stable: true,
+  });
+  assert.throws(
+    () => assertProductionUnchanged(productionBefore, productionAfter),
+    /stable process changed.*12/,
+  );
+  productionBefore.processes.pop();
   productionAfter.serviceIdentities.browsers[0].pid = 21;
   assert.throws(() => assertProductionUnchanged(productionBefore, productionAfter), /browsers identity changed/);
   const developmentHelp = execFileSync('node', ['scripts/development-runtime.js', 'help'], {

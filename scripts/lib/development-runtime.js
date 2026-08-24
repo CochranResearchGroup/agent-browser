@@ -153,7 +153,13 @@ WantedBy=default.target
   };
 }
 
-export function installDevelopmentRuntime({ binary, env = process.env, activate = true }) {
+export function installDevelopmentRuntime({
+  binary,
+  env = process.env,
+  activate = true,
+  snapshotProduction = productionSnapshot,
+  verifyProduction = assertProductionUnchanged,
+}) {
   const descriptor = developmentRuntimeDescriptor(env);
   const sourceBinary = resolve(binary);
   if (!existsSync(sourceBinary)) throw new Error(`Development candidate does not exist: ${sourceBinary}`);
@@ -163,9 +169,10 @@ export function installDevelopmentRuntime({ binary, env = process.env, activate 
   const generationId = `${version}-${sha256.slice(0, 12)}`;
   const generationDir = join(descriptor.generations, generationId);
   const generationBinary = join(generationDir, 'bin', 'agent-browser');
-  const before = productionSnapshot(env);
+  const before = snapshotProduction(env);
   const previousCurrent = resolvedLink(descriptor.current);
   const previousExecutable = captureStableExecutable(descriptor.executable);
+  const previousLaneManifest = captureStableExecutable(descriptor.laneManifest);
   const previousUnits = new Map();
 
   mkdirSync(join(generationDir, 'bin'), { recursive: true, mode: 0o700 });
@@ -229,8 +236,8 @@ export function installDevelopmentRuntime({ binary, env = process.env, activate 
       waitForDevelopmentManifest(descriptor, generationBinary, env);
     }
     synchronizeDevelopmentAgentSkill({ env });
-    const after = productionSnapshot(env);
-    assertProductionUnchanged(before, after);
+    const after = snapshotProduction(env);
+    verifyProduction(before, after);
     return {
       success: true,
       descriptor,
@@ -252,6 +259,7 @@ export function installDevelopmentRuntime({ binary, env = process.env, activate 
       removeLink(descriptor.current);
     }
     restoreStableExecutable(descriptor.executable, previousExecutable);
+    restoreStableExecutable(descriptor.laneManifest, previousLaneManifest);
     for (const [path, content] of previousUnits) {
       if (content === null) rmSync(path, { force: true });
       else writeFileAtomic(path, content, 0o644);
@@ -482,17 +490,20 @@ export function assertProductionUnchanged(before, after) {
   if (before.fixture && after.fixture) return;
   const invariantBefore = {
     ...before,
+    processes: undefined,
     stateFiles: { remoteViewHandoffs: before.stateFiles?.remoteViewHandoffs || null },
     serviceIdentities: undefined,
   };
   const invariantAfter = {
     ...after,
+    processes: undefined,
     stateFiles: { remoteViewHandoffs: after.stateFiles?.remoteViewHandoffs || null },
     serviceIdentities: undefined,
   };
   if (JSON.stringify(invariantBefore) !== JSON.stringify(invariantAfter)) {
     throw new Error(`Production runtime changed during development activation: ${JSON.stringify({ before, after })}`);
   }
+  assertStableProcessCensusPreserved(before.processes || [], after.processes || []);
   assertIdentityProjectionPreserved(before.serviceIdentities, after.serviceIdentities);
 }
 
@@ -645,6 +656,17 @@ function assertIdentityProjectionPreserved(before, after) {
   }
 }
 
+function assertStableProcessCensusPreserved(before, after) {
+  const current = new Map(after.map((item) => [item.pid, item]));
+  for (const item of before) {
+    if (item.stable === false) continue;
+    const observed = current.get(item.pid);
+    if (!observed || observed.startToken !== item.startToken || observed.executable !== item.executable) {
+      throw new Error(`Production stable process changed during development activation: ${item.pid}`);
+    }
+  }
+}
+
 function readJson(path) {
   try {
     return JSON.parse(readFileSync(path, 'utf8'));
@@ -671,13 +693,29 @@ function liveDevelopmentExecutables(generationsRoot) {
 function processCensusUnder(generationsRoot) {
   const processes = [];
   if (!existsSync('/proc')) return processes;
+  const uptimeSeconds = Number(readFileSync('/proc/uptime', 'utf8').split(/\s+/)[0] || 0);
+  let clockTicks = 100;
+  try {
+    clockTicks = Number(execFileSync('getconf', ['CLK_TCK'], { encoding: 'utf8' }).trim()) || 100;
+  } catch {
+    // Linux defaults to 100 ticks on the supported workstation when getconf is unavailable.
+  }
   for (const entry of readdirSync('/proc')) {
     if (!/^\d+$/.test(entry)) continue;
     try {
       const executable = readlinkSync(join('/proc', entry, 'exe'));
       if (!executable.startsWith(`${generationsRoot}/`)) continue;
       const stat = readFileSync(join('/proc', entry, 'stat'), 'utf8').trim().split(/\s+/);
-      processes.push({ pid: Number(entry), startToken: stat[21] || null, executable });
+      const startToken = stat[21] || null;
+      const ageSeconds = startToken === null
+        ? null
+        : Math.max(0, uptimeSeconds - Number(startToken) / clockTicks);
+      processes.push({
+        pid: Number(entry),
+        startToken,
+        executable,
+        stable: ageSeconds !== null && ageSeconds >= 30,
+      });
     } catch {
       // Processes can exit while the census is being read.
     }
