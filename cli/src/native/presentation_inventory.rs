@@ -250,24 +250,36 @@ impl PresentationProviderInventory {
         state: &mut ServiceState,
         config: PresentationCapacityConfig,
     ) -> Result<(), String> {
+        let live_browser_ids = state.browsers.keys().cloned().collect::<BTreeSet<_>>();
         let checked_out_routes = state
             .remote_view_routes
             .iter()
-            .filter(|(_, route)| route.browser_id.is_some() || route.session_id.is_some())
+            .filter(|(_, route)| {
+                route.state == "ready"
+                    && route
+                        .browser_id
+                        .as_ref()
+                        .is_some_and(|browser_id| live_browser_ids.contains(browser_id))
+            })
             .map(|(id, route)| (id.clone(), route.clone()))
             .collect::<BTreeMap<_, _>>();
         let checked_out_displays = state
             .display_allocations
             .iter()
             .filter(|(_, display)| {
-                display.owner_browser_id.is_some() || display.owner_session_id.is_some()
+                display
+                    .owner_browser_id
+                    .as_ref()
+                    .is_some_and(|browser_id| live_browser_ids.contains(browser_id))
             })
             .map(|(id, display)| (id.clone(), display.clone()))
             .collect::<BTreeMap<_, _>>();
         let checked_out_slots = state
             .route_pool
             .iter()
-            .filter(|(_, entry)| entry.state == "checked_out")
+            .filter(|(_, entry)| {
+                entry.state == "checked_out" && checked_out_routes.contains_key(&entry.route_id)
+            })
             .map(|(id, entry)| (id.clone(), entry.clone()))
             .collect::<BTreeMap<_, _>>();
         state
@@ -693,6 +705,13 @@ mod tests {
         inventory
             .overlay_service_state(&mut state, config.clone())
             .unwrap();
+        state.browsers.insert(
+            "browser-1".to_string(),
+            crate::native::service_model::BrowserProcess {
+                id: "browser-1".to_string(),
+                ..crate::native::service_model::BrowserProcess::default()
+            },
+        );
         let route = state
             .remote_view_routes
             .get_mut("development-route-1")
@@ -713,7 +732,9 @@ mod tests {
             .unwrap()
             .state = "checked_out".to_string();
 
-        inventory.overlay_service_state(&mut state, config).unwrap();
+        inventory
+            .overlay_service_state(&mut state, config.clone())
+            .unwrap();
 
         assert_eq!(
             state.remote_view_routes["development-route-1"]
@@ -734,6 +755,24 @@ mod tests {
             Some("scene-1")
         );
         assert_eq!(state.route_pool["development-slot-1"].state, "checked_out");
+
+        state.browsers.remove("browser-1");
+        state
+            .remote_view_routes
+            .get_mut("development-route-1")
+            .unwrap()
+            .state = "orphaned".to_string();
+        inventory.overlay_service_state(&mut state, config).unwrap();
+
+        assert_eq!(
+            state.remote_view_routes["development-route-1"].browser_id,
+            None
+        );
+        assert_eq!(
+            state.display_allocations["development-display-1"].owner_browser_id,
+            None
+        );
+        assert_eq!(state.route_pool["development-slot-1"].state, "available");
     }
 
     #[test]

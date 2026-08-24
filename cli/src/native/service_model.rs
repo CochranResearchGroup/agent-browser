@@ -2487,9 +2487,26 @@ impl ServiceState {
     pub fn overlay_configured_entities(&mut self, configured: ServiceState) {
         let mut configured = configured;
         configured.mark_config_entity_sources();
+        let live_browser_ids = self.browsers.keys().cloned().collect::<BTreeSet<_>>();
+        let active_route_ids = self
+            .remote_view_routes
+            .iter()
+            .filter(|(_, route)| {
+                route.state == "ready"
+                    && route
+                        .browser_id
+                        .as_ref()
+                        .is_some_and(|browser_id| live_browser_ids.contains(browser_id))
+            })
+            .map(|(id, _)| id.clone())
+            .collect::<BTreeSet<_>>();
         for (id, mut display) in configured.display_allocations {
             if let Some(existing) = self.display_allocations.get(&id) {
-                if existing.owner_browser_id.is_some() || existing.owner_session_id.is_some() {
+                if existing
+                    .owner_browser_id
+                    .as_ref()
+                    .is_some_and(|browser_id| live_browser_ids.contains(browser_id))
+                {
                     display.owner_browser_id = existing.owner_browser_id.clone();
                     display.owner_session_id = existing.owner_session_id.clone();
                     display.profile_id = existing.profile_id.clone();
@@ -2510,7 +2527,7 @@ impl ServiceState {
         }
         for (id, mut route) in configured.remote_view_routes {
             if let Some(existing) = self.remote_view_routes.get(&id) {
-                if existing.browser_id.is_some() || existing.session_id.is_some() {
+                if active_route_ids.contains(&id) {
                     route.browser_id = existing.browser_id.clone();
                     route.session_id = existing.session_id.clone();
                     route.route_source = existing.route_source.clone();
@@ -2525,7 +2542,8 @@ impl ServiceState {
         }
         for (id, mut entry) in configured.route_pool {
             if let Some(existing) = self.route_pool.get(&id) {
-                if existing.state == "checked_out" {
+                if existing.state == "checked_out" && active_route_ids.contains(&existing.route_id)
+                {
                     entry.state = existing.state.clone();
                     entry.current_route_allocation_id =
                         existing.current_route_allocation_id.clone();
@@ -9498,6 +9516,14 @@ mod tests {
     #[test]
     fn configured_provider_inventory_preserves_checked_out_runtime_ownership() {
         let mut persisted = ServiceState {
+            browsers: BTreeMap::from([(
+                "browser-1".to_string(),
+                BrowserProcess {
+                    id: "browser-1".to_string(),
+                    health: BrowserHealth::Ready,
+                    ..BrowserProcess::default()
+                },
+            )]),
             display_allocations: BTreeMap::from([(
                 "display-1".to_string(),
                 DisplayAllocation {
@@ -9517,6 +9543,7 @@ mod tests {
                     browser_id: Some("browser-1".to_string()),
                     session_id: Some("scene-1".to_string()),
                     route_source: "pool".to_string(),
+                    state: "ready".to_string(),
                     last_provider_event: Some("route_checked_out".to_string()),
                     ..RemoteViewRoute::default()
                 },
@@ -9563,7 +9590,7 @@ mod tests {
             ..ServiceState::default()
         };
 
-        persisted.overlay_configured_entities(configured);
+        persisted.overlay_configured_entities(configured.clone());
 
         let display = &persisted.display_allocations["display-1"];
         assert_eq!(display.owner_browser_id.as_deref(), Some("browser-1"));
@@ -9581,6 +9608,21 @@ mod tests {
                 .as_deref(),
             Some("route-1")
         );
+
+        persisted.browsers.remove("browser-1");
+        persisted
+            .remote_view_routes
+            .get_mut("route-1")
+            .unwrap()
+            .state = "orphaned".to_string();
+        persisted.overlay_configured_entities(configured);
+
+        assert_eq!(persisted.remote_view_routes["route-1"].browser_id, None);
+        assert_eq!(
+            persisted.display_allocations["display-1"].owner_browser_id,
+            None
+        );
+        assert_eq!(persisted.route_pool["slot-1"].state, "available");
     }
 
     #[test]
