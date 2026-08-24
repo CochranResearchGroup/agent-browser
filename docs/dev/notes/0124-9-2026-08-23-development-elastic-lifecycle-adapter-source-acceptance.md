@@ -75,3 +75,12 @@ manifest atomically. Regression fixtures cover both cases. The repaired retry
 installed `0.28.0-eeedd32d8e06`; the required development doctor passed with
 all three units active, ports 4948, 4949, and 4951 bound, four warm displays,
 six exact connection IDs, current development skill, and production unchanged.
+
+The first operator helper apply then exposed a separate installer predicate
+gap: the compatibility path checked the older desktop, display-access, and
+credential-update fields but not `routeSessionTermination`. It therefore
+classified installed v4 as ready despite the source and installed hashes
+differing. A fixture now removes only the termination object from an otherwise
+compatible helper and requires exactly one new authorization boundary plus
+source replacement. The live dry run now classifies v4 as lacking the required
+runtime contract and plans the v5 replacement.

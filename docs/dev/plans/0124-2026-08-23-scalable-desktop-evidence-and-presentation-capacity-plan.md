@@ -4,7 +4,7 @@ Date: 2026-08-23
 
 State: IN PROGRESS
 
-Execution state: `slice_g_elastic_adapter_installed_helper_install_pending`
+Execution state: `slice_g_helper_installer_repaired_operator_apply_pending`
 
 Lane: P124
 
