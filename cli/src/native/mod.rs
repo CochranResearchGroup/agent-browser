@@ -51,6 +51,10 @@ pub mod desktop_capture;
 pub(crate) mod desktop_control_coordinator;
 #[allow(dead_code)]
 pub(crate) mod desktop_evidence;
+// The configured episode is landing adapter by adapter so each live boundary
+// can remain fail-closed until the product caller is complete.
+#[allow(dead_code)]
+pub(crate) mod desktop_evidence_configured;
 #[allow(dead_code)]
 pub(crate) mod desktop_interaction;
 #[allow(dead_code)]

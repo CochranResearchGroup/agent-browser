@@ -4,7 +4,7 @@ Date: 2026-08-23
 
 State: IN PROGRESS
 
-Execution state: `slice_g_helper_installer_repaired_operator_apply_pending`
+Execution state: `slice_g_configured_capacity_adapter_source_accepted_scene_capture_adapter_missing`
 
 Lane: P124
 
@@ -378,10 +378,19 @@ are independently satisfied.
 
 ### Slice G | Controlled Installed Acceptance
 
-Status: IN PROGRESS. Capacity projection is accepted. The exact development
-elastic lifecycle adapter is source and development-install accepted in
-`docs/dev/notes/0124-9-2026-08-23-development-elastic-lifecycle-adapter-source-acceptance.md`.
-The reviewed root helper installation and repeated live scale cycle remain pending.
+Status: IN PROGRESS. Capacity projection and the exact development elastic
+lifecycle are installed and live accepted. Three complete 4→6→4 cycles and
+their fresh convergence census are recorded in
+`docs/dev/notes/0124-10-2026-08-23-development-elastic-lifecycle-live-acceptance.md`.
+The configured observation-only Desktop Evidence Episode now has a fallible,
+durable presentation-capacity adapter. Admission refusal stops before scene or
+trigger work, release failure is terminal, and one-shot unavailable requests
+do not leave unresumable queue entries. Source evidence is recorded in
+`docs/dev/notes/0124-11-2026-08-23-configured-capacity-adapter-source-acceptance.md`.
+The remaining installed boundary is the configured scene, capture, paired CDP,
+handoff, and cleanup composition plus its human, viewer, CDP, and retained
+browser acceptance. Configured production input remains outside this plan's
+live authority until Plan 0110 is independently accepted.
 
 After source acceptance and separate explicit live authority:
 

@@ -294,7 +294,7 @@ try {
         assert.deepEqual(args, ['-eo', 'user:64=,args=']);
         return {
           status: 0,
-          stdout: descriptor.routes.slice(0, descriptor.warmSlots)
+          stdout: descriptor.routes
             .flatMap((route, index) => [
               `${route.user} /usr/lib/systemd/systemd --user`,
               `${route.user} /usr/lib/xorg/Xorg :${30 + index}`,
@@ -309,7 +309,8 @@ try {
   });
   assert.equal(probed.database.schemaReady, true);
   assert.equal(probed.database.routes.length, 6);
-  assert.equal(probed.displays.length, 4);
+  assert.equal(probed.displays.length, 6);
+  assert.equal(probed.displays.at(-1).displayReservationId, 'development-display-6');
   assert.equal(probed.secrets.private, true);
   const configured = doctorDevelopmentPresentationProvider({ env, probe: () => readyObservation });
   assert.equal(configured.success, true);
@@ -575,6 +576,45 @@ try {
   assert.match(reclaimFailed.error, /fixture termination failure/);
 
   const referencedRoute = descriptor.routes[4];
+  let convergingProcessChecks = 0;
+  const convergingReclaimEffects = createDevelopmentPresentationLifecycleSystemEffects({
+    env,
+    reclaimTimeoutMs: 20,
+    reclaimPollMs: 1,
+    productionSnapshot: () => ({ identity: 'production-fixture' }),
+    assertProductionUnchanged: () => {},
+    run(command, args) {
+      if (command.endsWith('/agent-browser-privileged-helper') && args[0] === 'status-json') {
+        return {
+          status: 0,
+          stdout: JSON.stringify({
+            helperVersion: 'fixture-v5',
+            routeSessionTermination: {
+              supported: true,
+              exactRouteUser: true,
+              idempotentWhenAbsent: true,
+            },
+          }),
+          stderr: '',
+        };
+      }
+      if (command.endsWith('/agent-browser-dev') && args.at(-1) === 'close') {
+        return { status: 0, stdout: '{"success":true}', stderr: '' };
+      }
+      if (command === 'sudo') {
+        return { status: 1, stdout: '', stderr: 'route user processes remain after termination' };
+      }
+      if (command === 'ps') {
+        convergingProcessChecks += 1;
+        return convergingProcessChecks === 1
+          ? { status: 0, stdout: '4242 Xorg :16\n', stderr: '' }
+          : { status: 1, stdout: '', stderr: '' };
+      }
+      throw new Error(`Unexpected converging reclaim command: ${command} ${args.join(' ')}`);
+    },
+  });
+  assert.doesNotThrow(() => convergingReclaimEffects.reclaimRoute(referencedRoute, descriptor));
+  assert.equal(convergingProcessChecks, 2);
   const serviceState = {
     remoteViewRoutes: {
       [referencedRoute.routeId]: {
