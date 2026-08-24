@@ -1852,6 +1852,16 @@ agent-browser dashboard stop
 
 The dashboard command starts a stable ingress process on port 4848 and a generation-specific backend on the next port. The ingress remains the public listener while validated backend generations change. It retains the previously selected backend as a draining fallback, returns typed converging status when neither backend is reachable, and never selects a candidate whose runtime manifest or authenticated operator-journey evidence fails validation. All sessions automatically stream to the dashboard.
 
+For `POST /api/service/request`, stable ingress waits for the request's bounded
+`jobTimeoutMs` plus response grace before declaring the selected backend
+unavailable. If delivery may have occurred but no response arrives, ingress
+returns `mutation_outcome_unknown` with `retrySafe: false` and no
+`Retry-After` header. Inspect the retained service job or trace before deciding
+whether another mutation is lawful.
+Service-owned tab handles and shared acquisition evidence use the canonical
+`close_tabs` cleanup policy. Release the handle with `tab_handle_release`; the
+exact client tab is closed while the shared browser process is preserved.
+
 Use `agent-browser dashboard ingress status` to inspect the selected,
 candidate, fallback, and presentation-receipt state. Upgrade coordinators can
 use `dashboard ingress stage`, `commit`, and `rollback` with exact
@@ -1866,6 +1876,11 @@ dashboard prefers it for proxied service API requests before falling back to
 `default` or the first discovered session. This lets operators keep public
 dashboard ingress on a current backend without disturbing an existing default
 browser.
+
+`service resources` treats executables from the selected user install and the
+isolated development install as recognized runtime surfaces. They remain
+protected and do not create false `unowned_agent_browser_processes_observed`
+pressure merely because they are absent from production Service State.
 
 The dashboard includes an app-owned login screen. On first start it creates
 `~/.agent-browser/dashboard-auth.json` with hashed superuser credentials and a

@@ -621,7 +621,10 @@ fn classify_process(
     let mut gc_action = None;
     let mut reviewed_tree = None;
 
-    if Some(process.pid) == dashboard_main_pid {
+    if kind == ResourceKind::AgentBrowser && installed_agent_browser_runtime_surface(&process) {
+        disposition = ResourceDisposition::Protected;
+        reasons.push("installed_agent_browser_runtime_surface".to_string());
+    } else if Some(process.pid) == dashboard_main_pid {
         disposition = ResourceDisposition::Protected;
         reasons.push("dashboard_main_pid".to_string());
     }
@@ -942,6 +945,17 @@ fn resource_kind(
         return ResourceKind::Browser;
     }
     ResourceKind::Other
+}
+
+fn installed_agent_browser_runtime_surface(process: &ProcessSample) -> bool {
+    let executable = process
+        .executable
+        .as_deref()
+        .or_else(|| process.command.first().map(String::as_str))
+        .unwrap_or_default();
+    executable.ends_with("/.local/bin/agent-browser")
+        || executable.contains("/.local/lib/agent-browser/generations/")
+        || executable.contains("/.local/lib/agent-browser-dev/generations/")
 }
 
 fn resource_kind_name(kind: &ResourceKind) -> &'static str {
@@ -2246,6 +2260,42 @@ mod tests {
             response["resources"][0]["reasons"][0],
             "orphaned_remote_display_process"
         );
+    }
+
+    #[test]
+    fn production_resources_protect_installed_production_and_development_runtime_processes() {
+        let response = service_resources_response_from_samples_for_environment(
+            &ServiceState::default(),
+            vec![
+                sample(
+                    601,
+                    &["/home/dev/.local/lib/agent-browser/generations/current/bin/agent-browser"],
+                    Some(60),
+                ),
+                sample(
+                    602,
+                    &["/home/dev/.local/lib/agent-browser-dev/generations/current/bin/agent-browser"],
+                    Some(60),
+                ),
+                sample(
+                    603,
+                    &["/home/dev/.local/bin/agent-browser"],
+                    Some(1),
+                ),
+            ],
+            Vec::new(),
+            ResourceRuntimeEnvironment::Production,
+        );
+
+        assert_eq!(response["summary"]["protectedCount"], 3);
+        assert_eq!(response["summary"]["observedCount"], 0);
+        for resource in response["resources"].as_array().unwrap() {
+            assert_eq!(resource["disposition"], "protected");
+            assert_eq!(
+                resource["reasons"][0],
+                "installed_agent_browser_runtime_surface"
+            );
+        }
     }
 
     #[test]

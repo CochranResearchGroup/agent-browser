@@ -1387,7 +1387,7 @@ pub fn shared_profile_acquisition_result(input: SharedProfileAcquisitionResultIn
         "routeHintFields": input.route_hint_fields,
         "routeHintSource": input.route_hint_source,
         "controlSerialization": "service_queue",
-        "cleanupPolicy": "client_tab",
+        "cleanupPolicy": "close_tabs",
         "routeBound": input.route_bound,
         "routeId": input.route_id,
         "displayAllocationId": input.display_allocation_id,

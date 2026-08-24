@@ -1392,7 +1392,7 @@ pub(crate) fn external_byop_service_tab_handle(
         { "browserId" : browser_id, "sessionName" : session_id, "tabId" : tab_id,
         "targetId" : target_id, "url" : url, "title" : title, "profileId" : profile_id,
         "profileOrigin" : "external_byop", "leaseId" : session_id, "leaseState" :
-        "shared", "cleanupPolicy" : "detach", "leaseHeartbeatExpected" : true,
+        "shared", "cleanupPolicy" : "close_tabs", "leaseHeartbeatExpected" : true,
         "ownerSessionId" : session_id, "jobId" : Value::Null, "traceFilter" : {
         "browserId" : service_browser_id(session_id), "profileId" : profile_id,
         "sessionId" : session_id, }, "valid" : true, "staleReason" : Value::Null, }

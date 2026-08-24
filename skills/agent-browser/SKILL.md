@@ -2345,6 +2345,19 @@ private registry path only for isolated runtimes. Also set
 `AGENT_BROWSER_DASHBOARD_AUTH_DIR` for isolated dashboard fixtures so they do
 not read or rewrite user-scoped authentication files.
 
+Stable ingress keeps `POST /api/service/request` attached through the bounded
+`jobTimeoutMs` plus response grace. A delivered request that loses its backend
+response returns `mutation_outcome_unknown` with `retrySafe: false` and no
+`Retry-After` header. Do not blindly retry it. Inspect the retained job or
+service trace first.
+Service-owned tab handles and shared acquisition evidence both report
+`cleanupPolicy: close_tabs`. Use `tab_handle_release` to close that exact tab
+and preserve the shared browser process.
+
+Installed production and isolated development executables are protected
+runtime surfaces in `service resources`; their absence from production Service
+State alone is not unowned-process pressure.
+
 The split workstation service keeps `agent-browser-dashboard.service` as stable
 ingress and runs the generation backend in
 `agent-browser-dashboard-backend.service`. Current publishing preserves the

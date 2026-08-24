@@ -18,6 +18,9 @@ use tokio::time::timeout;
 pub(crate) const DASHBOARD_INGRESS_SCHEMA_VERSION: &str = "agent-browser.dashboard-ingress.v1";
 const DASHBOARD_INGRESS_FIRST_RESPONSE_TIMEOUT: Duration = Duration::from_secs(2);
 const DASHBOARD_INGRESS_HANDOFF_FIRST_RESPONSE_TIMEOUT: Duration = Duration::from_secs(65);
+const DASHBOARD_INGRESS_DEFAULT_SERVICE_JOB_TIMEOUT: Duration = Duration::from_secs(30);
+const DASHBOARD_INGRESS_SERVICE_RESPONSE_GRACE: Duration = Duration::from_secs(5);
+const DASHBOARD_INGRESS_MAX_SERVICE_FIRST_RESPONSE_TIMEOUT: Duration = Duration::from_secs(125);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -917,6 +920,7 @@ async fn proxy_ingress_request(client: &mut TcpStream, registry: &DashboardIngre
         }
     }
     let mut failures = Vec::new();
+    let mut mutation_outcome_unknown = false;
     for backend in attempts {
         match attempt_dashboard_backend(backend, &backend_request, first_response_timeout).await {
             Ok((mut connection, first_response)) => {
@@ -925,8 +929,23 @@ async fn proxy_ingress_request(client: &mut TcpStream, registry: &DashboardIngre
                 }
                 return;
             }
-            Err(error) => failures.push(format!("{}: {error}", backend.generation_id)),
+            Err(error) => {
+                mutation_outcome_unknown |= !retry_safe && error.request_may_have_been_delivered();
+                failures.push(format!("{}: {}", backend.generation_id, error.message()));
+            }
         }
+    }
+    if mutation_outcome_unknown {
+        write_ingress_mutation_outcome_unknown(
+            client,
+            &format!(
+                "selected dashboard generation {} accepted the request connection but did not return a bounded response: {}",
+                registry.selected_backend().generation_id,
+                failures.join("; ")
+            ),
+        )
+        .await;
+        return;
     }
     write_ingress_unavailable(
         client,
@@ -940,9 +959,27 @@ async fn proxy_ingress_request(client: &mut TcpStream, registry: &DashboardIngre
     .await;
 }
 
-/// Durable handoff resolution may use the backend's bounded 60-second service
-/// proxy while it proves the current owner and presentation generation. Keep
-/// ordinary ingress failures fast, but allow that exact action to finish.
+enum DashboardBackendAttemptError {
+    BeforeDelivery(String),
+    AfterDelivery(String),
+}
+
+impl DashboardBackendAttemptError {
+    fn request_may_have_been_delivered(&self) -> bool {
+        matches!(self, Self::AfterDelivery(_))
+    }
+
+    fn message(&self) -> &str {
+        match self {
+            Self::BeforeDelivery(message) | Self::AfterDelivery(message) => message,
+        }
+    }
+}
+
+/// Service requests may commit a mutation before the backend writes its first
+/// response byte. Keep ingress attached through the worker's bounded job
+/// timeout plus a small response grace so a committed request is not reported
+/// as a retryable backend failure.
 fn dashboard_ingress_first_response_timeout(request: &[u8]) -> Duration {
     if !request.starts_with(b"POST /api/service/request ") {
         return DASHBOARD_INGRESS_FIRST_RESPONSE_TIMEOUT;
@@ -954,18 +991,25 @@ fn dashboard_ingress_first_response_timeout(request: &[u8]) -> Duration {
     else {
         return DASHBOARD_INGRESS_FIRST_RESPONSE_TIMEOUT;
     };
-    let action = serde_json::from_slice::<serde_json::Value>(&request[body_offset..])
-        .ok()
-        .and_then(|payload| {
-            payload
-                .get("action")
-                .and_then(serde_json::Value::as_str)
-                .map(str::to_string)
-        });
-    if action.as_deref() == Some("service_remote_view_handoff_resolve") {
-        DASHBOARD_INGRESS_HANDOFF_FIRST_RESPONSE_TIMEOUT
+    let Some(payload) = serde_json::from_slice::<serde_json::Value>(&request[body_offset..]).ok()
+    else {
+        return DASHBOARD_INGRESS_FIRST_RESPONSE_TIMEOUT;
+    };
+    let requested_timeout = payload
+        .get("jobTimeoutMs")
+        .and_then(serde_json::Value::as_u64)
+        .filter(|timeout_ms| *timeout_ms > 0)
+        .map(Duration::from_millis)
+        .unwrap_or(DASHBOARD_INGRESS_DEFAULT_SERVICE_JOB_TIMEOUT);
+    let bounded_timeout = requested_timeout
+        .saturating_add(DASHBOARD_INGRESS_SERVICE_RESPONSE_GRACE)
+        .min(DASHBOARD_INGRESS_MAX_SERVICE_FIRST_RESPONSE_TIMEOUT);
+    if payload.get("action").and_then(serde_json::Value::as_str)
+        == Some("service_remote_view_handoff_resolve")
+    {
+        bounded_timeout.max(DASHBOARD_INGRESS_HANDOFF_FIRST_RESPONSE_TIMEOUT)
     } else {
-        DASHBOARD_INGRESS_FIRST_RESPONSE_TIMEOUT
+        bounded_timeout
     }
 }
 
@@ -1077,28 +1121,57 @@ async fn attempt_dashboard_backend(
     backend: &DashboardBackend,
     request: &[u8],
     first_response_timeout: Duration,
-) -> Result<(TcpStream, Vec<u8>), String> {
+) -> Result<(TcpStream, Vec<u8>), DashboardBackendAttemptError> {
     let mut connection = timeout(
         Duration::from_secs(2),
         TcpStream::connect(("127.0.0.1", backend.port)),
     )
     .await
-    .map_err(|_| "connect timed out".to_string())?
-    .map_err(|error| format!("connect failed: {error}"))?;
-    connection
-        .write_all(request)
-        .await
-        .map_err(|error| format!("request write failed: {error}"))?;
+    .map_err(|_| DashboardBackendAttemptError::BeforeDelivery("connect timed out".to_string()))?
+    .map_err(|error| {
+        DashboardBackendAttemptError::BeforeDelivery(format!("connect failed: {error}"))
+    })?;
+    connection.write_all(request).await.map_err(|error| {
+        DashboardBackendAttemptError::AfterDelivery(format!("request write failed: {error}"))
+    })?;
     let mut first_response = vec![0_u8; 8192];
     let count = timeout(first_response_timeout, connection.read(&mut first_response))
         .await
-        .map_err(|_| "first response byte timed out".to_string())?
-        .map_err(|error| format!("response read failed: {error}"))?;
+        .map_err(|_| {
+            DashboardBackendAttemptError::AfterDelivery("first response byte timed out".to_string())
+        })?
+        .map_err(|error| {
+            DashboardBackendAttemptError::AfterDelivery(format!("response read failed: {error}"))
+        })?;
     if count == 0 {
-        return Err("backend closed before returning a response".to_string());
+        return Err(DashboardBackendAttemptError::AfterDelivery(
+            "backend closed before returning a response".to_string(),
+        ));
     }
     first_response.truncate(count);
     Ok((connection, first_response))
+}
+
+async fn write_ingress_mutation_outcome_unknown(client: &mut TcpStream, message: &str) {
+    let body = serde_json::json!({
+        "success": false,
+        "error": "mutation_outcome_unknown",
+        "data": {
+            "dashboardIngressReady": true,
+            "operatorJourneyReady": false,
+            "state": "outcome_unknown",
+            "retrySafe": false,
+            "message": message,
+        }
+    })
+    .to_string();
+    let response = format!(
+        "HTTP/1.1 502 Bad Gateway\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        body.len(),
+        body
+    );
+    let _ = client.write_all(response.as_bytes()).await;
+    let _ = client.shutdown().await;
 }
 
 async fn proxy_ingress_connection(client: &mut TcpStream, backend: &mut TcpStream) {
@@ -1515,6 +1588,99 @@ mod tests {
                 .await
                 .is_err()
         );
+    }
+
+    #[tokio::test]
+    async fn delivered_mutation_without_backend_response_is_not_reported_retryable() {
+        let backend_listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let backend_port = backend_listener.local_addr().unwrap().port();
+        let registry = DashboardIngressRegistry::new(DashboardBackend::new(
+            "generation-selected",
+            backend_port,
+            "selected-manifest",
+        ));
+        let backend = tokio::spawn(async move {
+            let (mut connection, _) = backend_listener.accept().await.unwrap();
+            let request = read_initial_http_request(&mut connection).await.unwrap();
+            assert!(request.starts_with(b"POST /api/service/request "));
+        });
+        let ingress_listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let ingress_port = ingress_listener.local_addr().unwrap().port();
+        let ingress = tokio::spawn(async move {
+            let (mut connection, _) = ingress_listener.accept().await.unwrap();
+            proxy_ingress_request(&mut connection, &registry).await;
+        });
+        let mut client = TcpStream::connect(("127.0.0.1", ingress_port))
+            .await
+            .unwrap();
+        client
+            .write_all(
+                b"POST /api/service/request HTTP/1.1\r\nHost: localhost\r\nContent-Length: 2\r\n\r\n{}",
+            )
+            .await
+            .unwrap();
+        client.shutdown().await.unwrap();
+        let mut response = Vec::new();
+        client.read_to_end(&mut response).await.unwrap();
+
+        backend.await.unwrap();
+        ingress.await.unwrap();
+        let response = String::from_utf8(response).unwrap();
+        assert!(response.starts_with("HTTP/1.1 502"));
+        assert!(response.contains("mutation_outcome_unknown"));
+        assert!(response.contains("\"retrySafe\":false"));
+        assert!(!response.contains("Retry-After"));
+    }
+
+    #[tokio::test]
+    async fn committed_service_mutation_waits_for_its_bounded_backend_response() {
+        let backend_listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let backend_port = backend_listener.local_addr().unwrap().port();
+        let registry = DashboardIngressRegistry::new(DashboardBackend::new(
+            "generation-selected",
+            backend_port,
+            "selected-manifest",
+        ));
+        let backend = tokio::spawn(async move {
+            let (mut connection, _) = backend_listener.accept().await.unwrap();
+            let request = read_initial_http_request(&mut connection).await.unwrap();
+            assert!(request.starts_with(b"POST /api/service/request "));
+            tokio::time::sleep(Duration::from_millis(2_100)).await;
+            connection
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\nConnection: close\r\n\r\ncommitted",
+                )
+                .await
+                .unwrap();
+        });
+        let ingress_listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let ingress_port = ingress_listener.local_addr().unwrap().port();
+        let ingress = tokio::spawn(async move {
+            let (mut connection, _) = ingress_listener.accept().await.unwrap();
+            proxy_ingress_request(&mut connection, &registry).await;
+        });
+        let body = serde_json::json!({
+            "action": "tab_new",
+            "params": {"url": "about:blank"},
+            "jobTimeoutMs": 30_000,
+        })
+        .to_string();
+        let request = format!(
+            "POST /api/service/request HTTP/1.1\r\nHost: localhost\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        let mut client = TcpStream::connect(("127.0.0.1", ingress_port))
+            .await
+            .unwrap();
+        client.write_all(request.as_bytes()).await.unwrap();
+        client.shutdown().await.unwrap();
+        let mut response = Vec::new();
+        client.read_to_end(&mut response).await.unwrap();
+
+        backend.await.unwrap();
+        ingress.await.unwrap();
+        assert!(response.ends_with(b"committed"));
     }
 
     #[tokio::test]

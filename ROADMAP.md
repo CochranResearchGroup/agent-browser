@@ -1,23 +1,42 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-08-23
+Updated: 2026-08-24
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
 
+## P129 | Request Delivery, Lifecycle Projection, And Cleanup Repair
+
+State: IN PROGRESS
+Current state: live evidence proved that the stable dashboard ingress can
+return a retryable 503 after a non-retry-safe service mutation has already
+completed. The same proof exposed duplicate cold-start targets, contradictory
+tab cleanup policy, hidden terminal-replacement identity, unexplained
+nonterminal cleanup obligations, false unowned-process pressure, and a split
+historical QBO identity. Source repair is beginning on current main; no new
+runtime candidate has been built or installed.
+
+### Plan
+
+- `docs/dev/plans/0129-2026-08-24-request-lifecycle-and-cleanup-repair-plan.md`
+
+### Next Recommendation
+
+Complete the delayed-backend red-green ingress slice first. Do not retry a
+timed-out mutation or start workstation apply until at-most-once delivery is
+proven through the public ingress.
+
 ## P128 | Runtime Lifecycle Hotfix Collection
 
-State: OPEN
-Current state: the accepted absent-closing repairs are reconciled with current
-main. Newly owned launch persistence now rolls back exactly on registration
-failure, missing browser/session projection recovery remains fenced by durable
-handoff plus process and runtime-profile identity, and a quiescent historical
-stopped supervisor is advisory while live or drifted supervisor failures remain
-blocking. Focused Rust, strict Clippy, workstation fixture, documentation, and
-contract validation pass. Transactional installation and harmless live BILL
-profile acceptance remain pending.
+State: ACCEPTED
+Current state: the lifecycle repairs are integrated through current main and
+installed as generation `0.28.0-6b461233692c-7e71e8fd473b`. Transactional
+workstation acceptance, provider-free BILL replacement, exact process exit,
+profile-lock release, rollback readiness, and warning-only historical
+supervisor classification passed. P129 owns newly observed request-delivery,
+projection, and cleanup defects.
 
 ### Plan
 
@@ -25,8 +44,8 @@ profile acceptance remain pending.
 
 ### Next Recommendation
 
-Integrate the reviewed hotfix source into protected main, then build the exact
-candidate and admit workstation apply only after a stable transactional census.
+Preserve P128 as the accepted lifecycle foundation and route follow-up work
+through P129.
 
 ## P127 | Development Presentation Provider Isolation
 

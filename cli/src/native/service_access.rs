@@ -1414,7 +1414,7 @@ fn profile_reuse_decision(
             "requiresRouteHints": recommended_action == "reuse_existing_browser",
             "routeHintFields": if recommended_action == "reuse_existing_browser" { json!(["browserId", "sessionName"]) } else { json!([]) },
             "controlSerialization": "service_queue",
-            "cleanupPolicy": "client_tab",
+            "cleanupPolicy": "close_tabs",
             "duplicateProcessAllowed": false,
         },
         "maxConcurrentTabs": Value::Null,

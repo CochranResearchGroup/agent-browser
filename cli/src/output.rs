@@ -6178,6 +6178,13 @@ Usage:
   agent-browser service profiles lookup [--search <text>] [--hostname <host>] [--profile-id <id>] [--profile-name <name>] [--service-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--authentication-state <state>] [--freshness-state <state>] [--tag <tag>] [--url <url>] [--browser-build <build>]
   agent-browser service sessions
   agent-browser service browsers
+
+Resource census protects recognized production and isolated development install
+surfaces. Stable dashboard ingress waits through service jobTimeoutMs plus
+response grace; an indeterminate delivered mutation returns
+mutation_outcome_unknown with retrySafe=false and must be inspected before retry.
+Service-owned tab handles use cleanupPolicy=close_tabs; tab_handle_release closes
+the exact client tab and preserves the shared browser process.
   agent-browser service tabs
   agent-browser service monitors --summary --failed
   agent-browser service monitors run-due

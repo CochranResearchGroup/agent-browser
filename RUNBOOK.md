@@ -4,6 +4,39 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 186 | 2026-08-24
+
+Scope: open and execute P129 for request delivery, lifecycle projection, and
+reviewed runtime cleanup, followed by one transactional workstation upgrade.
+
+Actions:
+
+- re-anchored current main, installed generation, doctor, lifecycle, resource,
+  supervisor, QBO, and BILL-profile evidence;
+- confirmed every existing secondary worktree branch is already integrated
+  into `origin/main` and left those worktrees plus the isolated development
+  runtime unchanged;
+- reproduced that non-retry-safe dashboard ingress requests can return a
+  retryable 503 after their backend jobs complete;
+- recorded duplicate cold-start targets, cleanup-policy disagreement, hidden
+  terminal replacement evidence, nonterminal lifecycle debt, resource
+  misclassification, and split QBO identity as P129 acceptance criteria.
+
+Validation:
+
+- Graphiti runtime and MCP are healthy, but current P128/P129 recall is not
+  useful; repository and live runtime evidence remain authoritative;
+- policy selection classifies the repo as an operations platform and the
+  goal-execution audit passes;
+- production remains on the accepted P128 generation and no new install,
+  provider, profile, or cleanup effect has occurred in this turn.
+
+Result:
+
+- P129 is `source_repair_in_progress`;
+- the delayed-backend at-most-once regression is the first implementation
+  slice.
+
 ## Turn 185 | 2026-08-23
 
 Scope: reconcile and source-accept the P128 runtime lifecycle hotfix collection

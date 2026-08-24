@@ -292,6 +292,7 @@ fn test_tab_new_shared_acquisition_evidence_reports_reused_route_hints() {
     assert_eq!(evidence["waitedForProfileLease"], false);
     assert_eq!(evidence["rejectedDuplicateProcess"], false);
     assert_eq!(evidence["duplicateProcessAllowed"], false);
+    assert_eq!(evidence["cleanupPolicy"], "close_tabs");
     assert_eq!(
         evidence["duplicateProcessPolicy"],
         "reject_duplicate_process"

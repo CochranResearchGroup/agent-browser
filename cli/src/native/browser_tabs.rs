@@ -81,7 +81,7 @@ pub(crate) mod action_commands {
                 state.session_id.clone(), "tabId" : tab_id, "targetId" : target_id, "url"
                 : current_url, "title" : title, "profileId" : profile_id.clone(),
                 "profileOrigin" : "agent_browser_owned", "leaseId" : state.session_id
-                .clone(), "leaseState" : "shared", "cleanupPolicy" : "detach",
+                .clone(), "leaseState" : "shared", "cleanupPolicy" : "close_tabs",
                 "leaseHeartbeatExpected" : true, "ownerSessionId" : state.session_id
                 .clone(), "jobId" : Value::Null, "traceFilter" : { "browserId" :
                 service_browser_id(& state.session_id), "profileId" : profile_id.clone(),

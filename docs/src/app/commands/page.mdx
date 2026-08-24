@@ -1246,6 +1246,18 @@ receipt. Set `AGENT_BROWSER_DASHBOARD_INGRESS_STATE` only to isolate the
 private registry for a dedicated runtime. Set
 `AGENT_BROWSER_DASHBOARD_AUTH_DIR` for fixture-owned authentication files.
 
+For `POST /api/service/request`, ingress waits through the request's bounded
+`jobTimeoutMs` plus response grace. If the backend accepted delivery but did
+not return a response, ingress returns `mutation_outcome_unknown` with
+`retrySafe: false` and no `Retry-After` header. Inspect the retained job or
+trace before issuing another mutation. Installed production and isolated
+development Agent Browser executables are protected runtime surfaces in the
+resource census and do not count as unowned pressure solely because production
+Service State does not correlate them.
+Service-owned tab handles and shared acquisition evidence both use
+`cleanupPolicy: close_tabs`; `tab_handle_release` closes the exact client tab
+while preserving the shared browser process.
+
 For Linux hosts where an ingress route depends on the dashboard being
 available after login or restart, install the user-scoped systemd unit:
 

@@ -283,7 +283,7 @@ pub(crate) fn route_bound_open_reused_target_result(
         { "browserId" : browser_id, "sessionName" : session_id, "tabId" :
         format!("target:{target_id}"), "targetId" : target_id, "url" : url, "title" :
         title, "profileId" : profile_id, "profileOrigin" : "agent_browser_owned",
-        "leaseId" : session_id, "leaseState" : "shared", "cleanupPolicy" : "detach",
+        "leaseId" : session_id, "leaseState" : "shared", "cleanupPolicy" : "close_tabs",
         "leaseHeartbeatExpected" : true, "ownerSessionId" : session_id, "jobId" :
         Value::Null, "traceFilter" : { "browserId" : browser_id, "profileId" :
         profile_id, "sessionId" : session_id, "serviceName" :
