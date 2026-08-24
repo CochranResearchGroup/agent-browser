@@ -456,7 +456,16 @@ function waitForRouteDisplay(route, index) {
 
 function inspectRouteDisplays() {
   const scriptRoot = process.env.AGENT_BROWSER_REMOTE_VIEW_SCRIPT_ROOT || 'scripts';
-  const result = commandResult(process.execPath, [join(scriptRoot, 'inspect-rdp-route-displays.js'), '--display-content']);
+  const result = commandResult(
+    process.execPath,
+    [join(scriptRoot, 'inspect-rdp-route-displays.js'), '--display-content'],
+    {
+      env: {
+        ...process.env,
+        AGENT_BROWSER_ROUTE_DISPLAY_ALLOW_SINGLE_ROUTE: allowSingleRoute ? '1' : '0',
+      },
+    },
+  );
   const parsed = parseJson(result.stdout, 'route display inspector');
   return {
     exitCode: result.status,

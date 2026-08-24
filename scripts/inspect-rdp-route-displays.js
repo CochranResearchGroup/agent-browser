@@ -12,6 +12,7 @@ const existingUser = process.env.AGENT_BROWSER_RDP_EXISTING_USERNAME ||
   'agent-browser-rdp';
 const shellOutput = process.argv.includes('--shell');
 const includeWindows = process.argv.includes('--windows') || process.argv.includes('--display-content');
+const allowSingleRoute = process.env.AGENT_BROWSER_ROUTE_DISPLAY_ALLOW_SINGLE_ROUTE === '1';
 
 function commandResult(command, args) {
   return spawnSync(command, args, {
@@ -165,7 +166,7 @@ const routeInventory = configuredRoutes.map((route, index) => {
   });
 });
 const displays = routeInventory.map((route) => route.displayName).filter(Boolean);
-const success = routeInventory.length >= 2 &&
+const success = routeInventory.length >= (allowSingleRoute ? 1 : 2) &&
   displays.length === routeInventory.length &&
   new Set(displays).size === displays.length;
 const legacyRouteSpecificUsers = Object.fromEntries(

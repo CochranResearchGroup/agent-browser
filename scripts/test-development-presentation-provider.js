@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -100,6 +100,34 @@ try {
   ], { encoding: 'utf8', env: routeOpenerEnv });
   assert.equal(acceptedLifecycleRoute.status, 0);
   assert.equal(JSON.parse(acceptedLifecycleRoute.stdout).selectedRoutes.length, 1);
+  const fixtureBin = join(fixture, 'bin');
+  mkdirSync(fixtureBin, { recursive: true });
+  const fixturePs = join(fixtureBin, 'ps');
+  writeFileSync(fixturePs, [
+    '#!/bin/sh',
+    "printf '%s\\n' 'agent-browser-rdp-dev-5 4242 Xorg /usr/lib/xorg/Xorg :16 -auth .Xauthority'",
+    '',
+  ].join('\n'));
+  chmodSync(fixturePs, 0o755);
+  const rejectedSingleDisplay = spawnSync(process.execPath, [
+    'scripts/inspect-rdp-route-displays.js',
+  ], {
+    encoding: 'utf8',
+    env: { ...routeOpenerEnv, PATH: `${fixtureBin}:${process.env.PATH}` },
+  });
+  assert.equal(rejectedSingleDisplay.status, 1);
+  const acceptedSingleDisplay = spawnSync(process.execPath, [
+    'scripts/inspect-rdp-route-displays.js',
+  ], {
+    encoding: 'utf8',
+    env: {
+      ...routeOpenerEnv,
+      PATH: `${fixtureBin}:${process.env.PATH}`,
+      AGENT_BROWSER_ROUTE_DISPLAY_ALLOW_SINGLE_ROUTE: '1',
+    },
+  });
+  assert.equal(acceptedSingleDisplay.status, 0);
+  assert.equal(JSON.parse(acceptedSingleDisplay.stdout).routeInventory[0].displayName, ':16');
   const plan = developmentPresentationProviderDeploymentPlan(descriptor);
   assert.equal(plan.schemaVersion, DEVELOPMENT_PRESENTATION_DEPLOYMENT_SCHEMA);
   assert.equal(plan.environment, 'development');
