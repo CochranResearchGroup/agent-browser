@@ -4,7 +4,7 @@ Date: 2026-08-23
 
 State: IN PROGRESS
 
-Execution state: `slice_g_configured_scene_capture_source_accepted_product_composition_missing`
+Execution state: `slice_g_unstaged_scene_composition_source_accepted_product_action_missing`
 
 Lane: P124
 
@@ -395,9 +395,17 @@ frame receipt evidence without focusing or rearranging the desktop. Missing
 authoritative stacking, unowned occlusion, binding drift, or frame drift fails
 closed and releases capacity. Source evidence is recorded in
 `docs/dev/notes/0124-12-2026-08-24-configured-scene-capture-source-acceptance.md`.
-The remaining installed boundary is the configured paired CDP, staging,
-verification, handoff, release, and cleanup composition behind one product
-caller plus its human, viewer, CDP, and retained-browser acceptance.
+The coordinator now distinguishes a generic stacking or occlusion scene from
+a browser-external prompt. The configured observation-only composition has
+authority-checked snapshot, verification, no-op restoration, existing-handoff,
+release, and cleanup adapters. Generic scene observation does not fabricate a
+paired-CDP receipt, popup trigger, or staging effect. Configured staging stays
+fail-closed until exact native snapshot and restoration exist. Source evidence
+is recorded in
+`docs/dev/notes/0124-13-2026-08-24-unstaged-scene-composition-source-acceptance.md`.
+The remaining installed boundary is one task-shaped product action, exact
+active-presentation reservation, paired CDP and staged browser-external
+composition, plus human, viewer, CDP, and retained-browser acceptance.
 Configured production input remains outside this plan's live authority until
 Plan 0110 is independently accepted.
 

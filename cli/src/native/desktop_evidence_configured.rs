@@ -3,9 +3,11 @@ use super::desktop_capture::{
     DesktopCaptureBinding, DesktopCaptureRequest, DesktopCaptureResult, DEFAULT_MAX_BYTES,
 };
 use super::desktop_evidence::{
-    CaptureReadyEvidence, CaptureReadyProof, ControllerPosture, DesktopEpisodeAdapterFailure,
-    DesktopEpisodeAdmissionFailure, DesktopFrameAdapter, PresentationSlotAdapter,
-    SceneAdmissionRequest, ViewerPosture, WindowSemanticAdapter,
+    CaptureReadyEvidence, CaptureReadyProof, CdpEvidenceAdapter, CdpEvidenceReceipt,
+    ControllerPosture, DesktopEpisodeAdapterFailure, DesktopEpisodeAdmissionFailure,
+    DesktopFrameAdapter, DesktopInputAdapter, EpisodeCleanupAdapter, EpisodeVerificationAdapter,
+    ExternalUiTriggerAdapter, HumanHandoffAdapter, PresentationSlotAdapter, RestorationAuthority,
+    SceneAdmissionRequest, SceneStagingAdapter, ViewerPosture, WindowSemanticAdapter,
 };
 use super::presentation_capacity::{
     CapacityDecision, PresentationRequest, PresentationSlotState, PressureAdmission,
@@ -54,6 +56,255 @@ pub(crate) struct ConfiguredWindowSemanticAdapter<R> {
     repository: R,
     request_id: String,
     probe: Box<dyn SceneProbe>,
+}
+
+/// Restoration authority for configured observation-only episodes. The
+/// current product path never stages a scene, so restore is an explicit no-op.
+/// A future staged provider must replace the fail-closed `stage` branch and
+/// retain the exact prior native window state before mutation.
+pub(crate) struct ConfiguredSceneStagingAdapter<R> {
+    repository: R,
+    request_id: String,
+    snapshot: Option<RestorationAuthority>,
+    staged: bool,
+}
+
+impl<R> ConfiguredSceneStagingAdapter<R>
+where
+    R: ServiceStateRepository,
+{
+    pub(crate) fn new(repository: R, request_id: impl Into<String>) -> Self {
+        Self {
+            repository,
+            request_id: request_id.into(),
+            snapshot: None,
+            staged: false,
+        }
+    }
+
+    fn current(
+        &self,
+        browser_id: &str,
+    ) -> Result<(String, RestorationAuthority), DesktopEpisodeAdapterFailure> {
+        let state = self.repository.load_snapshot().map_err(|error| {
+            DesktopEpisodeAdapterFailure::new(
+                "scene_restoration",
+                "desktop_scene_state_unavailable",
+                error,
+            )
+        })?;
+        let scene = resolve_scene_authority(&state, browser_id).map_err(|error| {
+            DesktopEpisodeAdapterFailure::new(
+                "scene_restoration",
+                "desktop_scene_binding_unavailable",
+                error,
+            )
+        })?;
+        let reserved =
+            resolve_reserved_scene_authority(&state, scene, &self.request_id).map_err(|error| {
+                DesktopEpisodeAdapterFailure::new(
+                    "scene_restoration",
+                    "desktop_scene_reservation_unavailable",
+                    error,
+                )
+            })?;
+        let route = state
+            .remote_view_routes
+            .get(&reserved.scene.binding.route_id)
+            .ok_or_else(|| {
+                DesktopEpisodeAdapterFailure::new(
+                    "scene_restoration",
+                    "desktop_scene_route_unavailable",
+                    "the exact scene route disappeared",
+                )
+            })?;
+        let route_generation = format!(
+            "route:{}:{}:{}",
+            route.id,
+            route.controller_epoch,
+            route.connection_id.as_deref().unwrap_or("none")
+        );
+        let controller_generation = format!(
+            "controller:{}:{}",
+            route.controller_epoch,
+            route.controller_lease_id.as_deref().unwrap_or("none")
+        );
+        Ok((
+            reserved.scene_generation.clone(),
+            RestorationAuthority::new(
+                reserved.scene_generation,
+                route_generation,
+                controller_generation,
+            ),
+        ))
+    }
+}
+
+impl<R> SceneStagingAdapter for ConfiguredSceneStagingAdapter<R>
+where
+    R: ServiceStateRepository,
+{
+    fn snapshot(
+        &mut self,
+        browser_id: &str,
+    ) -> Result<(String, RestorationAuthority), DesktopEpisodeAdapterFailure> {
+        let (scene_generation, authority) = self.current(browser_id)?;
+        self.snapshot = Some(authority.clone());
+        Ok((scene_generation, authority))
+    }
+
+    fn stage(&mut self, _browser_id: &str) -> Result<String, DesktopEpisodeAdapterFailure> {
+        Err(DesktopEpisodeAdapterFailure::new(
+            "scene_staging",
+            "desktop_scene_staging_provider_unavailable",
+            "configured scene staging remains unavailable until exact native snapshot and restoration are implemented",
+        ))
+    }
+
+    fn current_authority(
+        &mut self,
+        browser_id: &str,
+    ) -> Result<RestorationAuthority, DesktopEpisodeAdapterFailure> {
+        self.current(browser_id).map(|(_, authority)| authority)
+    }
+
+    fn restore(&mut self, _browser_id: &str) -> Result<String, DesktopEpisodeAdapterFailure> {
+        if self.staged {
+            return Err(DesktopEpisodeAdapterFailure::new(
+                "scene_restoration",
+                "desktop_scene_restoration_provider_unavailable",
+                "a staged scene cannot be restored without the configured native provider",
+            ));
+        }
+        if self.snapshot.is_none() {
+            return Err(DesktopEpisodeAdapterFailure::new(
+                "scene_restoration",
+                "desktop_scene_snapshot_missing",
+                "scene restoration was requested without a recorded authority snapshot",
+            ));
+        }
+        Ok(format!("scene-restoration-noop:{}", self.request_id))
+    }
+}
+
+pub(crate) struct ConfiguredEpisodeVerificationAdapter<R> {
+    repository: R,
+    request_id: String,
+}
+
+impl<R> ConfiguredEpisodeVerificationAdapter<R>
+where
+    R: ServiceStateRepository,
+{
+    pub(crate) fn new(repository: R, request_id: impl Into<String>) -> Self {
+        Self {
+            repository,
+            request_id: request_id.into(),
+        }
+    }
+}
+
+impl<R> EpisodeVerificationAdapter for ConfiguredEpisodeVerificationAdapter<R>
+where
+    R: ServiceStateRepository,
+{
+    fn verify(
+        &mut self,
+        browser_id: &str,
+    ) -> Result<(String, String), DesktopEpisodeAdapterFailure> {
+        let state = self.repository.load_snapshot().map_err(|error| {
+            DesktopEpisodeAdapterFailure::new(
+                "episode_verification",
+                "desktop_scene_state_unavailable",
+                error,
+            )
+        })?;
+        let scene = resolve_scene_authority(&state, browser_id).map_err(|error| {
+            DesktopEpisodeAdapterFailure::new(
+                "episode_verification",
+                "desktop_scene_binding_unavailable",
+                error,
+            )
+        })?;
+        let reserved =
+            resolve_reserved_scene_authority(&state, scene, &self.request_id).map_err(|error| {
+                DesktopEpisodeAdapterFailure::new(
+                    "episode_verification",
+                    "desktop_scene_reservation_unavailable",
+                    error,
+                )
+            })?;
+        Ok((
+            format!(
+                "episode-verification:{}:{}",
+                self.request_id, reserved.scene_generation
+            ),
+            reserved.scene_generation,
+        ))
+    }
+}
+
+pub(crate) struct ConfiguredUnusedCdpAdapter;
+
+impl CdpEvidenceAdapter for ConfiguredUnusedCdpAdapter {
+    fn collect_page(&mut self, browser_id: &str) -> CdpEvidenceReceipt {
+        CdpEvidenceReceipt {
+            receipt_id: format!("cdp-delegation:{browser_id}"),
+        }
+    }
+
+    fn confirm_browser_external_absent(&mut self, browser_id: &str) -> String {
+        format!("paired-cdp-provider-unavailable:{browser_id}")
+    }
+}
+
+pub(crate) struct ConfiguredUnusedTriggerAdapter;
+
+impl ExternalUiTriggerAdapter for ConfiguredUnusedTriggerAdapter {
+    fn trigger(&mut self, browser_id: &str) -> String {
+        format!("desktop-trigger-unavailable:{browser_id}")
+    }
+}
+
+pub(crate) struct ConfiguredBlockedInputAdapter;
+
+impl DesktopInputAdapter for ConfiguredBlockedInputAdapter {
+    fn apply(&mut self, browser_id: &str, _authority_receipt_id: &str) -> String {
+        format!("desktop-input-blocked:{browser_id}")
+    }
+}
+
+pub(crate) struct ConfiguredExistingHandoffAdapter {
+    handoff_receipt_id: String,
+}
+
+impl ConfiguredExistingHandoffAdapter {
+    pub(crate) fn from_state(state: &ServiceState, browser_id: &str) -> Self {
+        let handoff_receipt_id = state
+            .remote_view_handoffs
+            .values()
+            .filter(|handoff| handoff.browser_id.as_deref() == Some(browser_id))
+            .filter(|handoff| matches!(handoff.state.as_str(), "ready" | "resolving" | "active"))
+            .map(|handoff| handoff.id.as_str())
+            .min()
+            .map(|handoff_id| format!("durable-handoff:{handoff_id}"))
+            .unwrap_or_else(|| "durable-handoff-unavailable".to_string());
+        Self { handoff_receipt_id }
+    }
+}
+
+impl HumanHandoffAdapter for ConfiguredExistingHandoffAdapter {
+    fn prepare(&mut self, _browser_id: &str, _reason: &'static str) -> String {
+        self.handoff_receipt_id.clone()
+    }
+}
+
+pub(crate) struct ConfiguredEpisodeCleanupAdapter;
+
+impl EpisodeCleanupAdapter for ConfiguredEpisodeCleanupAdapter {
+    fn complete(&mut self, episode_id: &str) -> String {
+        format!("episode-cleanup:{episode_id}")
+    }
 }
 
 impl<R> ConfiguredWindowSemanticAdapter<R>
@@ -190,7 +441,20 @@ where
     }
 }
 
-pub(crate) struct ConfiguredDesktopFrameAdapter;
+#[derive(Default)]
+pub(crate) struct ConfiguredDesktopFrameAdapter {
+    capture: Option<DesktopCaptureResult>,
+}
+
+impl ConfiguredDesktopFrameAdapter {
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    pub(crate) fn take_capture(&mut self) -> Option<DesktopCaptureResult> {
+        self.capture.take()
+    }
+}
 
 impl DesktopFrameAdapter for ConfiguredDesktopFrameAdapter {
     fn capture(
@@ -210,7 +474,9 @@ impl DesktopFrameAdapter for ConfiguredDesktopFrameAdapter {
                 error.to_string(),
             )
         })?;
-        validate_configured_capture(proof, &capture)
+        let receipt_id = validate_configured_capture(proof, &capture)?;
+        self.capture = Some(capture);
+        Ok(receipt_id)
     }
 }
 
@@ -866,5 +1132,49 @@ mod tests {
         let failure = validate_configured_capture(&proof, &capture).unwrap_err();
         assert_eq!(failure.phase, "desktop_frame_capture");
         assert_eq!(failure.code, "desktop_frame_binding_drift");
+    }
+
+    #[test]
+    fn configured_unstaged_scene_restoration_is_an_authority_checked_noop() {
+        let repository = MemoryRepository::new(configured_scene_state(false, false));
+        let mut adapter = ConfiguredSceneStagingAdapter::new(repository.clone(), "episode-1");
+
+        let (before_generation, recorded) = adapter.snapshot("browser-1").unwrap();
+        let current = adapter.current_authority("browser-1").unwrap();
+
+        assert_eq!(before_generation, "scene:slot-1:7");
+        assert_eq!(recorded, current);
+        assert_eq!(
+            adapter.restore("browser-1").unwrap(),
+            "scene-restoration-noop:episode-1"
+        );
+        let snapshot = repository.load_snapshot().unwrap();
+        assert_eq!(
+            snapshot.presentation_capacity.unwrap().slots[0].state,
+            PresentationSlotState::Reserved
+        );
+    }
+
+    #[test]
+    fn configured_staging_remains_fail_closed_until_exact_restore_exists() {
+        let repository = MemoryRepository::new(configured_scene_state(false, false));
+        let mut adapter = ConfiguredSceneStagingAdapter::new(repository, "episode-1");
+        adapter.snapshot("browser-1").unwrap();
+
+        let failure = adapter.stage("browser-1").unwrap_err();
+
+        assert_eq!(failure.phase, "scene_staging");
+        assert_eq!(failure.code, "desktop_scene_staging_provider_unavailable");
+    }
+
+    #[test]
+    fn configured_verification_rechecks_the_reserved_scene_generation() {
+        let repository = MemoryRepository::new(configured_scene_state(false, false));
+        let mut adapter = ConfiguredEpisodeVerificationAdapter::new(repository, "episode-1");
+
+        let (receipt_id, scene_generation) = adapter.verify("browser-1").unwrap();
+
+        assert_eq!(receipt_id, "episode-verification:episode-1:scene:slot-1:7");
+        assert_eq!(scene_generation, "scene:slot-1:7");
     }
 }

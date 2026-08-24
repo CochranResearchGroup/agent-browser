@@ -16,6 +16,12 @@ pub(crate) enum BrowserExternalSurface {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub(crate) enum DesktopSceneSurface {
+    StackingOrOcclusion,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub(crate) enum DiagnosticFailure {
     CdpTimeout,
 }
@@ -35,6 +41,7 @@ pub(crate) enum SupportedCdpSurface {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum EvidenceRequest {
     Page(PageEvidenceSurface),
+    DesktopScene(DesktopSceneSurface),
     BrowserExternal {
         surface: BrowserExternalSurface,
         stage_before_trigger: bool,
@@ -57,6 +64,10 @@ impl EvidenceRequest {
             surface,
             stage_before_trigger,
         }
+    }
+
+    pub(crate) fn desktop_scene(surface: DesktopSceneSurface) -> Self {
+        Self::DesktopScene(surface)
     }
 
     pub(crate) fn diagnostic_failure(failure: DiagnosticFailure) -> Self {
@@ -85,6 +96,7 @@ pub(crate) enum EvidenceOutcome {
 #[serde(rename_all = "snake_case")]
 pub(crate) enum EvidenceDecisionReason {
     PageEvidenceAvailableThroughCdp,
+    DesktopSceneRequiresDesktop,
     BrowserExternalSurfaceRequiresDesktop,
     DiagnosticFailureDoesNotAuthorizeDesktop,
     SensitiveSurfaceRequiresHumanContinuation,
@@ -98,6 +110,7 @@ pub(crate) struct EvidenceDecision {
     pub(crate) presentation_slot_required: bool,
     pub(crate) paired_page_absence_required: bool,
     pub(crate) stage_before_trigger: bool,
+    pub(crate) trigger_required: bool,
     pub(crate) reason: EvidenceDecisionReason,
 }
 
@@ -313,8 +326,10 @@ pub(crate) struct DesktopEvidenceEpisodeReceipt {
     pub(crate) admission_receipt_id: String,
     pub(crate) before_scene_generation: String,
     pub(crate) stage_receipt_id: Option<String>,
-    pub(crate) page_absence_receipt_id: String,
-    pub(crate) trigger_receipt_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) page_absence_receipt_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) trigger_receipt_id: Option<String>,
     pub(crate) capture_proof: CaptureReadyProof,
     pub(crate) capture_receipt_id: String,
     pub(crate) input_receipt_id: Option<String>,
@@ -465,10 +480,16 @@ pub(crate) trait PresentationSlotAdapter {
 }
 
 pub(crate) trait SceneStagingAdapter {
-    fn snapshot(&mut self, browser_id: &str) -> (String, RestorationAuthority);
-    fn stage(&mut self, browser_id: &str) -> String;
-    fn current_authority(&mut self, browser_id: &str) -> RestorationAuthority;
-    fn restore(&mut self, browser_id: &str) -> String;
+    fn snapshot(
+        &mut self,
+        browser_id: &str,
+    ) -> Result<(String, RestorationAuthority), DesktopEpisodeAdapterFailure>;
+    fn stage(&mut self, browser_id: &str) -> Result<String, DesktopEpisodeAdapterFailure>;
+    fn current_authority(
+        &mut self,
+        browser_id: &str,
+    ) -> Result<RestorationAuthority, DesktopEpisodeAdapterFailure>;
+    fn restore(&mut self, browser_id: &str) -> Result<String, DesktopEpisodeAdapterFailure>;
 }
 
 pub(crate) trait WindowSemanticAdapter {
@@ -500,7 +521,10 @@ pub(crate) trait DesktopInputAdapter {
 }
 
 pub(crate) trait EpisodeVerificationAdapter {
-    fn verify(&mut self, browser_id: &str) -> (String, String);
+    fn verify(
+        &mut self,
+        browser_id: &str,
+    ) -> Result<(String, String), DesktopEpisodeAdapterFailure>;
 }
 
 pub(crate) trait HumanHandoffAdapter {
@@ -631,14 +655,50 @@ impl DesktopEvidenceCoordinator {
             Err(failure) => return DesktopEpisodeOutcome::AdmissionUnavailable { failure },
         };
         let (before_scene_generation, restoration_authority) =
-            adapters.staging.snapshot(&request.browser_id);
-        let stage_receipt_id = decision
-            .stage_before_trigger
-            .then(|| adapters.staging.stage(&request.browser_id));
-        let page_absence_receipt_id = adapters
-            .cdp
-            .confirm_browser_external_absent(&request.browser_id);
-        let trigger_receipt_id = adapters.trigger.trigger(&request.browser_id);
+            match adapters.staging.snapshot(&request.browser_id) {
+                Ok(snapshot) => snapshot,
+                Err(failure) => {
+                    return Self::abort_after_reservation(
+                        &request,
+                        decision,
+                        admission_receipt_id,
+                        "scene-snapshot-unavailable".to_string(),
+                        None,
+                        DesktopEpisodeFailure::Adapter(failure),
+                        &RestorationAuthority::new("", "", ""),
+                        false,
+                        adapters,
+                    );
+                }
+            };
+        let stage_receipt_id = if decision.stage_before_trigger {
+            match adapters.staging.stage(&request.browser_id) {
+                Ok(receipt_id) => Some(receipt_id),
+                Err(failure) => {
+                    return Self::abort_after_reservation(
+                        &request,
+                        decision,
+                        admission_receipt_id,
+                        before_scene_generation,
+                        None,
+                        DesktopEpisodeFailure::Adapter(failure),
+                        &restoration_authority,
+                        true,
+                        adapters,
+                    );
+                }
+            }
+        } else {
+            None
+        };
+        let page_absence_receipt_id = decision.paired_page_absence_required.then(|| {
+            adapters
+                .cdp
+                .confirm_browser_external_absent(&request.browser_id)
+        });
+        let trigger_receipt_id = decision
+            .trigger_required
+            .then(|| adapters.trigger.trigger(&request.browser_id));
 
         let capture_proof = match adapters.windows.capture_ready(&request.browser_id) {
             Err(failure) => {
@@ -700,7 +760,22 @@ impl DesktopEvidenceCoordinator {
             EpisodeInput::ConfiguredProduction => unreachable!(),
         };
         let (verification_receipt_id, after_scene_generation) =
-            adapters.verification.verify(&request.browser_id);
+            match adapters.verification.verify(&request.browser_id) {
+                Ok(verification) => verification,
+                Err(failure) => {
+                    return Self::abort_after_reservation(
+                        &request,
+                        decision,
+                        admission_receipt_id,
+                        before_scene_generation,
+                        stage_receipt_id,
+                        DesktopEpisodeFailure::Adapter(failure),
+                        &restoration_authority,
+                        true,
+                        adapters,
+                    );
+                }
+            };
         let after_capture_proof = match adapters.windows.capture_ready(&request.browser_id) {
             Err(failure) => {
                 return Self::abort_after_reservation(
@@ -745,11 +820,38 @@ impl DesktopEvidenceCoordinator {
                 }
             },
         };
-        let current_authority = adapters.staging.current_authority(&request.browser_id);
+        let current_authority = match adapters.staging.current_authority(&request.browser_id) {
+            Ok(authority) => authority,
+            Err(failure) => {
+                return Self::abort_after_reservation(
+                    &request,
+                    decision,
+                    admission_receipt_id,
+                    before_scene_generation,
+                    stage_receipt_id,
+                    DesktopEpisodeFailure::Adapter(failure),
+                    &restoration_authority,
+                    false,
+                    adapters,
+                );
+            }
+        };
         let restoration_decision =
             Self::authorize_restoration(&restoration_authority, &current_authority);
         if restoration_decision == RestorationDecision::Restore {
-            adapters.staging.restore(&request.browser_id);
+            if let Err(failure) = adapters.staging.restore(&request.browser_id) {
+                return Self::abort_after_reservation(
+                    &request,
+                    decision,
+                    admission_receipt_id,
+                    before_scene_generation,
+                    stage_receipt_id,
+                    DesktopEpisodeFailure::Adapter(failure),
+                    &restoration_authority,
+                    false,
+                    adapters,
+                );
+            }
         }
         let slot_release_receipt_id = match adapters.slots.release(&request.browser_id) {
             Ok(receipt_id) => receipt_id,
@@ -801,13 +903,16 @@ impl DesktopEvidenceCoordinator {
         adapters: &mut DesktopEpisodeAdapters<'_>,
     ) -> DesktopEpisodeOutcome {
         let restoration_decision = if restoration_permitted {
-            let current = adapters.staging.current_authority(&request.browser_id);
-            Self::authorize_restoration(restoration_authority, &current)
+            adapters
+                .staging
+                .current_authority(&request.browser_id)
+                .map(|current| Self::authorize_restoration(restoration_authority, &current))
+                .unwrap_or(RestorationDecision::CancelledAuthorityDrift)
         } else {
             RestorationDecision::CancelledAuthorityDrift
         };
         if restoration_decision == RestorationDecision::Restore {
-            adapters.staging.restore(&request.browser_id);
+            let _ = adapters.staging.restore(&request.browser_id);
         }
         let release = adapters.slots.release(&request.browser_id);
         DesktopEpisodeOutcome::Aborted {
@@ -861,7 +966,16 @@ impl DesktopEvidenceCoordinator {
                 presentation_slot_required: false,
                 paired_page_absence_required: false,
                 stage_before_trigger: false,
+                trigger_required: false,
                 reason: EvidenceDecisionReason::PageEvidenceAvailableThroughCdp,
+            },
+            EvidenceRequest::DesktopScene(_) => EvidenceDecision {
+                outcome: EvidenceOutcome::DesktopEvidenceEpisode,
+                presentation_slot_required: true,
+                paired_page_absence_required: false,
+                stage_before_trigger: false,
+                trigger_required: false,
+                reason: EvidenceDecisionReason::DesktopSceneRequiresDesktop,
             },
             EvidenceRequest::BrowserExternal {
                 surface: _,
@@ -871,6 +985,7 @@ impl DesktopEvidenceCoordinator {
                 presentation_slot_required: true,
                 paired_page_absence_required: true,
                 stage_before_trigger,
+                trigger_required: true,
                 reason: EvidenceDecisionReason::BrowserExternalSurfaceRequiresDesktop,
             },
             EvidenceRequest::DiagnosticFailure(_) => EvidenceDecision {
@@ -878,6 +993,7 @@ impl DesktopEvidenceCoordinator {
                 presentation_slot_required: false,
                 paired_page_absence_required: false,
                 stage_before_trigger: false,
+                trigger_required: false,
                 reason: EvidenceDecisionReason::DiagnosticFailureDoesNotAuthorizeDesktop,
             },
             EvidenceRequest::HumanOnly(_) => EvidenceDecision {
@@ -885,6 +1001,7 @@ impl DesktopEvidenceCoordinator {
                 presentation_slot_required: false,
                 paired_page_absence_required: false,
                 stage_before_trigger: false,
+                trigger_required: false,
                 reason: EvidenceDecisionReason::SensitiveSurfaceRequiresHumanContinuation,
             },
             EvidenceRequest::SupportedCdp(_) => EvidenceDecision {
@@ -892,6 +1009,7 @@ impl DesktopEvidenceCoordinator {
                 presentation_slot_required: false,
                 paired_page_absence_required: false,
                 stage_before_trigger: false,
+                trigger_required: false,
                 reason: EvidenceDecisionReason::SupportedCdpMechanism,
             },
         }
@@ -1038,24 +1156,30 @@ mod tests {
         current: RestorationAuthority,
     }
     impl SceneStagingAdapter for FakeStaging {
-        fn snapshot(&mut self, _browser_id: &str) -> (String, RestorationAuthority) {
+        fn snapshot(
+            &mut self,
+            _browser_id: &str,
+        ) -> Result<(String, RestorationAuthority), DesktopEpisodeAdapterFailure> {
             self.log.borrow_mut().push("snapshot");
-            (
+            Ok((
                 "scene-before".to_string(),
                 RestorationAuthority::new("scene-staged", "route-1", "control-1"),
-            )
+            ))
         }
-        fn stage(&mut self, _browser_id: &str) -> String {
+        fn stage(&mut self, _browser_id: &str) -> Result<String, DesktopEpisodeAdapterFailure> {
             self.log.borrow_mut().push("stage");
-            "stage-1".to_string()
+            Ok("stage-1".to_string())
         }
-        fn current_authority(&mut self, _browser_id: &str) -> RestorationAuthority {
+        fn current_authority(
+            &mut self,
+            _browser_id: &str,
+        ) -> Result<RestorationAuthority, DesktopEpisodeAdapterFailure> {
             self.log.borrow_mut().push("current_authority");
-            self.current.clone()
+            Ok(self.current.clone())
         }
-        fn restore(&mut self, _browser_id: &str) -> String {
+        fn restore(&mut self, _browser_id: &str) -> Result<String, DesktopEpisodeAdapterFailure> {
             self.log.borrow_mut().push("restore");
-            "restore-1".to_string()
+            Ok("restore-1".to_string())
         }
     }
 
@@ -1135,9 +1259,12 @@ mod tests {
     }
     struct FakeVerification(Log);
     impl EpisodeVerificationAdapter for FakeVerification {
-        fn verify(&mut self, _browser_id: &str) -> (String, String) {
+        fn verify(
+            &mut self,
+            _browser_id: &str,
+        ) -> Result<(String, String), DesktopEpisodeAdapterFailure> {
             self.0.borrow_mut().push("verify");
-            ("verify-1".to_string(), "scene-after".to_string())
+            Ok(("verify-1".to_string(), "scene-after".to_string()))
         }
     }
     struct FakeHandoff(Log);
@@ -1288,7 +1415,10 @@ mod tests {
             panic!("expected a desktop episode receipt");
         };
         assert_eq!(receipt.stage_receipt_id.as_deref(), Some("stage-1"));
-        assert_eq!(receipt.page_absence_receipt_id, "absence-1");
+        assert_eq!(
+            receipt.page_absence_receipt_id.as_deref(),
+            Some("absence-1")
+        );
         assert_eq!(receipt.capture_receipt_id, "capture-1");
         assert_eq!(receipt.verification_receipt_id, "verify-1");
         assert_eq!(receipt.slot_release_receipt_id, "release-1");
@@ -1302,6 +1432,45 @@ mod tests {
                 "stage",
                 "page_absence",
                 "trigger",
+                "capture_ready",
+                "capture",
+                "verify",
+                "capture_ready",
+                "current_authority",
+                "restore",
+                "release",
+                "cleanup",
+            ]
+        );
+    }
+
+    #[test]
+    fn stacking_observation_uses_desktop_without_cdp_trigger_or_staging() {
+        let mut harness = Harness::new();
+        harness.windows.admission.requires_staging = false;
+        harness.windows.admission.capture_ready = true;
+
+        let outcome = harness.run(
+            EvidenceRequest::desktop_scene(DesktopSceneSurface::StackingOrOcclusion),
+            EpisodeInput::None,
+        );
+
+        let DesktopEpisodeOutcome::Desktop { receipt } = outcome else {
+            panic!("expected a desktop scene receipt");
+        };
+        assert_eq!(
+            receipt.evidence_decision.reason,
+            EvidenceDecisionReason::DesktopSceneRequiresDesktop
+        );
+        assert!(receipt.page_absence_receipt_id.is_none());
+        assert!(receipt.trigger_receipt_id.is_none());
+        assert!(receipt.stage_receipt_id.is_none());
+        assert_eq!(
+            *harness.log.borrow(),
+            vec![
+                "scene_admission",
+                "reserve",
+                "snapshot",
                 "capture_ready",
                 "capture",
                 "verify",
@@ -1642,8 +1811,8 @@ mod tests {
             admission_receipt_id: "admission-8".to_string(),
             before_scene_generation: "scene-before".to_string(),
             stage_receipt_id: Some("stage-8".to_string()),
-            page_absence_receipt_id: "absence-8".to_string(),
-            trigger_receipt_id: "trigger-8".to_string(),
+            page_absence_receipt_id: Some("absence-8".to_string()),
+            trigger_receipt_id: Some("trigger-8".to_string()),
             capture_proof: proof,
             capture_receipt_id: "capture-8".to_string(),
             input_receipt_id: None,
