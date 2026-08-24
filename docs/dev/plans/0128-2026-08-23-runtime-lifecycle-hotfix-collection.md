@@ -2,9 +2,9 @@
 
 Date: 2026-08-23
 
-State: OPEN
+State: ACCEPTED
 
-Execution state: `supervisor_followup_accepted_install_pending`
+Execution state: `installed_runtime_accepted`
 
 Lane: P128
 
@@ -194,3 +194,12 @@ are true. Post-install doctor exposed one remaining supervisor-classification
 edge: the historical inactive/dead lane has no PID, while its matching stream
 remains reachable through the healthy shared runtime host. That shared stream
 is not evidence that the stopped optional supervisor itself is active.
+
+The final supervisor candidate was accepted in transaction
+`upgrade-4a2cf513-114a-4ceb-9672-0e6a30b2748d`. Installed generation
+`0.28.0-6b461233692c-7e71e8fd473b` has binary SHA-256
+`6b461233692c0b51f67e690b50c9bf5bbf1e180c1b784b2d67fb90fd1277fdd1`.
+Standalone doctor succeeds with the historical supervisor retained as a
+warning. A provider-free BILL-profile replacement opened and closed one local
+tab through the service broker, then recorded exact process exit and profile
+lock release. The independently degraded Plan 0233 QBO record was preserved.
