@@ -2525,8 +2525,7 @@ impl ServiceState {
         }
         for (id, mut entry) in configured.route_pool {
             if let Some(existing) = self.route_pool.get(&id) {
-                if existing.current_route_allocation_id.is_some() || existing.state == "checked_out"
-                {
+                if existing.state == "checked_out" {
                     entry.state = existing.state.clone();
                     entry.current_route_allocation_id =
                         existing.current_route_allocation_id.clone();
