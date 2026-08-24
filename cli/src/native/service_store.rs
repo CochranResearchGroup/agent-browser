@@ -712,6 +712,17 @@ fn restore_file(path: &Path, prior: Option<&[u8]>) -> Result<(), String> {
     }
 }
 
+fn clear_service_state_transaction(transaction_path: &Path) -> Result<(), String> {
+    match fs::remove_file(transaction_path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!(
+            "Failed to clear service state transaction {}: {error}",
+            transaction_path.display()
+        )),
+    }
+}
+
 fn recover_service_state_transaction(state_path: &Path) -> Result<(), String> {
     let transaction_path = service_state_transaction_path(state_path);
     let raw = match fs::read_to_string(&transaction_path) {
@@ -801,12 +812,7 @@ fn recover_service_state_transaction(state_path: &Path) -> Result<(), String> {
         )?;
     }
     replace_from_temporary(&state_temp, state_path, "service state")?;
-    fs::remove_file(&transaction_path).map_err(|error| {
-        format!(
-            "Failed to clear service state transaction {}: {error}",
-            transaction_path.display()
-        )
-    })
+    clear_service_state_transaction(&transaction_path)
 }
 
 fn commit_service_state_transaction(
@@ -1024,12 +1030,7 @@ fn commit_service_state_transaction(
             )),
         };
     }
-    fs::remove_file(&transaction_path).map_err(|error| {
-        format!(
-            "Failed to clear service state transaction {}: {error}",
-            transaction_path.display()
-        )
-    })
+    clear_service_state_transaction(&transaction_path)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1172,6 +1173,17 @@ mod tests {
         let state = store.load().expect("missing state should load default");
 
         assert_eq!(state, ServiceState::default());
+    }
+
+    #[test]
+    fn clearing_an_already_recovered_transaction_is_idempotent() {
+        let path = unique_state_path("already-recovered-service-state-transaction");
+        let transaction_path = service_state_transaction_path(&path);
+
+        clear_service_state_transaction(&transaction_path)
+            .expect("a transaction recovered by another process should already be clear");
+
+        let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 
     #[test]
