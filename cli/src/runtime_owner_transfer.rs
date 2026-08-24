@@ -813,10 +813,22 @@ pub(crate) fn owner_binding_for_session(
     repository: &impl ServiceStateRepository,
     session_id: &str,
 ) -> Result<Option<RuntimeOwnerBinding>, String> {
-    repository
-        .load_snapshot()?
-        .runtime_owner_registry
-        .binding_for_session(session_id)
+    let snapshot = repository.load_snapshot()?;
+    let registry = &snapshot.runtime_owner_registry;
+    let binding = registry.binding_for_session(session_id)?;
+    let Some(binding) = binding else {
+        return Ok(None);
+    };
+    let is_terminal_history = registry
+        .lifecycle_records
+        .get(&binding.claim.logical_browser_id)
+        .is_some_and(|lifecycle| {
+            lifecycle.profile_identity_digest == binding.claim.profile_identity_digest
+                && lifecycle.owner_generation == binding.claim.owner_generation
+                && lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Terminal
+                && lifecycle.cleanup_obligation_state == CleanupObligationState::Satisfied
+        });
+    Ok((!is_terminal_history).then_some(binding))
 }
 
 /// Return whether an action must hydrate and validate runtime owner authority.
@@ -1680,6 +1692,41 @@ mod tests {
         authorize_action(&authority, &mut stale_old, "navigate").unwrap();
         assert!(stale_old.effect_capable);
         assert_eq!(stale_old.claim.owner_generation, 9);
+    }
+
+    #[test]
+    fn terminal_cleanup_satisfied_owner_is_history_not_a_rehydrated_effect_binding() {
+        let current = owner();
+        let mut registry = RuntimeOwnerRegistry::from_owner(current.clone());
+        registry.lifecycle_records.insert(
+            current.browser_id.clone(),
+            RuntimeLifecycleRecord {
+                logical_browser_id: current.browser_id.clone(),
+                profile_identity_digest: current.profile_identity_digest.clone(),
+                owner_generation: current.owner_generation,
+                lifecycle_state: RuntimeLaneLifecycleState::Terminal,
+                cleanup_obligation_state: CleanupObligationState::Satisfied,
+                terminal_evidence: vec![
+                    "exact_process_exited".to_string(),
+                    "profile_lock_released".to_string(),
+                ],
+                ..RuntimeLifecycleRecord::default()
+            },
+        );
+        assert!(registry
+            .binding_for_session("session-old")
+            .unwrap()
+            .is_some());
+        let repository = MemoryRepository {
+            state: Mutex::new(ServiceState {
+                runtime_owner_registry: registry,
+                ..ServiceState::default()
+            }),
+        };
+
+        assert!(owner_binding_for_session(&repository, "session-old")
+            .unwrap()
+            .is_none());
     }
 
     #[test]
