@@ -422,7 +422,7 @@ from (
   const processResult = run('ps', ['-eo', 'user:64=,args=']);
   const processLines = processResult.status === 0 ? processResult.stdout.split(/\r?\n/) : [];
   const displays = [];
-  for (const route of descriptor.routes.slice(0, descriptor.warmSlots)) {
+  for (const route of descriptor.routes) {
     const line = processLines.find((candidate) =>
       candidate.trimStart().startsWith(`${route.user} `) &&
       /(?:^|[\/\s])Xorg\s+:[0-9]+(?:\s|$)/.test(candidate),

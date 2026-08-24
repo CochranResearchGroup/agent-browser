@@ -294,7 +294,7 @@ try {
         assert.deepEqual(args, ['-eo', 'user:64=,args=']);
         return {
           status: 0,
-          stdout: descriptor.routes.slice(0, descriptor.warmSlots)
+          stdout: descriptor.routes
             .flatMap((route, index) => [
               `${route.user} /usr/lib/systemd/systemd --user`,
               `${route.user} /usr/lib/xorg/Xorg :${30 + index}`,
@@ -309,7 +309,8 @@ try {
   });
   assert.equal(probed.database.schemaReady, true);
   assert.equal(probed.database.routes.length, 6);
-  assert.equal(probed.displays.length, 4);
+  assert.equal(probed.displays.length, 6);
+  assert.equal(probed.displays.at(-1).displayReservationId, 'development-display-6');
   assert.equal(probed.secrets.private, true);
   const configured = doctorDevelopmentPresentationProvider({ env, probe: () => readyObservation });
   assert.equal(configured.success, true);
