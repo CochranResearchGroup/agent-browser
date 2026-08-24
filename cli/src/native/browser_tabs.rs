@@ -41,12 +41,23 @@ pub(crate) mod action_commands {
         cmd: &Value,
         state: &mut DaemonState,
     ) -> Result<Value, String> {
+        handle_tab_new_with_cold_launch(cmd, state, false).await
+    }
+    pub(crate) async fn handle_tab_new_with_cold_launch(
+        cmd: &Value,
+        state: &mut DaemonState,
+        cold_owned_launch: bool,
+    ) -> Result<Value, String> {
         let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
         let url = cmd.get("url").and_then(|v| v.as_str());
         state.ref_map.clear();
         state.iframe_sessions.clear();
         state.active_frame_id = None;
-        let mut result = mgr.tab_new(url).await?;
+        let mut result = if cold_owned_launch {
+            mgr.acquire_cold_launch_tab(url).await?
+        } else {
+            mgr.tab_new(url).await?
+        };
         if let Some(object) = result.as_object_mut() {
             object.insert(
                 "browserId".to_string(),

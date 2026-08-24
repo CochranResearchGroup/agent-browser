@@ -229,6 +229,12 @@ pub struct PageInfo {
     pub target_type: String, // "page" or "webview"
 }
 
+fn reusable_cold_launch_blank_index(pages: &[PageInfo]) -> Option<usize> {
+    pages.iter().rposition(|page| {
+        page.target_type == "page" && page.url == "about:blank" && page.title.is_empty()
+    })
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WaitUntil {
     Load,
@@ -531,6 +537,9 @@ const LIGHTPANDA_TARGET_INIT_TIMEOUT: Duration = Duration::from_secs(10);
 const RUNTIME_HANDOFF_TARGET_INIT_TIMEOUT: Duration = Duration::from_secs(2);
 
 impl BrowserManager {
+    pub(crate) fn owns_launched_browser_process(&self) -> bool {
+        self.browser_process.is_some()
+    }
     pub async fn launch(options: LaunchOptions, engine: Option<&str>) -> Result<Self, String> {
         let engine = engine.unwrap_or("chrome");
         let bootstrap_mode = if engine == "chrome" {
@@ -1613,6 +1622,50 @@ impl BrowserManager {
             "url": target_url,
             "targetId": self.pages[index].target_id.clone(),
             "pageSessionId": self.pages[index].session_id.clone(),
+        }))
+    }
+
+    pub async fn acquire_cold_launch_tab(&mut self, url: Option<&str>) -> Result<Value, String> {
+        let target_url = url.unwrap_or("about:blank");
+        let initial_target_count = self.pages.len();
+        let Some(index) = reusable_cold_launch_blank_index(&self.pages) else {
+            let mut opened = self.tab_new(url).await?;
+            if let Some(object) = opened.as_object_mut() {
+                object.insert("coldLaunch".to_string(), json!(true));
+                object.insert(
+                    "tabAcquisitionDecision".to_string(),
+                    json!("opened_new_target"),
+                );
+                object.insert(
+                    "initialTargetCount".to_string(),
+                    json!(initial_target_count),
+                );
+                object.insert(
+                    "restoredTargetCount".to_string(),
+                    json!(initial_target_count),
+                );
+            }
+            return Ok(opened);
+        };
+
+        self.active_page_index = index;
+        self.activate_page(index).await?;
+        if target_url != "about:blank" {
+            self.navigate(target_url, WaitUntil::None).await?;
+        }
+        let page = self
+            .pages
+            .get(index)
+            .ok_or_else(|| "Cold-launch blank target disappeared during acquisition".to_string())?;
+        Ok(json!({
+            "index": index,
+            "url": page.url,
+            "targetId": page.target_id,
+            "pageSessionId": page.session_id,
+            "coldLaunch": true,
+            "tabAcquisitionDecision": "reused_initial_blank_target",
+            "initialTargetCount": initial_target_count,
+            "restoredTargetCount": initial_target_count.saturating_sub(1),
         }))
     }
 
@@ -3407,6 +3460,29 @@ mod tests {
             params,
             session_id: Some(session_id.to_string()),
         }
+    }
+
+    #[test]
+    fn cold_launch_tab_acquisition_reuses_only_an_empty_blank_target() {
+        let pages = vec![
+            PageInfo {
+                target_id: "restored-login".to_string(),
+                session_id: "session-restored".to_string(),
+                url: "https://example.test/login".to_string(),
+                title: "Login".to_string(),
+                target_type: "page".to_string(),
+            },
+            PageInfo {
+                target_id: "bootstrap-blank".to_string(),
+                session_id: "session-blank".to_string(),
+                url: "about:blank".to_string(),
+                title: String::new(),
+                target_type: "page".to_string(),
+            },
+        ];
+
+        assert_eq!(reusable_cold_launch_blank_index(&pages), Some(1));
+        assert_eq!(reusable_cold_launch_blank_index(&pages[..1]), None);
     }
 
     /// Regression test for #846: when no network events arrive at all (e.g.

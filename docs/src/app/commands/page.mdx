@@ -1257,6 +1257,20 @@ Service State does not correlate them.
 Service-owned tab handles and shared acquisition evidence both use
 `cleanupPolicy: close_tabs`; `tab_handle_release` closes the exact client tab
 while preserving the shared browser process.
+On a newly launched owned browser, `tab_new` reuses an empty bootstrap
+`about:blank` target when available and reports `coldLaunch`,
+`tabAcquisitionDecision`, `initialTargetCount`, and `restoredTargetCount`.
+Restored profile targets remain observable but are not labeled as the newly
+requested tab.
+Access plans include `decision.lifecycleReplacement` for the selected profile,
+with the lifecycle browser and generation, owner and cleanup states, terminal
+evidence, `replacementEligible`, and `requiredAction`. This exposes a lifecycle
+veto before the copied service request is dispatched.
+Reviewed `service prune-retained --process-exited-browsers` includes a
+`degraded` browser only when it has no PID, CDP endpoint, or live tab. The
+response preserves its health evidence and profile-correlated lifecycle aliases
+under `candidateReasons.retainedBrowsers`; apply does not remove the lifecycle
+ledger.
 
 For Linux hosts where an ingress route depends on the dashboard being
 available after login or restart, install the user-scoped systemd unit:

@@ -374,6 +374,87 @@ fn test_prune_retained_service_state_removes_historical_browser_placeholders() {
     assert!(service_state.sessions.is_empty());
 }
 #[test]
+fn test_prune_retained_degraded_browser_preserves_terminal_lifecycle_alias_evidence() {
+    use crate::runtime_owner_transfer::{
+        CleanupObligationState, RuntimeLaneLifecycleState, RuntimeLifecycleRecord,
+        RuntimeOwnerRegistry,
+    };
+
+    let profile_path = "/tmp/agent-browser-plan0233-qbo-profile";
+    let profile_identity_digest =
+        crate::runtime_profile::canonical_profile_identity_digest(Path::new(profile_path)).unwrap();
+    let mut service_state = ServiceState {
+        profiles: BTreeMap::from([(
+            "plan0233-qbo".to_string(),
+            BrowserProfile {
+                id: "plan0233-qbo".to_string(),
+                name: "Plan 0233 QBO".to_string(),
+                user_data_dir: Some(profile_path.to_string()),
+                ..BrowserProfile::default()
+            },
+        )]),
+        browsers: BTreeMap::from([(
+            "session:plan0233-qbo".to_string(),
+            BrowserProcess {
+                id: "session:plan0233-qbo".to_string(),
+                profile_id: Some("plan0233-qbo".to_string()),
+                health: ServiceBrowserHealth::Degraded,
+                last_error: Some("closed CDP connection; force kill required".to_string()),
+                ..BrowserProcess::default()
+            },
+        )]),
+        runtime_owner_registry: RuntimeOwnerRegistry {
+            revision: 6,
+            lifecycle_records: BTreeMap::from([(
+                "session:plan0233-qbo-owned".to_string(),
+                RuntimeLifecycleRecord {
+                    logical_browser_id: "session:plan0233-qbo-owned".to_string(),
+                    profile_identity_digest,
+                    owner_generation: 5,
+                    lifecycle_state: RuntimeLaneLifecycleState::Terminal,
+                    cleanup_obligation_state: CleanupObligationState::Satisfied,
+                    terminal_evidence: vec![
+                        "exact_process_exited".to_string(),
+                        "profile_lock_released".to_string(),
+                    ],
+                    ..RuntimeLifecycleRecord::default()
+                },
+            )]),
+            ..RuntimeOwnerRegistry::default()
+        },
+        ..ServiceState::default()
+    };
+    let result = prune_retained_service_state(
+        &mut service_state,
+        ServiceRetentionPruneOptions {
+            apply: true,
+            closed_tabs: false,
+            not_started_browsers: false,
+            process_exited_browsers: true,
+            released_sessions: false,
+            abandoned_sessions: false,
+            orphaned_profiles: false,
+            display_allocations: false,
+            abandoned_session_min_age_minutes: 1440,
+        },
+    );
+
+    assert_eq!(
+        result["candidates"]["browsers"],
+        json!(["session:plan0233-qbo"])
+    );
+    assert_eq!(
+        result["candidateReasons"]["retainedBrowsers"]["session:plan0233-qbo"]["lifecycleAliases"]
+            [0]["logicalBrowserId"],
+        "session:plan0233-qbo-owned"
+    );
+    assert!(service_state.browsers.is_empty());
+    assert!(service_state
+        .runtime_owner_registry
+        .lifecycle_records
+        .contains_key("session:plan0233-qbo-owned"));
+}
+#[test]
 fn test_prune_retained_service_state_abandoned_sessions_require_age() {
     let old_session_time = (chrono::Utc::now() - chrono::Duration::minutes(90)).to_rfc3339();
     let fresh_session_time = (chrono::Utc::now() - chrono::Duration::minutes(5)).to_rfc3339();

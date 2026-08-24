@@ -166,6 +166,7 @@ export interface ServiceSharedTabAcquisition {
   requestedBrowserId?: string | null;
   requestedSessionName?: string | null;
   routeHintSource?: string;
+  cleanupPolicy?: "close_tabs" | string;
   [key: string]: unknown;
 }
 
@@ -801,6 +802,10 @@ export interface ServiceTabNewData {
   sessionId?: string;
   runtimeProfile?: string;
   profileId?: string;
+  coldLaunch?: boolean;
+  tabAcquisitionDecision?: "reused_initial_blank_target" | "opened_new_target" | string;
+  initialTargetCount?: number;
+  restoredTargetCount?: number;
   sharedAcquisition?: ServiceSharedTabAcquisition;
   serviceTabHandle?: ServiceTabHandle;
 }

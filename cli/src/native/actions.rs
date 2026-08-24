@@ -77,7 +77,9 @@ use super::browser_locator::{
 use super::browser_navigation::{
     handle_back, handle_forward, handle_reload, take_response_warning,
 };
-use super::browser_tabs::{handle_browser_pid, handle_tab_list, handle_tab_new, handle_window_new};
+use super::browser_tabs::{
+    handle_browser_pid, handle_tab_list, handle_tab_new_with_cold_launch, handle_window_new,
+};
 use super::clipboard::handle_clipboard;
 use super::cookies::{handle_cookies_clear, handle_cookies_get, handle_cookies_set};
 use super::desktop_capture::{handle_desktop_capture, redact_desktop_capture_stream_result};
@@ -575,6 +577,7 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
     }
     let skip_launch = action_skips_browser_launch(action)
         || (action == "evaluate" && cmd.get("serviceTabHandle").is_some());
+    let mut cold_owned_launch = false;
     if !skip_launch {
         let stale_state = detect_browser_stale_state(state).await;
         let mut needs_launch = stale_state.needs_launch;
@@ -620,6 +623,10 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
             if let Err(e) = auto_launch(state, cmd).await {
                 return error_response(&id, &format!("Auto-launch failed: {}", e));
             }
+            cold_owned_launch = state
+                .browser
+                .as_ref()
+                .is_some_and(|browser| browser.owns_launched_browser_process());
         }
         if let Some(ref mut mgr) = state.browser {
             if mgr.page_count() == 0 {
@@ -724,7 +731,7 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
             "recording_restart" => handle_recording_restart(cmd, state).await,
             "pdf" => handle_pdf(cmd, state).await,
             "tab_list" => handle_tab_list(cmd, state).await,
-            "tab_new" => handle_tab_new(cmd, state).await,
+            "tab_new" => handle_tab_new_with_cold_launch(cmd, state, cold_owned_launch).await,
             "tab_switch" => handle_tab_switch(cmd, state).await,
             "tab_close" => handle_tab_close(cmd, state).await,
             "tab_handle_refresh" => handle_tab_handle_refresh(cmd, state).await,

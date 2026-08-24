@@ -6185,6 +6185,12 @@ response grace; an indeterminate delivered mutation returns
 mutation_outcome_unknown with retrySafe=false and must be inspected before retry.
 Service-owned tab handles use cleanupPolicy=close_tabs; tab_handle_release closes
 the exact client tab and preserves the shared browser process.
+Cold owned tab_new reuses an empty bootstrap about:blank target and reports
+coldLaunch, tabAcquisitionDecision, initialTargetCount, and restoredTargetCount.
+Access plans expose decision.lifecycleReplacement with owner generation, lifecycle
+and cleanup states, terminal evidence, replacementEligible, and requiredAction.
+Reviewed --process-exited-browsers includes degraded browser placeholders only
+without PID, CDP, or live tabs and preserves lifecycle aliases in candidateReasons.
   agent-browser service tabs
   agent-browser service monitors --summary --failed
   agent-browser service monitors run-due

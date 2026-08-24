@@ -2353,6 +2353,21 @@ service trace first.
 Service-owned tab handles and shared acquisition evidence both report
 `cleanupPolicy: close_tabs`. Use `tab_handle_release` to close that exact tab
 and preserve the shared browser process.
+For a newly launched owned browser, `tab_new` reuses an empty bootstrap
+`about:blank` target when available. Read `coldLaunch`,
+`tabAcquisitionDecision`, `initialTargetCount`, and `restoredTargetCount` from
+the result instead of treating restored profile targets as newly requested
+tabs.
+Before dispatching the copied request, inspect
+`decision.lifecycleReplacement`. It exposes the selected profile's lifecycle
+browser and generation, owner and cleanup states, terminal evidence,
+`replacementEligible`, and `requiredAction`; follow a reconcile or inspection
+requirement instead of retrying a vetoed launch.
+For reviewed retained cleanup, `--process-exited-browsers` may include a
+`degraded` browser only when PID, CDP endpoint, and live tabs are all absent.
+Review `candidateReasons.retainedBrowsers` for the last health observation and
+profile-correlated lifecycle aliases. Apply removes the browser placeholder,
+not its lifecycle evidence.
 
 Installed production and isolated development executables are protected
 runtime surfaces in `service resources`; their absence from production Service

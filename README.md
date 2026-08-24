@@ -1861,6 +1861,20 @@ whether another mutation is lawful.
 Service-owned tab handles and shared acquisition evidence use the canonical
 `close_tabs` cleanup policy. Release the handle with `tab_handle_release`; the
 exact client tab is closed while the shared browser process is preserved.
+On a newly launched owned browser, `tab_new` reuses Chrome's empty bootstrap
+`about:blank` target when one exists instead of creating a second requested
+target. Its response reports `coldLaunch`, `tabAcquisitionDecision`,
+`initialTargetCount`, and `restoredTargetCount`; restored profile targets are
+observed but are not mistaken for the requested tab.
+Access plans expose `decision.lifecycleReplacement` for the selected profile.
+It reports the authoritative lifecycle browser and generation, owner and
+cleanup states, terminal evidence, `replacementEligible`, and the required
+action before a queued launch can encounter that authority.
+Reviewed `service prune-retained --process-exited-browsers` also admits a
+`degraded` browser only when it is processless, has no CDP endpoint, and owns
+no live tabs. `candidateReasons.retainedBrowsers` preserves its health error,
+last health observation, and profile-correlated lifecycle aliases; pruning the
+browser row never removes the lifecycle ledger.
 
 Use `agent-browser dashboard ingress status` to inspect the selected,
 candidate, fallback, and presentation-receipt state. Upgrade coordinators can

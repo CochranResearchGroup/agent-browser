@@ -815,6 +815,60 @@ pub(crate) mod service_commands {
         let browser_ids = browser_ids.into_iter().collect::<HashSet<_>>();
         let mut browser_ids = browser_ids.into_iter().collect::<Vec<_>>();
         browser_ids.sort();
+        let mut retained_browser_reasons = serde_json::Map::new();
+        for browser_id in &browser_ids {
+            let Some(browser) = state.browsers.get(browser_id) else {
+                continue;
+            };
+            let profile_identity_digest = browser
+                .profile_id
+                .as_deref()
+                .and_then(|profile_id| state.profiles.get(profile_id))
+                .and_then(|profile| profile.user_data_dir.as_deref())
+                .and_then(|path| {
+                    crate::runtime_profile::canonical_profile_identity_digest(Path::new(path)).ok()
+                });
+            let mut lifecycle_aliases = state
+                .runtime_owner_registry
+                .lifecycle_records
+                .values()
+                .filter(|record| {
+                    profile_identity_digest
+                        .as_deref()
+                        .is_some_and(|digest| record.profile_identity_digest == digest)
+                })
+                .map(|record| {
+                    json!({
+                        "logicalBrowserId": record.logical_browser_id,
+                        "ownerGeneration": record.owner_generation,
+                        "lifecycleState": record.lifecycle_state,
+                        "cleanupObligationState": record.cleanup_obligation_state,
+                        "terminalEvidence": record.terminal_evidence,
+                    })
+                })
+                .collect::<Vec<_>>();
+            lifecycle_aliases.sort_by(|left, right| {
+                left["ownerGeneration"]
+                    .as_u64()
+                    .cmp(&right["ownerGeneration"].as_u64())
+                    .then_with(|| {
+                        left["logicalBrowserId"]
+                            .as_str()
+                            .cmp(&right["logicalBrowserId"].as_str())
+                    })
+            });
+            retained_browser_reasons.insert(
+                browser_id.clone(),
+                json!({
+                    "health": browser.health,
+                    "profileId": browser.profile_id,
+                    "lastError": browser.last_error,
+                    "lastHealthObservation": browser.last_health_observation,
+                    "lifecycleAliases": lifecycle_aliases,
+                    "lifecycleEvidencePreserved": true,
+                }),
+            );
+        }
         let referenced_profile_ids = referenced_service_profile_ids(state);
         let mut orphaned_profile_reasons = serde_json::Map::new();
         let mut profile_ids = if options.orphaned_profiles {
@@ -989,6 +1043,7 @@ pub(crate) mod service_commands {
             .not_started_browsers, "processExitedBrowsers" : options
             .process_exited_browsers, "processExitedBrowsersIncludesUnreachable" : true,
             "processExitedBrowsersIncludesFaultedPlaceholders" : true,
+            "processExitedBrowsersIncludesDegradedProcesslessPlaceholders" : true,
             "releasedSessionPruneRemovesRetainedViewStreams" : true, "releasedSessions" :
             options.released_sessions, "abandonedSessions" : options.abandoned_sessions,
             "orphanedProfiles" : options.orphaned_profiles, "displayAllocations" :
@@ -1009,7 +1064,8 @@ pub(crate) mod service_commands {
             "orphanedProfiles" : profile_ids, "displayAllocations" :
             display_allocation_ids, }, "candidateReasons" : { "orphanedProfiles" :
             orphaned_profile_reasons, "displayAllocations" : display_allocation_reasons,
-            "profileRetention" : profile_retention_decisions,
+            "profileRetention" : profile_retention_decisions, "retainedBrowsers" :
+            retained_browser_reasons,
             }, "candidateClassCounts" : { "displayAllocations" :
             display_allocation_class_counts, }, "candidateCounts" : { "closedTabs" :
             closed_tab_ids.len(), "browsers" : browser_ids.len(), "sessions" :
@@ -1381,6 +1437,7 @@ pub(crate) mod service_commands {
             ServiceBrowserHealth::ProcessExited
                 | ServiceBrowserHealth::Unreachable
                 | ServiceBrowserHealth::Faulted
+                | ServiceBrowserHealth::Degraded
         )
     }
     pub(crate) fn retained_not_started_browser_placeholder(

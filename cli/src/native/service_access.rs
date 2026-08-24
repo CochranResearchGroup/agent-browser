@@ -859,6 +859,7 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         &launch_posture.value,
         manual_seeding_required,
     );
+    let lifecycle_replacement = lifecycle_replacement_decision(selected_profile, service_state);
     let one_time_profile_recommendation =
         access_plan_one_time_profile_recommendation(request, selected_profile, service_state);
     let manual_action_required = manual_seeding_required || waiting_for_human || failed_challenge;
@@ -989,6 +990,7 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         "browserHost": launch_posture.browser_host,
         "launchPosture": launch_posture.value,
         "profileReuse": profile_reuse,
+        "lifecycleReplacement": lifecycle_replacement,
         "oneTimeProfileRecommendation": one_time_profile_recommendation,
         "interactionMode": site_policy.map(|policy| policy.interaction_mode),
         "interactionRisk": interaction_decision.interaction_risk,
@@ -1013,6 +1015,92 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         "namingWarnings": naming_warnings,
         "hasNamingWarning": !naming_warnings.is_empty(),
         "reasons": reasons,
+    })
+}
+
+fn lifecycle_replacement_decision(
+    selected_profile: Option<&BrowserProfile>,
+    service_state: &ServiceState,
+) -> Value {
+    let Some(profile) = selected_profile else {
+        return json!({
+            "available": false,
+            "replacementEligible": false,
+            "reason": "no_selected_profile",
+        });
+    };
+    let profile_path = profile
+        .user_data_dir
+        .as_deref()
+        .map(std::path::PathBuf::from)
+        .or_else(|| crate::runtime_profile::runtime_profile_user_data_dir(&profile.id).ok());
+    let Some(profile_identity_digest) = profile_path
+        .as_deref()
+        .and_then(|path| crate::runtime_profile::canonical_profile_identity_digest(path).ok())
+    else {
+        return json!({
+            "available": false,
+            "profileId": profile.id,
+            "replacementEligible": false,
+            "reason": "profile_identity_unavailable",
+        });
+    };
+    let owner = service_state
+        .runtime_owner_registry
+        .owners
+        .get(&profile_identity_digest);
+    let mut records = service_state
+        .runtime_owner_registry
+        .lifecycle_records
+        .values()
+        .filter(|record| record.profile_identity_digest == profile_identity_digest)
+        .collect::<Vec<_>>();
+    records.sort_by_key(|record| record.owner_generation);
+    let lifecycle = owner
+        .and_then(|owner| {
+            records.iter().copied().find(|record| {
+                record.logical_browser_id == owner.browser_id
+                    && record.owner_generation == owner.owner_generation
+            })
+        })
+        .or_else(|| records.last().copied());
+    let replacement_eligible = lifecycle.is_none_or(|record| {
+        record.lifecycle_state == crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal
+            && record.cleanup_obligation_state
+                == crate::runtime_owner_transfer::CleanupObligationState::Satisfied
+    });
+    let reason = match lifecycle {
+        None => "no_lifecycle_owner",
+        Some(_) if replacement_eligible => "terminal_cleanup_satisfied",
+        Some(record)
+            if record.lifecycle_state
+                == crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Closing =>
+        {
+            "closing_lifecycle_requires_reconciliation"
+        }
+        Some(_) => "lifecycle_owner_blocks_replacement",
+    };
+    let required_action = match reason {
+        "no_lifecycle_owner" => "launch_new_browser",
+        "terminal_cleanup_satisfied" => "supersede_terminal_owner",
+        "closing_lifecycle_requires_reconciliation" => "reconcile_lifecycle_owner",
+        _ => "inspect_lifecycle_owner",
+    };
+
+    json!({
+        "available": true,
+        "profileId": profile.id,
+        "registryRevision": service_state.runtime_owner_registry.revision,
+        "ownerId": owner.map(|owner| owner.owner_id.clone()),
+        "ownerState": owner.map(|owner| owner.state),
+        "logicalBrowserId": lifecycle.map(|record| record.logical_browser_id.clone()),
+        "ownerGeneration": lifecycle.map(|record| record.owner_generation),
+        "lifecycleState": lifecycle.map(|record| record.lifecycle_state),
+        "cleanupObligationState": lifecycle.map(|record| record.cleanup_obligation_state),
+        "terminalEvidence": lifecycle.map(|record| record.terminal_evidence.clone()).unwrap_or_default(),
+        "replacementEligible": replacement_eligible,
+        "reason": reason,
+        "requiredAction": required_action,
     })
 }
 
@@ -4540,6 +4628,92 @@ mod tests {
             .as_array()
             .unwrap()
             .contains(&json!("no_compatible_live_browser")));
+    }
+
+    #[test]
+    fn service_access_plan_exposes_terminal_lifecycle_replacement_eligibility() {
+        use crate::runtime_owner_transfer::{
+            CleanupObligationState, ProfileOwner, ProfileOwnerState, RuntimeLaneLifecycleState,
+            RuntimeLifecycleRecord, RuntimeOwnerRegistry,
+        };
+
+        let profile_path = "/tmp/agent-browser-access-plan-terminal-profile";
+        let profile_identity_digest = crate::runtime_profile::canonical_profile_identity_digest(
+            std::path::Path::new(profile_path),
+        )
+        .unwrap();
+        let owner = ProfileOwner {
+            owner_id: "owner-terminal".to_string(),
+            profile_identity_digest: profile_identity_digest.clone(),
+            state: ProfileOwnerState::Ready,
+            owner_generation: 7,
+            browser_id: "session:terminal-lane".to_string(),
+            daemon_session_route: "terminal-lane".to_string(),
+            process_instance_digest: "process-digest".to_string(),
+            browser_family: "chrome".to_string(),
+            cdp_endpoint_identity_digest: "cdp-digest".to_string(),
+            target_set_digest: "target-digest".to_string(),
+            pending_transfer: None,
+            last_transition: None,
+        };
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "bill-soylei".to_string(),
+                BrowserProfile {
+                    id: "bill-soylei".to_string(),
+                    name: "BILL".to_string(),
+                    user_data_dir: Some(profile_path.to_string()),
+                    target_service_ids: vec!["bill".to_string()],
+                    authenticated_service_ids: vec!["bill".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            runtime_owner_registry: RuntimeOwnerRegistry {
+                revision: 11,
+                owners: BTreeMap::from([(profile_identity_digest.clone(), owner)]),
+                lifecycle_records: BTreeMap::from([(
+                    "session:terminal-lane".to_string(),
+                    RuntimeLifecycleRecord {
+                        logical_browser_id: "session:terminal-lane".to_string(),
+                        profile_identity_digest,
+                        owner_generation: 7,
+                        lifecycle_state: RuntimeLaneLifecycleState::Terminal,
+                        cleanup_obligation_state: CleanupObligationState::Satisfied,
+                        terminal_evidence: vec![
+                            "exact_process_exited".to_string(),
+                            "profile_lock_released".to_string(),
+                        ],
+                        ..RuntimeLifecycleRecord::default()
+                    },
+                )]),
+            },
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                target_service_ids: vec!["bill".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(
+            plan["decision"]["lifecycleReplacement"]["logicalBrowserId"],
+            "session:terminal-lane"
+        );
+        assert_eq!(
+            plan["decision"]["lifecycleReplacement"]["replacementEligible"],
+            true
+        );
+        assert_eq!(
+            plan["decision"]["lifecycleReplacement"]["reason"],
+            "terminal_cleanup_satisfied"
+        );
+        assert_eq!(
+            plan["decision"]["lifecycleReplacement"]["terminalEvidence"],
+            json!(["exact_process_exited", "profile_lock_released"])
+        );
     }
 
     #[test]
