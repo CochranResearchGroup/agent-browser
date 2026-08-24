@@ -168,6 +168,7 @@ pub mod stream_runtime;
 pub mod tracing;
 #[allow(dead_code)]
 pub mod webdriver;
+pub(crate) mod x11_scene;
 
 #[cfg(test)]
 mod e2e_tests;

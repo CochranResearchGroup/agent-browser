@@ -4,7 +4,7 @@ Date: 2026-08-23
 
 State: IN PROGRESS
 
-Execution state: `slice_g_configured_capacity_adapter_source_accepted_scene_capture_adapter_missing`
+Execution state: `slice_g_configured_scene_capture_source_accepted_product_composition_missing`
 
 Lane: P124
 
@@ -388,10 +388,18 @@ trigger work, release failure is terminal, scene and capture-ready probe loss
 is fail-closed, and one-shot unavailable requests do not leave unresumable
 queue entries. Source evidence is recorded in
 `docs/dev/notes/0124-11-2026-08-23-configured-capacity-adapter-source-acceptance.md`.
-The remaining installed boundary is the configured scene, capture, paired CDP,
-handoff, and cleanup composition plus its human, viewer, CDP, and retained
-browser acceptance. Configured production input remains outside this plan's
-live authority until Plan 0110 is independently accepted.
+The configured read-only window-semantic and frame adapters are source
+accepted. They bind exact process generation, route, display, slot, scene,
+viewer, controller, work-area geometry, crop, scale, coordinate space, and
+frame receipt evidence without focusing or rearranging the desktop. Missing
+authoritative stacking, unowned occlusion, binding drift, or frame drift fails
+closed and releases capacity. Source evidence is recorded in
+`docs/dev/notes/0124-12-2026-08-24-configured-scene-capture-source-acceptance.md`.
+The remaining installed boundary is the configured paired CDP, staging,
+verification, handoff, release, and cleanup composition behind one product
+caller plus its human, viewer, CDP, and retained-browser acceptance.
+Configured production input remains outside this plan's live authority until
+Plan 0110 is independently accepted.
 
 After source acceptance and separate explicit live authority:
 

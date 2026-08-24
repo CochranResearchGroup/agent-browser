@@ -1,6 +1,348 @@
-use super::desktop_evidence::{DesktopEpisodeAdmissionFailure, PresentationSlotAdapter};
-use super::presentation_capacity::{CapacityDecision, PresentationRequest, PressureAdmission};
+use super::desktop_capture::{
+    capture_configured_desktop_frame, desktop_geometry_epoch, resolve_desktop_capture_binding,
+    DesktopCaptureBinding, DesktopCaptureRequest, DesktopCaptureResult, DEFAULT_MAX_BYTES,
+};
+use super::desktop_evidence::{
+    CaptureReadyEvidence, CaptureReadyProof, ControllerPosture, DesktopEpisodeAdapterFailure,
+    DesktopEpisodeAdmissionFailure, DesktopFrameAdapter, PresentationSlotAdapter,
+    SceneAdmissionRequest, ViewerPosture, WindowSemanticAdapter,
+};
+use super::presentation_capacity::{
+    CapacityDecision, PresentationRequest, PresentationSlotState, PressureAdmission,
+};
+use super::service_model::ServiceState;
 use super::service_store::ServiceStateRepository;
+use super::x11_scene::{observe_browser_scene, X11SceneEvidence};
+use std::time::Instant;
+
+const CAPTURE_READY_MAXIMUM_AGE_MS: u64 = 500;
+const FRAME_SCALE_FACTOR_MILLIS: u32 = 1000;
+
+trait SceneProbe {
+    fn observe(&self, pid: u32, display_name: &str) -> Result<X11SceneEvidence, String>;
+}
+
+struct ConfiguredSceneProbe;
+
+impl SceneProbe for ConfiguredSceneProbe {
+    fn observe(&self, pid: u32, display_name: &str) -> Result<X11SceneEvidence, String> {
+        observe_browser_scene(pid, display_name)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SceneAuthority {
+    binding: DesktopCaptureBinding,
+    pid: u32,
+    process_generation: String,
+    viewer_posture: ViewerPosture,
+    controller_posture: ControllerPosture,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ReservedSceneAuthority {
+    scene: SceneAuthority,
+    presentation_slot_id: String,
+    scene_generation: String,
+}
+
+/// Configured read-only scene and capture-readiness provider. It resolves only
+/// service-owned browser, route, display, process-generation, slot, viewer,
+/// and controller identities, then asks the native X11 probe for semantic
+/// evidence without changing the desktop.
+pub(crate) struct ConfiguredWindowSemanticAdapter<R> {
+    repository: R,
+    request_id: String,
+    probe: Box<dyn SceneProbe>,
+}
+
+impl<R> ConfiguredWindowSemanticAdapter<R>
+where
+    R: ServiceStateRepository,
+{
+    pub(crate) fn new(repository: R, request_id: impl Into<String>) -> Self {
+        Self {
+            repository,
+            request_id: request_id.into(),
+            probe: Box::new(ConfiguredSceneProbe),
+        }
+    }
+
+    #[cfg(test)]
+    fn with_probe(
+        repository: R,
+        request_id: impl Into<String>,
+        probe: impl SceneProbe + 'static,
+    ) -> Self {
+        Self {
+            repository,
+            request_id: request_id.into(),
+            probe: Box::new(probe),
+        }
+    }
+
+    fn adapter_failure(
+        phase: &'static str,
+        code: impl Into<String>,
+        detail: impl Into<String>,
+    ) -> DesktopEpisodeAdapterFailure {
+        DesktopEpisodeAdapterFailure::new(phase, code, detail)
+    }
+
+    fn load_scene_authority(
+        &self,
+        browser_id: &str,
+        phase: &'static str,
+    ) -> Result<(ServiceState, SceneAuthority), DesktopEpisodeAdapterFailure> {
+        let state = self.repository.load_snapshot().map_err(|error| {
+            Self::adapter_failure(phase, "desktop_scene_state_unavailable", error)
+        })?;
+        let authority = resolve_scene_authority(&state, browser_id).map_err(|error| {
+            Self::adapter_failure(phase, "desktop_scene_binding_unavailable", error)
+        })?;
+        Ok((state, authority))
+    }
+
+    fn load_reserved_scene_authority(
+        &self,
+        browser_id: &str,
+        phase: &'static str,
+    ) -> Result<ReservedSceneAuthority, DesktopEpisodeAdapterFailure> {
+        let (state, scene) = self.load_scene_authority(browser_id, phase)?;
+        resolve_reserved_scene_authority(&state, scene, &self.request_id).map_err(|error| {
+            Self::adapter_failure(phase, "desktop_scene_reservation_unavailable", error)
+        })
+    }
+}
+
+impl<R> WindowSemanticAdapter for ConfiguredWindowSemanticAdapter<R>
+where
+    R: ServiceStateRepository,
+{
+    fn scene_admission(
+        &mut self,
+        browser_id: &str,
+        requires_staging: bool,
+    ) -> Result<SceneAdmissionRequest, DesktopEpisodeAdapterFailure> {
+        let (_, authority) = self.load_scene_authority(browser_id, "scene_admission")?;
+        let evidence = self
+            .probe
+            .observe(authority.pid, &authority.binding.display_name)
+            .map_err(|error| {
+                Self::adapter_failure("scene_admission", "desktop_scene_probe_unavailable", error)
+            })?;
+        Ok(SceneAdmissionRequest {
+            viewer_posture: authority.viewer_posture,
+            controller_posture: authority.controller_posture,
+            requires_staging,
+            capture_ready: scene_is_capture_ready(evidence),
+            explicit_takeover: false,
+        })
+    }
+
+    fn capture_ready(
+        &mut self,
+        browser_id: &str,
+    ) -> Result<CaptureReadyEvidence, DesktopEpisodeAdapterFailure> {
+        let before = self.load_reserved_scene_authority(browser_id, "capture_ready")?;
+        let started = Instant::now();
+        let evidence = self
+            .probe
+            .observe(before.scene.pid, &before.scene.binding.display_name)
+            .map_err(|error| {
+                Self::adapter_failure("capture_ready", "desktop_scene_probe_unavailable", error)
+            })?;
+        let after = self.load_reserved_scene_authority(browser_id, "capture_ready")?;
+        if before != after {
+            return Err(Self::adapter_failure(
+                "capture_ready",
+                "desktop_scene_binding_drift",
+                "service-owned process, route, display, slot, scene, viewer, or controller authority changed during the scene probe",
+            ));
+        }
+        let proof_age_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        let geometry_epoch = desktop_geometry_epoch(
+            &before.scene.binding,
+            evidence.frame_width,
+            evidence.frame_height,
+            FRAME_SCALE_FACTOR_MILLIS,
+        );
+        Ok(CaptureReadyEvidence::new(
+            before.scene.binding.browser_id,
+            before.scene.process_generation,
+            before.scene.binding.route_id,
+            before.scene.binding.display_allocation_id,
+            before.presentation_slot_id,
+            before.scene_generation,
+            geometry_epoch,
+            evidence.frame_width,
+            evidence.frame_height,
+            FRAME_SCALE_FACTOR_MILLIS,
+            evidence.active_window_owned,
+            evidence.topmost_window_owned,
+            evidence.authorized_geometry,
+            evidence.capture_region_unoccluded,
+            before.scene.viewer_posture,
+            before.scene.controller_posture,
+            proof_age_ms,
+            CAPTURE_READY_MAXIMUM_AGE_MS,
+        ))
+    }
+}
+
+pub(crate) struct ConfiguredDesktopFrameAdapter;
+
+impl DesktopFrameAdapter for ConfiguredDesktopFrameAdapter {
+    fn capture(
+        &mut self,
+        browser_id: &str,
+        proof: &CaptureReadyProof,
+    ) -> Result<String, DesktopEpisodeAdapterFailure> {
+        let capture = capture_configured_desktop_frame(DesktopCaptureRequest {
+            browser_id: browser_id.to_string(),
+            session_name: None,
+            max_bytes: DEFAULT_MAX_BYTES,
+        })
+        .map_err(|error| {
+            DesktopEpisodeAdapterFailure::new(
+                "desktop_frame_capture",
+                error.code(),
+                error.to_string(),
+            )
+        })?;
+        validate_configured_capture(proof, &capture)
+    }
+}
+
+fn validate_configured_capture(
+    proof: &CaptureReadyProof,
+    capture: &DesktopCaptureResult,
+) -> Result<String, DesktopEpisodeAdapterFailure> {
+    let context = &capture.context;
+    let receipt = &capture.frame_receipt;
+    let scale_factor_millis = (context.scale_factor * 1000.0).round() as u32;
+    if context.browser_id != proof.browser_id
+        || context.route_id != proof.route_id
+        || context.display_allocation_id != proof.display_allocation_id
+        || context.geometry_epoch != proof.geometry_epoch
+        || receipt.geometry_epoch != proof.geometry_epoch
+        || context.width != proof.frame_width
+        || context.height != proof.frame_height
+        || receipt.width != proof.frame_width
+        || receipt.height != proof.frame_height
+        || scale_factor_millis != proof.scale_factor_millis
+        || proof.capture_region.x != 0
+        || proof.capture_region.y != 0
+        || proof.capture_region.width != context.width
+        || proof.capture_region.height != context.height
+        || proof.coordinate_space != context.coordinate_space
+    {
+        return Err(DesktopEpisodeAdapterFailure::new(
+            "desktop_frame_capture",
+            "desktop_frame_binding_drift",
+            "captured frame does not match the exact capture-ready browser, route, display, geometry, crop, scale, or coordinate binding",
+        ));
+    }
+    Ok(receipt.frame_id.clone())
+}
+
+fn resolve_scene_authority(
+    state: &ServiceState,
+    browser_id: &str,
+) -> Result<SceneAuthority, String> {
+    let binding =
+        resolve_desktop_capture_binding(state, browser_id).map_err(|error| error.to_string())?;
+    let browser = state
+        .browsers
+        .get(browser_id)
+        .ok_or_else(|| "service browser is missing".to_string())?;
+    let pid = browser
+        .pid
+        .ok_or_else(|| "service browser PID is missing".to_string())?;
+    let process_identity = state
+        .browser_process_identities
+        .get(browser_id)
+        .ok_or_else(|| "service browser process generation is missing".to_string())?;
+    if process_identity.process_identity.pid != pid {
+        return Err("service browser PID and process-generation identity disagree".to_string());
+    }
+    let route = state
+        .remote_view_routes
+        .get(&binding.route_id)
+        .ok_or_else(|| "service browser route is missing".to_string())?;
+    let controller_posture = if route.controller_lease_id.is_some() {
+        ControllerPosture::Human
+    } else {
+        ControllerPosture::Uncontrolled
+    };
+    let passive_viewer_present = route
+        .viewer_lease_ids
+        .iter()
+        .filter_map(|lease_id| state.viewer_leases.get(lease_id))
+        .any(|lease| {
+            lease.viewer_role != "controller"
+                && matches!(lease.state.as_str(), "requested" | "active" | "ready")
+        });
+    let viewer_posture = if passive_viewer_present {
+        ViewerPosture::Passive
+    } else {
+        ViewerPosture::None
+    };
+    Ok(SceneAuthority {
+        binding,
+        pid,
+        process_generation: format!(
+            "process:{pid}:{}",
+            process_identity.process_identity.start_token
+        ),
+        viewer_posture,
+        controller_posture,
+    })
+}
+
+fn resolve_reserved_scene_authority(
+    state: &ServiceState,
+    scene: SceneAuthority,
+    request_id: &str,
+) -> Result<ReservedSceneAuthority, String> {
+    let capacity = state
+        .presentation_capacity
+        .as_ref()
+        .ok_or_else(|| "presentation capacity is missing".to_string())?;
+    let slot = capacity
+        .slots
+        .iter()
+        .find(|slot| slot.lease_request_id.as_deref() == Some(request_id))
+        .ok_or_else(|| "episode presentation-slot lease is missing".to_string())?;
+    if slot.browser_id.as_deref() != Some(scene.binding.browser_id.as_str())
+        || slot.route_id.as_deref() != Some(scene.binding.route_id.as_str())
+        || slot.display_allocation_id.as_deref()
+            != Some(scene.binding.display_allocation_id.as_str())
+        || !matches!(
+            slot.state,
+            PresentationSlotState::Reserved
+                | PresentationSlotState::Staging
+                | PresentationSlotState::CaptureReady
+                | PresentationSlotState::Active
+        )
+    {
+        return Err("episode slot does not match the exact browser presentation".to_string());
+    }
+    Ok(ReservedSceneAuthority {
+        scene,
+        presentation_slot_id: slot.id.clone(),
+        scene_generation: format!("scene:{}:{}", slot.id, slot.scene_generation),
+    })
+}
+
+fn scene_is_capture_ready(evidence: X11SceneEvidence) -> bool {
+    evidence.active_window_owned
+        && evidence.topmost_window_owned
+        && evidence.authorized_geometry
+        && evidence.capture_region_unoccluded
+        && evidence.frame_width > 0
+        && evidence.frame_height > 0
+}
 
 /// Durable presentation-capacity adapter for one configured desktop evidence
 /// episode. The adapter never invents a slot when Service State cannot commit
@@ -153,18 +495,29 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::native::desktop_capture::{DesktopContext, FrameReceipt};
+    use crate::native::desktop_evidence::{
+        DesktopEvidenceCoordinator, SceneAdmission, WindowSemanticAdapter,
+    };
     use crate::native::presentation_capacity::{
         PresentationCapacityAuthority, PresentationCapacityConfig, PresentationSlot,
         PresentationSlotState,
     };
-    use crate::native::service_model::ServiceState;
-    use std::sync::Mutex;
+    use crate::native::service_model::{
+        BrowserHealth, BrowserHost, BrowserProcess, DisplayAllocation, RemoteViewRoute,
+        ServiceBrowserProcessIdentity, ServiceState, ViewStream, ViewStreamProvider, ViewerLease,
+    };
+    use crate::process_identity::RecordedProcessIdentity;
+    use serde_json::json;
+    use std::collections::BTreeMap;
+    use std::sync::{Arc, Mutex};
 
-    struct MemoryRepository(Mutex<ServiceState>);
+    #[derive(Clone)]
+    struct MemoryRepository(Arc<Mutex<ServiceState>>);
 
     impl MemoryRepository {
         fn new(state: ServiceState) -> Self {
-            Self(Mutex::new(state))
+            Self(Arc::new(Mutex::new(state)))
         }
     }
 
@@ -206,6 +559,140 @@ mod tests {
         }
     }
 
+    #[derive(Clone, Copy)]
+    struct FakeSceneProbe {
+        evidence: X11SceneEvidence,
+    }
+
+    impl FakeSceneProbe {
+        fn ready() -> Self {
+            Self {
+                evidence: X11SceneEvidence {
+                    active_window_owned: true,
+                    topmost_window_owned: true,
+                    authorized_geometry: true,
+                    capture_region_unoccluded: true,
+                    frame_width: 1280,
+                    frame_height: 720,
+                },
+            }
+        }
+    }
+
+    impl SceneProbe for FakeSceneProbe {
+        fn observe(&self, _pid: u32, _display_name: &str) -> Result<X11SceneEvidence, String> {
+            Ok(self.evidence)
+        }
+    }
+
+    fn configured_scene_state(passive_viewer: bool, human_controller: bool) -> ServiceState {
+        let stream = ViewStream {
+            id: "stream-1".to_string(),
+            provider: ViewStreamProvider::RdpGateway,
+            route_id: Some("route-1".to_string()),
+            display_allocation_id: Some("display-1".to_string()),
+            readiness: Some(json!({
+                "state": "ready",
+                "displayContent": { "state": "browser_window_visible" }
+            })),
+            ..ViewStream::default()
+        };
+        let browser = BrowserProcess {
+            id: "browser-1".to_string(),
+            profile_id: Some("profile-1".to_string()),
+            host: BrowserHost::RemoteHeaded,
+            health: BrowserHealth::Ready,
+            display_isolation: Some("private_virtual_display".to_string()),
+            display_name: Some(":101".to_string()),
+            display_allocation_id: Some("display-1".to_string()),
+            pid: Some(4242),
+            view_streams: vec![stream],
+            active_session_ids: vec!["session-1".to_string()],
+            ..BrowserProcess::default()
+        };
+        let display = DisplayAllocation {
+            id: "display-1".to_string(),
+            display_name: Some(":101".to_string()),
+            display_isolation: "private_virtual_display".to_string(),
+            owner_browser_id: Some("browser-1".to_string()),
+            owner_session_id: Some("session-1".to_string()),
+            profile_id: Some("profile-1".to_string()),
+            host: Some(BrowserHost::RemoteHeaded),
+            state: "ready".to_string(),
+            route_ids: vec!["route-1".to_string()],
+            readiness: Some(json!({ "state": "ready" })),
+            ..DisplayAllocation::default()
+        };
+        let viewer_lease_ids = passive_viewer
+            .then(|| vec!["viewer-1".to_string()])
+            .unwrap_or_default();
+        let route = RemoteViewRoute {
+            id: "route-1".to_string(),
+            provider: ViewStreamProvider::RdpGateway,
+            display_allocation_id: Some("display-1".to_string()),
+            browser_id: Some("browser-1".to_string()),
+            session_id: Some("session-1".to_string()),
+            state: "ready".to_string(),
+            viewer_lease_ids: viewer_lease_ids.clone(),
+            controller_lease_id: human_controller.then(|| "controller-1".to_string()),
+            readiness: Some(json!({ "state": "ready" })),
+            ..RemoteViewRoute::default()
+        };
+        let viewer_leases = passive_viewer
+            .then(|| {
+                BTreeMap::from([(
+                    "viewer-1".to_string(),
+                    ViewerLease {
+                        id: "viewer-1".to_string(),
+                        route_id: Some("route-1".to_string()),
+                        browser_id: Some("browser-1".to_string()),
+                        viewer_role: "observer".to_string(),
+                        state: "active".to_string(),
+                        ..ViewerLease::default()
+                    },
+                )])
+            })
+            .unwrap_or_default();
+        let mut slot = PresentationSlot::warm_idle("slot-1").with_binding("route-1", "display-1");
+        slot.state = PresentationSlotState::Reserved;
+        slot.lease_request_id = Some("episode-1".to_string());
+        slot.browser_id = Some("browser-1".to_string());
+        slot.scene_generation = 7;
+        ServiceState {
+            browsers: BTreeMap::from([("browser-1".to_string(), browser)]),
+            browser_process_identities: BTreeMap::from([(
+                "browser-1".to_string(),
+                ServiceBrowserProcessIdentity {
+                    process_identity: RecordedProcessIdentity {
+                        pid: 4242,
+                        start_token: "start-9".to_string(),
+                        executable_path: Some("/opt/chrome".to_string()),
+                        browser_family: Some("chrome".to_string()),
+                    },
+                    user_data_dir: None,
+                    runtime_profile: None,
+                },
+            )]),
+            display_allocations: BTreeMap::from([("display-1".to_string(), display)]),
+            remote_view_routes: BTreeMap::from([("route-1".to_string(), route)]),
+            viewer_leases,
+            presentation_capacity: Some(
+                PresentationCapacityAuthority::new(
+                    PresentationCapacityConfig {
+                        warm_minimum: 1,
+                        hard_maximum: 1,
+                        human_priority_reserve: 0,
+                        recovery_reserve: 0,
+                        max_queue_depth: 8,
+                    },
+                    vec![slot],
+                )
+                .unwrap(),
+            ),
+            ..ServiceState::default()
+        }
+    }
+
     #[test]
     fn configured_adapter_commits_exact_reservation_and_release() {
         let repository = MemoryRepository::new(state(4));
@@ -240,5 +727,144 @@ mod tests {
             .slots
             .iter()
             .all(|slot| slot.state == PresentationSlotState::WarmIdle));
+    }
+
+    #[test]
+    fn passive_viewer_allows_only_an_already_ready_unstaged_scene() {
+        let repository = MemoryRepository::new(configured_scene_state(true, false));
+        let mut adapter = ConfiguredWindowSemanticAdapter::with_probe(
+            repository,
+            "episode-1",
+            FakeSceneProbe::ready(),
+        );
+
+        let unstaged = adapter.scene_admission("browser-1", false).unwrap();
+        assert_eq!(
+            DesktopEvidenceCoordinator::admit_scene(unstaged),
+            SceneAdmission::CaptureAllowed
+        );
+        let staged = adapter.scene_admission("browser-1", true).unwrap();
+        assert_eq!(
+            DesktopEvidenceCoordinator::admit_scene(staged),
+            SceneAdmission::WaitForViewer
+        );
+    }
+
+    #[test]
+    fn active_human_controller_blocks_before_capacity_or_scene_mutation() {
+        let repository = MemoryRepository::new(configured_scene_state(false, true));
+        let mut adapter = ConfiguredWindowSemanticAdapter::with_probe(
+            repository,
+            "episode-1",
+            FakeSceneProbe::ready(),
+        );
+
+        let admission = adapter.scene_admission("browser-1", false).unwrap();
+        assert_eq!(
+            DesktopEvidenceCoordinator::admit_scene(admission),
+            SceneAdmission::WaitForHumanController
+        );
+    }
+
+    #[test]
+    fn configured_capture_ready_proof_binds_process_route_display_slot_and_geometry() {
+        let repository = MemoryRepository::new(configured_scene_state(true, false));
+        let mut adapter = ConfiguredWindowSemanticAdapter::with_probe(
+            repository,
+            "episode-1",
+            FakeSceneProbe::ready(),
+        );
+
+        let evidence = adapter.capture_ready("browser-1").unwrap();
+        let proof = DesktopEvidenceCoordinator::prove_capture_ready(evidence).unwrap();
+
+        assert_eq!(proof.browser_id, "browser-1");
+        assert_eq!(proof.process_generation, "process:4242:start-9");
+        assert_eq!(proof.route_id, "route-1");
+        assert_eq!(proof.display_allocation_id, "display-1");
+        assert_eq!(proof.presentation_slot_id, "slot-1");
+        assert_eq!(proof.scene_generation, "scene:slot-1:7");
+        assert_eq!(proof.frame_width, 1280);
+        assert_eq!(proof.frame_height, 720);
+        assert_eq!(proof.scale_factor_millis, 1000);
+        assert_eq!(proof.viewer_posture, ViewerPosture::Passive);
+        assert_eq!(proof.controller_posture, ControllerPosture::Uncontrolled);
+    }
+
+    #[test]
+    fn configured_capture_ready_rejects_a_slot_bound_to_another_route() {
+        let mut state = configured_scene_state(false, false);
+        state.presentation_capacity.as_mut().unwrap().slots[0].route_id =
+            Some("route-other".to_string());
+        let repository = MemoryRepository::new(state);
+        let mut adapter = ConfiguredWindowSemanticAdapter::with_probe(
+            repository,
+            "episode-1",
+            FakeSceneProbe::ready(),
+        );
+
+        let failure = adapter.capture_ready("browser-1").unwrap_err();
+        assert_eq!(failure.phase, "capture_ready");
+        assert_eq!(failure.code, "desktop_scene_reservation_unavailable");
+    }
+
+    #[test]
+    fn configured_frame_validation_rejects_geometry_drift() {
+        let repository = MemoryRepository::new(configured_scene_state(false, false));
+        let mut adapter = ConfiguredWindowSemanticAdapter::with_probe(
+            repository,
+            "episode-1",
+            FakeSceneProbe::ready(),
+        );
+        let proof = DesktopEvidenceCoordinator::prove_capture_ready(
+            adapter.capture_ready("browser-1").unwrap(),
+        )
+        .unwrap();
+        let capture = DesktopCaptureResult {
+            context: DesktopContext {
+                context_id: "context-1".to_string(),
+                schema_version: "v1",
+                browser_id: "browser-1".to_string(),
+                session_name: "session-1".to_string(),
+                profile_id: Some("profile-1".to_string()),
+                display_allocation_id: "display-1".to_string(),
+                stream_id: "stream-1".to_string(),
+                route_id: "route-1".to_string(),
+                capture_provider: "x11_root",
+                view_stream_provider: ViewStreamProvider::RdpGateway,
+                display_isolation: "private_virtual_display".to_string(),
+                coordinate_space: "desktop_physical_pixels",
+                width: 1279,
+                height: 720,
+                scale_factor: 1.0,
+                geometry_epoch: proof.geometry_epoch.clone(),
+                resolved_at: "2026-08-24T00:00:00Z".to_string(),
+                readiness: json!({ "state": "ready" }),
+            },
+            frame_receipt: FrameReceipt {
+                frame_id: "frame-1".to_string(),
+                schema_version: "v1",
+                context_id: "context-1".to_string(),
+                capture_provider: "x11_root",
+                provider_version: "fixture-v1".to_string(),
+                sequence: 1,
+                captured_at: "2026-08-24T00:00:00Z".to_string(),
+                width: 1279,
+                height: 720,
+                scale_factor: 1.0,
+                geometry_epoch: proof.geometry_epoch.clone(),
+                mime_type: "image/png",
+                byte_length: 4,
+                content_sha256: "fixture".to_string(),
+                freshness: "fresh_capture",
+                retention: "ephemeral",
+                persisted: false,
+            },
+            image_bytes: vec![1, 2, 3, 4],
+        };
+
+        let failure = validate_configured_capture(&proof, &capture).unwrap_err();
+        assert_eq!(failure.phase, "desktop_frame_capture");
+        assert_eq!(failure.code, "desktop_frame_binding_drift");
     }
 }

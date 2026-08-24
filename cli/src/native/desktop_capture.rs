@@ -104,6 +104,17 @@ pub(crate) struct DesktopCaptureResult {
     pub image_bytes: Vec<u8>,
 }
 
+/// Exact service-owned binding reused by configured desktop evidence adapters.
+/// The display name remains internal and is never projected through a product
+/// action or receipt.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DesktopCaptureBinding {
+    pub(crate) browser_id: String,
+    pub(crate) display_allocation_id: String,
+    pub(crate) display_name: String,
+    pub(crate) route_id: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Geometry {
     width: u32,
@@ -256,15 +267,17 @@ fn capture_desktop_frame(
     let resolved_at = dependencies.clock.now();
     let captured_at = dependencies.clock.now();
     let sequence = dependencies.sequence.next();
-    let geometry_epoch = digest_text(&format!(
-        "{}\0{}\0{}\0{}\0{}\0{}",
-        before.browser_id,
-        before.display_allocation_id,
-        before.route_id,
+    let geometry_epoch = desktop_geometry_epoch(
+        &DesktopCaptureBinding {
+            browser_id: before.browser_id.clone(),
+            display_allocation_id: before.display_allocation_id.clone(),
+            display_name: before.display_name.clone(),
+            route_id: before.route_id.clone(),
+        },
         before_geometry.width,
         before_geometry.height,
-        before_geometry.scale_factor_millis
-    ));
+        before_geometry.scale_factor_millis,
+    );
     let context_id = format!(
         "desktop-context-{}",
         &digest_text(&format!(
@@ -341,6 +354,43 @@ pub(crate) fn capture_configured_desktop_frame(
             &ProcessSequence,
         ),
     )
+}
+
+pub(crate) fn resolve_desktop_capture_binding(
+    state: &ServiceState,
+    browser_id: &str,
+) -> Result<DesktopCaptureBinding, DesktopCaptureError> {
+    let resolved = resolve_desktop(
+        state,
+        &DesktopCaptureRequest {
+            browser_id: browser_id.to_string(),
+            session_name: None,
+            max_bytes: DEFAULT_MAX_BYTES,
+        },
+    )?;
+    Ok(DesktopCaptureBinding {
+        browser_id: resolved.browser_id,
+        display_allocation_id: resolved.display_allocation_id,
+        display_name: resolved.display_name,
+        route_id: resolved.route_id,
+    })
+}
+
+pub(crate) fn desktop_geometry_epoch(
+    binding: &DesktopCaptureBinding,
+    width: u32,
+    height: u32,
+    scale_factor_millis: u32,
+) -> String {
+    digest_text(&format!(
+        "{}\0{}\0{}\0{}\0{}\0{}",
+        binding.browser_id,
+        binding.display_allocation_id,
+        binding.route_id,
+        width,
+        height,
+        scale_factor_millis
+    ))
 }
 
 fn validate_request(request: &DesktopCaptureRequest) -> Result<(), DesktopCaptureError> {

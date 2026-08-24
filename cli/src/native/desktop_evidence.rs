@@ -116,6 +116,15 @@ pub(crate) enum ControllerPosture {
     Human,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CaptureRegion {
+    pub(crate) x: u32,
+    pub(crate) y: u32,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CaptureReadyEvidence {
     browser_id: String,
@@ -125,6 +134,11 @@ pub(crate) struct CaptureReadyEvidence {
     presentation_slot_id: String,
     scene_generation: String,
     geometry_epoch: String,
+    frame_width: u32,
+    frame_height: u32,
+    scale_factor_millis: u32,
+    capture_region: CaptureRegion,
+    coordinate_space: String,
     active_window_owned: bool,
     topmost_window_owned: bool,
     authorized_geometry: bool,
@@ -137,26 +151,79 @@ pub(crate) struct CaptureReadyEvidence {
 }
 
 impl CaptureReadyEvidence {
-    #[cfg(test)]
-    fn complete(scene_generation: impl Into<String>, geometry_epoch: impl Into<String>) -> Self {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        browser_id: impl Into<String>,
+        process_generation: impl Into<String>,
+        route_id: impl Into<String>,
+        display_allocation_id: impl Into<String>,
+        presentation_slot_id: impl Into<String>,
+        scene_generation: impl Into<String>,
+        geometry_epoch: impl Into<String>,
+        frame_width: u32,
+        frame_height: u32,
+        scale_factor_millis: u32,
+        active_window_owned: bool,
+        topmost_window_owned: bool,
+        authorized_geometry: bool,
+        capture_region_unoccluded: bool,
+        viewer_posture: ViewerPosture,
+        controller_posture: ControllerPosture,
+        proof_age_ms: u64,
+        maximum_age_ms: u64,
+    ) -> Self {
         Self {
-            browser_id: "browser-1".to_string(),
-            process_generation: "process-2".to_string(),
-            route_id: "route-4".to_string(),
-            display_allocation_id: "display-allocation-4".to_string(),
-            presentation_slot_id: "slot-4".to_string(),
+            browser_id: browser_id.into(),
+            process_generation: process_generation.into(),
+            route_id: route_id.into(),
+            display_allocation_id: display_allocation_id.into(),
+            presentation_slot_id: presentation_slot_id.into(),
             scene_generation: scene_generation.into(),
             geometry_epoch: geometry_epoch.into(),
-            active_window_owned: true,
-            topmost_window_owned: true,
-            authorized_geometry: true,
-            capture_region_unoccluded: true,
+            frame_width,
+            frame_height,
+            scale_factor_millis,
+            capture_region: CaptureRegion {
+                x: 0,
+                y: 0,
+                width: frame_width,
+                height: frame_height,
+            },
+            coordinate_space: "desktop_physical_pixels".to_string(),
+            active_window_owned,
+            topmost_window_owned,
+            authorized_geometry,
+            capture_region_unoccluded,
             frame_mapping_current: true,
-            viewer_posture: ViewerPosture::Passive,
-            controller_posture: ControllerPosture::Uncontrolled,
-            proof_age_ms: 50,
-            maximum_age_ms: 500,
+            viewer_posture,
+            controller_posture,
+            proof_age_ms,
+            maximum_age_ms,
         }
+    }
+
+    #[cfg(test)]
+    fn complete(scene_generation: impl Into<String>, geometry_epoch: impl Into<String>) -> Self {
+        Self::new(
+            "browser-1",
+            "process-2",
+            "route-4",
+            "display-allocation-4",
+            "slot-4",
+            scene_generation,
+            geometry_epoch,
+            1280,
+            720,
+            1000,
+            true,
+            true,
+            true,
+            true,
+            ViewerPosture::Passive,
+            ControllerPosture::Uncontrolled,
+            50,
+            500,
+        )
     }
 }
 
@@ -170,6 +237,11 @@ pub(crate) struct CaptureReadyProof {
     pub(crate) presentation_slot_id: String,
     pub(crate) scene_generation: String,
     pub(crate) geometry_epoch: String,
+    pub(crate) frame_width: u32,
+    pub(crate) frame_height: u32,
+    pub(crate) scale_factor_millis: u32,
+    pub(crate) capture_region: CaptureRegion,
+    pub(crate) coordinate_space: String,
     pub(crate) viewer_posture: ViewerPosture,
     pub(crate) controller_posture: ControllerPosture,
 }
@@ -416,7 +488,11 @@ pub(crate) trait ExternalUiTriggerAdapter {
 }
 
 pub(crate) trait DesktopFrameAdapter {
-    fn capture(&mut self, browser_id: &str, proof: &CaptureReadyProof) -> String;
+    fn capture(
+        &mut self,
+        browser_id: &str,
+        proof: &CaptureReadyProof,
+    ) -> Result<String, DesktopEpisodeAdapterFailure>;
 }
 
 pub(crate) trait DesktopInputAdapter {
@@ -595,7 +671,23 @@ impl DesktopEvidenceCoordinator {
                 }
             },
         };
-        let capture_receipt_id = adapters.frames.capture(&request.browser_id, &capture_proof);
+        let capture_receipt_id = match adapters.frames.capture(&request.browser_id, &capture_proof)
+        {
+            Ok(receipt_id) => receipt_id,
+            Err(failure) => {
+                return Self::abort_after_reservation(
+                    &request,
+                    decision,
+                    admission_receipt_id,
+                    before_scene_generation,
+                    stage_receipt_id,
+                    DesktopEpisodeFailure::Adapter(failure),
+                    &restoration_authority,
+                    true,
+                    adapters,
+                );
+            }
+        };
         let input_receipt_id = match &request.input {
             EpisodeInput::None => None,
             EpisodeInput::Authorized {
@@ -755,6 +847,11 @@ impl DesktopEvidenceCoordinator {
             && before.presentation_slot_id == after.presentation_slot_id
             && before.scene_generation == after.scene_generation
             && before.geometry_epoch == after.geometry_epoch
+            && before.frame_width == after.frame_width
+            && before.frame_height == after.frame_height
+            && before.scale_factor_millis == after.scale_factor_millis
+            && before.capture_region == after.capture_region
+            && before.coordinate_space == after.coordinate_space
     }
 
     pub(crate) fn decide(request: EvidenceRequest) -> EvidenceDecision {
@@ -831,6 +928,17 @@ impl DesktopEvidenceCoordinator {
         if !evidence.frame_mapping_current {
             return Err(CaptureReadinessFailure::FrameMappingStale);
         }
+        if evidence.frame_width == 0
+            || evidence.frame_height == 0
+            || evidence.scale_factor_millis == 0
+            || evidence.capture_region.x != 0
+            || evidence.capture_region.y != 0
+            || evidence.capture_region.width != evidence.frame_width
+            || evidence.capture_region.height != evidence.frame_height
+            || evidence.coordinate_space != "desktop_physical_pixels"
+        {
+            return Err(CaptureReadinessFailure::FrameMappingStale);
+        }
         if evidence.proof_age_ms > evidence.maximum_age_ms {
             return Err(CaptureReadinessFailure::ProofStale);
         }
@@ -842,6 +950,11 @@ impl DesktopEvidenceCoordinator {
             presentation_slot_id: evidence.presentation_slot_id,
             scene_generation: evidence.scene_generation,
             geometry_epoch: evidence.geometry_epoch,
+            frame_width: evidence.frame_width,
+            frame_height: evidence.frame_height,
+            scale_factor_millis: evidence.scale_factor_millis,
+            capture_region: evidence.capture_region,
+            coordinate_space: evidence.coordinate_space,
             viewer_posture: evidence.viewer_posture,
             controller_posture: evidence.controller_posture,
         })
@@ -996,11 +1109,21 @@ mod tests {
         "trigger-1"
     );
 
-    struct FakeFrames(Log);
+    struct FakeFrames {
+        log: Log,
+        failure: Option<DesktopEpisodeAdapterFailure>,
+    }
     impl DesktopFrameAdapter for FakeFrames {
-        fn capture(&mut self, _browser_id: &str, _proof: &CaptureReadyProof) -> String {
-            self.0.borrow_mut().push("capture");
-            "capture-1".to_string()
+        fn capture(
+            &mut self,
+            _browser_id: &str,
+            _proof: &CaptureReadyProof,
+        ) -> Result<String, DesktopEpisodeAdapterFailure> {
+            self.log.borrow_mut().push("capture");
+            if let Some(failure) = self.failure.clone() {
+                return Err(failure);
+            }
+            Ok("capture-1".to_string())
         }
     }
     struct FakeInput(Log);
@@ -1077,7 +1200,10 @@ mod tests {
                     ]),
                 },
                 trigger: FakeTrigger(log.clone()),
-                frames: FakeFrames(log.clone()),
+                frames: FakeFrames {
+                    log: log.clone(),
+                    failure: None,
+                },
                 input: FakeInput(log.clone()),
                 verification: FakeVerification(log.clone()),
                 handoff: FakeHandoff(log.clone()),
@@ -1324,6 +1450,31 @@ mod tests {
             receipt.failure,
             DesktopEpisodeFailure::Adapter(DesktopEpisodeAdapterFailure { code, .. })
                 if code == "desktop_capture_ready_probe_unavailable"
+        ));
+        assert!(harness.log.borrow().ends_with(&["release", "cleanup"]));
+    }
+
+    #[test]
+    fn unavailable_frame_capture_releases_capacity_and_cleans_up() {
+        let mut harness = Harness::new();
+        harness.frames.failure = Some(DesktopEpisodeAdapterFailure::new(
+            "desktop_frame_capture",
+            "desktop_frame_binding_drift",
+            "the configured frame no longer matches the capture-ready proof",
+        ));
+
+        let outcome = harness.run(
+            EvidenceRequest::browser_external(BrowserExternalSurface::PasskeyChooser, true),
+            EpisodeInput::None,
+        );
+
+        let DesktopEpisodeOutcome::Aborted { receipt } = outcome else {
+            panic!("expected a terminal frame failure receipt");
+        };
+        assert!(matches!(
+            receipt.failure,
+            DesktopEpisodeFailure::Adapter(DesktopEpisodeAdapterFailure { code, .. })
+                if code == "desktop_frame_binding_drift"
         ));
         assert!(harness.log.borrow().ends_with(&["release", "cleanup"]));
     }
