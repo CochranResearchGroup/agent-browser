@@ -5051,6 +5051,7 @@ where
                     error.kind,
                     RuntimeTransactionCommandFailureKind::ObservationOnlyAlias
                         | RuntimeTransactionCommandFailureKind::LegacyTransferredOwnerRejected
+                        | RuntimeTransactionCommandFailureKind::BrowserUnavailableAlias
                 ) && selected.is_some()
                     && session != primary_session =>
             {
@@ -5491,6 +5492,7 @@ enum RuntimeTransactionCommandFailureKind {
     ProtocolUnavailable,
     LegacyTransferredOwnerRejected,
     ObservationOnlyAlias,
+    BrowserUnavailableAlias,
     CommandFailed,
 }
 
@@ -5518,12 +5520,16 @@ fn runtime_transaction_failure_kind(
         && normalized.contains("runtime_owner_current_evidence_mismatch:");
     let observation_only_alias = command_args == ["handoff", "prepare"]
         && normalized.contains("runtime_owner_observation_only:");
+    let browser_unavailable_alias =
+        command_args == ["handoff", "prepare"] && normalized.contains("browser pid is unavailable");
     if handoff_command && (typed_unknown || textual_unknown) {
         RuntimeTransactionCommandFailureKind::ProtocolUnavailable
     } else if legacy_transferred_owner_rejected {
         RuntimeTransactionCommandFailureKind::LegacyTransferredOwnerRejected
     } else if observation_only_alias {
         RuntimeTransactionCommandFailureKind::ObservationOnlyAlias
+    } else if browser_unavailable_alias {
+        RuntimeTransactionCommandFailureKind::BrowserUnavailableAlias
     } else {
         RuntimeTransactionCommandFailureKind::CommandFailed
     }
@@ -11538,6 +11544,22 @@ mod tests {
             ),
             RuntimeTransactionCommandFailureKind::CommandFailed
         );
+        assert_eq!(
+            runtime_transaction_failure_kind(
+                Some(&runtime_failure),
+                "Cannot prepare runtime handoff for session 'historical-alias': browser PID is unavailable",
+                &["handoff", "prepare"]
+            ),
+            RuntimeTransactionCommandFailureKind::BrowserUnavailableAlias
+        );
+        assert_eq!(
+            runtime_transaction_failure_kind(
+                Some(&runtime_failure),
+                "browser PID is unavailable",
+                &["handoff", "resume"]
+            ),
+            RuntimeTransactionCommandFailureKind::CommandFailed
+        );
     }
 
     #[test]
@@ -11723,6 +11745,69 @@ mod tests {
         assert_eq!(prepared_sessions, vec!["primary", "historical-alias"]);
         assert_eq!(retired_sessions, vec!["historical-alias"]);
         assert_eq!(retired_aliases, vec!["historical-alias"]);
+    }
+
+    #[test]
+    fn runtime_handoff_prepare_retires_legacy_browser_unavailable_alias_after_owner_selection() {
+        let candidates = vec![
+            "current-owner-route".to_string(),
+            "historical-alias".to_string(),
+        ];
+        let mut retired_sessions = Vec::new();
+
+        let (selected_session, _, retired_aliases) = prepare_runtime_handoff_candidates(
+            "session:last30days-facebook--last30days-facebook",
+            "current-owner-route",
+            candidates,
+            |session| {
+                if session == "current-owner-route" {
+                    Ok(serde_json::json!({
+                        "data": {
+                            "prepared": true,
+                            "browserPresent": true,
+                            "candidateSessionName": "candidate"
+                        }
+                    }))
+                } else {
+                    Err(RuntimeTransactionCommandFailure {
+                        kind: RuntimeTransactionCommandFailureKind::BrowserUnavailableAlias,
+                        message: "Cannot prepare runtime handoff: browser PID is unavailable"
+                            .to_string(),
+                    })
+                }
+            },
+            |session| {
+                retired_sessions.push(session.to_string());
+                Ok(())
+            },
+        )
+        .expect("the current owner route must supersede a browserless historical alias");
+
+        assert_eq!(selected_session, "current-owner-route");
+        assert_eq!(retired_sessions, vec!["historical-alias"]);
+        assert_eq!(retired_aliases, vec!["historical-alias"]);
+    }
+
+    #[test]
+    fn runtime_handoff_prepare_rejects_browser_unavailable_primary() {
+        let (_, error) = prepare_runtime_handoff_candidates(
+            "session:logical-browser",
+            "owner-route",
+            vec!["owner-route".to_string()],
+            |_| {
+                Err(RuntimeTransactionCommandFailure {
+                    kind: RuntimeTransactionCommandFailureKind::BrowserUnavailableAlias,
+                    message: "browser PID is unavailable".to_string(),
+                })
+            },
+            |_| Ok(()),
+        )
+        .expect_err("the authoritative source route must have a browser PID");
+
+        assert_eq!(
+            error.kind,
+            RuntimeTransactionCommandFailureKind::BrowserUnavailableAlias
+        );
     }
 
     #[test]
