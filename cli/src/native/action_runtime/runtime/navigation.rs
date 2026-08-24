@@ -225,21 +225,41 @@ pub(crate) async fn handle_runtime_handoff_prepare(
                     "runtime_handoff_owner_missing: prepared owner is not registered".to_string()
                 })?;
             if current_owner.pending_transfer.as_ref() != Some(proposal) {
-                return Err(
-                    "runtime_handoff_prepare_replay_mismatch: descriptor and owner registry differ"
-                        .to_string(),
+                if reversed_handoff_retry_matches_current_owner(
+                    &descriptor.session_name,
+                    proposal,
+                    &current_owner,
+                ) {
+                    fs::remove_file(runtime_handoff_path(&state.session_id)).map_err(|error| {
+                        format!("runtime_handoff_prepare_stale_retry_cleanup_failed: {error}")
+                    })?;
+                    state.runtime_owner_binding = Some(
+                        crate::runtime_owner_transfer::RuntimeOwnerBinding::effect_capable(
+                            crate::runtime_owner_transfer::OwnerAuthorityClaim::from_owner(
+                                &current_owner,
+                            ),
+                        ),
+                    );
+                } else {
+                    return Err(
+                        "runtime_handoff_prepare_replay_mismatch: descriptor and owner registry differ"
+                            .to_string(),
+                    );
+                }
+            } else {
+                state.runtime_owner_binding = Some(
+                    crate::runtime_owner_transfer::RuntimeOwnerBinding::effect_capable(
+                        crate::runtime_owner_transfer::OwnerAuthorityClaim::from_owner(
+                            &current_owner,
+                        ),
+                    ),
                 );
+                return Ok(runtime_handoff_prepared_response(
+                    &descriptor,
+                    runtime_handoff_path(&state.session_id),
+                    true,
+                ));
             }
-            state.runtime_owner_binding = Some(
-                crate::runtime_owner_transfer::RuntimeOwnerBinding::effect_capable(
-                    crate::runtime_owner_transfer::OwnerAuthorityClaim::from_owner(&current_owner),
-                ),
-            );
-            return Ok(runtime_handoff_prepared_response(
-                &descriptor,
-                runtime_handoff_path(&state.session_id),
-                true,
-            ));
         }
     }
     let browser_pid = manager
@@ -376,6 +396,29 @@ pub(crate) async fn handle_runtime_handoff_prepare(
     };
     let path = write_runtime_handoff(&descriptor)?;
     Ok(runtime_handoff_prepared_response(&descriptor, path, false))
+}
+
+pub(crate) fn reversed_handoff_retry_matches_current_owner(
+    descriptor_session: &str,
+    proposal: &crate::runtime_owner_transfer::OwnerTransferProposal,
+    current_owner: &crate::runtime_owner_transfer::ProfileOwner,
+) -> bool {
+    current_owner.pending_transfer.is_none()
+        && current_owner.state == crate::runtime_owner_transfer::ProfileOwnerState::Ready
+        && proposal
+            .candidate_owner_generation
+            .checked_add(1)
+            .is_some_and(|generation| generation == current_owner.owner_generation)
+        && proposal.request.expected_owner_id.as_deref() == Some(current_owner.owner_id.as_str())
+        && proposal.request.expected_owner_generation == proposal.previous_owner_generation
+        && current_owner.browser_id == proposal.request.logical_browser_id
+        && current_owner.daemon_session_route == descriptor_session
+        && current_owner.profile_identity_digest == proposal.request.profile_identity_digest
+        && current_owner.process_instance_digest == proposal.request.process_instance_digest
+        && current_owner.browser_family == proposal.request.browser_family
+        && current_owner.cdp_endpoint_identity_digest
+            == proposal.request.cdp_endpoint_identity_digest
+        && current_owner.target_set_digest == proposal.request.target_set_digest
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -949,7 +992,7 @@ fn orphan_logical_browser_id_with_hint(
     Ok(logical_browser_id.to_string())
 }
 
-fn durable_orphan_runtime_profile(
+pub(crate) fn durable_orphan_runtime_profile(
     snapshot: &crate::native::service_model::ServiceState,
     source_session: &str,
     logical_browser_id: &str,

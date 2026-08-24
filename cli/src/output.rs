@@ -5491,8 +5491,10 @@ Usage: agent-browser install [--with-deps] [--with-remote-view-privileges]
 
 Downloads and installs browser binaries required for automation. The doctor is
 no-launch and also reports service-status, runtime multiplicity, duplicate
-profile pressure, and remote-view privilege readiness. Workstation payload checks bind the installed
-binary and support assets to recorded SHA-256 provenance. Real-host preflight
+profile pressure, and remote-view privilege readiness. Warning-severity
+observations remain visible but do not make doctor exit nonzero. Workstation
+payload checks bind the installed binary and support assets to recorded
+SHA-256 provenance. Real-host preflight
 requires at least 6 GiB free before sudo, payload staging, or package mutation.
 
 Fresh install and upgrade use one durable transaction engine. Before candidate
@@ -6300,6 +6302,8 @@ Notes:
   - Text service providers focuses provider identity, kind, enabled state, config reference, and capabilities.
   - Text service challenges focuses detected challenge kind, state, tab, provider, policy decision, human approval, and result.
   - Persisted browser records are probed for dead PIDs, unreachable CDP endpoints, and failed target-list probes.
+  - Reconciliation completes an owned closing runtime lifecycle only when its exact owner generation still matches, the recorded process group is absent, the matching registered profile path is present, and its profile lock is absent. Live, locked, unmatched, and ambiguous lanes remain unchanged.
+  - A managed launch may replace an exact terminal/satisfied owner under a new logical browser id only at the next generation with no pending transfer or lifecycle-key collision; the lifecycle record moves to the new id and retains one cleanup obligation.
   - Non-ready browsers close their known tabs during reconciliation so stale tab state does not look active.
   - Reconciliation emits a reconciliation event with details.action=session_tab_ownership_repaired when it removes stale session/tab ownership links.
   - The reconciliation snapshot records lastReconciledAt, browserCount, changedBrowsers, and lastError. service_reconcile responses also include expiredSessionLeases, expiredSessionLeaseCount, remoteViewRepair counts, and routePoolRefresh results. Pass --authoritative-route-pool-json with a readiness-verified JSON array to refresh retained route definitions without replacing a conflicting active allocation.

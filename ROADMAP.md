@@ -7,6 +7,27 @@ This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
 bounded implementation and validation plans remain under `docs/dev/plans/`.
 
+## P128 | Runtime Lifecycle Hotfix Collection
+
+State: OPEN
+Current state: the accepted absent-closing repairs are reconciled with current
+main. Newly owned launch persistence now rolls back exactly on registration
+failure, missing browser/session projection recovery remains fenced by durable
+handoff plus process and runtime-profile identity, and a quiescent historical
+stopped supervisor is advisory while live or drifted supervisor failures remain
+blocking. Focused Rust, strict Clippy, workstation fixture, documentation, and
+contract validation pass. Transactional installation and harmless live BILL
+profile acceptance remain pending.
+
+### Plan
+
+- `docs/dev/plans/0128-2026-08-23-runtime-lifecycle-hotfix-collection.md`
+
+### Next Recommendation
+
+Integrate the reviewed hotfix source into protected main, then build the exact
+candidate and admit workstation apply only after a stable transactional census.
+
 ## P127 | Development Presentation Provider Isolation
 
 State: IN PROGRESS

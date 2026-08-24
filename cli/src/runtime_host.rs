@@ -21,7 +21,16 @@ pub(crate) const DEFAULT_MAX_RUNTIME_LANES: usize = 64;
 pub(crate) fn admission_enabled() -> bool {
     match std::env::var(RUNTIME_HOST_ENV) {
         Ok(value) => matches!(value.trim(), "1" | "true" | "yes"),
-        Err(_) => crate::runtime_host_ingress::selected_socket_dir().is_some(),
+        Err(_) => {
+            #[cfg(test)]
+            {
+                false
+            }
+            #[cfg(not(test))]
+            {
+                crate::runtime_host_ingress::selected_socket_dir().is_some()
+            }
+        }
     }
 }
 

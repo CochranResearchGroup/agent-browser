@@ -931,13 +931,27 @@ fn classify_status(
         .as_ref()
         .is_ok_and(|unit| unit.active_state == "activating")
     {
+        issues.push(issue_with_severity(
+            "supervisor_starting",
+            "error",
+            "The shared runtime host supervisor is activating but not ready.",
+        ));
         ("starting", false)
     } else {
         if let Err(error) = systemd.as_ref() {
             issues.push(issue("supervisor_unavailable", error));
         } else {
-            issues.push(issue(
+            let has_live_expectation = stream_reachable
+                || systemd.as_ref().is_ok_and(|unit| {
+                    unit.active_state == "active" || unit.main_pid.is_some_and(|pid| pid > 0)
+                });
+            issues.push(issue_with_severity(
                 "supervisor_stopped",
+                if has_live_expectation {
+                    "error"
+                } else {
+                    "warning"
+                },
                 "The shared runtime host supervisor is not active and ready.",
             ));
         }
@@ -967,9 +981,13 @@ fn classify_status(
 }
 
 fn issue(code: &str, message: &str) -> Value {
+    issue_with_severity(code, "error", message)
+}
+
+fn issue_with_severity(code: &str, severity: &str, message: &str) -> Value {
     json!({
         "code": code,
-        "severity": "warning",
+        "severity": severity,
         "message": message,
         "recommendedAction": "agent-browser session supervisor status",
     })
@@ -1309,6 +1327,49 @@ mod tests {
         ] {
             assert!(validate_manifest(&invalid).is_err(), "accepted {invalid:?}");
         }
+    }
+
+    #[test]
+    fn quiescent_stopped_supervisor_is_advisory_but_live_expectation_is_blocking() {
+        let path = Path::new("/tmp/messages-v4.json");
+        let quiescent = classify_status(
+            "messages-v4",
+            path,
+            Ok(manifest()),
+            Ok(SystemdUnitObservation {
+                load_state: "loaded".to_string(),
+                active_state: "inactive".to_string(),
+                sub_state: "dead".to_string(),
+                result: "success".to_string(),
+                restart_count: 0,
+                main_pid: None,
+            }),
+            None,
+            false,
+            true,
+        );
+        assert_eq!(quiescent.state, "stopped");
+        assert_eq!(quiescent.issues[0]["code"], "supervisor_stopped");
+        assert_eq!(quiescent.issues[0]["severity"], "warning");
+
+        let live_expected = classify_status(
+            "messages-v4",
+            path,
+            Ok(manifest()),
+            Ok(SystemdUnitObservation {
+                load_state: "loaded".to_string(),
+                active_state: "active".to_string(),
+                sub_state: "running".to_string(),
+                result: "success".to_string(),
+                restart_count: 0,
+                main_pid: Some(4242),
+            }),
+            Some(39716),
+            false,
+            true,
+        );
+        assert_eq!(live_expected.state, "stopped");
+        assert_eq!(live_expected.issues[0]["severity"], "error");
     }
 
     #[test]

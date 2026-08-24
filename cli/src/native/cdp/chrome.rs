@@ -369,7 +369,11 @@ impl ChromeProcess {
                         exact_process_exited: true,
                         ..ProcessShutdownOutcome::default()
                     };
-                    kill_aux_processes(&mut self.aux_processes, &mut outcome);
+                    let auxiliary_cleanup_succeeded =
+                        kill_aux_processes(&mut self.aux_processes, &mut outcome);
+                    if outcome.force_kill_attempted {
+                        outcome.force_kill_succeeded = auxiliary_cleanup_succeeded;
+                    }
                     return complete_controlled_shutdown(outcome, &self.user_data_dir, timeout);
                 }
                 Ok(None) => std::thread::sleep(poll_interval),
@@ -3543,6 +3547,45 @@ mod tests {
         assert!(outcome.profile_lock_released);
         assert!(outcome.controlled_relaunch_ready());
         assert!(started.elapsed() >= Duration::from_millis(100));
+        assert!(outcome.errors.is_empty(), "{:?}", outcome.errors);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn graceful_shutdown_reports_successful_auxiliary_cleanup() {
+        let dir = TempDir::new("graceful-shutdown-auxiliary-cleanup");
+        std::fs::create_dir_all(&*dir).unwrap();
+        let child = spawn_noop_child();
+        let pid = child.id();
+        let auxiliary = spawn_sleep_child();
+        let mut process = ChromeProcess {
+            child,
+            aux_processes: vec![auxiliary],
+            ws_url: String::new(),
+            owns_process: true,
+            lifecycle_managed: false,
+            lifecycle_close_approved: false,
+            reviewed_process_tree: None,
+            temp_user_data_dir: None,
+            user_data_dir: dir.to_path_buf(),
+            runtime_profile: None,
+            display_name: None,
+            stderr_log_path: None,
+            stderr_drainer: None,
+            pgid: None,
+        };
+
+        let outcome = process.wait_or_kill(Duration::from_secs(1));
+
+        assert_eq!(outcome.pid, Some(pid));
+        assert!(outcome.graceful_exit);
+        assert!(outcome.exact_process_exited);
+        assert!(outcome.profile_lock_released);
+        assert!(outcome.force_kill_attempted);
+        assert!(
+            outcome.force_kill_succeeded,
+            "successful auxiliary cleanup must not become a false force-kill failure"
+        );
         assert!(outcome.errors.is_empty(), "{:?}", outcome.errors);
     }
 

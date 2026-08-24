@@ -915,6 +915,8 @@ pub fn run_install(with_deps: bool, with_remote_view_privileges: bool) {
 }
 
 /// Inspect the user-scoped command and package binaries without launching a browser.
+/// Warning-severity observations remain in the report but do not produce a
+/// nonzero result; all unmarked and error-severity issues remain blocking.
 pub fn run_install_doctor(flags: &Flags) {
     let report = install_doctor_report(flags);
     if flags.json {
@@ -1058,10 +1060,11 @@ pub fn run_install_doctor(flags: &Flags) {
         .and_then(|value| value.as_array())
         .cloned()
         .unwrap_or_default();
+    let blocking_issues = install_doctor_blocking_issues(&issues);
     if issues.is_empty() {
         println!("No install drift detected.");
     } else {
-        println!("Issues:");
+        println!("Observations:");
         for issue in issues {
             let code = issue
                 .get("code")
@@ -1073,6 +1076,8 @@ pub fn run_install_doctor(flags: &Flags) {
                 .unwrap_or("");
             println!("  - {code}: {message}");
         }
+    }
+    if !blocking_issues.is_empty() {
         exit(1);
     }
 }
@@ -1106,6 +1111,18 @@ fn runtime_pressure_ownership_issue(summary: &Value) -> Option<Value> {
         "observedProcessCount": observed_processes,
         "observedRssBytes": observed_rss_bytes,
     }))
+}
+
+fn install_doctor_blocking_issues(issues: &[Value]) -> Vec<Value> {
+    issues
+        .iter()
+        .filter(|issue| issue.get("severity").and_then(Value::as_str) != Some("warning"))
+        .cloned()
+        .collect()
+}
+
+fn install_doctor_issues_allow_success(issues: &[Value]) -> bool {
+    install_doctor_blocking_issues(issues).is_empty()
 }
 
 fn install_doctor_report(flags: &Flags) -> serde_json::Value {
@@ -1238,7 +1255,7 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
     }
 
     json!({
-        "success": issues.is_empty(),
+        "success": install_doctor_issues_allow_success(&issues),
         "data": {
             "version": env!("CARGO_PKG_VERSION"),
             "currentExecutable": current_executable,
@@ -4312,6 +4329,11 @@ mod tests {
                         "pamBypassed": true,
                         "cryptMethod": "SHA512",
                         "shaRounds": 100000
+                    },
+                    "routeSessionTermination": {
+                        "supported": true,
+                        "exactRouteUser": true,
+                        "idempotentWhenAbsent": true
                     }
                 }
             }
@@ -5048,6 +5070,29 @@ mod tests {
             "preserve_external_runtime_until_operator_close"
         );
         assert!(issues[0].get("remedy").is_none());
+    }
+
+    #[test]
+    fn install_doctor_warning_only_issues_are_advisory() {
+        let issues = vec![json!({
+            "code": "supervisor_stopped",
+            "severity": "warning",
+            "message": "historical supervisor is inactive",
+        })];
+
+        assert!(install_doctor_issues_allow_success(&issues));
+        assert!(install_doctor_blocking_issues(&issues).is_empty());
+    }
+
+    #[test]
+    fn install_doctor_non_warning_issue_remains_blocking() {
+        let issues = vec![json!({
+            "code": "runtime_monitor_not_ready",
+            "message": "runtime monitor is unavailable",
+        })];
+
+        assert!(!install_doctor_issues_allow_success(&issues));
+        assert_eq!(install_doctor_blocking_issues(&issues), issues);
     }
 
     #[test]

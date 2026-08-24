@@ -504,6 +504,88 @@ fn transferred_owner_can_prepare_the_next_runtime_handoff() {
 }
 
 #[test]
+fn reversed_owner_accepts_only_its_exact_stale_prepare_retry() {
+    use crate::runtime_adoption::BrowserAdoptionMode;
+    use crate::runtime_owner_transfer::{
+        OwnerTransferProposal, OwnerTransferRequest, ProfileOwner, ProfileOwnerState,
+    };
+
+    let proposal = OwnerTransferProposal {
+        request: OwnerTransferRequest {
+            mode: BrowserAdoptionMode::CooperativeTransfer,
+            logical_browser_id: "session:browser-a".to_string(),
+            profile_identity_digest: "profile-a".to_string(),
+            expected_owner_id: Some("owner-a".to_string()),
+            expected_owner_generation: 1,
+            candidate_owner_id: "owner-b".to_string(),
+            candidate_daemon_session_route: "handoff-a".to_string(),
+            process_instance_digest: "process-a".to_string(),
+            browser_family: "chrome".to_string(),
+            cdp_endpoint_identity_digest: "cdp-a".to_string(),
+            target_set_digest: "targets-a".to_string(),
+            selected_target_identity_digest: "target-a".to_string(),
+            transfer_nonce_digest: "nonce-a".to_string(),
+        },
+        previous_owner_generation: 1,
+        candidate_owner_generation: 2,
+        candidate_effect_capable: false,
+    };
+    let owner = ProfileOwner {
+        owner_id: "owner-a".to_string(),
+        profile_identity_digest: "profile-a".to_string(),
+        state: ProfileOwnerState::Ready,
+        owner_generation: 3,
+        browser_id: "session:browser-a".to_string(),
+        daemon_session_route: "source-a".to_string(),
+        process_instance_digest: "process-a".to_string(),
+        browser_family: "chrome".to_string(),
+        cdp_endpoint_identity_digest: "cdp-a".to_string(),
+        target_set_digest: "targets-a".to_string(),
+        pending_transfer: None,
+        last_transition: None,
+    };
+
+    assert!(reversed_handoff_retry_matches_current_owner(
+        "source-a", &proposal, &owner
+    ));
+
+    let mut mismatched = owner;
+    mismatched.process_instance_digest = "process-b".to_string();
+    assert!(!reversed_handoff_retry_matches_current_owner(
+        "source-a",
+        &proposal,
+        &mismatched,
+    ));
+}
+
+#[test]
+fn managed_browser_refresh_rejects_a_terminal_binding_for_the_previous_process() {
+    use crate::runtime_owner_transfer::{OwnerAuthorityClaim, RuntimeOwnerBinding};
+
+    let binding = RuntimeOwnerBinding::effect_capable(OwnerAuthorityClaim {
+        owner_id: "owner-a".to_string(),
+        profile_identity_digest: "profile-a".to_string(),
+        owner_generation: 2,
+        logical_browser_id: "session:replacement".to_string(),
+        daemon_session_route: "replacement".to_string(),
+        process_instance_digest: "process-old".to_string(),
+    });
+
+    assert!(runtime_binding_matches_managed_browser(
+        &binding,
+        "session:replacement",
+        "profile-a",
+        "process-old",
+    ));
+    assert!(!runtime_binding_matches_managed_browser(
+        &binding,
+        "session:replacement",
+        "profile-a",
+        "process-new",
+    ));
+}
+
+#[test]
 fn transferred_owner_requires_effect_capable_exact_binding() {
     use crate::runtime_owner_transfer::{
         OwnerAuthorityClaim, ProfileOwner, ProfileOwnerState, RuntimeOwnerBinding,
@@ -660,6 +742,83 @@ fn orphan_adoption_uses_verified_legacy_profile_when_service_evidence_omits_it()
     assert_eq!(
         runtime_handoff_orphan_profile(None, None, None).unwrap_err(),
         "runtime_handoff_orphan_profile_missing: canonical runtime profile is required"
+    );
+}
+
+#[test]
+fn missing_service_projection_requires_exact_durable_handoff_for_orphan_recovery() {
+    use crate::native::service_model::{
+        DurableHandoffPresentationReceipt, RemoteViewHandoff, ServiceState, ViewStreamProvider,
+    };
+    use crate::runtime_owner_transfer::{ProfileOwner, ProfileOwnerState};
+
+    let logical_browser_id = "session:bill-soylei";
+    let source_session = "bill-soylei";
+    let profile_digest = "1".repeat(64);
+    let process_digest = "2".repeat(64);
+    let mut snapshot = ServiceState::default();
+    snapshot.runtime_owner_registry.owners.insert(
+        profile_digest.clone(),
+        ProfileOwner {
+            owner_id: "owner-bill-orphan".to_string(),
+            profile_identity_digest: profile_digest,
+            state: ProfileOwnerState::Orphaned,
+            owner_generation: 2,
+            browser_id: logical_browser_id.to_string(),
+            daemon_session_route: source_session.to_string(),
+            process_instance_digest: process_digest.clone(),
+            browser_family: "chrome".to_string(),
+            cdp_endpoint_identity_digest: "3".repeat(64),
+            target_set_digest: "4".repeat(64),
+            pending_transfer: None,
+            last_transition: None,
+        },
+    );
+    snapshot.remote_view_handoffs.insert(
+        "bill-handoff".to_string(),
+        RemoteViewHandoff {
+            id: "bill-handoff".to_string(),
+            state: "ready".to_string(),
+            profile_id: Some("bill-soylei".to_string()),
+            browser_id: Some(logical_browser_id.to_string()),
+            session_name: Some(source_session.to_string()),
+            presentation_receipt: Some(DurableHandoffPresentationReceipt {
+                schema_version: "agent-browser.durable-handoff-presentation.v1".to_string(),
+                generation: 1,
+                dashboard_deployment_generation: "generation-a".to_string(),
+                logical_browser_id: logical_browser_id.to_string(),
+                daemon_owner_generation: Some(2),
+                process_instance_digest: Some(process_digest),
+                target_id: "target-a".to_string(),
+                required_stream_provider: ViewStreamProvider::RdpGateway,
+                observed_stream_provider: ViewStreamProvider::RdpGateway,
+                route_id: "route-a".to_string(),
+                display_allocation_id: "display-a".to_string(),
+                observed_at: "2026-08-23T00:00:00Z".to_string(),
+                state: "ready".to_string(),
+            }),
+            ..RemoteViewHandoff::default()
+        },
+    );
+
+    assert!(snapshot.browsers.is_empty());
+    assert!(snapshot.sessions.is_empty());
+    assert_eq!(
+        durable_orphan_runtime_profile(&snapshot, source_session, logical_browser_id).unwrap(),
+        "bill-soylei"
+    );
+
+    snapshot
+        .remote_view_handoffs
+        .get_mut("bill-handoff")
+        .unwrap()
+        .presentation_receipt
+        .as_mut()
+        .unwrap()
+        .process_instance_digest = Some("9".repeat(64));
+    assert_eq!(
+        durable_orphan_runtime_profile(&snapshot, source_session, logical_browser_id).unwrap_err(),
+        "runtime_handoff_durable_orphan_profile_ambiguous"
     );
 }
 

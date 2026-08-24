@@ -3201,7 +3201,7 @@ mod tests {
     }
 
     #[test]
-    fn dashboard_service_backend_falls_back_to_default_then_first() {
+    fn dashboard_service_backend_falls_back_to_default_and_rejects_unknown_first() {
         let default_sessions = vec![
             json!({ "session": "other", "port": 1111 }),
             json!({ "session": "default", "port": 2222 }),
@@ -3214,7 +3214,7 @@ mod tests {
         let first_sessions = vec![json!({ "session": "other", "port": 3333 })];
         assert_eq!(
             dashboard_service_backend_port_from_sessions(&first_sessions),
-            Some(3333)
+            None
         );
     }
 

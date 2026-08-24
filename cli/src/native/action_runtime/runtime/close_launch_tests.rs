@@ -169,6 +169,47 @@ fn test_close_behavior_for_launched_browser_detaches_only_for_named_runtime_prof
         CloseBehavior::CloseBrowser
     );
 }
+
+#[tokio::test]
+async fn failed_owned_launch_persistence_runs_cleanup_exactly_once() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    let cleanup_calls = Arc::new(AtomicUsize::new(0));
+    let observed_calls = cleanup_calls.clone();
+    let result =
+        require_owned_launch_persistence(Err("registration rejected".to_string()), || async move {
+            observed_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(BrowserShutdownOutcome {
+                exact_process_exited: true,
+                profile_lock_released: true,
+                ..BrowserShutdownOutcome::default()
+            })
+        })
+        .await;
+
+    assert_eq!(cleanup_calls.load(Ordering::SeqCst), 1);
+    let error = result.expect_err("failed persistence must fail the launch");
+    assert!(error.contains("registration rejected"));
+    assert!(error.contains("launched_browser_cleanup"));
+}
+
+#[tokio::test]
+async fn successful_owned_launch_persistence_skips_cleanup() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    let cleanup_calls = Arc::new(AtomicUsize::new(0));
+    let observed_calls = cleanup_calls.clone();
+    require_owned_launch_persistence(Ok(()), || async move {
+        observed_calls.fetch_add(1, Ordering::SeqCst);
+        Ok(BrowserShutdownOutcome::default())
+    })
+    .await
+    .expect("successful persistence must retain the browser");
+
+    assert_eq!(cleanup_calls.load(Ordering::SeqCst), 0);
+}
 #[test]
 fn managed_close_terminal_evidence_requires_exit_and_profile_unlock() {
     let incomplete = BrowserShutdownOutcome {
