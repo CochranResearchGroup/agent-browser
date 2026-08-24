@@ -4,7 +4,7 @@ Date: 2026-08-23
 
 State: IN PROGRESS
 
-Execution state: `slice_g_elastic_adapter_source_accepted_helper_install_pending`
+Execution state: `slice_g_elastic_adapter_installed_helper_install_pending`
 
 Lane: P124
 
@@ -379,10 +379,9 @@ are independently satisfied.
 ### Slice G | Controlled Installed Acceptance
 
 Status: IN PROGRESS. Capacity projection is accepted. The exact development
-elastic lifecycle adapter is source accepted in
+elastic lifecycle adapter is source and development-install accepted in
 `docs/dev/notes/0124-9-2026-08-23-development-elastic-lifecycle-adapter-source-acceptance.md`.
-The reviewed root helper installation and repeated live scale cycle remain
-pending.
+The reviewed root helper installation and repeated live scale cycle remain pending.
 
 After source acceptance and separate explicit live authority:
 

@@ -4,7 +4,7 @@ Date: 2026-08-23
 
 State: IN PROGRESS
 
-Execution state: `slice_c_elastic_adapter_source_accepted_helper_install_pending`
+Execution state: `slice_c_elastic_adapter_installed_helper_install_pending`
 
 Lane: P127
 
@@ -139,7 +139,8 @@ Status: ACCEPTED. See
 - prove production before and after identity unchanged.
 
 Status: IN PROGRESS. The one-route pressure-admitted provision and exact
-reference-qualified reclaim adapters are source accepted in
+reference-qualified reclaim adapters are source and development-install
+accepted in
 `docs/dev/notes/0124-9-2026-08-23-development-elastic-lifecycle-adapter-source-acceptance.md`.
 Installed helper replacement and the measured repeated live cycle remain
 pending.
