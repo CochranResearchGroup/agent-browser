@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -72,6 +73,33 @@ try {
   assert.match(descriptor.skill.target, /agent-browser-dev\/home\/\.codex\/skills\/agent-browser$/);
   assert.doesNotMatch(JSON.stringify(descriptor.routes), /route-a|route-b/i);
   assert.doesNotThrow(() => validateDevelopmentPresentationProviderIsolation(descriptor));
+  const singleRouteInventory = JSON.stringify([{
+    id: 'development-route-5',
+    routeId: 'guacamole:105',
+    connectionId: '105',
+    connectionName: 'Agent Browser Dev RDP Route 5',
+    frameUrl: 'http://127.0.0.1:8093/guacamole/#/client/fixture',
+    target: { routeUser: 'agent-browser-rdp-dev-5' },
+  }]);
+  const routeOpenerEnv = {
+    ...env,
+    HOME: userHome,
+    AGENT_BROWSER_HOME: join(fixture, 'empty-agent-home'),
+    AGENT_BROWSER_RDP_ROUTE_POOL_JSON: singleRouteInventory,
+  };
+  const rejectedSingleRoute = spawnSync(process.execPath, [
+    'scripts/open-rdp-guac-route-displays.js',
+    '--dry-run',
+  ], { encoding: 'utf8', env: routeOpenerEnv });
+  assert.equal(rejectedSingleRoute.status, 1);
+  assert.match(JSON.parse(rejectedSingleRoute.stdout).error, /expected at least two route-pool entries/);
+  const acceptedLifecycleRoute = spawnSync(process.execPath, [
+    'scripts/open-rdp-guac-route-displays.js',
+    '--dry-run',
+    '--allow-single-route',
+  ], { encoding: 'utf8', env: routeOpenerEnv });
+  assert.equal(acceptedLifecycleRoute.status, 0);
+  assert.equal(JSON.parse(acceptedLifecycleRoute.stdout).selectedRoutes.length, 1);
   const plan = developmentPresentationProviderDeploymentPlan(descriptor);
   assert.equal(plan.schemaVersion, DEVELOPMENT_PRESENTATION_DEPLOYMENT_SCHEMA);
   assert.equal(plan.environment, 'development');

@@ -10,6 +10,9 @@ import {
 
 const reportOnly = process.argv.includes('--report-only');
 const dryRun = process.argv.includes('--dry-run');
+// Elastic lifecycle provisioning opens one exact route at a time. The normal
+// operator workflow retains its many-to-many minimum unless this is explicit.
+const allowSingleRoute = process.argv.includes('--allow-single-route');
 const waitMs = numberArg('--wait-ms') ?? 8000;
 const agentBrowserTimeoutMs = numberArg('--agent-browser-timeout-ms') ?? 600000;
 const routeNavigationTimeoutMs = numberArg('--route-navigation-timeout-ms') ?? 600000;
@@ -470,8 +473,10 @@ function sleep(ms) {
 let output;
 try {
   const routes = canonicalRouteInventory(routePoolFromEnv() || routePoolFromDatabase() || routePoolFromDoctor());
-  if (routes.length < 2) {
-    throw new Error(`route_pool_missing: expected at least two route-pool entries, got ${routes.length}`);
+  const requiredRouteCount = allowSingleRoute ? 1 : 2;
+  if (routes.length < requiredRouteCount) {
+    const requirement = requiredRouteCount === 1 ? 'at least one' : 'at least two';
+    throw new Error(`route_pool_missing: expected ${requirement} route-pool entries, got ${routes.length}`);
   }
   const selectedRoutes = routes.map((route, index) => ({
     label: routeLabel(route, index),

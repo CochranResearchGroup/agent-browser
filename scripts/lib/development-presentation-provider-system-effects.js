@@ -460,6 +460,7 @@ export function createDevelopmentPresentationLifecycleSystemEffects(options = {}
         join(process.cwd(), 'scripts', 'open-rdp-guac-route-displays.js'),
         '--wait-ms',
         '1000',
+        '--allow-single-route',
       ], {
         env: {
           ...env,
