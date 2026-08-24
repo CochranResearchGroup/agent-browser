@@ -14,7 +14,10 @@ use super::presentation_capacity::{
 };
 use super::service_model::ServiceState;
 use super::service_store::ServiceStateRepository;
-use super::x11_scene::{observe_browser_scene, X11SceneEvidence};
+use super::x11_scene::{
+    observe_browser_scene, restore_browser_scene, snapshot_browser_scene, stage_browser_scene,
+    X11SceneEvidence, X11SceneSnapshot,
+};
 use std::time::Instant;
 
 const CAPTURE_READY_MAXIMUM_AGE_MS: u64 = 500;
@@ -37,6 +40,7 @@ struct SceneAuthority {
     binding: DesktopCaptureBinding,
     pid: u32,
     process_generation: String,
+    display_isolation: String,
     viewer_posture: ViewerPosture,
     controller_posture: ControllerPosture,
 }
@@ -45,6 +49,8 @@ struct SceneAuthority {
 struct ReservedSceneAuthority {
     scene: SceneAuthority,
     presentation_slot_id: String,
+    slot_state: PresentationSlotState,
+    scene_generation_number: u64,
     scene_generation: String,
 }
 
@@ -58,15 +64,57 @@ pub(crate) struct ConfiguredWindowSemanticAdapter<R> {
     probe: Box<dyn SceneProbe>,
 }
 
-/// Restoration authority for configured observation-only episodes. The
-/// current product path never stages a scene, so restore is an explicit no-op.
-/// A future staged provider must replace the fail-closed `stage` branch and
-/// retain the exact prior native window state before mutation.
+#[derive(Clone)]
+enum NativeSceneSnapshot {
+    X11(X11SceneSnapshot),
+    #[cfg(test)]
+    Fixture(String),
+}
+
+trait SceneStager {
+    fn snapshot(&self, pid: u32, display_name: &str) -> Result<NativeSceneSnapshot, String>;
+    fn stage(&self, snapshot: &NativeSceneSnapshot) -> Result<(), String>;
+    fn restore(&self, snapshot: &NativeSceneSnapshot) -> Result<(), String>;
+}
+
+struct ConfiguredSceneStager;
+
+impl SceneStager for ConfiguredSceneStager {
+    fn snapshot(&self, pid: u32, display_name: &str) -> Result<NativeSceneSnapshot, String> {
+        snapshot_browser_scene(pid, display_name).map(NativeSceneSnapshot::X11)
+    }
+
+    fn stage(&self, snapshot: &NativeSceneSnapshot) -> Result<(), String> {
+        match snapshot {
+            NativeSceneSnapshot::X11(snapshot) => stage_browser_scene(snapshot),
+            #[cfg(test)]
+            NativeSceneSnapshot::Fixture(_) => {
+                Err("fixture scene snapshot reached the configured X11 provider".to_string())
+            }
+        }
+    }
+
+    fn restore(&self, snapshot: &NativeSceneSnapshot) -> Result<(), String> {
+        match snapshot {
+            NativeSceneSnapshot::X11(snapshot) => restore_browser_scene(snapshot),
+            #[cfg(test)]
+            NativeSceneSnapshot::Fixture(_) => {
+                Err("fixture scene snapshot reached the configured X11 provider".to_string())
+            }
+        }
+    }
+}
+
+/// Exact authority and ephemeral native snapshot for a reversible configured
+/// scene-staging transaction. Provider handles never enter durable state.
 pub(crate) struct ConfiguredSceneStagingAdapter<R> {
     repository: R,
     request_id: String,
     snapshot: Option<RestorationAuthority>,
+    native_snapshot: Option<NativeSceneSnapshot>,
+    prior_slot_state: Option<PresentationSlotState>,
     staged: bool,
+    stager: Box<dyn SceneStager>,
 }
 
 impl<R> ConfiguredSceneStagingAdapter<R>
@@ -78,14 +126,34 @@ where
             repository,
             request_id: request_id.into(),
             snapshot: None,
+            native_snapshot: None,
+            prior_slot_state: None,
             staged: false,
+            stager: Box::new(ConfiguredSceneStager),
         }
     }
 
-    fn current(
+    #[cfg(test)]
+    fn with_stager(
+        repository: R,
+        request_id: impl Into<String>,
+        stager: impl SceneStager + 'static,
+    ) -> Self {
+        Self {
+            repository,
+            request_id: request_id.into(),
+            snapshot: None,
+            native_snapshot: None,
+            prior_slot_state: None,
+            staged: false,
+            stager: Box::new(stager),
+        }
+    }
+
+    fn resolved(
         &self,
         browser_id: &str,
-    ) -> Result<(String, RestorationAuthority), DesktopEpisodeAdapterFailure> {
+    ) -> Result<(ServiceState, ReservedSceneAuthority), DesktopEpisodeAdapterFailure> {
         let state = self.repository.load_snapshot().map_err(|error| {
             DesktopEpisodeAdapterFailure::new(
                 "scene_restoration",
@@ -108,6 +176,15 @@ where
                     error,
                 )
             })?;
+        Ok((state, reserved))
+    }
+
+    fn current(
+        &self,
+        browser_id: &str,
+        staged_generation: bool,
+    ) -> Result<(String, RestorationAuthority), DesktopEpisodeAdapterFailure> {
+        let (state, reserved) = self.resolved(browser_id)?;
         let route = state
             .remote_view_routes
             .get(&reserved.scene.binding.route_id)
@@ -118,25 +195,92 @@ where
                     "the exact scene route disappeared",
                 )
             })?;
+        let display = state
+            .display_allocations
+            .get(&reserved.scene.binding.display_allocation_id)
+            .ok_or_else(|| {
+                DesktopEpisodeAdapterFailure::new(
+                    "scene_restoration",
+                    "desktop_scene_display_unavailable",
+                    "the exact scene display allocation disappeared",
+                )
+            })?;
         let route_generation = format!(
-            "route:{}:{}:{}",
+            "route:{}:{}:{}:display:{}:{}:{}:{}",
             route.id,
             route.controller_epoch,
-            route.connection_id.as_deref().unwrap_or("none")
+            route.connection_id.as_deref().unwrap_or("none"),
+            display.id,
+            display.state,
+            display.display_isolation,
+            display.display_name.as_deref().unwrap_or("none")
         );
         let controller_generation = format!(
             "controller:{}:{}",
             route.controller_epoch,
             route.controller_lease_id.as_deref().unwrap_or("none")
         );
+        let authority_scene_generation = if staged_generation {
+            format!(
+                "scene:{}:{}",
+                reserved.presentation_slot_id,
+                reserved.scene_generation_number.saturating_add(1)
+            )
+        } else {
+            reserved.scene_generation.clone()
+        };
         Ok((
             reserved.scene_generation.clone(),
             RestorationAuthority::new(
-                reserved.scene_generation,
+                authority_scene_generation,
                 route_generation,
                 controller_generation,
             ),
         ))
+    }
+
+    fn transition_slot(
+        &self,
+        browser_id: &str,
+        next: PresentationSlotState,
+    ) -> Result<(), DesktopEpisodeAdapterFailure> {
+        let request_id = self.request_id.clone();
+        let browser_id = browser_id.to_string();
+        self.repository
+            .mutate(|state| {
+                let scene = resolve_scene_authority(state, &browser_id)?;
+                let reserved = resolve_reserved_scene_authority(state, scene, &request_id)?;
+                let slot_id = reserved.presentation_slot_id;
+                let mut capacity = state
+                    .presentation_capacity
+                    .take()
+                    .ok_or_else(|| "presentation capacity is missing".to_string())?;
+                let result = capacity.transition_slot(&slot_id, &request_id, next, Some(state));
+                state.presentation_capacity = Some(capacity);
+                result.map(|_| ())
+            })
+            .map_err(|error| {
+                DesktopEpisodeAdapterFailure::new(
+                    "scene_staging",
+                    "desktop_scene_transition_failed",
+                    error,
+                )
+            })
+    }
+
+    fn quarantine(&self, browser_id: &str, reason: &str) {
+        let request_id = self.request_id.clone();
+        let browser_id = browser_id.to_string();
+        let obligation = format!("scene-restoration:{}:{reason}", self.request_id);
+        let _ = self.repository.mutate(|state| {
+            let scene = resolve_scene_authority(state, &browser_id)?;
+            let reserved = resolve_reserved_scene_authority(state, scene, &request_id)?;
+            state
+                .presentation_capacity
+                .as_mut()
+                .ok_or_else(|| "presentation capacity is missing".to_string())?
+                .quarantine_slot(&reserved.presentation_slot_id, obligation)
+        });
     }
 }
 
@@ -147,35 +291,111 @@ where
     fn snapshot(
         &mut self,
         browser_id: &str,
+        requires_staging: bool,
     ) -> Result<(String, RestorationAuthority), DesktopEpisodeAdapterFailure> {
-        let (scene_generation, authority) = self.current(browser_id)?;
+        let (scene_generation, authority) = self.current(browser_id, requires_staging)?;
         self.snapshot = Some(authority.clone());
         Ok((scene_generation, authority))
     }
 
-    fn stage(&mut self, _browser_id: &str) -> Result<String, DesktopEpisodeAdapterFailure> {
-        Err(DesktopEpisodeAdapterFailure::new(
-            "scene_staging",
-            "desktop_scene_staging_provider_unavailable",
-            "configured scene staging remains unavailable until exact native snapshot and restoration are implemented",
-        ))
+    fn stage(&mut self, browser_id: &str) -> Result<String, DesktopEpisodeAdapterFailure> {
+        let expected_authority = self.snapshot.as_ref().ok_or_else(|| {
+            DesktopEpisodeAdapterFailure::new(
+                "scene_staging",
+                "desktop_scene_snapshot_missing",
+                "scene staging was requested without a recorded authority snapshot",
+            )
+        })?;
+        let (_, current_expected_authority) = self.current(browser_id, true)?;
+        if expected_authority != &current_expected_authority {
+            return Err(DesktopEpisodeAdapterFailure::new(
+                "scene_staging",
+                "desktop_scene_authority_drift",
+                "service scene, route, or controller authority changed before native staging",
+            ));
+        }
+        let (_, reserved) = self.resolved(browser_id)?;
+        if !matches!(
+            reserved.slot_state,
+            PresentationSlotState::Reserved | PresentationSlotState::Active
+        ) {
+            return Err(DesktopEpisodeAdapterFailure::new(
+                "scene_staging",
+                "desktop_scene_slot_not_stageable",
+                "the exact presentation slot is not reserved or active",
+            ));
+        }
+        if reserved.scene.display_isolation != "private_virtual_display" {
+            return Err(DesktopEpisodeAdapterFailure::new(
+                "scene_staging",
+                "desktop_scene_staging_requires_private_display",
+                "visible scene staging is allowed only on an isolated private virtual display",
+            ));
+        }
+        let native_snapshot = self
+            .stager
+            .snapshot(reserved.scene.pid, &reserved.scene.binding.display_name)
+            .map_err(|error| {
+                DesktopEpisodeAdapterFailure::new(
+                    "scene_staging",
+                    "desktop_scene_native_snapshot_failed",
+                    error,
+                )
+            })?;
+        let (_, authority_after_native_snapshot) = self.current(browser_id, true)?;
+        if expected_authority != &authority_after_native_snapshot {
+            return Err(DesktopEpisodeAdapterFailure::new(
+                "scene_staging",
+                "desktop_scene_authority_drift",
+                "service scene, route, or controller authority changed during native snapshot",
+            ));
+        }
+        if let Err(error) = self.stager.stage(&native_snapshot) {
+            if let Err(restore_error) = self.stager.restore(&native_snapshot) {
+                self.quarantine(browser_id, "stage_rollback_unverified");
+                return Err(DesktopEpisodeAdapterFailure::new(
+                    "scene_staging",
+                    "desktop_scene_stage_and_rollback_failed",
+                    format!("stage={error}; rollback={restore_error}"),
+                ));
+            }
+            return Err(DesktopEpisodeAdapterFailure::new(
+                "scene_staging",
+                "desktop_scene_native_stage_failed",
+                error,
+            ));
+        }
+        if let Err(transition_error) =
+            self.transition_slot(browser_id, PresentationSlotState::Staging)
+        {
+            if let Err(restore_error) = self.stager.restore(&native_snapshot) {
+                self.quarantine(browser_id, "stage_commit_rollback_unverified");
+                return Err(DesktopEpisodeAdapterFailure::new(
+                    "scene_staging",
+                    "desktop_scene_stage_commit_and_rollback_failed",
+                    format!(
+                        "commit={}; rollback={restore_error}",
+                        transition_error.detail
+                    ),
+                ));
+            }
+            return Err(transition_error);
+        }
+        self.prior_slot_state = Some(reserved.slot_state);
+        self.native_snapshot = Some(native_snapshot);
+        self.staged = true;
+        Ok(format!("scene-stage:{}", self.request_id))
     }
 
     fn current_authority(
         &mut self,
         browser_id: &str,
     ) -> Result<RestorationAuthority, DesktopEpisodeAdapterFailure> {
-        self.current(browser_id).map(|(_, authority)| authority)
+        self.current(browser_id, false)
+            .map(|(_, authority)| authority)
     }
 
-    fn restore(&mut self, _browser_id: &str) -> Result<String, DesktopEpisodeAdapterFailure> {
-        if self.staged {
-            return Err(DesktopEpisodeAdapterFailure::new(
-                "scene_restoration",
-                "desktop_scene_restoration_provider_unavailable",
-                "a staged scene cannot be restored without the configured native provider",
-            ));
-        }
+    fn restore(&mut self, browser_id: &str) -> Result<String, DesktopEpisodeAdapterFailure> {
         if self.snapshot.is_none() {
             return Err(DesktopEpisodeAdapterFailure::new(
                 "scene_restoration",
@@ -183,7 +403,43 @@ where
                 "scene restoration was requested without a recorded authority snapshot",
             ));
         }
-        Ok(format!("scene-restoration-noop:{}", self.request_id))
+        if !self.staged {
+            return Ok(format!("scene-restoration-noop:{}", self.request_id));
+        }
+        let native_snapshot = self.native_snapshot.clone().ok_or_else(|| {
+            DesktopEpisodeAdapterFailure::new(
+                "scene_restoration",
+                "desktop_scene_native_snapshot_missing",
+                "a staged scene has no ephemeral native restoration snapshot",
+            )
+        })?;
+        let prior_slot_state = self.prior_slot_state.ok_or_else(|| {
+            DesktopEpisodeAdapterFailure::new(
+                "scene_restoration",
+                "desktop_scene_prior_slot_state_missing",
+                "a staged scene has no recorded prior presentation-slot state",
+            )
+        })?;
+        self.transition_slot(browser_id, PresentationSlotState::Restoring)
+            .inspect_err(|_failure| {
+                self.quarantine(browser_id, "restoration_transition_failed");
+            })?;
+        if let Err(error) = self.stager.restore(&native_snapshot) {
+            self.quarantine(browser_id, "native_restoration_unverified");
+            return Err(DesktopEpisodeAdapterFailure::new(
+                "scene_restoration",
+                "desktop_scene_native_restoration_failed",
+                error,
+            ));
+        }
+        if let Err(failure) = self.transition_slot(browser_id, prior_slot_state) {
+            self.quarantine(browser_id, "restoration_commit_failed");
+            return Err(failure);
+        }
+        self.staged = false;
+        self.native_snapshot = None;
+        self.prior_slot_state = None;
+        Ok(format!("scene-restoration:{}", self.request_id))
     }
 }
 
@@ -364,6 +620,42 @@ where
             Self::adapter_failure(phase, "desktop_scene_reservation_unavailable", error)
         })
     }
+
+    fn mark_capture_ready_if_staging(
+        &self,
+        browser_id: &str,
+    ) -> Result<(), DesktopEpisodeAdapterFailure> {
+        let request_id = self.request_id.clone();
+        let browser_id = browser_id.to_string();
+        self.repository
+            .mutate(|state| {
+                let scene = resolve_scene_authority(state, &browser_id)?;
+                let reserved = resolve_reserved_scene_authority(state, scene, &request_id)?;
+                if reserved.slot_state != PresentationSlotState::Staging {
+                    return Ok(());
+                }
+                let slot_id = reserved.presentation_slot_id;
+                let mut capacity = state
+                    .presentation_capacity
+                    .take()
+                    .ok_or_else(|| "presentation capacity is missing".to_string())?;
+                let result = capacity.transition_slot(
+                    &slot_id,
+                    &request_id,
+                    PresentationSlotState::CaptureReady,
+                    None,
+                );
+                state.presentation_capacity = Some(capacity);
+                result.map(|_| ())
+            })
+            .map_err(|error| {
+                Self::adapter_failure(
+                    "capture_ready",
+                    "desktop_scene_capture_ready_transition_failed",
+                    error,
+                )
+            })
+    }
 }
 
 impl<R> WindowSemanticAdapter for ConfiguredWindowSemanticAdapter<R>
@@ -410,6 +702,9 @@ where
                 "desktop_scene_binding_drift",
                 "service-owned process, route, display, slot, scene, viewer, or controller authority changed during the scene probe",
             ));
+        }
+        if scene_is_capture_ready(evidence) {
+            self.mark_capture_ready_if_staging(browser_id)?;
         }
         let proof_age_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
         let geometry_epoch = desktop_geometry_epoch(
@@ -536,6 +831,10 @@ fn resolve_scene_authority(
         .remote_view_routes
         .get(&binding.route_id)
         .ok_or_else(|| "service browser route is missing".to_string())?;
+    let display = state
+        .display_allocations
+        .get(&binding.display_allocation_id)
+        .ok_or_else(|| "service browser display allocation is missing".to_string())?;
     let controller_posture = if route.controller_lease_id.is_some() {
         ControllerPosture::Human
     } else {
@@ -561,6 +860,7 @@ fn resolve_scene_authority(
             "process:{pid}:{}",
             process_identity.process_identity.start_token
         ),
+        display_isolation: display.display_isolation.clone(),
         viewer_posture,
         controller_posture,
     })
@@ -590,6 +890,7 @@ fn resolve_reserved_scene_authority(
                 | PresentationSlotState::Staging
                 | PresentationSlotState::CaptureReady
                 | PresentationSlotState::Active
+                | PresentationSlotState::Restoring
         )
     {
         return Err("episode slot does not match the exact browser presentation".to_string());
@@ -597,6 +898,8 @@ fn resolve_reserved_scene_authority(
     Ok(ReservedSceneAuthority {
         scene,
         presentation_slot_id: slot.id.clone(),
+        slot_state: slot.state,
+        scene_generation_number: slot.scene_generation,
         scene_generation: format!("scene:{}:{}", slot.id, slot.scene_generation),
     })
 }
@@ -862,6 +1165,46 @@ mod tests {
     impl SceneProbe for FakeSceneProbe {
         fn observe(&self, _pid: u32, _display_name: &str) -> Result<X11SceneEvidence, String> {
             Ok(self.evidence)
+        }
+    }
+
+    #[derive(Clone)]
+    struct FakeSceneStager {
+        calls: Arc<Mutex<Vec<&'static str>>>,
+        stage_failure: Option<String>,
+        restore_failure: Option<String>,
+    }
+
+    impl FakeSceneStager {
+        fn ready() -> Self {
+            Self {
+                calls: Arc::new(Mutex::new(Vec::new())),
+                stage_failure: None,
+                restore_failure: None,
+            }
+        }
+    }
+
+    impl SceneStager for FakeSceneStager {
+        fn snapshot(&self, _pid: u32, _display_name: &str) -> Result<NativeSceneSnapshot, String> {
+            self.calls.lock().unwrap().push("snapshot");
+            Ok(NativeSceneSnapshot::Fixture("fixture-scene".to_string()))
+        }
+
+        fn stage(&self, snapshot: &NativeSceneSnapshot) -> Result<(), String> {
+            self.calls.lock().unwrap().push("stage");
+            assert!(
+                matches!(snapshot, NativeSceneSnapshot::Fixture(value) if value == "fixture-scene")
+            );
+            self.stage_failure.clone().map_or(Ok(()), Err)
+        }
+
+        fn restore(&self, snapshot: &NativeSceneSnapshot) -> Result<(), String> {
+            self.calls.lock().unwrap().push("restore");
+            assert!(
+                matches!(snapshot, NativeSceneSnapshot::Fixture(value) if value == "fixture-scene")
+            );
+            self.restore_failure.clone().map_or(Ok(()), Err)
         }
     }
 
@@ -1185,7 +1528,7 @@ mod tests {
         let repository = MemoryRepository::new(configured_scene_state(false, false));
         let mut adapter = ConfiguredSceneStagingAdapter::new(repository.clone(), "episode-1");
 
-        let (before_generation, recorded) = adapter.snapshot("browser-1").unwrap();
+        let (before_generation, recorded) = adapter.snapshot("browser-1", false).unwrap();
         let current = adapter.current_authority("browser-1").unwrap();
 
         assert_eq!(before_generation, "scene:slot-1:7");
@@ -1202,15 +1545,90 @@ mod tests {
     }
 
     #[test]
-    fn configured_staging_remains_fail_closed_until_exact_restore_exists() {
+    fn configured_staging_snapshots_stages_and_restores_the_exact_slot() {
         let repository = MemoryRepository::new(configured_scene_state(false, false));
-        let mut adapter = ConfiguredSceneStagingAdapter::new(repository, "episode-1");
-        adapter.snapshot("browser-1").unwrap();
+        let stager = FakeSceneStager::ready();
+        let calls = stager.calls.clone();
+        let mut adapter =
+            ConfiguredSceneStagingAdapter::with_stager(repository.clone(), "episode-1", stager);
+        let (before_generation, recorded) = adapter.snapshot("browser-1", true).unwrap();
+
+        let stage_receipt = adapter.stage("browser-1").unwrap();
+        let current = adapter.current_authority("browser-1").unwrap();
+        assert_eq!(before_generation, "scene:slot-1:7");
+        assert_eq!(recorded, current);
+        assert_eq!(stage_receipt, "scene-stage:episode-1");
+        let staged = repository.load_snapshot().unwrap();
+        let slot = &staged.presentation_capacity.unwrap().slots[0];
+        assert_eq!(slot.state, PresentationSlotState::Staging);
+        assert_eq!(slot.scene_generation, 8);
+        assert!(slot.restoration_pending);
+
+        assert_eq!(
+            adapter.restore("browser-1").unwrap(),
+            "scene-restoration:episode-1"
+        );
+        let restored = repository.load_snapshot().unwrap();
+        let slot = &restored.presentation_capacity.unwrap().slots[0];
+        assert_eq!(slot.state, PresentationSlotState::Reserved);
+        assert_eq!(slot.scene_generation, 8);
+        assert!(!slot.restoration_pending);
+        assert_eq!(slot.browser_id.as_deref(), Some("browser-1"));
+        assert_eq!(
+            calls.lock().unwrap().as_slice(),
+            &["snapshot", "stage", "restore"]
+        );
+    }
+
+    #[test]
+    fn configured_staging_refuses_to_rearrange_a_shared_display() {
+        let mut state = configured_scene_state(false, false);
+        state
+            .display_allocations
+            .get_mut("display-1")
+            .unwrap()
+            .display_isolation = "shared_display".to_string();
+        state
+            .browsers
+            .get_mut("browser-1")
+            .unwrap()
+            .display_isolation = Some("shared_display".to_string());
+        let repository = MemoryRepository::new(state);
+        let stager = FakeSceneStager::ready();
+        let calls = stager.calls.clone();
+        let mut adapter =
+            ConfiguredSceneStagingAdapter::with_stager(repository, "episode-1", stager);
+        adapter.snapshot("browser-1", true).unwrap();
 
         let failure = adapter.stage("browser-1").unwrap_err();
 
-        assert_eq!(failure.phase, "scene_staging");
-        assert_eq!(failure.code, "desktop_scene_staging_provider_unavailable");
+        assert_eq!(
+            failure.code,
+            "desktop_scene_staging_requires_private_display"
+        );
+        assert!(calls.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn unverified_native_restoration_quarantines_the_exact_slot() {
+        let repository = MemoryRepository::new(configured_scene_state(false, false));
+        let mut stager = FakeSceneStager::ready();
+        stager.restore_failure = Some("restore did not converge".to_string());
+        let mut adapter =
+            ConfiguredSceneStagingAdapter::with_stager(repository.clone(), "episode-1", stager);
+        adapter.snapshot("browser-1", true).unwrap();
+        adapter.stage("browser-1").unwrap();
+
+        let failure = adapter.restore("browser-1").unwrap_err();
+
+        assert_eq!(failure.code, "desktop_scene_native_restoration_failed");
+        let state = repository.load_snapshot().unwrap();
+        let slot = &state.presentation_capacity.unwrap().slots[0];
+        assert_eq!(slot.state, PresentationSlotState::Quarantined);
+        assert_eq!(
+            slot.cleanup_obligation_ids,
+            vec!["scene-restoration:episode-1:native_restoration_unverified"]
+        );
     }
 
     #[test]

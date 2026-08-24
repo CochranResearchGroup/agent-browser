@@ -483,6 +483,7 @@ pub(crate) trait SceneStagingAdapter {
     fn snapshot(
         &mut self,
         browser_id: &str,
+        requires_staging: bool,
     ) -> Result<(String, RestorationAuthority), DesktopEpisodeAdapterFailure>;
     fn stage(&mut self, browser_id: &str) -> Result<String, DesktopEpisodeAdapterFailure>;
     fn current_authority(
@@ -654,23 +655,25 @@ impl DesktopEvidenceCoordinator {
             Ok(receipt_id) => receipt_id,
             Err(failure) => return DesktopEpisodeOutcome::AdmissionUnavailable { failure },
         };
-        let (before_scene_generation, restoration_authority) =
-            match adapters.staging.snapshot(&request.browser_id) {
-                Ok(snapshot) => snapshot,
-                Err(failure) => {
-                    return Self::abort_after_reservation(
-                        &request,
-                        decision,
-                        admission_receipt_id,
-                        "scene-snapshot-unavailable".to_string(),
-                        None,
-                        DesktopEpisodeFailure::Adapter(failure),
-                        &RestorationAuthority::new("", "", ""),
-                        false,
-                        adapters,
-                    );
-                }
-            };
+        let (before_scene_generation, restoration_authority) = match adapters
+            .staging
+            .snapshot(&request.browser_id, decision.stage_before_trigger)
+        {
+            Ok(snapshot) => snapshot,
+            Err(failure) => {
+                return Self::abort_after_reservation(
+                    &request,
+                    decision,
+                    admission_receipt_id,
+                    "scene-snapshot-unavailable".to_string(),
+                    None,
+                    DesktopEpisodeFailure::Adapter(failure),
+                    &RestorationAuthority::new("", "", ""),
+                    false,
+                    adapters,
+                );
+            }
+        };
         let stage_receipt_id = if decision.stage_before_trigger {
             match adapters.staging.stage(&request.browser_id) {
                 Ok(receipt_id) => Some(receipt_id),
@@ -1159,6 +1162,7 @@ mod tests {
         fn snapshot(
             &mut self,
             _browser_id: &str,
+            _requires_staging: bool,
         ) -> Result<(String, RestorationAuthority), DesktopEpisodeAdapterFailure> {
             self.log.borrow_mut().push("snapshot");
             Ok((

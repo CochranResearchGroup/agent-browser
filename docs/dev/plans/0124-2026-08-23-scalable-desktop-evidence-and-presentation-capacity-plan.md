@@ -4,7 +4,7 @@ Date: 2026-08-23
 
 State: IN PROGRESS
 
-Execution state: `slice_g_unstaged_scene_composition_source_accepted_product_action_missing`
+Execution state: `slice_g_reversible_scene_staging_source_accepted_paired_cdp_missing`
 
 Lane: P124
 
@@ -411,7 +411,15 @@ ephemeral pixels only on explicit request, persists redacted receipts, and
 releases its lease without parking an active retained browser. Source evidence
 is recorded in
 `docs/dev/notes/0124-14-2026-08-24-desktop-evidence-product-action-source-acceptance.md`.
-The remaining installed boundary is paired CDP and staged browser-external
+Reversible configured X11 scene staging is source accepted. It records
+process-local native geometry, maximize, stacking, and focus evidence before
+mutation; permits visible rearrangement only on an isolated private virtual
+display; proves capture-ready staging; restores the exact prior scene; and
+quarantines the exact slot when rollback or restoration cannot be verified.
+Service scene generations and slot states bind the staged transaction without
+persisting native window handles. Source evidence is recorded in
+`docs/dev/notes/0124-15-2026-08-24-reversible-scene-staging-source-acceptance.md`.
+The remaining installed boundary is paired CDP and browser-external trigger
 composition, plus human, viewer, CDP, and retained-browser acceptance.
 Configured production input remains outside this plan's live authority until
 Plan 0110 is independently accepted.

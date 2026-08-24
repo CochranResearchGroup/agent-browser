@@ -724,8 +724,17 @@ impl PresentationCapacityAuthority {
                 PresentationSlotState::Reserved,
                 PresentationSlotState::Staging
             ) | (
+                PresentationSlotState::Active,
+                PresentationSlotState::Staging
+            ) | (
                 PresentationSlotState::Staging,
                 PresentationSlotState::CaptureReady
+            ) | (
+                PresentationSlotState::Staging,
+                PresentationSlotState::Restoring
+            ) | (
+                PresentationSlotState::CaptureReady,
+                PresentationSlotState::Restoring
             ) | (
                 PresentationSlotState::CaptureReady,
                 PresentationSlotState::Active
@@ -735,6 +744,12 @@ impl PresentationCapacityAuthority {
             ) | (
                 PresentationSlotState::Restoring,
                 PresentationSlotState::WarmIdle
+            ) | (
+                PresentationSlotState::Restoring,
+                PresentationSlotState::Reserved
+            ) | (
+                PresentationSlotState::Restoring,
+                PresentationSlotState::Active
             )
         );
         if !allowed {
@@ -762,10 +777,20 @@ impl PresentationCapacityAuthority {
         }
         let previous_state = slot.state;
         slot.state = next;
-        if next == PresentationSlotState::Restoring {
+        if matches!(
+            next,
+            PresentationSlotState::Staging | PresentationSlotState::Restoring
+        ) {
             slot.restoration_pending = true;
-        } else if next == PresentationSlotState::WarmIdle {
+        } else if matches!(
+            next,
+            PresentationSlotState::WarmIdle
+                | PresentationSlotState::Reserved
+                | PresentationSlotState::Active
+        ) {
             slot.restoration_pending = false;
+        }
+        if next == PresentationSlotState::WarmIdle {
             slot.lease_request_id = None;
             slot.lease_priority = None;
             slot.browser_id = None;
@@ -1437,6 +1462,64 @@ mod tests {
             authority.slots[0].cleanup_obligation_ids,
             vec!["cleanup:episode-1"]
         );
+    }
+
+    #[test]
+    fn active_browser_staging_restores_the_exact_leased_slot_without_parking() {
+        let mut authority = one_slot_authority(8);
+        let slot = &mut authority.slots[0];
+        slot.state = PresentationSlotState::Active;
+        slot.browser_id = Some("browser-1".to_string());
+        let decision = authority.request_bound_observation(
+            PresentationRequest::observation("episode-active").for_browser("browser-1"),
+            PressureAdmission::admit(1),
+            &ServiceState::default(),
+            "route-1",
+            "display-1",
+        );
+        assert!(decision.is_granted());
+
+        authority
+            .transition_slot(
+                "slot-1",
+                "episode-active",
+                PresentationSlotState::Staging,
+                None,
+            )
+            .unwrap();
+        assert!(authority.slots[0].restoration_pending);
+        authority
+            .transition_slot(
+                "slot-1",
+                "episode-active",
+                PresentationSlotState::CaptureReady,
+                None,
+            )
+            .unwrap();
+        authority
+            .transition_slot(
+                "slot-1",
+                "episode-active",
+                PresentationSlotState::Restoring,
+                None,
+            )
+            .unwrap();
+        authority
+            .transition_slot(
+                "slot-1",
+                "episode-active",
+                PresentationSlotState::Active,
+                None,
+            )
+            .unwrap();
+
+        assert_eq!(authority.slots[0].state, PresentationSlotState::Active);
+        assert!(!authority.slots[0].restoration_pending);
+        assert_eq!(
+            authority.slots[0].lease_request_id.as_deref(),
+            Some("episode-active")
+        );
+        assert_eq!(authority.slots[0].browser_id.as_deref(), Some("browser-1"));
     }
 
     #[test]
