@@ -12,7 +12,8 @@ Authority: SOURCE AND DEVELOPMENT SKILL EFFECTS | PRODUCTION READ-ONLY
 
 - the development provider descriptor owns a separate root, secrets, state,
   receipts, inventory, compose project, services, database, ports, route users,
-  connections, displays, RDP ports, and slot lifecycle;
+  connections, display reservations, the shared immutable XRDP target, and
+  slot lifecycle;
 - the default inventory contains four warm and two elastic slots and supports a
   configurable arbitrary-N maximum without route A or route B assumptions;
 - isolation fixtures reject production ports, overlapping production paths,

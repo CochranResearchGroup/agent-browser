@@ -4,11 +4,11 @@ Date: 2026-08-23
 
 State: IN PROGRESS
 
-Execution state: `slice_a_source_and_development_skill_accepted_provider_apply_pending`
+Execution state: `slice_c_capacity_projection_accepted_live_scale_cycle_pending`
 
 Lane: P127
 
-Authority: SOURCE AND DEVELOPMENT SKILL EFFECTS | NO PROVIDER EFFECTS | PRODUCTION READ-ONLY
+Authority: DEVELOPMENT PROVIDER EFFECTS | PRODUCTION READ-ONLY
 
 Depends on:
 
@@ -41,9 +41,13 @@ The initial exact namespace is:
 - manifest: `provider.json` inside that root;
 - Guacamole port 8093, guacd port 4823, and PostgreSQL port 55433;
 - compose project `agent-browser-dev-presentation`;
-- route users `agent-browser-dev-route-1` through
-  `agent-browser-dev-route-6`;
-- displays `:120` through `:125` and RDP ports 3490 through 3495;
+- route users `agent-browser-rdp-dev-1` through
+  `agent-browser-rdp-dev-6`, which remain development-specific while satisfying
+  the installed privileged helper's bounded route-user contract;
+- display reservations `development-display-1` through
+  `development-display-6`;
+- the stable host XRDP listener at port 3389 as immutable shared substrate,
+  with isolation owned by six development-only route users and sessions;
 - four warm slots and a pressure-admitted hard maximum of six;
 - development skill target
   `~/.local/share/agent-browser-dev/home/.codex/skills/agent-browser`.
@@ -52,6 +56,20 @@ Environment overrides remain one reviewed descriptor input. Isolation
 validation rejects known production ports, overlapping production paths,
 production identities, duplicate route fields, and incomplete route
 inventory. There is no legacy route A or route B adapter in this authority.
+
+XRDP chooses the concrete Xorg display number when a route-user session is
+created. A display reservation is therefore durable identity, while
+`displayName` stays null until current Xorg inspection binds it. Configuration
+must never fabricate a display name or treat a stale persisted hint as stronger
+than current route-user and Xorg evidence.
+Guacamole likewise assigns numeric connection IDs at insertion time. The
+descriptor owns a stable connection key and exact connection name;
+`connectionId` stays null until a current database readback binds it.
+
+Development reconciliation may read the shared host XRDP listener but may not
+restart it, change its configuration, or alter production route users and
+sessions. This avoids six unnecessary listener daemons while keeping every
+development session and display independently owned.
 
 ### Unconfigured Is Visible But Initially Nonblocking
 
@@ -70,15 +88,14 @@ atomically into the development pseudo-home. It never writes
 compares a deterministic tree digest so missing and stale development guidance
 are distinguishable.
 
-### Provider Apply Is A Later Effect Boundary
+### Provider Apply Is Transactional And Resumable
 
-This source packet does not create users, displays, XRDP listeners, containers,
-database records, secrets, systemd units, Cooper routes, or provider resources.
-A later reviewed apply packet must:
+The provider apply requires explicit `--apply` authority and stops at a
+provider-ready, ingress-pending checkpoint. It:
 
 1. capture exact production and development before-state;
 2. provision only identities in the development descriptor;
-3. publish a development-only `/guacamole` ingress after readiness;
+3. publishes a development-only `/guacamole` ingress after readiness;
 4. write the exact provider manifest and an effect receipt;
 5. prove production identity unchanged;
 6. support exact rollback and quarantine on ambiguous cleanup.
@@ -109,6 +126,9 @@ Status: ACCEPTED. See
 - extend Cooper inventory with development `/guacamole` only after provider
   readiness.
 
+Status: ACCEPTED. See
+`docs/dev/notes/0127-2-2026-08-23-development-provider-deployment-and-ingress-acceptance.md`.
+
 ### Slice C | Plan 0124 Live Acceptance
 
 - converge to four warm development slots;
@@ -135,11 +155,13 @@ non-interference receipt, and fresh OS process and pressure readback.
 
 ## Acceptance Boundary
 
-Slice A acceptance proves only that the source owns an isolated namespace and
-can detect configuration drift. It does not prove Guacamole, XRDP, display,
-remote-view, desktop capture, scale-out, or cleanup readiness. Plan 0124 stays
-in progress until P127 Slices B and C complete the remaining provider-backed
-Slice G evidence.
+Slice B acceptance proves the isolated Guacamole provider, four warm Xorg
+displays, six route identities, protected ingress, and production
+non-interference. The first Slice C packet now projects the provider inventory
+into Service-owned display, route, pool, and capacity authority. Installed
+Service Status reports four warm slots, a six-slot hard maximum, one human
+reserve, one recovery reserve, and no binding warnings. This does not yet prove
+Plan 0124 live scale-out, desktop evidence, or scale-in GC.
 
 ## Hard Stops
 
