@@ -2,7 +2,7 @@
 
 use serde::Deserialize;
 use serde_json::json;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
@@ -250,6 +250,26 @@ impl PresentationProviderInventory {
         state: &mut ServiceState,
         config: PresentationCapacityConfig,
     ) -> Result<(), String> {
+        let checked_out_routes = state
+            .remote_view_routes
+            .iter()
+            .filter(|(_, route)| route.browser_id.is_some() || route.session_id.is_some())
+            .map(|(id, route)| (id.clone(), route.clone()))
+            .collect::<BTreeMap<_, _>>();
+        let checked_out_displays = state
+            .display_allocations
+            .iter()
+            .filter(|(_, display)| {
+                display.owner_browser_id.is_some() || display.owner_session_id.is_some()
+            })
+            .map(|(id, display)| (id.clone(), display.clone()))
+            .collect::<BTreeMap<_, _>>();
+        let checked_out_slots = state
+            .route_pool
+            .iter()
+            .filter(|(_, entry)| entry.state == "checked_out")
+            .map(|(id, entry)| (id.clone(), entry.clone()))
+            .collect::<BTreeMap<_, _>>();
         state
             .remote_view_routes
             .retain(|_, route| route.route_source != "provider_inventory");
@@ -268,60 +288,89 @@ impl PresentationProviderInventory {
             })?;
             let route_id = provider_route.route_id.clone();
             let display_id = provider_route.display_reservation_id.clone();
-            state.display_allocations.insert(
-                display_id.clone(),
-                DisplayAllocation {
-                    id: display_id.clone(),
-                    display_name: Some(display_name),
-                    display_isolation: "private_virtual_display".to_string(),
-                    state: "ready".to_string(),
-                    route_ids: vec![route_id.clone()],
-                    readiness: Some(json!({"state":"ready","source":"provider_inventory"})),
-                    ..DisplayAllocation::default()
-                },
-            );
-            state.remote_view_routes.insert(
-                route_id.clone(),
-                RemoteViewRoute {
-                    id: route_id.clone(),
-                    provider: ViewStreamProvider::RdpGateway,
-                    display_allocation_id: Some(display_id),
-                    route_source: "provider_inventory".to_string(),
-                    connection_id: provider_route.connection_id.clone(),
-                    connection_name: provider_route.connection_name.clone(),
-                    frame_url: provider_route.frame_url.clone(),
-                    control_input: Some(ControlInputProvider::ManualAttachedDesktop),
-                    provider_mode: "simultaneous_view".to_string(),
-                    state: "ready".to_string(),
-                    readiness: Some(json!({"state":"ready","source":"provider_inventory"})),
-                    ..RemoteViewRoute::default()
-                },
-            );
-            state.route_pool.insert(
-                provider_route.slot_id.clone(),
-                RoutePoolEntry {
-                    id: provider_route.slot_id.clone(),
-                    provider: ViewStreamProvider::RdpGateway,
-                    route_id: route_id.clone(),
-                    connection_id: provider_route.connection_id.clone(),
-                    connection_name: provider_route.connection_name.clone(),
-                    frame_url: provider_route.frame_url.clone(),
-                    target: json!({
-                        "displayAllocationId": provider_route.display_reservation_id.clone(),
-                        "displayName": state.display_allocations
-                            .get(&provider_route.display_reservation_id)
-                            .and_then(|display| display.display_name.clone()),
-                        "displayIsolation": "private_virtual_display",
-                        "routeUser": provider_route.user,
-                        "lifecycle": provider_route.lifecycle,
-                    }),
-                    provider_mode: "simultaneous_view".to_string(),
-                    state: "available".to_string(),
-                    current_route_allocation_id: Some(route_id),
-                    readiness: Some(json!({"state":"ready","source":"provider_inventory"})),
-                    ..RoutePoolEntry::default()
-                },
-            );
+            let mut display = DisplayAllocation {
+                id: display_id.clone(),
+                display_name: Some(display_name),
+                display_isolation: "private_virtual_display".to_string(),
+                state: "ready".to_string(),
+                route_ids: vec![route_id.clone()],
+                readiness: Some(json!({"state":"ready","source":"provider_inventory"})),
+                ..DisplayAllocation::default()
+            };
+            if let Some(existing) = checked_out_displays.get(&display_id) {
+                display.owner_browser_id = existing.owner_browser_id.clone();
+                display.owner_session_id = existing.owner_session_id.clone();
+                display.profile_id = existing.profile_id.clone();
+                display.browser_build = existing.browser_build.clone();
+                display.pid_hints = existing.pid_hints.clone();
+                display.created_at = existing.created_at.clone();
+                display.updated_at = existing.updated_at.clone();
+                display.last_health_check_at = existing.last_health_check_at.clone();
+                display.readiness = existing.readiness.clone();
+                for existing_route_id in &existing.route_ids {
+                    if !display.route_ids.contains(existing_route_id) {
+                        display.route_ids.push(existing_route_id.clone());
+                    }
+                }
+            }
+            state
+                .display_allocations
+                .insert(display_id.clone(), display);
+            let mut route = RemoteViewRoute {
+                id: route_id.clone(),
+                provider: ViewStreamProvider::RdpGateway,
+                display_allocation_id: Some(display_id),
+                route_source: "provider_inventory".to_string(),
+                connection_id: provider_route.connection_id.clone(),
+                connection_name: provider_route.connection_name.clone(),
+                frame_url: provider_route.frame_url.clone(),
+                control_input: Some(ControlInputProvider::ManualAttachedDesktop),
+                provider_mode: "simultaneous_view".to_string(),
+                state: "ready".to_string(),
+                readiness: Some(json!({"state":"ready","source":"provider_inventory"})),
+                ..RemoteViewRoute::default()
+            };
+            if let Some(existing) = checked_out_routes.get(&route_id) {
+                route.browser_id = existing.browser_id.clone();
+                route.session_id = existing.session_id.clone();
+                route.route_source = existing.route_source.clone();
+                route.viewer_lease_ids = existing.viewer_lease_ids.clone();
+                route.controller_lease_id = existing.controller_lease_id.clone();
+                route.controller_epoch = existing.controller_epoch;
+                route.last_provider_event = existing.last_provider_event.clone();
+                route.readiness = existing.readiness.clone();
+            }
+            state.remote_view_routes.insert(route_id.clone(), route);
+            let mut slot = RoutePoolEntry {
+                id: provider_route.slot_id.clone(),
+                provider: ViewStreamProvider::RdpGateway,
+                route_id: route_id.clone(),
+                connection_id: provider_route.connection_id.clone(),
+                connection_name: provider_route.connection_name.clone(),
+                frame_url: provider_route.frame_url.clone(),
+                target: json!({
+                    "displayAllocationId": provider_route.display_reservation_id.clone(),
+                    "displayName": state.display_allocations
+                        .get(&provider_route.display_reservation_id)
+                        .and_then(|display| display.display_name.clone()),
+                    "displayIsolation": "private_virtual_display",
+                    "routeUser": provider_route.user,
+                    "lifecycle": provider_route.lifecycle,
+                }),
+                provider_mode: "simultaneous_view".to_string(),
+                state: "available".to_string(),
+                current_route_allocation_id: Some(route_id),
+                readiness: Some(json!({"state":"ready","source":"provider_inventory"})),
+                ..RoutePoolEntry::default()
+            };
+            if let Some(existing) = checked_out_slots.get(&provider_route.slot_id) {
+                slot.state = existing.state.clone();
+                slot.current_route_allocation_id = existing.current_route_allocation_id.clone();
+                slot.readiness = existing.readiness.clone();
+            }
+            state
+                .route_pool
+                .insert(provider_route.slot_id.clone(), slot);
         }
         let previous = state.presentation_capacity.take();
         let mut capacity = PresentationCapacityAuthority::from_service_state(config, state)?;
@@ -610,6 +659,81 @@ mod tests {
         assert_eq!(capacity.slots.len(), 1);
         assert_eq!(capacity.config.hard_maximum, 2);
         assert_eq!(capacity.slots[0].id, "slot:development-slot-1");
+    }
+
+    #[test]
+    fn provider_inventory_refresh_preserves_checked_out_runtime_ownership() {
+        let inventory = PresentationProviderInventory::from_json(
+            &serde_json::json!({
+                "schemaVersion": "agent-browser.development-presentation-inventory.v1",
+                "environment": "development",
+                "routes": [{
+                    "routeId": "development-route-1",
+                    "slotId": "development-slot-1",
+                    "user": "agent-browser-rdp-dev-1",
+                    "connectionId": "41",
+                    "connectionName": "Agent Browser Dev RDP Route 1",
+                    "displayReservationId": "development-display-1",
+                    "displayName": ":21",
+                    "lifecycle": "warm",
+                    "state": "ready"
+                }]
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let config = PresentationCapacityConfig {
+            warm_minimum: 1,
+            hard_maximum: 2,
+            human_priority_reserve: 1,
+            recovery_reserve: 1,
+            max_queue_depth: 64,
+        };
+        let mut state = ServiceState::default();
+        inventory
+            .overlay_service_state(&mut state, config.clone())
+            .unwrap();
+        let route = state
+            .remote_view_routes
+            .get_mut("development-route-1")
+            .unwrap();
+        route.browser_id = Some("browser-1".to_string());
+        route.session_id = Some("scene-1".to_string());
+        route.route_source = "pool".to_string();
+        route.last_provider_event = Some("route_checked_out".to_string());
+        let display = state
+            .display_allocations
+            .get_mut("development-display-1")
+            .unwrap();
+        display.owner_browser_id = Some("browser-1".to_string());
+        display.owner_session_id = Some("scene-1".to_string());
+        state
+            .route_pool
+            .get_mut("development-slot-1")
+            .unwrap()
+            .state = "checked_out".to_string();
+
+        inventory.overlay_service_state(&mut state, config).unwrap();
+
+        assert_eq!(
+            state.remote_view_routes["development-route-1"]
+                .browser_id
+                .as_deref(),
+            Some("browser-1")
+        );
+        assert_eq!(
+            state.remote_view_routes["development-route-1"]
+                .session_id
+                .as_deref(),
+            Some("scene-1")
+        );
+        assert_eq!(
+            state.display_allocations["development-display-1"]
+                .owner_session_id
+                .as_deref(),
+            Some("scene-1")
+        );
+        assert_eq!(state.route_pool["development-slot-1"].state, "checked_out");
     }
 
     #[test]
