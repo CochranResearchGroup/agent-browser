@@ -154,6 +154,10 @@ fn parse_request(command: &Value) -> Result<ConfiguredObservationRequest, String
         "agentName",
         "taskName",
         "requestId",
+        // Added by the trusted control-plane queue after public request
+        // validation. Callers still cannot supply this through the service
+        // request contract.
+        "serviceJobId",
         "callerId",
         "requestPrincipalSource",
     ];
@@ -449,6 +453,7 @@ mod tests {
             "action": ACTION,
             "browserId": "browser-1",
             "requestId": "request-1",
+            "serviceJobId": "job-1",
             "evidenceSurface": STACKING_OR_OCCLUSION,
         }))
         .unwrap();

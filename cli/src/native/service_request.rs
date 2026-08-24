@@ -2415,6 +2415,10 @@ mod tests {
                 json!({"action":"desktop_evidence_observe","browserId":"browser-1","episodeId":"episode-1","evidenceSurface":"stacking_or_occlusion","serviceName":"DesktopEvidence","agentName":"fixture-agent","taskName":"inspect","params":{}}),
                 "desktop_evidence_observe does not accept params",
             ),
+            (
+                json!({"action":"desktop_evidence_observe","browserId":"browser-1","episodeId":"episode-1","evidenceSurface":"stacking_or_occlusion","serviceName":"DesktopEvidence","agentName":"fixture-agent","taskName":"inspect","serviceJobId":"caller-job"}),
+                "unknown service request field: serviceJobId",
+            ),
         ] {
             assert_eq!(normalize(request).unwrap_err().message(), expected);
         }
