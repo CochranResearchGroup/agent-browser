@@ -91,6 +91,7 @@ const SERVICE_BROWSER_CAPABILITY_PREFER_USAGE: &str = "service browser-capabilit
 const SERVICE_ACCESS_PLAN_USAGE: &str = "service access-plan [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--site-policy-id <id>] [--challenge-id <id>] [--readiness-profile-id <id>] [--runtime-profile <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--browser-host <local_headless|local_headed|docker_headed|remote_headed|cloud_provider|attached_existing>] [--view-stream-provider <cdp_screencast|chrome_tab_webrtc|virtual_display_webrtc|novnc|rdp_gateway|external_url>] [--control-input-provider <cdp_input|webrtc_input|vnc_input|manual_attached_desktop>] [--display-isolation <private_virtual_display|shared_display|ambient_display>]";
 const DESKTOP_CAPTURE_USAGE: &str = "desktop capture --browser-id <id> [--max-bytes <bytes>]";
 const DESKTOP_LOCATE_USAGE: &str = "desktop locate --browser-id <id> --locator-id <id> [--max-candidates <count>] [--include-visualization]";
+const DESKTOP_EVIDENCE_OBSERVE_USAGE: &str = "desktop evidence observe --browser-id <id> [--episode-id <id>] [--include-frame] [--service-name <name>] [--agent-name <name>] [--task-name <name>]";
 const DESKTOP_PROMPT_OBSERVE_USAGE: &str = "desktop prompt observe --browser-id <id> --prompt-profile-id p110-external-prompt-v1 [--include-visualization]";
 const DESKTOP_INTERACT_USAGE: &str = "desktop interact --browser-id <id> --controller-lease-id <id> --operation-id <id> --recipe-id <p110-pointer-keyboard-v1|p110-foundation-stress-v1> --service-name <name> --agent-name <name> --task-name <name>";
 const DESKTOP_LOCATE_DEFAULT_MAX_CANDIDATES: u64 = 8;
@@ -1266,6 +1267,93 @@ fn parse_desktop_prompt_observe(
     Ok(command)
 }
 
+/// Parse one task-shaped read-only desktop evidence episode. The caller names
+/// the evidence need and browser only; route, display, window, capture,
+/// staging, and provider selection remain service owned.
+fn parse_desktop_evidence_observe(
+    id: String,
+    rest: &[&str],
+    flags: &Flags,
+) -> Result<Value, ParseError> {
+    if rest.get(1).copied() != Some("observe") {
+        return match rest.get(1).copied() {
+            Some(subcommand) => Err(ParseError::UnknownSubcommand {
+                subcommand: subcommand.to_string(),
+                valid_options: &["observe"],
+            }),
+            None => Err(ParseError::MissingArguments {
+                context: "desktop evidence".to_string(),
+                usage: DESKTOP_EVIDENCE_OBSERVE_USAGE,
+            }),
+        };
+    }
+
+    let mut browser_id = None;
+    let mut episode_id = None;
+    let mut service_name = None;
+    let mut agent_name = None;
+    let mut task_name = None;
+    let mut include_frame = false;
+    let mut i = 2;
+    while i < rest.len() {
+        if rest[i] == "--include-frame" {
+            include_frame = true;
+            i += 1;
+            continue;
+        }
+        let (slot, flag) = match rest[i] {
+            "--browser-id" => (&mut browser_id, "--browser-id"),
+            "--episode-id" => (&mut episode_id, "--episode-id"),
+            "--service-name" => (&mut service_name, "--service-name"),
+            "--agent-name" => (&mut agent_name, "--agent-name"),
+            "--task-name" => (&mut task_name, "--task-name"),
+            flag => {
+                return Err(ParseError::InvalidValue {
+                    message: format!("Unknown flag for desktop evidence observe: {flag}"),
+                    usage: DESKTOP_EVIDENCE_OBSERVE_USAGE,
+                });
+            }
+        };
+        let value = required_next(rest, i, flag, DESKTOP_EVIDENCE_OBSERVE_USAGE)?;
+        if value.starts_with("--") {
+            return Err(ParseError::InvalidValue {
+                message: format!("Missing value for {flag}"),
+                usage: DESKTOP_EVIDENCE_OBSERVE_USAGE,
+            });
+        }
+        *slot = Some(value);
+        i += 2;
+    }
+    let Some(browser_id) = browser_id else {
+        return Err(ParseError::MissingArguments {
+            context: "desktop evidence observe".to_string(),
+            usage: DESKTOP_EVIDENCE_OBSERVE_USAGE,
+        });
+    };
+    let episode_id = episode_id.unwrap_or_else(|| id.clone());
+    let mut command = json!({
+        "id": id,
+        "action": "desktop_evidence_observe",
+        "browserId": browser_id,
+        "episodeId": episode_id,
+        "evidenceSurface": "stacking_or_occlusion",
+        "includeFrame": include_frame,
+    });
+    if let Some(session_name) = flags.session_name.as_ref() {
+        command["sessionName"] = json!(session_name);
+    }
+    if let Some(value) = service_name {
+        command["serviceName"] = json!(value);
+    }
+    if let Some(value) = agent_name {
+        command["agentName"] = json!(value);
+    }
+    if let Some(value) = task_name {
+        command["taskName"] = json!(value);
+    }
+    Ok(command)
+}
+
 /// Parse one named guarded desktop interaction recipe with a caller-generated
 /// opaque operation identity. Targets, coordinates, event plans, input text,
 /// timing, and provider selection remain service owned and cannot be supplied
@@ -1360,15 +1448,16 @@ fn parse_desktop(id: String, rest: &[&str], flags: &Flags) -> Result<Value, Pars
     match rest.first().copied() {
         Some("capture") => parse_desktop_capture(id, rest),
         Some("locate") => parse_desktop_locate(id, rest),
+        Some("evidence") => parse_desktop_evidence_observe(id, rest, flags),
         Some("prompt") => parse_desktop_prompt_observe(id, rest, flags),
         Some("interact") => parse_desktop_interact(id, rest, flags),
         Some(subcommand) => Err(ParseError::UnknownSubcommand {
             subcommand: subcommand.to_string(),
-            valid_options: &["capture", "locate", "prompt", "interact"],
+            valid_options: &["capture", "locate", "evidence", "prompt", "interact"],
         }),
         None => Err(ParseError::MissingArguments {
             context: "desktop".to_string(),
-            usage: "desktop <capture|locate|prompt|interact>",
+            usage: "desktop <capture|locate|evidence|prompt|interact>",
         }),
     }
 }
@@ -7652,6 +7741,45 @@ mod tests {
 
             assert!(matches!(err, ParseError::InvalidValue { .. }));
             assert!(err.format().contains("Unknown flag for desktop locate"));
+        }
+    }
+
+    #[test]
+    fn test_desktop_evidence_observe_builds_task_shaped_action() {
+        let cmd = parse_command(
+            &args("desktop evidence observe --browser-id browser-123 --episode-id episode-7 --include-frame --service-name DesktopEvidence --agent-name codex --task-name inspect-stacking"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "desktop_evidence_observe");
+        assert_eq!(cmd["browserId"], "browser-123");
+        assert_eq!(cmd["episodeId"], "episode-7");
+        assert_eq!(cmd["evidenceSurface"], "stacking_or_occlusion");
+        assert_eq!(cmd["includeFrame"], true);
+        assert_eq!(cmd["serviceName"], "DesktopEvidence");
+    }
+
+    #[test]
+    fn test_desktop_evidence_observe_rejects_provider_plumbing() {
+        for flag in [
+            "--display-name",
+            "--route-id",
+            "--provider-url",
+            "--window-id",
+            "--coordinates",
+            "--cdp-url",
+        ] {
+            let error = parse_command(
+                &args(&format!(
+                    "desktop evidence observe --browser-id browser-123 {flag} caller-value"
+                )),
+                &default_flags(),
+            )
+            .unwrap_err();
+            assert!(error
+                .format()
+                .contains("Unknown flag for desktop evidence observe"));
         }
     }
 

@@ -11,6 +11,7 @@ use super::action_runtime::runtime::{handle_close, CloseBehavior};
 use super::action_runtime::{service_profile_lease_gate, DaemonState, ServiceProfileLeaseGate};
 use super::actions::execute_command;
 use super::cancellation::CancellationToken as RunningJobCancel;
+use super::desktop_evidence_action::redact_desktop_evidence_stream_result;
 use super::desktop_interaction::redact_desktop_interaction_stream_result;
 use super::desktop_prompt_perception::redact_desktop_prompt_stream_result;
 use super::service_health::{
@@ -1049,6 +1050,14 @@ fn service_job_persisted_result(request: &ControlRequest, response: &Value) -> V
             ),
         });
     }
+    if request.action == "desktop_evidence_observe" {
+        return json!({
+            "success": success,
+            "data": redact_desktop_evidence_stream_result(
+                response.get("data").unwrap_or(&Value::Null),
+            ),
+        });
+    }
     if request.action == "desktop_prompt_observe" {
         return json!({
             "success": success,
@@ -1270,7 +1279,11 @@ fn service_job_control_plane_mode(request: &ControlRequest) -> JobControlPlaneMo
         || request.action == "view_takeover"
         || matches!(
             request.action.as_str(),
-            "desktop_capture" | "desktop_locate" | "desktop_prompt_observe" | "desktop_interact"
+            "desktop_capture"
+                | "desktop_locate"
+                | "desktop_evidence_observe"
+                | "desktop_prompt_observe"
+                | "desktop_interact"
         )
         || request.action.starts_with("service_")
     {
@@ -2036,6 +2049,42 @@ mod tests {
         assert!(!serialized.contains("sensitive-plaintext"));
         assert!(!serialized.contains("emittedPath\""));
         assert!(!serialized.contains("/sensitive/full/path"));
+    }
+
+    #[test]
+    fn persisted_desktop_evidence_removes_response_pixels_and_provider_details() {
+        let request = control_request_for_mode_test(json!({
+            "action": "desktop_evidence_observe"
+        }));
+        let persisted = service_job_persisted_result(
+            &request,
+            &json!({
+                "success": true,
+                "data": {
+                    "ok": true,
+                    "action": "desktop_evidence_observe",
+                    "evidenceSurface": "stacking_or_occlusion",
+                    "episode": { "outcome": "desktop" },
+                    "context": {
+                        "contextId": "context-1",
+                        "browserId": "browser-1",
+                        "displayName": ":101"
+                    },
+                    "frameReceipt": {
+                        "frameId": "frame-1",
+                        "sha256": "safe-hash",
+                        "providerVersion": "private-provider"
+                    },
+                    "frameBase64": "PRIVATE_PIXELS"
+                }
+            }),
+        );
+        let encoded = serde_json::to_string(&persisted).unwrap();
+
+        assert!(encoded.contains("safe-hash"));
+        assert!(!encoded.contains("PRIVATE_PIXELS"));
+        assert!(!encoded.contains("private-provider"));
+        assert!(!encoded.contains(":101"));
     }
 
     #[test]

@@ -316,6 +316,9 @@ const SERVICE_REQUEST_FIELDS: &[ServiceRequestFieldSpec] = &[
     ServiceRequestFieldSpec::field("format", FieldKind::String, true, true, false),
     ServiceRequestFieldSpec::field("maxBytes", FieldKind::PositiveInteger, true, true, false),
     ServiceRequestFieldSpec::field("locator", FieldKind::Object, true, true, false),
+    ServiceRequestFieldSpec::field("evidenceSurface", FieldKind::String, true, true, false),
+    ServiceRequestFieldSpec::field("episodeId", FieldKind::String, true, true, false),
+    ServiceRequestFieldSpec::field("includeFrame", FieldKind::Boolean, true, true, false),
     ServiceRequestFieldSpec::field(
         "includeVisualization",
         FieldKind::Boolean,
@@ -678,6 +681,7 @@ fn validate_safety_gates(
     reject_service_diagnostics_request(action, request)?;
     reject_desktop_capture_request(action, request)?;
     reject_desktop_locate_request(action, request)?;
+    reject_desktop_evidence_observe_request(action, request)?;
     reject_desktop_prompt_observe_request(action, request)?;
     reject_desktop_interact_request(action, request)?;
     reject_service_probe_request(action, request)?;
@@ -1195,6 +1199,84 @@ fn reject_desktop_interact_request(
         return Err(issue(
             ServiceRequestIssueKind::InvalidBoundedRecipe,
             "desktop_interact requires a supported recipeId",
+        ));
+    }
+    Ok(())
+}
+
+fn reject_desktop_evidence_observe_request(
+    action: &str,
+    request: &Map<String, Value>,
+) -> Result<(), ServiceRequestIssue> {
+    if action != "desktop_evidence_observe" {
+        return Ok(());
+    }
+    const TOP_LEVEL_FIELDS: &[&str] = &[
+        "action",
+        "browserId",
+        "sessionName",
+        "episodeId",
+        "evidenceSurface",
+        "includeFrame",
+        "serviceName",
+        "agentName",
+        "taskName",
+        "jobTimeoutMs",
+    ];
+    if let Some(field) = request
+        .keys()
+        .find(|field| !TOP_LEVEL_FIELDS.contains(&field.as_str()))
+    {
+        return Err(issue(
+            ServiceRequestIssueKind::InvalidBoundedRecipe,
+            format!("desktop_evidence_observe does not accept {field}"),
+        ));
+    }
+    for field in [
+        "browserId",
+        "episodeId",
+        "serviceName",
+        "agentName",
+        "taskName",
+    ] {
+        if request
+            .get(field)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_none()
+        {
+            return Err(issue(
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                format!("desktop_evidence_observe requires {field}"),
+            ));
+        }
+    }
+    if request.get("sessionName").is_some_and(|value| {
+        value
+            .as_str()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_none()
+    }) {
+        return Err(issue(
+            ServiceRequestIssueKind::InvalidBoundedRecipe,
+            "desktop_evidence_observe sessionName must be a nonempty string",
+        ));
+    }
+    if request.get("evidenceSurface").and_then(Value::as_str) != Some("stacking_or_occlusion") {
+        return Err(issue(
+            ServiceRequestIssueKind::InvalidBoundedRecipe,
+            "desktop_evidence_observe requires evidenceSurface stacking_or_occlusion",
+        ));
+    }
+    if request
+        .get("includeFrame")
+        .is_some_and(|value| !value.is_boolean())
+    {
+        return Err(issue(
+            ServiceRequestIssueKind::InvalidBoundedRecipe,
+            "desktop_evidence_observe includeFrame must be a boolean",
         ));
     }
     Ok(())
@@ -1798,7 +1880,7 @@ mod tests {
         let canonical_names = sorted_names(properties.keys().cloned());
         let spec_names = spec_role_names(|_| true);
 
-        assert_eq!(canonical_names.len(), 70);
+        assert_eq!(canonical_names.len(), 73);
         assert_eq!(canonical_names, spec_names);
         assert_eq!(
             role_contract["canonicalPropertyCount"].as_u64(),
@@ -2234,6 +2316,40 @@ mod tests {
     }
 
     #[test]
+    fn desktop_evidence_observe_requires_attributed_named_evidence_need() {
+        let normalized = normalize(json!({
+            "action": "desktop_evidence_observe",
+            "browserId": "browser-1",
+            "episodeId": "episode-1",
+            "evidenceSurface": "stacking_or_occlusion",
+            "includeFrame": false,
+            "serviceName": "DesktopEvidence",
+            "agentName": "fixture-agent",
+            "taskName": "inspect-stacking"
+        }))
+        .unwrap();
+        assert_eq!(normalized.command["action"], "desktop_evidence_observe");
+        assert_eq!(normalized.command["episodeId"], "episode-1");
+
+        for (request, expected) in [
+            (
+                json!({"action":"desktop_evidence_observe","browserId":"browser-1","episodeId":"episode-1","evidenceSurface":"stacking_or_occlusion","serviceName":"DesktopEvidence","agentName":"fixture-agent"}),
+                "desktop_evidence_observe requires taskName",
+            ),
+            (
+                json!({"action":"desktop_evidence_observe","browserId":"browser-1","episodeId":"episode-1","evidenceSurface":"browser_external_prompt","serviceName":"DesktopEvidence","agentName":"fixture-agent","taskName":"inspect"}),
+                "desktop_evidence_observe requires evidenceSurface stacking_or_occlusion",
+            ),
+            (
+                json!({"action":"desktop_evidence_observe","browserId":"browser-1","episodeId":"episode-1","evidenceSurface":"stacking_or_occlusion","serviceName":"DesktopEvidence","agentName":"fixture-agent","taskName":"inspect","params":{}}),
+                "desktop_evidence_observe does not accept params",
+            ),
+        ] {
+            assert_eq!(normalize(request).unwrap_err().message(), expected);
+        }
+    }
+
+    #[test]
     fn desktop_prompt_observe_requires_attributed_top_level_named_profile() {
         let normalized = normalize(json!({
             "action": "desktop_prompt_observe",
@@ -2317,6 +2433,14 @@ mod tests {
                     "locatorId": "p110-control-v1",
                     "maxCandidates": 8
                 });
+            }
+            "desktop_evidence_observe" => {
+                request["browserId"] = json!("browser:desktop-fixture");
+                request["episodeId"] = json!("episode-fixture");
+                request["evidenceSurface"] = json!("stacking_or_occlusion");
+                request["serviceName"] = json!("DesktopEvidence");
+                request["agentName"] = json!("fixture-agent");
+                request["taskName"] = json!("inspect-stacking");
             }
             "desktop_interact" => {
                 request["browserId"] = json!("browser:desktop-fixture");

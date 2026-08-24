@@ -849,6 +849,7 @@ fn action_is_observation_only(action: &str) -> bool {
             | "cookies_get"
             | "dependent_batch"
             | "diagnostics"
+            | "desktop_evidence_observe"
             | "desktop_prompt_observe"
             | "deny"
             | "errors"

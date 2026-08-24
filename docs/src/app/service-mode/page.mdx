@@ -339,6 +339,40 @@ const location = await locateServiceDesktopControl({
 // => { success: true, data: { context, frameReceipt, observation } }
 ```
 
+## Run a Desktop Evidence Episode
+
+Use the task-shaped evidence action when the task needs browser-external scene
+evidence such as stacking or occlusion. The caller names the evidence need;
+Agent Browser owns capacity, scene, route, display, window, geometry, capture,
+verification, release, and cleanup.
+
+```bash
+agent-browser desktop evidence observe \
+  --browser-id browser-123 \
+  --episode-id stacking-check-1 \
+  --service-name DesktopEvidence \
+  --agent-name codex \
+  --task-name inspect-stacking \
+  --json
+```
+
+HTTP clients post `action: "desktop_evidence_observe"`, `browserId`,
+`episodeId`, `evidenceSurface: "stacking_or_occlusion"`, optional
+`includeFrame`, and `serviceName`, `agentName`, and `taskName`. MCP provides
+both `service_request` and the dedicated `desktop_evidence_observe` tool.
+Generated clients expose `createServiceDesktopEvidenceObserveRequest()`,
+`requestServiceDesktopEvidenceObserve()`, and
+`observeServiceDesktopEvidence()`.
+
+The action does not accept display names, routes, provider URLs, window
+handles, coordinates, CDP endpoints, or provider commands. An active human
+controller blocks visible staging. A passive viewer permits observation only
+when the exact scene is already capture-ready. The current configured
+`stacking_or_occlusion` path fails closed rather than focusing, raising,
+maximizing, or rearranging the desktop. `includeFrame` defaults to false; any
+returned frame is response-only and is removed from durable jobs, streams,
+dashboard records, events, and incidents.
+
 ## Observe the synthetic browser-external prompt fixture
 
 P110 PoC 4 adds the canonical read-only `desktop_prompt_observe` action. It
@@ -1308,7 +1342,7 @@ shared display, or ambient daemon display.
   </tbody>
 </table>
 
-Service tools include `service_request`, `desktop_capture`, `service_job_cancel`, `service_browser_retry`, `service_incidents`, `service_remedies_apply`, `service_trace`, `service_profile_upsert`, `service_profile_freshness_update`, `service_profile_delete`, `service_session_upsert`, `service_session_delete`, `service_site_policy_upsert`, `service_site_policy_delete`, `service_monitor_upsert`, `service_monitor_delete`, `service_monitors_run_due`, `service_monitor_pause`, `service_monitor_resume`, `service_monitor_reset_failures`, `service_monitor_triage`, `service_provider_upsert`, `service_provider_delete`, `service_browser_capability_registry_upsert`, and `service_browser_capability_preflight`. Use `service_browser_capability_preflight` to evaluate a requested browser build without launching Chrome. Use `service_request` to queue one intent-based browser action with caller context and site/login hints. Use `desktop_capture` for the dedicated route-bound desktop observation form. Pass `summary: true` to `service_incidents` for the same escalation, severity, and state remedy groups as HTTP `summary=true`; add `remediesOnly: true` for the compact active `browser_degraded`, `monitor_attention`, and `os_degraded_possible` operator ladder. Use `service_remedies_apply` with `escalation: "monitor_attention"` to apply active monitor remedies, `escalation: "browser_degraded"` after operator review to batch degraded-browser retry enablement, or `escalation: "os_degraded_possible"` after host inspection to batch faulted-browser retry remedies through the service worker.
+Service tools include `service_request`, `desktop_capture`, `desktop_evidence_observe`, `service_job_cancel`, `service_browser_retry`, `service_incidents`, `service_remedies_apply`, `service_trace`, `service_profile_upsert`, `service_profile_freshness_update`, `service_profile_delete`, `service_session_upsert`, `service_session_delete`, `service_site_policy_upsert`, `service_site_policy_delete`, `service_monitor_upsert`, `service_monitor_delete`, `service_monitors_run_due`, `service_monitor_pause`, `service_monitor_resume`, `service_monitor_reset_failures`, `service_monitor_triage`, `service_provider_upsert`, `service_provider_delete`, `service_browser_capability_registry_upsert`, and `service_browser_capability_preflight`. Use `service_browser_capability_preflight` to evaluate a requested browser build without launching Chrome. Use `service_request` to queue one intent-based browser action with caller context and site/login hints. Use `desktop_capture` for the low-level route-bound diagnostic and `desktop_evidence_observe` for the task-shaped browser-external scene observation. Pass `summary: true` to `service_incidents` for the same escalation, severity, and state remedy groups as HTTP `summary=true`; add `remediesOnly: true` for the compact active `browser_degraded`, `monitor_attention`, and `os_degraded_possible` operator ladder. Use `service_remedies_apply` with `escalation: "monitor_attention"` to apply active monitor remedies, `escalation: "browser_degraded"` after operator review to batch degraded-browser retry enablement, or `escalation: "os_degraded_possible"` after host inspection to batch faulted-browser retry remedies through the service worker.
 
 Typed browser tools cover navigation, tabs, snapshots, screenshots, clicks, fills, waits, keyboard actions, element reads, cookies, storage, headers, offline mode, viewport, geolocation, permissions, timezone, locale, media, dialogs, uploads, downloads, HAR capture, request routing, console, errors, PDFs, response bodies, and clipboard operations. Use `browser_command` only for browser actions that do not yet have a typed tool.
 

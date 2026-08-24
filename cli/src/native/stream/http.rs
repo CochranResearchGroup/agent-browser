@@ -1829,7 +1829,13 @@ fn service_request_relay_session(default_session: &str, body: &str, command: &Va
 
     if matches!(
         command.get("action").and_then(Value::as_str),
-        Some("desktop_capture" | "desktop_locate" | "desktop_prompt_observe" | "desktop_interact")
+        Some(
+            "desktop_capture"
+                | "desktop_locate"
+                | "desktop_evidence_observe"
+                | "desktop_prompt_observe"
+                | "desktop_interact",
+        )
     ) {
         for value in [request.pointer("/sessionName"), command.get("sessionName")] {
             if let Some(session_name) = service_request_relay_session_candidate(value) {

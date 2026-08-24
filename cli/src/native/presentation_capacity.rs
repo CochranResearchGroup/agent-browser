@@ -524,6 +524,126 @@ impl PresentationCapacityAuthority {
         self.enqueue_or_reject(request, limiting_resource)
     }
 
+    /// Reserve the exact presentation already bound to an observation target.
+    /// An active retained browser keeps its slot state and browser binding; the
+    /// episode owns only the lease. A matching warm slot transitions to the
+    /// normal reserved state and continues to honor protected capacity.
+    pub(crate) fn request_bound_observation(
+        &mut self,
+        request: PresentationRequest,
+        pressure: PressureAdmission,
+        service_state: &ServiceState,
+        route_id: &str,
+        display_allocation_id: &str,
+    ) -> CapacityDecision {
+        self.queue_clock = self.queue_clock.saturating_add(1);
+        let browser_id = request.browser_id.as_deref();
+        if request.id.trim().is_empty()
+            || request.priority != PresentationPriority::Observation
+            || request.requires_staging
+            || browser_id.is_none()
+            || self
+                .queued_requests
+                .iter()
+                .any(|queued| queued.id == request.id)
+            || self
+                .slots
+                .iter()
+                .any(|slot| slot.lease_request_id.as_deref() == Some(request.id.as_str()))
+        {
+            return CapacityDecision::Rejected {
+                request_id: request.id,
+                limiting_resource: CapacityLimitingResource::InvalidRequest,
+                next_safe_action: CapacityNextSafeAction::PreserveCurrentPresentation,
+            };
+        }
+        let browser_id = browser_id.expect("validated above");
+        let Some(slot_index) = self.slots.iter().position(|slot| {
+            slot.route_id.as_deref() == Some(route_id)
+                && slot.display_allocation_id.as_deref() == Some(display_allocation_id)
+        }) else {
+            return self.enqueue_or_reject(request, CapacityLimitingResource::WarmSlot);
+        };
+        if slot_index >= pressure.admitted_maximum.min(self.config.hard_maximum) {
+            return self.enqueue_or_reject(request, CapacityLimitingResource::PressureAdmission);
+        }
+        if self.queued_requests.iter().any(|queued| {
+            queued.browser_id.as_deref() == Some(browser_id) && queued.id != request.id
+        }) || self.slots.iter().enumerate().any(|(index, slot)| {
+            index != slot_index
+                && slot.browser_id.as_deref() == Some(browser_id)
+                && slot.state != PresentationSlotState::WarmIdle
+        }) {
+            return self.enqueue_or_reject(request, CapacityLimitingResource::BrowserExclusion);
+        }
+        let slot = &self.slots[slot_index];
+        if slot.lease_request_id.is_some()
+            || !matches!(
+                slot.state,
+                PresentationSlotState::WarmIdle | PresentationSlotState::Active
+            )
+            || (slot.state == PresentationSlotState::Active
+                && slot.browser_id.as_deref() != Some(browser_id))
+        {
+            return self.enqueue_or_reject(request, CapacityLimitingResource::WarmSlot);
+        }
+        if let Some(conflict) = slot_admission_conflict(service_state, slot, &request) {
+            return self.enqueue_or_reject(request, conflict);
+        }
+        if slot.state == PresentationSlotState::WarmIdle {
+            let admitted_maximum = pressure.admitted_maximum.min(self.config.hard_maximum);
+            let free_slots = self
+                .slots
+                .iter()
+                .take(admitted_maximum)
+                .filter(|candidate| {
+                    candidate.state == PresentationSlotState::WarmIdle
+                        && slot_admission_conflict(service_state, candidate, &request).is_none()
+                })
+                .count();
+            if free_slots <= self.protected_reserve(request.priority) {
+                return self.enqueue_or_reject(request, CapacityLimitingResource::ReservedCapacity);
+            }
+        }
+        let slot = &mut self.slots[slot_index];
+        if slot.state == PresentationSlotState::WarmIdle {
+            slot.state = PresentationSlotState::Reserved;
+            slot.browser_id = Some(browser_id.to_string());
+        }
+        slot.lease_request_id = Some(request.id.clone());
+        slot.lease_priority = Some(request.priority);
+        CapacityDecision::Granted {
+            request_id: request.id,
+            slot_id: slot.id.clone(),
+        }
+    }
+
+    /// Release an observation lease without parking an already-active retained
+    /// browser. Warm-slot reservations continue through normal dispatch.
+    pub(crate) fn release_bound_observation(
+        &mut self,
+        slot_id: &str,
+        request_id: &str,
+        pressure: PressureAdmission,
+        service_state: &ServiceState,
+    ) -> Result<Option<CapacityDecision>, String> {
+        let slot = self
+            .slots
+            .iter_mut()
+            .find(|slot| slot.id == slot_id)
+            .ok_or_else(|| "presentation_reserved_slot_missing".to_string())?;
+        if slot.lease_request_id.as_deref() != Some(request_id) {
+            return Err("presentation_release_lease_mismatch".to_string());
+        }
+        if slot.state == PresentationSlotState::Active {
+            slot.lease_request_id = None;
+            slot.lease_priority = None;
+            self.queue_clock = self.queue_clock.saturating_add(1);
+            return Ok(None);
+        }
+        Ok(self.release_and_dispatch_with_service_state(slot_id, pressure, Some(service_state)))
+    }
+
     fn enqueue_or_reject(
         &mut self,
         mut request: PresentationRequest,

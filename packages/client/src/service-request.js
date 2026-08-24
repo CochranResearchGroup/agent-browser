@@ -40,6 +40,8 @@ const displayIsolationSet = new Set([
  * @typedef {import('./service-request.generated.js').ServiceDesktopInteractRequestOptions} ServiceDesktopInteractRequestOptions
  * @typedef {import('./service-request.generated.js').ServiceDesktopLocateRequestHttpOptions} ServiceDesktopLocateRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceDesktopLocateRequestOptions} ServiceDesktopLocateRequestOptions
+ * @typedef {import('./service-request.generated.js').ServiceDesktopEvidenceObserveRequestHttpOptions} ServiceDesktopEvidenceObserveRequestHttpOptions
+ * @typedef {import('./service-request.generated.js').ServiceDesktopEvidenceObserveRequestOptions} ServiceDesktopEvidenceObserveRequestOptions
  * @typedef {import('./service-request.generated.js').ServiceDesktopPromptObserveRequestHttpOptions} ServiceDesktopPromptObserveRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceDesktopPromptObserveRequestOptions} ServiceDesktopPromptObserveRequestOptions
  * @typedef {import('./service-request.generated.js').ServiceProbeRequestHttpOptions} ServiceProbeRequestHttpOptions
@@ -164,6 +166,9 @@ export function createServiceRequest(input) {
   }
   if (input.action === 'desktop_locate') {
     validateDesktopLocateRequest(record);
+  }
+  if (input.action === 'desktop_evidence_observe') {
+    validateDesktopEvidenceObserveRequest(record);
   }
   if (input.action === 'desktop_interact') {
     validateDesktopInteractRequest(record);
@@ -634,6 +639,68 @@ export function createServiceDesktopLocateRequest(input) {
     ...(sessionName !== undefined ? { sessionName } : {}),
     locator: { locatorId, maxCandidates },
     includeVisualization,
+  });
+}
+
+/**
+ * Builds one task-shaped read-only Desktop Evidence Episode. Callers name the
+ * evidence need and browser while service-owned adapters resolve capacity,
+ * scene, route, display, window, and capture details.
+ *
+ * @param {ServiceDesktopEvidenceObserveRequestOptions} input
+ * @returns {ServiceRequest}
+ */
+export function createServiceDesktopEvidenceObserveRequest(input) {
+  assertPlainObject(input, 'service desktop evidence observe request');
+  const {
+    browserId,
+    sessionName,
+    episodeId,
+    evidenceSurface,
+    includeFrame = false,
+    serviceName,
+    agentName,
+    taskName,
+    ...request
+  } = input;
+  const allowedRequestFields = new Set(['jobTimeoutMs']);
+  const forbiddenField = Object.keys(request).find((field) => !allowedRequestFields.has(field));
+  if (forbiddenField !== undefined) {
+    throw new TypeError(`service desktop evidence observe request does not accept ${forbiddenField}`);
+  }
+  for (const [field, value] of Object.entries({
+    browserId,
+    episodeId,
+    serviceName,
+    agentName,
+    taskName,
+  })) {
+    if (typeof value !== 'string' || value.trim().length === 0) {
+      throw new TypeError(`service desktop evidence observe request requires ${field}`);
+    }
+  }
+  if (sessionName !== undefined && (typeof sessionName !== 'string' || sessionName.trim().length === 0)) {
+    throw new TypeError('service desktop evidence observe request sessionName must be a non-empty string');
+  }
+  if (evidenceSurface !== 'stacking_or_occlusion') {
+    throw new TypeError(
+      'service desktop evidence observe request requires evidenceSurface stacking_or_occlusion',
+    );
+  }
+  if (typeof includeFrame !== 'boolean') {
+    throw new TypeError('service desktop evidence observe request includeFrame must be a boolean');
+  }
+  return createServiceRequest({
+    ...request,
+    action: 'desktop_evidence_observe',
+    browserId,
+    ...(sessionName !== undefined ? { sessionName } : {}),
+    episodeId,
+    evidenceSurface,
+    includeFrame,
+    serviceName,
+    agentName,
+    taskName,
   });
 }
 
@@ -1512,6 +1579,31 @@ export async function requestServiceDesktopLocate({ baseUrl, fetch = globalThis.
  */
 export async function locateServiceDesktopControl(options) {
   return requestServiceDesktopLocate(options);
+}
+
+/**
+ * Run one read-only Desktop Evidence Episode.
+ *
+ * @param {ServiceDesktopEvidenceObserveRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function requestServiceDesktopEvidenceObserve({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+  return postServiceRequest({
+    baseUrl,
+    fetch,
+    signal,
+    request: createServiceDesktopEvidenceObserveRequest(request),
+  });
+}
+
+/**
+ * Convenience alias for requestServiceDesktopEvidenceObserve.
+ *
+ * @param {ServiceDesktopEvidenceObserveRequestHttpOptions} options
+ * @returns {Promise<ServiceRequestResponse>}
+ */
+export async function observeServiceDesktopEvidence(options) {
+  return requestServiceDesktopEvidenceObserve(options);
 }
 
 /**
@@ -2461,6 +2553,47 @@ function validateDesktopLocateRequest(request) {
   const includeVisualization = field('includeVisualization');
   if (includeVisualization !== undefined && typeof includeVisualization !== 'boolean') {
     throw new TypeError('service desktop locate request includeVisualization must be a boolean');
+  }
+}
+
+/**
+ * @param {Record<string, unknown>} request
+ */
+function validateDesktopEvidenceObserveRequest(request) {
+  const allowedFields = new Set([
+    'action',
+    'browserId',
+    'sessionName',
+    'episodeId',
+    'evidenceSurface',
+    'includeFrame',
+    'serviceName',
+    'agentName',
+    'taskName',
+    'jobTimeoutMs',
+  ]);
+  const forbiddenField = Object.keys(request).find((field) => !allowedFields.has(field));
+  if (forbiddenField !== undefined) {
+    throw new TypeError(`service desktop evidence observe request does not accept ${forbiddenField}`);
+  }
+  for (const field of ['browserId', 'episodeId', 'serviceName', 'agentName', 'taskName']) {
+    if (typeof request[field] !== 'string' || String(request[field]).trim().length === 0) {
+      throw new TypeError(`service desktop evidence observe request requires ${field}`);
+    }
+  }
+  if (
+    request.sessionName !== undefined &&
+    (typeof request.sessionName !== 'string' || request.sessionName.trim().length === 0)
+  ) {
+    throw new TypeError('service desktop evidence observe request sessionName must be a non-empty string');
+  }
+  if (request.evidenceSurface !== 'stacking_or_occlusion') {
+    throw new TypeError(
+      'service desktop evidence observe request requires evidenceSurface stacking_or_occlusion',
+    );
+  }
+  if (request.includeFrame !== undefined && typeof request.includeFrame !== 'boolean') {
+    throw new TypeError('service desktop evidence observe request includeFrame must be a boolean');
   }
 }
 

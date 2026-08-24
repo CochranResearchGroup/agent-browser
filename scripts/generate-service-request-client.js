@@ -576,6 +576,20 @@ export interface ServiceDesktopCaptureData {
   [key: string]: unknown;
 }
 
+export interface ServiceDesktopEvidenceObserveData {
+  ok: true;
+  action: "desktop_evidence_observe";
+  evidenceSurface: "stacking_or_occlusion";
+  episode: Record<string, unknown>;
+  /** Present only when the episode reached desktop capture. */
+  context?: DesktopContext;
+  /** Present only when the episode reached desktop capture. */
+  frameReceipt?: FrameReceipt;
+  /** Optional response-only base64 PNG. Durable projections remove pixels. */
+  frameBase64?: string;
+  [key: string]: unknown;
+}
+
 export interface DesktopLocatorObservation {
   observationId: string;
   schemaVersion: "v1";
@@ -1307,6 +1321,7 @@ export interface ServiceRequestActionDataMap {
   diagnostics: ServiceDiagnosticsData;
   desktop_capture: ServiceDesktopCaptureData;
   desktop_locate: ServiceDesktopLocateData;
+  desktop_evidence_observe: ServiceDesktopEvidenceObserveData;
   desktop_prompt_observe: ServiceDesktopPromptObserveData;
   desktop_interact: ServiceDesktopInteractData;
   back: ServiceUrlData;
@@ -1571,6 +1586,23 @@ export interface ServiceDesktopLocateRequestOptions extends Omit<ServiceRequest,
 }
 
 export interface ServiceDesktopLocateRequestHttpOptions extends ServiceDesktopLocateRequestOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
+export interface ServiceDesktopEvidenceObserveRequestOptions extends Pick<ServiceRequest, "jobTimeoutMs"> {
+  browserId: string;
+  sessionName?: string;
+  episodeId: string;
+  evidenceSurface: "stacking_or_occlusion";
+  includeFrame?: boolean;
+  serviceName: string;
+  agentName: string;
+  taskName: string;
+}
+
+export interface ServiceDesktopEvidenceObserveRequestHttpOptions extends ServiceDesktopEvidenceObserveRequestOptions {
   baseUrl: string;
   fetch?: typeof globalThis.fetch;
   signal?: AbortSignal;
@@ -1881,6 +1913,9 @@ export declare function createServiceDesktopCaptureRequest(
 export declare function createServiceDesktopLocateRequest(
   input: ServiceDesktopLocateRequestOptions,
 ): ServiceRequestForAction<"desktop_locate">;
+export declare function createServiceDesktopEvidenceObserveRequest(
+  input: ServiceDesktopEvidenceObserveRequestOptions,
+): ServiceRequestForAction<"desktop_evidence_observe">;
 export declare function createServiceDesktopInteractRequest(
   input: ServiceDesktopInteractRequestOptions,
 ): ServiceRequestForAction<"desktop_interact">;
@@ -1982,6 +2017,12 @@ export declare function requestServiceDesktopLocate(
 export declare function locateServiceDesktopControl(
   options: ServiceDesktopLocateRequestHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceDesktopLocateData>>;
+export declare function requestServiceDesktopEvidenceObserve(
+  options: ServiceDesktopEvidenceObserveRequestHttpOptions,
+): Promise<ServiceRequestResponse<ServiceDesktopEvidenceObserveData>>;
+export declare function observeServiceDesktopEvidence(
+  options: ServiceDesktopEvidenceObserveRequestHttpOptions,
+): Promise<ServiceRequestResponse<ServiceDesktopEvidenceObserveData>>;
 export declare function requestServiceDesktopInteract(
   options: ServiceDesktopInteractRequestHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceDesktopInteractData>>;

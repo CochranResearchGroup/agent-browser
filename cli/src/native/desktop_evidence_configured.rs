@@ -684,13 +684,17 @@ where
         let pressure = self.pressure;
         let mut unavailable = None;
         let mutation = self.repository.mutate(|state| {
+            let binding = resolve_desktop_capture_binding(state, &browser_id)
+                .map_err(|error| error.to_string())?;
             let Some(mut capacity) = state.presentation_capacity.take() else {
                 return Err("presentation_capacity_unavailable".to_string());
             };
-            let decision = capacity.request_with_service_state(
+            let decision = capacity.request_bound_observation(
                 PresentationRequest::observation(request_id.clone()).for_browser(&browser_id),
                 pressure,
-                Some(state),
+                state,
+                &binding.route_id,
+                &binding.display_allocation_id,
             );
             state.presentation_capacity = Some(capacity);
             match decision {
@@ -732,6 +736,7 @@ where
             ));
         }
         let pressure = self.pressure;
+        let request_id = self.request_id.clone();
         let mutation = self.repository.mutate(|state| {
             let Some(mut capacity) = state.presentation_capacity.take() else {
                 return Err("presentation_capacity_unavailable".to_string());
@@ -740,7 +745,7 @@ where
                 state.presentation_capacity = Some(capacity);
                 return Err("presentation_reserved_slot_missing".to_string());
             }
-            capacity.release_and_dispatch_with_service_state(&slot_id, pressure, Some(state));
+            capacity.release_bound_observation(&slot_id, &request_id, pressure, state)?;
             state.presentation_capacity = Some(capacity);
             Ok(())
         });
@@ -805,24 +810,33 @@ mod tests {
     }
 
     fn state(slot_count: usize) -> ServiceState {
-        ServiceState {
-            presentation_capacity: Some(
-                PresentationCapacityAuthority::new(
-                    PresentationCapacityConfig {
-                        warm_minimum: slot_count,
-                        hard_maximum: slot_count,
-                        human_priority_reserve: usize::from(slot_count > 0),
-                        recovery_reserve: usize::from(slot_count > 1),
-                        max_queue_depth: 8,
-                    },
-                    (0..slot_count)
-                        .map(|index| PresentationSlot::warm_idle(format!("slot-{index}")))
-                        .collect(),
-                )
-                .unwrap(),
-            ),
-            ..Default::default()
-        }
+        let mut state = configured_scene_state(false, false);
+        let slots = (0..slot_count)
+            .map(|index| {
+                if index == 0 {
+                    PresentationSlot::warm_idle("slot-0").with_binding("route-1", "display-1")
+                } else {
+                    PresentationSlot::warm_idle(format!("slot-{index}")).with_binding(
+                        format!("route-extra-{index}"),
+                        format!("display-extra-{index}"),
+                    )
+                }
+            })
+            .collect();
+        state.presentation_capacity = Some(
+            PresentationCapacityAuthority::new(
+                PresentationCapacityConfig {
+                    warm_minimum: slot_count,
+                    hard_maximum: slot_count,
+                    human_priority_reserve: usize::from(slot_count > 0),
+                    recovery_reserve: usize::from(slot_count > 1),
+                    max_queue_depth: 8,
+                },
+                slots,
+            )
+            .unwrap(),
+        );
+        state
     }
 
     #[derive(Clone, Copy)]
@@ -984,8 +998,12 @@ mod tests {
         let repository = MemoryRepository::new(state(2));
         let mut adapter = ConfiguredPresentationSlotAdapter::new(repository, "episode-2", 2);
 
-        let failure = adapter.reserve("browser-2").unwrap_err();
-        assert_eq!(failure.code, "presentation_capacity_queued");
+        let failure = adapter.reserve("browser-1").unwrap_err();
+        assert_eq!(
+            failure.code, "presentation_capacity_queued",
+            "{}",
+            failure.detail
+        );
         let snapshot = adapter.repository.load_snapshot().unwrap();
         let capacity = snapshot.presentation_capacity.unwrap();
         assert!(capacity.queued_requests.is_empty());
@@ -993,6 +1011,34 @@ mod tests {
             .slots
             .iter()
             .all(|slot| slot.state == PresentationSlotState::WarmIdle));
+    }
+
+    #[test]
+    fn configured_adapter_leases_and_releases_active_presentation_without_parking_browser() {
+        let mut state = configured_scene_state(true, false);
+        let slot = &mut state.presentation_capacity.as_mut().unwrap().slots[0];
+        slot.state = PresentationSlotState::Active;
+        slot.lease_request_id = None;
+        slot.lease_priority = None;
+        let repository = MemoryRepository::new(state);
+        let mut adapter =
+            ConfiguredPresentationSlotAdapter::new(repository.clone(), "episode-active", 1);
+
+        let admission = adapter.reserve("browser-1").unwrap();
+        assert_eq!(admission, "presentation-admission:episode-active:slot-1");
+        let snapshot = repository.load_snapshot().unwrap();
+        let slot = &snapshot.presentation_capacity.unwrap().slots[0];
+        assert_eq!(slot.state, PresentationSlotState::Active);
+        assert_eq!(slot.browser_id.as_deref(), Some("browser-1"));
+        assert_eq!(slot.lease_request_id.as_deref(), Some("episode-active"));
+
+        let release = adapter.release("browser-1").unwrap();
+        assert_eq!(release, "presentation-release:episode-active:slot-1");
+        let snapshot = repository.load_snapshot().unwrap();
+        let slot = &snapshot.presentation_capacity.unwrap().slots[0];
+        assert_eq!(slot.state, PresentationSlotState::Active);
+        assert_eq!(slot.browser_id.as_deref(), Some("browser-1"));
+        assert_eq!(slot.lease_request_id, None);
     }
 
     #[test]

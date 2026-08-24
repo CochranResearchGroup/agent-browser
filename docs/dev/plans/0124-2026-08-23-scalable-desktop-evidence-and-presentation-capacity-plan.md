@@ -403,8 +403,15 @@ paired-CDP receipt, popup trigger, or staging effect. Configured staging stays
 fail-closed until exact native snapshot and restoration exist. Source evidence
 is recorded in
 `docs/dev/notes/0124-13-2026-08-24-unstaged-scene-composition-source-acceptance.md`.
-The remaining installed boundary is one task-shaped product action, exact
-active-presentation reservation, paired CDP and staged browser-external
+The task-shaped `desktop_evidence_observe` product action and exact
+active-presentation observation lease are source accepted. The action accepts
+one closed evidence need and service-owned browser identity, invokes the
+configured coordinator without provider plumbing or browser launch, returns
+ephemeral pixels only on explicit request, persists redacted receipts, and
+releases its lease without parking an active retained browser. Source evidence
+is recorded in
+`docs/dev/notes/0124-14-2026-08-24-desktop-evidence-product-action-source-acceptance.md`.
+The remaining installed boundary is paired CDP and staged browser-external
 composition, plus human, viewer, CDP, and retained-browser acceptance.
 Configured production input remains outside this plan's live authority until
 Plan 0110 is independently accepted.

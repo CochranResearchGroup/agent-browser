@@ -9,7 +9,8 @@ use crate::native::service_access::{
 use crate::native::service_activity::service_incident_activity_response;
 use crate::native::service_contracts::{
     service_contracts_metadata, DESKTOP_CAPTURE_DEFAULT_MAX_BYTES, DESKTOP_CAPTURE_HARD_MAX_BYTES,
-    DESKTOP_CAPTURE_MCP_TOOL_NAME, DESKTOP_INTERACT_MCP_TOOL_NAME, DESKTOP_LOCATE_MCP_TOOL_NAME,
+    DESKTOP_CAPTURE_MCP_TOOL_NAME, DESKTOP_EVIDENCE_OBSERVE_MCP_TOOL_NAME,
+    DESKTOP_INTERACT_MCP_TOOL_NAME, DESKTOP_LOCATE_MCP_TOOL_NAME,
     DESKTOP_PROMPT_OBSERVE_MCP_TOOL_NAME, SERVICE_ACCESS_PLAN_MCP_RESOURCE,
     SERVICE_ACCESS_PLAN_MCP_TOOL_NAME, SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME,
     SERVICE_BROWSER_CAPABILITY_REGISTRY_RESOURCE, SERVICE_CONTRACTS_RESOURCE,
@@ -946,6 +947,21 @@ fn service_mcp_tools() -> Vec<Value> {
                         "default": false,
                         "description": "Return a bounded response-only visualization for action=desktop_locate or action=desktop_prompt_observe."
                     },
+                    "evidenceSurface": {
+                        "type": "string",
+                        "enum": ["stacking_or_occlusion"],
+                        "description": "Named browser-external evidence need for action=desktop_evidence_observe."
+                    },
+                    "episodeId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Opaque bounded episode identity for action=desktop_evidence_observe."
+                    },
+                    "includeFrame": {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "Return response-only PNG bytes for action=desktop_evidence_observe."
+                    },
                     "promptProfileId": {
                         "type": "string",
                         "enum": ["p110-external-prompt-v1"],
@@ -1225,6 +1241,7 @@ fn service_mcp_tools() -> Vec<Value> {
         }),
         desktop_capture_tool_schema(),
         desktop_locate_tool_schema(),
+        desktop_evidence_observe_tool_schema(),
         desktop_prompt_observe_tool_schema(),
         desktop_interact_tool_schema(),
         json!({
@@ -4847,6 +4864,30 @@ fn desktop_interact_tool_schema() -> Value {
     })
 }
 
+fn desktop_evidence_observe_tool_schema() -> Value {
+    json!({
+        "name": DESKTOP_EVIDENCE_OBSERVE_MCP_TOOL_NAME,
+        "title": "Observe browser-external desktop evidence",
+        "description": "Run one read-only Desktop Evidence Episode for a named browser-external evidence need. Agent Browser reserves the exact active presentation, proves and captures the service-owned scene, verifies authority, and releases the observation lease. Callers cannot select displays, routes, windows, coordinates, CDP endpoints, or capture providers.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "browserId": { "type": "string", "description": "Required service-owned browser id." },
+                "sessionName": { "type": "string", "description": "Optional daemon session and the only daemon selector." },
+                "episodeId": { "type": "string", "description": "Required caller-generated opaque episode identity." },
+                "evidenceSurface": { "type": "string", "enum": ["stacking_or_occlusion"], "description": "Named evidence need. Provider plumbing is service owned." },
+                "includeFrame": { "type": "boolean", "default": false, "description": "Return response-only PNG bytes. Pixels are never retained in durable projections." },
+                "jobTimeoutMs": { "type": "integer", "minimum": 1 },
+                "serviceName": { "type": "string", "description": "Required calling service name." },
+                "agentName": { "type": "string", "description": "Required calling agent name." },
+                "taskName": { "type": "string", "description": "Required calling task name." }
+            },
+            "required": ["browserId", "episodeId", "evidenceSurface", "serviceName", "agentName", "taskName"]
+        }
+    })
+}
+
 fn desktop_prompt_observe_tool_schema() -> Value {
     json!({
         "name": DESKTOP_PROMPT_OBSERVE_MCP_TOOL_NAME,
@@ -5077,6 +5118,9 @@ fn call_service_mcp_tool(
         }
         DESKTOP_LOCATE_MCP_TOOL_NAME => {
             call_desktop_locate(arguments, session, configured_service_state)
+        }
+        DESKTOP_EVIDENCE_OBSERVE_MCP_TOOL_NAME => {
+            call_desktop_evidence_observe(arguments, session, configured_service_state)
         }
         DESKTOP_PROMPT_OBSERVE_MCP_TOOL_NAME => {
             call_desktop_prompt_observe(arguments, session, configured_service_state)
@@ -5990,6 +6034,79 @@ fn call_desktop_locate(
     configured_service_state: &ServiceState,
 ) -> Result<Value, JsonRpcError> {
     let request = desktop_locate_service_request(arguments)?;
+    call_service_request(&request, session, configured_service_state)
+}
+
+fn desktop_evidence_observe_service_request(arguments: &Value) -> Result<Value, JsonRpcError> {
+    let argument_map = arguments.as_object().ok_or_else(|| {
+        JsonRpcError::invalid_params("desktop_evidence_observe arguments must be an object")
+    })?;
+    const ALLOWED_FIELDS: &[&str] = &[
+        "browserId",
+        "sessionName",
+        "episodeId",
+        "evidenceSurface",
+        "includeFrame",
+        "jobTimeoutMs",
+        "serviceName",
+        "agentName",
+        "taskName",
+    ];
+    if let Some(field) = argument_map
+        .keys()
+        .find(|field| !ALLOWED_FIELDS.contains(&field.as_str()))
+    {
+        return Err(JsonRpcError::invalid_params(&format!(
+            "unknown desktop_evidence_observe field: {field}"
+        )));
+    }
+    let browser_id = required_string_argument(arguments, "browserId")?;
+    let episode_id = required_string_argument(arguments, "episodeId")?;
+    let evidence_surface = required_string_argument(arguments, "evidenceSurface")?;
+    if evidence_surface != "stacking_or_occlusion" {
+        return Err(JsonRpcError::invalid_params(
+            "desktop_evidence_observe evidenceSurface must be stacking_or_occlusion",
+        ));
+    }
+    let service_name = required_string_argument(arguments, "serviceName")?;
+    let agent_name = required_string_argument(arguments, "agentName")?;
+    let task_name = required_string_argument(arguments, "taskName")?;
+    let include_frame = arguments
+        .get("includeFrame")
+        .map(|value| {
+            value.as_bool().ok_or_else(|| {
+                JsonRpcError::invalid_params(
+                    "desktop_evidence_observe includeFrame must be a boolean",
+                )
+            })
+        })
+        .transpose()?
+        .unwrap_or(false);
+    let mut request = json!({
+        "action": "desktop_evidence_observe",
+        "browserId": browser_id,
+        "episodeId": episode_id,
+        "evidenceSurface": evidence_surface,
+        "includeFrame": include_frame,
+        "serviceName": service_name,
+        "agentName": agent_name,
+        "taskName": task_name,
+    });
+    if let Some(value) = optional_string_argument(arguments, "sessionName")? {
+        request["sessionName"] = json!(value);
+    }
+    if let Some(value) = optional_positive_u64_argument(arguments, "jobTimeoutMs")? {
+        request["jobTimeoutMs"] = json!(value);
+    }
+    Ok(request)
+}
+
+fn call_desktop_evidence_observe(
+    arguments: &Value,
+    session: &str,
+    configured_service_state: &ServiceState,
+) -> Result<Value, JsonRpcError> {
+    let request = desktop_evidence_observe_service_request(arguments)?;
     call_service_request(&request, session, configured_service_state)
 }
 
@@ -13023,6 +13140,43 @@ mod tests {
             json!({"browserId":"browser-rdp-1","promptProfileId":"p110-external-prompt-v1","serviceName":"DesktopPromptObserver","agentName":"fixture-agent","taskName":"observe","params":{}}),
         ] {
             assert!(desktop_prompt_observe_service_request(&invalid).is_err());
+        }
+    }
+
+    #[test]
+    fn desktop_evidence_observe_tool_is_strict_and_lowers_to_canonical_request() {
+        let tools = service_mcp_tools();
+        let tool = tools
+            .iter()
+            .find(|tool| tool["name"] == "desktop_evidence_observe")
+            .expect("desktop_evidence_observe schema should be listed");
+        assert_eq!(tool["inputSchema"]["additionalProperties"], false);
+        assert!(tool["inputSchema"]["required"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("episodeId")));
+
+        let request = desktop_evidence_observe_service_request(&json!({
+            "browserId": "browser-rdp-1",
+            "sessionName": "rdp-session",
+            "episodeId": "episode-1",
+            "evidenceSurface": "stacking_or_occlusion",
+            "includeFrame": true,
+            "serviceName": "DesktopEvidence",
+            "agentName": "fixture-agent",
+            "taskName": "inspect-stacking"
+        }))
+        .unwrap();
+        assert_eq!(request["action"], "desktop_evidence_observe");
+        assert_eq!(request["episodeId"], "episode-1");
+        assert_eq!(request["includeFrame"], true);
+
+        for invalid in [
+            json!({"browserId":"browser-rdp-1","episodeId":"episode-1","evidenceSurface":"stacking_or_occlusion","serviceName":"DesktopEvidence","agentName":"fixture-agent"}),
+            json!({"browserId":"browser-rdp-1","episodeId":"episode-1","evidenceSurface":"browser_external_prompt","serviceName":"DesktopEvidence","agentName":"fixture-agent","taskName":"inspect"}),
+            json!({"browserId":"browser-rdp-1","episodeId":"episode-1","evidenceSurface":"stacking_or_occlusion","serviceName":"DesktopEvidence","agentName":"fixture-agent","taskName":"inspect","routeId":"route-1"}),
+        ] {
+            assert!(desktop_evidence_observe_service_request(&invalid).is_err());
         }
     }
 

@@ -83,6 +83,9 @@ use super::browser_tabs::{
 use super::clipboard::handle_clipboard;
 use super::cookies::{handle_cookies_clear, handle_cookies_get, handle_cookies_set};
 use super::desktop_capture::{handle_desktop_capture, redact_desktop_capture_stream_result};
+use super::desktop_evidence_action::{
+    handle_desktop_evidence_observe, redact_desktop_evidence_stream_result,
+};
 use super::desktop_interaction::{
     handle_desktop_interact, redact_desktop_interaction_stream_result,
 };
@@ -213,6 +216,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "diagnostics"
             | "desktop_capture"
             | "desktop_locate"
+            | "desktop_evidence_observe"
             | "desktop_prompt_observe"
             | "desktop_interact"
             | "probe"
@@ -424,7 +428,10 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
     let cmd_start = std::time::Instant::now();
     if action != "confirm"
         && action != "deny"
-        && !matches!(action, "desktop_interact" | "desktop_prompt_observe")
+        && !matches!(
+            action,
+            "desktop_evidence_observe" | "desktop_interact" | "desktop_prompt_observe"
+        )
     {
         if let Some(ref ca) = state.confirm_actions {
             if ca.requires_confirmation(action) {
@@ -486,9 +493,17 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
             state.runtime_owner_binding = None;
         }
     }
-    // PoC 4 and PoC 5 have no configured production providers. Resolve that static
-    // availability posture before stream broadcast, CDP event drain, policy
-    // reload, confirmation mutation, browser recovery, or any other effect.
+    // Desktop evidence is service-owned and does not require a daemon-local
+    // browser manager. Resolve it before CDP event drain, policy reload,
+    // confirmation mutation, or browser recovery.
+    if action == "desktop_evidence_observe" {
+        return match handle_desktop_evidence_observe(cmd).await {
+            Ok(data) => success_response(&id, data),
+            Err(error) => error_response(&id, &error),
+        };
+    }
+    // PoC 4 and PoC 5 have no configured production providers. Resolve that
+    // static availability posture before any other effect.
     if action == "desktop_prompt_observe" {
         return match handle_desktop_prompt_observe(cmd).await {
             Ok(data) => success_response(&id, data),
@@ -1007,6 +1022,7 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
         let data = match action {
             "desktop_capture" => redact_desktop_capture_stream_result(response_data),
             "desktop_locate" => redact_desktop_locate_stream_result(response_data),
+            "desktop_evidence_observe" => redact_desktop_evidence_stream_result(response_data),
             "desktop_prompt_observe" => redact_desktop_prompt_stream_result(response_data),
             "desktop_interact" => redact_desktop_interaction_stream_result(response_data),
             _ => response_data.clone(),

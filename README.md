@@ -685,6 +685,39 @@ submit, authenticate, or solve a challenge. Generated client helpers are
 `createServiceDesktopLocateRequest()`, `requestServiceDesktopLocate()`, and
 `locateServiceDesktopControl()`.
 
+### Desktop Evidence Episodes
+
+Use the task-shaped observation action when the need is browser-external scene
+evidence rather than a raw desktop frame:
+
+```bash
+agent-browser desktop evidence observe \
+  --browser-id browser-123 \
+  --episode-id stacking-check-1 \
+  --service-name DesktopEvidence \
+  --agent-name codex \
+  --task-name inspect-stacking \
+  --json
+```
+
+The current `stacking_or_occlusion` evidence surface resolves presentation
+capacity, route, display, process generation, window stacking, work area,
+geometry, viewer, controller, and capture provider from service authority. It
+does not accept caller displays, routes, window handles, coordinates, CDP
+endpoints, or provider commands. It reserves and releases the exact active
+presentation without parking a retained browser. If the scene is not already
+capture-ready, the current configured adapter fails closed instead of focusing
+or rearranging the desktop.
+
+HTTP and generic MCP requests use `action: "desktop_evidence_observe"`,
+`browserId`, `episodeId`, `evidenceSurface: "stacking_or_occlusion"`, optional
+`includeFrame`, and all three attribution fields. MCP also exposes the dedicated
+`desktop_evidence_observe` tool. Generated client helpers are
+`createServiceDesktopEvidenceObserveRequest()`,
+`requestServiceDesktopEvidenceObserve()`, and
+`observeServiceDesktopEvidence()`. Frame bytes are returned only when
+`includeFrame` is true and are removed from all durable projections.
+
 ### Synthetic Browser-External Prompt Observation
 
 PoC 4 defines one read-only observation over a repository-owned fixture corpus:

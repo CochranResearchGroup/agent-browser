@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-desktop-evidence-observe-response.v1.schema.json",
+  "title": "agent-browser desktop evidence observation response",
+  "description": "Immediate response data for action=desktop_evidence_observe. Frame pixels are optional and response-only; durable projections retain only redacted receipts.",
+  "type": "object",
+  "required": ["ok", "action", "evidenceSurface", "episode"],
+  "properties": {
+    "ok": { "const": true },
+    "action": { "const": "desktop_evidence_observe" },
+    "evidenceSurface": { "const": "stacking_or_occlusion" },
+    "episode": {
+      "type": "object",
+      "description": "Typed desktop evidence episode outcome with admission, capture-ready, verification, restoration, release, cleanup, and handoff receipts."
+    },
+    "context": {
+      "description": "Present only when the episode reached desktop capture.",
+      "$ref": "desktop-context.v1.schema.json"
+    },
+    "frameReceipt": {
+      "description": "Present only when the episode reached desktop capture.",
+      "$ref": "frame-receipt.v1.schema.json"
+    },
+    "frameBase64": {
+      "type": "string",
+      "contentEncoding": "base64",
+      "contentMediaType": "image/png",
+      "description": "Optional bounded ephemeral PNG bytes returned only when includeFrame=true."
+    }
+  },
+  "additionalProperties": false
+}

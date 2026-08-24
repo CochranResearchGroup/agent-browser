@@ -37,6 +37,7 @@ pub const SERVICE_ACCESS_PLAN_MCP_TOOL_NAME: &str = "service_access_plan";
 pub const SERVICE_REQUEST_MCP_TOOL_NAME: &str = "service_request";
 pub const DESKTOP_CAPTURE_MCP_TOOL_NAME: &str = "desktop_capture";
 pub const DESKTOP_LOCATE_MCP_TOOL_NAME: &str = "desktop_locate";
+pub const DESKTOP_EVIDENCE_OBSERVE_MCP_TOOL_NAME: &str = "desktop_evidence_observe";
 pub const DESKTOP_PROMPT_OBSERVE_MCP_TOOL_NAME: &str = "desktop_prompt_observe";
 pub const DESKTOP_INTERACT_MCP_TOOL_NAME: &str = "desktop_interact";
 pub const SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME: &str =
@@ -73,6 +74,8 @@ pub const OBSERVATION_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/observation.v1.schema.json";
 pub const SERVICE_DESKTOP_LOCATE_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-desktop-locate-response.v1.schema.json";
+pub const SERVICE_DESKTOP_EVIDENCE_OBSERVE_RESPONSE_SCHEMA_ID: &str =
+    "https://agent-browser.local/contracts/service-desktop-evidence-observe-response.v1.schema.json";
 pub const PROMPT_OBSERVATION_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/prompt-observation.v1.schema.json";
 pub const SERVICE_DESKTOP_PROMPT_OBSERVE_RESPONSE_SCHEMA_ID: &str =
@@ -132,6 +135,7 @@ pub const SERVICE_REQUEST_ACTIONS: &[&str] = &[
     "diagnostics",
     "desktop_capture",
     "desktop_locate",
+    "desktop_evidence_observe",
     "desktop_prompt_observe",
     "desktop_interact",
     "probe",
@@ -325,6 +329,42 @@ pub fn service_contracts_metadata() -> Value {
                     "sourceFrameRetention": "ephemeral",
                     "visualizationRetention": "ephemeral",
                     "persisted": false,
+                },
+                "noLaunch": true,
+                "input": false,
+            },
+            "serviceDesktopEvidenceObserveResponse": {
+                "version": SERVICE_REQUEST_CONTRACT_VERSION,
+                "schemaId": SERVICE_DESKTOP_EVIDENCE_OBSERVE_RESPONSE_SCHEMA_ID,
+                "schemaPath": "docs/dev/contracts/service-desktop-evidence-observe-response.v1.schema.json",
+                "http": {
+                    "method": "POST",
+                    "route": SERVICE_REQUEST_HTTP_ROUTE,
+                    "action": "desktop_evidence_observe",
+                },
+                "mcp": {
+                    "tools": [SERVICE_REQUEST_MCP_TOOL_NAME, DESKTOP_EVIDENCE_OBSERVE_MCP_TOOL_NAME],
+                },
+                "client": {
+                    "package": "@agent-browser/client/service-request",
+                    "helpers": [
+                        "createServiceDesktopEvidenceObserveRequest",
+                        "requestServiceDesktopEvidenceObserve",
+                        "observeServiceDesktopEvidence"
+                    ],
+                },
+                "request": {
+                    "evidenceSurfaces": ["stacking_or_occlusion"],
+                    "requiresEpisodeId": true,
+                    "requiresAttribution": ["serviceName", "agentName", "taskName"],
+                    "paramsAccepted": false,
+                    "includeFrameDefault": false,
+                    "daemonSelector": "sessionName",
+                },
+                "payload": {
+                    "frameRetention": "ephemeral",
+                    "persisted": false,
+                    "persistedPixels": false,
                 },
                 "noLaunch": true,
                 "input": false,
@@ -848,6 +888,15 @@ mod tests {
         assert_eq!(
             metadata["contracts"]["serviceDesktopLocateResponse"]["mcp"]["tools"][1],
             DESKTOP_LOCATE_MCP_TOOL_NAME
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceDesktopEvidenceObserveResponse"]["mcp"]["tools"][1],
+            DESKTOP_EVIDENCE_OBSERVE_MCP_TOOL_NAME
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceDesktopEvidenceObserveResponse"]["request"]
+                ["evidenceSurfaces"][0],
+            "stacking_or_occlusion"
         );
         assert_eq!(
             metadata["contracts"]["serviceDesktopLocateResponse"]["request"]

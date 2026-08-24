@@ -11,6 +11,7 @@ import {
   createServiceCdpFreeLaunchRequest,
   createServiceDiagnosticsRequest,
   createServiceDesktopCaptureRequest,
+  createServiceDesktopEvidenceObserveRequest,
   createServiceDesktopInteractRequest,
   createServiceDesktopLocateRequest,
   createServiceDesktopPromptObserveRequest,
@@ -45,6 +46,7 @@ import {
   requestServiceFileTransfer,
   captureServiceNetwork,
   captureServiceDesktopFrame,
+  observeServiceDesktopEvidence,
   locateServiceDesktopControl,
   observeServiceDesktopPrompt,
   requestServiceUiAction,
@@ -59,6 +61,7 @@ import {
   requestServiceCdpFreeLaunch,
   requestServiceDiagnostics,
   requestServiceDesktopCapture,
+  requestServiceDesktopEvidenceObserve,
   requestServiceDesktopInteract,
   requestServiceDesktopLocate,
   requestServiceDesktopPromptObserve,
@@ -648,6 +651,77 @@ async function main() {
         maxCandidates: 3,
       },
       includeVisualization: true,
+    });
+  }
+
+  const desktopEvidenceRequest = createServiceDesktopEvidenceObserveRequest({
+    browserId: 'browser-rdp-1',
+    sessionName: 'rdp-1',
+    episodeId: 'episode-1',
+    evidenceSurface: 'stacking_or_occlusion',
+    includeFrame: true,
+    serviceName: 'DesktopEvidence',
+    agentName: 'fixture-agent',
+    taskName: 'inspect-stacking',
+    jobTimeoutMs: 30_000,
+  });
+  assert.deepEqual(desktopEvidenceRequest, {
+    action: 'desktop_evidence_observe',
+    browserId: 'browser-rdp-1',
+    sessionName: 'rdp-1',
+    episodeId: 'episode-1',
+    evidenceSurface: 'stacking_or_occlusion',
+    includeFrame: true,
+    serviceName: 'DesktopEvidence',
+    agentName: 'fixture-agent',
+    taskName: 'inspect-stacking',
+    jobTimeoutMs: 30_000,
+  });
+  for (const forbidden of ['params', 'displayName', 'routeId', 'windowId', 'coordinates', 'providerUrl']) {
+    assert.throws(
+      () => createServiceDesktopEvidenceObserveRequest({
+        browserId: 'browser-rdp-1',
+        episodeId: 'episode-1',
+        evidenceSurface: 'stacking_or_occlusion',
+        serviceName: 'DesktopEvidence',
+        agentName: 'fixture-agent',
+        taskName: 'inspect-stacking',
+        [forbidden]: forbidden === 'params' || forbidden === 'coordinates' ? {} : forbidden,
+      }),
+      /does not accept/,
+    );
+  }
+  for (const invoke of [requestServiceDesktopEvidenceObserve, observeServiceDesktopEvidence]) {
+    const recorder = createFetchRecorder({
+      success: true,
+      data: {
+        ok: true,
+        action: 'desktop_evidence_observe',
+        evidenceSurface: 'stacking_or_occlusion',
+        episode: { outcome: 'desktop' },
+        context: { contextId: 'context-1' },
+        frameReceipt: { frameId: 'frame-1' },
+      },
+    });
+    await invoke({
+      baseUrl: 'http://127.0.0.1:9222',
+      fetch: recorder.fetch,
+      browserId: 'browser-rdp-1',
+      episodeId: 'episode-1',
+      evidenceSurface: 'stacking_or_occlusion',
+      serviceName: 'DesktopEvidence',
+      agentName: 'fixture-agent',
+      taskName: 'inspect-stacking',
+    });
+    assert.deepEqual(recorder.calls[0].body, {
+      action: 'desktop_evidence_observe',
+      browserId: 'browser-rdp-1',
+      episodeId: 'episode-1',
+      evidenceSurface: 'stacking_or_occlusion',
+      includeFrame: false,
+      serviceName: 'DesktopEvidence',
+      agentName: 'fixture-agent',
+      taskName: 'inspect-stacking',
     });
   }
 

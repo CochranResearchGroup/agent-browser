@@ -209,6 +209,44 @@ fn format_desktop_locate_text(data: &serde_json::Value) -> Option<String> {
     )
 }
 
+fn format_desktop_evidence_observe_text(data: &serde_json::Value) -> Option<String> {
+    let surface = data.get("evidenceSurface")?.as_str()?;
+    let episode = data.get("episode")?.as_object()?;
+    let outcome = episode.get("outcome")?.as_str()?;
+    let mut lines = vec![
+        format!("Desktop evidence episode {outcome}"),
+        format!("Evidence surface: {surface}"),
+    ];
+    if let Some(receipt) = episode.get("receipt").and_then(|value| value.as_object()) {
+        if let Some(episode_id) = receipt.get("episodeId").and_then(|value| value.as_str()) {
+            lines.push(format!("Episode: {episode_id}"));
+        }
+        if let Some(capture_receipt_id) = receipt
+            .get("captureReceiptId")
+            .and_then(|value| value.as_str())
+        {
+            lines.push(format!("Capture receipt: {capture_receipt_id}"));
+        }
+        if let Some(release_receipt_id) = receipt
+            .get("slotReleaseReceiptId")
+            .and_then(|value| value.as_str())
+        {
+            lines.push(format!("Slot release: {release_receipt_id}"));
+        }
+        if let Some(cleanup_receipt_id) = receipt
+            .get("cleanupReceiptId")
+            .and_then(|value| value.as_str())
+        {
+            lines.push(format!("Cleanup: {cleanup_receipt_id}"));
+        }
+    }
+    lines.push(
+        "Use --json for typed episode receipts and any explicitly requested response-only frame."
+            .to_string(),
+    );
+    Some(lines.join("\n"))
+}
+
 fn format_desktop_prompt_observe_text(data: &serde_json::Value) -> Option<String> {
     let observation = data.get("promptObservation")?.as_object()?;
     let status = observation.get("detectionStatus")?.as_str()?;
@@ -3034,6 +3072,13 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
             println!("{}", output);
             return;
         }
+        if action == Some("desktop_evidence_observe") {
+            let output = format_desktop_evidence_observe_text(data).unwrap_or_else(|| {
+                "Desktop evidence response did not match the public receipt contract".to_string()
+            });
+            println!("{}", output);
+            return;
+        }
         if action == Some("desktop_interact") {
             if let Some(output) = format_desktop_interact_text(data) {
                 println!("{}", output);
@@ -5764,6 +5809,7 @@ agent-browser desktop - Observe or run one guarded synthetic desktop transaction
 Usage:
   agent-browser desktop capture --browser-id <id> [--max-bytes <bytes>]
   agent-browser desktop locate --browser-id <id> --locator-id <id> [--max-candidates <count>] [--include-visualization]
+  agent-browser desktop evidence observe --browser-id <id> [--episode-id <id>] [--include-frame]
   agent-browser desktop prompt observe --browser-id <id> --prompt-profile-id p110-external-prompt-v1 [--include-visualization]
   agent-browser desktop interact --browser-id <id> --controller-lease-id <id> --operation-id <id> --recipe-id <p110-pointer-keyboard-v1|p110-foundation-stress-v1> --service-name <name> --agent-name <name> --task-name <name>
 
@@ -5804,6 +5850,14 @@ effects. Fixture results and source presence do not prove installed behavior or
 detection of a real browser, extension popup, native dialog, credential
 manager, passkey prompt, CAPTCHA, or challenge.
 
+`desktop evidence observe` is the task-shaped read-only product action. The
+caller names a browser and evidence need; Agent Browser resolves exact
+presentation capacity, scene, route, display, window, and capture providers.
+The current `stacking_or_occlusion` surface captures only when the scene is
+already authoritative and does not focus, raise, maximize, or rearrange the
+desktop. Use `--include-frame` only when response pixels are required. Pixels
+are removed from durable job, stream, dashboard, event, and incident records.
+
 `desktop interact` is the source-only atomic observe, locate, act, and verify
 contract. It accepts only a pre-existing controller lease, a caller-generated
 opaque operation ID, and either registered synthetic recipe. It cannot request or take over
@@ -5827,15 +5881,17 @@ Options:
   --locator-id <id>       Select one registered deterministic locator profile
   --max-candidates <n>    Bound candidates (default: 8; max: 32)
   --include-visualization Include an annotated response-only visualization in JSON
+  --episode-id <id>       Supply an opaque desktop evidence episode identity
+  --include-frame         Include response-only frame bytes in JSON
   --prompt-profile-id <id>
                           Select p110-external-prompt-v1 for synthetic fixture proof
   --controller-lease-id <id>
                           Require the exact current controller lease
   --operation-id <id>     Supply the opaque idempotency identity for this operation
   --recipe-id <id>        Select p110-pointer-keyboard-v1 or p110-foundation-stress-v1
-  --service-name <name>   Prompt-observation or interaction service attribution
-  --agent-name <name>     Prompt-observation or interaction agent attribution
-  --task-name <name>      Prompt-observation or interaction task attribution
+  --service-name <name>   Desktop action service attribution
+  --agent-name <name>     Desktop action agent attribution
+  --task-name <name>      Desktop action task attribution
 
 Global Options:
   --session <name>        Select the daemon lane; never sent as request evidence
@@ -5847,6 +5903,7 @@ Examples:
   agent-browser desktop capture --browser-id browser-123 --max-bytes 8388608 --json
   agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1
   agent-browser desktop locate --browser-id browser-123 --locator-id p110-control-v1 --include-visualization --json
+  agent-browser desktop evidence observe --browser-id browser-123 --episode-id scene-check-1 --service-name DesktopEvidence --agent-name codex --task-name inspect-stacking --json
   agent-browser --session fixture-daemon desktop prompt observe --browser-id browser-123 --session-name fixture-browser --prompt-profile-id p110-external-prompt-v1 --service-name DesktopPerception --agent-name fixture-agent --task-name observe-fixture
   agent-browser desktop prompt observe --browser-id browser-123 --prompt-profile-id p110-external-prompt-v1 --include-visualization --json
   agent-browser desktop interact --browser-id browser-123 --controller-lease-id viewer-7 --operation-id operation-7 --recipe-id p110-foundation-stress-v1 --service-name DesktopInteractor --agent-name fixture-agent --task-name stress-synthetic-control --json
@@ -6888,6 +6945,8 @@ Desktop observation:
                              Capture one service-bound desktop PNG receipt
   desktop locate --browser-id <id> --locator-id <id>
                              Locate deterministic candidates without input
+  desktop evidence observe --browser-id <id>
+                             Run one service-owned read-only evidence episode
   desktop prompt observe --browser-id <id> --prompt-profile-id p110-external-prompt-v1
                              Observe the source-only synthetic external-prompt fixture
   desktop interact --browser-id <id> --controller-lease-id <id> --operation-id <id> --recipe-id <id> --service-name <name> --agent-name <name> --task-name <name>
@@ -7395,7 +7454,8 @@ pub fn print_version() {
 #[cfg(test)]
 mod tests {
     use super::{
-        format_desktop_capture_text, format_desktop_interact_text, format_desktop_locate_text,
+        format_desktop_capture_text, format_desktop_evidence_observe_text,
+        format_desktop_interact_text, format_desktop_locate_text,
         format_desktop_prompt_observe_text, format_service_access_plan_text,
         format_service_browser_capability_preflight_text, format_service_browsers_text,
         format_service_challenges_text, format_service_events_text, format_service_incidents_text,
@@ -7444,6 +7504,30 @@ mod tests {
         assert!(rendered.contains("SHA-256: abc123"));
         assert!(rendered.contains("Retention: ephemeral (persisted: false)"));
         assert!(!rendered.contains("sensitive-frame-bytes"));
+    }
+
+    #[test]
+    fn desktop_evidence_text_reports_episode_receipts_without_pixels() {
+        let data = json!({
+            "action": "desktop_evidence_observe",
+            "evidenceSurface": "stacking_or_occlusion",
+            "episode": {
+                "outcome": "desktop",
+                "receipt": {
+                    "episodeId": "episode-1",
+                    "captureReceiptId": "capture-1",
+                    "slotReleaseReceiptId": "release-1",
+                    "cleanupReceiptId": "cleanup-1"
+                }
+            },
+            "frameBase64": "PRIVATE_PIXELS"
+        });
+
+        let rendered = format_desktop_evidence_observe_text(&data).unwrap();
+        assert!(rendered.contains("Desktop evidence episode desktop"));
+        assert!(rendered.contains("Episode: episode-1"));
+        assert!(rendered.contains("Slot release: release-1"));
+        assert!(!rendered.contains("PRIVATE_PIXELS"));
     }
 
     #[test]
