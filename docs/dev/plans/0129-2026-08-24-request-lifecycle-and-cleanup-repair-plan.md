@@ -2,15 +2,15 @@
 
 Date: 2026-08-24
 
-State: OPEN
+State: CLOSED
 
-Execution state: `source_repair_in_progress`
+Execution state: `accepted_installed_and_cleaned`
 
 Lane: P129
 
 Branch: `main`
 
-Target: `origin/main` at `b1e8b31ea558cbbace1e2a6d480a64925ccda340`
+Target: `origin/main` at `b283b2a6f1347429356ebbc833adf452ccdb785b`
 
 Authority: SOURCE, PROVIDER-FREE DEVELOPMENT, TRANSACTIONAL WORKSTATION
 UPGRADE, AND REVIEWED RUNTIME CLEANUP
@@ -151,3 +151,50 @@ runtime cleanup through Agent Browser ownership.
   processes and is protected by retained profile and display evidence;
 - Graphiti group `agent_browser_main` was healthy but had no useful current
   P128/P129 recall, so repository and runtime evidence are authoritative.
+
+## Closeout Evidence
+
+- Source repair commits landed directly on `main`:
+  `abcaf266`, `a0743268`, `071004be`, `23454cd8`, and `b283b2a6`.
+- Fresh access plans now retain an explicit lane through the real CLI flag
+  cleaning path. Installed release-mode readback returned
+  `query.sessionName=bill-soylei` and
+  `decision.serviceRequest.request.sessionName=bill-soylei` while preserving
+  `launch_new_browser` as the no-conflict acquisition decision.
+- Candidate binary SHA-256
+  `c128349c482fc049b70fe5f3dbfeadd3a9336cdd3ad5f81731dc2cb6b3d5cd63`
+  was built from `b283b2a6`, passed a no-mutation workstation dry run, and was
+  selected as generation `0.28.0-c128349c482f-d9745dc2e128`.
+- Accepted transaction
+  `upgrade-db8bdb81-cf53-4df3-8264-31f95ab15a85` completed stable census,
+  runtime transfer, presentation rebound, authenticated candidate proof,
+  payload commit, workstation reconciliation, dashboard cutover, and
+  supervisor rebound. Admission draining is false and all seven readiness
+  axes are true.
+- Candidate presentation used only `https://example.com/` through disposable
+  handoff `r386851`. Its receipt bound the candidate deployment generation,
+  exact browser, target, owner generation, display, route, and RDP provider.
+  No BILL or QBO content was opened.
+- Installed doctor passes with no issues. Runtime multiplicity is steady with
+  one dashboard process, one runtime host, one executable generation, and zero
+  legacy daemons. The runtime monitor is fresh and healthy.
+- The runtime monitor safely pruned the processless degraded
+  `session:plan0233-qbo` and historical Odollo browser projections while
+  retaining their lifecycle evidence. The exact inactive
+  `last30days-home-feed` supervisor was removed through
+  `session supervisor remove`; unrelated units, profiles, browser storage, and
+  Service State were preserved.
+- The provider-neutral acceptance browser was closed through its transferred
+  owner lane. Its expected close incident was resolved with an operator note.
+  The pre-existing `remote-view-route:guacamole:2` incident remains active
+  because it references historical BILL route evidence. Its linked display
+  records remain diagnostic-retained and were not force-pruned.
+- Validation passed: focused request-delivery, cold-tab, lifecycle, access-plan,
+  handoff-race, CLI, MCP, generated-client, and release regressions; all 91
+  workstation installer tests; all 42 service access-plan tests; complete
+  service-client checks; route-confusion, API/MCP parity, client type,
+  workstation host, source-free workstation install, and remote-view docs
+  fixtures; Rust format and strict Clippy; and the full docs production build.
+- Primary `main`, `origin/main`, and the reviewed source tree were reconciled
+  to `b283b2a6` with a clean worktree. Active feature development was not
+  overwritten or staged by this repair.
