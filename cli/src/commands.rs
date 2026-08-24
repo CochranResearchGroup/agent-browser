@@ -229,6 +229,9 @@ fn parse_service_access_plan(
         "action": "service_access_plan",
         "serviceState": flags.service_state.clone(),
     });
+    if let Some(session_name) = flags.session_name.as_ref() {
+        cmd["sessionName"] = json!(session_name);
+    }
     let mut i = 1;
     while i < rest.len() {
         match rest[i] {
@@ -8626,6 +8629,15 @@ mod tests {
         assert_eq!(cmd["controlInputProvider"], "manual_attached_desktop");
         assert_eq!(cmd["displayIsolation"], "private_virtual_display");
         assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_access_plan_preserves_global_session_name_after_flag_cleaning() {
+        let mut flags = default_flags();
+        flags.session_name = Some("bill-soylei".to_string());
+        let cmd = parse_command(&args("service access-plan --login-id bill"), &flags).unwrap();
+
+        assert_eq!(cmd["sessionName"], "bill-soylei");
     }
 
     #[test]
