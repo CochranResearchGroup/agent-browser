@@ -10,14 +10,14 @@ bounded implementation and validation plans remain under `docs/dev/plans/`.
 ## P128 | Runtime Lifecycle Hotfix Collection
 
 State: OPEN
-Current state: fresh runtime evidence proves one scoped BILL named-profile
-ownership contradiction, while the workstation remains converged. The accepted
-absent-closing branch is not yet integrated into current main, a failed
-terminal replacement left a protected live browser without service ownership,
-and one historical stopped supervisor warning still makes standalone install
-doctor nonzero. Work is isolated on
-`hotfix/runtime-lifecycle-collection`; current development-presentation work
-and production provider state remain untouched.
+Current state: the accepted absent-closing repairs are reconciled with current
+main. Newly owned launch persistence now rolls back exactly on registration
+failure, missing browser/session projection recovery remains fenced by durable
+handoff plus process and runtime-profile identity, and a quiescent historical
+stopped supervisor is advisory while live or drifted supervisor failures remain
+blocking. Focused Rust, strict Clippy, workstation fixture, documentation, and
+contract validation pass. Transactional installation and harmless live BILL
+profile acceptance remain pending.
 
 ### Plan
 
@@ -25,9 +25,8 @@ and production provider state remain untouched.
 
 ### Next Recommendation
 
-Reconcile the accepted lifecycle branch with current main, establish red
-provider-free reproductions for failed-launch residue and exact named-profile
-recovery, and keep workstation apply behind an exact transactional census.
+Integrate the reviewed hotfix source into protected main, then build the exact
+candidate and admit workstation apply only after a stable transactional census.
 
 ## P127 | Development Presentation Provider Isolation
 

@@ -4,6 +4,44 @@ This file records dated execution turns for repo governance, planning, release,
 and operational handoff work. Detailed command output belongs in validation
 notes or artifacts, not in this log.
 
+## Turn 185 | 2026-08-23
+
+Scope: reconcile and source-accept the P128 runtime lifecycle hotfix collection
+without changing production or the active development feature lane.
+
+Actions:
+
+- merged the accepted absent-closing lifecycle branch into an isolated hotfix
+  worktree and retained its prior acceptance artifacts as P128 historical
+  packets;
+- routed auto-launch and explicit owned launch through one persistence cleanup
+  obligation, using lifecycle-authorized close when registration already
+  created an owner binding;
+- retained exact orphan recovery through the existing durable handoff,
+  process, profile, CDP, target, owner-generation, and runtime-state seam;
+- separated quiescent historical supervisor warnings from blocking live,
+  starting, drifted, conflicted, and unavailable supervisor failures;
+- aligned the install-doctor fixture with the current exact route-session
+  termination helper contract.
+
+Validation:
+
+- 9 close/launch, 12 runtime lifecycle, 12 session supervisor, 20 serial install
+  doctor, 4 workstation payload, and the exact missing-projection recovery
+  tests passed;
+- Rust formatting, strict Clippy, diff hygiene, workstation install and host
+  fixtures, fresh-VM harness, Guacamole assets and PostgreSQL durability,
+  route-user sync, remote-view handoff docs, and the docs production build
+  passed;
+- the installed workstation dry-run returned `mutated=false`; no production
+  browser, provider, profile, service, or accounting state changed.
+
+Result:
+
+- P128 is `source_accepted_install_pending`;
+- protected-main integration, candidate build, transactional census, install,
+  and one harmless local `bill-soylei` acquisition proof remain.
+
 ## Turn 181 | 2026-08-23
 
 Scope: install P124 in the isolated development environment and execute every
