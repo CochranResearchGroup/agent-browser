@@ -360,11 +360,19 @@ pub(crate) fn resolve_desktop_capture_binding(
     state: &ServiceState,
     browser_id: &str,
 ) -> Result<DesktopCaptureBinding, DesktopCaptureError> {
+    resolve_desktop_capture_binding_for_session(state, browser_id, None)
+}
+
+pub(crate) fn resolve_desktop_capture_binding_for_session(
+    state: &ServiceState,
+    browser_id: &str,
+    session_name: Option<&str>,
+) -> Result<DesktopCaptureBinding, DesktopCaptureError> {
     let resolved = resolve_desktop(
         state,
         &DesktopCaptureRequest {
             browser_id: browser_id.to_string(),
-            session_name: None,
+            session_name: session_name.map(str::to_string),
             max_bytes: DEFAULT_MAX_BYTES,
         },
     )?;

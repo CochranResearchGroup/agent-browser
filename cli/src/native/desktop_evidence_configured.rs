@@ -1,6 +1,7 @@
 use super::desktop_capture::{
-    capture_configured_desktop_frame, desktop_geometry_epoch, resolve_desktop_capture_binding,
-    DesktopCaptureBinding, DesktopCaptureRequest, DesktopCaptureResult, DEFAULT_MAX_BYTES,
+    capture_configured_desktop_frame, desktop_geometry_epoch,
+    resolve_desktop_capture_binding_for_session, DesktopCaptureBinding, DesktopCaptureRequest,
+    DesktopCaptureResult, DEFAULT_MAX_BYTES,
 };
 use super::desktop_evidence::{
     BrowserExternalSurface, CaptureReadyEvidence, CaptureReadyProof, CdpEvidenceAdapter,
@@ -63,6 +64,7 @@ struct ReservedSceneAuthority {
 pub(crate) struct ConfiguredWindowSemanticAdapter<R> {
     repository: R,
     request_id: String,
+    session_name: Option<String>,
     probe: Box<dyn SceneProbe>,
 }
 
@@ -112,6 +114,7 @@ impl SceneStager for ConfiguredSceneStager {
 pub(crate) struct ConfiguredSceneStagingAdapter<R> {
     repository: R,
     request_id: String,
+    session_name: Option<String>,
     snapshot: Option<RestorationAuthority>,
     native_snapshot: Option<NativeSceneSnapshot>,
     prior_slot_state: Option<PresentationSlotState>,
@@ -127,12 +130,18 @@ where
         Self {
             repository,
             request_id: request_id.into(),
+            session_name: None,
             snapshot: None,
             native_snapshot: None,
             prior_slot_state: None,
             staged: false,
             stager: Box::new(ConfiguredSceneStager),
         }
+    }
+
+    pub(crate) fn for_session(mut self, session_name: Option<String>) -> Self {
+        self.session_name = session_name;
+        self
     }
 
     #[cfg(test)]
@@ -144,6 +153,7 @@ where
         Self {
             repository,
             request_id: request_id.into(),
+            session_name: None,
             snapshot: None,
             native_snapshot: None,
             prior_slot_state: None,
@@ -163,13 +173,14 @@ where
                 error,
             )
         })?;
-        let scene = resolve_scene_authority(&state, browser_id).map_err(|error| {
-            DesktopEpisodeAdapterFailure::new(
-                "scene_restoration",
-                "desktop_scene_binding_unavailable",
-                error,
-            )
-        })?;
+        let scene = resolve_scene_authority(&state, browser_id, self.session_name.as_deref())
+            .map_err(|error| {
+                DesktopEpisodeAdapterFailure::new(
+                    "scene_restoration",
+                    "desktop_scene_binding_unavailable",
+                    error,
+                )
+            })?;
         let reserved =
             resolve_reserved_scene_authority(&state, scene, &self.request_id).map_err(|error| {
                 DesktopEpisodeAdapterFailure::new(
@@ -248,9 +259,10 @@ where
     ) -> Result<(), DesktopEpisodeAdapterFailure> {
         let request_id = self.request_id.clone();
         let browser_id = browser_id.to_string();
+        let session_name = self.session_name.clone();
         self.repository
             .mutate(|state| {
-                let scene = resolve_scene_authority(state, &browser_id)?;
+                let scene = resolve_scene_authority(state, &browser_id, session_name.as_deref())?;
                 let reserved = resolve_reserved_scene_authority(state, scene, &request_id)?;
                 let slot_id = reserved.presentation_slot_id;
                 let mut capacity = state
@@ -273,9 +285,10 @@ where
     fn quarantine(&self, browser_id: &str, reason: &str) {
         let request_id = self.request_id.clone();
         let browser_id = browser_id.to_string();
+        let session_name = self.session_name.clone();
         let obligation = format!("scene-restoration:{}:{reason}", self.request_id);
         let _ = self.repository.mutate(|state| {
-            let scene = resolve_scene_authority(state, &browser_id)?;
+            let scene = resolve_scene_authority(state, &browser_id, session_name.as_deref())?;
             let reserved = resolve_reserved_scene_authority(state, scene, &request_id)?;
             state
                 .presentation_capacity
@@ -448,6 +461,7 @@ where
 pub(crate) struct ConfiguredEpisodeVerificationAdapter<R> {
     repository: R,
     request_id: String,
+    session_name: Option<String>,
 }
 
 impl<R> ConfiguredEpisodeVerificationAdapter<R>
@@ -458,7 +472,13 @@ where
         Self {
             repository,
             request_id: request_id.into(),
+            session_name: None,
         }
+    }
+
+    pub(crate) fn for_session(mut self, session_name: Option<String>) -> Self {
+        self.session_name = session_name;
+        self
     }
 }
 
@@ -477,13 +497,14 @@ where
                 error,
             )
         })?;
-        let scene = resolve_scene_authority(&state, browser_id).map_err(|error| {
-            DesktopEpisodeAdapterFailure::new(
-                "episode_verification",
-                "desktop_scene_binding_unavailable",
-                error,
-            )
-        })?;
+        let scene = resolve_scene_authority(&state, browser_id, self.session_name.as_deref())
+            .map_err(|error| {
+                DesktopEpisodeAdapterFailure::new(
+                    "episode_verification",
+                    "desktop_scene_binding_unavailable",
+                    error,
+                )
+            })?;
         let reserved =
             resolve_reserved_scene_authority(&state, scene, &self.request_id).map_err(|error| {
                 DesktopEpisodeAdapterFailure::new(
@@ -708,8 +729,14 @@ where
         Self {
             repository,
             request_id: request_id.into(),
+            session_name: None,
             probe: Box::new(ConfiguredSceneProbe),
         }
+    }
+
+    pub(crate) fn for_session(mut self, session_name: Option<String>) -> Self {
+        self.session_name = session_name;
+        self
     }
 
     #[cfg(test)]
@@ -721,6 +748,7 @@ where
         Self {
             repository,
             request_id: request_id.into(),
+            session_name: None,
             probe: Box::new(probe),
         }
     }
@@ -741,7 +769,8 @@ where
         let state = self.repository.load_snapshot().map_err(|error| {
             Self::adapter_failure(phase, "desktop_scene_state_unavailable", error)
         })?;
-        let authority = resolve_scene_authority(&state, browser_id).map_err(|error| {
+        let authority = resolve_scene_authority(&state, browser_id, self.session_name.as_deref())
+            .map_err(|error| {
             Self::adapter_failure(phase, "desktop_scene_binding_unavailable", error)
         })?;
         Ok((state, authority))
@@ -764,9 +793,10 @@ where
     ) -> Result<(), DesktopEpisodeAdapterFailure> {
         let request_id = self.request_id.clone();
         let browser_id = browser_id.to_string();
+        let session_name = self.session_name.clone();
         self.repository
             .mutate(|state| {
-                let scene = resolve_scene_authority(state, &browser_id)?;
+                let scene = resolve_scene_authority(state, &browser_id, session_name.as_deref())?;
                 let reserved = resolve_reserved_scene_authority(state, scene, &request_id)?;
                 if reserved.slot_state != PresentationSlotState::Staging {
                     return Ok(());
@@ -873,14 +903,22 @@ where
     }
 }
 
-#[derive(Default)]
 pub(crate) struct ConfiguredDesktopFrameAdapter {
     capture: Option<DesktopCaptureResult>,
+    session_name: Option<String>,
 }
 
 impl ConfiguredDesktopFrameAdapter {
     pub(crate) fn new() -> Self {
-        Self::default()
+        Self {
+            capture: None,
+            session_name: None,
+        }
+    }
+
+    pub(crate) fn for_session(mut self, session_name: Option<String>) -> Self {
+        self.session_name = session_name;
+        self
     }
 
     pub(crate) fn take_capture(&mut self) -> Option<DesktopCaptureResult> {
@@ -896,7 +934,7 @@ impl DesktopFrameAdapter for ConfiguredDesktopFrameAdapter {
     ) -> Result<String, DesktopEpisodeAdapterFailure> {
         let capture = capture_configured_desktop_frame(DesktopCaptureRequest {
             browser_id: browser_id.to_string(),
-            session_name: None,
+            session_name: self.session_name.clone(),
             max_bytes: DEFAULT_MAX_BYTES,
         })
         .map_err(|error| {
@@ -947,9 +985,10 @@ fn validate_configured_capture(
 fn resolve_scene_authority(
     state: &ServiceState,
     browser_id: &str,
+    session_name: Option<&str>,
 ) -> Result<SceneAuthority, String> {
-    let binding =
-        resolve_desktop_capture_binding(state, browser_id).map_err(|error| error.to_string())?;
+    let binding = resolve_desktop_capture_binding_for_session(state, browser_id, session_name)
+        .map_err(|error| error.to_string())?;
     let browser = state
         .browsers
         .get(browser_id)
@@ -1056,6 +1095,7 @@ fn scene_is_capture_ready(evidence: X11SceneEvidence) -> bool {
 pub(crate) struct ConfiguredPresentationSlotAdapter<R> {
     repository: R,
     request_id: String,
+    session_name: Option<String>,
     pressure: PressureAdmission,
     reservation: Option<(String, String)>,
 }
@@ -1072,9 +1112,15 @@ where
         Self {
             repository,
             request_id: request_id.into(),
+            session_name: None,
             pressure: PressureAdmission::admit(admitted_maximum),
             reservation: None,
         }
+    }
+
+    pub(crate) fn for_session(mut self, session_name: Option<String>) -> Self {
+        self.session_name = session_name;
+        self
     }
 
     fn admission_failure(decision: CapacityDecision) -> DesktopEpisodeAdmissionFailure {
@@ -1121,11 +1167,16 @@ where
         }
         let request_id = self.request_id.clone();
         let browser_id = browser_id.to_string();
+        let session_name = self.session_name.clone();
         let pressure = self.pressure;
         let mut unavailable = None;
         let mutation = self.repository.mutate(|state| {
-            let binding = resolve_desktop_capture_binding(state, &browser_id)
-                .map_err(|error| error.to_string())?;
+            let binding = resolve_desktop_capture_binding_for_session(
+                state,
+                &browser_id,
+                session_name.as_deref(),
+            )
+            .map_err(|error| error.to_string())?;
             let Some(mut capacity) = state.presentation_capacity.take() else {
                 return Err("presentation_capacity_unavailable".to_string());
             };

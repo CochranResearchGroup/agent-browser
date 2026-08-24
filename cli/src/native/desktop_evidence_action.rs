@@ -21,6 +21,7 @@ use super::desktop_evidence_configured::{
     ConfiguredPresentationSlotAdapter, ConfiguredSceneStagingAdapter, ConfiguredUnusedCdpAdapter,
     ConfiguredUnusedTriggerAdapter, ConfiguredWindowSemanticAdapter,
 };
+use super::service_model::{ServiceState, ViewStreamProvider};
 use super::service_store::{
     JsonServiceStateStore, LockedServiceStateRepository, ServiceStateRepository,
 };
@@ -50,6 +51,7 @@ impl ConfiguredEvidenceRequest {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ConfiguredObservationRequest {
     browser_id: String,
+    session_name: Option<String>,
     episode_id: String,
     evidence: ConfiguredEvidenceRequest,
     include_frame: bool,
@@ -172,6 +174,7 @@ fn parse_request(command: &Value) -> Result<ConfiguredObservationRequest, String
         return Err(format!("{ACTION} requires action {ACTION}"));
     }
     let browser_id = required_string(command, "browserId")?;
+    let requested_session_name = optional_string(command, "sessionName");
     let evidence_surface = required_string(command, "evidenceSurface")?;
     let evidence = match evidence_surface.as_str() {
         STACKING_OR_OCCLUSION => {
@@ -211,6 +214,7 @@ fn parse_request(command: &Value) -> Result<ConfiguredObservationRequest, String
         .unwrap_or(false);
     Ok(ConfiguredObservationRequest {
         browser_id,
+        session_name: requested_session_name,
         episode_id,
         evidence,
         include_frame,
@@ -274,6 +278,11 @@ where
     R: ServiceStateRepository + Clone + 'static,
 {
     let initial_state = repository.load_snapshot()?;
+    let scene_session_name = resolve_scene_session_name(
+        &initial_state,
+        &request.browser_id,
+        request.session_name.as_deref(),
+    )?;
     let admitted_maximum = initial_state
         .presentation_capacity
         .as_ref()
@@ -326,15 +335,20 @@ where
         repository.clone(),
         request.episode_id.clone(),
         admitted_maximum,
-    );
+    )
+    .for_session(Some(scene_session_name.clone()));
     let mut staging =
-        ConfiguredSceneStagingAdapter::new(repository.clone(), request.episode_id.clone());
+        ConfiguredSceneStagingAdapter::new(repository.clone(), request.episode_id.clone())
+            .for_session(Some(scene_session_name.clone()));
     let mut windows =
-        ConfiguredWindowSemanticAdapter::new(repository.clone(), request.episode_id.clone());
-    let mut frames = ConfiguredDesktopFrameAdapter::new();
+        ConfiguredWindowSemanticAdapter::new(repository.clone(), request.episode_id.clone())
+            .for_session(Some(scene_session_name.clone()));
+    let mut frames =
+        ConfiguredDesktopFrameAdapter::new().for_session(Some(scene_session_name.clone()));
     let mut input = ConfiguredBlockedInputAdapter;
     let mut verification =
-        ConfiguredEpisodeVerificationAdapter::new(repository, request.episode_id.clone());
+        ConfiguredEpisodeVerificationAdapter::new(repository, request.episode_id.clone())
+            .for_session(Some(scene_session_name));
     let mut handoff =
         ConfiguredExistingHandoffAdapter::from_state(&initial_state, &request.browser_id);
     let mut cleanup = ConfiguredEpisodeCleanupAdapter;
@@ -380,6 +394,50 @@ where
     Ok(response)
 }
 
+fn resolve_scene_session_name(
+    state: &ServiceState,
+    browser_id: &str,
+    requested: Option<&str>,
+) -> Result<String, String> {
+    let browser = state
+        .browsers
+        .get(browser_id)
+        .ok_or_else(|| "desktop_workspace_not_found: service browser is missing".to_string())?;
+    let route_ids = browser
+        .view_streams
+        .iter()
+        .filter(|stream| stream.provider == ViewStreamProvider::RdpGateway)
+        .filter_map(|stream| stream.route_id.as_deref())
+        .collect::<Vec<_>>();
+    if route_ids.len() != 1 {
+        return Err(format!(
+            "desktop_workspace_ambiguous: browser {browser_id} requires exactly one RDP route"
+        ));
+    }
+    let route = state
+        .remote_view_routes
+        .get(route_ids[0])
+        .ok_or_else(|| "desktop_identity_mismatch: service browser route is missing".to_string())?;
+    if route.browser_id.as_deref() != Some(browser_id) {
+        return Err(
+            "desktop_identity_mismatch: route ownership does not match the browser".to_string(),
+        );
+    }
+    let session_name = route
+        .session_id
+        .as_deref()
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            "desktop_identity_mismatch: route session ownership is missing".to_string()
+        })?;
+    if requested.is_some_and(|requested| requested != session_name) {
+        return Err(
+            "desktop_identity_mismatch: requested session does not own the route".to_string(),
+        );
+    }
+    Ok(session_name.to_string())
+}
+
 fn required_string(command: &Value, field: &str) -> Result<String, String> {
     optional_string(command, field).ok_or_else(|| format!("{ACTION} requires nonempty {field}"))
 }
@@ -396,6 +454,8 @@ fn optional_string(command: &Value, field: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::native::service_model::{BrowserProcess, RemoteViewRoute, ViewStream};
+    use std::collections::BTreeMap;
 
     #[test]
     fn request_is_task_shaped_and_accepts_no_provider_plumbing() {
@@ -530,6 +590,45 @@ mod tests {
                 .unwrap_err()
                 .contains("does not accept a tab handle or page trigger"));
         }
+    }
+
+    #[test]
+    fn scene_session_comes_from_the_exact_route_not_the_cdp_tab_owner() {
+        let state = ServiceState {
+            browsers: BTreeMap::from([(
+                "browser-1".to_string(),
+                BrowserProcess {
+                    id: "browser-1".to_string(),
+                    active_session_ids: vec!["default".to_string(), "scene-1".to_string()],
+                    view_streams: vec![ViewStream {
+                        provider: ViewStreamProvider::RdpGateway,
+                        route_id: Some("route-1".to_string()),
+                        ..ViewStream::default()
+                    }],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            remote_view_routes: BTreeMap::from([(
+                "route-1".to_string(),
+                RemoteViewRoute {
+                    id: "route-1".to_string(),
+                    browser_id: Some("browser-1".to_string()),
+                    session_id: Some("scene-1".to_string()),
+                    ..RemoteViewRoute::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        assert_eq!(
+            resolve_scene_session_name(&state, "browser-1", None).unwrap(),
+            "scene-1"
+        );
+        assert!(
+            resolve_scene_session_name(&state, "browser-1", Some("default"))
+                .unwrap_err()
+                .contains("does not own the route")
+        );
     }
 
     #[test]

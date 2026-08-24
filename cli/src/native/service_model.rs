@@ -2487,11 +2487,54 @@ impl ServiceState {
     pub fn overlay_configured_entities(&mut self, configured: ServiceState) {
         let mut configured = configured;
         configured.mark_config_entity_sources();
-        self.display_allocations
-            .extend(configured.display_allocations);
-        self.remote_view_routes
-            .extend(configured.remote_view_routes);
-        self.route_pool.extend(configured.route_pool);
+        for (id, mut display) in configured.display_allocations {
+            if let Some(existing) = self.display_allocations.get(&id) {
+                if existing.owner_browser_id.is_some() || existing.owner_session_id.is_some() {
+                    display.owner_browser_id = existing.owner_browser_id.clone();
+                    display.owner_session_id = existing.owner_session_id.clone();
+                    display.profile_id = existing.profile_id.clone();
+                    display.browser_build = existing.browser_build.clone();
+                    display.pid_hints = existing.pid_hints.clone();
+                    display.created_at = existing.created_at.clone();
+                    display.updated_at = existing.updated_at.clone();
+                    display.last_health_check_at = existing.last_health_check_at.clone();
+                    display.readiness = existing.readiness.clone();
+                    for route_id in &existing.route_ids {
+                        if !display.route_ids.contains(route_id) {
+                            display.route_ids.push(route_id.clone());
+                        }
+                    }
+                }
+            }
+            self.display_allocations.insert(id, display);
+        }
+        for (id, mut route) in configured.remote_view_routes {
+            if let Some(existing) = self.remote_view_routes.get(&id) {
+                if existing.browser_id.is_some() || existing.session_id.is_some() {
+                    route.browser_id = existing.browser_id.clone();
+                    route.session_id = existing.session_id.clone();
+                    route.route_source = existing.route_source.clone();
+                    route.viewer_lease_ids = existing.viewer_lease_ids.clone();
+                    route.controller_lease_id = existing.controller_lease_id.clone();
+                    route.controller_epoch = existing.controller_epoch;
+                    route.last_provider_event = existing.last_provider_event.clone();
+                    route.readiness = existing.readiness.clone();
+                }
+            }
+            self.remote_view_routes.insert(id, route);
+        }
+        for (id, mut entry) in configured.route_pool {
+            if let Some(existing) = self.route_pool.get(&id) {
+                if existing.current_route_allocation_id.is_some() || existing.state == "checked_out"
+                {
+                    entry.state = existing.state.clone();
+                    entry.current_route_allocation_id =
+                        existing.current_route_allocation_id.clone();
+                    entry.readiness = existing.readiness.clone();
+                }
+            }
+            self.route_pool.insert(id, entry);
+        }
         self.viewer_leases.extend(configured.viewer_leases);
         for (id, profile) in configured.profiles {
             self.profiles.insert(id.clone(), profile);
@@ -9450,6 +9493,94 @@ mod tests {
         assert_eq!(
             persisted.browser_capability_registry.browser_hosts[0]["id"],
             "configured-host"
+        );
+    }
+
+    #[test]
+    fn configured_provider_inventory_preserves_checked_out_runtime_ownership() {
+        let mut persisted = ServiceState {
+            display_allocations: BTreeMap::from([(
+                "display-1".to_string(),
+                DisplayAllocation {
+                    id: "display-1".to_string(),
+                    display_name: Some(":12".to_string()),
+                    owner_browser_id: Some("browser-1".to_string()),
+                    owner_session_id: Some("scene-1".to_string()),
+                    route_ids: vec!["route-1".to_string()],
+                    readiness: Some(json!({"state": "ready", "source": "checkout"})),
+                    ..DisplayAllocation::default()
+                },
+            )]),
+            remote_view_routes: BTreeMap::from([(
+                "route-1".to_string(),
+                RemoteViewRoute {
+                    id: "route-1".to_string(),
+                    browser_id: Some("browser-1".to_string()),
+                    session_id: Some("scene-1".to_string()),
+                    route_source: "pool".to_string(),
+                    last_provider_event: Some("route_checked_out".to_string()),
+                    ..RemoteViewRoute::default()
+                },
+            )]),
+            route_pool: BTreeMap::from([(
+                "slot-1".to_string(),
+                RoutePoolEntry {
+                    id: "slot-1".to_string(),
+                    route_id: "route-1".to_string(),
+                    state: "checked_out".to_string(),
+                    current_route_allocation_id: Some("route-1".to_string()),
+                    ..RoutePoolEntry::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let configured = ServiceState {
+            display_allocations: BTreeMap::from([(
+                "display-1".to_string(),
+                DisplayAllocation {
+                    id: "display-1".to_string(),
+                    display_name: Some(":12".to_string()),
+                    route_ids: vec!["route-1".to_string()],
+                    ..DisplayAllocation::default()
+                },
+            )]),
+            remote_view_routes: BTreeMap::from([(
+                "route-1".to_string(),
+                RemoteViewRoute {
+                    id: "route-1".to_string(),
+                    route_source: "provider_inventory".to_string(),
+                    ..RemoteViewRoute::default()
+                },
+            )]),
+            route_pool: BTreeMap::from([(
+                "slot-1".to_string(),
+                RoutePoolEntry {
+                    id: "slot-1".to_string(),
+                    route_id: "route-1".to_string(),
+                    state: "available".to_string(),
+                    ..RoutePoolEntry::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        persisted.overlay_configured_entities(configured);
+
+        let display = &persisted.display_allocations["display-1"];
+        assert_eq!(display.owner_browser_id.as_deref(), Some("browser-1"));
+        assert_eq!(display.owner_session_id.as_deref(), Some("scene-1"));
+        assert_eq!(
+            persisted.remote_view_routes["route-1"]
+                .session_id
+                .as_deref(),
+            Some("scene-1")
+        );
+        assert_eq!(persisted.route_pool["slot-1"].state, "checked_out");
+        assert_eq!(
+            persisted.route_pool["slot-1"]
+                .current_route_allocation_id
+                .as_deref(),
+            Some("route-1")
         );
     }
 
