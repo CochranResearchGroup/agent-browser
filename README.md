@@ -700,18 +700,30 @@ agent-browser desktop evidence observe \
   --json
 ```
 
-The current `stacking_or_occlusion` evidence surface resolves presentation
+The `stacking_or_occlusion` evidence surface resolves presentation
 capacity, route, display, process generation, window stacking, work area,
 geometry, viewer, controller, and capture provider from service authority. It
 does not accept caller displays, routes, window handles, coordinates, CDP
 endpoints, or provider commands. It reserves and releases the exact active
 presentation without parking a retained browser. If the scene is not already
-capture-ready, the current configured adapter fails closed instead of focusing
-or rearranging the desktop.
+capture-ready, the configured adapter fails closed instead of focusing or
+rearranging the desktop.
+
+Development runtimes also accept `evidenceSurface: "passkey_chooser"` with an
+exact `serviceTabHandle` and exactly one selector-based `uiAction` click. Agent
+Browser stages the isolated scene before the click, connects directly to the
+same service-owned page target without activating it, records paired CDP
+evidence that the chooser is absent from page content, captures the desktop,
+then restores the prior geometry, stacking, maximize state, and focus. Raw DOM
+and page screenshot bytes are discarded after a digest receipt is formed.
+Production rejects this trigger before presentation or native mutation and
+remains read-only pending Plan 0110.
 
 HTTP and generic MCP requests use `action: "desktop_evidence_observe"`,
-`browserId`, `episodeId`, `evidenceSurface: "stacking_or_occlusion"`, optional
-`includeFrame`, and all three attribution fields. MCP also exposes the dedicated
+`browserId`, `episodeId`, either named `evidenceSurface`, optional
+`includeFrame`, and all three attribution fields. `passkey_chooser` additionally
+requires `serviceTabHandle` and `uiAction: { maxActions: 1, steps: [{ type:
+"click", selector }] }`. MCP also exposes the dedicated
 `desktop_evidence_observe` tool. Generated client helpers are
 `createServiceDesktopEvidenceObserveRequest()`,
 `requestServiceDesktopEvidenceObserve()`, and

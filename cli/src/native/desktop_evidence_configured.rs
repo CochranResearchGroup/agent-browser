@@ -3,12 +3,14 @@ use super::desktop_capture::{
     DesktopCaptureBinding, DesktopCaptureRequest, DesktopCaptureResult, DEFAULT_MAX_BYTES,
 };
 use super::desktop_evidence::{
-    CaptureReadyEvidence, CaptureReadyProof, CdpEvidenceAdapter, CdpEvidenceReceipt,
-    ControllerPosture, DesktopEpisodeAdapterFailure, DesktopEpisodeAdmissionFailure,
-    DesktopFrameAdapter, DesktopInputAdapter, EpisodeCleanupAdapter, EpisodeVerificationAdapter,
-    ExternalUiTriggerAdapter, HumanHandoffAdapter, PresentationSlotAdapter, RestorationAuthority,
-    SceneAdmissionRequest, SceneStagingAdapter, ViewerPosture, WindowSemanticAdapter,
+    BrowserExternalSurface, CaptureReadyEvidence, CaptureReadyProof, CdpEvidenceAdapter,
+    CdpEvidenceReceipt, ControllerPosture, DesktopEpisodeAdapterFailure,
+    DesktopEpisodeAdmissionFailure, DesktopFrameAdapter, DesktopInputAdapter,
+    EpisodeCleanupAdapter, EpisodeVerificationAdapter, ExternalUiTriggerAdapter,
+    HumanHandoffAdapter, PresentationSlotAdapter, RestorationAuthority, SceneAdmissionRequest,
+    SceneStagingAdapter, ViewerPosture, WindowSemanticAdapter,
 };
+use super::desktop_evidence_cdp::{CdpEpisodeProvider, ConfiguredCdpProvider, ConfiguredCdpTarget};
 use super::presentation_capacity::{
     CapacityDecision, PresentationRequest, PresentationSlotState, PressureAdmission,
 };
@@ -503,22 +505,157 @@ where
 pub(crate) struct ConfiguredUnusedCdpAdapter;
 
 impl CdpEvidenceAdapter for ConfiguredUnusedCdpAdapter {
-    fn collect_page(&mut self, browser_id: &str) -> CdpEvidenceReceipt {
-        CdpEvidenceReceipt {
+    fn collect_page(
+        &mut self,
+        browser_id: &str,
+    ) -> Result<CdpEvidenceReceipt, DesktopEpisodeAdapterFailure> {
+        Ok(CdpEvidenceReceipt {
             receipt_id: format!("cdp-delegation:{browser_id}"),
+        })
+    }
+
+    fn confirm_browser_external_absent(
+        &mut self,
+        browser_id: &str,
+        _surface: BrowserExternalSurface,
+    ) -> Result<String, DesktopEpisodeAdapterFailure> {
+        Err(DesktopEpisodeAdapterFailure::new(
+            "paired_page_evidence",
+            "desktop_paired_cdp_provider_unavailable",
+            format!("paired CDP evidence is unavailable for {browser_id}"),
+        ))
+    }
+}
+
+pub(crate) struct ConfiguredPairedCdpAdapter {
+    target: ConfiguredCdpTarget,
+    provider: Box<dyn CdpEpisodeProvider>,
+}
+
+impl ConfiguredPairedCdpAdapter {
+    pub(crate) fn new(target: ConfiguredCdpTarget, provider: ConfiguredCdpProvider) -> Self {
+        Self {
+            target,
+            provider: Box::new(provider),
         }
     }
 
-    fn confirm_browser_external_absent(&mut self, browser_id: &str) -> String {
-        format!("paired-cdp-provider-unavailable:{browser_id}")
+    #[cfg(test)]
+    fn with_provider(
+        target: ConfiguredCdpTarget,
+        provider: impl CdpEpisodeProvider + 'static,
+    ) -> Self {
+        Self {
+            target,
+            provider: Box::new(provider),
+        }
+    }
+}
+
+impl CdpEvidenceAdapter for ConfiguredPairedCdpAdapter {
+    fn collect_page(
+        &mut self,
+        _browser_id: &str,
+    ) -> Result<CdpEvidenceReceipt, DesktopEpisodeAdapterFailure> {
+        Err(DesktopEpisodeAdapterFailure::new(
+            "page_evidence",
+            "desktop_cdp_page_collection_not_configured",
+            "this configured adapter is scoped to paired browser-external evidence",
+        ))
+    }
+
+    fn confirm_browser_external_absent(
+        &mut self,
+        browser_id: &str,
+        surface: BrowserExternalSurface,
+    ) -> Result<String, DesktopEpisodeAdapterFailure> {
+        if self.target.browser_id != browser_id {
+            return Err(DesktopEpisodeAdapterFailure::new(
+                "paired_page_evidence",
+                "desktop_cdp_browser_binding_drift",
+                "paired CDP evidence no longer identifies the requested service browser",
+            ));
+        }
+        self.provider
+            .confirm_browser_external_absent(&self.target, surface)
+            .map_err(|failure| {
+                DesktopEpisodeAdapterFailure::new(
+                    "paired_page_evidence",
+                    failure.code,
+                    failure.detail,
+                )
+            })
     }
 }
 
 pub(crate) struct ConfiguredUnusedTriggerAdapter;
 
 impl ExternalUiTriggerAdapter for ConfiguredUnusedTriggerAdapter {
-    fn trigger(&mut self, browser_id: &str) -> String {
-        format!("desktop-trigger-unavailable:{browser_id}")
+    fn trigger(&mut self, browser_id: &str) -> Result<String, DesktopEpisodeAdapterFailure> {
+        Err(DesktopEpisodeAdapterFailure::new(
+            "browser_external_trigger",
+            "desktop_external_trigger_provider_unavailable",
+            format!("browser-external trigger is unavailable for {browser_id}"),
+        ))
+    }
+}
+
+pub(crate) struct ConfiguredCdpTriggerAdapter {
+    target: ConfiguredCdpTarget,
+    selector: String,
+    effect_key: String,
+    provider: Box<dyn CdpEpisodeProvider>,
+}
+
+impl ConfiguredCdpTriggerAdapter {
+    pub(crate) fn new(
+        target: ConfiguredCdpTarget,
+        selector: impl Into<String>,
+        effect_key: impl Into<String>,
+        provider: ConfiguredCdpProvider,
+    ) -> Self {
+        Self {
+            target,
+            selector: selector.into(),
+            effect_key: effect_key.into(),
+            provider: Box::new(provider),
+        }
+    }
+
+    #[cfg(test)]
+    fn with_provider(
+        target: ConfiguredCdpTarget,
+        selector: impl Into<String>,
+        effect_key: impl Into<String>,
+        provider: impl CdpEpisodeProvider + 'static,
+    ) -> Self {
+        Self {
+            target,
+            selector: selector.into(),
+            effect_key: effect_key.into(),
+            provider: Box::new(provider),
+        }
+    }
+}
+
+impl ExternalUiTriggerAdapter for ConfiguredCdpTriggerAdapter {
+    fn trigger(&mut self, browser_id: &str) -> Result<String, DesktopEpisodeAdapterFailure> {
+        if self.target.browser_id != browser_id {
+            return Err(DesktopEpisodeAdapterFailure::new(
+                "browser_external_trigger",
+                "desktop_trigger_browser_binding_drift",
+                "the page trigger no longer identifies the requested service browser",
+            ));
+        }
+        self.provider
+            .trigger(&self.target, &self.selector, &self.effect_key)
+            .map_err(|failure| {
+                DesktopEpisodeAdapterFailure::new(
+                    "browser_external_trigger",
+                    failure.code,
+                    failure.detail,
+                )
+            })
     }
 }
 
@@ -1087,6 +1224,46 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     #[derive(Clone)]
+    struct FakeCdpEpisodeProvider {
+        calls: Arc<Mutex<Vec<String>>>,
+    }
+
+    impl FakeCdpEpisodeProvider {
+        fn new() -> Self {
+            Self {
+                calls: Arc::new(Mutex::new(Vec::new())),
+            }
+        }
+    }
+
+    impl CdpEpisodeProvider for FakeCdpEpisodeProvider {
+        fn confirm_browser_external_absent(
+            &self,
+            target: &ConfiguredCdpTarget,
+            surface: BrowserExternalSurface,
+        ) -> Result<String, super::super::desktop_evidence_cdp::ConfiguredCdpFailure> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push(format!("absence:{}:{surface:?}", target.browser_id));
+            Ok("paired-cdp-absence:fixture".to_string())
+        }
+
+        fn trigger(
+            &self,
+            target: &ConfiguredCdpTarget,
+            selector: &str,
+            effect_key: &str,
+        ) -> Result<String, super::super::desktop_evidence_cdp::ConfiguredCdpFailure> {
+            self.calls.lock().unwrap().push(format!(
+                "trigger:{}:{selector}:{effect_key}",
+                target.browser_id
+            ));
+            Ok("cdp-page-trigger:fixture".to_string())
+        }
+    }
+
+    #[derive(Clone)]
     struct MemoryRepository(Arc<Mutex<ServiceState>>);
 
     impl MemoryRepository {
@@ -1334,6 +1511,54 @@ mod tests {
         let slot = &snapshot.presentation_capacity.unwrap().slots[0];
         assert_eq!(slot.state, PresentationSlotState::WarmIdle);
         assert_eq!(slot.browser_id, None);
+    }
+
+    #[test]
+    fn configured_paired_cdp_adapters_preserve_exact_browser_binding() {
+        let provider = FakeCdpEpisodeProvider::new();
+        let calls = provider.calls.clone();
+        let target = ConfiguredCdpTarget::fixture("browser-1");
+        let mut cdp = ConfiguredPairedCdpAdapter::with_provider(target.clone(), provider.clone());
+        let mut trigger = ConfiguredCdpTriggerAdapter::with_provider(
+            target,
+            "#show-passkeys",
+            "effect-1",
+            provider,
+        );
+
+        assert_eq!(
+            trigger.trigger("browser-1").unwrap(),
+            "cdp-page-trigger:fixture"
+        );
+        assert_eq!(
+            cdp.confirm_browser_external_absent(
+                "browser-1",
+                BrowserExternalSurface::PasskeyChooser
+            )
+            .unwrap(),
+            "paired-cdp-absence:fixture"
+        );
+        assert_eq!(
+            calls.lock().unwrap().as_slice(),
+            [
+                "trigger:browser-1:#show-passkeys:effect-1",
+                "absence:browser-1:PasskeyChooser"
+            ]
+        );
+
+        assert_eq!(
+            trigger.trigger("browser-2").unwrap_err().code,
+            "desktop_trigger_browser_binding_drift"
+        );
+        assert_eq!(
+            cdp.confirm_browser_external_absent(
+                "browser-2",
+                BrowserExternalSurface::PasskeyChooser
+            )
+            .unwrap_err()
+            .code,
+            "desktop_cdp_browser_binding_drift"
+        );
     }
 
     #[test]

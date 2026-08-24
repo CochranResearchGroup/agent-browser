@@ -595,10 +595,11 @@ Generated client helpers are `createServiceDesktopLocateRequest()`,
 ## Desktop Evidence Episodes
 
 Use `desktop evidence observe` when the task requires browser-external scene
-evidence such as stacking or occlusion. Do not choose raw capture merely
-because CDP is inconvenient. The current action accepts a service-owned
-`browserId`, an opaque `episodeId`, and only the named
-`stacking_or_occlusion` evidence surface:
+evidence such as stacking, occlusion, browser chrome, extension UI, or a
+password-manager passkey chooser. Do not choose raw capture merely because CDP
+is inconvenient or failed. Page DOM, accessibility, viewport, canvas, and page
+pixels remain CDP evidence. JavaScript dialogs and other supported CDP surfaces
+remain CDP operations.
 
 ```bash
 agent-browser desktop evidence observe \
@@ -615,8 +616,19 @@ window, geometry, capture, verification, release, and cleanup. Never provide
 or derive provider URLs, display names, route labels, window handles, or
 coordinates. An active human controller blocks visible staging. A passive
 viewer permits observation only when the exact scene is already ready. The
-current configured `stacking_or_occlusion` path is read-only and fails closed
+configured `stacking_or_occlusion` path is read-only and fails closed
 instead of raising, maximizing, focusing, or rearranging the desktop.
+
+On a development runtime only, use `passkey_chooser` when one exact
+service-owned page click is expected to open browser-external chooser UI. Pass
+the current `serviceTabHandle` plus exactly one selector click in
+`uiAction.steps`. Agent Browser stages the isolated scene before the click,
+observes the exact page target through direct CDP without activating it,
+requires paired evidence that no matching page-owned modal exists, captures
+the desktop, and restores the prior scene. Never retry a
+`desktop_external_trigger_outcome_unknown` result until its returned effect
+digest has been reconciled. Production rejects this trigger and remains
+read-only pending Plan 0110.
 
 HTTP and generic MCP use `desktop_evidence_observe`; MCP also has a dedicated
 tool. Generated clients expose `createServiceDesktopEvidenceObserveRequest()`,

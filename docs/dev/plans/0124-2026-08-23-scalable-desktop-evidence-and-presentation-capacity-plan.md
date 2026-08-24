@@ -4,7 +4,7 @@ Date: 2026-08-23
 
 State: IN PROGRESS
 
-Execution state: `slice_g_reversible_scene_staging_source_accepted_paired_cdp_missing`
+Execution state: `slice_h_paired_cdp_browser_external_source_accepted_live_missing`
 
 Lane: P124
 

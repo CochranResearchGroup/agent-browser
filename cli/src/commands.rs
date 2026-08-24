@@ -91,7 +91,7 @@ const SERVICE_BROWSER_CAPABILITY_PREFER_USAGE: &str = "service browser-capabilit
 const SERVICE_ACCESS_PLAN_USAGE: &str = "service access-plan [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--session-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--site-policy-id <id>] [--challenge-id <id>] [--readiness-profile-id <id>] [--runtime-profile <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--browser-host <local_headless|local_headed|docker_headed|remote_headed|cloud_provider|attached_existing>] [--view-stream-provider <cdp_screencast|chrome_tab_webrtc|virtual_display_webrtc|novnc|rdp_gateway|external_url>] [--control-input-provider <cdp_input|webrtc_input|vnc_input|manual_attached_desktop>] [--display-isolation <private_virtual_display|shared_display|ambient_display>]";
 const DESKTOP_CAPTURE_USAGE: &str = "desktop capture --browser-id <id> [--max-bytes <bytes>]";
 const DESKTOP_LOCATE_USAGE: &str = "desktop locate --browser-id <id> --locator-id <id> [--max-candidates <count>] [--include-visualization]";
-const DESKTOP_EVIDENCE_OBSERVE_USAGE: &str = "desktop evidence observe --browser-id <id> [--episode-id <id>] [--include-frame] [--service-name <name>] [--agent-name <name>] [--task-name <name>]";
+const DESKTOP_EVIDENCE_OBSERVE_USAGE: &str = "desktop evidence observe --browser-id <id> [--episode-id <id>] [--evidence-surface stacking_or_occlusion|passkey_chooser] [--service-tab-handle-json <json> --trigger-selector <css>] [--include-frame] [--service-name <name>] [--agent-name <name>] [--task-name <name>]";
 const DESKTOP_PROMPT_OBSERVE_USAGE: &str = "desktop prompt observe --browser-id <id> --prompt-profile-id p110-external-prompt-v1 [--include-visualization]";
 const DESKTOP_INTERACT_USAGE: &str = "desktop interact --browser-id <id> --controller-lease-id <id> --operation-id <id> --recipe-id <p110-pointer-keyboard-v1|p110-foundation-stress-v1> --service-name <name> --agent-name <name> --task-name <name>";
 const DESKTOP_LOCATE_DEFAULT_MAX_CANDIDATES: u64 = 8;
@@ -1306,6 +1306,9 @@ fn parse_desktop_evidence_observe(
     let mut service_name = None;
     let mut agent_name = None;
     let mut task_name = None;
+    let mut evidence_surface = None;
+    let mut service_tab_handle_json = None;
+    let mut trigger_selector = None;
     let mut include_frame = false;
     let mut i = 2;
     while i < rest.len() {
@@ -1320,6 +1323,11 @@ fn parse_desktop_evidence_observe(
             "--service-name" => (&mut service_name, "--service-name"),
             "--agent-name" => (&mut agent_name, "--agent-name"),
             "--task-name" => (&mut task_name, "--task-name"),
+            "--evidence-surface" => (&mut evidence_surface, "--evidence-surface"),
+            "--service-tab-handle-json" => {
+                (&mut service_tab_handle_json, "--service-tab-handle-json")
+            }
+            "--trigger-selector" => (&mut trigger_selector, "--trigger-selector"),
             flag => {
                 return Err(ParseError::InvalidValue {
                     message: format!("Unknown flag for desktop evidence observe: {flag}"),
@@ -1344,14 +1352,63 @@ fn parse_desktop_evidence_observe(
         });
     };
     let episode_id = episode_id.unwrap_or_else(|| id.clone());
+    let evidence_surface = evidence_surface.unwrap_or_else(|| "stacking_or_occlusion".to_string());
+    if !matches!(
+        evidence_surface.as_str(),
+        "stacking_or_occlusion" | "passkey_chooser"
+    ) {
+        return Err(ParseError::InvalidValue {
+            message: format!("Unsupported desktop evidence surface: {evidence_surface}"),
+            usage: DESKTOP_EVIDENCE_OBSERVE_USAGE,
+        });
+    }
     let mut command = json!({
         "id": id,
         "action": "desktop_evidence_observe",
         "browserId": browser_id,
         "episodeId": episode_id,
-        "evidenceSurface": "stacking_or_occlusion",
+        "evidenceSurface": evidence_surface,
         "includeFrame": include_frame,
     });
+    match evidence_surface.as_str() {
+        "stacking_or_occlusion" => {
+            if service_tab_handle_json.is_some() || trigger_selector.is_some() {
+                return Err(ParseError::InvalidValue {
+                    message: "stacking_or_occlusion does not accept a service tab handle or trigger selector".to_string(),
+                    usage: DESKTOP_EVIDENCE_OBSERVE_USAGE,
+                });
+            }
+        }
+        "passkey_chooser" => {
+            let raw_handle =
+                service_tab_handle_json.ok_or_else(|| ParseError::MissingArguments {
+                    context: "passkey_chooser requires --service-tab-handle-json".to_string(),
+                    usage: DESKTOP_EVIDENCE_OBSERVE_USAGE,
+                })?;
+            let handle = serde_json::from_str::<Value>(&raw_handle).map_err(|error| {
+                ParseError::InvalidValue {
+                    message: format!("Invalid service tab handle JSON: {error}"),
+                    usage: DESKTOP_EVIDENCE_OBSERVE_USAGE,
+                }
+            })?;
+            if !handle.is_object() {
+                return Err(ParseError::InvalidValue {
+                    message: "Service tab handle JSON must be an object".to_string(),
+                    usage: DESKTOP_EVIDENCE_OBSERVE_USAGE,
+                });
+            }
+            let selector = trigger_selector.ok_or_else(|| ParseError::MissingArguments {
+                context: "passkey_chooser requires --trigger-selector".to_string(),
+                usage: DESKTOP_EVIDENCE_OBSERVE_USAGE,
+            })?;
+            command["serviceTabHandle"] = handle;
+            command["uiAction"] = json!({
+                "maxActions": 1,
+                "steps": [{ "type": "click", "selector": selector }]
+            });
+        }
+        _ => unreachable!(),
+    }
     if let Some(session_name) = flags.session_name.as_ref() {
         command["sessionName"] = json!(session_name);
     }
@@ -7794,6 +7851,21 @@ mod tests {
                 .format()
                 .contains("Unknown flag for desktop evidence observe"));
         }
+    }
+
+    #[test]
+    fn test_desktop_evidence_observe_builds_bounded_passkey_composition() {
+        let cmd = parse_command(
+            &args("desktop evidence observe --browser-id browser-123 --episode-id episode-8 --evidence-surface passkey_chooser --service-tab-handle-json {\"browserId\":\"browser-123\",\"tabId\":\"tab-1\",\"targetId\":\"target-1\",\"valid\":true} --trigger-selector #show-passkeys --service-name DesktopEvidence --agent-name codex --task-name inspect-passkey"),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["evidenceSurface"], "passkey_chooser");
+        assert_eq!(cmd["serviceTabHandle"]["targetId"], "target-1");
+        assert_eq!(cmd["uiAction"]["maxActions"], 1);
+        assert_eq!(cmd["uiAction"]["steps"][0]["type"], "click");
+        assert_eq!(cmd["uiAction"]["steps"][0]["selector"], "#show-passkeys");
     }
 
     #[test]

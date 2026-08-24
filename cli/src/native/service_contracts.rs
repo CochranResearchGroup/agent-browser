@@ -354,7 +354,7 @@ pub fn service_contracts_metadata() -> Value {
                     ],
                 },
                 "request": {
-                    "evidenceSurfaces": ["stacking_or_occlusion"],
+                    "evidenceSurfaces": ["stacking_or_occlusion", "passkey_chooser"],
                     "requiresEpisodeId": true,
                     "requiresAttribution": ["serviceName", "agentName", "taskName"],
                     "paramsAccepted": false,
@@ -367,7 +367,8 @@ pub fn service_contracts_metadata() -> Value {
                     "persistedPixels": false,
                 },
                 "noLaunch": true,
-                "input": false,
+                "productionInput": false,
+                "developmentPageTrigger": "one_exact_service_tab_click",
             },
             "promptObservation": {
                 "version": SERVICE_REQUEST_CONTRACT_VERSION,

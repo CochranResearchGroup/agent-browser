@@ -579,7 +579,7 @@ export interface ServiceDesktopCaptureData {
 export interface ServiceDesktopEvidenceObserveData {
   ok: true;
   action: "desktop_evidence_observe";
-  evidenceSurface: "stacking_or_occlusion";
+  evidenceSurface: "stacking_or_occlusion" | "passkey_chooser";
   episode: Record<string, unknown>;
   /** Present only when the episode reached desktop capture. */
   context?: DesktopContext;
@@ -1595,7 +1595,11 @@ export interface ServiceDesktopEvidenceObserveRequestOptions extends Pick<Servic
   browserId: string;
   sessionName?: string;
   episodeId: string;
-  evidenceSurface: "stacking_or_occlusion";
+  evidenceSurface: "stacking_or_occlusion" | "passkey_chooser";
+  /** Required only for passkey_chooser. */
+  serviceTabHandle?: ServiceTabHandle;
+  /** Exactly one selector-based click, required only for passkey_chooser. */
+  uiAction?: { maxActions?: 1; steps: [{ type: "click"; selector: string }] };
   includeFrame?: boolean;
   serviceName: string;
   agentName: string;

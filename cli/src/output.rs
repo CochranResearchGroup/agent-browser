@@ -5809,7 +5809,7 @@ agent-browser desktop - Observe or run one guarded synthetic desktop transaction
 Usage:
   agent-browser desktop capture --browser-id <id> [--max-bytes <bytes>]
   agent-browser desktop locate --browser-id <id> --locator-id <id> [--max-candidates <count>] [--include-visualization]
-  agent-browser desktop evidence observe --browser-id <id> [--episode-id <id>] [--include-frame]
+  agent-browser desktop evidence observe --browser-id <id> [--episode-id <id>] [--evidence-surface stacking_or_occlusion|passkey_chooser] [--service-tab-handle-json <json> --trigger-selector <css>] [--include-frame]
   agent-browser desktop prompt observe --browser-id <id> --prompt-profile-id p110-external-prompt-v1 [--include-visualization]
   agent-browser desktop interact --browser-id <id> --controller-lease-id <id> --operation-id <id> --recipe-id <p110-pointer-keyboard-v1|p110-foundation-stress-v1> --service-name <name> --agent-name <name> --task-name <name>
 
@@ -5850,13 +5850,15 @@ effects. Fixture results and source presence do not prove installed behavior or
 detection of a real browser, extension popup, native dialog, credential
 manager, passkey prompt, CAPTCHA, or challenge.
 
-`desktop evidence observe` is the task-shaped read-only product action. The
-caller names a browser and evidence need; Agent Browser resolves exact
-presentation capacity, scene, route, display, window, and capture providers.
-The current `stacking_or_occlusion` surface captures only when the scene is
-already authoritative and does not focus, raise, maximize, or rearrange the
-desktop. Use `--include-frame` only when response pixels are required. Pixels
-are removed from durable job, stream, dashboard, event, and incident records.
+`desktop evidence observe` is the task-shaped product action. The
+`stacking_or_occlusion` surface is read-only. On a development runtime only,
+`passkey_chooser` binds an exact service tab, stages and proves its isolated
+desktop scene, performs exactly one selector click expected to open the
+chooser, confirms through paired CDP evidence that the surface is absent from
+the page, captures the desktop, and restores the prior scene. It does not
+activate the CDP target. Production remains read-only pending Plan 0110. Use
+`--include-frame` only when response pixels are required. Pixels are removed
+from durable job, stream, dashboard, event, and incident records.
 
 `desktop interact` is the source-only atomic observe, locate, act, and verify
 contract. It accepts only a pre-existing controller lease, a caller-generated
@@ -5882,6 +5884,11 @@ Options:
   --max-candidates <n>    Bound candidates (default: 8; max: 32)
   --include-visualization Include an annotated response-only visualization in JSON
   --episode-id <id>       Supply an opaque desktop evidence episode identity
+  --evidence-surface <id> Select stacking_or_occlusion or passkey_chooser
+  --service-tab-handle-json <json>
+                          Bind passkey_chooser to an exact service-owned tab
+  --trigger-selector <css>
+                          Select the sole bounded page click for passkey_chooser
   --include-frame         Include response-only frame bytes in JSON
   --prompt-profile-id <id>
                           Select p110-external-prompt-v1 for synthetic fixture proof
@@ -6946,7 +6953,7 @@ Desktop observation:
   desktop locate --browser-id <id> --locator-id <id>
                              Locate deterministic candidates without input
   desktop evidence observe --browser-id <id>
-                             Run one service-owned read-only evidence episode
+                             Run one bounded service-owned evidence episode
   desktop prompt observe --browser-id <id> --prompt-profile-id p110-external-prompt-v1
                              Observe the source-only synthetic external-prompt fixture
   desktop interact --browser-id <id> --controller-lease-id <id> --operation-id <id> --recipe-id <id> --service-name <name> --agent-name <name> --task-name <name>

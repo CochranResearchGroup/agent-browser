@@ -8,7 +8,7 @@
   "properties": {
     "ok": { "const": true },
     "action": { "const": "desktop_evidence_observe" },
-    "evidenceSurface": { "const": "stacking_or_occlusion" },
+    "evidenceSurface": { "enum": ["stacking_or_occlusion", "passkey_chooser"] },
     "episode": {
       "type": "object",
       "description": "Typed desktop evidence episode outcome with admission, capture-ready, verification, restoration, release, cleanup, and handoff receipts."

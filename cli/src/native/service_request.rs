@@ -1218,6 +1218,8 @@ fn reject_desktop_evidence_observe_request(
         "episodeId",
         "evidenceSurface",
         "includeFrame",
+        "serviceTabHandle",
+        "uiAction",
         "serviceName",
         "agentName",
         "taskName",
@@ -1264,11 +1266,66 @@ fn reject_desktop_evidence_observe_request(
             "desktop_evidence_observe sessionName must be a nonempty string",
         ));
     }
-    if request.get("evidenceSurface").and_then(Value::as_str) != Some("stacking_or_occlusion") {
-        return Err(issue(
-            ServiceRequestIssueKind::InvalidBoundedRecipe,
-            "desktop_evidence_observe requires evidenceSurface stacking_or_occlusion",
-        ));
+    match request.get("evidenceSurface").and_then(Value::as_str) {
+        Some("stacking_or_occlusion") => {
+            if request.contains_key("serviceTabHandle") || request.contains_key("uiAction") {
+                return Err(issue(
+                    ServiceRequestIssueKind::InvalidBoundedRecipe,
+                    "desktop_evidence_observe stacking_or_occlusion does not accept serviceTabHandle or uiAction",
+                ));
+            }
+        }
+        Some("passkey_chooser") => {
+            if !request
+                .get("serviceTabHandle")
+                .is_some_and(Value::is_object)
+            {
+                return Err(issue(
+                    ServiceRequestIssueKind::InvalidBoundedRecipe,
+                    "desktop_evidence_observe passkey_chooser requires serviceTabHandle",
+                ));
+            }
+            let valid_trigger = request
+                .get("uiAction")
+                .and_then(Value::as_object)
+                .is_some_and(|action| {
+                    action
+                        .keys()
+                        .all(|field| matches!(field.as_str(), "steps" | "maxActions"))
+                        && action
+                            .get("maxActions")
+                            .map(Value::as_u64)
+                            .unwrap_or(Some(1))
+                            == Some(1)
+                        && action
+                            .get("steps")
+                            .and_then(Value::as_array)
+                            .filter(|steps| steps.len() == 1)
+                            .and_then(|steps| steps[0].as_object())
+                            .is_some_and(|step| {
+                                step.keys()
+                                    .all(|field| matches!(field.as_str(), "type" | "selector"))
+                                    && step.get("type").and_then(Value::as_str) == Some("click")
+                                    && step
+                                        .get("selector")
+                                        .and_then(Value::as_str)
+                                        .map(str::trim)
+                                        .is_some_and(|value| !value.is_empty())
+                            })
+                });
+            if !valid_trigger {
+                return Err(issue(
+                    ServiceRequestIssueKind::InvalidBoundedRecipe,
+                    "desktop_evidence_observe passkey_chooser requires exactly one selector-based uiAction click",
+                ));
+            }
+        }
+        _ => {
+            return Err(issue(
+                ServiceRequestIssueKind::InvalidBoundedRecipe,
+                "desktop_evidence_observe evidenceSurface must be stacking_or_occlusion or passkey_chooser",
+            ));
+        }
     }
     if request
         .get("includeFrame")
@@ -2331,6 +2388,20 @@ mod tests {
         assert_eq!(normalized.command["action"], "desktop_evidence_observe");
         assert_eq!(normalized.command["episodeId"], "episode-1");
 
+        let passkey = normalize(json!({
+            "action": "desktop_evidence_observe",
+            "browserId": "browser-1",
+            "episodeId": "episode-2",
+            "evidenceSurface": "passkey_chooser",
+            "serviceTabHandle": {"browserId":"browser-1","tabId":"tab-1","targetId":"target-1","valid":true},
+            "uiAction": {"maxActions":1,"steps":[{"type":"click","selector":"#show-passkeys"}]},
+            "serviceName": "DesktopEvidence",
+            "agentName": "fixture-agent",
+            "taskName": "inspect-passkey-chooser"
+        }))
+        .unwrap();
+        assert_eq!(passkey.command["evidenceSurface"], "passkey_chooser");
+
         for (request, expected) in [
             (
                 json!({"action":"desktop_evidence_observe","browserId":"browser-1","episodeId":"episode-1","evidenceSurface":"stacking_or_occlusion","serviceName":"DesktopEvidence","agentName":"fixture-agent"}),
@@ -2338,7 +2409,7 @@ mod tests {
             ),
             (
                 json!({"action":"desktop_evidence_observe","browserId":"browser-1","episodeId":"episode-1","evidenceSurface":"browser_external_prompt","serviceName":"DesktopEvidence","agentName":"fixture-agent","taskName":"inspect"}),
-                "desktop_evidence_observe requires evidenceSurface stacking_or_occlusion",
+                "desktop_evidence_observe evidenceSurface must be stacking_or_occlusion or passkey_chooser",
             ),
             (
                 json!({"action":"desktop_evidence_observe","browserId":"browser-1","episodeId":"episode-1","evidenceSurface":"stacking_or_occlusion","serviceName":"DesktopEvidence","agentName":"fixture-agent","taskName":"inspect","params":{}}),

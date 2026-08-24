@@ -677,6 +677,34 @@ async function main() {
     taskName: 'inspect-stacking',
     jobTimeoutMs: 30_000,
   });
+  const passkeyEvidenceRequest = createServiceDesktopEvidenceObserveRequest({
+    browserId: 'browser-rdp-1',
+    episodeId: 'episode-2',
+    evidenceSurface: 'passkey_chooser',
+    serviceTabHandle: {
+      browserId: 'browser-rdp-1',
+      tabId: 'tab-1',
+      targetId: 'target-1',
+      valid: true,
+    },
+    uiAction: {
+      maxActions: 1,
+      steps: [{ type: 'click', selector: '#show-passkeys' }],
+    },
+    serviceName: 'DesktopEvidence',
+    agentName: 'fixture-agent',
+    taskName: 'inspect-passkey',
+  });
+  assert.equal(passkeyEvidenceRequest.evidenceSurface, 'passkey_chooser');
+  assert.equal(passkeyEvidenceRequest.uiAction.steps.length, 1);
+  const { action: _passkeyAction, ...passkeyEvidenceOptions } = passkeyEvidenceRequest;
+  assert.throws(
+    () => createServiceDesktopEvidenceObserveRequest({
+      ...passkeyEvidenceOptions,
+      uiAction: { steps: [{ type: 'click', selector: '#one' }, { type: 'click', selector: '#two' }] },
+    }),
+    /exactly one step/,
+  );
   for (const forbidden of ['params', 'displayName', 'routeId', 'windowId', 'coordinates', 'providerUrl']) {
     assert.throws(
       () => createServiceDesktopEvidenceObserveRequest({

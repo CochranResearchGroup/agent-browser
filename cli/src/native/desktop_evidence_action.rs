@@ -9,12 +9,15 @@ use base64::Engine;
 use serde_json::{json, Value};
 
 use super::desktop_evidence::{
-    DesktopEpisodeAdapters, DesktopEpisodeOutcome, DesktopEpisodeRequest,
-    DesktopEvidenceCoordinator, DesktopSceneSurface, EpisodeInput, EvidenceRequest,
+    BrowserExternalSurface, CdpEvidenceAdapter, DesktopEpisodeAdapters, DesktopEpisodeOutcome,
+    DesktopEpisodeRequest, DesktopEvidenceCoordinator, DesktopSceneSurface, EpisodeInput,
+    EvidenceRequest, ExternalUiTriggerAdapter,
 };
+use super::desktop_evidence_cdp::{resolve_configured_cdp_target, ConfiguredCdpProvider};
 use super::desktop_evidence_configured::{
-    ConfiguredBlockedInputAdapter, ConfiguredDesktopFrameAdapter, ConfiguredEpisodeCleanupAdapter,
-    ConfiguredEpisodeVerificationAdapter, ConfiguredExistingHandoffAdapter,
+    ConfiguredBlockedInputAdapter, ConfiguredCdpTriggerAdapter, ConfiguredDesktopFrameAdapter,
+    ConfiguredEpisodeCleanupAdapter, ConfiguredEpisodeVerificationAdapter,
+    ConfiguredExistingHandoffAdapter, ConfiguredPairedCdpAdapter,
     ConfiguredPresentationSlotAdapter, ConfiguredSceneStagingAdapter, ConfiguredUnusedCdpAdapter,
     ConfiguredUnusedTriggerAdapter, ConfiguredWindowSemanticAdapter,
 };
@@ -24,19 +27,44 @@ use super::service_store::{
 
 const ACTION: &str = "desktop_evidence_observe";
 const STACKING_OR_OCCLUSION: &str = "stacking_or_occlusion";
+const PASSKEY_CHOOSER: &str = "passkey_chooser";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ConfiguredEvidenceRequest {
+    StackingOrOcclusion,
+    PasskeyChooser {
+        service_tab_handle: Value,
+        trigger_selector: String,
+    },
+}
+
+impl ConfiguredEvidenceRequest {
+    fn surface_name(&self) -> &'static str {
+        match self {
+            Self::StackingOrOcclusion => STACKING_OR_OCCLUSION,
+            Self::PasskeyChooser { .. } => PASSKEY_CHOOSER,
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ConfiguredObservationRequest {
     browser_id: String,
     episode_id: String,
+    evidence: ConfiguredEvidenceRequest,
     include_frame: bool,
 }
 
 pub(crate) async fn handle_desktop_evidence_observe(command: &Value) -> Result<Value, String> {
     let request = parse_request(command)?;
+    let runtime = tokio::runtime::Handle::current();
+    let development_effects = std::env::var("AGENT_BROWSER_RUNTIME_ENVIRONMENT")
+        .ok()
+        .as_deref()
+        == Some("development");
     tokio::task::spawn_blocking(move || {
         let repository = LockedServiceStateRepository::<JsonServiceStateStore>::default_json()?;
-        run_configured_observation(request, repository)
+        run_configured_observation(request, repository, runtime, development_effects)
     })
     .await
     .map_err(|_| "desktop_evidence_observe task failed".to_string())?
@@ -119,6 +147,8 @@ fn parse_request(command: &Value) -> Result<ConfiguredObservationRequest, String
         "episodeId",
         "evidenceSurface",
         "includeFrame",
+        "serviceTabHandle",
+        "uiAction",
         "jobTimeoutMs",
         "serviceName",
         "agentName",
@@ -139,11 +169,29 @@ fn parse_request(command: &Value) -> Result<ConfiguredObservationRequest, String
     }
     let browser_id = required_string(command, "browserId")?;
     let evidence_surface = required_string(command, "evidenceSurface")?;
-    if evidence_surface != STACKING_OR_OCCLUSION {
-        return Err(format!(
-            "{ACTION} currently requires evidenceSurface {STACKING_OR_OCCLUSION}"
-        ));
-    }
+    let evidence = match evidence_surface.as_str() {
+        STACKING_OR_OCCLUSION => {
+            if command.get("serviceTabHandle").is_some() || command.get("uiAction").is_some() {
+                return Err(format!(
+                    "{ACTION} {STACKING_OR_OCCLUSION} does not accept a tab handle or page trigger"
+                ));
+            }
+            ConfiguredEvidenceRequest::StackingOrOcclusion
+        }
+        PASSKEY_CHOOSER => ConfiguredEvidenceRequest::PasskeyChooser {
+            service_tab_handle: command
+                .get("serviceTabHandle")
+                .filter(|value| value.is_object())
+                .cloned()
+                .ok_or_else(|| format!("{ACTION} {PASSKEY_CHOOSER} requires serviceTabHandle"))?,
+            trigger_selector: parse_single_click_trigger(command)?,
+        },
+        _ => {
+            return Err(format!(
+                "{ACTION} evidenceSurface must be {STACKING_OR_OCCLUSION} or {PASSKEY_CHOOSER}"
+            ))
+        }
+    };
     let episode_id = ["episodeId", "requestId"]
         .into_iter()
         .find_map(|field| optional_string(command, field))
@@ -160,13 +208,63 @@ fn parse_request(command: &Value) -> Result<ConfiguredObservationRequest, String
     Ok(ConfiguredObservationRequest {
         browser_id,
         episode_id,
+        evidence,
         include_frame,
     })
+}
+
+fn parse_single_click_trigger(command: &Value) -> Result<String, String> {
+    let ui_action = command
+        .get("uiAction")
+        .and_then(Value::as_object)
+        .ok_or_else(|| format!("{ACTION} {PASSKEY_CHOOSER} requires uiAction"))?;
+    if ui_action
+        .keys()
+        .any(|field| !matches!(field.as_str(), "steps" | "maxActions"))
+    {
+        return Err(format!(
+            "{ACTION} {PASSKEY_CHOOSER} uiAction accepts only steps and maxActions"
+        ));
+    }
+    if ui_action
+        .get("maxActions")
+        .map(|value| value.as_u64() != Some(1))
+        .unwrap_or(false)
+    {
+        return Err(format!(
+            "{ACTION} {PASSKEY_CHOOSER} requires uiAction.maxActions 1"
+        ));
+    }
+    let steps = ui_action
+        .get("steps")
+        .and_then(Value::as_array)
+        .filter(|steps| steps.len() == 1)
+        .ok_or_else(|| format!("{ACTION} {PASSKEY_CHOOSER} requires exactly one uiAction step"))?;
+    let step = steps[0]
+        .as_object()
+        .ok_or_else(|| format!("{ACTION} {PASSKEY_CHOOSER} uiAction step must be an object"))?;
+    if step
+        .keys()
+        .any(|field| !matches!(field.as_str(), "type" | "selector"))
+        || step.get("type").and_then(Value::as_str) != Some("click")
+    {
+        return Err(format!(
+            "{ACTION} {PASSKEY_CHOOSER} supports one selector-based click step"
+        ));
+    }
+    step.get("selector")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| format!("{ACTION} {PASSKEY_CHOOSER} click requires selector"))
 }
 
 fn run_configured_observation<R>(
     request: ConfiguredObservationRequest,
     repository: R,
+    runtime: tokio::runtime::Handle,
+    development_effects: bool,
 ) -> Result<Value, String>
 where
     R: ServiceStateRepository + Clone + 'static,
@@ -177,7 +275,49 @@ where
         .as_ref()
         .map(|capacity| capacity.config.hard_maximum)
         .ok_or_else(|| "presentation_capacity_unavailable".to_string())?;
-    let mut cdp = ConfiguredUnusedCdpAdapter;
+    let surface_name = request.evidence.surface_name();
+    let (evidence, mut cdp, mut trigger): (
+        EvidenceRequest,
+        Box<dyn CdpEvidenceAdapter>,
+        Box<dyn ExternalUiTriggerAdapter>,
+    ) = match &request.evidence {
+        ConfiguredEvidenceRequest::StackingOrOcclusion => (
+            EvidenceRequest::desktop_scene(DesktopSceneSurface::StackingOrOcclusion),
+            Box::new(ConfiguredUnusedCdpAdapter),
+            Box::new(ConfiguredUnusedTriggerAdapter),
+        ),
+        ConfiguredEvidenceRequest::PasskeyChooser {
+            service_tab_handle,
+            trigger_selector,
+        } => {
+            if !development_effects {
+                return Err(
+                    "desktop_browser_external_trigger_development_only: production runtime remains read-only"
+                        .to_string(),
+                );
+            }
+            let target = resolve_configured_cdp_target(
+                &initial_state,
+                &request.browser_id,
+                service_tab_handle,
+            )
+            .map_err(|failure| format!("{}: {}", failure.code, failure.detail))?;
+            let provider = ConfiguredCdpProvider::new(runtime);
+            (
+                EvidenceRequest::browser_external(BrowserExternalSurface::PasskeyChooser, true),
+                Box::new(ConfiguredPairedCdpAdapter::new(
+                    target.clone(),
+                    provider.clone(),
+                )),
+                Box::new(ConfiguredCdpTriggerAdapter::new(
+                    target,
+                    trigger_selector,
+                    format!("desktop-evidence:{}:trigger", request.episode_id),
+                    provider,
+                )),
+            )
+        }
+    };
     let mut slots = ConfiguredPresentationSlotAdapter::new(
         repository.clone(),
         request.episode_id.clone(),
@@ -187,7 +327,6 @@ where
         ConfiguredSceneStagingAdapter::new(repository.clone(), request.episode_id.clone());
     let mut windows =
         ConfiguredWindowSemanticAdapter::new(repository.clone(), request.episode_id.clone());
-    let mut trigger = ConfiguredUnusedTriggerAdapter;
     let mut frames = ConfiguredDesktopFrameAdapter::new();
     let mut input = ConfiguredBlockedInputAdapter;
     let mut verification =
@@ -199,15 +338,15 @@ where
         DesktopEpisodeRequest {
             episode_id: request.episode_id,
             browser_id: request.browser_id,
-            evidence: EvidenceRequest::desktop_scene(DesktopSceneSurface::StackingOrOcclusion),
+            evidence,
             input: EpisodeInput::None,
         },
         &mut DesktopEpisodeAdapters {
-            cdp: &mut cdp,
+            cdp: cdp.as_mut(),
             slots: &mut slots,
             staging: &mut staging,
             windows: &mut windows,
-            trigger: &mut trigger,
+            trigger: trigger.as_mut(),
             frames: &mut frames,
             input: &mut input,
             verification: &mut verification,
@@ -222,7 +361,7 @@ where
     let mut response = json!({
         "ok": true,
         "action": ACTION,
-        "evidenceSurface": STACKING_OR_OCCLUSION,
+        "evidenceSurface": surface_name,
         "episode": outcome,
     });
     if let Some(capture) = capture {
@@ -316,6 +455,76 @@ mod tests {
 
         assert!(!request.include_frame);
         assert_eq!(request.episode_id, "request-1");
+    }
+
+    #[test]
+    fn passkey_chooser_requires_exact_tab_handle_and_one_click_trigger() {
+        let request = parse_request(&json!({
+            "action": ACTION,
+            "browserId": "browser-1",
+            "episodeId": "episode-1",
+            "evidenceSurface": PASSKEY_CHOOSER,
+            "serviceTabHandle": {
+                "browserId": "browser-1",
+                "tabId": "tab-1",
+                "targetId": "target-1",
+                "valid": true
+            },
+            "uiAction": {
+                "maxActions": 1,
+                "steps": [{ "type": "click", "selector": "#show-passkeys" }]
+            }
+        }))
+        .unwrap();
+
+        assert!(matches!(
+            request.evidence,
+            ConfiguredEvidenceRequest::PasskeyChooser {
+                trigger_selector,
+                ..
+            } if trigger_selector == "#show-passkeys"
+        ));
+
+        for ui_action in [
+            json!({"steps": []}),
+            json!({"maxActions": "1", "steps": [{"type":"click", "selector":"#x"}]}),
+            json!({"maxActions": 2, "steps": [{"type":"click", "selector":"#x"}]}),
+            json!({"steps": [{"type":"fill", "selector":"#x"}]}),
+            json!({"steps": [{"type":"click", "selector":"#x"}, {"type":"click", "selector":"#y"}]}),
+        ] {
+            let error = parse_request(&json!({
+                "action": ACTION,
+                "browserId": "browser-1",
+                "episodeId": "episode-1",
+                "evidenceSurface": PASSKEY_CHOOSER,
+                "serviceTabHandle": {},
+                "uiAction": ui_action
+            }))
+            .unwrap_err();
+            assert!(error.contains(PASSKEY_CHOOSER), "{error}");
+        }
+    }
+
+    #[test]
+    fn stacking_surface_rejects_browser_external_trigger_plumbing() {
+        for field in [
+            ("serviceTabHandle", json!({})),
+            (
+                "uiAction",
+                json!({"steps": [{"type":"click", "selector":"#x"}]}),
+            ),
+        ] {
+            let mut command = json!({
+                "action": ACTION,
+                "browserId": "browser-1",
+                "episodeId": "episode-1",
+                "evidenceSurface": STACKING_OR_OCCLUSION
+            });
+            command[field.0] = field.1;
+            assert!(parse_request(&command)
+                .unwrap_err()
+                .contains("does not accept a tab handle or page trigger"));
+        }
     }
 
     #[test]

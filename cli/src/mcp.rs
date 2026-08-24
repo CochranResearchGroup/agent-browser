@@ -953,7 +953,7 @@ fn service_mcp_tools() -> Vec<Value> {
                     },
                     "evidenceSurface": {
                         "type": "string",
-                        "enum": ["stacking_or_occlusion"],
+                        "enum": ["stacking_or_occlusion", "passkey_chooser"],
                         "description": "Named browser-external evidence need for action=desktop_evidence_observe."
                     },
                     "episodeId": {
@@ -4872,7 +4872,7 @@ fn desktop_evidence_observe_tool_schema() -> Value {
     json!({
         "name": DESKTOP_EVIDENCE_OBSERVE_MCP_TOOL_NAME,
         "title": "Observe browser-external desktop evidence",
-        "description": "Run one read-only Desktop Evidence Episode for a named browser-external evidence need. Agent Browser reserves the exact active presentation, proves and captures the service-owned scene, verifies authority, and releases the observation lease. Callers cannot select displays, routes, windows, coordinates, CDP endpoints, or capture providers.",
+        "description": "Run one Desktop Evidence Episode for a named browser-external evidence need. Stacking observation is read-only. Development runtimes can stage a passkey chooser, issue exactly one service-tab-bound page click, collect paired CDP absence evidence without target activation, capture the desktop, restore the scene, and release the lease. Production remains read-only.",
         "inputSchema": {
             "type": "object",
             "additionalProperties": false,
@@ -4880,7 +4880,31 @@ fn desktop_evidence_observe_tool_schema() -> Value {
                 "browserId": { "type": "string", "description": "Required service-owned browser id." },
                 "sessionName": { "type": "string", "description": "Optional daemon session and the only daemon selector." },
                 "episodeId": { "type": "string", "description": "Required caller-generated opaque episode identity." },
-                "evidenceSurface": { "type": "string", "enum": ["stacking_or_occlusion"], "description": "Named evidence need. Provider plumbing is service owned." },
+                "evidenceSurface": { "type": "string", "enum": ["stacking_or_occlusion", "passkey_chooser"], "description": "Named evidence need. Provider plumbing is service owned." },
+                "serviceTabHandle": { "type": "object", "description": "Exact service-owned tab handle required only for passkey_chooser." },
+                "uiAction": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "maxActions": { "type": "integer", "const": 1 },
+                        "steps": {
+                            "type": "array",
+                            "minItems": 1,
+                            "maxItems": 1,
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "properties": {
+                                    "type": { "const": "click" },
+                                    "selector": { "type": "string", "minLength": 1, "maxLength": 1024 }
+                                },
+                                "required": ["type", "selector"]
+                            }
+                        }
+                    },
+                    "required": ["steps"],
+                    "description": "One bounded selector click required only for passkey_chooser."
+                },
                 "includeFrame": { "type": "boolean", "default": false, "description": "Return response-only PNG bytes. Pixels are never retained in durable projections." },
                 "jobTimeoutMs": { "type": "integer", "minimum": 1 },
                 "serviceName": { "type": "string", "description": "Required calling service name." },
@@ -6051,6 +6075,8 @@ fn desktop_evidence_observe_service_request(arguments: &Value) -> Result<Value, 
         "episodeId",
         "evidenceSurface",
         "includeFrame",
+        "serviceTabHandle",
+        "uiAction",
         "jobTimeoutMs",
         "serviceName",
         "agentName",
@@ -6067,9 +6093,12 @@ fn desktop_evidence_observe_service_request(arguments: &Value) -> Result<Value, 
     let browser_id = required_string_argument(arguments, "browserId")?;
     let episode_id = required_string_argument(arguments, "episodeId")?;
     let evidence_surface = required_string_argument(arguments, "evidenceSurface")?;
-    if evidence_surface != "stacking_or_occlusion" {
+    if !matches!(
+        evidence_surface,
+        "stacking_or_occlusion" | "passkey_chooser"
+    ) {
         return Err(JsonRpcError::invalid_params(
-            "desktop_evidence_observe evidenceSurface must be stacking_or_occlusion",
+            "desktop_evidence_observe evidenceSurface must be stacking_or_occlusion or passkey_chooser",
         ));
     }
     let service_name = required_string_argument(arguments, "serviceName")?;
@@ -6101,6 +6130,11 @@ fn desktop_evidence_observe_service_request(arguments: &Value) -> Result<Value, 
     }
     if let Some(value) = optional_positive_u64_argument(arguments, "jobTimeoutMs")? {
         request["jobTimeoutMs"] = json!(value);
+    }
+    for field in ["serviceTabHandle", "uiAction"] {
+        if let Some(value) = arguments.get(field) {
+            request[field] = value.clone();
+        }
     }
     Ok(request)
 }
@@ -13176,6 +13210,20 @@ mod tests {
         assert_eq!(request["action"], "desktop_evidence_observe");
         assert_eq!(request["episodeId"], "episode-1");
         assert_eq!(request["includeFrame"], true);
+
+        let passkey = desktop_evidence_observe_service_request(&json!({
+            "browserId": "browser-rdp-1",
+            "episodeId": "episode-2",
+            "evidenceSurface": "passkey_chooser",
+            "serviceTabHandle": {"browserId":"browser-rdp-1","tabId":"tab-1","targetId":"target-1","valid":true},
+            "uiAction": {"maxActions":1,"steps":[{"type":"click","selector":"#show-passkeys"}]},
+            "serviceName": "DesktopEvidence",
+            "agentName": "fixture-agent",
+            "taskName": "inspect-passkey"
+        }))
+        .unwrap();
+        assert_eq!(passkey["evidenceSurface"], "passkey_chooser");
+        assert_eq!(passkey["uiAction"]["steps"][0]["type"], "click");
 
         for invalid in [
             json!({"browserId":"browser-rdp-1","episodeId":"episode-1","evidenceSurface":"stacking_or_occlusion","serviceName":"DesktopEvidence","agentName":"fixture-agent"}),

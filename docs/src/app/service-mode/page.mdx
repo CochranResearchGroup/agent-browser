@@ -357,8 +357,8 @@ agent-browser desktop evidence observe \
 ```
 
 HTTP clients post `action: "desktop_evidence_observe"`, `browserId`,
-`episodeId`, `evidenceSurface: "stacking_or_occlusion"`, optional
-`includeFrame`, and `serviceName`, `agentName`, and `taskName`. MCP provides
+`episodeId`, a named `evidenceSurface`, optional `includeFrame`, and
+`serviceName`, `agentName`, and `taskName`. MCP provides
 both `service_request` and the dedicated `desktop_evidence_observe` tool.
 Generated clients expose `createServiceDesktopEvidenceObserveRequest()`,
 `requestServiceDesktopEvidenceObserve()`, and
@@ -369,7 +369,16 @@ handles, coordinates, CDP endpoints, or provider commands. An active human
 controller blocks visible staging. A passive viewer permits observation only
 when the exact scene is already capture-ready. The current configured
 `stacking_or_occlusion` path fails closed rather than focusing, raising,
-maximizing, or rearranging the desktop. `includeFrame` defaults to false; any
+maximizing, or rearranging the desktop.
+
+Development runtimes also expose `passkey_chooser`. It requires the exact
+`serviceTabHandle` and `uiAction: { maxActions: 1, steps: [{ type: "click",
+selector }] }`. The episode stages the isolated desktop before the click,
+observes the same page target through direct CDP without activating it,
+requires paired evidence that the chooser is absent from page content,
+captures the desktop, and restores the prior scene. Production rejects this
+trigger before presentation or native mutation and remains read-only pending
+Plan 0110. `includeFrame` defaults to false; any
 returned frame is response-only and is removed from durable jobs, streams,
 dashboard records, events, and incidents.
 

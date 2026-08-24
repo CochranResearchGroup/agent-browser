@@ -657,6 +657,8 @@ export function createServiceDesktopEvidenceObserveRequest(input) {
     sessionName,
     episodeId,
     evidenceSurface,
+    serviceTabHandle,
+    uiAction,
     includeFrame = false,
     serviceName,
     agentName,
@@ -682,11 +684,12 @@ export function createServiceDesktopEvidenceObserveRequest(input) {
   if (sessionName !== undefined && (typeof sessionName !== 'string' || sessionName.trim().length === 0)) {
     throw new TypeError('service desktop evidence observe request sessionName must be a non-empty string');
   }
-  if (evidenceSurface !== 'stacking_or_occlusion') {
+  if (!['stacking_or_occlusion', 'passkey_chooser'].includes(evidenceSurface)) {
     throw new TypeError(
-      'service desktop evidence observe request requires evidenceSurface stacking_or_occlusion',
+      'service desktop evidence observe request requires evidenceSurface stacking_or_occlusion or passkey_chooser',
     );
   }
+  validateDesktopEvidenceTrigger(evidenceSurface, serviceTabHandle, uiAction);
   if (typeof includeFrame !== 'boolean') {
     throw new TypeError('service desktop evidence observe request includeFrame must be a boolean');
   }
@@ -697,6 +700,8 @@ export function createServiceDesktopEvidenceObserveRequest(input) {
     ...(sessionName !== undefined ? { sessionName } : {}),
     episodeId,
     evidenceSurface,
+    ...(serviceTabHandle !== undefined ? { serviceTabHandle } : {}),
+    ...(uiAction !== undefined ? { uiAction } : {}),
     includeFrame,
     serviceName,
     agentName,
@@ -2567,6 +2572,8 @@ function validateDesktopEvidenceObserveRequest(request) {
     'episodeId',
     'evidenceSurface',
     'includeFrame',
+    'serviceTabHandle',
+    'uiAction',
     'serviceName',
     'agentName',
     'taskName',
@@ -2587,13 +2594,68 @@ function validateDesktopEvidenceObserveRequest(request) {
   ) {
     throw new TypeError('service desktop evidence observe request sessionName must be a non-empty string');
   }
-  if (request.evidenceSurface !== 'stacking_or_occlusion') {
+  if (
+    request.evidenceSurface !== 'stacking_or_occlusion' &&
+    request.evidenceSurface !== 'passkey_chooser'
+  ) {
     throw new TypeError(
-      'service desktop evidence observe request requires evidenceSurface stacking_or_occlusion',
+      'service desktop evidence observe request requires evidenceSurface stacking_or_occlusion or passkey_chooser',
     );
   }
+  validateDesktopEvidenceTrigger(
+    request.evidenceSurface,
+    request.serviceTabHandle,
+    request.uiAction,
+  );
   if (request.includeFrame !== undefined && typeof request.includeFrame !== 'boolean') {
     throw new TypeError('service desktop evidence observe request includeFrame must be a boolean');
+  }
+}
+
+/**
+ * @param {unknown} evidenceSurface
+ * @param {unknown} serviceTabHandle
+ * @param {unknown} uiAction
+ */
+function validateDesktopEvidenceTrigger(evidenceSurface, serviceTabHandle, uiAction) {
+  if (evidenceSurface === 'stacking_or_occlusion') {
+    if (serviceTabHandle !== undefined || uiAction !== undefined) {
+      throw new TypeError(
+        'service desktop evidence observe stacking_or_occlusion does not accept serviceTabHandle or uiAction',
+      );
+    }
+    return;
+  }
+  const handle = recordFromUnknown(serviceTabHandle);
+  if (handle === null) {
+    throw new TypeError('service desktop evidence observe requires serviceTabHandle');
+  }
+  const action = recordFromUnknown(uiAction);
+  if (action === null) {
+    throw new TypeError('service desktop evidence observe requires uiAction');
+  }
+  const actionFields = Object.keys(action);
+  if (actionFields.some((field) => !['maxActions', 'steps'].includes(field))) {
+    throw new TypeError('service desktop evidence observe uiAction accepts only maxActions and steps');
+  }
+  if (action.maxActions !== undefined && action.maxActions !== 1) {
+    throw new TypeError('service desktop evidence observe uiAction.maxActions must be 1');
+  }
+  if (!Array.isArray(action.steps) || action.steps.length !== 1) {
+    throw new TypeError('service desktop evidence observe uiAction requires exactly one step');
+  }
+  const step = recordFromUnknown(action.steps[0]);
+  if (
+    step === null ||
+    Object.keys(step).some((field) => !['type', 'selector'].includes(field)) ||
+    step.type !== 'click' ||
+    typeof step.selector !== 'string' ||
+    step.selector.trim().length === 0 ||
+    step.selector.length > 1024
+  ) {
+    throw new TypeError(
+      'service desktop evidence observe passkey_chooser requires one bounded selector click',
+    );
   }
 }
 
