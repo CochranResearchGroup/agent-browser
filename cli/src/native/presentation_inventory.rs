@@ -273,6 +273,7 @@ impl PresentationProviderInventory {
                 DisplayAllocation {
                     id: display_id.clone(),
                     display_name: Some(display_name),
+                    display_isolation: "private_virtual_display".to_string(),
                     state: "ready".to_string(),
                     route_ids: vec![route_id.clone()],
                     readiness: Some(json!({"state":"ready","source":"provider_inventory"})),
@@ -306,9 +307,11 @@ impl PresentationProviderInventory {
                     connection_name: provider_route.connection_name.clone(),
                     frame_url: provider_route.frame_url.clone(),
                     target: json!({
+                        "displayAllocationId": provider_route.display_reservation_id.clone(),
                         "displayName": state.display_allocations
                             .get(&provider_route.display_reservation_id)
                             .and_then(|display| display.display_name.clone()),
+                        "displayIsolation": "private_virtual_display",
                         "routeUser": provider_route.user,
                         "lifecycle": provider_route.lifecycle,
                     }),
@@ -590,6 +593,19 @@ mod tests {
         assert_eq!(state.display_allocations.len(), 1);
         assert_eq!(state.remote_view_routes.len(), 1);
         assert_eq!(state.route_pool.len(), 1);
+        let route_pool_entry = state.route_pool.get("development-slot-1").unwrap();
+        assert_eq!(
+            route_pool_entry.target["displayAllocationId"],
+            "development-display-1"
+        );
+        assert_eq!(
+            route_pool_entry.target["displayIsolation"],
+            "private_virtual_display"
+        );
+        assert_eq!(
+            state.display_allocations["development-display-1"].display_isolation,
+            "private_virtual_display"
+        );
         let capacity = state.presentation_capacity.as_ref().unwrap();
         assert_eq!(capacity.slots.len(), 1);
         assert_eq!(capacity.config.hard_maximum, 2);
