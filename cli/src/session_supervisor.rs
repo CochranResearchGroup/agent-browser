@@ -941,10 +941,13 @@ fn classify_status(
         if let Err(error) = systemd.as_ref() {
             issues.push(issue("supervisor_unavailable", error));
         } else {
-            let has_live_expectation = stream_reachable
-                || systemd.as_ref().is_ok_and(|unit| {
-                    unit.active_state == "active" || unit.main_pid.is_some_and(|pid| pid > 0)
-                });
+            // A matching published stream can remain reachable through the
+            // shared runtime host after this optional supervisor lane stops.
+            // Only the unit's own active state or PID makes a stopped result
+            // blocking; mismatched reachable ports were rejected above.
+            let has_live_expectation = systemd.as_ref().is_ok_and(|unit| {
+                unit.active_state == "active" || unit.main_pid.is_some_and(|pid| pid > 0)
+            });
             issues.push(issue_with_severity(
                 "supervisor_stopped",
                 if has_live_expectation {
@@ -1351,6 +1354,29 @@ mod tests {
         assert_eq!(quiescent.state, "stopped");
         assert_eq!(quiescent.issues[0]["code"], "supervisor_stopped");
         assert_eq!(quiescent.issues[0]["severity"], "warning");
+
+        let shared_stream = classify_status(
+            "messages-v4",
+            path,
+            Ok(manifest()),
+            Ok(SystemdUnitObservation {
+                load_state: "loaded".to_string(),
+                active_state: "inactive".to_string(),
+                sub_state: "dead".to_string(),
+                result: "success".to_string(),
+                restart_count: 0,
+                main_pid: None,
+            }),
+            Some(39716),
+            true,
+            true,
+        );
+        assert_eq!(shared_stream.state, "stopped");
+        assert_eq!(
+            shared_stream.published_stream_port,
+            shared_stream.stream_port
+        );
+        assert_eq!(shared_stream.issues[0]["severity"], "warning");
 
         let live_expected = classify_status(
             "messages-v4",
