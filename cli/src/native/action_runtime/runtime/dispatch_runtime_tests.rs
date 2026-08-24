@@ -504,6 +504,88 @@ fn transferred_owner_can_prepare_the_next_runtime_handoff() {
 }
 
 #[test]
+fn reversed_owner_accepts_only_its_exact_stale_prepare_retry() {
+    use crate::runtime_adoption::BrowserAdoptionMode;
+    use crate::runtime_owner_transfer::{
+        OwnerTransferProposal, OwnerTransferRequest, ProfileOwner, ProfileOwnerState,
+    };
+
+    let proposal = OwnerTransferProposal {
+        request: OwnerTransferRequest {
+            mode: BrowserAdoptionMode::CooperativeTransfer,
+            logical_browser_id: "session:browser-a".to_string(),
+            profile_identity_digest: "profile-a".to_string(),
+            expected_owner_id: Some("owner-a".to_string()),
+            expected_owner_generation: 1,
+            candidate_owner_id: "owner-b".to_string(),
+            candidate_daemon_session_route: "handoff-a".to_string(),
+            process_instance_digest: "process-a".to_string(),
+            browser_family: "chrome".to_string(),
+            cdp_endpoint_identity_digest: "cdp-a".to_string(),
+            target_set_digest: "targets-a".to_string(),
+            selected_target_identity_digest: "target-a".to_string(),
+            transfer_nonce_digest: "nonce-a".to_string(),
+        },
+        previous_owner_generation: 1,
+        candidate_owner_generation: 2,
+        candidate_effect_capable: false,
+    };
+    let owner = ProfileOwner {
+        owner_id: "owner-a".to_string(),
+        profile_identity_digest: "profile-a".to_string(),
+        state: ProfileOwnerState::Ready,
+        owner_generation: 3,
+        browser_id: "session:browser-a".to_string(),
+        daemon_session_route: "source-a".to_string(),
+        process_instance_digest: "process-a".to_string(),
+        browser_family: "chrome".to_string(),
+        cdp_endpoint_identity_digest: "cdp-a".to_string(),
+        target_set_digest: "targets-a".to_string(),
+        pending_transfer: None,
+        last_transition: None,
+    };
+
+    assert!(reversed_handoff_retry_matches_current_owner(
+        "source-a", &proposal, &owner
+    ));
+
+    let mut mismatched = owner;
+    mismatched.process_instance_digest = "process-b".to_string();
+    assert!(!reversed_handoff_retry_matches_current_owner(
+        "source-a",
+        &proposal,
+        &mismatched,
+    ));
+}
+
+#[test]
+fn managed_browser_refresh_rejects_a_terminal_binding_for_the_previous_process() {
+    use crate::runtime_owner_transfer::{OwnerAuthorityClaim, RuntimeOwnerBinding};
+
+    let binding = RuntimeOwnerBinding::effect_capable(OwnerAuthorityClaim {
+        owner_id: "owner-a".to_string(),
+        profile_identity_digest: "profile-a".to_string(),
+        owner_generation: 2,
+        logical_browser_id: "session:replacement".to_string(),
+        daemon_session_route: "replacement".to_string(),
+        process_instance_digest: "process-old".to_string(),
+    });
+
+    assert!(runtime_binding_matches_managed_browser(
+        &binding,
+        "session:replacement",
+        "profile-a",
+        "process-old",
+    ));
+    assert!(!runtime_binding_matches_managed_browser(
+        &binding,
+        "session:replacement",
+        "profile-a",
+        "process-new",
+    ));
+}
+
+#[test]
 fn transferred_owner_requires_effect_capable_exact_binding() {
     use crate::runtime_owner_transfer::{
         OwnerAuthorityClaim, ProfileOwner, ProfileOwnerState, RuntimeOwnerBinding,

@@ -143,7 +143,128 @@ Result:
 - P124 is `slice_d_source_accepted`;
 - Slice E elastic lifecycle and garbage collection is the next bounded
   source-only packet.
+## Turn 184 | 2026-08-23
 
+Scope: qualify and transactionally install the absent-closing lifecycle
+hotfix while preserving concurrent feature work.
+
+Actions:
+
+- repaired candidate-dashboard startup timing, exact reversed stale handoff
+  retries, old-daemon retry cleanup, and stale in-memory lifecycle bindings;
+- validated focused regressions, formatting, and strict Clippy, then built
+  candidate SHA-256
+  `a89625b870c3cda3cde9b41f27271ebe36d60683b1235c4196c4be337bb39ea6`;
+- accepted workstation transaction
+  `upgrade-7d9a2776-2c7e-458c-8e4c-eb2bbe989c46` using an authenticated
+  provider-free presentation receipt;
+- proved exact same-profile route-bound replacement at owner generation 3 and
+  closed the fixture through its current owner.
+
+Result:
+
+- production selects generation `0.28.0-a89625b870c3-1e2c09b12ebc` with all
+  workstation readiness axes true and rollback ready;
+- the replacement closed to `terminal/satisfied` with exact process-exit and
+  profile-lock evidence, leaving no browser or session record, Route B
+  available, and zero cleanup candidates;
+- the isolated development generation and unrelated feature-work checkout
+  remained unchanged;
+- the predecessor lifecycle packet is `CLOSED`. The next action is
+  protected-main review and integration,
+  not another workstation upgrade.
+
+## Turn 183 | 2026-08-23
+
+Scope: continue the unaffected lifecycle source and provider-free development-runtime
+work after the workstation upgrade gate closed.
+
+Actions:
+
+- repaired shutdown aggregation so a graceful browser exit followed by
+  successful auxiliary cleanup cannot be classified as a force-kill failure;
+- merged then-current `origin/main` and reconciled the plan-number collision
+  that existed in that branch history;
+- isolated unit tests from the operator's installed runtime-ingress registry
+  unless a test explicitly opts in, and aligned a stale dashboard test with
+  the deliberate removal of unknown-session fallback;
+- published the candidate only to the isolated development runtime as
+  generation `0.28.0-b1a74a64a0dc` with SHA-256
+  `b1a74a64a0dc0a80bb145a7334b741b7376c04b06829f77c72aa2ca955d9f22f`;
+- ran three disposable provider-free `about:blank` open, URL-read, and close
+  cycles without navigating to X, LinkedIn, or another provider.
+
+Validation:
+
+- canonical Rust CI passed: 1,412 parallel-safe tests, 57 ignored tests, all
+  isolated environment-mutating modules, and integration partitions passed;
+- strict Clippy, Rust formatting, diff hygiene, route-confusion gates, all
+  selected workstation and Guacamole fixtures, docs build, remote-view handoff
+  docs, and installed skill parity passed;
+- development doctor passed with all three units using the selected
+  development generation;
+- post-smoke development readback found zero sessions, zero active incidents,
+  and zero force-kill failure classifications;
+- the development publisher and smoke both reported the production generation
+  remained `0.28.0-4b975a51aa89-d0782705d5ff` with installed SHA-256
+  `4b975a51aa892241ea73cc6e8acef42bb67d781c8b9be43edbc1086f4d7956f8`.
+
+Result:
+
+- provider-free normal close and shutdown classification are accepted in the
+  isolated development runtime;
+- deterministic lifecycle coverage accepts exact next-generation
+  same-profile replacement;
+- production and authenticated provider profiles were not changed or opened;
+- the lifecycle packet remains `OPEN` only for harmless route-bound same-profile replacement
+  acceptance, which does not block unrelated Agent Browser work.
+
+## Turn 182 | 2026-08-23
+
+Scope: reconcile the preserved named-profile lifecycle and diagnose one bounded
+X and LinkedIn feed tick after the Agent Browser upgrade.
+
+Actions:
+
+- verified installed version `0.28.0`, selected generation
+  `0.28.0-4b975a51aa89-d0782705d5ff`, one dashboard, one runtime host, zero
+  legacy daemons, and no live browser for the selected profile;
+- implemented exact absent-process and absent-lock completion for matching
+  `closing/owned` lifecycle records, then repaired repository merge so the
+  completed transition persists;
+- reconciled the selected profile to `terminal/satisfied` without replacing,
+  reseeding, reauthenticating, launching, or killing its browser;
+- ran the one authorized X and LinkedIn tick and traced both pre-navigation
+  failures to terminal replacement rejecting the service's new logical browser
+  ID;
+- repaired terminal replacement so a collision-free next-generation owner may
+  move the lifecycle record to a new logical ID, while pending transfers,
+  duplicate profile records, and key collisions remain fail-closed;
+- recomputed package launch identity after generation advance and added
+  cross-logical-ID and collision regression tests.
+
+Validation:
+
+- all 12 `native::runtime_lifecycle::tests` pass;
+- all 50 `native::service_health::tests` pass;
+- strict Clippy, formatting, and diff hygiene pass;
+- the bounded tick `tick-7224876f30d729e41ff5435b387be4df`
+  launched and politely closed both browser processes, released both profile
+  locks, and rolled back route and display leases;
+- X job `r923698` and LinkedIn job `r841495` each observed zero posts because
+  `remote_view_open` failed before provider navigation.
+
+Result:
+
+- the authenticated profile is preserved and the stale lifecycle is
+  `terminal/satisfied`;
+- the newly exposed replacement defect is repaired and validated in source;
+- the lifecycle packet remains `OPEN` because provider-free normal-close and replacement
+  acceptance is incomplete;
+- the corrected production binary was not installed and no
+  provider retrieval has yet occurred;
+- no second tick was run, so this turn yields no X or LinkedIn authentication,
+  retrieval, acceptance, or filtering conclusion.
 ## Turn 177 | 2026-08-23
 
 Scope: diagnose, repair, and accept P126 before new feature development.

@@ -42,7 +42,10 @@ const INSTALL_SCHEMA_VERSION: &str = "agent-browser.workstation-install.v1";
 const DEFAULT_DASHBOARD_PORT: u16 = 4848;
 const DEFAULT_GUACAMOLE_PORT: u16 = 8092;
 const MIN_WORKSTATION_FREE_DISK_BYTES: u64 = 6 * 1024 * 1024 * 1024;
-const DASHBOARD_CANDIDATE_START_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+// The shadow dashboard synchronously bootstraps its candidate service lane before
+// binding. That bounded recovery may itself consume 20 seconds, so the installer
+// must leave additional time for process startup and runtime-manifest hashing.
+const DASHBOARD_CANDIDATE_START_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(45);
 const DASHBOARD_PRESENTATION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
 const DASHBOARD_CANDIDATE_POLL_INTERVAL: std::time::Duration =
     std::time::Duration::from_millis(250);
@@ -4932,9 +4935,62 @@ fn prepare_runtime_handoff_with_alias_fallback(
         &migration.logical_browser_id,
         primary_session,
         candidates,
-        |session| run_agent_json_detailed(old_binary, session, &["handoff", "prepare"]),
+        |session| {
+            clear_exact_reversed_source_handoff_retry(service_state, session).map_err(
+                |message| RuntimeTransactionCommandFailure {
+                    kind: RuntimeTransactionCommandFailureKind::CommandFailed,
+                    message,
+                },
+            )?;
+            run_agent_json_detailed(old_binary, session, &["handoff", "prepare"])
+        },
         retire_idle_daemon,
     )
+}
+
+fn clear_exact_reversed_source_handoff_retry(
+    service_state: &crate::native::service_model::ServiceState,
+    source_session: &str,
+) -> Result<bool, String> {
+    if !crate::validation::is_valid_session_name(source_session) {
+        return Err(crate::validation::session_name_error(source_session));
+    }
+    let path = crate::connection::get_socket_dir().join(format!("{source_session}.handoff.json"));
+    let descriptor_bytes = match fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => {
+            return Err(format!(
+                "runtime_handoff_prepare_retry_read_failed:{source_session}:{error}"
+            ));
+        }
+    };
+    let descriptor: crate::native::action_runtime::runtime::RuntimeHandoffDescriptor =
+        serde_json::from_slice(&descriptor_bytes).map_err(|error| {
+            format!("runtime_handoff_prepare_retry_invalid:{source_session}:{error}")
+        })?;
+    let Some(proposal) = descriptor.owner_transfer.as_ref() else {
+        return Ok(false);
+    };
+    let Some(current_owner) = service_state
+        .runtime_owner_registry
+        .owner(&proposal.request.profile_identity_digest)
+    else {
+        return Ok(false);
+    };
+    if current_owner.pending_transfer.as_ref() == Some(proposal)
+        || !crate::native::action_runtime::runtime::reversed_handoff_retry_matches_current_owner(
+            &descriptor.session_name,
+            proposal,
+            current_owner,
+        )
+    {
+        return Ok(false);
+    }
+    fs::remove_file(&path).map_err(|error| {
+        format!("runtime_handoff_prepare_stale_retry_cleanup_failed:{source_session}:{error}")
+    })?;
+    Ok(true)
 }
 
 fn prepare_runtime_handoff_candidates<Prepare, Retire>(
@@ -9400,6 +9456,11 @@ mod tests {
         assert!(parse_workstation_install_args(&conflicting)
             .unwrap_err()
             .contains("mutually exclusive"));
+    }
+
+    #[test]
+    fn candidate_dashboard_timeout_covers_service_lane_recovery() {
+        assert!(DASHBOARD_CANDIDATE_START_TIMEOUT >= std::time::Duration::from_secs(30));
     }
 
     #[test]

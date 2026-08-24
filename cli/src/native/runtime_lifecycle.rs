@@ -419,8 +419,6 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
             pending_transfer: None,
             last_transition: None,
         };
-        let package_launch_identity_digest =
-            package_launch_identity_digest(&owner, registration.process_group_id)?;
         if let Some(current) = existing {
             let lifecycle = self
                 .repository
@@ -439,11 +437,13 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
                     .owner_generation
                     .checked_add(1)
                     .ok_or_else(|| "runtime_lifecycle_generation_exhausted".to_string())?;
+                let replacement_package_launch_identity_digest =
+                    package_launch_identity_digest(&replacement, registration.process_group_id)?;
                 let activated =
                     match self.transition(RuntimeLifecycleIntent::ActivateTerminalReplacement {
                         owner: replacement,
                         process_group_id: registration.process_group_id,
-                        package_launch_identity_digest,
+                        package_launch_identity_digest: replacement_package_launch_identity_digest,
                     })? {
                         RuntimeLifecycleTransition::TerminalReplacementActivated(owner) => owner,
                         _ => {
@@ -481,6 +481,8 @@ impl<'a, R: ServiceStateRepository> RuntimeLifecycleAuthority<'a, R> {
                 OwnerAuthorityClaim::from_owner(&refreshed),
             ));
         }
+        let package_launch_identity_digest =
+            package_launch_identity_digest(&owner, registration.process_group_id)?;
         let registered = match self.transition(RuntimeLifecycleIntent::RegisterManagedLane {
             owner,
             process_group_id: registration.process_group_id,
@@ -605,11 +607,19 @@ fn apply_transition(
                 .cloned()
                 .ok_or_else(|| "runtime_lifecycle_replacement_record_missing".to_string())?;
             if owner.owner_generation != current.owner_generation.saturating_add(1)
-                || owner.browser_id != current.browser_id
+                || current.pending_transfer.is_some()
                 || lifecycle.profile_identity_digest != owner.profile_identity_digest
                 || lifecycle.owner_generation != current.owner_generation
                 || lifecycle.lifecycle_state != RuntimeLaneLifecycleState::Terminal
                 || lifecycle.cleanup_obligation_state != CleanupObligationState::Satisfied
+                || registry
+                    .lifecycle_records
+                    .iter()
+                    .any(|(logical_id, record)| {
+                        logical_id != &current.browser_id
+                            && (logical_id == &owner.browser_id
+                                || record.profile_identity_digest == owner.profile_identity_digest)
+                    })
             {
                 return Err("runtime_lifecycle_terminal_replacement_rejected".to_string());
             }
@@ -618,6 +628,10 @@ fn apply_transition(
                 .insert(owner.profile_identity_digest.clone(), owner.clone());
             registry.revision = registry.revision.saturating_add(1);
             let mut lifecycle = lifecycle;
+            if owner.browser_id != current.browser_id {
+                registry.lifecycle_records.remove(&current.browser_id);
+            }
+            lifecycle.logical_browser_id = owner.browser_id.clone();
             lifecycle.owner_generation = owner.owner_generation;
             lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Ready;
             lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
@@ -800,6 +814,34 @@ fn apply_transition(
             Ok(RuntimeLifecycleTransition::LaneUpdated(lifecycle))
         }
     }
+}
+
+/// Complete a closing lane inside an already locked Service State mutation.
+///
+/// Service reconciliation uses this seam only after independently proving
+/// that the recorded process group and profile lock are both absent. The
+/// lifecycle compare-and-swap remains authoritative for the exact logical
+/// browser, profile identity, and owner generation.
+pub(crate) fn complete_reconciled_close(
+    registry: &mut RuntimeOwnerRegistry,
+    logical_browser_id: String,
+    profile_identity_digest: String,
+    expected_owner_generation: u64,
+    terminal_evidence: Vec<String>,
+) -> Result<RuntimeLifecycleRecord, String> {
+    let transition = apply_transition(
+        registry,
+        RuntimeLifecycleIntent::CompleteClose {
+            logical_browser_id,
+            profile_identity_digest,
+            expected_owner_generation,
+            terminal_evidence,
+        },
+    )?;
+    let RuntimeLifecycleTransition::LaneUpdated(record) = transition else {
+        return Err("runtime_lifecycle_reconciled_close_outcome_mismatch".to_string());
+    };
+    Ok(record)
 }
 
 fn update_effect_owned_lane(
@@ -1267,6 +1309,8 @@ mod tests {
             .unwrap();
 
         let mut replacement = registration;
+        replacement.logical_browser_id = "session:new-replacement".to_string();
+        replacement.daemon_session_route = "new-replacement".to_string();
         replacement.process_identity.pid = 4201;
         replacement.process_identity.start_token = "linux:boot:4201".to_string();
         replacement.process_group_id = Some(4201);
@@ -1275,14 +1319,117 @@ mod tests {
         let replacement_binding = authority.register_managed_lane(replacement).unwrap();
 
         assert_eq!(replacement_binding.claim.owner_generation, 2);
+        assert_eq!(
+            replacement_binding.claim.logical_browser_id,
+            "session:new-replacement"
+        );
         let state = repository.load_snapshot().unwrap();
-        let lifecycle = &state.runtime_owner_registry.lifecycle_records["session:replacement"];
+        assert!(!state
+            .runtime_owner_registry
+            .lifecycle_records
+            .contains_key("session:replacement"));
+        let lifecycle = &state.runtime_owner_registry.lifecycle_records["session:new-replacement"];
+        assert_eq!(lifecycle.logical_browser_id, "session:new-replacement");
         assert_eq!(lifecycle.lifecycle_state, RuntimeLaneLifecycleState::Ready);
         assert_eq!(
             lifecycle.cleanup_obligation_state,
             CleanupObligationState::Owned
         );
         assert!(lifecycle.terminal_evidence.is_empty());
+        assert_eq!(
+            lifecycle.package_launch_identity_digest,
+            Some(
+                package_launch_identity_digest(
+                    state
+                        .runtime_owner_registry
+                        .owner(&replacement_binding.claim.profile_identity_digest)
+                        .unwrap(),
+                    Some(4201),
+                )
+                .unwrap()
+            )
+        );
+    }
+
+    #[test]
+    fn terminal_replacement_rejects_a_colliding_logical_browser_record() {
+        let repository = MemoryRepository::default();
+        let authority = RuntimeLifecycleAuthority::new(&repository);
+        let profile_root = std::env::temp_dir().join("agent-browser-lifecycle-collision");
+        let registration = ManagedLaneRegistration {
+            logical_browser_id: "session:old".to_string(),
+            profile_root,
+            daemon_session_route: "old".to_string(),
+            process_group_id: Some(4300),
+            process_identity: crate::process_identity::RecordedProcessIdentity {
+                pid: 4300,
+                start_token: "linux:boot:4300".to_string(),
+                executable_path: Some("/opt/agent-browser/chrome".to_string()),
+                browser_family: Some("chrome".to_string()),
+            },
+            browser_family: "chrome".to_string(),
+            cdp_endpoint: "ws://127.0.0.1:9560/devtools/browser/old".to_string(),
+            target_ids: vec!["target-old".to_string()],
+        };
+        let binding = authority
+            .register_managed_lane(registration.clone())
+            .unwrap();
+        authority
+            .transition(RuntimeLifecycleIntent::BeginClose {
+                claim: binding.claim.clone(),
+            })
+            .unwrap();
+        authority
+            .transition(RuntimeLifecycleIntent::CompleteClose {
+                logical_browser_id: binding.claim.logical_browser_id.clone(),
+                profile_identity_digest: binding.claim.profile_identity_digest.clone(),
+                expected_owner_generation: binding.claim.owner_generation,
+                terminal_evidence: vec!["profile_lock_released".to_string()],
+            })
+            .unwrap();
+        repository
+            .mutate(|state| {
+                state.runtime_owner_registry.lifecycle_records.insert(
+                    "session:occupied".to_string(),
+                    RuntimeLifecycleRecord {
+                        logical_browser_id: "session:occupied".to_string(),
+                        profile_identity_digest: digest("other-profile"),
+                        owner_generation: 9,
+                        lifecycle_state: RuntimeLaneLifecycleState::Ready,
+                        cleanup_obligation_state: CleanupObligationState::Owned,
+                        ..RuntimeLifecycleRecord::default()
+                    },
+                );
+                Ok(())
+            })
+            .unwrap();
+
+        let mut replacement = registration;
+        replacement.logical_browser_id = "session:occupied".to_string();
+        replacement.daemon_session_route = "occupied".to_string();
+        replacement.process_group_id = Some(4301);
+        replacement.process_identity.pid = 4301;
+        replacement.process_identity.start_token = "linux:boot:4301".to_string();
+        replacement.cdp_endpoint = "ws://127.0.0.1:9561/devtools/browser/new".to_string();
+        replacement.target_ids = vec!["target-new".to_string()];
+
+        assert_eq!(
+            authority.register_managed_lane(replacement).unwrap_err(),
+            "runtime_lifecycle_terminal_replacement_rejected"
+        );
+        let state = repository.load_snapshot().unwrap();
+        assert_eq!(
+            state
+                .runtime_owner_registry
+                .owner(&binding.claim.profile_identity_digest)
+                .unwrap()
+                .browser_id,
+            "session:old"
+        );
+        assert_eq!(
+            state.runtime_owner_registry.lifecycle_records["session:old"].lifecycle_state,
+            RuntimeLaneLifecycleState::Terminal
+        );
     }
 
     #[test]
