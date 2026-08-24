@@ -4,13 +4,15 @@ Date: 2026-08-23
 
 State: OPEN
 
-Execution state: `source_followup_accepted_install_pending`
+Execution state: `supervisor_followup_accepted_install_pending`
 
 Lane: P128
 
 Branch: `hotfix/runtime-lifecycle-collection`
 
 Follow-up branch: `hotfix/runtime-source-session-selection`
+
+Supervisor follow-up branch: `hotfix/supervisor-shared-stream-advisory`
 
 Target: `origin/main` at `88418a99b7eb76cb995421f89c5ece93dc8ccd19`
 
@@ -184,3 +186,11 @@ the exact browser-bearing primary was already selected. The bounded follow-up
 classifies that diagnostic only for `handoff prepare`, retires it only when it
 comes from a non-primary alternate after valid owner selection, and keeps the
 same result blocking for a primary route.
+
+The accepted runtime-source candidate was installed in transaction
+`upgrade-1d41d42e-e3bd-4325-ba6b-1df703f195cf`. The selected generation is
+`0.28.0-cf7527ab9003-9e38bacc997a`, and all seven workstation readiness axes
+are true. Post-install doctor exposed one remaining supervisor-classification
+edge: the historical inactive/dead lane has no PID, while its matching stream
+remains reachable through the healthy shared runtime host. That shared stream
+is not evidence that the stopped optional supervisor itself is active.
