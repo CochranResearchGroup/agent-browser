@@ -73,6 +73,8 @@ pnpm development-runtime:provider-plan
 pnpm development-runtime:provider-stage
 pnpm development-runtime:provider-preflight
 pnpm development-runtime:provider-apply -- --apply --defer-ingress
+pnpm development-runtime:provider-scale-out -- --apply
+pnpm development-runtime:provider-scale-in -- --apply
 pnpm development-runtime:gc
 pnpm development-runtime:skill-sync
 pnpm development-runtime:skill-status
@@ -97,6 +99,12 @@ artifacts, and pass preflight before using the explicit apply command above.
 Ingress publication remains deferred until the provider-ready checkpoint.
 Provider doctor success proves provider readiness; Service Status must also
 report non-null `presentationCapacity` before capacity acceptance begins.
+Elastic provider changes are explicit and one route per command. Scale-out
+admits a fifth or sixth slot only when current memory, swap, load, and file
+handle reserves permit it. Scale-in waits for cooldown and refuses any route
+with browser, session, viewer, controller, acquisition, handoff, restoration,
+or cleanup references. Ambiguous or partial effects are quarantined with an
+exact development cleanup obligation. They never authorize production cleanup.
 
 Cargo builds use resource-aware admission rather than a repository-wide
 full-lifetime lock. The default policy admits at most two four-job builds while

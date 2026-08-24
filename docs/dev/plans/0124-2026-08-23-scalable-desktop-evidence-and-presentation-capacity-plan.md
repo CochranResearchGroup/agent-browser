@@ -4,11 +4,11 @@ Date: 2026-08-23
 
 State: IN PROGRESS
 
-Execution state: `slice_g_development_installed_partial_provider_namespace_blocked`
+Execution state: `slice_g_elastic_adapter_source_accepted_helper_install_pending`
 
 Lane: P124
 
-Authority: SOURCE-ONLY | NO LIVE DESKTOP OR INSTALL EFFECTS
+Authority: DEVELOPMENT RUNTIME EFFECTS | PRODUCTION READ-ONLY
 
 Depends on:
 
@@ -377,6 +377,12 @@ are independently satisfied.
   pixels, or secret-bearing OCR text.
 
 ### Slice G | Controlled Installed Acceptance
+
+Status: IN PROGRESS. Capacity projection is accepted. The exact development
+elastic lifecycle adapter is source accepted in
+`docs/dev/notes/0124-9-2026-08-23-development-elastic-lifecycle-adapter-source-acceptance.md`.
+The reviewed root helper installation and repeated live scale cycle remain
+pending.
 
 After source acceptance and separate explicit live authority:
 

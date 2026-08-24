@@ -4,7 +4,7 @@ Date: 2026-08-23
 
 State: IN PROGRESS
 
-Execution state: `slice_c_capacity_projection_accepted_live_scale_cycle_pending`
+Execution state: `slice_c_elastic_adapter_source_accepted_helper_install_pending`
 
 Lane: P127
 
@@ -138,6 +138,12 @@ Status: ACCEPTED. See
   container, database, lease, browser, or handoff residue;
 - prove production before and after identity unchanged.
 
+Status: IN PROGRESS. The one-route pressure-admitted provision and exact
+reference-qualified reclaim adapters are source accepted in
+`docs/dev/notes/0124-9-2026-08-23-development-elastic-lifecycle-adapter-source-acceptance.md`.
+Installed helper replacement and the measured repeated live cycle remain
+pending.
+
 ## Validation
 
 The source packet runs:
@@ -161,7 +167,8 @@ non-interference. The first Slice C packet now projects the provider inventory
 into Service-owned display, route, pool, and capacity authority. Installed
 Service Status reports four warm slots, a six-slot hard maximum, one human
 reserve, one recovery reserve, and no binding warnings. This does not yet prove
-Plan 0124 live scale-out, desktop evidence, or scale-in GC.
+Plan 0124 live scale-out, desktop evidence, or scale-in GC. The lifecycle
+adapter source is now accepted, but no live scale cycle has been claimed.
 
 ## Hard Stops
 

@@ -812,6 +812,15 @@ Before provider mutation, run `pnpm development-runtime:provider-plan`,
 Cooper ingress after the provider-ready checkpoint. A green provider doctor is
 not capacity proof. Development Service Status must report non-null
 `presentationCapacity` before capacity acceptance.
+Elastic provider lifecycle is explicit and changes exactly one development
+route per command. Use
+`pnpm development-runtime:provider-scale-out -- --apply` only after the
+provider is ready; current resource pressure may defer it. Use
+`pnpm development-runtime:provider-scale-in -- --apply` only after cooldown.
+Scale-in checks exact browser, session, viewer, controller, acquisition,
+handoff, restoration, and cleanup references before terminating the exact
+route user. A deferred result is not browser failure. A quarantined result
+retains an exact cleanup obligation and must not trigger broad process cleanup.
 The stable `agent-browser-dev` command is an environment-owning launcher, not a
 plain binary alias. Direct commands therefore inherit the dev pseudo-home,
 socket, auth store, and runtime identity automatically.

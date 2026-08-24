@@ -62,6 +62,14 @@ Review and stage those effects with
 Publish Cooper ingress only after the provider-ready checkpoint. A green
 provider doctor is not capacity proof; development Service Status must also
 report a non-null <code>presentationCapacity</code> before capacity acceptance.
+Elastic changes require an explicit one-route command:
+<code>pnpm development-runtime:provider-scale-out -- --apply</code> or
+<code>pnpm development-runtime:provider-scale-in -- --apply</code>. Scale-out
+uses current memory, swap, load, and file-handle admission. Scale-in waits for
+cooldown and refuses a route with browser, session, viewer, controller,
+acquisition, handoff, restoration, or cleanup references. Ambiguous or partial
+effects are quarantined with an exact development cleanup obligation and never
+authorize production cleanup.
 Use <code>pnpm smoke:development-dashboard-auth -- --dashboard-url
 https://agent-browser-dev.ecochran.dyndns.org</code> to verify login, the
 session cookie, authenticated service API access, and the development manifest

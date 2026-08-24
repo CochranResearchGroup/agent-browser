@@ -139,6 +139,12 @@ This is a Rust codebase. The browser automation daemon lives in `cli/src/native/
 - Provider doctor success does not prove Service capacity projection. Require
   non-null `presentationCapacity` from development Service Status before
   running presentation-capacity acceptance.
+- Use `pnpm development-runtime:provider-scale-out -- --apply` and
+  `pnpm development-runtime:provider-scale-in -- --apply` for one-route elastic
+  lifecycle effects. Scale-out is pressure-admitted. Scale-in requires elapsed
+  cooldown and an exact reference-free route. A quarantined result is a failed
+  operation with a retained cleanup obligation, not permission for broad
+  process cleanup.
 
 ## RDP and Remote-View Handoffs
 
