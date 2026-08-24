@@ -14,6 +14,17 @@ export function scaleOutDevelopmentPresentation({
   const productionBefore = effects.snapshotProduction();
   const before = effects.observe(descriptor);
   const beforeRoutes = readyRoutes(descriptor, before);
+  const reclaimCapability = effects.reclaimCapability?.();
+  if (reclaimCapability?.ready !== true) {
+    return lifecycleDecision(descriptor, {
+      state: 'deferred',
+      reason: 'reclaim_capability_unavailable',
+      beforeSlots: beforeRoutes.length,
+      afterSlots: beforeRoutes.length,
+      reclaimCapability: reclaimCapability || { ready: false, reason: 'adapter_missing' },
+      productionUnchanged: true,
+    });
+  }
   const admission = effects.pressureAdmission(descriptor, before);
   const admittedMaximum = Number(admission?.admittedMaximum);
   if (!Number.isInteger(admittedMaximum) || admittedMaximum < descriptor.warmSlots) {
@@ -121,6 +132,18 @@ export function scaleInDevelopmentPresentation({
       beforeSlots: beforeRoutes.length,
       afterSlots: beforeRoutes.length,
       cooldown,
+      productionUnchanged: true,
+    });
+  }
+  const reclaimCapability = effects.reclaimCapability?.();
+  if (reclaimCapability?.ready !== true) {
+    return lifecycleDecision(descriptor, {
+      state: 'deferred',
+      reason: 'reclaim_capability_unavailable',
+      routeId: route.routeId,
+      beforeSlots: beforeRoutes.length,
+      afterSlots: beforeRoutes.length,
+      reclaimCapability: reclaimCapability || { ready: false, reason: 'adapter_missing' },
       productionUnchanged: true,
     });
   }

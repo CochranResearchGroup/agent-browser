@@ -376,8 +376,35 @@ export function createDevelopmentPresentationLifecycleSystemEffects(options = {}
   const helper = env.AGENT_BROWSER_PRIVILEGED_HELPER ||
     '/usr/local/libexec/agent-browser/agent-browser-privileged-helper';
   const operatorUser = env.AGENT_BROWSER_DEV_OPERATOR_USER || env.USER;
+  const reclaimCapability = () => {
+    const result = run(helper, ['status-json']);
+    if (result.error || result.status !== 0) {
+      return {
+        ready: false,
+        reason: `helper_status_unavailable:${commandError(result) || result.status}`,
+        helper,
+      };
+    }
+    let status;
+    try {
+      status = JSON.parse(result.stdout);
+    } catch {
+      return { ready: false, reason: 'helper_status_json_invalid', helper };
+    }
+    const termination = status.routeSessionTermination;
+    const ready = termination?.supported === true &&
+      termination?.exactRouteUser === true &&
+      termination?.idempotentWhenAbsent === true;
+    return {
+      ready,
+      reason: ready ? null : 'helper_contract_missing',
+      helper,
+      helperVersion: status.helperVersion || null,
+    };
+  };
   return {
     ...base,
+    reclaimCapability,
     pressureAdmission(descriptor) {
       const memoryAvailableBytes = meminfoBytes('MemAvailable');
       const swapFreeBytes = meminfoBytes('SwapFree');
@@ -480,6 +507,10 @@ export function createDevelopmentPresentationLifecycleSystemEffects(options = {}
       return exactRouteReferences(status?.data?.service_state || status?.data?.serviceState || {}, route);
     },
     reclaimRoute(route, descriptor) {
+      const capability = reclaimCapability();
+      if (capability.ready !== true) {
+        throw new Error(`Development reclaim capability is unavailable: ${capability.reason}`);
+      }
       const command = join(descriptor.userHome, '.local', 'bin', 'agent-browser-dev');
       const close = run(command, [
         '--json',

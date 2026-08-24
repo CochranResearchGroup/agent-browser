@@ -360,6 +360,7 @@ try {
     effects: {
       snapshotProduction: () => ({ identity: 'production-fixture' }),
       assertProductionUnchanged: (before, after) => assert.deepEqual(after, before),
+      reclaimCapability: () => ({ ready: true }),
       pressureAdmission: () => ({ admittedMaximum: 6, reasons: [] }),
       observe: () => scaleObservation,
       provisionRoute: (route) => {
@@ -381,6 +382,7 @@ try {
     effects: {
       snapshotProduction: () => ({ identity: 'production-fixture' }),
       assertProductionUnchanged: (before, after) => assert.deepEqual(after, before),
+      reclaimCapability: () => ({ ready: true }),
       pressureAdmission: () => ({ admittedMaximum: 6, reasons: [] }),
       observe: () => failedScaleObservation,
       provisionRoute: () => { failedScaleObservation = scaledObservation; },
@@ -399,6 +401,7 @@ try {
     env,
     effects: {
       snapshotProduction: () => ({ identity: 'production-fixture' }),
+      reclaimCapability: () => ({ ready: true }),
       pressureAdmission: () => ({ admittedMaximum: 4, reasons: ['memory_reserve'] }),
       observe: () => readyObservation,
       provisionRoute: () => { pressureProvisioned = true; },
@@ -408,6 +411,21 @@ try {
   assert.equal(pressureDeferred.reason, 'pressure_admission');
   assert.equal(pressureProvisioned, false);
 
+  let unsafeProvisioned = false;
+  const reclaimCapabilityDeferred = scaleOutDevelopmentPresentation({
+    env,
+    effects: {
+      snapshotProduction: () => ({ identity: 'production-fixture' }),
+      reclaimCapability: () => ({ ready: false, reason: 'helper_contract_missing' }),
+      pressureAdmission: () => ({ admittedMaximum: 6, reasons: [] }),
+      observe: () => readyObservation,
+      provisionRoute: () => { unsafeProvisioned = true; },
+    },
+  });
+  assert.equal(reclaimCapabilityDeferred.state, 'deferred');
+  assert.equal(reclaimCapabilityDeferred.reason, 'reclaim_capability_unavailable');
+  assert.equal(unsafeProvisioned, false);
+
   const reclaimCalls = [];
   let reclaimObservation = scaledObservation;
   const reclaimed = scaleInDevelopmentPresentation({
@@ -415,6 +433,7 @@ try {
     effects: {
       snapshotProduction: () => ({ identity: 'production-fixture' }),
       assertProductionUnchanged: (before, after) => assert.deepEqual(after, before),
+      reclaimCapability: () => ({ ready: true }),
       observe: () => reclaimObservation,
       referenceCheck: (route) => ({
         routeId: route.routeId,
@@ -438,6 +457,7 @@ try {
     env,
     effects: {
       snapshotProduction: () => ({ identity: 'production-fixture' }),
+      reclaimCapability: () => ({ ready: true }),
       observe: () => scaledObservation,
       referenceCheck: (route) => ({
         routeId: route.routeId,
@@ -455,6 +475,7 @@ try {
     env,
     effects: {
       snapshotProduction: () => ({ identity: 'production-fixture' }),
+      reclaimCapability: () => ({ ready: true }),
       observe: () => scaledObservation,
       referenceCheck: (route) => ({
         routeId: route.routeId,
@@ -485,6 +506,7 @@ try {
     effects: {
       snapshotProduction: () => ({ identity: 'production-fixture' }),
       assertProductionUnchanged: (before, after) => assert.deepEqual(after, before),
+      reclaimCapability: () => ({ ready: true }),
       observe: () => scaledObservation,
       referenceCheck: (route) => ({ routeId: route.routeId, blockers: [], ambiguities: [] }),
       reclaimRoute: () => { throw new Error('fixture termination failure'); },
@@ -531,6 +553,13 @@ try {
     productionSnapshot: () => ({ identity: 'production-fixture' }),
     assertProductionUnchanged: () => {},
     run(command, args) {
+      if (command.endsWith('/agent-browser-privileged-helper') && args[0] === 'status-json') {
+        return {
+          status: 0,
+          stdout: JSON.stringify({ helperVersion: 'fixture-v4' }),
+          stderr: '',
+        };
+      }
       if (command.endsWith('/agent-browser-dev') && args.at(-2) === 'service') {
         return {
           status: 0,
@@ -540,6 +569,12 @@ try {
       }
       throw new Error(`Unexpected reference command: ${command} ${args.join(' ')}`);
     },
+  });
+  assert.deepEqual(referenceEffects.reclaimCapability(), {
+    ready: false,
+    reason: 'helper_contract_missing',
+    helper: '/usr/local/libexec/agent-browser/agent-browser-privileged-helper',
+    helperVersion: 'fixture-v4',
   });
   assert.deepEqual(referenceEffects.referenceCheck(referencedRoute, descriptor), {
     routeId: referencedRoute.routeId,
