@@ -576,6 +576,45 @@ try {
   assert.match(reclaimFailed.error, /fixture termination failure/);
 
   const referencedRoute = descriptor.routes[4];
+  let convergingProcessChecks = 0;
+  const convergingReclaimEffects = createDevelopmentPresentationLifecycleSystemEffects({
+    env,
+    reclaimTimeoutMs: 20,
+    reclaimPollMs: 1,
+    productionSnapshot: () => ({ identity: 'production-fixture' }),
+    assertProductionUnchanged: () => {},
+    run(command, args) {
+      if (command.endsWith('/agent-browser-privileged-helper') && args[0] === 'status-json') {
+        return {
+          status: 0,
+          stdout: JSON.stringify({
+            helperVersion: 'fixture-v5',
+            routeSessionTermination: {
+              supported: true,
+              exactRouteUser: true,
+              idempotentWhenAbsent: true,
+            },
+          }),
+          stderr: '',
+        };
+      }
+      if (command.endsWith('/agent-browser-dev') && args.at(-1) === 'close') {
+        return { status: 0, stdout: '{"success":true}', stderr: '' };
+      }
+      if (command === 'sudo') {
+        return { status: 1, stdout: '', stderr: 'route user processes remain after termination' };
+      }
+      if (command === 'ps') {
+        convergingProcessChecks += 1;
+        return convergingProcessChecks === 1
+          ? { status: 0, stdout: '4242 Xorg :16\n', stderr: '' }
+          : { status: 1, stdout: '', stderr: '' };
+      }
+      throw new Error(`Unexpected converging reclaim command: ${command} ${args.join(' ')}`);
+    },
+  });
+  assert.doesNotThrow(() => convergingReclaimEffects.reclaimRoute(referencedRoute, descriptor));
+  assert.equal(convergingProcessChecks, 2);
   const serviceState = {
     remoteViewRoutes: {
       [referencedRoute.routeId]: {

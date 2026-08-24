@@ -376,6 +376,9 @@ export function createDevelopmentPresentationLifecycleSystemEffects(options = {}
   const helper = env.AGENT_BROWSER_PRIVILEGED_HELPER ||
     '/usr/local/libexec/agent-browser/agent-browser-privileged-helper';
   const operatorUser = env.AGENT_BROWSER_DEV_OPERATOR_USER || env.USER;
+  const reclaimTimeoutMs = Number(options.reclaimTimeoutMs ??
+    env.AGENT_BROWSER_DEV_PRESENTATION_RECLAIM_TIMEOUT_MS ?? 5000);
+  const reclaimPollMs = Number(options.reclaimPollMs ?? 100);
   const reclaimCapability = () => {
     const result = run(helper, ['status-json']);
     if (result.error || result.status !== 0) {
@@ -529,11 +532,18 @@ export function createDevelopmentPresentationLifecycleSystemEffects(options = {}
       if (close.error || (close.status !== 0 && !/not found|no browser|not running/i.test(`${close.stdout}${close.stderr}`))) {
         throw new Error(`close ${route.viewerSession} failed: ${commandError(close) || close.status}`);
       }
-      runRequired(run, 'sudo', [
+      const termination = run('sudo', [
         '-n', helper, 'terminate-rdp-route-session', '--user', route.user,
-      ], {}, `terminate ${route.routeId}`);
-      const processes = run('ps', ['-u', route.user, '-o', 'pid=,args=']);
-      if (processes.status === 0 && processes.stdout.trim()) {
+      ]);
+      try {
+        waitFor(run, () => {
+          const processes = run('ps', ['-u', route.user, '-o', 'pid=,args=']);
+          return processes.status !== 0 || !processes.stdout.trim();
+        }, reclaimTimeoutMs, `reclaim ${route.routeId}`, reclaimPollMs);
+      } catch {
+        if (termination.error || termination.status !== 0) {
+          throw new Error(`terminate ${route.routeId} failed: ${commandError(termination) || termination.status}`);
+        }
         throw new Error(`Development route processes remain after reclaim: ${route.routeId}`);
       }
     },
@@ -646,11 +656,11 @@ function containerHealth(run, name) {
   return result.status === 0 ? result.stdout.trim() : null;
 }
 
-function waitFor(run, predicate, timeoutMs, label) {
+function waitFor(run, predicate, timeoutMs, label, pollMs = 1000) {
   const deadline = Date.now() + timeoutMs;
   do {
     if (predicate()) return;
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1000);
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, pollMs);
   } while (Date.now() < deadline);
   throw new Error(`${label} timed out`);
 }
