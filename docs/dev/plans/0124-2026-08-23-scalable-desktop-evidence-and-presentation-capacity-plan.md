@@ -384,8 +384,9 @@ their fresh convergence census are recorded in
 `docs/dev/notes/0124-10-2026-08-23-development-elastic-lifecycle-live-acceptance.md`.
 The configured observation-only Desktop Evidence Episode now has a fallible,
 durable presentation-capacity adapter. Admission refusal stops before scene or
-trigger work, release failure is terminal, and one-shot unavailable requests
-do not leave unresumable queue entries. Source evidence is recorded in
+trigger work, release failure is terminal, scene and capture-ready probe loss
+is fail-closed, and one-shot unavailable requests do not leave unresumable
+queue entries. Source evidence is recorded in
 `docs/dev/notes/0124-11-2026-08-23-configured-capacity-adapter-source-acceptance.md`.
 The remaining installed boundary is the configured scene, capture, paired CDP,
 handoff, and cleanup composition plus its human, viewer, CDP, and retained

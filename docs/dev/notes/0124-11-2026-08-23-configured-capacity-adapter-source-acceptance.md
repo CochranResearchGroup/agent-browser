@@ -13,6 +13,12 @@ paired evidence, or external trigger work. A release that cannot be durably
 committed returns a terminal `release_failed` receipt and still runs episode
 cleanup.
 
+Scene-admission and capture-readiness providers are now fallible as well. A
+missing scene observation stops before capacity reservation. Losing the
+capture-ready probe after reservation produces a terminal adapter-failure
+receipt, releases the exact slot, and runs cleanup. Provider unavailability can
+therefore no longer be interpreted as capture readiness.
+
 `ConfiguredPresentationSlotAdapter` binds one episode request to the durable
 Service State presentation authority. It commits the exact granted slot and
 browser identity, releases that same slot through the authority, and refuses
@@ -22,7 +28,7 @@ no configured resume caller exists.
 
 ## Validation
 
-- `native::desktop_evidence::tests`: 17 passed
+- `native::desktop_evidence::tests`: 19 passed
 - `native::desktop_evidence_configured::tests`: 2 passed
 - Rust formatting passed
 
