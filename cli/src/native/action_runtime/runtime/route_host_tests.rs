@@ -194,6 +194,24 @@ fn apply_launch_host_hints_allows_private_remote_headed_display() {
     assert_eq!(options.display, None);
 }
 #[test]
+fn apply_launch_host_hints_preserves_reserved_route_private_display() {
+    let command = json!(
+        { "action" : "launch", "browserHost" : "remote_headed",
+        "displayIsolation" : "private_virtual_display", "remoteHeadedDisplay" : ":94",
+        "routeId" : "route-94", "displayAllocationId" : "display-94" }
+    );
+    let mut options = LaunchOptions::default();
+    let host = apply_launch_host_hints(&mut options, &command);
+    assert_eq!(host, ServiceBrowserHost::RemoteHeaded);
+    assert!(!options.headless);
+    assert!(options.remote_headed);
+    assert_eq!(
+        options.remote_headed_display_isolation.as_deref(),
+        Some("private_virtual_display")
+    );
+    assert_eq!(options.display.as_deref(), Some(":94"));
+}
+#[test]
 fn manual_login_launch_accepts_params_only_for_headed_launches() {
     let command = json!({ "params" : { "manualLoginLaunch" : true } });
     assert!(manual_login_launch_from_command(&command, false).unwrap());

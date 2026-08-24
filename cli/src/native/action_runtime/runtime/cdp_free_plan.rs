@@ -315,6 +315,14 @@ pub(crate) fn apply_launch_host_hints(
     if host == ServiceBrowserHost::RemoteHeaded {
         options.remote_headed = true;
         let explicit_remote_display = remote_headed_display_from_command_only(command);
+        // A route-bound open reserves an existing provider display before it
+        // launches Chrome. The route and allocation identities are the
+        // authority that distinguishes that private display from an arbitrary
+        // caller-supplied DISPLAY value. Ordinary private launches still
+        // allocate a fresh Xvfb display below.
+        let reserved_route_display = explicit_remote_display.is_some()
+            && optional_command_string(command, "routeId").is_some()
+            && optional_command_string(command, "displayAllocationId").is_some();
         if let Some(display_isolation) = remote_headed_display_isolation_from_command(command) {
             options.remote_headed_display_isolation = Some(display_isolation);
         } else if options.remote_headed_display_isolation.is_none()
@@ -325,6 +333,7 @@ pub(crate) fn apply_launch_host_hints(
             options.remote_headed_display_isolation = Some("private_virtual_display".to_string());
         }
         options.display = match options.remote_headed_display_isolation.as_deref() {
+            Some("private_virtual_display") if reserved_route_display => explicit_remote_display,
             Some("private_virtual_display") | Some("ambient_display") => None,
             _ => remote_headed_display_from_command(command).or_else(|| options.display.clone()),
         };
