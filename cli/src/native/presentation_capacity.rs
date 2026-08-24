@@ -974,6 +974,14 @@ fn slot_admission_conflict(
         route_id == handoff.last_route_id.as_deref()
             && matches!(handoff.state.as_str(), "ready" | "resolving" | "active")
             && handoff.browser_id.as_deref() != request.browser_id.as_deref()
+            && handoff.browser_id.as_deref().is_some_and(|browser_id| {
+                state.browsers.get(browser_id).is_some_and(|browser| {
+                    browser
+                        .view_streams
+                        .iter()
+                        .any(|stream| stream.route_id.as_deref() == route_id)
+                })
+            })
             && request.priority != PresentationPriority::Recovery
     }) {
         return Some(CapacityLimitingResource::DurableHandoff);
@@ -1025,6 +1033,7 @@ fn limiting_resource_name(resource: CapacityLimitingResource) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::native::service_model::{BrowserProcess, RemoteViewHandoff, ViewStream};
 
     #[test]
     fn projection_preserves_zero_one_two_four_six_and_eight_slots() {
@@ -1050,6 +1059,43 @@ mod tests {
             assert_eq!(projection.configured_hard_maximum, count);
             assert_eq!(projection.pressure_admitted_maximum, count);
         }
+    }
+
+    #[test]
+    fn stale_durable_handoff_history_does_not_occupy_a_route() {
+        let slot = PresentationSlot::warm_idle("slot-1").with_binding("route-1", "display-1");
+        let request = PresentationRequest::observation("request-1").for_browser("browser-current");
+        let mut state = ServiceState {
+            remote_view_handoffs: BTreeMap::from([(
+                "handoff-old".to_string(),
+                RemoteViewHandoff {
+                    id: "handoff-old".to_string(),
+                    state: "ready".to_string(),
+                    browser_id: Some("browser-old".to_string()),
+                    last_route_id: Some("route-1".to_string()),
+                    ..RemoteViewHandoff::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        assert_eq!(slot_admission_conflict(&state, &slot, &request), None);
+
+        state.browsers.insert(
+            "browser-old".to_string(),
+            BrowserProcess {
+                id: "browser-old".to_string(),
+                view_streams: vec![ViewStream {
+                    route_id: Some("route-1".to_string()),
+                    ..ViewStream::default()
+                }],
+                ..BrowserProcess::default()
+            },
+        );
+        assert_eq!(
+            slot_admission_conflict(&state, &slot, &request),
+            Some(CapacityLimitingResource::DurableHandoff)
+        );
     }
 
     #[test]
