@@ -309,6 +309,9 @@ pub(crate) enum DesktopEpisodeOutcome {
     AdmissionUnavailable {
         failure: DesktopEpisodeAdmissionFailure,
     },
+    AdapterUnavailable {
+        failure: DesktopEpisodeAdapterFailure,
+    },
     ReleaseFailed {
         receipt: DesktopEvidenceReleaseFailureReceipt,
     },
@@ -333,11 +336,34 @@ impl DesktopEpisodeAdmissionFailure {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DesktopEpisodeAdapterFailure {
+    pub(crate) phase: &'static str,
+    pub(crate) code: String,
+    pub(crate) detail: String,
+}
+
+impl DesktopEpisodeAdapterFailure {
+    pub(crate) fn new(
+        phase: &'static str,
+        code: impl Into<String>,
+        detail: impl Into<String>,
+    ) -> Self {
+        Self {
+            phase,
+            code: code.into(),
+            detail: detail.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum DesktopEpisodeFailure {
     CaptureReadiness(CaptureReadinessFailure),
     CaptureBindingDrift,
+    Adapter(DesktopEpisodeAdapterFailure),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -378,8 +404,11 @@ pub(crate) trait WindowSemanticAdapter {
         &mut self,
         browser_id: &str,
         requires_staging: bool,
-    ) -> SceneAdmissionRequest;
-    fn capture_ready(&mut self, browser_id: &str) -> CaptureReadyEvidence;
+    ) -> Result<SceneAdmissionRequest, DesktopEpisodeAdapterFailure>;
+    fn capture_ready(
+        &mut self,
+        browser_id: &str,
+    ) -> Result<CaptureReadyEvidence, DesktopEpisodeAdapterFailure>;
 }
 
 pub(crate) trait ExternalUiTriggerAdapter {
@@ -494,11 +523,14 @@ impl DesktopEvidenceCoordinator {
                 adapters,
             );
         }
-        match Self::admit_scene(
-            adapters
-                .windows
-                .scene_admission(&request.browser_id, decision.stage_before_trigger),
-        ) {
+        let scene_admission = match adapters
+            .windows
+            .scene_admission(&request.browser_id, decision.stage_before_trigger)
+        {
+            Ok(admission) => admission,
+            Err(failure) => return DesktopEpisodeOutcome::AdapterUnavailable { failure },
+        };
+        match Self::admit_scene(scene_admission) {
             SceneAdmission::WaitForHumanController => {
                 return Self::human_continuation(
                     &request.browser_id,
@@ -532,8 +564,21 @@ impl DesktopEvidenceCoordinator {
             .confirm_browser_external_absent(&request.browser_id);
         let trigger_receipt_id = adapters.trigger.trigger(&request.browser_id);
 
-        let capture_proof =
-            match Self::prove_capture_ready(adapters.windows.capture_ready(&request.browser_id)) {
+        let capture_proof = match adapters.windows.capture_ready(&request.browser_id) {
+            Err(failure) => {
+                return Self::abort_after_reservation(
+                    &request,
+                    decision,
+                    admission_receipt_id,
+                    before_scene_generation,
+                    stage_receipt_id,
+                    DesktopEpisodeFailure::Adapter(failure),
+                    &restoration_authority,
+                    true,
+                    adapters,
+                );
+            }
+            Ok(evidence) => match Self::prove_capture_ready(evidence) {
                 Ok(proof) => proof,
                 Err(failure) => {
                     return Self::abort_after_reservation(
@@ -548,7 +593,8 @@ impl DesktopEvidenceCoordinator {
                         adapters,
                     );
                 }
-            };
+            },
+        };
         let capture_receipt_id = adapters.frames.capture(&request.browser_id, &capture_proof);
         let input_receipt_id = match &request.input {
             EpisodeInput::None => None,
@@ -563,8 +609,21 @@ impl DesktopEvidenceCoordinator {
         };
         let (verification_receipt_id, after_scene_generation) =
             adapters.verification.verify(&request.browser_id);
-        let after_capture_proof =
-            match Self::prove_capture_ready(adapters.windows.capture_ready(&request.browser_id)) {
+        let after_capture_proof = match adapters.windows.capture_ready(&request.browser_id) {
+            Err(failure) => {
+                return Self::abort_after_reservation(
+                    &request,
+                    decision,
+                    admission_receipt_id,
+                    before_scene_generation,
+                    stage_receipt_id,
+                    DesktopEpisodeFailure::Adapter(failure),
+                    &restoration_authority,
+                    false,
+                    adapters,
+                );
+            }
+            Ok(evidence) => match Self::prove_capture_ready(evidence) {
                 Ok(proof) if Self::same_capture_binding(&capture_proof, &proof) => proof,
                 Ok(_) => {
                     return Self::abort_after_reservation(
@@ -592,7 +651,8 @@ impl DesktopEvidenceCoordinator {
                         adapters,
                     );
                 }
-            };
+            },
+        };
         let current_authority = adapters.staging.current_authority(&request.browser_id);
         let restoration_decision =
             Self::authorize_restoration(&restoration_authority, &current_authority);
@@ -890,19 +950,30 @@ mod tests {
         log: Log,
         evidence: VecDeque<CaptureReadyEvidence>,
         admission: SceneAdmissionRequest,
+        scene_failure: Option<DesktopEpisodeAdapterFailure>,
+        capture_failure: Option<DesktopEpisodeAdapterFailure>,
     }
     impl WindowSemanticAdapter for FakeWindows {
         fn scene_admission(
             &mut self,
             _browser_id: &str,
             _requires_staging: bool,
-        ) -> SceneAdmissionRequest {
+        ) -> Result<SceneAdmissionRequest, DesktopEpisodeAdapterFailure> {
             self.log.borrow_mut().push("scene_admission");
-            self.admission
+            if let Some(failure) = self.scene_failure.clone() {
+                return Err(failure);
+            }
+            Ok(self.admission)
         }
-        fn capture_ready(&mut self, _browser_id: &str) -> CaptureReadyEvidence {
+        fn capture_ready(
+            &mut self,
+            _browser_id: &str,
+        ) -> Result<CaptureReadyEvidence, DesktopEpisodeAdapterFailure> {
             self.log.borrow_mut().push("capture_ready");
-            self.evidence.pop_front().unwrap()
+            if let Some(failure) = self.capture_failure.clone() {
+                return Err(failure);
+            }
+            Ok(self.evidence.pop_front().unwrap())
         }
     }
 
@@ -998,6 +1069,8 @@ mod tests {
                         capture_ready: false,
                         explicit_takeover: false,
                     },
+                    scene_failure: None,
+                    capture_failure: None,
                     evidence: VecDeque::from([
                         CaptureReadyEvidence::complete("scene-staged", "geometry-1"),
                         CaptureReadyEvidence::complete("scene-staged", "geometry-1"),
@@ -1202,6 +1275,57 @@ mod tests {
             }
         );
         assert_eq!(*harness.log.borrow(), vec!["scene_admission", "reserve"]);
+    }
+
+    #[test]
+    fn unavailable_scene_probe_stops_before_capacity_reservation() {
+        let mut harness = Harness::new();
+        harness.windows.scene_failure = Some(DesktopEpisodeAdapterFailure::new(
+            "scene_admission",
+            "desktop_scene_probe_unavailable",
+            "the configured window provider returned no current observation",
+        ));
+
+        let outcome = harness.run(
+            EvidenceRequest::browser_external(BrowserExternalSurface::PasskeyChooser, true),
+            EpisodeInput::None,
+        );
+
+        assert!(matches!(
+            outcome,
+            DesktopEpisodeOutcome::AdapterUnavailable {
+                failure: DesktopEpisodeAdapterFailure {
+                    code,
+                    ..
+                }
+            } if code == "desktop_scene_probe_unavailable"
+        ));
+        assert_eq!(*harness.log.borrow(), vec!["scene_admission"]);
+    }
+
+    #[test]
+    fn unavailable_capture_probe_releases_capacity_and_cleans_up() {
+        let mut harness = Harness::new();
+        harness.windows.capture_failure = Some(DesktopEpisodeAdapterFailure::new(
+            "capture_ready",
+            "desktop_capture_ready_probe_unavailable",
+            "the configured window provider returned no current capture proof",
+        ));
+
+        let outcome = harness.run(
+            EvidenceRequest::browser_external(BrowserExternalSurface::PasskeyChooser, true),
+            EpisodeInput::None,
+        );
+
+        let DesktopEpisodeOutcome::Aborted { receipt } = outcome else {
+            panic!("expected a terminal adapter failure receipt");
+        };
+        assert!(matches!(
+            receipt.failure,
+            DesktopEpisodeFailure::Adapter(DesktopEpisodeAdapterFailure { code, .. })
+                if code == "desktop_capture_ready_probe_unavailable"
+        ));
+        assert!(harness.log.borrow().ends_with(&["release", "cleanup"]));
     }
 
     #[test]
