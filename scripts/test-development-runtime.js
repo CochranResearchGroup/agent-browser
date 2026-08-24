@@ -52,6 +52,11 @@ try {
     assert.match(source, /AGENT_BROWSER_RUNTIME_HOST=1/);
     assert.match(source, /AGENT_BROWSER_SOCKET_DIR=/);
     assert.match(source, new RegExp(`AGENT_BROWSER_EXECUTABLE_PATH=${fakeBrowser}`));
+    assert.match(source, /AGENT_BROWSER_PRESENTATION_PROVIDER_INVENTORY_PATH=/);
+    assert.match(source, /AGENT_BROWSER_PRESENTATION_WARM_MINIMUM=4/);
+    assert.match(source, /AGENT_BROWSER_PRESENTATION_HARD_MAXIMUM=6/);
+    assert.match(source, /AGENT_BROWSER_PRESENTATION_HUMAN_RESERVE=1/);
+    assert.match(source, /AGENT_BROWSER_PRESENTATION_RECOVERY_RESERVE=1/);
     assert.doesNotMatch(source, /\.local\/bin\/agent-browser\n/);
   }
   assert.match(units['agent-browser-dev-dashboard.service'], /AGENT_BROWSER_DASHBOARD_PORT=4948/);

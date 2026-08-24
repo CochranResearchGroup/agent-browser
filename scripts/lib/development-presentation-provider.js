@@ -36,18 +36,28 @@ export function developmentPresentationProviderDescriptor(env = process.env) {
   if (hardMaxSlots < warmSlots) {
     throw new Error('Development presentation hard maximum must be at least the warm slot count');
   }
-  const displayBase = positiveInteger(env.AGENT_BROWSER_DEV_DISPLAY_BASE, 120);
-  const rdpPortBase = positiveInteger(env.AGENT_BROWSER_DEV_RDP_PORT_BASE, 3490);
   const routes = Array.from({ length: hardMaxSlots }, (_, index) => {
     const ordinal = index + 1;
+    const viewerProfile = `development-presentation-provider-v5-${ordinal}`;
     return {
       ordinal,
       routeId: `development-route-${ordinal}`,
       slotId: `development-slot-${ordinal}`,
-      user: `agent-browser-dev-route-${ordinal}`,
-      connectionId: `agent-browser-dev-connection-${ordinal}`,
-      display: `:${displayBase + index}`,
-      rdpPort: rdpPortBase + index,
+      user: `agent-browser-rdp-dev-${ordinal}`,
+      connectionKey: `agent-browser-dev-connection-${ordinal}`,
+      connectionId: null,
+      connectionName: `Agent Browser Dev RDP Route ${ordinal}`,
+      displayReservationId: `development-display-${ordinal}`,
+      displayName: null,
+      viewerSession: `development-presentation-provider-v5-${ordinal}`,
+      viewerProfile,
+      viewerProfilePath: join(
+        pseudoHome,
+        '.agent-browser',
+        'runtime-profiles',
+        viewerProfile,
+        'user-data',
+      ),
       lifecycle: ordinal <= warmSlots ? 'warm' : 'elastic',
     };
   });
@@ -77,6 +87,13 @@ export function developmentPresentationProviderDescriptor(env = process.env) {
       guacd: port(env.AGENT_BROWSER_DEV_GUACD_PORT, 4823),
       postgres: port(env.AGENT_BROWSER_DEV_POSTGRES_PORT, 55433),
     },
+    rdpTarget: {
+      host: env.AGENT_BROWSER_DEV_RDP_TARGET_HOST || 'host.docker.internal',
+      port: port(env.AGENT_BROWSER_DEV_RDP_TARGET_PORT, 3389),
+      isolation: 'route_user',
+      sharedDaemon: true,
+      restartAllowed: false,
+    },
     warmSlots,
     hardMaxSlots,
     routes,
@@ -99,17 +116,11 @@ export function validateDevelopmentPresentationProviderIsolation(
     throw new Error('Development presentation provider must declare the development environment');
   }
   const providerPorts = Object.entries(descriptor.ports);
-  const allDevelopmentPorts = [
-    ...providerPorts.map(([, value]) => value),
-    ...descriptor.routes.map((route) => route.rdpPort),
-  ];
+  const allDevelopmentPorts = providerPorts.map(([, value]) => value);
   if (new Set(allDevelopmentPorts).size !== allDevelopmentPorts.length) {
     throw new Error('Development presentation provider contains duplicate ports');
   }
-  for (const [name, value] of [
-    ...providerPorts,
-    ...descriptor.routes.map((route) => [`route:${route.routeId}`, route.rdpPort]),
-  ]) {
+  for (const [name, value] of providerPorts) {
     if (production.ports.includes(value)) {
       throw new Error(`Development ${name} port ${value} collides with production`);
     }
@@ -122,6 +133,7 @@ export function validateDevelopmentPresentationProviderIsolation(
     descriptor.inventoryPath,
     descriptor.skill.root,
     descriptor.skill.target,
+    ...descriptor.routes.map((route) => route.viewerProfilePath),
   ]) {
     for (const productionPath of production.paths) {
       if (pathsOverlap(candidate, productionPath)) {
@@ -134,7 +146,15 @@ export function validateDevelopmentPresentationProviderIsolation(
     ...Object.values(descriptor.services),
     descriptor.database.name,
     descriptor.database.user,
-    ...descriptor.routes.flatMap((route) => [route.routeId, route.slotId, route.user, route.connectionId]),
+    ...descriptor.routes.flatMap((route) => [
+      route.routeId,
+      route.slotId,
+      route.user,
+      route.connectionKey,
+      route.connectionName,
+      route.viewerSession,
+      route.viewerProfile,
+    ]),
   ];
   for (const identity of identities) {
     if (production.identities.includes(identity)) {
@@ -144,9 +164,12 @@ export function validateDevelopmentPresentationProviderIsolation(
   assertUnique(descriptor.routes, 'routeId');
   assertUnique(descriptor.routes, 'slotId');
   assertUnique(descriptor.routes, 'user');
-  assertUnique(descriptor.routes, 'connectionId');
-  assertUnique(descriptor.routes, 'display');
-  assertUnique(descriptor.routes, 'rdpPort');
+  assertUnique(descriptor.routes, 'connectionKey');
+  assertUnique(descriptor.routes, 'connectionName');
+  assertUnique(descriptor.routes, 'displayReservationId');
+  assertUnique(descriptor.routes, 'viewerSession');
+  assertUnique(descriptor.routes, 'viewerProfile');
+  assertUnique(descriptor.routes, 'viewerProfilePath');
   if (descriptor.routes.length !== descriptor.hardMaxSlots) {
     throw new Error('Development route inventory must describe every admitted slot');
   }
@@ -166,6 +189,7 @@ export function developmentPresentationProviderManifest(descriptor) {
     services: descriptor.services,
     database: descriptor.database,
     ports: descriptor.ports,
+    rdpTarget: descriptor.rdpTarget,
     warmSlots: descriptor.warmSlots,
     hardMaxSlots: descriptor.hardMaxSlots,
     routes: descriptor.routes,
@@ -173,7 +197,7 @@ export function developmentPresentationProviderManifest(descriptor) {
   };
 }
 
-export function developmentPresentationProviderStatus({ env = process.env } = {}) {
+export function developmentPresentationProviderStatus({ env = process.env, probe = null } = {}) {
   const descriptor = developmentPresentationProviderDescriptor(env);
   const required = env.AGENT_BROWSER_DEV_PRESENTATION_PROVIDER_REQUIRED === '1';
   let isolationError = null;
@@ -195,11 +219,34 @@ export function developmentPresentationProviderStatus({ env = process.env } = {}
   const manifest = readJson(descriptor.manifest);
   const expected = developmentPresentationProviderManifest(descriptor);
   const matches = manifest !== null && JSON.stringify(manifest) === JSON.stringify(expected);
+  if (!matches || isolationError) {
+    return {
+      descriptor,
+      manifest,
+      observation: null,
+      readinessChecks: [],
+      state: 'drifted',
+      ready: false,
+      blocking: true,
+      isolationError,
+    };
+  }
+  const observation = probe ? probe(descriptor) : {
+    environment: 'development',
+    unavailable: 'live provider probe is not configured',
+  };
+  const readinessChecks = evaluateDevelopmentPresentationProviderObservation(
+    descriptor,
+    observation,
+  );
+  const ready = readinessChecks.every((item) => item.ok);
   return {
     descriptor,
     manifest,
-    state: !isolationError && matches ? 'configured' : 'drifted',
-    ready: !isolationError && matches,
+    observation,
+    readinessChecks,
+    state: ready ? 'configured' : 'not_ready',
+    ready,
     blocking: true,
     isolationError,
   };
@@ -258,8 +305,8 @@ export function developmentAgentSkillStatus({ env = process.env } = {}) {
   };
 }
 
-export function doctorDevelopmentPresentationProvider({ env = process.env } = {}) {
-  const status = developmentPresentationProviderStatus({ env });
+export function doctorDevelopmentPresentationProvider({ env = process.env, probe = null } = {}) {
+  const status = developmentPresentationProviderStatus({ env, probe });
   const checks = [
     check('presentation-provider:isolation', !status.isolationError, status.isolationError || 'isolated'),
     check(
@@ -279,8 +326,78 @@ export function doctorDevelopmentPresentationProvider({ env = process.env } = {}
       status.manifest.routes?.length === status.descriptor.hardMaxSlots,
       status.manifest.routes?.length,
     ));
+    checks.push(...status.readinessChecks);
   }
   return { success: checks.every((item) => item.ok), checks, status };
+}
+
+export function evaluateDevelopmentPresentationProviderObservation(descriptor, observation) {
+  const checks = [
+    check('presentation-provider:observed-environment', observation?.environment === 'development', observation?.environment),
+    check('presentation-provider:secrets-private', observation?.secrets?.private === true, observation?.secrets?.private),
+    check('presentation-provider:database-schema', observation?.database?.schemaReady === true, observation?.database?.schemaReady),
+  ];
+  for (const [service, name] of Object.entries(descriptor.services)) {
+    const container = observation?.containers?.find((item) => item.name === name);
+    checks.push(check(
+      `presentation-provider:container:${service}`,
+      container?.running === true && container?.composeProject === descriptor.composeProject,
+      container || null,
+    ));
+  }
+  for (const [name, portValue] of Object.entries(descriptor.ports)) {
+    const observed = observation?.ports?.[name];
+    checks.push(check(
+      `presentation-provider:port:${name}`,
+      observed?.listening === true && observed?.port === portValue,
+      observed || null,
+    ));
+  }
+  for (const route of descriptor.routes) {
+    const user = observation?.routeUsers?.find((item) => item.user === route.user);
+    checks.push(check(
+      `presentation-provider:route-user:${route.routeId}`,
+      user?.exists === true,
+      user || null,
+    ));
+    const connection = observation?.database?.routes?.find((item) =>
+      item.connectionName === route.connectionName && item.user === route.user,
+    );
+    checks.push(check(
+      `presentation-provider:connection:${route.routeId}`,
+      Boolean(connection?.connectionId),
+      connection || null,
+    ));
+  }
+  const connectionIds = observation?.database?.routes
+    ?.map((route) => route.connectionId)
+    .filter(Boolean) || [];
+  checks.push(check(
+    'presentation-provider:connection-ids-unique',
+    connectionIds.length === descriptor.routes.length &&
+      new Set(connectionIds).size === descriptor.routes.length,
+    connectionIds,
+  ));
+  const warmDisplays = [];
+  for (const route of descriptor.routes.slice(0, descriptor.warmSlots)) {
+    const display = observation?.displays?.find((item) =>
+      item.displayReservationId === route.displayReservationId && item.user === route.user,
+    );
+    const displayReady = display?.ready === true && /^:[0-9]+$/.test(display?.displayName || '');
+    checks.push(check(
+      `presentation-provider:warm-display:${route.routeId}`,
+      displayReady,
+      display || null,
+    ));
+    if (displayReady) warmDisplays.push(display.displayName);
+  }
+  checks.push(check(
+    'presentation-provider:warm-displays-unique',
+    warmDisplays.length === descriptor.warmSlots &&
+      new Set(warmDisplays).size === descriptor.warmSlots,
+    warmDisplays,
+  ));
+  return checks;
 }
 
 function productionPresentationProjection(env = process.env) {

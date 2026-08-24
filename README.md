@@ -69,6 +69,10 @@ pnpm build:dashboard
 scripts/ci/cargo-safe.sh build --release --manifest-path cli/Cargo.toml
 pnpm development-runtime:install
 pnpm development-runtime:doctor
+pnpm development-runtime:provider-plan
+pnpm development-runtime:provider-stage
+pnpm development-runtime:provider-preflight
+pnpm development-runtime:provider-apply -- --apply --defer-ingress
 pnpm development-runtime:gc
 pnpm development-runtime:skill-sync
 pnpm development-runtime:skill-status
@@ -78,8 +82,9 @@ pnpm smoke:development-dashboard-auth -- --dashboard-url https://agent-browser-d
 
 The dashboard labels this runtime `Development`, and its runtime manifest
 reports `runtimeEnvironment: "development"`. The Cooper service inventory owns
-the separate `agent-browser-dev` local and external ingress routes. Initial dev
-publication is dashboard-only and does not borrow production Guacamole routes.
+the separate `agent-browser-dev` local and external ingress routes. Its isolated
+presentation provider has six development-only route identities and listens on
+local port 8093. It does not borrow production Guacamole routes.
 The skill commands publish and verify guidance only inside the development
 pseudo-home. They do not replace the shared user-scoped production skill.
 
@@ -87,8 +92,11 @@ Development presentation-provider status is included in the development
 doctor. An absent provider is reported as unconfigured and remains nonblocking
 for dashboard-only work. Once configured, exact namespace or manifest drift is
 blocking. Set `AGENT_BROWSER_DEV_PRESENTATION_PROVIDER_REQUIRED=1` only for a
-provider-backed acceptance run. Provider provisioning remains a separately
-reviewed privileged operation.
+provider-backed acceptance run. Review the provider plan, stage its secret-free
+artifacts, and pass preflight before using the explicit apply command above.
+Ingress publication remains deferred until the provider-ready checkpoint.
+Provider doctor success proves provider readiness; Service Status must also
+report non-null `presentationCapacity` before capacity acceptance begins.
 
 Cargo builds use resource-aware admission rather than a repository-wide
 full-lifetime lock. The default policy admits at most two four-job builds while

@@ -791,8 +791,9 @@ executable, immutable generation store, pseudo-home, socket directory, auth
 store, user services, and dashboard ports 4948 and 4949. Its dashboard must show
 the Development badge and its runtime manifest must report
 `runtimeEnvironment: "development"`. The Cooper inventory entry
-`agent-browser-dev` owns its external ingress. Do not attach the initial dev
-route to production Guacamole. Its seeded `development-default` runtime lane
+`agent-browser-dev` owns its external ingress. Its isolated presentation
+provider uses six development-only route identities and local port 8093. Do not
+attach it to production Guacamole. Its seeded `development-default` runtime lane
 uses fixed stream port 4951. Use `pnpm development-runtime:gc` for safe
 unselected-generation cleanup.
 Use `pnpm development-runtime:skill-sync` to publish this repository skill into
@@ -804,6 +805,13 @@ absent provider is an explicit, nonblocking `unconfigured` state for CDP and
 dashboard work. Provider-backed desktop acceptance must set
 `AGENT_BROWSER_DEV_PRESENTATION_PROVIDER_REQUIRED=1` and must not reuse
 production Guacamole, XRDP, display, route, database, secret, or cleanup state.
+Before provider mutation, run `pnpm development-runtime:provider-plan`,
+`pnpm development-runtime:provider-stage`, and
+`pnpm development-runtime:provider-preflight`. Apply only with
+`pnpm development-runtime:provider-apply -- --apply --defer-ingress`; publish
+Cooper ingress after the provider-ready checkpoint. A green provider doctor is
+not capacity proof. Development Service Status must report non-null
+`presentationCapacity` before capacity acceptance.
 The stable `agent-browser-dev` command is an environment-owning launcher, not a
 plain binary alias. Direct commands therefore inherit the dev pseudo-home,
 socket, auth store, and runtime identity automatically.

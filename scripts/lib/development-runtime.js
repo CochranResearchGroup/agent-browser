@@ -25,6 +25,7 @@ import {
   doctorDevelopmentPresentationProvider,
   synchronizeDevelopmentAgentSkill,
 } from './development-presentation-provider.js';
+import { probeDevelopmentPresentationProvider } from './development-presentation-provider-deployment.js';
 
 export const DEVELOPMENT_RUNTIME_SCHEMA = 'agent-browser.development-runtime.v1';
 
@@ -88,6 +89,11 @@ export function renderDevelopmentUnits(descriptor, generationBinary) {
     `Environment=AGENT_BROWSER_SOCKET_DIR=${descriptor.socketDir}`,
     `Environment=AGENT_BROWSER_DASHBOARD_AUTH_DIR=${descriptor.authDir}`,
     `Environment=AGENT_BROWSER_EXECUTABLE_PATH=${descriptor.browserExecutable}`,
+    `Environment=AGENT_BROWSER_PRESENTATION_PROVIDER_INVENTORY_PATH=${descriptor.presentationProvider.inventoryPath}`,
+    `Environment=AGENT_BROWSER_PRESENTATION_WARM_MINIMUM=${descriptor.presentationProvider.warmSlots}`,
+    `Environment=AGENT_BROWSER_PRESENTATION_HARD_MAXIMUM=${descriptor.presentationProvider.hardMaxSlots}`,
+    `Environment=AGENT_BROWSER_PRESENTATION_HUMAN_RESERVE=1`,
+    `Environment=AGENT_BROWSER_PRESENTATION_RECOVERY_RESERVE=1`,
   ].join('\n');
   return {
     'agent-browser-dev-runtime-host.service': `[Unit]
@@ -288,7 +294,10 @@ export function developmentRuntimeStatus({ env = process.env } = {}) {
     store: privateFileStatus(join(descriptor.authDir, 'dashboard-auth.json')),
     bootstrap: privateFileStatus(join(descriptor.authDir, 'dashboard-auth.env')),
   };
-  const presentationProvider = doctorDevelopmentPresentationProvider({ env }).status;
+  const presentationProvider = doctorDevelopmentPresentationProvider({
+    env,
+    probe: probeDevelopmentPresentationProvider,
+  }).status;
   const developmentSkill = developmentAgentSkillStatus({ env });
   return {
     schemaVersion: DEVELOPMENT_RUNTIME_SCHEMA,
@@ -321,7 +330,10 @@ export function developmentRuntimeStatus({ env = process.env } = {}) {
 
 export function doctorDevelopmentRuntime({ env = process.env } = {}) {
   const status = developmentRuntimeStatus({ env });
-  const presentationProviderDoctor = doctorDevelopmentPresentationProvider({ env });
+  const presentationProviderDoctor = doctorDevelopmentPresentationProvider({
+    env,
+    probe: probeDevelopmentPresentationProvider,
+  });
   const checks = [
     check('selected-generation', Boolean(status.selectedGeneration), status.selectedGeneration),
     check('stable-executable', Boolean(status.stableExecutable), status.stableExecutable),
@@ -368,6 +380,11 @@ export AGENT_BROWSER_RUNTIME_ENVIRONMENT=development
 export AGENT_BROWSER_RUNTIME_HOST=1
 export AGENT_BROWSER_SOCKET_DIR=${shellQuote(descriptor.socketDir)}
 export AGENT_BROWSER_DASHBOARD_AUTH_DIR=${shellQuote(descriptor.authDir)}
+export AGENT_BROWSER_PRESENTATION_PROVIDER_INVENTORY_PATH=${shellQuote(descriptor.presentationProvider.inventoryPath)}
+export AGENT_BROWSER_PRESENTATION_WARM_MINIMUM=${descriptor.presentationProvider.warmSlots}
+export AGENT_BROWSER_PRESENTATION_HARD_MAXIMUM=${descriptor.presentationProvider.hardMaxSlots}
+export AGENT_BROWSER_PRESENTATION_HUMAN_RESERVE=1
+export AGENT_BROWSER_PRESENTATION_RECOVERY_RESERVE=1
 if [ -z "\${AGENT_BROWSER_EXECUTABLE_PATH:-}" ]; then
   export AGENT_BROWSER_EXECUTABLE_PATH=${shellQuote(descriptor.browserExecutable)}
 fi

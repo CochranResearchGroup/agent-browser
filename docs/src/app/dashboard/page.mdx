@@ -39,8 +39,9 @@ development dashboard displays a persistent Development badge, and
 <code>/api/runtime/manifest</code> reports
 <code>runtimeEnvironment: "development"</code>. The separate Cooper inventory
 entry named <code>agent-browser-dev</code> owns external ingress. It initially
-publishes only the dashboard and must not route its Guacamole path to the
-production provider.
+publishes the dashboard and an isolated presentation provider on local port
+8093. The provider owns six development-only route identities and must not use
+the production Guacamole provider.
 Publish experimental agent guidance with
 <code>pnpm development-runtime:skill-sync</code> and verify it with
 <code>pnpm development-runtime:skill-status</code>. The target is inside the
@@ -53,6 +54,14 @@ and CDP work. Provider-backed acceptance sets
 manifest exists, namespace or manifest drift is blocking. Development
 Guacamole, XRDP, display, route, database, secret, cleanup, and ingress effects
 remain a separately reviewed operation.
+Review and stage those effects with
+<code>pnpm development-runtime:provider-plan</code> and
+<code>pnpm development-runtime:provider-stage</code>, then run
+<code>pnpm development-runtime:provider-preflight</code>. The only apply form is
+<code>pnpm development-runtime:provider-apply -- --apply --defer-ingress</code>.
+Publish Cooper ingress only after the provider-ready checkpoint. A green
+provider doctor is not capacity proof; development Service Status must also
+report a non-null <code>presentationCapacity</code> before capacity acceptance.
 Use <code>pnpm smoke:development-dashboard-auth -- --dashboard-url
 https://agent-browser-dev.ecochran.dyndns.org</code> to verify login, the
 session cookie, authenticated service API access, and the development manifest

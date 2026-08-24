@@ -1,7 +1,16 @@
 //! Canonical list-shaped route inventory contract fixtures.
 
 use serde::Deserialize;
+use serde_json::json;
 use std::collections::BTreeSet;
+use std::fs;
+use std::path::Path;
+
+use super::presentation_capacity::{PresentationCapacityAuthority, PresentationCapacityConfig};
+use super::service_model::{
+    ControlInputProvider, DisplayAllocation, RemoteViewRoute, RoutePoolEntry, ServiceState,
+    ViewStreamProvider,
+};
 
 #[cfg(test)]
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -163,6 +172,228 @@ impl StaticRouteInventory {
     }
 }
 
+const PRESENTATION_PROVIDER_INVENTORY_SCHEMA: &str =
+    "agent-browser.development-presentation-inventory.v1";
+
+/// A provider-owned readiness inventory projected into Service authority.
+/// The adapter is opt-in through an exact file path and accepts development
+/// inventories only, keeping production state isolated by default.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PresentationProviderInventory {
+    schema_version: String,
+    environment: String,
+    routes: Vec<PresentationProviderRoute>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PresentationProviderRoute {
+    route_id: String,
+    slot_id: String,
+    #[serde(default)]
+    user: Option<String>,
+    #[serde(default)]
+    connection_id: Option<String>,
+    #[serde(default)]
+    connection_name: Option<String>,
+    display_reservation_id: String,
+    #[serde(default)]
+    display_name: Option<String>,
+    #[serde(default)]
+    frame_url: Option<String>,
+    #[serde(default)]
+    lifecycle: Option<String>,
+    state: String,
+}
+
+impl PresentationProviderInventory {
+    pub(crate) fn from_json(raw: &str) -> Result<Self, String> {
+        let inventory = serde_json::from_str::<Self>(raw)
+            .map_err(|error| format!("presentation_provider_inventory_json_invalid:{error}"))?;
+        if inventory.schema_version != PRESENTATION_PROVIDER_INVENTORY_SCHEMA {
+            return Err("presentation_provider_inventory_schema_invalid".to_string());
+        }
+        if inventory.environment != "development" {
+            return Err("presentation_provider_inventory_environment_invalid".to_string());
+        }
+        validate_provider_identities(
+            inventory.routes.iter().map(|route| route.route_id.as_str()),
+            "route",
+        )?;
+        validate_provider_identities(
+            inventory.routes.iter().map(|route| route.slot_id.as_str()),
+            "slot",
+        )?;
+        validate_provider_identities(
+            inventory
+                .routes
+                .iter()
+                .map(|route| route.display_reservation_id.as_str()),
+            "display",
+        )?;
+        Ok(inventory)
+    }
+
+    pub(crate) fn from_path(path: &Path) -> Result<Self, String> {
+        let raw = fs::read_to_string(path).map_err(|error| {
+            format!(
+                "presentation_provider_inventory_read_failed:{}:{error}",
+                path.display()
+            )
+        })?;
+        Self::from_json(&raw)
+    }
+
+    pub(crate) fn overlay_service_state(
+        &self,
+        state: &mut ServiceState,
+        config: PresentationCapacityConfig,
+    ) -> Result<(), String> {
+        state
+            .remote_view_routes
+            .retain(|_, route| route.route_source != "provider_inventory");
+        state
+            .display_allocations
+            .retain(|_, display| !has_provider_inventory_readiness(display.readiness.as_ref()));
+        state
+            .route_pool
+            .retain(|_, entry| !has_provider_inventory_readiness(entry.readiness.as_ref()));
+        for provider_route in self.routes.iter().filter(|route| route.state == "ready") {
+            let display_name = provider_route.display_name.clone().ok_or_else(|| {
+                format!(
+                    "presentation_provider_ready_display_missing:{}",
+                    provider_route.route_id
+                )
+            })?;
+            let route_id = provider_route.route_id.clone();
+            let display_id = provider_route.display_reservation_id.clone();
+            state.display_allocations.insert(
+                display_id.clone(),
+                DisplayAllocation {
+                    id: display_id.clone(),
+                    display_name: Some(display_name),
+                    state: "ready".to_string(),
+                    route_ids: vec![route_id.clone()],
+                    readiness: Some(json!({"state":"ready","source":"provider_inventory"})),
+                    ..DisplayAllocation::default()
+                },
+            );
+            state.remote_view_routes.insert(
+                route_id.clone(),
+                RemoteViewRoute {
+                    id: route_id.clone(),
+                    provider: ViewStreamProvider::RdpGateway,
+                    display_allocation_id: Some(display_id),
+                    route_source: "provider_inventory".to_string(),
+                    connection_id: provider_route.connection_id.clone(),
+                    connection_name: provider_route.connection_name.clone(),
+                    frame_url: provider_route.frame_url.clone(),
+                    control_input: Some(ControlInputProvider::ManualAttachedDesktop),
+                    provider_mode: "simultaneous_view".to_string(),
+                    state: "ready".to_string(),
+                    readiness: Some(json!({"state":"ready","source":"provider_inventory"})),
+                    ..RemoteViewRoute::default()
+                },
+            );
+            state.route_pool.insert(
+                provider_route.slot_id.clone(),
+                RoutePoolEntry {
+                    id: provider_route.slot_id.clone(),
+                    provider: ViewStreamProvider::RdpGateway,
+                    route_id: route_id.clone(),
+                    connection_id: provider_route.connection_id.clone(),
+                    connection_name: provider_route.connection_name.clone(),
+                    frame_url: provider_route.frame_url.clone(),
+                    target: json!({
+                        "displayName": state.display_allocations
+                            .get(&provider_route.display_reservation_id)
+                            .and_then(|display| display.display_name.clone()),
+                        "routeUser": provider_route.user,
+                        "lifecycle": provider_route.lifecycle,
+                    }),
+                    provider_mode: "simultaneous_view".to_string(),
+                    state: "available".to_string(),
+                    current_route_allocation_id: Some(route_id),
+                    readiness: Some(json!({"state":"ready","source":"provider_inventory"})),
+                    ..RoutePoolEntry::default()
+                },
+            );
+        }
+        let previous = state.presentation_capacity.take();
+        let mut capacity = PresentationCapacityAuthority::from_service_state(config, state)?;
+        if let Some(previous) = previous {
+            capacity.queued_requests = previous.queued_requests;
+            capacity.queue_clock = previous.queue_clock;
+            for slot in &mut capacity.slots {
+                if let Some(previous_slot) = previous.slots.iter().find(|candidate| {
+                    candidate.id == slot.id
+                        && candidate.route_id == slot.route_id
+                        && candidate.display_allocation_id == slot.display_allocation_id
+                }) {
+                    *slot = previous_slot.clone();
+                }
+            }
+        }
+        state.presentation_capacity = Some(capacity);
+        Ok(())
+    }
+}
+
+fn has_provider_inventory_readiness(readiness: Option<&serde_json::Value>) -> bool {
+    readiness
+        .and_then(|value| value.get("source"))
+        .and_then(serde_json::Value::as_str)
+        == Some("provider_inventory")
+}
+
+fn validate_provider_identities<'a>(
+    values: impl Iterator<Item = &'a str>,
+    field: &str,
+) -> Result<(), String> {
+    let values = values.collect::<Vec<_>>();
+    if values.iter().any(|value| value.trim().is_empty()) {
+        return Err(format!(
+            "presentation_provider_inventory_{field}_identity_invalid"
+        ));
+    }
+    if values.iter().collect::<BTreeSet<_>>().len() != values.len() {
+        return Err(format!(
+            "presentation_provider_inventory_{field}_identity_duplicate"
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn overlay_provider_inventory_from_environment(
+    state: &mut ServiceState,
+) -> Result<(), String> {
+    let path = match std::env::var("AGENT_BROWSER_PRESENTATION_PROVIDER_INVENTORY_PATH") {
+        Ok(path) if !path.trim().is_empty() => path,
+        Ok(_) | Err(std::env::VarError::NotPresent) => return Ok(()),
+        Err(std::env::VarError::NotUnicode(_)) => {
+            return Err("presentation_provider_inventory_path_not_unicode".to_string())
+        }
+    };
+    let usize_env = |name: &str, fallback: usize| -> Result<usize, String> {
+        match std::env::var(name) {
+            Ok(value) => value
+                .parse::<usize>()
+                .map_err(|_| format!("{name}_invalid")),
+            Err(std::env::VarError::NotPresent) => Ok(fallback),
+            Err(std::env::VarError::NotUnicode(_)) => Err(format!("{name}_not_unicode")),
+        }
+    };
+    let config = PresentationCapacityConfig {
+        warm_minimum: usize_env("AGENT_BROWSER_PRESENTATION_WARM_MINIMUM", 4)?,
+        hard_maximum: usize_env("AGENT_BROWSER_PRESENTATION_HARD_MAXIMUM", 6)?,
+        human_priority_reserve: usize_env("AGENT_BROWSER_PRESENTATION_HUMAN_RESERVE", 1)?,
+        recovery_reserve: usize_env("AGENT_BROWSER_PRESENTATION_RECOVERY_RESERVE", 1)?,
+        max_queue_depth: usize_env("AGENT_BROWSER_PRESENTATION_MAX_QUEUE_DEPTH", 64)?,
+    };
+    PresentationProviderInventory::from_path(Path::new(&path))?.overlay_service_state(state, config)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RuntimeRouteEnvironment {
     pub(crate) route_pool_json: String,
@@ -307,5 +538,89 @@ mod tests {
         assert_eq!(environment.legacy_display_a.as_deref(), Some(":21"));
         assert_eq!(environment.legacy_display_b.as_deref(), Some(":22"));
         assert_eq!(environment.legacy_display_env_values().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn provider_inventory_projects_only_ready_slots_into_service_authority() {
+        let raw = serde_json::json!({
+            "schemaVersion": "agent-browser.development-presentation-inventory.v1",
+            "environment": "development",
+            "routes": [
+                {
+                    "routeId": "development-route-1",
+                    "slotId": "development-slot-1",
+                    "user": "agent-browser-rdp-dev-1",
+                    "connectionId": "41",
+                    "connectionName": "Agent Browser Dev RDP Route 1",
+                    "displayReservationId": "development-display-1",
+                    "displayName": ":21",
+                    "lifecycle": "warm",
+                    "state": "ready"
+                },
+                {
+                    "routeId": "development-route-2",
+                    "slotId": "development-slot-2",
+                    "user": "agent-browser-rdp-dev-2",
+                    "connectionId": "42",
+                    "connectionName": "Agent Browser Dev RDP Route 2",
+                    "displayReservationId": "development-display-2",
+                    "displayName": null,
+                    "lifecycle": "elastic",
+                    "state": "absent"
+                }
+            ]
+        })
+        .to_string();
+        let inventory = PresentationProviderInventory::from_json(&raw).unwrap();
+        let mut state = crate::native::service_model::ServiceState::default();
+
+        inventory
+            .overlay_service_state(
+                &mut state,
+                crate::native::presentation_capacity::PresentationCapacityConfig {
+                    warm_minimum: 1,
+                    hard_maximum: 2,
+                    human_priority_reserve: 1,
+                    recovery_reserve: 1,
+                    max_queue_depth: 64,
+                },
+            )
+            .unwrap();
+
+        assert_eq!(state.display_allocations.len(), 1);
+        assert_eq!(state.remote_view_routes.len(), 1);
+        assert_eq!(state.route_pool.len(), 1);
+        let capacity = state.presentation_capacity.as_ref().unwrap();
+        assert_eq!(capacity.slots.len(), 1);
+        assert_eq!(capacity.config.hard_maximum, 2);
+        assert_eq!(capacity.slots[0].id, "slot:development-slot-1");
+    }
+
+    #[test]
+    fn provider_inventory_rejects_environment_and_identity_drift() {
+        let wrong_environment = serde_json::json!({
+            "schemaVersion": "agent-browser.development-presentation-inventory.v1",
+            "environment": "production",
+            "routes": []
+        })
+        .to_string();
+        assert_eq!(
+            PresentationProviderInventory::from_json(&wrong_environment).unwrap_err(),
+            "presentation_provider_inventory_environment_invalid"
+        );
+
+        let duplicate = serde_json::json!({
+            "schemaVersion": "agent-browser.development-presentation-inventory.v1",
+            "environment": "development",
+            "routes": [
+                {"routeId":"route-1","slotId":"slot-1","displayReservationId":"display-1","displayName":":21","state":"ready"},
+                {"routeId":"route-1","slotId":"slot-2","displayReservationId":"display-2","displayName":":22","state":"ready"}
+            ]
+        })
+        .to_string();
+        assert_eq!(
+            PresentationProviderInventory::from_json(&duplicate).unwrap_err(),
+            "presentation_provider_inventory_route_identity_duplicate"
+        );
     }
 }

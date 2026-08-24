@@ -131,6 +131,14 @@ This is a Rust codebase. The browser automation daemon lives in `cli/src/native/
   Provider-backed acceptance must set
   `AGENT_BROWSER_DEV_PRESENTATION_PROVIDER_REQUIRED=1` and pass the exact
   development provider doctor without borrowing production resources.
+- Before provider mutation, run `pnpm development-runtime:provider-plan`,
+  `pnpm development-runtime:provider-stage`, and
+  `pnpm development-runtime:provider-preflight`. Apply only with
+  `pnpm development-runtime:provider-apply -- --apply --defer-ingress`, then
+  publish Cooper ingress after the provider-ready checkpoint.
+- Provider doctor success does not prove Service capacity projection. Require
+  non-null `presentationCapacity` from development Service Status before
+  running presentation-capacity acceptance.
 
 ## RDP and Remote-View Handoffs
 

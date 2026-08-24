@@ -226,6 +226,7 @@ impl ServiceStateStore for JsonServiceStateStore {
             state.runtime_owner_registry.lifecycle_records = lifecycle_registry.records;
         }
         state.mark_persisted_entity_sources();
+        super::presentation_inventory::overlay_provider_inventory_from_environment(&mut state)?;
         state.refresh_derived_views();
         Ok(state)
     }

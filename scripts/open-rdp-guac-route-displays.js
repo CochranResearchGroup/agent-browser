@@ -304,7 +304,8 @@ function openRoute(route, index) {
   const url = routeUrl(route);
   if (!url) throw new Error(`route_${slug}_url_missing: ${JSON.stringify(route)}`);
   const existingDisplay = inspectedRoute(inspectRouteDisplays(), route, index)?.displayName;
-  if (existingDisplay) {
+  const forceViewer = process.env.AGENT_BROWSER_ROUTE_DISPLAY_FORCE_VIEWER === '1';
+  if (existingDisplay && !forceViewer) {
     return {
       label,
       session: null,
@@ -342,6 +343,9 @@ function openRoute(route, index) {
   mkdirSync(profileRoot, { recursive: true });
   const session = route.viewerSession || `rdp-guac-${slug}-viewer`;
   const profile = route.viewerProfile || join(profileRoot, slug);
+  if (profile.includes('/') || profile.includes('\\')) {
+    mkdirSync(profile, { recursive: true });
+  }
   const executable = route.viewerExecutable ||
     process.env.AGENT_BROWSER_RDP_ROUTE_VIEWER_EXECUTABLE ||
     null;
@@ -360,25 +364,42 @@ function openRoute(route, index) {
   ];
   const opened = runAgentBrowser(openArgs, `open Guacamole route ${label}`);
   const headerUser = guacamoleHeaderUser();
-  if (token.authMode !== 'header' || !headerUser) {
-    throw new Error(`guacamole_route_${slug}_header_auth_required`);
+  let displayName;
+  try {
+    if (token.authMode !== 'header' || !headerUser) {
+      throw new Error(`guacamole_route_${slug}_header_auth_required`);
+    }
+    runAgentBrowser([
+      '--json',
+      '--session',
+      session,
+      '--profile',
+      profile,
+      'set',
+      'headers',
+      JSON.stringify({ 'Remote-User': headerUser }),
+    ], `configure Guacamole header authentication for route ${label}`);
+    navigateRoute([
+      '--json',
+      '--session',
+      session,
+      '--profile',
+      profile,
+      'open',
+      url,
+    ], `reload authenticated Guacamole route ${label}`);
+    displayName = waitForRouteDisplay(route, index);
+  } catch (error) {
+    commandResult(agentBrowserCommand(), [
+      '--json',
+      '--session',
+      session,
+      '--profile',
+      profile,
+      'close',
+    ], { timeout: 30000 });
+    throw error;
   }
-  runAgentBrowser([
-    '--json',
-    '--session',
-    session,
-    'set',
-    'headers',
-    JSON.stringify({ 'Remote-User': headerUser }),
-  ], `configure Guacamole header authentication for route ${label}`);
-  navigateRoute([
-    '--json',
-    '--session',
-    session,
-    'open',
-    url,
-  ], `reload authenticated Guacamole route ${label}`);
-  const displayName = waitForRouteDisplay(route, index);
   return {
     label,
     session,
