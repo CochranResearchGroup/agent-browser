@@ -4511,7 +4511,17 @@ fn transfer_discovered_runtimes(
                         transfer_evidence.push(evidence);
                         continue;
                     }
-                    Err((_failed_session, error)) => return Err(error.message),
+                    Err((_failed_session, error)) => {
+                        if runtime_handoff_source_disappeared(&error) {
+                            preserve_runtime_without_live_source(migration);
+                            let reason = "handoff_source_disappeared_after_census";
+                            if !migration.reason_codes.iter().any(|value| value == reason) {
+                                migration.reason_codes.push(reason.to_string());
+                            }
+                            continue;
+                        }
+                        return Err(error.message);
+                    }
                 };
                 if !retired_aliases.is_empty() {
                     let reason = "browserless_source_alias_daemon_retired";
@@ -5075,13 +5085,20 @@ where
     Err((
         primary_session.to_string(),
         RuntimeTransactionCommandFailure {
-            kind: RuntimeTransactionCommandFailureKind::CommandFailed,
+            kind: RuntimeTransactionCommandFailureKind::BrowserUnavailableAlias,
             message: format!(
                 "runtime_transfer_source_browser_missing:{}",
                 logical_browser_id
             ),
         },
     ))
+}
+
+fn runtime_handoff_source_disappeared(error: &RuntimeTransactionCommandFailure) -> bool {
+    error.kind == RuntimeTransactionCommandFailureKind::BrowserUnavailableAlias
+        || error
+            .message
+            .starts_with("runtime_transfer_source_browser_missing:")
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -11808,6 +11825,31 @@ mod tests {
             error.kind,
             RuntimeTransactionCommandFailureKind::BrowserUnavailableAlias
         );
+    }
+
+    #[test]
+    fn runtime_handoff_prepare_reports_all_browserless_sources_as_unavailable() {
+        let (_, error) = prepare_runtime_handoff_candidates(
+            "session:logical-browser",
+            "owner-route",
+            vec!["owner-route".to_string()],
+            |_| {
+                Ok(serde_json::json!({
+                    "data": {
+                        "prepared": false,
+                        "browserPresent": false
+                    }
+                }))
+            },
+            |_| Ok(()),
+        )
+        .expect_err("a browserless source must be reported as unavailable");
+
+        assert_eq!(
+            error.kind,
+            RuntimeTransactionCommandFailureKind::BrowserUnavailableAlias
+        );
+        assert!(runtime_handoff_source_disappeared(&error));
     }
 
     #[test]

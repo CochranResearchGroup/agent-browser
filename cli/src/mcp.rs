@@ -794,6 +794,10 @@ fn service_mcp_tools() -> Vec<Value> {
                         "type": "string",
                         "description": "Calling task name, for example probeACSwebsite."
                     },
+                    "sessionName": {
+                        "type": "string",
+                        "description": "Explicit daemon session lane to preserve in the planned browser request."
+                    },
                     "targetServiceId": {
                         "type": "string",
                         "description": "Target site or identity provider for profile selection."
@@ -9781,6 +9785,7 @@ fn access_plan_params_from_arguments(
         "serviceName",
         "agentName",
         "taskName",
+        "sessionName",
         "targetServiceId",
         "targetService",
         "siteId",
@@ -11036,6 +11041,7 @@ mod tests {
             .find(|tool| tool["name"] == SERVICE_ACCESS_PLAN_MCP_TOOL_NAME)
             .expect("service_access_plan schema should be listed");
         assert!(service_access_plan["inputSchema"]["properties"]["loginId"].is_object());
+        assert!(service_access_plan["inputSchema"]["properties"]["sessionName"].is_object());
         assert!(service_access_plan["inputSchema"]["properties"]["browserBuild"].is_object());
         assert!(service_access_plan["inputSchema"]["properties"]["browserHost"].is_object());
         assert!(service_access_plan["inputSchema"]["properties"]["viewStreamProvider"].is_object());
@@ -15169,7 +15175,7 @@ mod tests {
         };
 
         let response = handle_jsonrpc_line_with_config(
-            r#"{"jsonrpc":"2.0","id":"access-plan","method":"tools/call","params":{"name":"service_access_plan","arguments":{"serviceName":"CanvaCLI","agentName":"codex","taskName":"openCanvaWorkspace","loginId":"canva","browserBuild":"stealthcdp_chromium","browserHost":"remote_headed","viewStreamProvider":"rdp_gateway","controlInputProvider":"manual_attached_desktop","displayIsolation":"private_virtual_display"}}}"#,
+            r#"{"jsonrpc":"2.0","id":"access-plan","method":"tools/call","params":{"name":"service_access_plan","arguments":{"serviceName":"CanvaCLI","agentName":"codex","taskName":"openCanvaWorkspace","sessionName":"bill-soylei","loginId":"canva","browserBuild":"stealthcdp_chromium","browserHost":"remote_headed","viewStreamProvider":"rdp_gateway","controlInputProvider":"manual_attached_desktop","displayIsolation":"private_virtual_display"}}}"#,
             "default",
             &state,
         )
@@ -15179,6 +15185,11 @@ mod tests {
 
         assert_eq!(payload["tool"], SERVICE_ACCESS_PLAN_MCP_TOOL_NAME);
         assert_eq!(payload["trace"]["agentName"], "codex");
+        assert_eq!(payload["data"]["query"]["sessionName"], "bill-soylei");
+        assert_eq!(
+            payload["data"]["decision"]["serviceRequest"]["request"]["sessionName"],
+            "bill-soylei"
+        );
         assert_eq!(
             payload["data"]["query"]["browserBuild"],
             "stealthcdp_chromium"

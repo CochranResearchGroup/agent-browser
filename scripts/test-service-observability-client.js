@@ -1326,7 +1326,7 @@ async function main() {
   const accessPlan = createFetchRecorder((url) => {
     assert.equal(
       url,
-      'http://127.0.0.1:4849/api/service/access-plan?serviceName=CanvaCLI&loginId=canva&browserBuild=stealthcdp_chromium&runtimeProfile=canva-default&sitePolicyId=canva&challengeId=challenge-1',
+      'http://127.0.0.1:4849/api/service/access-plan?serviceName=CanvaCLI&sessionName=bill-soylei&loginId=canva&browserBuild=stealthcdp_chromium&runtimeProfile=canva-default&sitePolicyId=canva&challengeId=challenge-1',
     );
     return {
       success: true,
@@ -1445,6 +1445,7 @@ async function main() {
     baseUrl: 'http://127.0.0.1:4849',
     fetch: accessPlan.fetch,
     serviceName: 'CanvaCLI',
+    sessionName: 'bill-soylei',
     loginId: 'canva',
     browserBuild: 'stealthcdp_chromium',
     runtimeProfile: 'canva-default',
@@ -1452,6 +1453,10 @@ async function main() {
     challengeId: 'challenge-1',
   });
   assert.equal(accessPlan.calls.length, 1);
+  assert.equal(
+    new URL(accessPlan.calls[0].url).searchParams.get('sessionName'),
+    'bill-soylei',
+  );
   assert.equal(accessPlanResult.selectedProfile?.id, 'authenticated');
   assert.equal(accessPlanResult.sitePolicy?.id, 'canva');
   assert.equal(accessPlanResult.monitorFindings.profileReadinessAttentionRequired, true);

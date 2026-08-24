@@ -2267,6 +2267,8 @@ export interface ServiceAccessPlanOptions extends ServiceProfileIdentityLookupOp
   agentName?: string;
   /** Caller task name for queue and trace debugging. */
   taskName?: string;
+  /** Explicit daemon session lane to preserve in the planned browser request. */
+  sessionName?: string;
   /** Optional browser-host posture hint for the planned service request. */
   browserHost?: 'local_headless' | 'local_headed' | 'docker_headed' | 'remote_headed' | 'cloud_provider' | 'attached_existing' | string;
   /** Optional view stream provider hint for the planned service request. */

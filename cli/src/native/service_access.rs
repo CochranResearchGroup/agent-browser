@@ -30,6 +30,8 @@ pub(crate) struct ServiceAccessPlanRequest {
     pub(crate) service_name: Option<String>,
     pub(crate) agent_name: Option<String>,
     pub(crate) task_name: Option<String>,
+    /// Explicit daemon lane that must survive planning into the executable request.
+    pub(crate) session_name: Option<String>,
     pub(crate) target_service_ids: Vec<String>,
     pub(crate) account_ids: Vec<String>,
     pub(crate) target_url: Option<String>,
@@ -70,6 +72,9 @@ pub(crate) fn parse_service_access_plan_query(
             }
             "agentName" | "agent_name" | "agent-name" => request.agent_name = non_empty(value),
             "taskName" | "task_name" | "task-name" => request.task_name = non_empty(value),
+            "sessionName" | "session_name" | "session-name" => {
+                request.session_name = non_empty(value)
+            }
             "targetServiceId" | "target_service_id" | "target-service-id" | "targetService"
             | "target_service" | "target-service" | "siteId" | "site_id" | "site-id"
             | "loginId" | "login_id" | "login-id" => {
@@ -246,6 +251,7 @@ pub(crate) fn service_access_plan_for_state(
             "serviceName": request.service_name,
             "agentName": request.agent_name,
             "taskName": request.task_name,
+            "sessionName": request.session_name,
             "targetServiceIds": request.target_service_ids,
             "accountIds": request.account_ids,
             "url": request.target_url,
@@ -1112,6 +1118,7 @@ pub(crate) const SERVICE_REQUEST_ACCESS_PLAN_ROUTING_FIELDS: &[&str] = &[
     "serviceName",
     "agentName",
     "taskName",
+    "sessionName",
     "targetServiceId",
     "targetService",
     "targetServiceIds",
@@ -2108,6 +2115,9 @@ fn service_request_decision(input: ServiceRequestDecisionInput<'_>) -> Value {
     }
     if let Some(task_name) = request.task_name.as_ref() {
         service_request.insert("taskName".to_string(), json!(task_name));
+    }
+    if let Some(session_name) = request.session_name.as_ref() {
+        service_request.insert("sessionName".to_string(), json!(session_name));
     }
     if !request.target_service_ids.is_empty() {
         service_request.insert(
@@ -4034,6 +4044,7 @@ mod tests {
             ("service-name".to_string(), "JournalDownloader".to_string()),
             ("agentName".to_string(), "codex".to_string()),
             ("task_name".to_string(), "probeACSwebsite".to_string()),
+            ("session-name".to_string(), "bill-soylei".to_string()),
             ("login-id".to_string(), "acs".to_string()),
         ])
         .unwrap();
@@ -4041,7 +4052,45 @@ mod tests {
         assert_eq!(request.service_name.as_deref(), Some("JournalDownloader"));
         assert_eq!(request.agent_name.as_deref(), Some("codex"));
         assert_eq!(request.task_name.as_deref(), Some("probeACSwebsite"));
+        assert_eq!(request.session_name.as_deref(), Some("bill-soylei"));
         assert_eq!(request.target_service_ids, vec!["acs".to_string()]);
+    }
+
+    #[test]
+    fn fresh_access_plan_preserves_the_explicit_session_lane() {
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "bill-profile".to_string(),
+                BrowserProfile {
+                    id: "bill-profile".to_string(),
+                    target_service_ids: vec!["bill".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                service_name: Some("BooksReceipts".to_string()),
+                agent_name: Some("codex".to_string()),
+                task_name: Some("inspect-bill".to_string()),
+                session_name: Some("bill-soylei".to_string()),
+                target_service_ids: vec!["bill".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(
+            plan["decision"]["profileReuse"]["recommendedAction"],
+            "launch_new_browser"
+        );
+        assert_eq!(plan["query"]["sessionName"], "bill-soylei");
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["sessionName"],
+            "bill-soylei"
+        );
     }
 
     #[test]

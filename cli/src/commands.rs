@@ -88,7 +88,7 @@ const SERVICE_BROWSER_CAPABILITY_GUIDE_USAGE: &str = "service browser-capability
 
 const SERVICE_BROWSER_CAPABILITY_PREFER_USAGE: &str = "service browser-capability prefer --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> --preferred-executable-id <id> [--id <binding-id>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--service-name <name>] [--task-name <name>] [--preferred-host-id <id>] [--preferred-capability-id <id>] [--priority <n>] [--reason <text>]";
 
-const SERVICE_ACCESS_PLAN_USAGE: &str = "service access-plan [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--site-policy-id <id>] [--challenge-id <id>] [--readiness-profile-id <id>] [--runtime-profile <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--browser-host <local_headless|local_headed|docker_headed|remote_headed|cloud_provider|attached_existing>] [--view-stream-provider <cdp_screencast|chrome_tab_webrtc|virtual_display_webrtc|novnc|rdp_gateway|external_url>] [--control-input-provider <cdp_input|webrtc_input|vnc_input|manual_attached_desktop>] [--display-isolation <private_virtual_display|shared_display|ambient_display>]";
+const SERVICE_ACCESS_PLAN_USAGE: &str = "service access-plan [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--session-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--site-policy-id <id>] [--challenge-id <id>] [--readiness-profile-id <id>] [--runtime-profile <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--browser-host <local_headless|local_headed|docker_headed|remote_headed|cloud_provider|attached_existing>] [--view-stream-provider <cdp_screencast|chrome_tab_webrtc|virtual_display_webrtc|novnc|rdp_gateway|external_url>] [--control-input-provider <cdp_input|webrtc_input|vnc_input|manual_attached_desktop>] [--display-isolation <private_virtual_display|shared_display|ambient_display>]";
 const DESKTOP_CAPTURE_USAGE: &str = "desktop capture --browser-id <id> [--max-bytes <bytes>]";
 const DESKTOP_LOCATE_USAGE: &str = "desktop locate --browser-id <id> --locator-id <id> [--max-candidates <count>] [--include-visualization]";
 const DESKTOP_EVIDENCE_OBSERVE_USAGE: &str = "desktop evidence observe --browser-id <id> [--episode-id <id>] [--include-frame] [--service-name <name>] [--agent-name <name>] [--task-name <name>]";
@@ -260,6 +260,16 @@ fn parse_service_access_plan(
                     });
                 };
                 cmd["taskName"] = json!(value);
+                i += 1;
+            }
+            "--session-name" => {
+                let Some(value) = rest.get(i + 1) else {
+                    return Err(ParseError::InvalidValue {
+                        message: "Missing value for --session-name".to_string(),
+                        usage: SERVICE_ACCESS_PLAN_USAGE,
+                    });
+                };
+                cmd["sessionName"] = json!(value);
                 i += 1;
             }
             "--target-service-id" | "--target-service" => {
@@ -8597,7 +8607,7 @@ mod tests {
     #[test]
     fn test_service_access_plan_accepts_identity_and_browser_build() {
         let cmd = parse_command(
-            &args("service access-plan --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace --login-id canva --account-id user@example.test --runtime-profile canva-default --browser-build stealthcdp_chromium --browser-host remote_headed --view-stream-provider rdp_gateway --control-input-provider manual_attached_desktop --display-isolation private_virtual_display"),
+            &args("service access-plan --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace --session-name bill-soylei --login-id canva --account-id user@example.test --runtime-profile canva-default --browser-build stealthcdp_chromium --browser-host remote_headed --view-stream-provider rdp_gateway --control-input-provider manual_attached_desktop --display-isolation private_virtual_display"),
             &default_flags(),
         )
         .unwrap();
@@ -8606,6 +8616,7 @@ mod tests {
         assert_eq!(cmd["serviceName"], "CanvaCLI");
         assert_eq!(cmd["agentName"], "codex");
         assert_eq!(cmd["taskName"], "openCanvaWorkspace");
+        assert_eq!(cmd["sessionName"], "bill-soylei");
         assert_eq!(cmd["loginId"], "canva");
         assert_eq!(cmd["accountId"], "user@example.test");
         assert_eq!(cmd["runtimeProfile"], "canva-default");

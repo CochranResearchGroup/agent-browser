@@ -637,6 +637,7 @@ export async function getServiceAccessPlan({
         serviceName: options.serviceName,
         agentName: options.agentName,
         taskName: options.taskName,
+        sessionName: options.sessionName,
         loginId: options.loginId,
         siteId: options.siteId,
         targetServiceId: options.targetServiceId,

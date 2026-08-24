@@ -2579,6 +2579,7 @@ pub(crate) mod service_commands {
             service_name: optional_command_string(cmd, "serviceName"),
             agent_name: optional_command_string(cmd, "agentName"),
             task_name: optional_command_string(cmd, "taskName"),
+            session_name: optional_command_string(cmd, "sessionName"),
             target_service_ids: target_service_ids_from_command(cmd),
             account_ids: account_ids_from_command(cmd),
             target_url: target_url_from_command(cmd),
