@@ -31,6 +31,13 @@ a failed quarantined receipt with a deterministic cleanup obligation. Provider
 authority is reconciled from the current observation so partially created
 resources remain visible rather than becoming hidden residue.
 
+Scale-out also proves the installed helper's exact, idempotent route-session
+termination contract before provisioning. A live check against installed
+helper v4 returned `reclaim_capability_unavailable`, retained four displays,
+changed no provider resource, and wrote a durable deferred receipt. This closes
+the gap where capacity could grow before its exact garbage-collection path was
+available.
+
 ## Source Validation
 
 - development provider fixture passed, including four-to-five provisioning,

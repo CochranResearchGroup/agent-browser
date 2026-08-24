@@ -815,7 +815,8 @@ not capacity proof. Development Service Status must report non-null
 Elastic provider lifecycle is explicit and changes exactly one development
 route per command. Use
 `pnpm development-runtime:provider-scale-out -- --apply` only after the
-provider is ready; current resource pressure may defer it. Use
+provider is ready; current resource pressure or an unavailable exact reclaim
+helper must defer it before provisioning. Use
 `pnpm development-runtime:provider-scale-in -- --apply` only after cooldown.
 Scale-in checks exact browser, session, viewer, controller, acquisition,
 handoff, restoration, and cleanup references before terminating the exact

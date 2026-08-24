@@ -66,6 +66,8 @@ Elastic changes require an explicit one-route command:
 <code>pnpm development-runtime:provider-scale-out -- --apply</code> or
 <code>pnpm development-runtime:provider-scale-in -- --apply</code>. Scale-out
 uses current memory, swap, load, and file-handle admission. Scale-in waits for
+Scale-out also requires the installed helper to prove exact, idempotent
+route-session reclamation before it provisions anything. Scale-in waits for
 cooldown and refuses a route with browser, session, viewer, controller,
 acquisition, handoff, restoration, or cleanup references. Ambiguous or partial
 effects are quarantined with an exact development cleanup obligation and never

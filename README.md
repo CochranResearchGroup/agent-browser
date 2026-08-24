@@ -101,7 +101,8 @@ Provider doctor success proves provider readiness; Service Status must also
 report non-null `presentationCapacity` before capacity acceptance begins.
 Elastic provider changes are explicit and one route per command. Scale-out
 admits a fifth or sixth slot only when current memory, swap, load, and file
-handle reserves permit it. Scale-in waits for cooldown and refuses any route
+handle reserves permit it and the installed helper already proves exact,
+idempotent route-session reclamation. Scale-in waits for cooldown and refuses any route
 with browser, session, viewer, controller, acquisition, handoff, restoration,
 or cleanup references. Ambiguous or partial effects are quarantined with an
 exact development cleanup obligation. They never authorize production cleanup.

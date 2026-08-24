@@ -142,7 +142,9 @@ This is a Rust codebase. The browser automation daemon lives in `cli/src/native/
 - Use `pnpm development-runtime:provider-scale-out -- --apply` and
   `pnpm development-runtime:provider-scale-in -- --apply` for one-route elastic
   lifecycle effects. Scale-out is pressure-admitted. Scale-in requires elapsed
-  cooldown and an exact reference-free route. A quarantined result is a failed
+  cooldown and an exact reference-free route. Scale-out must defer unless the
+  installed helper already proves exact, idempotent route-session reclamation.
+  A quarantined result is a failed
   operation with a retained cleanup obligation, not permission for broad
   process cleanup.
 
