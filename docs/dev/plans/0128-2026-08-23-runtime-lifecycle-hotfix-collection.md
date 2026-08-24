@@ -4,11 +4,13 @@ Date: 2026-08-23
 
 State: OPEN
 
-Execution state: `source_accepted_install_pending`
+Execution state: `source_followup_accepted_install_pending`
 
 Lane: P128
 
 Branch: `hotfix/runtime-lifecycle-collection`
+
+Follow-up branch: `hotfix/runtime-source-session-selection`
 
 Target: `origin/main` at `88418a99b7eb76cb995421f89c5ece93dc8ccd19`
 
@@ -164,3 +166,21 @@ main already owns P127.
   `mcp-service-request-tab_new-2a40e988-8d11-4ad3-99ee-1fdc306fb804`;
 - supervisor observation: `last30days-home-feed`, unit inactive/dead, warning
   `supervisor_stopped`.
+
+## Transactional Install Follow-up
+
+The first reviewed candidate, SHA-256
+`7d19b21c7801bbed90ca398967662b4e3fbf121c851bcbaef27e93d376cc583d`,
+failed closed before activation in transaction
+`upgrade-56f5c32a-d939-4610-a299-fee113b5571e`. The selected generation
+remained unchanged, and supported reconciliation removed the failed candidate
+without terminating a live browser.
+
+The exact live owner route for the `last30days-facebook` browser prepared a
+cooperative handoff. A historical alias on the same shared runtime host then
+returned the legacy diagnostic `browser PID is unavailable`. The installer
+treated that browserless alternate as a blocking command failure even though
+the exact browser-bearing primary was already selected. The bounded follow-up
+classifies that diagnostic only for `handoff prepare`, retires it only when it
+comes from a non-primary alternate after valid owner selection, and keeps the
+same result blocking for a primary route.
