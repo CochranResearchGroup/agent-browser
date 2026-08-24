@@ -603,11 +603,15 @@ fn register_current_browser_lifecycle(state: &mut DaemonState) -> Result<(), Str
         target_ids,
     };
     let binding = authority.register_managed_lane(registration)?;
-    let reviewed_process_tree = authority.reviewed_process_tree(&binding, &process_identity)?;
+    state.runtime_owner_binding = Some(binding);
+    let binding = state
+        .runtime_owner_binding
+        .as_ref()
+        .expect("newly registered runtime owner binding remains present");
+    let reviewed_process_tree = authority.reviewed_process_tree(binding, &process_identity)?;
     if let Some(manager) = state.browser.as_mut() {
         manager.mark_lifecycle_managed(reviewed_process_tree);
     }
-    state.runtime_owner_binding = Some(binding);
     Ok(())
 }
 

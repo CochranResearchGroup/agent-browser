@@ -992,7 +992,7 @@ fn orphan_logical_browser_id_with_hint(
     Ok(logical_browser_id.to_string())
 }
 
-fn durable_orphan_runtime_profile(
+pub(crate) fn durable_orphan_runtime_profile(
     snapshot: &crate::native::service_model::ServiceState,
     source_session: &str,
     logical_browser_id: &str,

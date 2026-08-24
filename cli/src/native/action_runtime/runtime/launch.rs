@@ -100,6 +100,8 @@ use crate::runtime_profile::{
 };
 use serde_json::{json, Map, Value};
 use std::env;
+use std::fmt::Debug;
+use std::future::Future;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -527,6 +529,53 @@ pub(crate) async fn launch_browser_with_transient_retry(
         Err(error) => Err(error),
     }
 }
+
+pub(crate) async fn require_owned_launch_persistence<Cleanup, CleanupFuture, CleanupOutput>(
+    persistence: Result<(), String>,
+    cleanup: Cleanup,
+) -> Result<(), String>
+where
+    Cleanup: FnOnce() -> CleanupFuture,
+    CleanupFuture: Future<Output = Result<CleanupOutput, String>>,
+    CleanupOutput: Debug,
+{
+    let Err(error) = persistence else {
+        return Ok(());
+    };
+    let cleanup = cleanup().await;
+    Err(format!("{error}; launched_browser_cleanup={cleanup:?}"))
+}
+
+async fn cleanup_failed_owned_launch(state: &mut DaemonState) -> Result<Value, String> {
+    if state.runtime_owner_binding.is_some() {
+        return super::navigation::handle_close(state).await;
+    }
+
+    let runtime_profile = state
+        .browser
+        .as_ref()
+        .and_then(|manager| manager.runtime_profile_name().map(str::to_string));
+    let cleanup = match state.browser.as_mut() {
+        Some(manager) => manager.close_with_outcome().await,
+        None => Ok(BrowserShutdownOutcome::default()),
+    }?;
+    state.browser = None;
+    state.launch_hash = None;
+    state.close_behavior = CloseBehavior::CloseBrowser;
+    state.update_stream_client().await;
+    if let Some(runtime_profile) = runtime_profile.as_deref() {
+        if cleanup.controlled_relaunch_ready() {
+            let _ = clear_runtime_state(runtime_profile);
+        }
+    }
+    Ok(json!({
+        "exactProcessExited": cleanup.exact_process_exited,
+        "profileLockReleased": cleanup.profile_lock_released,
+        "forceKillFailed": cleanup.force_kill_failed,
+        "errors": cleanup.errors,
+    }))
+}
+
 pub(crate) async fn auto_launch(state: &mut DaemonState, command: &Value) -> Result<(), String> {
     state.pending_shared_profile_acquisition = None;
     let mut options = launch_options_from_env();
@@ -695,16 +744,17 @@ pub(crate) async fn auto_launch(state: &mut DaemonState, command: &Value) -> Res
         close_behavior_for_launched_browser(mgr.runtime_profile_name(), leave_open);
     state.browser = Some(mgr);
     state.launch_hash = Some(hash);
-    state.subscribe_to_browser_events();
-    state.start_fetch_handler();
-    state.start_dialog_handler();
-    state.update_stream_client().await;
-    persist_current_browser_health(
+    let persistence = persist_current_browser_health(
         state,
         service_host,
         ServiceBrowserHealth::Ready,
         Some(metadata),
-    )?;
+    );
+    require_owned_launch_persistence(persistence, || cleanup_failed_owned_launch(state)).await?;
+    state.subscribe_to_browser_events();
+    state.start_fetch_handler();
+    state.start_dialog_handler();
+    state.update_stream_client().await;
     if has_proxy_auth {
         if let Some(ref mgr) = state.browser {
             if let Ok(session_id) = mgr.active_session_id() {
@@ -1133,32 +1183,13 @@ pub(crate) async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Resul
             .and_then(|mgr| mgr.runtime_profile_name()),
         leave_open,
     );
-    if let Err(error) = persist_current_browser_health(
+    let persistence = persist_current_browser_health(
         state,
         service_host,
         ServiceBrowserHealth::Ready,
         Some(metadata),
-    ) {
-        let runtime_profile = state
-            .browser
-            .as_ref()
-            .and_then(|manager| manager.runtime_profile_name().map(str::to_string));
-        let cleanup = match state.browser.as_mut() {
-            Some(manager) => manager.close_with_outcome().await,
-            None => Ok(BrowserShutdownOutcome::default()),
-        };
-        state.browser = None;
-        state.launch_hash = None;
-        state.close_behavior = CloseBehavior::CloseBrowser;
-        state.update_stream_client().await;
-        if let (Some(runtime_profile), Ok(outcome)) = (runtime_profile.as_deref(), cleanup.as_ref())
-        {
-            if outcome.controlled_relaunch_ready() {
-                let _ = clear_runtime_state(runtime_profile);
-            }
-        }
-        return Err(format!("{error}; launched_browser_cleanup={cleanup:?}"));
-    }
+    );
+    require_owned_launch_persistence(persistence, || cleanup_failed_owned_launch(state)).await?;
     state.launch_hash = Some(new_hash);
     state.subscribe_to_browser_events();
     state.start_fetch_handler();

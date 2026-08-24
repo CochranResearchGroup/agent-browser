@@ -369,7 +369,11 @@ agent-browser install doctor --json
 The doctor reports drift when the command on `PATH` does not match the pnpm
 global package binary or the current workspace binary, and it reports launch
 readiness problems when `stealthcdp_chromium` is selected without a ready
-executable or manifest.
+executable or manifest. Structured observations with `severity: "warning"`
+remain visible but do not make doctor exit nonzero. A quiescent historical
+supervisor is advisory; a supervisor with active-process or stream evidence,
+startup failure, executable drift, port conflict, or unavailable status remains
+blocking.
 
 ### Maintainer Release Validation
 

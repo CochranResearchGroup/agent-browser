@@ -746,6 +746,83 @@ fn orphan_adoption_uses_verified_legacy_profile_when_service_evidence_omits_it()
 }
 
 #[test]
+fn missing_service_projection_requires_exact_durable_handoff_for_orphan_recovery() {
+    use crate::native::service_model::{
+        DurableHandoffPresentationReceipt, RemoteViewHandoff, ServiceState, ViewStreamProvider,
+    };
+    use crate::runtime_owner_transfer::{ProfileOwner, ProfileOwnerState};
+
+    let logical_browser_id = "session:bill-soylei";
+    let source_session = "bill-soylei";
+    let profile_digest = "1".repeat(64);
+    let process_digest = "2".repeat(64);
+    let mut snapshot = ServiceState::default();
+    snapshot.runtime_owner_registry.owners.insert(
+        profile_digest.clone(),
+        ProfileOwner {
+            owner_id: "owner-bill-orphan".to_string(),
+            profile_identity_digest: profile_digest,
+            state: ProfileOwnerState::Orphaned,
+            owner_generation: 2,
+            browser_id: logical_browser_id.to_string(),
+            daemon_session_route: source_session.to_string(),
+            process_instance_digest: process_digest.clone(),
+            browser_family: "chrome".to_string(),
+            cdp_endpoint_identity_digest: "3".repeat(64),
+            target_set_digest: "4".repeat(64),
+            pending_transfer: None,
+            last_transition: None,
+        },
+    );
+    snapshot.remote_view_handoffs.insert(
+        "bill-handoff".to_string(),
+        RemoteViewHandoff {
+            id: "bill-handoff".to_string(),
+            state: "ready".to_string(),
+            profile_id: Some("bill-soylei".to_string()),
+            browser_id: Some(logical_browser_id.to_string()),
+            session_name: Some(source_session.to_string()),
+            presentation_receipt: Some(DurableHandoffPresentationReceipt {
+                schema_version: "agent-browser.durable-handoff-presentation.v1".to_string(),
+                generation: 1,
+                dashboard_deployment_generation: "generation-a".to_string(),
+                logical_browser_id: logical_browser_id.to_string(),
+                daemon_owner_generation: Some(2),
+                process_instance_digest: Some(process_digest),
+                target_id: "target-a".to_string(),
+                required_stream_provider: ViewStreamProvider::RdpGateway,
+                observed_stream_provider: ViewStreamProvider::RdpGateway,
+                route_id: "route-a".to_string(),
+                display_allocation_id: "display-a".to_string(),
+                observed_at: "2026-08-23T00:00:00Z".to_string(),
+                state: "ready".to_string(),
+            }),
+            ..RemoteViewHandoff::default()
+        },
+    );
+
+    assert!(snapshot.browsers.is_empty());
+    assert!(snapshot.sessions.is_empty());
+    assert_eq!(
+        durable_orphan_runtime_profile(&snapshot, source_session, logical_browser_id).unwrap(),
+        "bill-soylei"
+    );
+
+    snapshot
+        .remote_view_handoffs
+        .get_mut("bill-handoff")
+        .unwrap()
+        .presentation_receipt
+        .as_mut()
+        .unwrap()
+        .process_instance_digest = Some("9".repeat(64));
+    assert_eq!(
+        durable_orphan_runtime_profile(&snapshot, source_session, logical_browser_id).unwrap_err(),
+        "runtime_handoff_durable_orphan_profile_ambiguous"
+    );
+}
+
+#[test]
 fn orphan_adoption_requires_one_exact_runtime_state_profile_match() {
     let process_identity = crate::process_identity::RecordedProcessIdentity {
         pid: 34923,
