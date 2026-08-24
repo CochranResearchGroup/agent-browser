@@ -4,7 +4,7 @@ Date: 2026-08-23
 
 State: IN PROGRESS
 
-Execution state: `slice_g_elastic_lifecycle_live_accepted_configured_episode_adapter_missing`
+Execution state: `slice_g_configured_capacity_adapter_source_accepted_scene_capture_adapter_missing`
 
 Lane: P124
 
@@ -382,10 +382,15 @@ Status: IN PROGRESS. Capacity projection and the exact development elastic
 lifecycle are installed and live accepted. Three complete 4→6→4 cycles and
 their fresh convergence census are recorded in
 `docs/dev/notes/0124-10-2026-08-23-development-elastic-lifecycle-live-acceptance.md`.
-The remaining installed boundary is a configured observation-only Desktop
-Evidence Episode adapter and its human, viewer, CDP, and retained-browser
-acceptance. Configured production input remains outside this plan's live
-authority until Plan 0110 is independently accepted.
+The configured observation-only Desktop Evidence Episode now has a fallible,
+durable presentation-capacity adapter. Admission refusal stops before scene or
+trigger work, release failure is terminal, and one-shot unavailable requests
+do not leave unresumable queue entries. Source evidence is recorded in
+`docs/dev/notes/0124-11-2026-08-23-configured-capacity-adapter-source-acceptance.md`.
+The remaining installed boundary is the configured scene, capture, paired CDP,
+handoff, and cleanup composition plus its human, viewer, CDP, and retained
+browser acceptance. Configured production input remains outside this plan's
+live authority until Plan 0110 is independently accepted.
 
 After source acceptance and separate explicit live authority:
 

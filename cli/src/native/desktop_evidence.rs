@@ -254,6 +254,15 @@ pub(crate) struct DesktopEvidenceEpisodeReceipt {
     pub(crate) cleanup_receipt_id: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DesktopEvidenceReleaseFailureReceipt {
+    pub(crate) episode_id: String,
+    pub(crate) admission_receipt_id: String,
+    pub(crate) failure: DesktopEpisodeAdmissionFailure,
+    pub(crate) cleanup_receipt_id: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct DesktopEpisodeRequest {
     pub(crate) episode_id: String,
@@ -297,9 +306,31 @@ pub(crate) enum DesktopEpisodeOutcome {
     DiagnosticFailure {
         reason: EvidenceDecisionReason,
     },
+    AdmissionUnavailable {
+        failure: DesktopEpisodeAdmissionFailure,
+    },
+    ReleaseFailed {
+        receipt: DesktopEvidenceReleaseFailureReceipt,
+    },
     Aborted {
         receipt: DesktopEvidenceTerminalReceipt,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DesktopEpisodeAdmissionFailure {
+    pub(crate) code: String,
+    pub(crate) detail: String,
+}
+
+impl DesktopEpisodeAdmissionFailure {
+    pub(crate) fn new(code: impl Into<String>, detail: impl Into<String>) -> Self {
+        Self {
+            code: code.into(),
+            detail: detail.into(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -319,7 +350,9 @@ pub(crate) struct DesktopEvidenceTerminalReceipt {
     pub(crate) stage_receipt_id: Option<String>,
     pub(crate) failure: DesktopEpisodeFailure,
     pub(crate) restoration_decision: RestorationDecision,
-    pub(crate) slot_release_receipt_id: String,
+    pub(crate) slot_release_receipt_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) release_failure: Option<DesktopEpisodeAdmissionFailure>,
     pub(crate) cleanup_receipt_id: String,
 }
 
@@ -329,8 +362,8 @@ pub(crate) trait CdpEvidenceAdapter {
 }
 
 pub(crate) trait PresentationSlotAdapter {
-    fn reserve(&mut self, browser_id: &str) -> String;
-    fn release(&mut self, browser_id: &str) -> String;
+    fn reserve(&mut self, browser_id: &str) -> Result<String, DesktopEpisodeAdmissionFailure>;
+    fn release(&mut self, browser_id: &str) -> Result<String, DesktopEpisodeAdmissionFailure>;
 }
 
 pub(crate) trait SceneStagingAdapter {
@@ -485,7 +518,10 @@ impl DesktopEvidenceCoordinator {
             | SceneAdmission::NotCaptureReady => {}
         }
 
-        let admission_receipt_id = adapters.slots.reserve(&request.browser_id);
+        let admission_receipt_id = match adapters.slots.reserve(&request.browser_id) {
+            Ok(receipt_id) => receipt_id,
+            Err(failure) => return DesktopEpisodeOutcome::AdmissionUnavailable { failure },
+        };
         let (before_scene_generation, restoration_authority) =
             adapters.staging.snapshot(&request.browser_id);
         let stage_receipt_id = decision
@@ -563,7 +599,19 @@ impl DesktopEvidenceCoordinator {
         if restoration_decision == RestorationDecision::Restore {
             adapters.staging.restore(&request.browser_id);
         }
-        let slot_release_receipt_id = adapters.slots.release(&request.browser_id);
+        let slot_release_receipt_id = match adapters.slots.release(&request.browser_id) {
+            Ok(receipt_id) => receipt_id,
+            Err(failure) => {
+                return DesktopEpisodeOutcome::ReleaseFailed {
+                    receipt: DesktopEvidenceReleaseFailureReceipt {
+                        episode_id: request.episode_id.clone(),
+                        admission_receipt_id,
+                        failure,
+                        cleanup_receipt_id: adapters.cleanup.complete(&request.episode_id),
+                    },
+                };
+            }
+        };
         let cleanup_receipt_id = adapters.cleanup.complete(&request.episode_id);
 
         DesktopEpisodeOutcome::Desktop {
@@ -609,6 +657,7 @@ impl DesktopEvidenceCoordinator {
         if restoration_decision == RestorationDecision::Restore {
             adapters.staging.restore(&request.browser_id);
         }
+        let release = adapters.slots.release(&request.browser_id);
         DesktopEpisodeOutcome::Aborted {
             receipt: DesktopEvidenceTerminalReceipt {
                 episode_id: request.episode_id.clone(),
@@ -618,7 +667,8 @@ impl DesktopEvidenceCoordinator {
                 stage_receipt_id,
                 failure,
                 restoration_decision,
-                slot_release_receipt_id: adapters.slots.release(&request.browser_id),
+                slot_release_receipt_id: release.as_ref().ok().cloned(),
+                release_failure: release.err(),
                 cleanup_receipt_id: adapters.cleanup.complete(&request.episode_id),
             },
         }
@@ -788,15 +838,25 @@ mod tests {
         }
     }
 
-    struct FakeSlots(Log);
+    struct FakeSlots {
+        log: Log,
+        admission_failure: Option<DesktopEpisodeAdmissionFailure>,
+        release_failure: Option<DesktopEpisodeAdmissionFailure>,
+    }
     impl PresentationSlotAdapter for FakeSlots {
-        fn reserve(&mut self, _browser_id: &str) -> String {
-            self.0.borrow_mut().push("reserve");
-            "admission-1".to_string()
+        fn reserve(&mut self, _browser_id: &str) -> Result<String, DesktopEpisodeAdmissionFailure> {
+            self.log.borrow_mut().push("reserve");
+            if let Some(failure) = self.admission_failure.clone() {
+                return Err(failure);
+            }
+            Ok("admission-1".to_string())
         }
-        fn release(&mut self, _browser_id: &str) -> String {
-            self.0.borrow_mut().push("release");
-            "release-1".to_string()
+        fn release(&mut self, _browser_id: &str) -> Result<String, DesktopEpisodeAdmissionFailure> {
+            self.log.borrow_mut().push("release");
+            if let Some(failure) = self.release_failure.clone() {
+                return Err(failure);
+            }
+            Ok("release-1".to_string())
         }
     }
 
@@ -920,7 +980,11 @@ mod tests {
             let log = Rc::new(RefCell::new(Vec::new()));
             Self {
                 cdp: FakeCdp(log.clone()),
-                slots: FakeSlots(log.clone()),
+                slots: FakeSlots {
+                    log: log.clone(),
+                    admission_failure: None,
+                    release_failure: None,
+                },
                 staging: FakeStaging {
                     log: log.clone(),
                     current: RestorationAuthority::new("scene-staged", "route-1", "control-1"),
@@ -1052,6 +1116,28 @@ mod tests {
     }
 
     #[test]
+    fn release_failure_is_terminal_and_cleanup_still_runs() {
+        let mut harness = Harness::new();
+        harness.slots.release_failure = Some(DesktopEpisodeAdmissionFailure::new(
+            "presentation_release_failed",
+            "durable capacity mutation was not committed",
+        ));
+
+        let outcome = harness.run(
+            EvidenceRequest::browser_external(BrowserExternalSurface::PasskeyChooser, true),
+            EpisodeInput::None,
+        );
+
+        let DesktopEpisodeOutcome::ReleaseFailed { receipt } = outcome else {
+            panic!("expected a terminal release failure receipt");
+        };
+        assert_eq!(receipt.episode_id, "episode-1");
+        assert_eq!(receipt.failure.code, "presentation_release_failed");
+        assert_eq!(receipt.cleanup_receipt_id, "cleanup-1");
+        assert!(harness.log.borrow().ends_with(&["release", "cleanup"]));
+    }
+
+    #[test]
     fn configured_production_input_is_unavailable_and_returns_human_handoff() {
         let mut harness = Harness::new();
         let outcome = harness.run(
@@ -1091,6 +1177,31 @@ mod tests {
             }
         ));
         assert_eq!(*harness.log.borrow(), vec!["scene_admission", "handoff"]);
+    }
+
+    #[test]
+    fn unavailable_capacity_stops_before_scene_snapshot_or_external_trigger() {
+        let mut harness = Harness::new();
+        harness.slots.admission_failure = Some(DesktopEpisodeAdmissionFailure::new(
+            "presentation_capacity_reserved",
+            "human and recovery capacity is protected",
+        ));
+
+        let outcome = harness.run(
+            EvidenceRequest::browser_external(BrowserExternalSurface::PasskeyChooser, true),
+            EpisodeInput::None,
+        );
+
+        assert_eq!(
+            outcome,
+            DesktopEpisodeOutcome::AdmissionUnavailable {
+                failure: DesktopEpisodeAdmissionFailure::new(
+                    "presentation_capacity_reserved",
+                    "human and recovery capacity is protected",
+                ),
+            }
+        );
+        assert_eq!(*harness.log.borrow(), vec!["scene_admission", "reserve"]);
     }
 
     #[test]
