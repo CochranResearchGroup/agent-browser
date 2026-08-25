@@ -15235,8 +15235,12 @@ mod tests {
         assert_eq!(payload["trace"]["agentName"], "codex");
         assert_eq!(payload["data"]["query"]["sessionName"], "bill-soylei");
         assert_eq!(
-            payload["data"]["decision"]["serviceRequest"]["request"]["sessionName"],
-            "bill-soylei"
+            payload["data"]["decision"]["serviceRequest"]["request"],
+            Value::Null
+        );
+        assert_eq!(
+            payload["data"]["decision"]["serviceRequest"]["available"],
+            false
         );
         assert_eq!(
             payload["data"]["query"]["browserBuild"],
@@ -15262,7 +15266,7 @@ mod tests {
         );
         assert_eq!(
             payload["data"]["decision"]["recommendedAction"],
-            "use_selected_profile"
+            "resolve_explicit_session_route"
         );
     }
 

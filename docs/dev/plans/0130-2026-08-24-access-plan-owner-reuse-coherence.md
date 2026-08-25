@@ -4,7 +4,7 @@ Date: 2026-08-24
 
 State: OPEN
 
-Execution state: `source_implementation_active`
+Execution state: `client_implementation_active`
 
 Lane: P130
 
@@ -289,3 +289,19 @@ process count, tab acquisition, tab release, and final resource census.
   surfaces.
 - Next action: add the P130-A red regression through the public access-plan
   interface.
+
+## 2026-08-24 planner checkpoint
+
+- P130-A is complete. The transferred-owner fixture failed with
+  `wait_for_profile_lease` before the repair and now returns exact reuse hints.
+- P130-B is complete for the access-plan and command-delivery surfaces.
+  Existing-tab compatibility now uses explicit acquisition constraints instead
+  of inherited replacement posture. Replacement-ineligible owners and invalid
+  explicit sessions fail closed before request queueing.
+- `compatibleLiveBrowserCount` now reports operation-compatible browsers;
+  `sameProfileLiveBrowserCount` retains the broader health observation.
+- Focused evidence: 45 `service_access_plan` tests pass, including HTTP, MCP,
+  CLI output, transferred-owner reuse, explicit-session expansion, lifecycle
+  replacement blocking, and partial route-hint completion.
+- Next action: validate cooperative-transfer projection and implement the
+  generated-client plan consumer.
