@@ -12,6 +12,10 @@ use crate::native::cdp::chrome::{launch_chrome_detached, LaunchOptions, ManualCh
 use crate::native::cookies;
 use crate::native::network::{self, DomainFilter, EventTracker};
 use crate::native::policy::{ActionPolicy, ConfirmActions, PolicyResult};
+use crate::native::presentation_capacity::{
+    PresentationCapacityAuthority, PresentationCapacityConfig, PresentationSlot,
+    PresentationSlotState,
+};
 use crate::native::providers;
 use crate::native::remote_view::open::*;
 use crate::native::remote_view::{
@@ -531,6 +535,25 @@ async fn test_remote_view_browser_reattach_reuses_retained_browser_without_dupli
     let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
     store
         .save(&ServiceState {
+            presentation_capacity: Some(
+                PresentationCapacityAuthority::new(
+                    PresentationCapacityConfig {
+                        warm_minimum: 1,
+                        hard_maximum: 1,
+                        human_priority_reserve: 0,
+                        recovery_reserve: 0,
+                        max_queue_depth: 8,
+                    },
+                    vec![{
+                        let mut slot = PresentationSlot::warm_idle("slot:pool-a")
+                            .with_binding("route-a", "display-a");
+                        slot.state = PresentationSlotState::Active;
+                        slot.browser_id = Some("session:rdp-a".to_string());
+                        slot
+                    }],
+                )
+                .unwrap(),
+            ),
             display_allocations: BTreeMap::from([(
                 "display-a".to_string(),
                 DisplayAllocation {
@@ -627,6 +650,9 @@ async fn test_remote_view_browser_reattach_reuses_retained_browser_without_dupli
     assert_eq!(result["success"], true, "{result}");
     assert_eq!(result["data"]["status"], "reattached");
     assert_eq!(result["data"]["routeId"], "route-a");
+    assert_eq!(result["data"]["recoveryAdmission"]["status"], "granted");
+    assert_eq!(result["data"]["recoveryAdmission"]["slotId"], "slot:pool-a");
+    assert_eq!(result["data"]["recoveryRelease"]["status"], "released");
     assert_eq!(
         result["data"]["checkout"]["attachability"]["state"],
         "attached_ready"
@@ -649,6 +675,11 @@ async fn test_remote_view_browser_reattach_reuses_retained_browser_without_dupli
         Some("display-a")
     );
     assert_eq!(persisted.remote_view_routes["route-a"].state, "ready");
+    let slot = &persisted.presentation_capacity.as_ref().unwrap().slots[0];
+    assert_eq!(slot.state, PresentationSlotState::Active);
+    assert_eq!(slot.browser_id.as_deref(), Some("session:rdp-a"));
+    assert_eq!(slot.lease_request_id, None);
+    assert_eq!(slot.lease_priority, None);
     let _ = fs::remove_dir_all(&home);
 }
 #[tokio::test]

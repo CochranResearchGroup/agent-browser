@@ -376,6 +376,11 @@ live browser's route, release that route surface, and return
 `routeSwitchParking` with the parked browser and release evidence. Browser and
 RDP stream records expose `attachability` with the recommended action and
 route/display/proof agreement evidence.
+On a runtime with configured presentation capacity, both operations acquire
+recovery priority on the exact bound slot before route mutation. Require
+`recoveryAdmission.status=granted` and `recoveryRelease.status=released` as the
+capacity receipt pair. A `not_configured` status is compatibility evidence for
+an older state, not proof that recovery capacity was admitted.
 When `AGENT_BROWSER_RDP_ROUTE_POOL_JSON` is present, the CLI copies that
 fresh route-pool array into the `remote_view_open` request unless the caller
 already supplied `--route-pool-entry-json`. Use this after the route-pool

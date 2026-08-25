@@ -3438,6 +3438,11 @@ shown again without launching or acquiring its profile, and use
 different available or parkable Guacamole route. When both route slots are
 occupied, route switch can park another live browser's route surface and returns
 `routeSwitchParking` with the parked browser and release evidence.
+When presentation capacity is configured, reattach and route switch reserve
+the exact bound slot at recovery priority before changing route state, then
+release that lease without parking the retained browser. Their responses expose
+`recoveryAdmission` and `recoveryRelease`; `not_configured` is explicit on
+older states that do not have presentation-capacity authority.
 The returned browser and RDP stream records include `attachability` evidence so
 clients can distinguish attached, reattachable stale-route, disconnected-viewer,
 and closed-browser states.

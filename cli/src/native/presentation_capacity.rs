@@ -536,10 +536,50 @@ impl PresentationCapacityAuthority {
         route_id: &str,
         display_allocation_id: &str,
     ) -> CapacityDecision {
+        self.request_bound_presentation(
+            request,
+            PresentationPriority::Observation,
+            pressure,
+            service_state,
+            route_id,
+            display_allocation_id,
+        )
+    }
+
+    /// Reserve the exact presentation being restored by a recovery operation.
+    /// Recovery outranks observations and may reuse a durable handoff binding,
+    /// but it remains subordinate to an active human controller.
+    pub(crate) fn request_bound_recovery(
+        &mut self,
+        request: PresentationRequest,
+        pressure: PressureAdmission,
+        service_state: &ServiceState,
+        route_id: &str,
+        display_allocation_id: &str,
+    ) -> CapacityDecision {
+        self.request_bound_presentation(
+            request,
+            PresentationPriority::Recovery,
+            pressure,
+            service_state,
+            route_id,
+            display_allocation_id,
+        )
+    }
+
+    fn request_bound_presentation(
+        &mut self,
+        request: PresentationRequest,
+        expected_priority: PresentationPriority,
+        pressure: PressureAdmission,
+        service_state: &ServiceState,
+        route_id: &str,
+        display_allocation_id: &str,
+    ) -> CapacityDecision {
         self.queue_clock = self.queue_clock.saturating_add(1);
         let browser_id = request.browser_id.as_deref();
         if request.id.trim().is_empty()
-            || request.priority != PresentationPriority::Observation
+            || request.priority != expected_priority
             || request.requires_staging
             || browser_id.is_none()
             || self
@@ -618,9 +658,9 @@ impl PresentationCapacityAuthority {
         }
     }
 
-    /// Release an observation lease without parking an already-active retained
-    /// browser. Warm-slot reservations continue through normal dispatch.
-    pub(crate) fn release_bound_observation(
+    /// Release a bound presentation lease without parking an already-active
+    /// retained browser. Warm-slot reservations continue through normal dispatch.
+    pub(crate) fn release_bound_presentation(
         &mut self,
         slot_id: &str,
         request_id: &str,
