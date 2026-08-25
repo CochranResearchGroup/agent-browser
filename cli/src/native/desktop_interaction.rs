@@ -971,8 +971,18 @@ pub(crate) async fn handle_desktop_interact(command: &Value) -> Result<Value, St
             ));
         }
     }
+    let admission =
+        super::desktop_input_provider_admission::current_development_provider_admission()
+            .map_err(|code| format!("{code}: controlled desktop input admission failed"))?;
+    let _admitted_generation = (
+        admission.generation_id,
+        admission.generation_sha256,
+        admission.provider_id,
+        admission.capability,
+        admission.recipe_id,
+    );
     Err(
-        "desktop_input_provider_unavailable: no production desktop input provider is configured"
+        "desktop_input_provider_unavailable: controlled provider dispatch is not active"
             .to_string(),
     )
 }

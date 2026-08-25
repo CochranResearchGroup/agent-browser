@@ -60,6 +60,7 @@ pub(crate) mod desktop_evidence_cdp;
 pub(crate) mod desktop_evidence_configured;
 #[allow(dead_code)]
 pub(crate) mod desktop_input_provider;
+pub(crate) mod desktop_input_provider_admission;
 #[allow(dead_code)]
 pub(crate) mod desktop_interaction;
 #[allow(dead_code)]
