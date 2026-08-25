@@ -7,7 +7,7 @@ const MIN_IDLE_CPU_FRACTION = 0.1;
 const MIN_IDLE_CPU_CORES = 1;
 const MAX_IO_WAIT_FRACTION = 0.1;
 const MAX_FILE_HANDLE_FRACTION = 0.8;
-const CPU_SAMPLE_MS = 250;
+const CPU_SAMPLE_MS = 1_000;
 
 /** Read one bounded Linux host-pressure snapshot for elastic presentation admission. */
 export function sampleDevelopmentPresentationPressure({

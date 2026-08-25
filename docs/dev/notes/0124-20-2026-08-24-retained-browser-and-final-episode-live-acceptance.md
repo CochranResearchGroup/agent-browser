@@ -109,7 +109,7 @@ while current host pressure is allowed to decay.
 
 The original CPU gate used one-minute load average as its only CPU-pressure
 signal. Commit `eec463d6` deepened pressure admission into a typed snapshot
-evaluator and a bounded Linux sampler. A fresh 250 ms `/proc/stat` delta now
+evaluator and a bounded Linux sampler. A fresh one-second `/proc/stat` delta now
 controls CPU admission when available. The evaluator requires at least ten
 percent idle capacity with a one-core floor, rejects I/O wait above ten
 percent, preserves memory, swap, and file-handle reserves, and uses load
@@ -117,6 +117,12 @@ average only as a fail-closed fallback. Fixtures prove that lagging high load
 with five idle-core equivalents is admitted, zero idle capacity is rejected
 even with low load, high I/O wait is rejected, and missing CPU samples retain
 the conservative fallback.
+
+An initial 250 ms tracer caught one brief idle scheduler interval between
+otherwise saturated samples. The following scale command resampled at zero
+idle capacity and made no change, but the interval was too noisy to remain an
+admission authority. The final sampler therefore aggregates one second before
+making the same typed decision.
 
 The first corrected live request returned `reasons=[cpu_capacity]`, zero
 idle-core equivalents against a required two on the 20-CPU host, four slots

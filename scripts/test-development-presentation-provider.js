@@ -115,7 +115,7 @@ try {
   let cpuStatReads = 0;
   const sampledHeadroom = sampleDevelopmentPresentationPressure({
     cpuCount: 20,
-    wait: (milliseconds) => assert.equal(milliseconds, 250),
+    wait: (milliseconds) => assert.equal(milliseconds, 1_000),
     readFile: (path) => {
       if (path === '/proc/stat') {
         cpuStatReads += 1;
