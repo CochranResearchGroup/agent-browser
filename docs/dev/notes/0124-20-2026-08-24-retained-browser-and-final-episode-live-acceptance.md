@@ -6,7 +6,7 @@ Plan: `docs/dev/plans/0124-2026-08-23-scalable-desktop-evidence-and-presentation
 
 Authority: DEVELOPMENT RUNTIME EFFECTS | PRODUCTION READ-ONLY
 
-Status: PARTIAL ACCEPTED | UNRELATED ELASTIC CYCLE PRESSURE-DEFERRED
+Status: PARTIAL ACCEPTED | UNRELATED ELASTIC CYCLE CPU-CAPACITY-DEFERRED
 
 ## Accepted Retained Browser Boundary
 
@@ -105,7 +105,23 @@ The unrelated elastic cycle is not yet accepted in this packet. Repeated
 scale-out requests correctly deferred at four slots with
 `reason=pressure_admission`, `reasons=[cpu_load]`, and
 `productionUnchanged=true`. The retained authenticated browser remains alive
-while current host pressure is allowed to decay. Plan 0124 closes only after
-one admitted fifth route is reclaimed after cooldown and the same PID, process
-token, profile, target, and authenticated result survive that unrelated
-scale-in.
+while current host pressure is allowed to decay.
+
+The original CPU gate used one-minute load average as its only CPU-pressure
+signal. Commit `eec463d6` deepened pressure admission into a typed snapshot
+evaluator and a bounded Linux sampler. A fresh 250 ms `/proc/stat` delta now
+controls CPU admission when available. The evaluator requires at least ten
+percent idle capacity with a one-core floor, rejects I/O wait above ten
+percent, preserves memory, swap, and file-handle reserves, and uses load
+average only as a fail-closed fallback. Fixtures prove that lagging high load
+with five idle-core equivalents is admitted, zero idle capacity is rejected
+even with low load, high I/O wait is rejected, and missing CPU samples retain
+the conservative fallback.
+
+The first corrected live request returned `reasons=[cpu_capacity]`, zero
+idle-core equivalents against a required two on the 20-CPU host, four slots
+before and after, and `productionUnchanged=true`. This proves the current
+deferral is real CPU saturation rather than a stale load-average false
+positive. Plan 0124 closes only after one admitted fifth route is reclaimed
+after cooldown and the same PID, process token, profile, target, and
+authenticated result survive that unrelated scale-in.

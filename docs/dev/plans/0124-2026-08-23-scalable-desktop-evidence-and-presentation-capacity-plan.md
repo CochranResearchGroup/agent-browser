@@ -4,7 +4,7 @@ Date: 2026-08-23
 
 State: IN PROGRESS
 
-Execution state: `retained_browser_partial_and_final_episode_accepted_elastic_pressure_deferred_legacy_row_protected`
+Execution state: `retained_browser_partial_and_final_episode_accepted_elastic_cpu_capacity_deferred_legacy_row_protected`
 
 Lane: P124
 
@@ -470,10 +470,15 @@ reuse instead of being guessed away. Evidence is recorded in
 
 The remaining installed boundary is one unrelated elastic scale-out and
 cooldown scale-in while the same authenticated browser identity remains live.
-Current scale-out attempts are correctly pressure-deferred because one-minute
-host load exceeds the 18.0 admission boundary on this 20-CPU host. Configured
-production input remains outside this plan's live authority until Plan 0110 is
-independently accepted.
+Commit `eec463d6` replaced one-minute load average as the primary CPU admission
+signal with a bounded 250 ms idle-headroom sample. The sampler requires at
+least ten percent idle capacity with a one-core floor, rejects I/O wait above
+ten percent, and retains load average as a fail-closed fallback when a fresh
+CPU sample is unavailable. The latest scale-out remains correctly deferred
+because the 20-CPU host measured zero idle-core equivalents against a required
+two, not merely because its load average was high. Configured production input
+remains outside this plan's live authority until Plan 0110 is independently
+accepted.
 
 After source acceptance and separate explicit live authority:
 
