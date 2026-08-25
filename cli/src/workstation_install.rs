@@ -7326,6 +7326,7 @@ fn stage_payload_generation(
         let generation_path = paths.generations_dir.join(&generation_id);
         let generation_manifest = serde_json::to_string_pretty(&serde_json::json!({
             "schemaVersion": "agent-browser.runtime-generation.v1",
+            "environment": "production",
             "generationId": generation_id,
             "packageVersion": env!("CARGO_PKG_VERSION"),
             "binarySha256": binary_sha256.clone(),
@@ -7333,6 +7334,12 @@ fn stage_payload_generation(
             "controllerCompatibilityVersion": 1,
             "schemaCompatibilityVersion": 1,
             "immutableInstallationPath": generation_path,
+            "desktopInputProvider": {
+                "enabled": true,
+                "providerId": "controlled-x11-xtest",
+                "capability": "guarded_pointer_keyboard_v1",
+                "recipeId": "p131-controlled-x11-v1",
+            },
         }))
         .expect("runtime generation manifest must serialize");
         fs::write(staging.join("generation.json"), generation_manifest)
@@ -7453,6 +7460,7 @@ fn migrate_legacy_payload_to_generation(paths: &InstallPaths) -> Result<String, 
         let generation_path = paths.generations_dir.join(&generation_id);
         let generation_manifest = serde_json::to_string_pretty(&serde_json::json!({
             "schemaVersion": "agent-browser.runtime-generation.v1",
+            "environment": "production",
             "generationId": generation_id,
             "packageVersion": env!("CARGO_PKG_VERSION"),
             "binarySha256": binary_sha256,
@@ -7461,6 +7469,12 @@ fn migrate_legacy_payload_to_generation(paths: &InstallPaths) -> Result<String, 
             "schemaCompatibilityVersion": 1,
             "immutableInstallationPath": generation_path,
             "importedFromLegacyPayload": true,
+            "desktopInputProvider": {
+                "enabled": false,
+                "providerId": "controlled-x11-xtest",
+                "capability": "guarded_pointer_keyboard_v1",
+                "recipeId": "p131-controlled-x11-v1",
+            },
         }))
         .expect("legacy runtime generation manifest must serialize");
         fs::write(staging.join("generation.json"), generation_manifest).map_err(display_io(

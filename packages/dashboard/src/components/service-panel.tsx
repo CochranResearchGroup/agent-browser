@@ -8055,10 +8055,14 @@ export function ServicePanel({
               label="Evidence"
               value={status?.desktopEvidencePolicy?.pageEvidenceTransport === "cdp" ? "CDP first" : "unknown"}
               detail={status?.desktopEvidencePolicy
-                ? `Desktop requires capture-ready proof; generic CDP failure fallback ${status.desktopEvidencePolicy.genericCdpFailureAuthorizesDesktop ? "enabled" : "disabled"}`
+                ? `Desktop requires capture-ready proof; configured input ${status.desktopEvidencePolicy.configuredProductionInput ?? "unknown"}; generic CDP failure fallback ${status.desktopEvidencePolicy.genericCdpFailureAuthorizesDesktop ? "enabled" : "disabled"}`
                 : "Use desktop evidence only for browser-external or operating-system surfaces"}
               icon={ScanSearch}
-              tone={status?.desktopEvidencePolicy?.configuredProductionInput === "unavailable_pending_plan_0110" ? "neutral" : "warn"}
+              tone={status?.desktopEvidencePolicy?.configuredProductionInput === "controlled_x11_exact_generation_required"
+                ? "good"
+                : status?.desktopEvidencePolicy?.configuredProductionInput === "unavailable_pending_plan_0110"
+                  ? "neutral"
+                  : "warn"}
             />
             <ServiceStatusLight
               label="Reconciled"

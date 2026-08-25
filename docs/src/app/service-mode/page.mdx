@@ -43,8 +43,12 @@ contract shared by CLI, HTTP, MCP, generated clients, and the dashboard.
   </tbody>
 </table>
 
-Configured production desktop input remains unavailable until Plan 0110 is
-accepted independently.
+Configured production desktop input is limited to the closed
+<code>p131-controlled-x11-v1</code> recipe. Service status reports
+<code>controlled_x11_exact_generation_required</code>; execution still requires
+the exact selected immutable generation to enable the provider in its manifest
+and match the manifest binary digest. This does not authorize credential,
+private-profile, arbitrary-input, or general desktop-control workflows.
 
 The normal request model is identity-first. A caller asks for a tab or browser action plus `serviceName`, `agentName`, `taskName`, and the target site or login identity. agent-browser selects or reuses the managed profile, manages any profile lease, queues browser-control work, and records the trace state. Direct profile selection is for known-login overrides and bring-your-own-profile workflows.
 
@@ -533,10 +537,11 @@ provider selection, focus actions, and takeover instructions. It never
 requests, renews, releases, or takes over controller authority.
 
 > **Experimental:** `p131-controlled-x11-v1` is admitted only by an exact
-> installed development-generation manifest and the repository-owned,
-> network-free X11 fixture. Production and unmanifested binaries return
-> `desktop_input_provider_unavailable` before capture, controller mutation, or
-> input.
+> installed development or production generation manifest whose digest matches
+> the running binary, together with the repository-owned, network-free X11
+> fixture. Unmanifested binaries and unknown runtime environments fail before
+> capture, controller mutation, or input. This is not a general desktop-control
+> capability.
 
 The pointer-keyboard recipe owns its locator, server-derived deterministic pointer
 arc, one left click, fixed benign text, cleanup, and after-state verifier. It

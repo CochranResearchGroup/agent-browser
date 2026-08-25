@@ -599,7 +599,7 @@ impl DesktopEvidenceCoordinator {
             capture_ready_proof_required: true,
             paired_page_absence_required: true,
             generic_cdp_failure_authorizes_desktop: false,
-            configured_production_input: "unavailable_pending_plan_0110",
+            configured_production_input: "controlled_x11_exact_generation_required",
         }
     }
 
@@ -1486,7 +1486,7 @@ mod tests {
         assert_eq!(value["genericCdpFailureAuthorizesDesktop"], false);
         assert_eq!(
             value["configuredProductionInput"],
-            "unavailable_pending_plan_0110"
+            "controlled_x11_exact_generation_required"
         );
         assert!(value.get("routeId").is_none());
         assert!(value.get("displayName").is_none());

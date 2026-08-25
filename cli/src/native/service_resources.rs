@@ -1063,8 +1063,25 @@ trait ProcessInspector {
     fn sample(&self, pid: u32) -> Option<ProcessSample>;
 }
 
+struct ServiceGcApplyDependencies<'a> {
+    inspector: &'a dyn ProcessInspector,
+    terminator: &'a dyn ProcessTerminator,
+    now: u64,
+}
+
+trait ServiceGcClock {
+    fn now_seconds(&self) -> u64;
+}
+
 struct LiveInspector;
 struct LiveTerminator;
+struct SystemServiceGcClock;
+
+impl ServiceGcClock for SystemServiceGcClock {
+    fn now_seconds(&self) -> u64 {
+        unix_now_seconds()
+    }
+}
 
 impl ProcessInspector for LiveInspector {
     fn sample(&self, pid: u32) -> Option<ProcessSample> {
@@ -1087,17 +1104,39 @@ fn service_gc_apply_response_from_samples(
     inspector: &dyn ProcessInspector,
     terminator: &dyn ProcessTerminator,
 ) -> Value {
+    let now = unix_now_seconds();
+    service_gc_apply_response_from_samples_at(
+        state,
+        processes,
+        collection_warnings,
+        review_token,
+        force_without_review,
+        ServiceGcApplyDependencies {
+            inspector,
+            terminator,
+            now,
+        },
+    )
+}
+
+fn service_gc_apply_response_from_samples_at(
+    state: &mut ServiceState,
+    processes: Vec<ProcessSample>,
+    collection_warnings: Vec<String>,
+    review_token: Option<&str>,
+    force_without_review: bool,
+    dependencies: ServiceGcApplyDependencies<'_>,
+) -> Value {
     let resources_response =
         service_resources_response_from_samples(state, processes, collection_warnings);
     let candidates = candidates_from_response(&resources_response);
-    let now = unix_now_seconds();
     let token_status = if force_without_review {
         json!({
             "accepted": true,
             "mode": "force_without_review",
         })
     } else if let Some(token) = review_token {
-        match validate_review_token(&candidates, token, now) {
+        match validate_review_token(&candidates, token, dependencies.now) {
             Ok(()) => json!({
                 "accepted": true,
                 "mode": "review_token",
@@ -1141,7 +1180,7 @@ fn service_gc_apply_response_from_samples(
             }));
             continue;
         };
-        if !candidate_identity_still_matches(state, candidate, &identity, inspector) {
+        if !candidate_identity_still_matches(state, candidate, &identity, dependencies.inspector) {
             skipped.push(json!({
                 "pid": candidate.get("pid").cloned().unwrap_or(Value::Null),
                 "reason": "candidate_identity_changed",
@@ -1149,7 +1188,7 @@ fn service_gc_apply_response_from_samples(
             }));
             continue;
         }
-        let outcome = terminator.terminate(state, candidate);
+        let outcome = dependencies.terminator.terminate(state, candidate);
         match outcome.get("status").and_then(Value::as_str) {
             Some("terminated") | Some("already_exited") => terminated.push(json!({
                 "pid": candidate.get("pid").cloned().unwrap_or(Value::Null),
@@ -1198,21 +1237,43 @@ fn service_gc_unattended_response_from_samples(
     inspector: &dyn ProcessInspector,
     terminator: &dyn ProcessTerminator,
 ) -> Value {
+    service_gc_unattended_response_from_samples_with_clock(
+        state,
+        processes,
+        collection_warnings,
+        inspector,
+        terminator,
+        &SystemServiceGcClock,
+    )
+}
+
+fn service_gc_unattended_response_from_samples_with_clock(
+    state: &mut ServiceState,
+    processes: Vec<ProcessSample>,
+    collection_warnings: Vec<String>,
+    inspector: &dyn ProcessInspector,
+    terminator: &dyn ProcessTerminator,
+    clock: &dyn ServiceGcClock,
+) -> Value {
+    let now = clock.now_seconds();
     let resources = service_resources_response_from_samples(
         state,
         processes.clone(),
         collection_warnings.clone(),
     );
     let candidates = candidates_from_response(&resources);
-    let token = review_token_for_candidates(&candidates, unix_now_seconds());
-    let mut response = service_gc_apply_response_from_samples(
+    let token = review_token_for_candidates(&candidates, now);
+    let mut response = service_gc_apply_response_from_samples_at(
         state,
         processes,
         collection_warnings,
         Some(&token),
         false,
-        inspector,
-        terminator,
+        ServiceGcApplyDependencies {
+            inspector,
+            terminator,
+            now,
+        },
     );
     response["authority"] = json!("unattended_policy");
     response["reviewRequired"] = json!(false);
@@ -2417,6 +2478,43 @@ mod tests {
         assert_eq!(response["token"]["mode"], "unattended_policy");
         assert_eq!(response["counts"]["terminated"], 1);
         assert_eq!(state.events.len(), 1);
+    }
+
+    #[test]
+    fn unattended_gc_uses_one_clock_sample_for_token_issue_and_validation() {
+        struct ReversingClock(std::cell::Cell<u8>);
+
+        impl ServiceGcClock for ReversingClock {
+            fn now_seconds(&self) -> u64 {
+                let calls = self.0.get();
+                self.0.set(calls + 1);
+                if calls == 0 {
+                    1_000
+                } else {
+                    999
+                }
+            }
+        }
+
+        let (mut state, candidate) =
+            owned_closing_candidate(608, "/tmp/agent-browser-plan0131-unattended-clock");
+        let clock = ReversingClock(std::cell::Cell::new(0));
+        let response = service_gc_unattended_response_from_samples_with_clock(
+            &mut state,
+            vec![candidate.clone()],
+            Vec::new(),
+            &FakeInspector {
+                sample: Some(candidate),
+            },
+            &FakeTerminator,
+            &clock,
+        );
+
+        assert_eq!(response["applied"], true);
+        assert_eq!(response["authority"], "unattended_policy");
+        assert_eq!(response["token"]["mode"], "unattended_policy");
+        assert_eq!(response["counts"]["terminated"], 1);
+        assert_eq!(clock.0.get(), 1);
     }
 
     #[test]
