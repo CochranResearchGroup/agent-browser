@@ -59,6 +59,8 @@ pub(crate) mod desktop_evidence_cdp;
 #[allow(dead_code)]
 pub(crate) mod desktop_evidence_configured;
 #[allow(dead_code)]
+pub(crate) mod desktop_input_provider;
+#[allow(dead_code)]
 pub(crate) mod desktop_interaction;
 #[allow(dead_code)]
 pub mod desktop_locator;

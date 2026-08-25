@@ -2,9 +2,9 @@
 
 Date: 2026-08-25
 
-State: PLANNED
+State: OPEN
 
-Execution state: `plan_frozen_source_not_started`
+Execution state: `slice_a_contract_and_red_fixtures_active`
 
 Lane: P131
 
@@ -12,10 +12,16 @@ Parent: `docs/dev/plans/0110-2026-08-12-desktop-perception-interaction-foundatio
 
 Source baseline: `e8695f82969e684cc4f9a7929b723777f548c3a3e`
 
-Current authority: PLAN AND DOCUMENTATION ONLY
+Current authority: SOURCE-ONLY SLICES A AND B
 
 Future implementation branch:
 `feature/plan0131-controlled-x11-desktop-provider`
+
+Execution start baseline: `a54b0f976fb20e801d8e09e844708753c80ac79d`
+
+Owned worktree scope:
+`feature/plan0131-controlled-x11-desktop-provider` in the dedicated local
+Plan 0131 worktree.
 
 Depends on:
 
