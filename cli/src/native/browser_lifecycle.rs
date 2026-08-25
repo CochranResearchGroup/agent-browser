@@ -3,9 +3,10 @@ pub(crate) mod action_commands {
     use crate::native::action_runtime::runtime::{
         is_stale_page_session_error, optional_command_string, recover_browser_command_channel,
         relaunch_and_restore_page, service_browser_id,
-        validate_service_tab_handle_for_current_session,
-        validate_service_tab_handle_route_for_current_session, DaemonState, FetchPausedRequest,
-        HarEntry, MouseState, RouteEntry, RouteResponse, TrackedRequest,
+        validate_service_tab_handle_for_current_session, validate_service_tab_handle_for_daemon,
+        validate_service_tab_handle_route_for_current_session,
+        validate_service_tab_handle_route_for_daemon, DaemonState, FetchPausedRequest, HarEntry,
+        MouseState, RouteEntry, RouteResponse, TrackedRequest,
         AUTH_LOGIN_PREFERRED_SELECTOR_WINDOW_MS, AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
         AUTH_LOGIN_WAIT_UNTIL,
     };
@@ -270,10 +271,9 @@ pub(crate) mod action_commands {
             });
         let desired_origin = requested_url.as_deref().and_then(origin_for_url);
         let mut candidates = retained_tab_handle_candidates(handle, requested_url.as_deref());
-        let old_handle_valid =
-            validate_service_tab_handle_for_current_session(handle, &state.session_id)
-                .map(|_| true)
-                .unwrap_or(false);
+        let old_handle_valid = validate_service_tab_handle_for_daemon(handle, state)
+            .map(|_| true)
+            .unwrap_or(false);
         let mgr = state.browser.as_mut().ok_or_else(|| {
             "Cannot refresh service tab handle: routed browser session is not running".to_string()
         })?;
@@ -478,7 +478,7 @@ pub(crate) mod action_commands {
             .get("serviceTabHandle")
             .and_then(Value::as_object)
             .ok_or_else(|| "tab_handle_release requires serviceTabHandle".to_string())?;
-        validate_service_tab_handle_route_for_current_session(handle, &state.session_id)?;
+        validate_service_tab_handle_route_for_daemon(handle, state)?;
         let physical_tab_close =
             release_physical_tab_for_handle(handle, state, cmd.get("closePhysicalTab")).await;
         let released_at = OffsetDateTime::now_utc()

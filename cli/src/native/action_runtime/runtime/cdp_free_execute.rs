@@ -246,7 +246,8 @@ pub(crate) async fn handle_cdp_attach(
     cmd: &Value,
     state: &mut DaemonState,
 ) -> Result<Value, String> {
-    validate_cdp_attach_request(cmd, &state.session_id)?;
+    validate_cdp_attach_request(cmd, state)?;
+    let browser_id = service_tab_handle_browser_id(state);
     let mgr = state.browser.as_mut().ok_or_else(|| {
         "Cannot attach CDP: target browser session is not running; request a service tab first"
             .to_string()
@@ -267,7 +268,6 @@ pub(crate) async fn handle_cdp_attach(
     let attached_at = OffsetDateTime::now_utc()
         .format(&Rfc3339)
         .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string());
-    let browser_id = service_browser_id(&state.session_id);
     let profile_id = handle.get("profileId").cloned().unwrap_or(Value::Null);
     let tab_id = handle
         .get("tabId")
@@ -299,13 +299,13 @@ pub(crate) async fn handle_cdp_detach(
         .get("serviceTabHandle")
         .and_then(Value::as_object)
         .ok_or_else(|| "cdp_detach requires serviceTabHandle".to_string())?;
-    validate_service_tab_handle_for_current_session(handle, &state.session_id)?;
+    validate_service_tab_handle_for_daemon(handle, state)?;
     let detached_at = OffsetDateTime::now_utc()
         .format(&Rfc3339)
         .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string());
     Ok(json!(
         { "detached" : true, "controlPlaneMode" : "cdp", "detachKind" :
-        "service_tab_handle", "browserId" : service_browser_id(& state.session_id),
+        "service_tab_handle", "browserId" : service_tab_handle_browser_id(state),
         "sessionName" : state.session_id.clone(), "tabId" : handle.get("tabId")
         .cloned().unwrap_or(Value::Null), "targetId" : handle.get("targetId")
         .cloned().unwrap_or(Value::Null), "profileId" : handle.get("profileId")
@@ -315,7 +315,7 @@ pub(crate) async fn handle_cdp_detach(
         detached_at, }
     ))
 }
-pub(crate) fn validate_cdp_attach_request(cmd: &Value, session_id: &str) -> Result<(), String> {
+pub(crate) fn validate_cdp_attach_request(cmd: &Value, state: &DaemonState) -> Result<(), String> {
     if cmd.get("requiresCdpFree").and_then(Value::as_bool) == Some(true) {
         return Err(
             "cdp_attach is blocked because the selected policy requires CDP-free browser operation"
@@ -332,7 +332,7 @@ pub(crate) fn validate_cdp_attach_request(cmd: &Value, session_id: &str) -> Resu
         .get("serviceTabHandle")
         .and_then(Value::as_object)
         .ok_or_else(|| "cdp_attach requires serviceTabHandle".to_string())?;
-    validate_service_tab_handle_for_current_session(handle, session_id)?;
+    validate_service_tab_handle_for_daemon(handle, state)?;
     if handle.get("targetId").and_then(Value::as_str).is_none()
         && cmd.get("targetId").and_then(Value::as_str).is_none()
     {
@@ -351,18 +351,58 @@ pub(crate) fn validate_service_tab_handle_for_current_session(
             .unwrap_or("unknown");
         return Err(format!("service tab handle is stale: {stale_reason}"));
     }
-    validate_service_tab_handle_route_for_current_session(handle, session_id)
+    validate_service_tab_handle_route(handle, session_id, None)
 }
 pub(crate) fn validate_service_tab_handle_route_for_current_session(
     handle: &Map<String, Value>,
     session_id: &str,
+) -> Result<(), String> {
+    validate_service_tab_handle_route(handle, session_id, None)
+}
+pub(crate) fn service_tab_handle_browser_id(state: &DaemonState) -> String {
+    state
+        .runtime_owner_binding
+        .as_ref()
+        .map(|binding| binding.claim.logical_browser_id.trim())
+        .filter(|browser_id| !browser_id.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| service_browser_id(&state.session_id))
+}
+pub(crate) fn validate_service_tab_handle_for_daemon(
+    handle: &Map<String, Value>,
+    state: &DaemonState,
+) -> Result<(), String> {
+    if handle.get("valid").and_then(Value::as_bool) != Some(true) {
+        let stale_reason = handle
+            .get("staleReason")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        return Err(format!("service tab handle is stale: {stale_reason}"));
+    }
+    let browser_id = service_tab_handle_browser_id(state);
+    validate_service_tab_handle_route(handle, &state.session_id, Some(&browser_id))
+}
+pub(crate) fn validate_service_tab_handle_route_for_daemon(
+    handle: &Map<String, Value>,
+    state: &DaemonState,
+) -> Result<(), String> {
+    let browser_id = service_tab_handle_browser_id(state);
+    validate_service_tab_handle_route(handle, &state.session_id, Some(&browser_id))
+}
+fn validate_service_tab_handle_route(
+    handle: &Map<String, Value>,
+    session_id: &str,
+    authorized_browser_id: Option<&str>,
 ) -> Result<(), String> {
     let browser_id = handle
         .get("browserId")
         .and_then(Value::as_str)
         .ok_or_else(|| "serviceTabHandle.browserId is required".to_string())?;
     let expected_browser_id = service_browser_id(session_id);
-    if browser_id != expected_browser_id && browser_id != format!("session:{session_id}") {
+    if browser_id != expected_browser_id
+        && browser_id != format!("session:{session_id}")
+        && authorized_browser_id != Some(browser_id)
+    {
         return Err(format!(
             "service tab handle browserId {browser_id} does not match routed session {session_id}"
         ));
@@ -444,4 +484,63 @@ pub(crate) async fn launch_safari(cmd: &Value, state: &mut DaemonState) -> Resul
         { "launched" : true, "provider" : "safari", "port" : actual_port, "backend" :
         "webdriver", }
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime_owner_transfer::{OwnerAuthorityClaim, RuntimeOwnerBinding};
+
+    fn retained_owner_state() -> DaemonState {
+        let mut state = DaemonState::new();
+        state.session_id = "handoff-owner-route".to_string();
+        state.runtime_owner_binding =
+            Some(RuntimeOwnerBinding::effect_capable(OwnerAuthorityClaim {
+                owner_id: "owner-1".to_string(),
+                profile_identity_digest: "profile-digest".to_string(),
+                owner_generation: 19,
+                logical_browser_id: "session:durable-browser".to_string(),
+                daemon_session_route: "handoff-owner-route".to_string(),
+                process_instance_digest: "process-digest".to_string(),
+            }));
+        state
+    }
+
+    #[test]
+    fn retained_owner_authorizes_durable_service_tab_handle_identity() {
+        let state = retained_owner_state();
+        let handle = json!({
+            "browserId": "session:durable-browser",
+            "sessionName": "handoff-owner-route",
+            "tabId": "target:tab-1",
+            "targetId": "tab-1",
+            "valid": true,
+        });
+
+        assert_eq!(
+            service_tab_handle_browser_id(&state),
+            "session:durable-browser"
+        );
+        validate_service_tab_handle_for_daemon(handle.as_object().expect("handle object"), &state)
+            .expect("durable owner browser id should be authorized");
+    }
+
+    #[test]
+    fn retained_owner_rejects_unrelated_service_tab_handle_identity() {
+        let state = retained_owner_state();
+        let handle = json!({
+            "browserId": "session:unrelated-browser",
+            "sessionName": "handoff-owner-route",
+            "tabId": "target:tab-1",
+            "targetId": "tab-1",
+            "valid": true,
+        });
+
+        let error = validate_service_tab_handle_for_daemon(
+            handle.as_object().expect("handle object"),
+            &state,
+        )
+        .expect_err("unrelated browser id must fail closed");
+        assert!(error.contains("does not match routed session"));
+    }
 }

@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
 use super::action_runtime::runtime::{
-    service_browser_id, validate_service_tab_handle_for_current_session, DaemonState,
+    service_browser_id, validate_service_tab_handle_for_daemon, DaemonState,
     RuntimeHandoffDescriptor, TrackedRequest,
 };
 use super::browser_navigation::handle_reload;
@@ -24,7 +24,7 @@ pub(crate) async fn handle_service_ui_action(
         .get("serviceTabHandle")
         .and_then(Value::as_object)
         .ok_or_else(|| "ui_action requires serviceTabHandle".to_string())?;
-    validate_service_tab_handle_for_current_session(handle, &state.session_id)?;
+    validate_service_tab_handle_for_daemon(handle, state)?;
     let ui_action = cmd
         .get("uiAction")
         .and_then(Value::as_object)
