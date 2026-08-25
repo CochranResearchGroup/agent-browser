@@ -4,7 +4,7 @@ Date: 2026-08-23
 
 State: IN PROGRESS
 
-Execution state: `slice_h_browser_external_live_accepted_remaining_multi_party_acceptance`
+Execution state: `slice_h_cdp_slot_neutrality_accepted_remaining_multi_party_acceptance`
 
 Lane: P124
 
@@ -430,11 +430,24 @@ provider-inventory `available` state without a ghost browser. Evidence is
 recorded in
 `docs/dev/notes/0124-17-2026-08-24-browser-external-live-acceptance.md`.
 
+Ordinary CDP-only slot neutrality is live accepted. A fresh named development
+browser remained controllable while all four presentation slots stayed
+`warm_idle`, no display allocation or viewer lease appeared, and the human and
+recovery reserves remained configured. Exact close then produced process-exit
+and profile-lock-release evidence with zero cleanup candidates. A reviewed
+retained-state prune removed three older dead browser placeholders and one
+closed tab without touching profiles, sessions, displays, or live processes.
+Four older lifecycle-only rows remain `closing` despite absent process groups;
+that migration residue remains part of the garbage-collection boundary.
+Evidence is recorded in
+`docs/dev/notes/0124-18-2026-08-24-cdp-slot-neutrality-live-acceptance.md`.
+
 The remaining installed boundary is active-human and passive-viewer
-precedence, concurrent observation plus recovery admission, CDP-only slot
-neutrality, and retained authenticated-browser survival through route movement
-and unrelated scale-in. Configured production input remains outside this
-plan's live authority until Plan 0110 is independently accepted.
+precedence, concurrent observation plus recovery admission, retained
+authenticated-browser survival through route movement and unrelated scale-in,
+and convergence of legacy lifecycle-only closing rows. Configured production
+input remains outside this plan's live authority until Plan 0110 is
+independently accepted.
 
 After source acceptance and separate explicit live authority:
 
