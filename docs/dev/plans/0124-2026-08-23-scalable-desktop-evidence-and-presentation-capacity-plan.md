@@ -4,7 +4,7 @@ Date: 2026-08-23
 
 State: IN PROGRESS
 
-Execution state: `slice_g_multi_party_priority_and_recovery_accepted_remaining_retained_browser_and_legacy_cleanup`
+Execution state: `retained_browser_partial_and_final_episode_accepted_elastic_pressure_deferred_legacy_row_protected`
 
 Lane: P124
 
@@ -458,12 +458,22 @@ concurrently started recovery lease. Final development generation
 active viewer leases, and four `warm_idle` slots. Evidence is recorded in
 `docs/dev/notes/0124-19-2026-08-24-human-priority-and-concurrent-recovery-live-acceptance.md`.
 
-The remaining installed boundary is retained authenticated-browser survival
-through route movement and unrelated scale-in, a repeat browser-external
-episode on the final installed generation, and convergence or explicit
-disposition of the remaining unprovable legacy `v1` lifecycle-only closing
-row. Configured production input remains outside this plan's live authority
-until Plan 0110 is independently accepted.
+Retained authenticated-browser identity is now live accepted through occupied
+route parking, reassignment, reconciliation, and authenticated dashboard
+refresh. A complete browser-external episode also passed on final installed
+development generation `0.28.0-08de92737c24`. The unprovable legacy `v1`
+lifecycle-only closing row has an explicit protected disposition: its PID,
+process group, old profile directory, and lock are absent, but no authoritative
+profile mapping exists, so the row remains quarantined and ineligible for
+reuse instead of being guessed away. Evidence is recorded in
+`docs/dev/notes/0124-20-2026-08-24-retained-browser-and-final-episode-live-acceptance.md`.
+
+The remaining installed boundary is one unrelated elastic scale-out and
+cooldown scale-in while the same authenticated browser identity remains live.
+Current scale-out attempts are correctly pressure-deferred because one-minute
+host load exceeds the 18.0 admission boundary on this 20-CPU host. Configured
+production input remains outside this plan's live authority until Plan 0110 is
+independently accepted.
 
 After source acceptance and separate explicit live authority:
 
