@@ -17,6 +17,7 @@ use tokio::time::timeout;
 
 pub(crate) const DASHBOARD_INGRESS_SCHEMA_VERSION: &str = "agent-browser.dashboard-ingress.v1";
 const DASHBOARD_INGRESS_FIRST_RESPONSE_TIMEOUT: Duration = Duration::from_secs(2);
+const DASHBOARD_INGRESS_SERVICE_STATUS_FIRST_RESPONSE_TIMEOUT: Duration = Duration::from_secs(10);
 const DASHBOARD_INGRESS_HANDOFF_FIRST_RESPONSE_TIMEOUT: Duration = Duration::from_secs(65);
 const DASHBOARD_INGRESS_DEFAULT_SERVICE_JOB_TIMEOUT: Duration = Duration::from_secs(30);
 const DASHBOARD_INGRESS_SERVICE_RESPONSE_GRACE: Duration = Duration::from_secs(5);
@@ -981,6 +982,14 @@ impl DashboardBackendAttemptError {
 /// timeout plus a small response grace so a committed request is not reported
 /// as a retryable backend failure.
 fn dashboard_ingress_first_response_timeout(request: &[u8]) -> Duration {
+    if request.starts_with(b"GET /api/service/status ")
+        || request.starts_with(b"GET /api/service/status?")
+    {
+        // A live service projection can take longer than an ordinary dashboard
+        // read while the host is under admitted pressure. Keep this allowance
+        // route-specific so unrelated reads still fail over promptly.
+        return DASHBOARD_INGRESS_SERVICE_STATUS_FIRST_RESPONSE_TIMEOUT;
+    }
     if !request.starts_with(b"POST /api/service/request ") {
         return DASHBOARD_INGRESS_FIRST_RESPONSE_TIMEOUT;
     }
@@ -1681,6 +1690,22 @@ mod tests {
         backend.await.unwrap();
         ingress.await.unwrap();
         assert!(response.ends_with(b"committed"));
+    }
+
+    #[test]
+    fn service_status_read_gets_a_pressure_tolerant_first_response_timeout() {
+        assert_eq!(
+            dashboard_ingress_first_response_timeout(
+                b"GET /api/service/status HTTP/1.1\r\nHost: localhost\r\n\r\n"
+            ),
+            Duration::from_secs(10)
+        );
+        assert_eq!(
+            dashboard_ingress_first_response_timeout(
+                b"GET /api/runtime/manifest HTTP/1.1\r\nHost: localhost\r\n\r\n"
+            ),
+            DASHBOARD_INGRESS_FIRST_RESPONSE_TIMEOUT
+        );
     }
 
     #[tokio::test]
