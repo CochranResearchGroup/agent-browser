@@ -718,8 +718,11 @@ Access-plan responses include <code>decision.profileReuse</code>, a no-launch
 minimal-profile advisory. It reports whether the selected profile should reuse
 an existing compatible live browser, wait for the profile lease with
 <code>profileLeasePolicy: "wait"</code>, or launch a new browser because no
-compatible account, site, browser-build, host, view-stream, control-input, and
-display-isolation lane exists. Duplicate live browsers or duplicate active
+compatible acquisition lane exists. <code>compatibleLiveBrowserCount</code>
+counts browsers that can accept the planned operation, while
+<code>sameProfileLiveBrowserCount</code> reports healthy same-profile
+observations. Tab reuse does not inherit new-launch presentation defaults, but
+explicit host, stream, input, and display constraints remain strict. Duplicate live browsers or duplicate active
 leases for the selected profile are exposed as <code>duplicatePressure</code>
 so clients can queue instead of cloning equivalent runtime profiles. When the
 recommendation is <code>reuse_existing_browser</code>, the copied
@@ -731,6 +734,11 @@ existing daemon lane. Software clients can call
 response or the tab response to get requested profile, planned profile, retained
 browser/session hints, tab handle, acquisition mode, and duplicate-process
 policy without parsing nested profile reuse fields.
+An explicit <code>sessionName</code> must map uniquely to one compatible retained
+browser. Missing or ambiguous mappings, and live lifecycle owners that cannot
+accept the planned operation, set <code>serviceRequest.available</code> to false,
+return typed attention, and omit the copyable request so clients cannot launch
+a forbidden replacement.
 
 Use <code>agent-browser service resources</code> when the host looks noisy and
 you need a no-launch process inventory correlated with retained service state.

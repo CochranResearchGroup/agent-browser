@@ -1844,6 +1844,12 @@ export interface ServiceAccessPlanServiceRequest {
   blockedByManualAction: boolean;
   /** True when site policy or challenge state denies the request. */
   blockedByPolicy: boolean;
+  /** True when lifecycle or explicit-route admission blocks this acquisition. */
+  blockedByAcquisition: boolean;
+  /** True when a retained lifecycle owner prevents replacement launch. */
+  blockedByLifecycleOwner: boolean;
+  /** Typed acquisition blocker when no request is available. */
+  acquisitionBlocker: string | null;
   action: 'tab_new';
   /** Profile selected by the planner, or null when no managed profile matched. */
   selectedProfileId: string | null;
@@ -1868,7 +1874,7 @@ export interface ServiceAccessPlanServiceRequest {
     browserId?: string;
     sessionName?: string;
     [key: string]: unknown;
-  };
+  } | null;
   http: {
     method: 'POST';
     route: '/api/service/request';
@@ -2147,12 +2153,15 @@ export interface ServiceAccessPlanProfileReuse {
     | 'reuse_existing_browser'
     | 'wait_for_profile_lease'
     | 'launch_new_browser'
+    | 'blocked_by_lifecycle_owner'
+    | 'blocked_by_explicit_session_route'
     | string;
   selectedProfileId: string | null;
   reusableBrowserId: string | null;
   reusableSessionName: string | null;
   reusableBrowserIds: string[];
   compatibleLiveBrowserCount: number;
+  sameProfileLiveBrowserCount: number;
   sameProfileLiveBrowserIds: string[];
   activeLeaseSessionIds: string[];
   activeLeaseCount: number;

@@ -6968,7 +6968,7 @@ Service:
   service gc                 Review or reclaim exact lifecycle-owned closing process trees
   service prune-retained     Dry-run or apply retained closed-tab, inert-browser, orphaned-profile, and display-allocation cleanup
   service repair-retained    Dry-run or apply retained session evidence repair
-  service access-plan        Show no-launch profile and browser-build routing recommendation
+  service access-plan        Show no-launch profile, retained-owner, and browser-build routing recommendation
   service profiles           Show retained profile records and allocation state
   service sessions           Show retained service session records
   service browsers           Show retained browser health records

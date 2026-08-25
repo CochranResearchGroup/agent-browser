@@ -972,6 +972,7 @@
             "reusableSessionName",
             "reusableBrowserIds",
             "compatibleLiveBrowserCount",
+            "sameProfileLiveBrowserCount",
             "sameProfileLiveBrowserIds",
             "activeLeaseSessionIds",
             "activeLeaseCount",
@@ -991,7 +992,9 @@
                 "seed_profile_before_reuse",
                 "reuse_existing_browser",
                 "wait_for_profile_lease",
-                "launch_new_browser"
+                "launch_new_browser",
+                "blocked_by_lifecycle_owner",
+                "blocked_by_explicit_session_route"
               ]
             },
             "selectedProfileId": {
@@ -1010,6 +1013,10 @@
               }
             },
             "compatibleLiveBrowserCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "sameProfileLiveBrowserCount": {
               "type": "integer",
               "minimum": 0
             },
@@ -1388,6 +1395,9 @@
             "blockedByManualAction",
             "blockedByCdpFree",
             "blockedByPolicy",
+            "blockedByAcquisition",
+            "blockedByLifecycleOwner",
+            "acquisitionBlocker",
             "requiresCdpFree",
             "cdpAttachmentAllowed",
             "action",
@@ -1415,6 +1425,15 @@
             },
             "blockedByPolicy": {
               "type": "boolean"
+            },
+            "blockedByAcquisition": {
+              "type": "boolean"
+            },
+            "blockedByLifecycleOwner": {
+              "type": "boolean"
+            },
+            "acquisitionBlocker": {
+              "type": ["string", "null"]
             },
             "requiresCdpFree": {
               "type": "boolean"
@@ -1511,7 +1530,7 @@
               "additionalProperties": true
             },
             "request": {
-              "type": "object",
+              "type": ["object", "null"],
               "required": ["action", "profileLeasePolicy"],
               "properties": {
                 "action": {

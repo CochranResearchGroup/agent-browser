@@ -4,7 +4,7 @@ Date: 2026-08-24
 
 State: OPEN
 
-Execution state: `client_implementation_active`
+Execution state: `validation_active`
 
 Lane: P130
 
@@ -323,3 +323,17 @@ process count, tab acquisition, tab release, and final resource census.
 - The active presentation lane published commits `8964dbf8` and `543da5e7`;
   the primary `main` worktree is clean. P130-E can now reconcile against that
   checkpoint.
+
+## 2026-08-24 presentation and contract checkpoint
+
+- P130-E is complete by reconciliation with the published presentation lane.
+  The retained-browser reattach fixture passes with one browser row, recovery
+  admission and release, and no controller displacement. All 16 focused
+  presentation-capacity tests pass.
+- HTTP, MCP, schema, generated-client, dashboard eligibility, CLI help, README,
+  skill, and docs-site surfaces now describe the same acquisition outcomes.
+- The access-plan client rejects unavailable plans, incomplete reuse hints, and
+  contradictory route overrides before posting.
+- P130-F validation is active. The workstation-bound no-launch smoke remains
+  deferred until the transactional candidate install because the installed
+  runtime currently rejects legacy per-session daemon admission.
