@@ -115,7 +115,7 @@ class Fixture:
                 tags=("state",),
             )
             self.canvas.create_text(
-                288, 344, text="VERIFIED", fill="white", tags=("state",)
+                288, 395, text="VERIFIED", fill="#24292f", tags=("state",)
             )
 
     def run(self):
