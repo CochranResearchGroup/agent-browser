@@ -635,6 +635,9 @@ pub(crate) async fn handle_service_remote_view_route_checkout(
                 entry.readiness = readiness.clone();
             }
         }
+        if let Some(capacity) = state.presentation_capacity.as_mut() {
+            capacity.activate_bound_browser(&route_id, &display_allocation_id, &browser_id)?;
+        }
         if let Some(browser) = state.browsers.get_mut(&browser_id) {
             browser.display_allocation_id = Some(display_allocation_id.clone());
             browser.active_session_ids.push(session_id.clone());
@@ -706,6 +709,13 @@ pub(crate) async fn handle_service_remote_view_route_release(
         let browser_id = route.browser_id.clone();
         let session_id = route.session_id.clone();
         let viewer_lease_ids = route.viewer_lease_ids.clone();
+        if let (Some(capacity), Some(display_allocation_id), Some(browser_id)) = (
+            state.presentation_capacity.as_mut(),
+            display_allocation_id.as_deref(),
+            browser_id.as_deref(),
+        ) {
+            capacity.release_bound_browser(&route_id, display_allocation_id, browser_id)?;
+        }
         if route.controller_lease_id.is_some() {
             advance_route_controller_authority(state, &route_id, None)?;
         }
