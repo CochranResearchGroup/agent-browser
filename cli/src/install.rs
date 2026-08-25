@@ -5695,6 +5695,11 @@ EOF
                     "ready": true,
                     "terminalStartupDetected": false
                 },
+                "routeSessionTermination": {
+                    "supported": true,
+                    "exactRouteUser": true,
+                    "idempotentWhenAbsent": true
+                },
                 "displayAccess": {
                     "supportsFilesystemX11Socket": true,
                     "supportsAbstractX11Socket": true,
@@ -5719,6 +5724,11 @@ EOF
             "routeDesktopSession": {
                 "ready": true,
                 "terminalStartupDetected": false
+            },
+            "routeSessionTermination": {
+                "supported": true,
+                "exactRouteUser": true,
+                "idempotentWhenAbsent": true
             },
             "displayAccess": {
                 "supportsFilesystemX11Socket": true,
@@ -5776,6 +5786,11 @@ EOF
                 "routeDesktopSession": {
                     "ready": true,
                     "terminalStartupDetected": false
+                },
+                "routeSessionTermination": {
+                    "supported": true,
+                    "exactRouteUser": true,
+                    "idempotentWhenAbsent": true
                 },
                 "displayAccess": {
                     "supportsFilesystemX11Socket": true,

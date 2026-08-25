@@ -978,6 +978,10 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         "register_or_seed_managed_profile"
     } else if selected_profile.is_none() {
         "register_managed_profile_or_request_throwaway_browser"
+    } else if acquisition_blocked_by_explicit_session {
+        "resolve_explicit_session_route"
+    } else if acquisition_blocked_by_lifecycle_owner {
+        "reconcile_lifecycle_owner_for_tab_acquisition"
     } else if profile_readiness_monitor_attention
         && readiness_profile_needs_probe(readiness, target_service_ids)
     {
@@ -986,10 +990,6 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         "run_due_profile_readiness_monitor"
     } else if readiness_profile_needs_probe(readiness, target_service_ids) {
         "verify_or_seed_profile_before_authenticated_work"
-    } else if acquisition_blocked_by_explicit_session {
-        "resolve_explicit_session_route"
-    } else if acquisition_blocked_by_lifecycle_owner {
-        "reconcile_lifecycle_owner_for_tab_acquisition"
     } else {
         "use_selected_profile"
     };
@@ -1183,6 +1183,9 @@ pub(crate) fn apply_shared_profile_route_hints_for_service_request(
     {
         return Ok(());
     }
+    if service_request_has_browser_hint(command) && !service_request_has_session_hint(command) {
+        return Err("service_access_plan_incomplete_route_hints".to_string());
+    }
 
     let request = service_access_plan_request_from_service_command(command)?;
     let plan = service_access_plan_for_state(service_state, request);
@@ -1234,6 +1237,21 @@ fn service_request_route_hint_count(command: &Value) -> usize {
                 .is_some_and(|value| !value.trim().is_empty())
         })
         .count()
+}
+
+fn service_request_has_browser_hint(command: &Value) -> bool {
+    service_request_has_route_hint_field(command, "browserId")
+}
+
+fn service_request_has_session_hint(command: &Value) -> bool {
+    service_request_has_route_hint_field(command, "sessionName")
+}
+
+fn service_request_has_route_hint_field(command: &Value, field: &str) -> bool {
+    command
+        .get(field)
+        .and_then(Value::as_str)
+        .is_some_and(|value| !value.trim().is_empty())
 }
 
 fn service_request_has_complete_route_hints(command: &Value) -> bool {

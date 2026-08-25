@@ -150,7 +150,8 @@ fn test_remote_view_helper_status_contract_accepts_current_capabilities() {
     let report = json!(
         { "success" : true, "parsed" : { "schemaVersion" : 1, "helperVersion" :
         "2026-06-23.p44-route-desktop-v4", "routeDesktopSession" : { "ready" : true,
-        "terminalStartupDetected" : false }, "displayAccess" : {
+        "terminalStartupDetected" : false }, "routeSessionTermination" : { "supported" :
+        true, "exactRouteUser" : true, "idempotentWhenAbsent" : true }, "displayAccess" : {
         "supportsFilesystemX11Socket" : true, "supportsAbstractX11Socket" : true,
         "boundedXhostTimeoutSeconds" : 2 }, "routeUserCredentialUpdate" : {
         "pamBypassed" : true, "cryptMethod" : "SHA512", "shaRounds" : 100000 } } }
@@ -162,7 +163,8 @@ fn test_remote_view_helper_status_contract_rejects_missing_abstract_socket_suppo
     let report = json!(
         { "success" : true, "parsed" : { "schemaVersion" : 1, "helperVersion" :
         "2026-06-23.p44-route-desktop-v4", "routeDesktopSession" : { "ready" : true,
-        "terminalStartupDetected" : false }, "displayAccess" : {
+        "terminalStartupDetected" : false }, "routeSessionTermination" : { "supported" :
+        true, "exactRouteUser" : true, "idempotentWhenAbsent" : true }, "displayAccess" : {
         "supportsFilesystemX11Socket" : true, "supportsAbstractX11Socket" : false,
         "boundedXhostTimeoutSeconds" : 2 }, "routeUserCredentialUpdate" : {
         "pamBypassed" : true, "cryptMethod" : "SHA512", "shaRounds" : 100000 } } }

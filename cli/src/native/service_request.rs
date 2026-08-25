@@ -2836,7 +2836,10 @@ mod tests {
         }
     }
 
-    fn normalize_with_state(request: Value, state: &ServiceState) -> NormalizedServiceRequest {
+    fn normalize_with_state(
+        request: Value,
+        state: &ServiceState,
+    ) -> Result<NormalizedServiceRequest, ServiceRequestIssue> {
         normalize_service_request(ServiceRequestNormalization {
             request: &request,
             service_state: Some(state),
@@ -2847,7 +2850,6 @@ mod tests {
             request_id: "test-normalizer-request",
             effective_session: Some("test-normalizer"),
         })
-        .unwrap()
     }
 
     #[test]
@@ -2880,7 +2882,8 @@ mod tests {
                 "params": {"handoffId": "handoff-a"}
             }),
             &state,
-        );
+        )
+        .unwrap();
         assert_eq!(handoff.command["browserId"], "session:original-lane");
         assert_eq!(handoff.command["sessionName"], "original-lane");
 
@@ -2896,24 +2899,28 @@ mod tests {
             "agentName": "agent-a",
             "taskName": "openSocial"
         });
-        let selected = normalize_with_state(base.clone(), &state);
+        let selected = normalize_with_state(base.clone(), &state).unwrap();
         assert_eq!(selected.command["browserId"], "browser-social");
         assert_eq!(selected.command["sessionName"], "operator-social");
 
         for overlay in [
             json!({"browserId": "session:explicit"}),
             json!({"sessionName": "explicit"}),
-            json!({"allowDuplicateProfileLane": true}),
         ] {
             let mut request = base.clone();
             request
                 .as_object_mut()
                 .unwrap()
                 .extend(overlay.as_object().unwrap().clone());
-            let normalized = normalize_with_state(request, &state);
-            assert_ne!(normalized.command["browserId"], "browser-social");
-            assert_ne!(normalized.command["sessionName"], "operator-social");
+            let error = normalize_with_state(request, &state).unwrap_err();
+            assert!(error.message().contains("service_access_plan_"));
         }
+
+        let mut duplicate_request = base;
+        duplicate_request["allowDuplicateProfileLane"] = json!(true);
+        let duplicate = normalize_with_state(duplicate_request, &state).unwrap();
+        assert!(duplicate.command.get("browserId").is_none());
+        assert!(duplicate.command.get("sessionName").is_none());
     }
 
     fn without_transport_id(mut command: Value) -> Value {
