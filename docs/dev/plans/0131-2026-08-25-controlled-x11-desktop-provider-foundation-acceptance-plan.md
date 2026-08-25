@@ -4,7 +4,7 @@ Date: 2026-08-25
 
 State: SOURCE ACCEPTED
 
-Execution state: `slice_b_source_accepted_live_preflight_pending`
+Execution state: `slice_c_development_install_active`
 
 Lane: P131
 
@@ -12,7 +12,7 @@ Parent: `docs/dev/plans/0110-2026-08-12-desktop-perception-interaction-foundatio
 
 Source baseline: `e8695f82969e684cc4f9a7929b723777f548c3a3e`
 
-Current authority: DEVELOPMENT LIVE PREFLIGHT ONLY
+Current authority: DEVELOPMENT RUNTIME EFFECTS FOR SLICE C ONLY
 
 Future implementation branch:
 `feature/plan0131-controlled-x11-desktop-provider`
@@ -434,7 +434,10 @@ defines their exact inputs, cleanup, resource budget, and receipt location.
 
 ## Current Next Action
 
-Run the Slice C development-runtime preflight from the accepted source commit.
-Do not install, activate, launch the fixture, or emit XTEST input until the
-preflight records the exact production and development identities, resources,
-provider readiness, rollback selector, and retained cleanup state.
+Install candidate
+`de5888949c2bb9e25ee84f3f1fab1cabdbcdb07bab1ae651835ade32f29a37d3`
+transactionally into `agent-browser-dev`, then rerun development doctor and the
+three-cycle development browser launch smoke. Production remains outside this
+authority. Launch the controlled fixture and emit XTEST input only after the
+installed generation, service capacity, route, display, controller, process,
+and production snapshots are re-anchored from the selected candidate.
