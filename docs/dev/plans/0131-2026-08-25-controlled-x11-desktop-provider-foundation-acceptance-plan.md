@@ -435,7 +435,7 @@ defines their exact inputs, cleanup, resource budget, and receipt location.
 ## Current Next Action
 
 Install candidate
-`de5888949c2bb9e25ee84f3f1fab1cabdbcdb07bab1ae651835ade32f29a37d3`
+`86026cf08fe76352b92a52312a6b8992c9c0bc8fba455e8cf58d8e461382429b`
 transactionally into `agent-browser-dev`, then rerun development doctor and the
 three-cycle development browser launch smoke. Production remains outside this
 authority. Launch the controlled fixture and emit XTEST input only after the

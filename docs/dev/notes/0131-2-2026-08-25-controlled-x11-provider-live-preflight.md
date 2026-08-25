@@ -76,3 +76,30 @@ pointer and keyboard recipe against an exact development route and controller
 lease. Any production hash or generation change, ambiguous cleanup state,
 missing capacity, or failed after-state verification requires development
 rollback to the selector recorded above.
+
+## First Live Attempt And Bounded Remediation
+
+The initial candidate reached two fail-closed outcomes during the controlled
+fixture proof:
+
+- The fixture rendered its label over the exact target color, so the strict
+  solid-color locator rejected the scene as ambiguous before any input.
+- After the fixture target became one solid region, operation
+  `p131-success-20260825-03` acknowledged 31 of 32 attempted event keys and
+  retained one uncertain `key_down` record. The uncertain event was the hyphen
+  in `fixture-ready`. The X11 adapter admitted that character but used the
+  literal `-` with `XStringToKeysym`; the registered X11 keysym name is
+  `minus`.
+
+The operation was not retried. Its durable uncertainty journal remains under
+the private development service state. The fixture browser exited, the viewer
+lease was released, the route returned to available, and the development
+selector was rolled back to `0.28.0-08de92737c24` before remediation.
+
+The bounded remediation moved the fixture label outside the solid target and
+mapped hyphen to the registered `minus` keysym under a focused unit regression.
+Strict clippy and fixture compilation passed. The remediated source commit is
+`d5f4799ef5d65aabd0f05a91588c761b0eaef38f`; its candidate SHA-256 is
+`86026cf08fe76352b92a52312a6b8992c9c0bc8fba455e8cf58d8e461382429b`.
+The original preflight candidate above remains historical evidence and is
+superseded for the next development installation only.
