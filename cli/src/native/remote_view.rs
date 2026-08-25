@@ -1774,6 +1774,7 @@ pub fn visible_browser_window_proof(
         .and_then(Value::as_str)
         .unwrap_or("unknown");
     if state == "browser_window_visible" {
+        validate_operator_presentation_if_present(route_id, display_name, &display_content)?;
         return Ok(json!({
             "state": "ready",
             "displayName": display_name,
@@ -1807,6 +1808,51 @@ pub fn visible_browser_window_proof(
     Err(format!(
         "{code}: route '{}' display '{}' state is '{}'{probe_error}",
         route_id, display_name, state
+    ))
+}
+
+fn validate_operator_presentation_if_present(
+    route_id: &str,
+    display_name: &str,
+    display_content: &Value,
+) -> Result<(), String> {
+    let Some(presentation) = display_content
+        .get("operatorPresentation")
+        .and_then(Value::as_object)
+    else {
+        return Ok(());
+    };
+    let is_true = |field: &str| presentation.get(field).and_then(Value::as_bool) == Some(true);
+    let mut blockers = Vec::new();
+    if !is_true("processBound") {
+        blockers.push("process_not_bound");
+    }
+    if !is_true("mapped") {
+        blockers.push("not_mapped");
+    }
+    if presentation.get("minimized").and_then(Value::as_bool) != Some(false) {
+        blockers.push("minimized");
+    }
+    if !is_true("visibleWorkspace") {
+        blockers.push("wrong_workspace");
+    }
+    if !is_true("activeWindowOwned") && !is_true("topmostWindowOwned") {
+        blockers.push("not_active_or_topmost");
+    }
+    if !is_true("authorizedGeometry") {
+        blockers.push("geometry_not_authorized");
+    }
+    if !is_true("captureRegionUnoccluded") {
+        blockers.push("occluded");
+    }
+    if blockers.is_empty() {
+        return Ok(());
+    }
+    Err(format!(
+        "operator_presentation_not_ready: route '{}' display '{}' blockers={}",
+        route_id,
+        display_name,
+        blockers.join(",")
     ))
 }
 
@@ -3103,6 +3149,29 @@ mod tests {
         let proof = visible_browser_window_proof("route-a", ":12", content).unwrap();
         assert_eq!(proof["state"], "ready");
         assert_eq!(proof["displayContent"]["state"], "browser_window_visible");
+    }
+
+    #[test]
+    fn visible_window_proof_rejects_minimized_process_bound_browser() {
+        let content = json!({
+            "state": "browser_window_visible",
+            "displayName": ":12",
+            "operatorPresentation": {
+                "processBound": true,
+                "mapped": true,
+                "minimized": true,
+                "visibleWorkspace": true,
+                "activeWindowOwned": false,
+                "topmostWindowOwned": false,
+                "authorizedGeometry": false,
+                "captureRegionUnoccluded": false
+            }
+        });
+
+        let error = visible_browser_window_proof("route-a", ":12", content).unwrap_err();
+
+        assert!(error.contains("operator_presentation_not_ready"));
+        assert!(error.contains("minimized"));
     }
 
     #[test]
