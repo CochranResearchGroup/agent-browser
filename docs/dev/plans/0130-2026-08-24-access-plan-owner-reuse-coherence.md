@@ -2,9 +2,9 @@
 
 Date: 2026-08-24
 
-State: OPEN
+State: CLOSED
 
-Execution state: `retained_handle_repair_candidate_qualified_runtime_apply_authorization_required`
+Execution state: `installed_runtime_acceptance_complete`
 
 Lane: P130
 
@@ -561,3 +561,50 @@ process count, tab acquisition, tab release, and final resource census.
   acceptance must release the existing harmless target rather than acquire a
   second tab, then prove the browser process, route, owner, and profile lane
   were preserved.
+
+## 2026-08-25 final installed-runtime acceptance
+
+- The operator explicitly authorized exact candidate SHA-256
+  `80d87ab7be0d2b3a1c8241a6bc5865fe556a00dcf700c2489759ab1a947af97a`.
+  The first apply attempt failed safely at the five-minute candidate-dashboard
+  presentation gate because the operator journey was not issued while the
+  candidate was staged. Ingress revision 324 selected the prior generation
+  with no candidate backend, and the installed binary remained `2970534a...`.
+- The coordinated retry staged exact generation
+  `0.28.0-80d87ab7be0d-5926db67f48a` at ingress revision 325. An authenticated
+  `service_remote_view_handoff_resolve` request for durable handoff `r895695`
+  returned success and automatically advanced ingress to ready revision 326
+  with a generation-bound presentation receipt. No provider response body was
+  read or retained.
+- Transaction `upgrade-4828ff47-b400-4b2f-b875-32c2fb5c6009` completed with
+  `success=true`, `complete=true`, `state=ready`, and `mutated=true`. Every
+  installer phase through workstation reconciliation, dashboard management,
+  and supervisor rebinding completed. The installed binary exactly matches
+  SHA-256 `80d87ab7...`.
+- The original harmless target `E93F0CD7724B06E4303D86643851EF69`
+  was lawfully retired during transactional owner-transfer cleanup and was no
+  longer live after installation. A replacement bounded proof therefore
+  acquired one `about:blank` tab as target
+  `5C38C377B1E89D0FD02CAC6CD68C4125` through the retained browser and current
+  session `handoff-cf9000d7f4b26642`.
+- The repaired runtime returned a valid `close_tabs` handle with durable
+  browser ID `session:last30days-facebook--last30days-facebook`, profile ID
+  `last30days-facebook`, and the current session route. Releasing that exact
+  handle returned `released=true`, `tabReleased=true`,
+  `browserProcessPreserved=true`, `sessionRoutePreserved=true`, and
+  `closeBrowserOnRelease=false`. The released target is absent from the final
+  tab inventory, while browser PID 95745 remains live.
+- The first post-install doctor observed one historical runtime-monitor
+  lock-collision receipt created while workstation reconciliation was active.
+  Runtime multiplicity was already steady. After the bounded backoff expired,
+  the configured runtime interlock completed successfully and replaced the
+  receipt with `state=healthy`, zero consecutive failures, and no error.
+- Final `agent-browser install doctor --json` exits zero with `success=true`
+  and no issues. The payload is source-free and ready, runtime convergence is
+  `converged`, dashboard state is ready and matches the exact installed SHA,
+  and the census reports one executable generation, one dashboard process,
+  one runtime host, zero legacy daemons, zero service candidates, zero
+  duplicate-profile warnings, and zero degraded supervisors.
+- P130-F and Plan 0130 are complete. The access plan, retained-owner command
+  route, durable tab handle, exact release, transactional installer, dashboard
+  presentation, and final health surfaces now agree in the installed runtime.
