@@ -13,6 +13,8 @@ use std::fs::{self, File, OpenOptions};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
+mod x11;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RouteEffectFenceIdentity {
     pub environment_id: String,
@@ -707,5 +709,33 @@ mod tests {
         assert_eq!(retry.code(), "desktop_input_effect_uncertain");
         assert_eq!(*calls.lock().unwrap(), 1);
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn controlled_fixture_manifest_is_bounded_and_private_data_free() {
+        let manifest: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/fixtures/controlled-x11-provider/manifest.json"
+        ))
+        .unwrap();
+        assert_eq!(
+            manifest["schemaVersion"],
+            "agent-browser.controlled-x11-fixture.v1"
+        );
+        assert_eq!(manifest["environment"], "development");
+        assert_eq!(manifest["fixedText"], "fixture-ready");
+        assert_eq!(manifest["networkAllowed"], false);
+        assert_eq!(manifest["privateDataAllowed"], false);
+        assert_eq!(manifest["cleanup"]["maximumAttempts"], 1);
+        assert_eq!(
+            manifest["cleanup"]["automaticRetryAfterPossibleEffect"],
+            false
+        );
+        assert_eq!(manifest["budgets"]["browserCount"], 1);
+        assert_eq!(manifest["budgets"]["competingProcessCount"], 1);
+        assert_eq!(manifest["receiptProjection"]["containsPixels"], false);
+        assert_eq!(
+            manifest["receiptProjection"]["containsPlaintextInput"],
+            false
+        );
     }
 }

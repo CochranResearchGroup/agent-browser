@@ -951,8 +951,26 @@ pub(crate) fn run_desktop_interaction(
 }
 
 /// Public production dispatch resolves no input provider in PoC 3. This must
-/// fail before capture, authority lookup, controller mutation, or input.
-pub(crate) async fn handle_desktop_interact(_command: &Value) -> Result<Value, String> {
+/// fail before capture, authority lookup, controller mutation, or input. Raw
+/// provider routing is rejected even while configured dispatch is unavailable
+/// so it can never become an accidental compatibility contract.
+pub(crate) async fn handle_desktop_interact(command: &Value) -> Result<Value, String> {
+    for forbidden in [
+        "coordinates",
+        "displayName",
+        "xauthorityPath",
+        "routeUser",
+        "providerExecutable",
+        "lockPath",
+        "providerUrl",
+        "guacamoleUrl",
+    ] {
+        if command.get(forbidden).is_some() {
+            return Err(format!(
+                "desktop_interact does not accept caller-controlled {forbidden}"
+            ));
+        }
+    }
     Err(
         "desktop_input_provider_unavailable: no production desktop input provider is configured"
             .to_string(),
@@ -3209,6 +3227,31 @@ mod tests {
             .await
             .unwrap_err();
         assert!(error.starts_with("desktop_input_provider_unavailable:"));
+    }
+
+    #[tokio::test]
+    async fn public_dispatch_rejects_caller_controlled_provider_routing() {
+        for forbidden in [
+            "coordinates",
+            "displayName",
+            "xauthorityPath",
+            "routeUser",
+            "providerExecutable",
+            "lockPath",
+            "providerUrl",
+            "guacamoleUrl",
+        ] {
+            let error = handle_desktop_interact(&json!({
+                "action": "desktop_interact",
+                (forbidden): "caller-value",
+            }))
+            .await
+            .unwrap_err();
+            assert_eq!(
+                error,
+                format!("desktop_interact does not accept caller-controlled {forbidden}")
+            );
+        }
     }
 
     #[test]
