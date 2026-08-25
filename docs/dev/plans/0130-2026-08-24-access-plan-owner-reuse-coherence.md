@@ -4,7 +4,7 @@ Date: 2026-08-24
 
 State: OPEN
 
-Execution state: `candidate_rebuild_required_after_e2e_fixture`
+Execution state: `candidate_qualified_runtime_apply_authorization_required`
 
 Lane: P130
 
@@ -498,3 +498,18 @@ process count, tab acquisition, tab release, and final resource census.
   contract. The previously qualified candidate SHA-256 `09d98c8b...` is now
   stale and must not be installed. Build and qualify a new exact candidate
   before requesting live-apply authorization.
+
+## 2026-08-25 replacement candidate qualification
+
+- The replacement exact release candidate
+  `/tmp/agent-browser-plan0130-target-79a83b89/release/agent-browser` has
+  SHA-256 `2970534ac54b7226baec48690ec70b8dab7a0fe25a1cdc3000baaa5f666f5be9`
+  and reports version `0.28.0`. It supersedes the stale `09d98c8b...`
+  candidate, which remains prohibited from installation.
+- Its live-host dry-run passed with `success=true`, `state=planned`, and
+  `mutated=false`. No workstation transaction or runtime mutation occurred.
+- The exact replacement binary passes the complete source-free workstation
+  installation fixture.
+- Source and candidate qualification are complete. The installed runtime
+  remains unchanged. A third transactional apply remains outside this slice
+  and requires separate explicit operator authorization for this exact SHA-256.
