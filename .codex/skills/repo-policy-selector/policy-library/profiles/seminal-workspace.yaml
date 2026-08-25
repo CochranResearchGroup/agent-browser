@@ -10,6 +10,7 @@ modules:
   - planning-discipline
   - seminal-workspace-evolution
   - documentation-change-control
+  - code-testing-discipline
   - commit-history-discipline
   - commit-and-push-cadence
   - turn-closeout

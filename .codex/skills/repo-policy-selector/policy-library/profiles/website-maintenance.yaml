@@ -16,6 +16,7 @@ modules:
   - visual-release-qa
   - web-interface-quality
   - documentation-change-control
+  - code-testing-discipline
   - git-worktree-hygiene
   - commit-history-discipline
   - branch-and-integration-strategy

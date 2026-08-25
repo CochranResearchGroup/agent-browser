@@ -375,6 +375,22 @@ For repos that build or operate installed memory-service runtimes, likely reusab
 
 Those should stay distinct from repo-local tool names, partition-key semantics, and deployment assumptions unless those behaviors clearly generalize.
 
+For repos that maintain executable code and regression suites, likely reusable
+policy themes include:
+- placing each invariant at the cheapest reliable test layer
+- tiering focused, presubmit, comprehensive, and live or soak execution
+- concrete repo-local wall-clock and compute budgets
+- hermeticity, order independence, and duration-aware parallel execution
+- guarded affected-test selection with an unknown-impact fallback and periodic
+  comprehensive drift detection
+- preserving first-failure evidence across retries and using owned, expiring
+  quarantine for flaky tests
+- recurring review of slow, redundant, obsolete, and low-yield tests with a
+  retained-risk mapping before consolidation or deletion
+
+Exact commands, CI jobs, numeric budgets, marker names, provider gates, and
+risk inventories should remain repo-local.
+
 For `course-workspace`, likely reusable policy themes include:
 - course identity, term, workspace, archive, and generated-artifact governance
 - LMS CLI read-before-write discipline, live course target checks, and post-write validation

@@ -71,6 +71,9 @@ modules:
   - id: validation-and-handoff
     path: modules/validation-and-handoff.md
     tags: [validation, tests, handoff, verification]
+  - id: code-testing-discipline
+    path: modules/code-testing-discipline.md
+    tags: [testing, regression, ci, performance, reliability]
   - id: preview-artifact-review
     path: modules/preview-artifact-review.md
     tags: [artifacts, previews, review, approval]

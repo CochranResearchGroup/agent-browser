@@ -8,6 +8,7 @@ modules:
   - graph-backed-memory-usage
   - planning-discipline
   - codegraph-usage
+  - code-testing-discipline
   - git-worktree-hygiene
   - commit-history-discipline
   - branch-and-integration-strategy

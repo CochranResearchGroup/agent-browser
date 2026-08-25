@@ -401,6 +401,7 @@ Read and follow:
 - `docs/dev/policies/0037-active-lane-coordination.md`
 - `docs/dev/policies/0038-multi-agent-reconciliation.md`
 - `docs/dev/policies/0039-policy-harvest-loop.md`
+- `docs/dev/policies/0042-code-testing-discipline.md`
 
 ## Scope
 

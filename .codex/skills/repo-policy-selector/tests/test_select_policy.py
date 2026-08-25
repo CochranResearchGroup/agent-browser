@@ -160,6 +160,38 @@ class SelectPolicyRegressionTests(unittest.TestCase):
             modules = self.select_policy.base_modules_for_profile(profile_id, installed_library)
             self.assertIn("planning-discipline", modules, profile_id)
 
+    def test_code_testing_discipline_is_in_software_oriented_profiles(self):
+        installed_library = self.select_policy.enumerate_policy_library(self.policy_root)
+        for profile_id in (
+            "repo-product-engineering",
+            "standalone-library",
+            "skill-repo-maintainer",
+            "operations-platform",
+            "website-maintenance",
+            "seminal-workspace",
+        ):
+            modules = self.select_policy.base_modules_for_profile(profile_id, installed_library)
+            self.assertIn("code-testing-discipline", modules, profile_id)
+
+        for profile_id in ("course-workspace", "writing-project"):
+            modules = self.select_policy.base_modules_for_profile(profile_id, installed_library)
+            self.assertNotIn("code-testing-discipline", modules, profile_id)
+
+    def test_code_testing_discipline_keeps_budget_and_retry_contracts(self):
+        module_text = (self.policy_root / "modules" / "code-testing-discipline.md").read_text(encoding="utf-8")
+        for required in (
+            "cheapest layer that can prove it reliably",
+            "Unknown impact",
+            "periodic comprehensive run",
+            "Preserve the first failure",
+            "pass-on-retry as flaky",
+            "retained-risk mapping",
+            "presubmit_blocking_budget",
+            "presubmit_compute_budget",
+            "flaky_test_disposition_sla",
+        ):
+            self.assertIn(required, module_text)
+
     def test_complete_policy_coverage_reports_already_aligned(self):
         repo_root = self.make_repo()
         policy_dir = repo_root / "docs" / "dev" / "policies"

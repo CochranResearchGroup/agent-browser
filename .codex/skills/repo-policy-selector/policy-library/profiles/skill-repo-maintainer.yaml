@@ -8,6 +8,7 @@ modules:
   - notes-and-memories
   - graph-backed-memory-usage
   - codegraph-usage
+  - code-testing-discipline
   - planning-discipline
   - goal-execution-governance
   - parallel-plan-design

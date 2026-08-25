@@ -13,6 +13,7 @@ modules:
   - parallel-plan-design
   - roadmap-runbook-governance
   - architecture-guardrails
+  - code-testing-discipline
   - documentation-change-control
   - git-worktree-hygiene
   - active-lane-coordination
