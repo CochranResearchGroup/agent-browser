@@ -52,12 +52,27 @@ browser placeholders and one closed tab. It removed no profile, session,
 display allocation, or live process. The final Service State had zero modeled
 browsers and four live warm display allocations.
 
-Resource inventory still reports four older presentation lifecycle rows as
-`closing` with owned cleanup obligations even though their process groups are
-absent and zero reclaimable process candidates exist. This is retained
-lifecycle migration residue rather than live system pressure. It does not
-invalidate CDP slot neutrality, but it remains evidence for Plan 0124 garbage
-collection and convergence work and must not be described as fully repaired.
+The cleanup census initially exposed four older presentation lifecycle rows as
+`closing` with owned cleanup obligations even though their process groups were
+absent and zero reclaimable process candidates existed. Reconciliation could
+not join current managed-profile shorthand records to their canonical profile
+identities and treated stale Chrome `SingletonLock` symlinks as live locks.
+
+Commits `c9487b51` and `217f2abf` repaired those two boundaries without
+weakening lifecycle authority. Managed-profile shorthand is considered only
+when `userDataDir` exactly equals the profile ID. A stale lock is accepted only
+when its PID exactly matches the recorded process group and both the PID and
+process group are absent. The terminal receipt distinguishes stale-lock proof
+from an absent lock.
+
+Development generation `0.28.0-df2844eaf9d2`, binary SHA-256
+`df2844eaf9d25da02277264c05a27cee0f74791e7576599f0c431151bda96e9a`,
+completed exactly three current `v5` lifecycle rows. Cleanup obligations moved
+from 4 owned and 30 satisfied to 1 owned and 33 satisfied. The remaining
+`development-presentation-provider-v1-2` row has no current profile mapping and
+remains protected rather than guessed away. Candidate process count and RSS
+remain zero. This final legacy row is retained lifecycle migration residue,
+not live system pressure, and remains part of Plan 0124 convergence work.
 
 ## Remaining Boundary
 
@@ -66,4 +81,5 @@ controller precedence, passive-viewer non-disruption, two concurrent desktop
 observations plus recovery reservation, or retained authenticated-browser
 survival through route movement and unrelated scale-in. The full
 browser-external episode also has not been repeated on the final cleanup
-overlay generation.
+overlay generation. The one unprovable legacy `v1` lifecycle row also remains
+open.

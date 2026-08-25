@@ -437,17 +437,19 @@ recovery reserves remained configured. Exact close then produced process-exit
 and profile-lock-release evidence with zero cleanup candidates. A reviewed
 retained-state prune removed three older dead browser placeholders and one
 closed tab without touching profiles, sessions, displays, or live processes.
-Four older lifecycle-only rows remain `closing` despite absent process groups;
-that migration residue remains part of the garbage-collection boundary.
+Three current lifecycle-only rows that remained `closing` despite absent
+process groups now converge through exact managed-profile shorthand and stale
+lock-owner evidence. One older `v1` row has no current profile mapping and
+remains protected as migration residue in the garbage-collection boundary.
 Evidence is recorded in
 `docs/dev/notes/0124-18-2026-08-24-cdp-slot-neutrality-live-acceptance.md`.
 
 The remaining installed boundary is active-human and passive-viewer
 precedence, concurrent observation plus recovery admission, retained
 authenticated-browser survival through route movement and unrelated scale-in,
-and convergence of legacy lifecycle-only closing rows. Configured production
-input remains outside this plan's live authority until Plan 0110 is
-independently accepted.
+and convergence or explicit disposition of the remaining unprovable legacy
+`v1` lifecycle-only closing row. Configured production input remains outside
+this plan's live authority until Plan 0110 is independently accepted.
 
 After source acceptance and separate explicit live authority:
 
