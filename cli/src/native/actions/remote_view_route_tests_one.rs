@@ -719,6 +719,29 @@ async fn test_remote_view_route_switch_releases_previous_route_and_checks_out_ne
     let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
     store
         .save(&ServiceState {
+            presentation_capacity: Some(
+                PresentationCapacityAuthority::new(
+                    PresentationCapacityConfig {
+                        warm_minimum: 2,
+                        hard_maximum: 2,
+                        human_priority_reserve: 0,
+                        recovery_reserve: 0,
+                        max_queue_depth: 8,
+                    },
+                    vec![
+                        {
+                            let mut slot = PresentationSlot::warm_idle("slot:pool-a")
+                                .with_binding("route-a", "display-a");
+                            slot.state = PresentationSlotState::Active;
+                            slot.browser_id = Some("session:rdp-a".to_string());
+                            slot
+                        },
+                        PresentationSlot::warm_idle("slot:pool-b")
+                            .with_binding("route-b", "display-b"),
+                    ],
+                )
+                .unwrap(),
+            ),
             display_allocations: BTreeMap::from([
                 (
                     "display-a".to_string(),
@@ -894,6 +917,12 @@ async fn test_remote_view_route_switch_releases_previous_route_and_checks_out_ne
             .as_deref(),
         Some("display-b")
     );
+    let slots = &persisted.presentation_capacity.as_ref().unwrap().slots;
+    assert_eq!(slots[0].state, PresentationSlotState::WarmIdle);
+    assert_eq!(slots[0].browser_id, None);
+    assert_eq!(slots[1].state, PresentationSlotState::Active);
+    assert_eq!(slots[1].browser_id.as_deref(), Some("session:rdp-a"));
+    assert_eq!(slots[1].lease_request_id, None);
     let _ = fs::remove_dir_all(&home);
 }
 #[tokio::test]
@@ -1134,6 +1163,34 @@ async fn test_remote_view_route_switch_parks_occupied_route_when_no_route_availa
     let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
     store
         .save(&ServiceState {
+            presentation_capacity: Some(
+                PresentationCapacityAuthority::new(
+                    PresentationCapacityConfig {
+                        warm_minimum: 2,
+                        hard_maximum: 2,
+                        human_priority_reserve: 0,
+                        recovery_reserve: 0,
+                        max_queue_depth: 8,
+                    },
+                    vec![
+                        {
+                            let mut slot = PresentationSlot::warm_idle("slot:pool-b")
+                                .with_binding("route-b", "display-b");
+                            slot.state = PresentationSlotState::Active;
+                            slot.browser_id = Some("session:rdp-b".to_string());
+                            slot
+                        },
+                        {
+                            let mut slot = PresentationSlot::warm_idle("slot:pool-c")
+                                .with_binding("route-c", "display-c");
+                            slot.state = PresentationSlotState::Active;
+                            slot.browser_id = Some("session:rdp-c".to_string());
+                            slot
+                        },
+                    ],
+                )
+                .unwrap(),
+            ),
             display_allocations: BTreeMap::from([
                 (
                     "display-a".to_string(),
@@ -1391,6 +1448,12 @@ async fn test_remote_view_route_switch_parks_occupied_route_when_no_route_availa
             .as_deref(),
         Some("route-c")
     );
+    let slots = &persisted.presentation_capacity.as_ref().unwrap().slots;
+    assert_eq!(slots[0].state, PresentationSlotState::Active);
+    assert_eq!(slots[0].browser_id.as_deref(), Some("session:rdp-a"));
+    assert_eq!(slots[0].lease_request_id, None);
+    assert_eq!(slots[1].state, PresentationSlotState::Active);
+    assert_eq!(slots[1].browser_id.as_deref(), Some("session:rdp-c"));
     let _ = fs::remove_dir_all(&home);
 }
 #[tokio::test]

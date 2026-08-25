@@ -28,6 +28,7 @@ fn reserve_bound_recovery<R>(
     browser_id: &str,
     route_id: &str,
     display_allocation_id: &str,
+    route_switch: bool,
 ) -> Result<(Option<BoundRecoveryReservation>, Value), String>
 where
     R: ServiceStateRepository,
@@ -43,13 +44,24 @@ where
             return Ok(None);
         };
         let pressure = PressureAdmission::admit(capacity.config.hard_maximum);
-        let decision = capacity.request_bound_recovery(
-            PresentationRequest::recovery(request_id.clone()).for_browser(browser_id),
-            pressure,
-            state,
-            route_id,
-            display_allocation_id,
-        );
+        let request = PresentationRequest::recovery(request_id.clone()).for_browser(browser_id);
+        let decision = if route_switch {
+            capacity.request_bound_route_switch_recovery(
+                request,
+                pressure,
+                state,
+                route_id,
+                display_allocation_id,
+            )
+        } else {
+            capacity.request_bound_recovery(
+                request,
+                pressure,
+                state,
+                route_id,
+                display_allocation_id,
+            )
+        };
         state.presentation_capacity = Some(capacity);
         match decision {
             CapacityDecision::Granted { slot_id, .. } => Ok(Some(BoundRecoveryReservation {
@@ -318,6 +330,7 @@ pub(crate) async fn handle_service_remote_view_browser_reattach(
         &browser_id,
         &selected_route_id,
         &display_allocation_id,
+        route_switch,
     )?;
     let operation_result: Result<Value, String> = async {
         let reattach_repair = if !route_switch {
@@ -714,7 +727,15 @@ pub(crate) async fn handle_service_remote_view_route_release(
             display_allocation_id.as_deref(),
             browser_id.as_deref(),
         ) {
-            capacity.release_bound_browser(&route_id, display_allocation_id, browser_id)?;
+            if park_for_route_switch {
+                capacity.release_bound_browser_for_route_switch(
+                    &route_id,
+                    display_allocation_id,
+                    browser_id,
+                )?;
+            } else {
+                capacity.release_bound_browser(&route_id, display_allocation_id, browser_id)?;
+            }
         }
         if route.controller_lease_id.is_some() {
             advance_route_controller_authority(state, &route_id, None)?;

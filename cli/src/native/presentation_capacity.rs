@@ -541,8 +541,8 @@ impl PresentationCapacityAuthority {
             PresentationPriority::Observation,
             pressure,
             service_state,
-            route_id,
-            display_allocation_id,
+            (route_id, display_allocation_id),
+            false,
         )
     }
 
@@ -562,8 +562,30 @@ impl PresentationCapacityAuthority {
             PresentationPriority::Recovery,
             pressure,
             service_state,
-            route_id,
-            display_allocation_id,
+            (route_id, display_allocation_id),
+            false,
+        )
+    }
+
+    /// Reserve a route-switch destination before releasing either the moving
+    /// browser's source slot or a browser currently occupying the destination.
+    /// The destination keeps its current binding until the route-switch
+    /// transaction parks it, then checkout transfers the leased slot.
+    pub(crate) fn request_bound_route_switch_recovery(
+        &mut self,
+        request: PresentationRequest,
+        pressure: PressureAdmission,
+        service_state: &ServiceState,
+        route_id: &str,
+        display_allocation_id: &str,
+    ) -> CapacityDecision {
+        self.request_bound_presentation(
+            request,
+            PresentationPriority::Recovery,
+            pressure,
+            service_state,
+            (route_id, display_allocation_id),
+            true,
         )
     }
 
@@ -573,9 +595,10 @@ impl PresentationCapacityAuthority {
         expected_priority: PresentationPriority,
         pressure: PressureAdmission,
         service_state: &ServiceState,
-        route_id: &str,
-        display_allocation_id: &str,
+        binding: (&str, &str),
+        route_switch: bool,
     ) -> CapacityDecision {
+        let (route_id, display_allocation_id) = binding;
         self.queue_clock = self.queue_clock.saturating_add(1);
         let browser_id = request.browser_id.as_deref();
         if request.id.trim().is_empty()
@@ -607,13 +630,23 @@ impl PresentationCapacityAuthority {
         if slot_index >= pressure.admitted_maximum.min(self.config.hard_maximum) {
             return self.enqueue_or_reject(request, CapacityLimitingResource::PressureAdmission);
         }
+        let source_slots = self
+            .slots
+            .iter()
+            .enumerate()
+            .filter(|(index, slot)| {
+                *index != slot_index && slot.browser_id.as_deref() == Some(browser_id)
+            })
+            .collect::<Vec<_>>();
+        let source_is_migratable = route_switch
+            && source_slots.len() <= 1
+            && source_slots.iter().all(|(_index, slot)| {
+                slot.state == PresentationSlotState::Active && slot.lease_request_id.is_none()
+            });
         if self.queued_requests.iter().any(|queued| {
             queued.browser_id.as_deref() == Some(browser_id) && queued.id != request.id
-        }) || self.slots.iter().enumerate().any(|(index, slot)| {
-            index != slot_index
-                && slot.browser_id.as_deref() == Some(browser_id)
-                && slot.state != PresentationSlotState::WarmIdle
-        }) {
+        }) || (!source_slots.is_empty() && !source_is_migratable)
+        {
             return self.enqueue_or_reject(request, CapacityLimitingResource::BrowserExclusion);
         }
         let slot = &self.slots[slot_index];
@@ -623,14 +656,15 @@ impl PresentationCapacityAuthority {
                 PresentationSlotState::WarmIdle | PresentationSlotState::Active
             )
             || (slot.state == PresentationSlotState::Active
-                && slot.browser_id.as_deref() != Some(browser_id))
+                && slot.browser_id.as_deref() != Some(browser_id)
+                && !route_switch)
         {
             return self.enqueue_or_reject(request, CapacityLimitingResource::WarmSlot);
         }
         if let Some(conflict) = slot_admission_conflict(service_state, slot, &request) {
             return self.enqueue_or_reject(request, conflict);
         }
-        if slot.state == PresentationSlotState::WarmIdle {
+        if slot.state == PresentationSlotState::WarmIdle && !source_is_migratable {
             let admitted_maximum = pressure.admitted_maximum.min(self.config.hard_maximum);
             let free_slots = self
                 .slots
@@ -648,7 +682,7 @@ impl PresentationCapacityAuthority {
         let slot = &mut self.slots[slot_index];
         if slot.state == PresentationSlotState::WarmIdle {
             slot.state = PresentationSlotState::Reserved;
-            slot.browser_id = Some(browser_id.to_string());
+            slot.browser_id = (!route_switch).then(|| browser_id.to_string());
         }
         slot.lease_request_id = Some(request.id.clone());
         slot.lease_priority = Some(request.priority);
@@ -807,6 +841,38 @@ impl PresentationCapacityAuthority {
         slot.lease_priority = None;
         slot.restoration_pending = false;
         Ok(())
+    }
+
+    /// Park a route-switch occupant while retaining the destination recovery
+    /// lease. Ordinary source-slot releases still follow the normal release
+    /// path because they carry no recovery lease.
+    pub(crate) fn release_bound_browser_for_route_switch(
+        &mut self,
+        route_id: &str,
+        display_allocation_id: &str,
+        browser_id: &str,
+    ) -> Result<(), String> {
+        let Some(slot) = self.slots.iter_mut().find(|slot| {
+            slot.route_id.as_deref() == Some(route_id)
+                && slot.display_allocation_id.as_deref() == Some(display_allocation_id)
+        }) else {
+            return Err("presentation_bound_slot_missing".to_string());
+        };
+        if slot.browser_id.as_deref() != Some(browser_id) {
+            return Err("presentation_bound_slot_browser_mismatch".to_string());
+        }
+        if slot.lease_request_id.is_some() {
+            if slot.lease_priority != Some(PresentationPriority::Recovery)
+                || slot.state != PresentationSlotState::Active
+            {
+                return Err("presentation_bound_slot_lease_active".to_string());
+            }
+            slot.state = PresentationSlotState::Reserved;
+            slot.browser_id = None;
+            slot.restoration_pending = false;
+            return Ok(());
+        }
+        self.release_bound_browser(route_id, display_allocation_id, browser_id)
     }
 
     /// Re-derive unleased warm and active slots from durable route and browser

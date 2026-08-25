@@ -158,6 +158,9 @@ When presentation capacity is configured, route reattach and route switch
 reserve the exact browser, route, and display slot at recovery priority before
 route mutation. The operation returns matching `recoveryAdmission` and
 `recoveryRelease` receipts and leaves the retained browser attached.
+Route switch applies that reservation as an atomic migration: the source
+browser remains retained during admission, an occupied destination stays bound
+until parking, and checkout transfers the leased slot before final release.
 
 ## Keep URL roles separate
 

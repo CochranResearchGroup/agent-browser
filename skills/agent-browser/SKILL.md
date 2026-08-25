@@ -381,6 +381,11 @@ recovery priority on the exact bound slot before route mutation. Require
 `recoveryAdmission.status=granted` and `recoveryRelease.status=released` as the
 capacity receipt pair. A `not_configured` status is compatibility evidence for
 an older state, not proof that recovery capacity was admitted.
+For route switch, the reservation is an atomic migration. The moving browser
+may retain its active source slot while admission is checked, and an occupied
+destination retains its browser until the route-switch parking step transfers
+the leased slot. Do not release either browser merely to work around
+`BrowserExclusion`.
 When `AGENT_BROWSER_RDP_ROUTE_POOL_JSON` is present, the CLI copies that
 fresh route-pool array into the `remote_view_open` request unless the caller
 already supplied `--route-pool-entry-json`. Use this after the route-pool

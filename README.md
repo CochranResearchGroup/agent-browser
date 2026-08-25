@@ -3443,6 +3443,10 @@ the exact bound slot at recovery priority before changing route state, then
 release that lease without parking the retained browser. Their responses expose
 `recoveryAdmission` and `recoveryRelease`; `not_configured` is explicit on
 older states that do not have presentation-capacity authority.
+Route switch treats that reservation as an atomic migration: the moving
+browser may remain active on its source slot, an occupied destination keeps
+its current browser until parking, and checkout transfers the leased
+destination before the recovery lease is released.
 The returned browser and RDP stream records include `attachability` evidence so
 clients can distinguish attached, reattachable stale-route, disconnected-viewer,
 and closed-browser states.
