@@ -432,8 +432,21 @@ fn reconcile_absent_closing_runtime_lifecycles(state: &mut ServiceState) -> usiz
     let profile_roots = state
         .profiles
         .values()
-        .filter_map(|profile| {
-            let profile_root = PathBuf::from(profile.user_data_dir.as_deref()?);
+        .flat_map(|profile| {
+            let Some(user_data_dir) = profile.user_data_dir.as_deref() else {
+                return Vec::new();
+            };
+            let mut candidates = vec![PathBuf::from(user_data_dir)];
+            if user_data_dir == profile.id {
+                if let Ok(managed_root) =
+                    crate::runtime_profile::runtime_profile_user_data_dir(&profile.id)
+                {
+                    candidates.push(managed_root);
+                }
+            }
+            candidates
+        })
+        .filter_map(|profile_root| {
             let digest =
                 crate::runtime_profile::canonical_profile_identity_digest(&profile_root).ok()?;
             Some((digest, profile_root))
@@ -3279,6 +3292,49 @@ mod tests {
             Some(1)
         );
         let _ = fs::remove_dir_all(profile_root);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn reconcile_resolves_managed_profile_shorthand_for_absent_closing_lane() {
+        use crate::runtime_owner_transfer::{CleanupObligationState, RuntimeLaneLifecycleState};
+
+        let profile_id = format!(
+            "service-health-managed-shorthand-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        let profile_root = crate::runtime_profile::runtime_profile_user_data_dir(&profile_id)
+            .expect("managed runtime profile root");
+        let absent_process_group = (2_001_000..2_002_000)
+            .find(|process_group_id| !process_group_is_running(*process_group_id))
+            .unwrap();
+        let mut state = closing_runtime_lifecycle_state(&profile_root, absent_process_group);
+        let profile = state.profiles.values_mut().next().unwrap();
+        profile.id = profile_id.clone();
+        profile.user_data_dir = Some(profile_id);
+
+        reconcile_service_state(&mut state).await;
+
+        let lifecycle = &state.runtime_owner_registry.lifecycle_records["browser-closing"];
+        assert_eq!(
+            lifecycle.lifecycle_state,
+            RuntimeLaneLifecycleState::Terminal
+        );
+        assert_eq!(
+            lifecycle.cleanup_obligation_state,
+            CleanupObligationState::Satisfied
+        );
+        assert_eq!(
+            lifecycle.terminal_evidence,
+            vec![
+                format!("service_reconcile_process_group_absent:{absent_process_group}"),
+                "service_reconcile_profile_lock_absent".to_string(),
+            ]
+        );
     }
 
     #[cfg(unix)]
