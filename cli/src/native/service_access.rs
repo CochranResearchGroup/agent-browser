@@ -858,14 +858,17 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         manual_seeding_required,
         browser_capability_evidence,
     );
+    let lifecycle_replacement = lifecycle_replacement_decision(selected_profile, service_state);
     let mut profile_reuse = profile_reuse_decision(
         request,
         selected_profile,
         service_state,
         &launch_posture.value,
         manual_seeding_required,
+        lifecycle_replacement
+            .get("replacementSessionName")
+            .and_then(Value::as_str),
     );
-    let lifecycle_replacement = lifecycle_replacement_decision(selected_profile, service_state);
     let lifecycle_blocks_replacement = lifecycle_replacement["available"].as_bool() == Some(true)
         && lifecycle_replacement["replacementEligible"].as_bool() == Some(false);
     let acquisition_blocked_by_explicit_session =
@@ -1001,6 +1004,7 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         manual_action_required,
         launch_posture: &launch_posture.value,
         profile_reuse: &profile_reuse,
+        lifecycle_replacement: &lifecycle_replacement,
         one_time_profile_recommendation: &one_time_profile_recommendation,
         acquisition_blocker,
     });
@@ -1054,6 +1058,8 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
     })
 }
 
+/// Project replacement authority and the exact collision-free daemon route
+/// that can supersede one cleanup-satisfied terminal owner.
 fn lifecycle_replacement_decision(
     selected_profile: Option<&BrowserProfile>,
     service_state: &ServiceState,
@@ -1092,22 +1098,35 @@ fn lifecycle_replacement_decision(
         .filter(|record| record.profile_identity_digest == profile_identity_digest)
         .collect::<Vec<_>>();
     records.sort_by_key(|record| record.owner_generation);
-    let lifecycle = owner
-        .and_then(|owner| {
-            records.iter().copied().find(|record| {
-                record.logical_browser_id == owner.browser_id
-                    && record.owner_generation == owner.owner_generation
-            })
+    let owner_lifecycle = owner.and_then(|owner| {
+        records.iter().copied().find(|record| {
+            record.logical_browser_id == owner.browser_id
+                && record.owner_generation == owner.owner_generation
         })
-        .or_else(|| records.last().copied());
-    let replacement_eligible = lifecycle.is_none_or(|record| {
+    });
+    let lifecycle = owner_lifecycle.or_else(|| records.last().copied());
+    let terminal_cleanup_satisfied = lifecycle.is_some_and(|record| {
         record.lifecycle_state == crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Terminal
             && record.cleanup_obligation_state
                 == crate::runtime_owner_transfer::CleanupObligationState::Satisfied
     });
+    let replacement_route = owner.zip(owner_lifecycle).and_then(|(owner, record)| {
+        let expected_browser_id = format!("session:{}", owner.daemon_session_route);
+        (terminal_cleanup_satisfied
+            && record.logical_browser_id == owner.browser_id
+            && owner.browser_id == expected_browser_id)
+            .then(|| (owner.browser_id.clone(), owner.daemon_session_route.clone()))
+    });
+    let replacement_eligible = match (owner, lifecycle) {
+        (None, None) => true,
+        (Some(_), Some(_)) => replacement_route.is_some(),
+        _ => false,
+    };
     let reason = match lifecycle {
-        None => "no_lifecycle_owner",
-        Some(_) if replacement_eligible => "terminal_cleanup_satisfied",
+        None if owner.is_none() => "no_lifecycle_owner",
+        None => "lifecycle_owner_record_missing",
+        Some(_) if replacement_route.is_some() => "terminal_cleanup_satisfied",
+        Some(_) if terminal_cleanup_satisfied => "terminal_replacement_route_inconsistent",
         Some(record)
             if record.lifecycle_state
                 == crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Closing =>
@@ -1129,6 +1148,8 @@ fn lifecycle_replacement_decision(
         "registryRevision": service_state.runtime_owner_registry.revision,
         "ownerId": owner.map(|owner| owner.owner_id.clone()),
         "ownerState": owner.map(|owner| owner.state),
+        "replacementBrowserId": replacement_route.as_ref().map(|(browser_id, _)| browser_id.clone()),
+        "replacementSessionName": replacement_route.as_ref().map(|(_, session_name)| session_name.clone()),
         "logicalBrowserId": lifecycle.map(|record| record.logical_browser_id.clone()),
         "ownerGeneration": lifecycle.map(|record| record.owner_generation),
         "lifecycleState": lifecycle.map(|record| record.lifecycle_state),
@@ -1202,7 +1223,27 @@ pub(crate) fn apply_shared_profile_route_hints_for_service_request(
         != Some("reuse_existing_browser")
     {
         if service_request_has_partial_route_hints(command) {
-            return Err("service_access_plan_incomplete_route_hints".to_string());
+            let planned_terminal_session = plan["decision"]["lifecycleReplacement"]
+                .get("replacementSessionName")
+                .and_then(Value::as_str);
+            let requested_session = command.get("sessionName").and_then(Value::as_str);
+            let exact_terminal_replacement = !service_request_has_browser_hint(command)
+                && plan["decision"]["lifecycleReplacement"]["replacementEligible"].as_bool()
+                    == Some(true)
+                && requested_session == planned_terminal_session;
+            if !exact_terminal_replacement {
+                return Err("service_access_plan_incomplete_route_hints".to_string());
+            }
+            return Ok(());
+        }
+        if !service_request_has_session_hint(command) {
+            if let Some(session_name) = plan["decision"]["serviceRequest"]["request"]
+                .get("sessionName")
+                .and_then(Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+            {
+                command["sessionName"] = json!(session_name);
+            }
         }
         return Ok(());
     }
@@ -1401,6 +1442,7 @@ fn profile_reuse_decision(
     service_state: &ServiceState,
     launch_posture: &Value,
     manual_seeding_required: bool,
+    terminal_replacement_session_name: Option<&str>,
 ) -> Value {
     let Some(profile) = selected_profile else {
         return json!({
@@ -1490,8 +1532,12 @@ fn profile_reuse_decision(
 
     let mut explicit_session_route_error = None;
     let mut explicit_session_route = None;
+    let mut explicit_terminal_replacement_route = false;
     if let Some(session_name) = request.session_name.as_deref() {
         match service_state.sessions.get(session_name) {
+            None if terminal_replacement_session_name == Some(session_name) => {
+                explicit_terminal_replacement_route = true;
+            }
             None => explicit_session_route_error = Some("explicit_session_not_found"),
             Some(session) if session.browser_ids.len() != 1 => {
                 explicit_session_route_error = Some("explicit_session_browser_mapping_ambiguous");
@@ -1574,6 +1620,8 @@ fn profile_reuse_decision(
         reasons.push(reason);
     } else if explicit_session_route.is_some() {
         reasons.push("explicit_session_route_selected");
+    } else if explicit_terminal_replacement_route {
+        reasons.push("explicit_session_terminal_replacement_selected");
     }
     reasons.sort();
     reasons.dedup();
@@ -2184,6 +2232,7 @@ struct ServiceRequestDecisionInput<'a> {
     manual_action_required: bool,
     launch_posture: &'a Value,
     profile_reuse: &'a Value,
+    lifecycle_replacement: &'a Value,
     one_time_profile_recommendation: &'a Value,
     acquisition_blocker: Option<&'a str>,
 }
@@ -2193,6 +2242,7 @@ fn service_request_decision(input: ServiceRequestDecisionInput<'_>) -> Value {
     let selected_profile = input.selected_profile;
     let launch_posture = input.launch_posture;
     let profile_reuse = input.profile_reuse;
+    let lifecycle_replacement = input.lifecycle_replacement;
     let one_time_profile_recommendation = input.one_time_profile_recommendation;
     let selected_profile_id = selected_profile.map(|profile| profile.id.clone());
     let recommended_runtime_profile = one_time_profile_recommendation
@@ -2240,7 +2290,21 @@ fn service_request_decision(input: ServiceRequestDecisionInput<'_>) -> Value {
     if let Some(task_name) = request.task_name.as_ref() {
         service_request.insert("taskName".to_string(), json!(task_name));
     }
-    if let Some(session_name) = request.session_name.as_ref() {
+    let replacement_session_name = (profile_reuse
+        .get("recommendedAction")
+        .and_then(Value::as_str)
+        == Some("launch_new_browser")
+        && lifecycle_replacement
+            .get("replacementEligible")
+            .and_then(Value::as_bool)
+            == Some(true))
+    .then(|| {
+        lifecycle_replacement
+            .get("replacementSessionName")
+            .and_then(Value::as_str)
+    })
+    .flatten();
+    if let Some(session_name) = request.session_name.as_deref().or(replacement_session_name) {
         service_request.insert("sessionName".to_string(), json!(session_name));
     }
     if !request.target_service_ids.is_empty() {
@@ -5203,9 +5267,56 @@ mod tests {
             "terminal_cleanup_satisfied"
         );
         assert_eq!(
+            plan["decision"]["lifecycleReplacement"]["replacementSessionName"],
+            "terminal-lane"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["sessionName"],
+            "terminal-lane"
+        );
+        assert_eq!(
             plan["decision"]["lifecycleReplacement"]["terminalEvidence"],
             json!(["exact_process_exited", "profile_lock_released"])
         );
+
+        let explicit_plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                session_name: Some("terminal-lane".to_string()),
+                target_service_ids: vec!["bill".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+        assert_eq!(
+            explicit_plan["decision"]["profileReuse"]["recommendedAction"],
+            "launch_new_browser"
+        );
+        assert_eq!(
+            explicit_plan["decision"]["serviceRequest"]["available"],
+            true
+        );
+        assert_eq!(
+            explicit_plan["decision"]["serviceRequest"]["request"]["sessionName"],
+            "terminal-lane"
+        );
+
+        let mut copied_request = json!({
+            "action": "tab_new",
+            "runtimeProfile": "bill-soylei",
+            "targetServiceIds": ["bill"],
+        });
+        apply_shared_profile_route_hints_for_service_request(&state, &mut copied_request).unwrap();
+        assert_eq!(copied_request["sessionName"], "terminal-lane");
+
+        let mut exact_explicit_request = json!({
+            "action": "tab_new",
+            "runtimeProfile": "bill-soylei",
+            "targetServiceIds": ["bill"],
+            "sessionName": "terminal-lane",
+        });
+        apply_shared_profile_route_hints_for_service_request(&state, &mut exact_explicit_request)
+            .unwrap();
+        assert!(exact_explicit_request.get("browserId").is_none());
     }
 
     #[test]

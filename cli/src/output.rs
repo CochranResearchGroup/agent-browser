@@ -6255,7 +6255,9 @@ the exact client tab and preserves the shared browser process.
 Cold owned tab_new reuses an empty bootstrap about:blank target and reports
 coldLaunch, tabAcquisitionDecision, initialTargetCount, and restoredTargetCount.
 Access plans expose decision.lifecycleReplacement with owner generation, lifecycle
-and cleanup states, terminal evidence, replacementEligible, and requiredAction.
+and cleanup states, terminal evidence, replacementEligible, requiredAction, and
+the exact replacementBrowserId and replacementSessionName for an eligible
+terminal owner. The copied launch request carries that session automatically.
 Reviewed --process-exited-browsers includes degraded browser placeholders only
 without PID, CDP, or live tabs and preserves lifecycle aliases in candidateReasons.
   agent-browser service tabs

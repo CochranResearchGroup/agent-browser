@@ -714,6 +714,11 @@ shell operator or CLI-driven agent needs the same broker recommendation as HTTP
 profile, manual-seeding posture, monitor freshness recommendation, service
 request availability, and compact <code>browser_build_summary</code> routing
 audit output.
+For a cleanup-satisfied terminal owner,
+<code>decision.lifecycleReplacement</code> includes the exact
+<code>replacementBrowserId</code> and <code>replacementSessionName</code>. The
+copied fresh-launch request carries that session automatically. An explicit
+session is accepted for replacement only when it matches the advertised route.
 Access-plan responses include <code>decision.profileReuse</code>, a no-launch
 minimal-profile advisory. It reports whether the selected profile should reuse
 an existing compatible live browser, wait for the profile lease with

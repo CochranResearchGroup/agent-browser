@@ -1825,7 +1825,7 @@ mod tests {
     fn daemon_owner_gate_precedes_stream_broadcast_and_browser_recovery() {
         let source = include_str!("native/actions.rs");
         let gate = source
-            .find("if state.runtime_owner_binding.is_none()")
+            .find("crate::native::runtime_lifecycle::admit_default_action_effect(")
             .expect("runtime owner gate must be installed");
         let desktop_effect = source
             .find("if action == \"desktop_interact\"")
