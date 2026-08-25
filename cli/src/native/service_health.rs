@@ -932,7 +932,17 @@ pub(crate) fn remove_browser_operational_record(
             .retain(|session_id| !removable_session_ids.contains(session_id));
     }
     service_state.refresh_derived_views();
+    reconcile_presentation_capacity_bindings(service_state);
     usize::from(removed_browser.is_some())
+}
+
+fn reconcile_presentation_capacity_bindings(service_state: &mut ServiceState) -> usize {
+    let Some(mut capacity) = service_state.presentation_capacity.take() else {
+        return 0;
+    };
+    let repaired = capacity.reconcile_authoritative_bindings(service_state);
+    service_state.presentation_capacity = Some(capacity);
+    repaired
 }
 
 fn upsert_browser_display_allocation(
@@ -2292,6 +2302,11 @@ fn reconcile_remote_view_state_with_display_probe(
         .iter()
         .map(|(id, route)| (id.clone(), route.state.clone()))
         .collect::<BTreeMap<_, _>>();
+    let route_browser_owners = state
+        .remote_view_routes
+        .iter()
+        .map(|(id, route)| (id.clone(), route.browser_id.clone()))
+        .collect::<BTreeMap<_, _>>();
 
     for entry in state.route_pool.values_mut() {
         if entry.state == "unavailable" {
@@ -2322,16 +2337,22 @@ fn reconcile_remote_view_state_with_display_probe(
         if !viewer_lease_is_reconcile_active(lease) {
             continue;
         }
-        let route_unavailable = lease
-            .route_id
-            .as_ref()
-            .map(|id| {
-                !matches!(
-                    route_states.get(id).map(String::as_str),
-                    Some("ready" | "reconnecting" | "allocating")
-                )
-            })
-            .unwrap_or(true);
+        let route_unavailable = lease.route_id.as_ref().is_none_or(|id| {
+            let route_browser_id = route_browser_owners
+                .get(id)
+                .and_then(|browser_id| browser_id.as_deref());
+            !matches!(
+                route_states.get(id).map(String::as_str),
+                Some("ready" | "reconnecting" | "allocating")
+            ) || route_browser_id.is_none()
+                || route_browser_id.is_some_and(|browser_id| {
+                    browser_health.get(browser_id) != Some(&BrowserHealth::Ready)
+                        || lease
+                            .browser_id
+                            .as_deref()
+                            .is_some_and(|lease_browser_id| lease_browser_id != browser_id)
+                })
+        });
         if viewer_lease_is_expired(lease, &now) {
             lease.state = "expired".to_string();
             lease.last_viewer_event = Some("expired".to_string());
@@ -2416,6 +2437,7 @@ fn reconcile_remote_view_state_with_display_probe(
             }
         }
     }
+    reconcile_presentation_capacity_bindings(state);
     refresh_remote_view_attachability(state);
 
     repair
@@ -3187,6 +3209,10 @@ struct CdpHttpTargetInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::native::presentation_capacity::{
+        PresentationCapacityAuthority, PresentationCapacityConfig, PresentationSlot,
+        PresentationSlotState,
+    };
     use crate::native::service_model::{
         ControlInputProvider, DisplayAllocation, JobState, RemoteViewRoute, RoutePoolEntry,
         ServiceJob, ServiceProvider, SitePolicy, ViewStream, ViewStreamProvider, ViewerLease,
@@ -4195,6 +4221,77 @@ mod tests {
         assert_eq!(remote_view["releasedRoutePoolEntries"], 1);
         assert_eq!(remote_view["releasedViewerLeases"], 1);
         assert_eq!(remote_view["clearedControllerLeases"], 1);
+    }
+
+    #[test]
+    fn reconcile_disconnects_ownerless_viewer_and_releases_ghost_active_slot() {
+        let route_id = "route-1";
+        let display_id = "display-1";
+        let browser_id = "browser-closed";
+        let lease_id = "viewer-stale";
+        let mut active_slot =
+            PresentationSlot::warm_idle("slot-1").with_binding(route_id, display_id);
+        active_slot.state = PresentationSlotState::Active;
+        active_slot.browser_id = Some(browser_id.to_string());
+
+        let mut state = ServiceState {
+            display_allocations: BTreeMap::from([(
+                display_id.to_string(),
+                DisplayAllocation {
+                    id: display_id.to_string(),
+                    state: "ready".to_string(),
+                    route_ids: vec![route_id.to_string()],
+                    ..DisplayAllocation::default()
+                },
+            )]),
+            remote_view_routes: BTreeMap::from([(
+                route_id.to_string(),
+                RemoteViewRoute {
+                    id: route_id.to_string(),
+                    display_allocation_id: Some(display_id.to_string()),
+                    browser_id: None,
+                    state: "ready".to_string(),
+                    viewer_lease_ids: vec![lease_id.to_string()],
+                    ..RemoteViewRoute::default()
+                },
+            )]),
+            viewer_leases: BTreeMap::from([(
+                lease_id.to_string(),
+                ViewerLease {
+                    id: lease_id.to_string(),
+                    route_id: Some(route_id.to_string()),
+                    browser_id: Some(browser_id.to_string()),
+                    state: "observing".to_string(),
+                    ..ViewerLease::default()
+                },
+            )]),
+            presentation_capacity: Some(
+                PresentationCapacityAuthority::new(
+                    PresentationCapacityConfig {
+                        warm_minimum: 1,
+                        hard_maximum: 1,
+                        human_priority_reserve: 0,
+                        recovery_reserve: 0,
+                        max_queue_depth: 8,
+                    },
+                    vec![active_slot],
+                )
+                .unwrap(),
+            ),
+            ..ServiceState::default()
+        };
+
+        let repair =
+            reconcile_remote_view_state_with_display_probe(&mut state, |_display_name| true, false);
+
+        assert_eq!(repair.released_viewer_leases, 1);
+        assert_eq!(state.viewer_leases[lease_id].state, "disconnected");
+        assert!(state.remote_view_routes[route_id]
+            .viewer_lease_ids
+            .is_empty());
+        let slot = &state.presentation_capacity.as_ref().unwrap().slots[0];
+        assert_eq!(slot.state, PresentationSlotState::WarmIdle);
+        assert_eq!(slot.browser_id, None);
     }
 
     #[tokio::test]

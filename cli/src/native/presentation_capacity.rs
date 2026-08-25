@@ -809,6 +809,69 @@ impl PresentationCapacityAuthority {
         Ok(())
     }
 
+    /// Re-derive unleased warm and active slots from durable route and browser
+    /// ownership. In-flight leases remain untouched so reconciliation cannot
+    /// steal presentation authority from an active episode or recovery.
+    pub(crate) fn reconcile_authoritative_bindings(&mut self, state: &ServiceState) -> usize {
+        let mut repaired = 0;
+        for slot in &mut self.slots {
+            if slot.lease_request_id.is_some()
+                || !matches!(
+                    slot.state,
+                    PresentationSlotState::WarmIdle | PresentationSlotState::Active
+                )
+            {
+                continue;
+            }
+
+            let authoritative_browser_id = slot
+                .route_id
+                .as_deref()
+                .zip(slot.display_allocation_id.as_deref())
+                .and_then(|(route_id, display_allocation_id)| {
+                    let route = state.remote_view_routes.get(route_id)?;
+                    if !matches!(
+                        route.state.as_str(),
+                        "ready" | "reconnecting" | "allocating"
+                    ) || route.display_allocation_id.as_deref() != Some(display_allocation_id)
+                    {
+                        return None;
+                    }
+                    let browser_id = route.browser_id.as_deref()?;
+                    let browser = state.browsers.get(browser_id)?;
+                    (browser.health == super::service_model::BrowserHealth::Ready
+                        && browser.display_allocation_id.as_deref() == Some(display_allocation_id))
+                    .then_some(browser_id)
+                });
+
+            match authoritative_browser_id {
+                Some(browser_id)
+                    if slot.state != PresentationSlotState::Active
+                        || slot.browser_id.as_deref() != Some(browser_id) =>
+                {
+                    slot.state = PresentationSlotState::Active;
+                    slot.browser_id = Some(browser_id.to_string());
+                    slot.lease_priority = None;
+                    slot.restoration_pending = false;
+                    repaired += 1;
+                }
+                None if slot.state != PresentationSlotState::WarmIdle
+                    || slot.browser_id.is_some()
+                    || slot.lease_priority.is_some()
+                    || slot.restoration_pending =>
+                {
+                    slot.state = PresentationSlotState::WarmIdle;
+                    slot.browser_id = None;
+                    slot.lease_priority = None;
+                    slot.restoration_pending = false;
+                    repaired += 1;
+                }
+                _ => {}
+            }
+        }
+        repaired
+    }
+
     pub(crate) fn transition_slot(
         &mut self,
         slot_id: &str,
@@ -1139,7 +1202,90 @@ fn limiting_resource_name(resource: CapacityLimitingResource) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::native::service_model::{BrowserProcess, RemoteViewHandoff, ViewStream};
+    use crate::native::service_model::{
+        BrowserHealth, BrowserProcess, RemoteViewHandoff, RemoteViewRoute, ViewStream,
+    };
+
+    fn authoritative_bound_browser_state() -> ServiceState {
+        ServiceState {
+            browsers: BTreeMap::from([(
+                "browser-1".to_string(),
+                BrowserProcess {
+                    id: "browser-1".to_string(),
+                    health: BrowserHealth::Ready,
+                    display_allocation_id: Some("display-1".to_string()),
+                    ..BrowserProcess::default()
+                },
+            )]),
+            remote_view_routes: BTreeMap::from([(
+                "route-1".to_string(),
+                RemoteViewRoute {
+                    id: "route-1".to_string(),
+                    display_allocation_id: Some("display-1".to_string()),
+                    browser_id: Some("browser-1".to_string()),
+                    state: "ready".to_string(),
+                    ..RemoteViewRoute::default()
+                },
+            )]),
+            ..ServiceState::default()
+        }
+    }
+
+    #[test]
+    fn reconciliation_activates_authoritatively_bound_warm_slot() {
+        let mut authority = PresentationCapacityAuthority::new(
+            PresentationCapacityConfig {
+                warm_minimum: 1,
+                hard_maximum: 1,
+                human_priority_reserve: 0,
+                recovery_reserve: 0,
+                max_queue_depth: 8,
+            },
+            vec![PresentationSlot::warm_idle("slot-1").with_binding("route-1", "display-1")],
+        )
+        .unwrap();
+
+        assert_eq!(
+            authority.reconcile_authoritative_bindings(&authoritative_bound_browser_state()),
+            1
+        );
+        assert_eq!(authority.slots[0].state, PresentationSlotState::Active);
+        assert_eq!(authority.slots[0].browser_id.as_deref(), Some("browser-1"));
+    }
+
+    #[test]
+    fn reconciliation_preserves_in_flight_bound_lease() {
+        let mut slot = PresentationSlot::warm_idle("slot-1").with_binding("route-1", "display-1");
+        slot.state = PresentationSlotState::Active;
+        slot.browser_id = Some("browser-closed".to_string());
+        slot.lease_request_id = Some("recovery-1".to_string());
+        slot.lease_priority = Some(PresentationPriority::Recovery);
+        let mut authority = PresentationCapacityAuthority::new(
+            PresentationCapacityConfig {
+                warm_minimum: 1,
+                hard_maximum: 1,
+                human_priority_reserve: 0,
+                recovery_reserve: 0,
+                max_queue_depth: 8,
+            },
+            vec![slot],
+        )
+        .unwrap();
+
+        assert_eq!(
+            authority.reconcile_authoritative_bindings(&ServiceState::default()),
+            0
+        );
+        assert_eq!(authority.slots[0].state, PresentationSlotState::Active);
+        assert_eq!(
+            authority.slots[0].lease_request_id.as_deref(),
+            Some("recovery-1")
+        );
+        assert_eq!(
+            authority.slots[0].browser_id.as_deref(),
+            Some("browser-closed")
+        );
+    }
 
     #[test]
     fn projection_preserves_zero_one_two_four_six_and_eight_slots() {
