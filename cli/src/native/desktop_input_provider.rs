@@ -14,6 +14,7 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 mod x11;
+pub(crate) use x11::XTestSink;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RouteEffectFenceIdentity {
@@ -53,6 +54,10 @@ impl DesktopInputProviderError {
 
     pub(crate) fn code(&self) -> &'static str {
         self.code
+    }
+
+    pub(crate) fn from_code(code: &'static str) -> Self {
+        Self::new(code)
     }
 }
 
@@ -477,8 +482,19 @@ where
         event: &ControlledX11Event,
         fence_deadline: Duration,
     ) -> Result<ProviderEventReceipt, DesktopInputProviderError> {
+        self.execute_guarded(effect_key, event, fence_deadline, || Ok(()))
+    }
+
+    pub(crate) fn execute_guarded(
+        &mut self,
+        effect_key: &str,
+        event: &ControlledX11Event,
+        fence_deadline: Duration,
+        validate_authority: impl FnOnce() -> Result<(), DesktopInputProviderError>,
+    ) -> Result<ProviderEventReceipt, DesktopInputProviderError> {
         let _fence =
             RouteEffectFence::acquire(&self.runtime_state_root, &self.identity, fence_deadline)?;
+        validate_authority()?;
         let descriptor = ProviderEffectDescriptor {
             provider_generation: &self.provider_generation,
             event_kind: event.kind(),

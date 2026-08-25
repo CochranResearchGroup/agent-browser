@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agent-browser.local/contracts/service-desktop-interact-response.v1.schema.json",
   "title": "agent-browser desktop interact response",
-  "description": "Immediate response data for action=desktop_interact. PoC 5 exposes two registered synthetic recipes and has no configured production input provider.",
+  "description": "Immediate response data for action=desktop_interact. The controlled X11 recipe is admitted only by an exact installed development-generation manifest. Production has no configured input provider.",
   "type": "object",
   "required": ["ok", "action", "interactionReceipt"],
   "properties": {

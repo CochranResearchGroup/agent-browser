@@ -461,7 +461,7 @@
       "required": ["recipeId"],
       "properties": {
         "recipeId": {
-          "enum": ["p110-pointer-keyboard-v1", "p110-foundation-stress-v1"],
+          "enum": ["p110-pointer-keyboard-v1", "p110-foundation-stress-v1", "p131-controlled-x11-v1"],
           "description": "Registered repository-owned interaction recipe for action=desktop_interact."
         }
       },

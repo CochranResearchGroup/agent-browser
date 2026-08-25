@@ -1194,7 +1194,7 @@ fn reject_desktop_interact_request(
     }
     if !matches!(
         recipe.get("recipeId").and_then(Value::as_str),
-        Some("p110-pointer-keyboard-v1" | "p110-foundation-stress-v1")
+        Some("p110-pointer-keyboard-v1" | "p110-foundation-stress-v1" | "p131-controlled-x11-v1")
     ) {
         return Err(issue(
             ServiceRequestIssueKind::InvalidBoundedRecipe,
@@ -2310,6 +2310,22 @@ mod tests {
         assert_eq!(normalized.command["action"], "desktop_interact");
         assert_eq!(normalized.command["controllerLeaseId"], "lease-1");
         assert_eq!(normalized.command["operationId"], "operation-1");
+        let controlled = normalize(json!({
+            "action": "desktop_interact",
+            "browserId": "browser-1",
+            "sessionName": "rdp-1",
+            "controllerLeaseId": "lease-1",
+            "operationId": "controlled-operation-1",
+            "recipe": { "recipeId": "p131-controlled-x11-v1" },
+            "serviceName": "DesktopInteractor",
+            "agentName": "fixture-agent",
+            "taskName": "verify-controlled-x11"
+        }))
+        .unwrap();
+        assert_eq!(
+            controlled.command["recipe"]["recipeId"],
+            "p131-controlled-x11-v1"
+        );
         assert!(normalized.command["operationPrincipalId"]
             .as_str()
             .is_some_and(|value| value.starts_with("operation-principal-v1:")));

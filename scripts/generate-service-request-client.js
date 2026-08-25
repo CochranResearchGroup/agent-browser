@@ -712,7 +712,7 @@ export interface ServiceDesktopPromptObserveData {
 export interface DesktopInteractionReceipt {
   transactionId: string;
   schemaVersion: "v1";
-  recipeId: "p110-pointer-keyboard-v1" | "p110-foundation-stress-v1";
+  recipeId: "p110-pointer-keyboard-v1" | "p110-foundation-stress-v1" | "p131-controlled-x11-v1";
   recipeVersion: string;
   recipeSha256: string;
   browserId: string;
@@ -1619,7 +1619,7 @@ export interface ServiceDesktopInteractRequestOptions extends Pick<ServiceReques
   sessionName?: string;
   controllerLeaseId: string;
   operationId: string;
-  recipeId: "p110-pointer-keyboard-v1" | "p110-foundation-stress-v1";
+  recipeId: "p110-pointer-keyboard-v1" | "p110-foundation-stress-v1" | "p131-controlled-x11-v1";
   serviceName: string;
   agentName: string;
   taskName: string;

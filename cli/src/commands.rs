@@ -93,7 +93,7 @@ const DESKTOP_CAPTURE_USAGE: &str = "desktop capture --browser-id <id> [--max-by
 const DESKTOP_LOCATE_USAGE: &str = "desktop locate --browser-id <id> --locator-id <id> [--max-candidates <count>] [--include-visualization]";
 const DESKTOP_EVIDENCE_OBSERVE_USAGE: &str = "desktop evidence observe --browser-id <id> [--episode-id <id>] [--evidence-surface stacking_or_occlusion|passkey_chooser] [--service-tab-handle-json <json> --trigger-selector <css>] [--include-frame] [--service-name <name>] [--agent-name <name>] [--task-name <name>]";
 const DESKTOP_PROMPT_OBSERVE_USAGE: &str = "desktop prompt observe --browser-id <id> --prompt-profile-id p110-external-prompt-v1 [--include-visualization]";
-const DESKTOP_INTERACT_USAGE: &str = "desktop interact --browser-id <id> --controller-lease-id <id> --operation-id <id> --recipe-id <p110-pointer-keyboard-v1|p110-foundation-stress-v1> --service-name <name> --agent-name <name> --task-name <name>";
+const DESKTOP_INTERACT_USAGE: &str = "desktop interact --browser-id <id> --controller-lease-id <id> --operation-id <id> --recipe-id <p110-pointer-keyboard-v1|p110-foundation-stress-v1|p131-controlled-x11-v1> --service-name <name> --agent-name <name> --task-name <name>";
 const DESKTOP_LOCATE_DEFAULT_MAX_CANDIDATES: u64 = 8;
 const DESKTOP_LOCATE_HARD_MAX_CANDIDATES: u64 = 32;
 
@@ -1489,7 +1489,7 @@ fn parse_desktop_interact(id: String, rest: &[&str], flags: &Flags) -> Result<Va
     };
     if !matches!(
         recipe_id.as_str(),
-        "p110-pointer-keyboard-v1" | "p110-foundation-stress-v1"
+        "p110-pointer-keyboard-v1" | "p110-foundation-stress-v1" | "p131-controlled-x11-v1"
     ) {
         return Err(ParseError::InvalidValue {
             message: format!("Unsupported desktop interaction recipe: {recipe_id}"),

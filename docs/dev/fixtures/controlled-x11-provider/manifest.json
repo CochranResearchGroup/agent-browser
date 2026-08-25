@@ -8,12 +8,15 @@
   "fixedText": "fixture-ready",
   "target": {
     "id": "controlled-target",
+    "rgb": [32, 122, 214],
     "bounds": { "x": 160, "y": 120, "width": 96, "height": 48 }
   },
   "decoy": {
     "id": "controlled-decoy",
+    "rgb": [33, 121, 213],
     "bounds": { "x": 320, "y": 120, "width": 96, "height": 48 }
   },
+  "application": "scripts/fixtures/controlled-x11-provider.py",
   "allowedEvents": [
     "pointer_move",
     "left_down",
@@ -30,7 +33,10 @@
     "partial_effect",
     "verification_failure"
   ],
-  "successMarker": "verified",
+  "successMarker": {
+    "state": "verified",
+    "rgb": [46, 160, 67]
+  },
   "captureRequirement": "desktop_frame_outside_page_content",
   "cleanup": {
     "maximumAttempts": 1,

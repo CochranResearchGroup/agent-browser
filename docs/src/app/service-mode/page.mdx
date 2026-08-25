@@ -517,7 +517,7 @@ const interaction = await runServiceDesktopInteraction({
     <tr>
       <td><code>recipe.recipeId</code></td>
       <td>Required</td>
-      <td>Use <code>p110-pointer-keyboard-v1</code> or <code>p110-foundation-stress-v1</code>.</td>
+      <td>Use <code>p110-pointer-keyboard-v1</code>, <code>p110-foundation-stress-v1</code>, or <code>p131-controlled-x11-v1</code>.</td>
     </tr>
     <tr>
       <td><code>serviceName</code>, <code>agentName</code>, <code>taskName</code></td>
@@ -532,11 +532,11 @@ paths, timing, buttons, arbitrary keys or plaintext, clipboard content,
 provider selection, focus actions, and takeover instructions. It never
 requests, renews, releases, or takes over controller authority.
 
-> **Experimental:** P110 configures no production input provider. Contract
-> discovery can advertise `desktop_interact`, but ordinary production dispatch
-> returns `desktop_input_provider_unavailable` before capture, controller
-> mutation, or input. The complete transaction is proven only with an injected
-> in-memory synthetic fixture provider.
+> **Experimental:** `p131-controlled-x11-v1` is admitted only by an exact
+> installed development-generation manifest and the repository-owned,
+> network-free X11 fixture. Production and unmanifested binaries return
+> `desktop_input_provider_unavailable` before capture, controller mutation, or
+> input.
 
 The pointer-keyboard recipe owns its locator, server-derived deterministic pointer
 arc, one left click, fixed benign text, cleanup, and after-state verifier. It

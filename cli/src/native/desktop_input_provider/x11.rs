@@ -11,6 +11,13 @@ pub(crate) struct XTestSink {
     display_name: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct XTestSceneProbe {
+    pub(crate) pointer_x: i32,
+    pub(crate) pointer_y: i32,
+    pub(crate) controlled_fixture_focused: bool,
+}
+
 impl XTestSink {
     pub(crate) fn new(display_name: impl Into<String>) -> Result<Self, DesktopInputProviderError> {
         let display_name = display_name.into();
@@ -20,6 +27,10 @@ impl XTestSink {
             ));
         }
         Ok(Self { display_name })
+    }
+
+    pub(crate) fn probe(&self) -> Result<XTestSceneProbe, DesktopInputProviderError> {
+        platform::probe(&self.display_name)
     }
 }
 
@@ -36,6 +47,7 @@ mod platform {
     use std::ffi::{c_char, c_int, c_uint, c_ulong, c_void, CString};
 
     type Display = c_void;
+    type Window = c_ulong;
     type XOpenDisplayFn = unsafe extern "C" fn(*const c_char) -> *mut Display;
     type XCloseDisplayFn = unsafe extern "C" fn(*mut Display) -> c_int;
     type XSyncFn = unsafe extern "C" fn(*mut Display, c_int) -> c_int;
@@ -46,6 +58,29 @@ mod platform {
     type XTestFakeButtonEventFn =
         unsafe extern "C" fn(*mut Display, c_uint, c_int, c_ulong) -> c_int;
     type XTestFakeKeyEventFn = unsafe extern "C" fn(*mut Display, c_uint, c_int, c_ulong) -> c_int;
+    type XDefaultRootWindowFn = unsafe extern "C" fn(*mut Display) -> Window;
+    type XGetInputFocusFn = unsafe extern "C" fn(*mut Display, *mut Window, *mut c_int) -> c_int;
+    type XFetchNameFn = unsafe extern "C" fn(*mut Display, Window, *mut *mut c_char) -> c_int;
+    type XQueryTreeFn = unsafe extern "C" fn(
+        *mut Display,
+        Window,
+        *mut Window,
+        *mut Window,
+        *mut *mut Window,
+        *mut c_uint,
+    ) -> c_int;
+    type XQueryPointerFn = unsafe extern "C" fn(
+        *mut Display,
+        Window,
+        *mut Window,
+        *mut Window,
+        *mut c_int,
+        *mut c_int,
+        *mut c_int,
+        *mut c_int,
+        *mut c_uint,
+    ) -> c_int;
+    type XFreeFn = unsafe extern "C" fn(*mut c_void) -> c_int;
 
     struct XTestLibraries {
         x11_handle: *mut c_void,
@@ -55,6 +90,12 @@ mod platform {
         sync: XSyncFn,
         string_to_keysym: XStringToKeysymFn,
         keysym_to_keycode: XKeysymToKeycodeFn,
+        default_root_window: XDefaultRootWindowFn,
+        get_input_focus: XGetInputFocusFn,
+        fetch_name: XFetchNameFn,
+        query_tree: XQueryTreeFn,
+        query_pointer: XQueryPointerFn,
+        free: XFreeFn,
         fake_motion: XTestFakeMotionEventFn,
         fake_button: XTestFakeButtonEventFn,
         fake_key: XTestFakeKeyEventFn,
@@ -83,6 +124,12 @@ mod platform {
                         sync: symbol(x11_handle, "XSync")?,
                         string_to_keysym: symbol(x11_handle, "XStringToKeysym")?,
                         keysym_to_keycode: symbol(x11_handle, "XKeysymToKeycode")?,
+                        default_root_window: symbol(x11_handle, "XDefaultRootWindow")?,
+                        get_input_focus: symbol(x11_handle, "XGetInputFocus")?,
+                        fetch_name: symbol(x11_handle, "XFetchName")?,
+                        query_tree: symbol(x11_handle, "XQueryTree")?,
+                        query_pointer: symbol(x11_handle, "XQueryPointer")?,
+                        free: symbol(x11_handle, "XFree")?,
                         fake_motion: symbol(xtst_handle, "XTestFakeMotionEvent")?,
                         fake_button: symbol(xtst_handle, "XTestFakeButtonEvent")?,
                         fake_key: symbol(xtst_handle, "XTestFakeKeyEvent")?,
@@ -139,6 +186,95 @@ mod platform {
             (libraries.close_display)(display);
             result
         }
+    }
+
+    pub(super) fn probe(display_name: &str) -> Result<XTestSceneProbe, DesktopInputProviderError> {
+        let display_name = CString::new(display_name).map_err(|_| {
+            DesktopInputProviderError::new("desktop_input_display_authority_invalid")
+        })?;
+        let libraries = XTestLibraries::load()?;
+        unsafe {
+            let display = (libraries.open_display)(display_name.as_ptr());
+            if display.is_null() {
+                return Err(DesktopInputProviderError::new(
+                    "desktop_input_display_unavailable",
+                ));
+            }
+            let result = probe_on_display(&libraries, display);
+            (libraries.close_display)(display);
+            result
+        }
+    }
+
+    unsafe fn probe_on_display(
+        libraries: &XTestLibraries,
+        display: *mut Display,
+    ) -> Result<XTestSceneProbe, DesktopInputProviderError> {
+        let root = (libraries.default_root_window)(display);
+        let mut root_return = 0;
+        let mut child_return = 0;
+        let mut root_x = 0;
+        let mut root_y = 0;
+        let mut window_x = 0;
+        let mut window_y = 0;
+        let mut mask = 0;
+        if (libraries.query_pointer)(
+            display,
+            root,
+            &mut root_return,
+            &mut child_return,
+            &mut root_x,
+            &mut root_y,
+            &mut window_x,
+            &mut window_y,
+            &mut mask,
+        ) == 0
+        {
+            return Err(DesktopInputProviderError::new(
+                "desktop_input_focus_probe_unavailable",
+            ));
+        }
+        let mut focused = 0;
+        let mut revert = 0;
+        (libraries.get_input_focus)(display, &mut focused, &mut revert);
+        let mut controlled_fixture_focused = false;
+        for _ in 0..16 {
+            let mut name = std::ptr::null_mut();
+            if (libraries.fetch_name)(display, focused, &mut name) != 0 && !name.is_null() {
+                let title = std::ffi::CStr::from_ptr(name).to_bytes();
+                controlled_fixture_focused = title == b"Agent Browser Controlled X11 Fixture";
+                (libraries.free)(name.cast());
+                if controlled_fixture_focused {
+                    break;
+                }
+            }
+            let mut root_window = 0;
+            let mut parent = 0;
+            let mut children = std::ptr::null_mut();
+            let mut child_count = 0;
+            if (libraries.query_tree)(
+                display,
+                focused,
+                &mut root_window,
+                &mut parent,
+                &mut children,
+                &mut child_count,
+            ) == 0
+                || parent == 0
+                || parent == focused
+            {
+                break;
+            }
+            if !children.is_null() {
+                (libraries.free)(children.cast());
+            }
+            focused = parent;
+        }
+        Ok(XTestSceneProbe {
+            pointer_x: root_x,
+            pointer_y: root_y,
+            controlled_fixture_focused,
+        })
     }
 
     unsafe fn emit_on_display(
@@ -241,6 +377,12 @@ mod platform {
     ) -> Result<(), DesktopInputProviderError> {
         Err(DesktopInputProviderError::new(
             "desktop_input_provider_unsupported",
+        ))
+    }
+
+    pub(super) fn probe(_display_name: &str) -> Result<XTestSceneProbe, DesktopInputProviderError> {
+        Err(DesktopInputProviderError::new(
+            "desktop_input_xtest_provider_unavailable",
         ))
     }
 }
