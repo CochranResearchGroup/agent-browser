@@ -41,6 +41,16 @@ impl ClosedX11Sink for XTestSink {
     }
 }
 
+fn registered_keysym_name(key: char) -> Result<String, DesktopInputProviderError> {
+    match key {
+        'a'..='z' => Ok(key.to_string()),
+        '-' => Ok("minus".to_string()),
+        _ => Err(DesktopInputProviderError::new(
+            "desktop_input_key_not_registered",
+        )),
+    }
+}
+
 #[cfg(unix)]
 mod platform {
     use super::*;
@@ -316,13 +326,10 @@ mod platform {
         display: *mut Display,
         key: char,
     ) -> Result<c_uint, DesktopInputProviderError> {
-        if !matches!(key, 'a'..='z' | '-') {
-            return Err(DesktopInputProviderError::new(
-                "desktop_input_key_not_registered",
-            ));
-        }
-        let key = CString::new(key.to_string()).expect("registered key contains no NUL");
-        let keysym = (libraries.string_to_keysym)(key.as_ptr());
+        let keysym_name = registered_keysym_name(key)?;
+        let keysym_name =
+            CString::new(keysym_name).expect("registered keysym name contains no NUL");
+        let keysym = (libraries.string_to_keysym)(keysym_name.as_ptr());
         if keysym == 0 {
             return Err(DesktopInputProviderError::new(
                 "desktop_input_key_not_registered",
@@ -399,5 +406,15 @@ mod tests {
                 "desktop_input_display_authority_invalid"
             );
         }
+    }
+
+    #[test]
+    fn registered_hyphen_uses_the_x11_minus_keysym_name() {
+        assert_eq!(registered_keysym_name('-').unwrap(), "minus");
+        assert_eq!(registered_keysym_name('f').unwrap(), "f");
+        assert_eq!(
+            registered_keysym_name('_').unwrap_err().code(),
+            "desktop_input_key_not_registered"
+        );
     }
 }

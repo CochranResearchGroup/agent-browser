@@ -59,7 +59,7 @@ class Fixture:
             160, 120, 255, 167, fill=TARGET, outline=TARGET, tags=("target",)
         )
         self.canvas.create_text(
-            208, 144, text="TARGET", fill="white", tags=("target",)
+            208, 190, text="TARGET", fill="#24292f", tags=("target-label",)
         )
         self.canvas.create_rectangle(
             320, 120, 415, 167, fill=DECOY, outline=DECOY, tags=("decoy",)
