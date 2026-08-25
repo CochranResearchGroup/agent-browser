@@ -443,7 +443,11 @@ pub fn service_contracts_metadata() -> Value {
                 },
                 "request": {
                     "namedRecipesOnly": true,
-                    "recipeIds": ["p110-pointer-keyboard-v1", "p110-foundation-stress-v1"],
+                    "recipeIds": [
+                        "p110-pointer-keyboard-v1",
+                        "p110-foundation-stress-v1",
+                        "p131-controlled-x11-v1"
+                    ],
                     "requiresControllerLease": true,
                     "requiresOperationId": true,
                     "requiresAttribution": ["serviceName", "agentName", "taskName"],
@@ -471,6 +475,7 @@ pub fn service_contracts_metadata() -> Value {
                     "effectKeyProjection": "attempted_and_acknowledged_digests_and_counts",
                 },
                 "productionProviderConfigured": false,
+                "developmentProviderAdmission": "exact_installed_generation_manifest",
                 "noLaunch": true,
                 "input": true,
             },

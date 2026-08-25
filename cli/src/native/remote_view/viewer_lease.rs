@@ -5,7 +5,7 @@ use super::open::{
 use crate::native::action_runtime::runtime::{
     optional_command_string, service_browser_id, DaemonState,
 };
-use crate::native::desktop_control_coordinator::global_desktop_control_coordinator;
+use crate::native::desktop_control_coordinator::begin_service_controller_mutation;
 use crate::native::remote_view_attachability::refresh_remote_view_attachability;
 use crate::native::service_model::{
     advance_route_controller_authority, ServiceEventKind, ViewerLease,
@@ -33,11 +33,12 @@ pub(crate) fn mutate_service_viewer_lease(
     let requested_role =
         optional_command_string(cmd, "viewerRole").unwrap_or_else(|| "observer".to_string());
     let wants_controller = controller_takeover || requested_role == "controller";
-    let _controller_mutation = wants_controller
-        .then(|| global_desktop_control_coordinator().begin_controller_mutation(&route_id))
-        .transpose()?;
     let now = service_remote_view_timestamp();
     let repository = LockedServiceStateRepository::default_json()?;
+    let snapshot = repository.load_snapshot()?;
+    let _controller_mutation = wants_controller
+        .then(|| begin_service_controller_mutation(&snapshot, &route_id))
+        .transpose()?;
     repository.mutate(|state| {
         let route_snapshot = state
             .remote_view_routes
@@ -313,7 +314,7 @@ pub(crate) async fn handle_service_viewer_lease_release(
         .cloned();
     let _controller_mutation = controlled_route_id
         .as_deref()
-        .map(|route_id| global_desktop_control_coordinator().begin_controller_mutation(route_id))
+        .map(|route_id| begin_service_controller_mutation(&snapshot, route_id))
         .transpose()?;
     repository.mutate(|state| {
         let lease = state

@@ -150,6 +150,7 @@ function assertServiceRequestActionDataCoverage() {
   assert.deepEqual(schema.properties.recipe.properties.recipeId.enum, [
     'p110-pointer-keyboard-v1',
     'p110-foundation-stress-v1',
+    'p131-controlled-x11-v1',
   ]);
   const promptObservationSchema = JSON.parse(
     readFileSync(

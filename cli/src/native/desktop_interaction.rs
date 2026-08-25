@@ -18,6 +18,7 @@ use super::service_model::ServiceState;
 
 pub(crate) const RECIPE_ID: &str = "p110-pointer-keyboard-v1";
 pub(crate) const FOUNDATION_STRESS_RECIPE_ID: &str = "p110-foundation-stress-v1";
+pub(crate) const CONTROLLED_X11_RECIPE_ID: &str = "p131-controlled-x11-v1";
 const RECIPE_VERSION: &str = "v1";
 const FIXED_TEXT: &str = "fixture-ready";
 const COORDINATE_SPACE: &str = "desktop_physical_pixels";
@@ -577,9 +578,16 @@ impl PersistedInteractionOperationLedger {
             .and_then(|value| value.to_str())
             .ok_or_else(|| ledger_error("desktop_interaction_operation_ledger_save_failed"))?;
         let temporary = parent.join(format!(".{file_name}.{}.tmp", std::process::id()));
-        let mut file = OpenOptions::new()
-            .create_new(true)
-            .write(true)
+        let mut options = OpenOptions::new();
+        options.create_new(true).write(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options
+                .mode(0o600)
+                .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW);
+        }
+        let mut file = options
             .open(&temporary)
             .map_err(|_| ledger_error("desktop_interaction_operation_ledger_save_failed"))?;
         let serialized = self.inner.to_json()?;
@@ -734,7 +742,7 @@ pub(crate) struct DesktopInteractionError {
 }
 
 impl DesktopInteractionError {
-    fn new(code: &'static str, message: &'static str) -> Self {
+    pub(crate) fn new(code: &'static str, message: &'static str) -> Self {
         Self {
             code,
             message,
@@ -950,13 +958,139 @@ pub(crate) fn run_desktop_interaction(
     }
 }
 
-/// Public production dispatch resolves no input provider in PoC 3. This must
-/// fail before capture, authority lookup, controller mutation, or input.
-pub(crate) async fn handle_desktop_interact(_command: &Value) -> Result<Value, String> {
-    Err(
-        "desktop_input_provider_unavailable: no production desktop input provider is configured"
-            .to_string(),
-    )
+/// Dispatch the controlled provider only from an exact admitted development
+/// generation. Production and unmanifested binaries fail before capture,
+/// authority lookup, controller mutation, or input. Raw provider routing is
+/// never accepted as a compatibility contract.
+pub(crate) async fn handle_desktop_interact(command: &Value) -> Result<Value, String> {
+    for forbidden in [
+        "coordinates",
+        "displayName",
+        "xauthorityPath",
+        "routeUser",
+        "providerExecutable",
+        "lockPath",
+        "providerUrl",
+        "guacamoleUrl",
+    ] {
+        if command.get(forbidden).is_some() {
+            return Err(format!(
+                "desktop_interact does not accept caller-controlled {forbidden}"
+            ));
+        }
+    }
+    let admission =
+        super::desktop_input_provider_admission::current_development_provider_admission()
+            .map_err(|code| format!("{code}: controlled desktop input admission failed"))?;
+    let request = parse_configured_interaction_request(command)?;
+    tokio::task::spawn_blocking(move || run_configured_interaction(request, admission))
+        .await
+        .map_err(|_| "desktop_input_provider_failed: configured provider task failed".to_string())?
+}
+
+fn parse_configured_interaction_request(
+    command: &Value,
+) -> Result<DesktopInteractionRequest, String> {
+    fn required(command: &Value, field: &str) -> Result<String, String> {
+        command
+            .get(field)
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .map(str::to_string)
+            .ok_or_else(|| format!("desktop_interact requires {field}"))
+    }
+    let recipe_id = command
+        .get("recipe")
+        .and_then(Value::as_object)
+        .and_then(|recipe| recipe.get("recipeId"))
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| "desktop_interact requires recipe.recipeId".to_string())?;
+    if recipe_id != CONTROLLED_X11_RECIPE_ID {
+        return Err("desktop_interaction_unsupported: recipe is not registered".to_string());
+    }
+    Ok(DesktopInteractionRequest {
+        browser_id: required(command, "browserId")?,
+        session_name: command
+            .get("sessionName")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        controller_lease_id: required(command, "controllerLeaseId")?,
+        recipe_id,
+        operation_id: required(command, "operationId")?,
+        operation_principal_id: required(command, "operationPrincipalId")?,
+        request_principal_source: command
+            .get("requestPrincipalSource")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        service_name: required(command, "serviceName")?,
+        task_name: required(command, "taskName")?,
+        caller_id: required(command, "callerId")?,
+        request_id: required(command, "requestId")?,
+        agent_name: required(command, "agentName")?,
+    })
+}
+
+fn run_configured_interaction(
+    request: DesktopInteractionRequest,
+    admission: super::desktop_input_provider_admission::DevelopmentProviderAdmission,
+) -> Result<Value, String> {
+    use super::controlled_x11_provider::{ControlledX11Provider, SystemInteractionClock};
+    use super::desktop_control_coordinator::global_desktop_control_coordinator;
+    use super::service_store::{
+        default_service_state_path, LockedServiceStateRepository, ServiceStateRepository,
+    };
+
+    let state = LockedServiceStateRepository::default_json()?.load_snapshot()?;
+    let mut handoffs = ServiceStateHandoffRepository::new(&state);
+    let (mut provider, mut authority) = ControlledX11Provider::open(request.clone(), admission)
+        .map_err(|error| error.to_string())?;
+    let state_path = default_service_state_path()?;
+    let ledger_path = state_path
+        .parent()
+        .ok_or_else(|| "desktop_interaction_operation_ledger_unavailable".to_string())?
+        .join("desktop-input")
+        .join("operations.json");
+    let ledger_directory = ledger_path
+        .parent()
+        .ok_or_else(|| "desktop_interaction_operation_ledger_unavailable".to_string())?;
+    fs::create_dir_all(ledger_directory)
+        .map_err(|_| "desktop_interaction_operation_ledger_unavailable".to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(ledger_directory, fs::Permissions::from_mode(0o700))
+            .map_err(|_| "desktop_interaction_operation_ledger_unavailable".to_string())?;
+    }
+    let mut idempotency = PersistedInteractionOperationLedger::open(ledger_path)
+        .map_err(|error| error.to_string())?;
+    let mut clock = SystemInteractionClock;
+    match run_desktop_interaction(
+        request,
+        InteractionDependencies {
+            provider: &mut provider,
+            authority: &mut authority,
+            coordinator: global_desktop_control_coordinator(),
+            idempotency: &mut idempotency,
+            handoffs: &mut handoffs,
+            clock: &mut clock,
+        },
+    ) {
+        Ok(receipt) => serde_json::to_value(receipt)
+            .map_err(|_| "desktop_input_provider_receipt_invalid".to_string()),
+        Err(error) => {
+            if let Some(receipt) = error.receipt() {
+                Ok(serde_json::json!({
+                    "status": "failed",
+                    "error": error.code(),
+                    "receipt": receipt,
+                }))
+            } else {
+                Err(error.to_string())
+            }
+        }
+    }
 }
 
 /// Remove response-only or provider-private desktop input material before a
@@ -1621,7 +1755,12 @@ fn run_claimed_interaction(
 }
 
 fn validate_request(request: &DesktopInteractionRequest) -> Result<(), DesktopInteractionError> {
-    if ![RECIPE_ID, FOUNDATION_STRESS_RECIPE_ID].contains(&request.recipe_id.as_str())
+    if ![
+        RECIPE_ID,
+        FOUNDATION_STRESS_RECIPE_ID,
+        CONTROLLED_X11_RECIPE_ID,
+    ]
+    .contains(&request.recipe_id.as_str())
         || request.browser_id.trim().is_empty()
         || request.controller_lease_id.trim().is_empty()
         || request.operation_id.trim().is_empty()
@@ -3209,6 +3348,31 @@ mod tests {
             .await
             .unwrap_err();
         assert!(error.starts_with("desktop_input_provider_unavailable:"));
+    }
+
+    #[tokio::test]
+    async fn public_dispatch_rejects_caller_controlled_provider_routing() {
+        for forbidden in [
+            "coordinates",
+            "displayName",
+            "xauthorityPath",
+            "routeUser",
+            "providerExecutable",
+            "lockPath",
+            "providerUrl",
+            "guacamoleUrl",
+        ] {
+            let error = handle_desktop_interact(&json!({
+                "action": "desktop_interact",
+                (forbidden): "caller-value",
+            }))
+            .await
+            .unwrap_err();
+            assert_eq!(
+                error,
+                format!("desktop_interact does not accept caller-controlled {forbidden}")
+            );
+        }
     }
 
     #[test]

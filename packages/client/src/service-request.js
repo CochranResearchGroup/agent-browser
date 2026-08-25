@@ -762,7 +762,7 @@ export function createServiceDesktopInteractRequest(input) {
   if (sessionName !== undefined && (typeof sessionName !== 'string' || sessionName.trim().length === 0)) {
     throw new TypeError('service desktop interact request sessionName must be a non-empty string');
   }
-  if (!['p110-pointer-keyboard-v1', 'p110-foundation-stress-v1'].includes(recipeId)) {
+  if (!['p110-pointer-keyboard-v1', 'p110-foundation-stress-v1', 'p131-controlled-x11-v1'].includes(recipeId)) {
     throw new TypeError(
       'service desktop interact request requires a supported recipeId',
     );
@@ -2735,7 +2735,7 @@ function validateDesktopInteractRequest(request) {
   }
   if (
     typeof recipe.recipeId !== 'string' ||
-    !['p110-pointer-keyboard-v1', 'p110-foundation-stress-v1'].includes(recipe.recipeId)
+    !['p110-pointer-keyboard-v1', 'p110-foundation-stress-v1', 'p131-controlled-x11-v1'].includes(recipe.recipeId)
   ) {
     throw new TypeError('service desktop interact request requires a supported recipeId');
   }

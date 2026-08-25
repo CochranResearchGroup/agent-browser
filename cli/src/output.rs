@@ -5814,7 +5814,7 @@ Usage:
   agent-browser desktop locate --browser-id <id> --locator-id <id> [--max-candidates <count>] [--include-visualization]
   agent-browser desktop evidence observe --browser-id <id> [--episode-id <id>] [--evidence-surface stacking_or_occlusion|passkey_chooser] [--service-tab-handle-json <json> --trigger-selector <css>] [--include-frame]
   agent-browser desktop prompt observe --browser-id <id> --prompt-profile-id p110-external-prompt-v1 [--include-visualization]
-  agent-browser desktop interact --browser-id <id> --controller-lease-id <id> --operation-id <id> --recipe-id <p110-pointer-keyboard-v1|p110-foundation-stress-v1> --service-name <name> --agent-name <name> --task-name <name>
+  agent-browser desktop interact --browser-id <id> --controller-lease-id <id> --operation-id <id> --recipe-id <p110-pointer-keyboard-v1|p110-foundation-stress-v1|p131-controlled-x11-v1> --service-name <name> --agent-name <name> --task-name <name>
 
 `desktop capture` asks the service worker to resolve one retained browser to
 its exact ready stream, route, and display allocation. It captures one PNG of
@@ -5898,7 +5898,7 @@ Options:
   --controller-lease-id <id>
                           Require the exact current controller lease
   --operation-id <id>     Supply the opaque idempotency identity for this operation
-  --recipe-id <id>        Select p110-pointer-keyboard-v1 or p110-foundation-stress-v1
+  --recipe-id <id>        Select p110-pointer-keyboard-v1, p110-foundation-stress-v1, or p131-controlled-x11-v1
   --service-name <name>   Desktop action service attribution
   --agent-name <name>     Desktop action agent attribution
   --task-name <name>      Desktop action task attribution

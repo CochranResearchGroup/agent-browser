@@ -641,6 +641,7 @@ async fn test_viewer_lease_policy_rejects_single_viewer_and_controller_conflicts
                     state: "ready".to_string(),
                     browser_id: Some("session:rdp-b".to_string()),
                     session_id: Some("rdp-b".to_string()),
+                    display_allocation_id: Some("display-controller".to_string()),
                     ..RemoteViewRoute::default()
                 },
             )]),

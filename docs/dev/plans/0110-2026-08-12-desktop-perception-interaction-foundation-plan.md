@@ -2,7 +2,7 @@
 
 Date: 2026-08-12
 
-State: ALL FIVE POCS SOURCE ACCEPTED | PLAN 0131 CONTROLLED PROVIDER PLANNED
+State: ALL FIVE POCS SOURCE ACCEPTED | PLAN 0131 DEVELOPMENT LIVE ACCEPTED | FOUNDATION LIVE OPEN
 
 Authority: SOURCE-ONLY
 
@@ -27,10 +27,11 @@ The product direction and five proof-of-concept sequence are source accepted.
 Service state binds a browser to a display allocation, remote-view route, view
 stream, and operator-visible proof. Canonical desktop capture, locator, prompt
 observation, and interaction contracts now exist, but configured production
-machine input remains unavailable. The current route event fence is
-process-local and no real provider closes the XTEST acknowledgement crash gap.
-CDP page screenshots remain a separate browser-page capability. Plan 0131 now
-owns the controlled provider and live Foundation Acceptance bridge.
+machine input remains unavailable. Plan 0131 has now accepted the development
+X11 provider, OS-visible route fence, durable effect journal, installed
+development generation, and one controlled route-bound success. CDP page
+screenshots remain a separate browser-page capability. The production
+controlled-fixture bridge remains unexecuted and requires separate authority.
 
 Proof of Concept 1 is source accepted at `853c2d90` with no live or installed
 proof. The canonical `desktop_capture` action now resolves an exact
@@ -228,9 +229,11 @@ acceptance without separate authority.
 
 ## Current Recommendation
 
-Plan 0131 now freezes the controlled X11 provider, cross-process route fence,
-effect journal, installed-binary identity, development RDP fixture, rollback,
-and separate production authority boundary. Start Plan 0131 Slice A only:
-provider contracts and red provider-free fixtures. Do not begin a real
-challenge or authentication integration until its separately authorized
-production controlled-fixture proof passes.
+Plan 0131 Slices A through D are development live accepted. Candidate
+`86026cf08fe76352b92a52312a6b8992c9c0bc8fba455e8cf58d8e461382429b`
+is selected only in `agent-browser-dev`; one exact route-bound recipe reached
+`verified_success`, replay emitted no additional effects, and the fixture lane
+returned to the four-slot warm minimum with zero cleanup candidates. The
+production generation and its unavailable input posture remained unchanged.
+Do not begin Slice E, mark this parent live accepted, or begin a real challenge
+or authentication integration without fresh explicit production authority.

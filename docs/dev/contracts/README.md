@@ -68,7 +68,8 @@ wrapper for invoking `service_request` with the same intent object.
 The guarded desktop interaction contract is split between
 `service-desktop-interact-response.v1.schema.json` and
 `interaction-receipt.v1.schema.json`. `desktop_interact` requires an existing
-controller lease, the named `p110-pointer-keyboard-v1` synthetic recipe, and
+controller lease, a registered synthetic recipe including the development-only
+`p131-controlled-x11-v1` recipe, and
 complete service, agent, and task attribution. It rejects generic `params`,
 caller coordinates, text, pixels, motion paths, provider selection, and lease
 mutation fields. PoC 3 metadata explicitly advertises

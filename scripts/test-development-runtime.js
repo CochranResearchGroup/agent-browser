@@ -75,6 +75,15 @@ try {
   assert.equal(installed.production.unchanged, true);
   assert.equal(installed.generation.version, '0.28.0-fixture');
   assert.equal(readFileSync(installed.generation.binary, 'utf8'), readFileSync(fakeBinary, 'utf8'));
+  const generationManifest = JSON.parse(
+    readFileSync(join(installed.generation.path, 'generation.json'), 'utf8'),
+  );
+  assert.deepEqual(generationManifest.desktopInputProvider, {
+    enabled: true,
+    providerId: 'controlled-x11-xtest',
+    capability: 'guarded_pointer_keyboard_v1',
+    recipeId: 'p131-controlled-x11-v1',
+  });
   const launcherEnvironment = execFileSync(descriptor.executable, ['print-env'], {
     encoding: 'utf8',
   }).trim();

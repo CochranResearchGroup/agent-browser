@@ -718,10 +718,12 @@ agent-browser desktop interact \
   --json
 ```
 
-P110 desktop interaction remains source-only and provider-free. It configures no X11, Guacamole, CDP,
-or operating-system input provider. An ordinary runtime request must fail with
-`desktop_input_provider_unavailable` before capture, controller mutation, or
-input. Do not interpret contract discovery as installed or live readiness.
+The `p131-controlled-x11-v1` recipe is admitted only by an exact installed
+development-generation manifest. It uses the repository-owned, network-free
+X11 fixture and a closed native XTEST event schema. Production and
+unmanifested binaries must fail with `desktop_input_provider_unavailable`
+before capture, controller mutation, or input. Do not interpret contract
+discovery as installed or live readiness.
 
 The pointer-keyboard recipe owns the fresh locator, server-derived pointer arc, one left click,
 fixed benign test text, release cleanup, and after-state verifier. Never pass
@@ -735,7 +737,8 @@ handoff scenarios without adding a production provider.
 
 HTTP and generated-client requests use `action: "desktop_interact"`, top-level
 `browserId`, `controllerLeaseId`, `operationId`, and either
-`p110-pointer-keyboard-v1` or `p110-foundation-stress-v1` as
+`p110-pointer-keyboard-v1`, `p110-foundation-stress-v1`, or
+`p131-controlled-x11-v1` as
 `recipe.recipeId`. Supply all three
 attribution labels. MCP clients can use the canonical `service_request` or the
 dedicated `desktop_interact` tool. Client helpers are

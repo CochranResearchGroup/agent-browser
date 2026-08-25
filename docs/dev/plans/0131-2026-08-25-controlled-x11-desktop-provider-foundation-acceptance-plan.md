@@ -2,9 +2,9 @@
 
 Date: 2026-08-25
 
-State: PLANNED
+State: DEVELOPMENT LIVE ACCEPTED
 
-Execution state: `plan_frozen_source_not_started`
+Execution state: `development_live_accepted`
 
 Lane: P131
 
@@ -12,10 +12,16 @@ Parent: `docs/dev/plans/0110-2026-08-12-desktop-perception-interaction-foundatio
 
 Source baseline: `e8695f82969e684cc4f9a7929b723777f548c3a3e`
 
-Current authority: PLAN AND DOCUMENTATION ONLY
+Current authority: NONE. SLICE E REQUIRES FRESH EXPLICIT AUTHORITY.
 
 Future implementation branch:
 `feature/plan0131-controlled-x11-desktop-provider`
+
+Execution start baseline: `a54b0f976fb20e801d8e09e844708753c80ac79d`
+
+Owned worktree scope:
+`feature/plan0131-controlled-x11-desktop-provider` in the dedicated local
+Plan 0131 worktree.
 
 Depends on:
 
@@ -428,6 +434,10 @@ defines their exact inputs, cleanup, resource budget, and receipt location.
 
 ## Current Next Action
 
-Start Slice A only in the dedicated feature worktree. Freeze red contracts and
-provider-free fixtures before selecting an XTEST library, changing configured
-dispatch, building an installed candidate, or touching either runtime.
+Development acceptance is recorded in
+`docs/dev/notes/0131-3-2026-08-25-controlled-x11-provider-development-live-acceptance.md`.
+Production input remains unavailable, Plan 0110 remains open at its separate
+live Foundation Acceptance boundary, and no further runtime effect is
+authorized. The next executable slice is Slice E only after fresh explicit
+authority and a new source, installed-generation, process, browser, handoff,
+provider, resource, production, and rollback preflight.

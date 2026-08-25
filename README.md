@@ -810,15 +810,16 @@ agent-browser desktop interact \
 | `--browser-id <id>` | Required retained service-owned browser identity |
 | `--controller-lease-id <id>` | Required current controller lease for the exact route and stream |
 | `--operation-id <id>` | Required caller-generated opaque idempotency identity; it is distinct from transport request identity |
-| `--recipe-id <id>` | Required registered recipe: `p110-pointer-keyboard-v1` or `p110-foundation-stress-v1` |
+| `--recipe-id <id>` | Required registered recipe: `p110-pointer-keyboard-v1`, `p110-foundation-stress-v1`, or `p131-controlled-x11-v1` |
 | `--service-name <name>` | Required accountable service label |
 | `--agent-name <name>` | Required accountable agent label |
 | `--task-name <name>` | Required accountable task label |
 
-> **Experimental:** This is a provider-free source proof. It configures no
-> X11, Guacamole, CDP, or operating-system input provider. Ordinary runtime
-> requests fail with `desktop_input_provider_unavailable` before capture,
-> controller mutation, or input.
+> **Experimental:** `p131-controlled-x11-v1` is available only from an exact
+> installed development generation whose immutable manifest enables the
+> controlled X11/XTEST provider. Production and unmanifested binaries return
+> `desktop_input_provider_unavailable` before capture, controller mutation, or
+> input.
 
 The pointer-keyboard recipe derives its target from a fresh `p110-control-v1` observation. It
 owns the deterministic pointer arc, one left click, fixed non-sensitive test
@@ -829,6 +830,12 @@ provider routing, focus actions, or controller takeover.
 The foundation-stress recipe runs the same source engine across deterministic
 success, replay, conflict, cleanup, verification, prompt-intervention, and
 handoff scenarios without adding a production provider.
+
+The controlled X11 recipe uses the repository-owned, network-free fixture in
+`scripts/fixtures/controlled-x11-provider.py`. It derives the display, route,
+target, fixed benign text, and provider generation internally. Caller supplied
+coordinates, display names, paths, executables, provider URLs, and arbitrary
+input remain forbidden.
 
 The request requires an existing controller lease; `desktop interact` never
 requests, renews, releases, or takes over control. The complete transaction is

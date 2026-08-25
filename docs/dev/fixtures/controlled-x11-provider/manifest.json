@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "agent-browser.controlled-x11-fixture.v1",
+  "fixtureId": "p131-controlled-x11-foundation",
+  "recipeId": "p131-controlled-x11-v1",
+  "environment": "development",
+  "networkAllowed": false,
+  "privateDataAllowed": false,
+  "fixedText": "fixture-ready",
+  "target": {
+    "id": "controlled-target",
+    "rgb": [32, 122, 214],
+    "bounds": { "x": 160, "y": 120, "width": 96, "height": 48 }
+  },
+  "decoy": {
+    "id": "controlled-decoy",
+    "rgb": [33, 121, 213],
+    "bounds": { "x": 320, "y": 120, "width": 96, "height": 48 }
+  },
+  "application": "scripts/fixtures/controlled-x11-provider.py",
+  "allowedEvents": [
+    "pointer_move",
+    "left_down",
+    "left_up",
+    "key_down",
+    "key_up"
+  ],
+  "controls": [
+    "ambiguity",
+    "focus_loss",
+    "geometry_drift",
+    "route_replacement",
+    "controller_takeover",
+    "partial_effect",
+    "verification_failure"
+  ],
+  "successMarker": {
+    "state": "verified",
+    "rgb": [46, 160, 67]
+  },
+  "captureRequirement": "desktop_frame_outside_page_content",
+  "cleanup": {
+    "maximumAttempts": 1,
+    "automaticRetryAfterPossibleEffect": false,
+    "reconcileToWarmMinimum": true
+  },
+  "budgets": {
+    "browserCount": 1,
+    "primaryRouteCount": 1,
+    "competingProcessCount": 1,
+    "scenarioGroupTimeoutSeconds": 900
+  },
+  "receiptProjection": {
+    "containsPixels": false,
+    "containsPlaintextInput": false,
+    "containsDisplayName": false,
+    "containsFilesystemPath": false,
+    "containsProviderUrl": false
+  }
+}

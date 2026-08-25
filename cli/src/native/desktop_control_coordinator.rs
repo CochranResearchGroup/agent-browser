@@ -1,7 +1,15 @@
 //! Process-owned, route-scoped serialization for desktop controller mutation.
 
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
+use std::time::Duration;
+
+use super::desktop_input_provider::{RouteEffectFence, RouteEffectFenceIdentity};
+use super::service_model::ServiceState;
+use super::service_store::default_service_state_path;
+
+const CONTROLLER_MUTATION_FENCE_DEADLINE: Duration = Duration::from_secs(5);
 
 #[derive(Default)]
 pub(crate) struct DesktopControlCoordinator {
@@ -36,12 +44,48 @@ pub(crate) struct DesktopControlEventGuard {
 
 pub(crate) struct DesktopControllerMutationGuard {
     route: Arc<RouteControl>,
+    _external_fence: Option<RouteEffectFence>,
 }
 
 static DESKTOP_CONTROL_COORDINATOR: OnceLock<DesktopControlCoordinator> = OnceLock::new();
 
 pub(crate) fn global_desktop_control_coordinator() -> &'static DesktopControlCoordinator {
     DESKTOP_CONTROL_COORDINATOR.get_or_init(DesktopControlCoordinator::new)
+}
+
+/// Serialize a route controller-authority mutation with desktop input effects.
+///
+/// The route and display identities come only from the current service state.
+/// Callers cannot supply a display, lock path, or provider-owned coordinate.
+pub(crate) fn begin_service_controller_mutation(
+    state: &ServiceState,
+    route_id: &str,
+) -> Result<DesktopControllerMutationGuard, String> {
+    let route = state
+        .remote_view_routes
+        .get(route_id)
+        .ok_or_else(|| "desktop_control_route_not_found".to_string())?;
+    let display_allocation_id = route
+        .display_allocation_id
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "desktop_control_display_binding_missing".to_string())?;
+    let state_path = default_service_state_path()?;
+    let runtime_state_root = state_path
+        .parent()
+        .and_then(Path::parent)
+        .ok_or_else(|| "desktop_control_runtime_state_root_unavailable".to_string())?;
+    let environment_id = std::env::var("AGENT_BROWSER_RUNTIME_ENVIRONMENT")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "production".to_string());
+    let identity = RouteEffectFenceIdentity::new(environment_id, route_id, display_allocation_id);
+    global_desktop_control_coordinator().begin_fenced_controller_mutation(
+        route_id,
+        runtime_state_root,
+        &identity,
+        CONTROLLER_MUTATION_FENCE_DEADLINE,
+    )
 }
 
 impl DesktopControlCoordinator {
@@ -98,7 +142,25 @@ impl DesktopControlCoordinator {
                 .map_err(|_| "desktop_control_coordinator_poisoned".to_string())?;
         }
         drop(state);
-        Ok(DesktopControllerMutationGuard { route })
+        Ok(DesktopControllerMutationGuard {
+            route,
+            _external_fence: None,
+        })
+    }
+
+    pub(crate) fn begin_fenced_controller_mutation(
+        &self,
+        route_id: &str,
+        runtime_state_root: &Path,
+        identity: &RouteEffectFenceIdentity,
+        deadline: Duration,
+    ) -> Result<DesktopControllerMutationGuard, String> {
+        let mut guard = self.begin_controller_mutation(route_id)?;
+        guard._external_fence = Some(
+            RouteEffectFence::acquire(runtime_state_root, identity, deadline)
+                .map_err(|error| error.code().to_string())?,
+        );
+        Ok(guard)
     }
 
     fn route(&self, route_id: &str) -> Arc<RouteControl> {
@@ -267,5 +329,45 @@ mod tests {
         );
         drop(mutation);
         assert!(coordinator.claim("route-a", "interaction-a").is_ok());
+    }
+
+    #[test]
+    fn controller_mutation_waits_for_the_external_route_effect_fence() {
+        use crate::native::desktop_input_provider::{RouteEffectFence, RouteEffectFenceIdentity};
+        use std::fs;
+
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-controller-route-fence-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        let identity = RouteEffectFenceIdentity::new("development", "route-a", "display-a");
+        let held = RouteEffectFence::acquire(&root, &identity, Duration::ZERO).unwrap();
+        let coordinator = Arc::new(DesktopControlCoordinator::new());
+        let mutation_coordinator = coordinator.clone();
+        let mutation_root = root.clone();
+        let mutation_identity = identity.clone();
+        let (started_tx, started_rx) = mpsc::channel();
+        let (finished_tx, finished_rx) = mpsc::channel();
+        let mutation = thread::spawn(move || {
+            started_tx.send(()).unwrap();
+            let guard = mutation_coordinator
+                .begin_fenced_controller_mutation(
+                    "route-a",
+                    &mutation_root,
+                    &mutation_identity,
+                    Duration::from_secs(1),
+                )
+                .unwrap();
+            finished_tx.send(()).unwrap();
+            drop(guard);
+        });
+
+        started_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        assert!(finished_rx.recv_timeout(Duration::from_millis(50)).is_err());
+        drop(held);
+        finished_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        mutation.join().unwrap();
+        fs::remove_dir_all(root).unwrap();
     }
 }

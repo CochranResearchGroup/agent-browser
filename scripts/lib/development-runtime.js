@@ -198,6 +198,12 @@ export function installDevelopmentRuntime({
     sha256,
     sourceBinary,
     browserExecutable: descriptor.browserExecutable,
+    desktopInputProvider: {
+      enabled: true,
+      providerId: 'controlled-x11-xtest',
+      capability: 'guarded_pointer_keyboard_v1',
+      recipeId: 'p131-controlled-x11-v1',
+    },
     installedAt: new Date().toISOString(),
   });
   mkdirSync(dirname(descriptor.laneManifest), { recursive: true, mode: 0o700 });

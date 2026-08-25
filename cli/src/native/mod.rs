@@ -39,6 +39,7 @@ pub mod cdp;
 pub mod clipboard;
 #[allow(dead_code)]
 pub mod control_plane;
+pub(crate) mod controlled_x11_provider;
 #[allow(dead_code)]
 pub mod cookies;
 #[allow(dead_code)]
@@ -58,6 +59,9 @@ pub(crate) mod desktop_evidence_cdp;
 // can remain fail-closed until the product caller is complete.
 #[allow(dead_code)]
 pub(crate) mod desktop_evidence_configured;
+#[allow(dead_code)]
+pub(crate) mod desktop_input_provider;
+pub(crate) mod desktop_input_provider_admission;
 #[allow(dead_code)]
 pub(crate) mod desktop_interaction;
 #[allow(dead_code)]
