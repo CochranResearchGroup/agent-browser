@@ -19,7 +19,7 @@ use std::os::unix::net::UnixStream;
 
 const DAEMON_AUTH_TOKEN_ENV: &str = "AGENT_BROWSER_DAEMON_AUTH_TOKEN";
 const DAEMON_AUTH_FIELD: &str = "_agentBrowserAuthToken";
-const DAEMON_START_TIMEOUT: Duration = Duration::from_secs(15);
+const DAEMON_START_TIMEOUT: Duration = Duration::from_secs(60);
 const DAEMON_START_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 #[derive(Serialize)]

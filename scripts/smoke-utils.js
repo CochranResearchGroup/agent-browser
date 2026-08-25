@@ -25,6 +25,7 @@ export function createSmokeContext({ prefix, session, sessionPrefix, socketDir: 
     ...process.env,
     HOME: tempHome,
     AGENT_BROWSER_HOME: agentHome,
+    AGENT_BROWSER_RUNTIME_HOST: '1',
     AGENT_BROWSER_SOCKET_DIR: socketDir,
     AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS: '0',
     ...(cargoHome ? { CARGO_HOME: cargoHome } : {}),
