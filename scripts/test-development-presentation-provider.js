@@ -28,6 +28,10 @@ import {
   developmentPresentationProviderSystemPreflight,
 } from './lib/development-presentation-provider-system-effects.js';
 import {
+  evaluateDevelopmentPresentationPressure,
+  sampleDevelopmentPresentationPressure,
+} from './lib/development-presentation-pressure.js';
+import {
   scaleInDevelopmentPresentation,
   scaleOutDevelopmentPresentation,
 } from './lib/development-presentation-lifecycle.js';
@@ -73,6 +77,79 @@ try {
   assert.match(descriptor.skill.target, /agent-browser-dev\/home\/\.codex\/skills\/agent-browser$/);
   assert.doesNotMatch(JSON.stringify(descriptor.routes), /route-a|route-b/i);
   assert.doesNotThrow(() => validateDevelopmentPresentationProviderIsolation(descriptor));
+  const headroomReadings = {
+    memoryAvailableBytes: 32 * 1024 ** 3,
+    swapFreeBytes: 4 * 1024 ** 3,
+    swapTotalBytes: 8 * 1024 ** 3,
+    loadOne: 24,
+    cpuCount: 20,
+    cpuSampleAvailable: true,
+    cpuIdleFraction: 0.25,
+    ioWaitFraction: 0.01,
+    fileHandlesAllocated: 100,
+    fileHandlesMaximum: 1_000,
+  };
+  const laggingLoadWithCpuHeadroom = evaluateDevelopmentPresentationPressure(
+    descriptor,
+    headroomReadings,
+  );
+  assert.equal(laggingLoadWithCpuHeadroom.admittedMaximum, descriptor.hardMaxSlots);
+  assert.deepEqual(laggingLoadWithCpuHeadroom.reasons, []);
+  assert.equal(laggingLoadWithCpuHeadroom.readings.cpuAdmissionSource, 'sampled_idle_headroom');
+  const pressureEffects = createDevelopmentPresentationLifecycleSystemEffects({
+    env,
+    productionSnapshot: () => ({ identity: 'production-fixture' }),
+    assertProductionUnchanged: () => {},
+    pressureSnapshot: () => headroomReadings,
+  });
+  const effectAdmission = pressureEffects.pressureAdmission(descriptor);
+  assert.equal(effectAdmission.admittedMaximum, descriptor.hardMaxSlots);
+  assert.equal(effectAdmission.readings.cpuAdmissionSource, 'sampled_idle_headroom');
+  const saturatedAdmission = evaluateDevelopmentPresentationPressure(descriptor, {
+    ...headroomReadings,
+    loadOne: 10,
+    cpuIdleFraction: 0,
+  });
+  assert.equal(saturatedAdmission.admittedMaximum, descriptor.warmSlots);
+  assert.deepEqual(saturatedAdmission.reasons, ['cpu_capacity']);
+  let cpuStatReads = 0;
+  const sampledHeadroom = sampleDevelopmentPresentationPressure({
+    cpuCount: 20,
+    wait: (milliseconds) => assert.equal(milliseconds, 250),
+    readFile: (path) => {
+      if (path === '/proc/stat') {
+        cpuStatReads += 1;
+        return cpuStatReads === 1
+          ? 'cpu 100 0 100 700 0 0 0 0 0 0\n'
+          : 'cpu 120 0 120 860 0 0 0 0 0 0\n';
+      }
+      if (path === '/proc/meminfo') {
+        return 'MemAvailable: 33554432 kB\nSwapFree: 4194304 kB\nSwapTotal: 8388608 kB\n';
+      }
+      if (path === '/proc/loadavg') return '30.00 25.00 20.00 1/100 1\n';
+      if (path === '/proc/sys/fs/file-nr') return '100 0 1000\n';
+      throw new Error(`unexpected pressure fixture path: ${path}`);
+    },
+  });
+  const sampledAdmission = evaluateDevelopmentPresentationPressure(descriptor, sampledHeadroom);
+  assert.equal(sampledHeadroom.cpuIdleFraction, 0.8);
+  assert.equal(sampledAdmission.admittedMaximum, descriptor.hardMaxSlots);
+  assert.deepEqual(sampledAdmission.reasons, []);
+  const fallbackAdmission = evaluateDevelopmentPresentationPressure(descriptor, {
+    ...headroomReadings,
+    cpuSampleAvailable: false,
+    cpuIdleFraction: null,
+    ioWaitFraction: null,
+  });
+  assert.equal(fallbackAdmission.admittedMaximum, descriptor.warmSlots);
+  assert.deepEqual(fallbackAdmission.reasons, ['cpu_load']);
+  assert.equal(fallbackAdmission.readings.cpuAdmissionSource, 'load_average_fallback');
+  const ioPressureAdmission = evaluateDevelopmentPresentationPressure(descriptor, {
+    ...headroomReadings,
+    ioWaitFraction: 0.2,
+  });
+  assert.equal(ioPressureAdmission.admittedMaximum, descriptor.warmSlots);
+  assert.deepEqual(ioPressureAdmission.reasons, ['io_pressure']);
   const singleRouteInventory = JSON.stringify([{
     id: 'development-route-5',
     routeId: 'guacamole:105',

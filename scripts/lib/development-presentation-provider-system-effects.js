@@ -8,7 +8,6 @@ import {
   statfsSync,
 } from 'node:fs';
 import { join } from 'node:path';
-import { cpus } from 'node:os';
 import {
   developmentPresentationProviderDescriptor,
   validateDevelopmentPresentationProviderIsolation,
@@ -17,6 +16,10 @@ import {
   probeDevelopmentPresentationProvider,
   renderDevelopmentPresentationProviderBundle,
 } from './development-presentation-provider-deployment.js';
+import {
+  evaluateDevelopmentPresentationPressure,
+  sampleDevelopmentPresentationPressure,
+} from './development-presentation-pressure.js';
 
 const MIN_AVAILABLE_MEMORY_BYTES = 8 * 1024 ** 3;
 const MIN_FREE_DISK_BYTES = 10 * 1024 ** 3;
@@ -379,6 +382,7 @@ export function createDevelopmentPresentationLifecycleSystemEffects(options = {}
   const reclaimTimeoutMs = Number(options.reclaimTimeoutMs ??
     env.AGENT_BROWSER_DEV_PRESENTATION_RECLAIM_TIMEOUT_MS ?? 5000);
   const reclaimPollMs = Number(options.reclaimPollMs ?? 100);
+  const pressureSnapshot = options.pressureSnapshot || sampleDevelopmentPresentationPressure;
   const reclaimCapability = () => {
     const result = run(helper, ['status-json']);
     if (result.error || result.status !== 0) {
@@ -409,34 +413,7 @@ export function createDevelopmentPresentationLifecycleSystemEffects(options = {}
     ...base,
     reclaimCapability,
     pressureAdmission(descriptor) {
-      const memoryAvailableBytes = meminfoBytes('MemAvailable');
-      const swapFreeBytes = meminfoBytes('SwapFree');
-      const swapTotalBytes = meminfoBytes('SwapTotal');
-      const loadOne = Number(readFileSync('/proc/loadavg', 'utf8').split(/\s+/)[0] || 0);
-      const cpuCount = Math.max(1, cpus().length);
-      const fileParts = readFileSync('/proc/sys/fs/file-nr', 'utf8').trim().split(/\s+/).map(Number);
-      const fileHandlesAllocated = fileParts[0] || 0;
-      const fileHandlesMaximum = fileParts[2] || 0;
-      const reasons = [];
-      if (memoryAvailableBytes < MIN_AVAILABLE_MEMORY_BYTES) reasons.push('memory_reserve');
-      if (swapTotalBytes > 0 && swapFreeBytes < 1024 ** 3) reasons.push('swap_reserve');
-      if (loadOne > cpuCount * 0.9) reasons.push('cpu_load');
-      if (fileHandlesMaximum > 0 && fileHandlesAllocated / fileHandlesMaximum > 0.8) {
-        reasons.push('file_handle_reserve');
-      }
-      return {
-        admittedMaximum: reasons.length === 0 ? descriptor.hardMaxSlots : descriptor.warmSlots,
-        reasons,
-        readings: {
-          memoryAvailableBytes,
-          swapFreeBytes,
-          swapTotalBytes,
-          loadOne,
-          cpuCount,
-          fileHandlesAllocated,
-          fileHandlesMaximum,
-        },
-      };
+      return evaluateDevelopmentPresentationPressure(descriptor, pressureSnapshot());
     },
     provisionRoute(route, descriptor) {
       const observation = base.observe(descriptor);
