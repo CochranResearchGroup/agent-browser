@@ -4,13 +4,13 @@ Date: 2026-08-24
 
 State: OPEN
 
-Execution state: `candidate_qualified_runtime_apply_authorization_required`
+Execution state: `retained_handle_repair_candidate_qualified_runtime_apply_authorization_required`
 
 Lane: P130
 
 Branch: `hotfix/access-plan-owner-reuse-coherence`
 
-Target: `main` through `98141d07907bd5a7594a10465a39238410dabd1d`
+Target: `main` through `dfc5b03a`
 
 Integration method: direct local merge after active-lane reconciliation
 
@@ -513,3 +513,51 @@ process count, tab acquisition, tab release, and final resource census.
 - Source and candidate qualification are complete. The installed runtime
   remains unchanged. A third transactional apply remains outside this slice
   and requires separate explicit operator authorization for this exact SHA-256.
+
+## 2026-08-25 accepted installation and retained-handle repair
+
+- The operator explicitly authorized replacement candidate SHA-256
+  `2970534ac54b7226baec48690ec70b8dab7a0fe25a1cdc3000baaa5f666f5be9`.
+  Transaction `upgrade-51ba76bb-8d12-4c04-9d67-8b8cf7e5d05f`
+  completed with terminal result `accepted`, selected generation
+  `0.28.0-2970534ac54b-58e468ee69f5`, and no stop reason. The authenticated
+  staged-dashboard proof resolved durable handoff `r895695` against the exact
+  candidate and ingress selected the candidate generation.
+- `agent-browser install doctor`, invoked outside a source checkout, passed
+  with zero issues. Runtime convergence is `converged`; the selected dashboard
+  and installed binary match the exact SHA-256; the census reports one
+  executable generation, one dashboard process, one runtime host, no legacy
+  daemons, no upgrade candidates, and no degraded session supervisors.
+- The installed access plan correctly returned
+  `reuse_existing_browser` for durable browser
+  `session:last30days-facebook--last30days-facebook`, session
+  `handoff-50e51527230ae122`, one healthy same-profile browser, and a ready
+  generation-19 owner. One harmless `about:blank` tab was acquired through the
+  authenticated stable dashboard as target
+  `E93F0CD7724B06E4303D86643851EF69`; no provider page was opened.
+- Release exposed a separate retained-handle identity defect. `tab_new`
+  returned daemon alias `session:handoff-50e51527230ae122` and a null profile
+  instead of the lifecycle owner's durable browser and retained profile.
+  Service validation then rejected the alias because the retained tab belongs
+  to the durable browser, while daemon routing rejected the corrected durable
+  browser because it expected the alias. Both failures were fail-closed. The
+  harmless tab remains open, and no duplicate tab or browser was created.
+- Commit `dfc5b03a` repairs this contradiction by deriving retained tab handles
+  from the exact runtime-owner binding, preserving the retained profile, and
+  authorizing that identity across daemon follow-up validators while retaining
+  the legacy session alias fallback when no binding exists. Focused handle,
+  access-plan, formatting, clippy, and the canonical split Rust test harness
+  pass. The split harness passed 1,585 parallel-safe tests plus every
+  environment-mutating partition serially.
+- The repaired exact release candidate
+  `/tmp/agent-browser-plan0130-target-dfc5b03a/release/agent-browser` reports
+  version `0.28.0` and SHA-256
+  `80d87ab7be0d2b3a1c8241a6bc5865fe556a00dcf700c2489759ab1a947af97a`.
+  Its live-host dry-run passed with `success=true`, `state=planned`, and
+  `mutated=false`; the complete source-free workstation fixture also passed.
+- The accepted installed runtime remains healthy at SHA-256 `2970534a...`.
+  Installing the repaired `80d87ab7...` candidate is a new mutation and
+  requires separate explicit operator authorization. After installation,
+  acceptance must release the existing harmless target rather than acquire a
+  second tab, then prove the browser process, route, owner, and profile lane
+  were preserved.
