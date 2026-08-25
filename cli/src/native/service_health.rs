@@ -9,7 +9,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use super::browser::BrowserShutdownOutcome;
-use super::desktop_control_coordinator::global_desktop_control_coordinator;
+use super::desktop_control_coordinator::begin_service_controller_mutation;
 use super::remote_view::{route_display_socket_available, route_pool_target_string};
 use super::remote_view_attachability::refresh_remote_view_attachability;
 use super::service_lifecycle::{upsert_service_profile_and_session, ServiceLaunchMetadata};
@@ -744,7 +744,7 @@ pub async fn reconcile_service_state_in_repository(
         .remote_view_routes
         .values()
         .filter(|route| route.controller_lease_id.is_some())
-        .map(|route| global_desktop_control_coordinator().begin_controller_mutation(&route.id))
+        .map(|route| begin_service_controller_mutation(&before, &route.id))
         .collect::<Result<Vec<_>, _>>()?;
     let mut reconciled_state = before.clone();
     let summary = reconcile_service_state_with_controller_fence(&mut reconciled_state, true).await;
@@ -1421,7 +1421,7 @@ pub(crate) fn persist_closed_browser_health_in_repository(
                 && (route.browser_id.as_deref() == Some(browser_id.as_str())
                     || route.session_id.as_deref() == Some(session_id))
         })
-        .map(|route| global_desktop_control_coordinator().begin_controller_mutation(&route.id))
+        .map(|route| begin_service_controller_mutation(&snapshot, &route.id))
         .collect::<Result<Vec<_>, _>>()?;
     repository.mutate(|service_state| {
         let id = service_browser_id_for_session(session_id);
@@ -2395,11 +2395,9 @@ fn reconcile_remote_view_state_with_display_probe(
     } else {
         controller_routes_to_clear
             .iter()
-            .map(|route_id| {
-                global_desktop_control_coordinator().begin_controller_mutation(route_id)
-            })
+            .map(|route_id| begin_service_controller_mutation(state, route_id))
             .collect::<Result<Vec<_>, _>>()
-            .expect("desktop control coordinator must remain available")
+            .expect("desktop control effect fence must remain available")
     };
     for route_id in &controller_routes_to_clear {
         advance_route_controller_authority(state, route_id, None)

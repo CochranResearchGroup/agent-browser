@@ -10,7 +10,7 @@ use super::route_pool::{
     select_browser_reattach_route_pool_entry,
 };
 use super::shared::*;
-use crate::native::desktop_control_coordinator::global_desktop_control_coordinator;
+use crate::native::desktop_control_coordinator::begin_service_controller_mutation;
 use crate::native::presentation_capacity::{
     CapacityDecision, PresentationRequest, PressureAdmission,
 };
@@ -705,10 +705,10 @@ pub(crate) async fn handle_service_remote_view_route_release(
     _daemon_state: &DaemonState,
 ) -> Result<Value, String> {
     let route_id = required_remote_view_route_id(cmd)?;
-    let _controller_mutation =
-        global_desktop_control_coordinator().begin_controller_mutation(&route_id)?;
     let now = service_remote_view_timestamp();
     let repository = LockedServiceStateRepository::default_json()?;
+    let snapshot = repository.load_snapshot()?;
+    let _controller_mutation = begin_service_controller_mutation(&snapshot, &route_id)?;
     repository.mutate(|state| {
         let park_for_route_switch = optional_command_or_params_bool(cmd, "parkForRouteSwitch")
             .or_else(|| optional_command_or_params_bool(cmd, "releaseDisplayAllocation"))
