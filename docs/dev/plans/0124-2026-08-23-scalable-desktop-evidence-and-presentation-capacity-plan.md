@@ -4,7 +4,7 @@ Date: 2026-08-23
 
 State: IN PROGRESS
 
-Execution state: `slice_h_cdp_slot_neutrality_accepted_remaining_multi_party_acceptance`
+Execution state: `slice_g_multi_party_priority_and_recovery_accepted_remaining_retained_browser_and_legacy_cleanup`
 
 Lane: P124
 
@@ -444,12 +444,26 @@ remains protected as migration residue in the garbage-collection boundary.
 Evidence is recorded in
 `docs/dev/notes/0124-18-2026-08-24-cdp-slot-neutrality-live-acceptance.md`.
 
-The remaining installed boundary is active-human and passive-viewer
-precedence, concurrent observation plus recovery admission, retained
-authenticated-browser survival through route movement and unrelated scale-in,
-and convergence or explicit disposition of the remaining unprovable legacy
-`v1` lifecycle-only closing row. Configured production input remains outside
-this plan's live authority until Plan 0110 is independently accepted.
+Human and multi-agent priority is live accepted. An active human controller
+blocked visible passkey staging and returned a durable human-continuation
+handoff without mutating the scene, while an unstaged observation preserved a
+passive viewer. Two desktop observations and one exact-route recovery then ran
+concurrently across three distinct browsers, routes, displays, and active
+slots. Their job intervals overlapped without binding drift. Cleanup exposed
+and repaired two lifecycle defects: browser checkout now synchronizes slot
+activation, and reconciliation disconnects ownerless viewers and persists
+unleased slot convergence through a compare-and-swap merge that preserves a
+concurrently started recovery lease. Final development generation
+`0.28.0-32265fb11862` converged to zero browsers, zero owned routes, zero
+active viewer leases, and four `warm_idle` slots. Evidence is recorded in
+`docs/dev/notes/0124-19-2026-08-24-human-priority-and-concurrent-recovery-live-acceptance.md`.
+
+The remaining installed boundary is retained authenticated-browser survival
+through route movement and unrelated scale-in, a repeat browser-external
+episode on the final installed generation, and convergence or explicit
+disposition of the remaining unprovable legacy `v1` lifecycle-only closing
+row. Configured production input remains outside this plan's live authority
+until Plan 0110 is independently accepted.
 
 After source acceptance and separate explicit live authority:
 
