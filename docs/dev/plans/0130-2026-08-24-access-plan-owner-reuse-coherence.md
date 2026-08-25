@@ -4,13 +4,13 @@ Date: 2026-08-24
 
 State: OPEN
 
-Execution state: `validation_active`
+Execution state: `source_integration_ready`
 
 Lane: P130
 
 Branch: `hotfix/access-plan-owner-reuse-coherence`
 
-Target: `main` at `0535131b61627a1bbff34773bb116e462334aafe`
+Target: `main` through `4587e8f433a5af07dd3680e362ef75ba467186f4`
 
 Integration method: direct local merge after active-lane reconciliation
 
@@ -337,3 +337,27 @@ process count, tab acquisition, tab release, and final resource census.
 - P130-F validation is active. The workstation-bound no-launch smoke remains
   deferred until the transactional candidate install because the installed
   runtime currently rejects legacy per-session daemon admission.
+
+## 2026-08-24 integrated validation checkpoint
+
+- The later presentation-ownership checkpoint `4587e8f4` was merged into the
+  isolated hotfix without conflict. The combined head is `80e6653b`.
+- The repository split Rust CI harness passes: 1,521 parallel-safe tests pass
+  with 57 ignored, followed by every environment-mutating partition passing
+  serially.
+- Formatting, clippy with warnings denied, and `git diff --check` pass.
+- The combined-head focused suites pass: 45 access-plan tests, 18
+  presentation-capacity tests, and 77 service-health tests.
+- Route-confusion, host-provision, fresh-workstation, Guacamole asset and
+  durability, route-specific user sync, API/MCP parity, service-client,
+  remote-view handoff documentation, and dashboard launcher gates pass.
+- The docs site and dashboard production builds pass. The dashboard candidate
+  therefore contains current static assets rather than the missing-build
+  external-ingress state reported before this repair.
+- The release-building workstation fixture was intentionally cancelled while
+  a concurrent feature build held the repository-wide Cargo lane. It remains
+  required after direct integration, together with the deferred installed
+  service-access no-launch smoke.
+- P130-F is source-integration ready. Remaining authority is the exact
+  integrated candidate build, one transactional workstation dry-run and apply,
+  install doctor, and the bounded harmless Last30Days runtime proof.
