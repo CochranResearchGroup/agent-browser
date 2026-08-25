@@ -9,6 +9,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -196,6 +197,9 @@ try {
   for (const base of [protectedBase, unprotectedBase]) {
     writeFileSync(`${base}.dump`, 'old dump');
     writeFileSync(`${base}.json`, '{}');
+    const fixtureTime = new Date('2026-01-02T00:00:00.000Z');
+    utimesSync(`${base}.dump`, fixtureTime, fixtureTime);
+    utimesSync(`${base}.json`, fixtureTime, fixtureTime);
   }
   writeFileSync(`${protectedBase}.keep`, 'protected\n');
 
