@@ -4,7 +4,7 @@ Date: 2026-08-24
 
 State: OPEN
 
-Execution state: `source_integrated_runtime_acceptance_open`
+Execution state: `candidate_qualified_runtime_apply_authorization_required`
 
 Lane: P130
 
@@ -468,3 +468,20 @@ process count, tab acquisition, tab release, and final resource census.
   `session:last30days-facebook--last30days-facebook`, PID 95745, session
   `handoff-17959ea3e226ee61`, ready owner generation 18, and durable handoff
   `r895695`. No temporary candidate-proof browser remains.
+
+## 2026-08-25 exact candidate qualification
+
+- Exact release candidate
+  `/tmp/agent-browser-plan0130-target-687abdb3/release/agent-browser` has
+  SHA-256 `09d98c8b14cbd28d5a1e1cbe289d13996408a6131438e89b3d2bdda952da373d`
+  and reports version `0.28.0`.
+- Its live-host dry-run passed with `success=true`, `state=planned`, and
+  `mutated=false`. No transaction, ingress, browser, or runtime ownership state
+  changed.
+- The exact release candidate passes the complete source-free workstation
+  fixture. The first fixture invocation exposed a release-pipe `SIGPIPE`; the
+  fixture now captures up to 64 MiB while separately enforcing that reconcile
+  JSON remains at or below 16 MiB. The rerun passed that payload-size contract.
+- Candidate preparation is complete. A live apply remains outside this slice's
+  bound and requires a separate explicit authorization for the third
+  transactional attempt.

@@ -575,6 +575,10 @@ try {
     null,
     `workstation reconcile must finish through the public command interface: signal=${reconcile.signal} error=${reconcile.error?.message || 'none'}\n${reconcile.stdout}${reconcile.stderr}`,
   );
+  assert.ok(
+    Buffer.byteLength(reconcile.stdout || '', 'utf8') <= 16 * 1024 * 1024,
+    `workstation reconcile JSON must stay within 16 MiB; observed ${Buffer.byteLength(reconcile.stdout || '', 'utf8')} bytes`,
+  );
   assert.doesNotMatch(
     `${reconcile.stdout}${reconcile.stderr}`,
     /Usage:/,
@@ -771,7 +775,7 @@ function runInstaller(root, flags, extraEnv = {}) {
   return spawnSync(agentBrowser, ['install', 'workstation', ...flags], {
     cwd: fixtureRoot,
     encoding: 'utf8',
-    maxBuffer: 16 * 1024 * 1024,
+    maxBuffer: 64 * 1024 * 1024,
     env: {
       ...process.env,
       HOME: home,
