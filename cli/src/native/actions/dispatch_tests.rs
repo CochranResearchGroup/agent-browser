@@ -167,9 +167,10 @@ async fn configured_desktop_provider_gates_precede_confirmation_and_dispatch_eff
     .await;
 
     assert_eq!(response["success"], false);
-    assert!(response["error"]
-        .as_str()
-        .is_some_and(|error| error.starts_with("desktop_input_provider_unavailable:")));
+    assert!(response["error"].as_str().is_some_and(|error| {
+        error.starts_with("desktop_input_provider_")
+            && error.ends_with(": controlled desktop input admission failed")
+    }));
     assert!(state.pending_confirmation.is_none());
 }
 #[test]

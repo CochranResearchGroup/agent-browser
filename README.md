@@ -816,10 +816,11 @@ agent-browser desktop interact \
 | `--task-name <name>` | Required accountable task label |
 
 > **Experimental:** `p131-controlled-x11-v1` is available only from an exact
-> installed development generation whose immutable manifest enables the
-> controlled X11/XTEST provider. Production and unmanifested binaries return
-> `desktop_input_provider_unavailable` before capture, controller mutation, or
-> input.
+> installed development or production generation whose immutable manifest
+> enables the controlled X11/XTEST provider and whose binary matches the
+> manifest digest. Unmanifested binaries and unknown runtime environments fail
+> before capture, controller mutation, or input. This is not a general desktop
+> control capability.
 
 The pointer-keyboard recipe derives its target from a fresh `p110-control-v1` observation. It
 owns the deterministic pointer arc, one left click, fixed non-sensitive test
@@ -3507,8 +3508,12 @@ cannot observe. A generic CDP timeout or failure is diagnostic evidence, not
 permission to fall back to desktop capture. Browser-external classification
 requires paired CDP absence evidence, and capture requires an exact
 capture-ready proof before and after the frame. Biometric, secure-desktop, PIN,
-master-password, and consent surfaces return a human continuation. Configured
-production desktop input remains unavailable pending Plan 0110 acceptance.
+master-password, and consent surfaces return a human continuation. When service
+status reports `controlled_x11_exact_generation_required`, configured
+production input is limited to the closed `p131-controlled-x11-v1` recipe and
+still requires admission by the exact selected immutable generation. That
+admission does not authorize credential, private-profile, arbitrary-input, or
+general desktop-control workflows.
 When the bound browser already has a live same-origin target for the requested
 URL, route-bound repeat opens reuse that target and include
 `tabAcquisitionDecision="reused_compatible_target"` plus

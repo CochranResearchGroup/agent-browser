@@ -236,7 +236,7 @@ async fn unavailable_observations_are_typed_unknown_and_keep_legacy_manual_array
     );
     assert_eq!(
         value["desktopEvidencePolicy"]["configuredProductionInput"],
-        "unavailable_pending_plan_0110"
+        "controlled_x11_exact_generation_required"
     );
     assert_eq!(
         value["runtimeLifecycle"]["schemaVersion"],

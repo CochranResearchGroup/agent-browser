@@ -13,7 +13,7 @@ use super::desktop_capture::{
 use super::desktop_input_provider::{
     ControlledX11Event, DesktopInputProviderError, ProviderEffectExecutor, XTestSink,
 };
-use super::desktop_input_provider_admission::DevelopmentProviderAdmission;
+use super::desktop_input_provider_admission::ProviderAdmission;
 use super::desktop_interaction::{
     AfterObservation, BeforeObservation, ControllerAuthority, ControllerAuthorityRepository,
     DesktopBinding, DesktopInteractionError, DesktopInteractionProvider,
@@ -31,7 +31,7 @@ const FIXED_TEXT: &str = "fixture-ready";
 const EFFECT_FENCE_DEADLINE: Duration = Duration::from_secs(5);
 
 pub(crate) struct ControlledX11Provider {
-    admission: DevelopmentProviderAdmission,
+    admission: ProviderAdmission,
     request: DesktopInteractionRequest,
     display_name: String,
     executor: ProviderEffectExecutor<XTestSink>,
@@ -53,7 +53,7 @@ pub(crate) struct SystemInteractionClock;
 impl ControlledX11Provider {
     pub(crate) fn open(
         request: DesktopInteractionRequest,
-        admission: DevelopmentProviderAdmission,
+        admission: ProviderAdmission,
     ) -> Result<(Self, ConfiguredControllerAuthorityRepository), DesktopInteractionError> {
         let repository = LockedServiceStateRepository::default_json()
             .map_err(|_| provider_error("desktop_input_provider_state_unavailable"))?;
@@ -116,7 +116,7 @@ impl ControlledX11Provider {
             .map_err(|error| provider_error(error.code()))?;
         let executor = ProviderEffectExecutor::new(
             &runtime_state_root,
-            "development",
+            &admission.runtime_environment,
             &capture_binding.route_id,
             &capture_binding.display_allocation_id,
             &admission.generation_sha256,
