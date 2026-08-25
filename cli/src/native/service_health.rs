@@ -466,25 +466,34 @@ fn reconcile_absent_closing_runtime_lifecycles(state: &mut ServiceState) -> usiz
                 .owner(&lifecycle.profile_identity_digest)?;
             let process_group_id = lifecycle.process_group_id?;
             let profile_root = profile_roots.get(&lifecycle.profile_identity_digest)?;
-            (owner.browser_id == lifecycle.logical_browser_id
-                && owner.owner_generation == lifecycle.owner_generation
-                && !process_group_is_running(process_group_id)
-                && profile_lock_is_absent(profile_root))
-            .then(|| {
-                (
-                    lifecycle.logical_browser_id.clone(),
-                    lifecycle.profile_identity_digest.clone(),
-                    lifecycle.owner_generation,
-                    process_group_id,
-                )
-            })
+            if owner.browser_id != lifecycle.logical_browser_id
+                || owner.owner_generation != lifecycle.owner_generation
+                || process_group_is_running(process_group_id)
+            {
+                return None;
+            }
+            let profile_lock_evidence =
+                reconciled_profile_lock_evidence(profile_root, process_group_id)?;
+            Some((
+                lifecycle.logical_browser_id.clone(),
+                lifecycle.profile_identity_digest.clone(),
+                lifecycle.owner_generation,
+                process_group_id,
+                profile_lock_evidence,
+            ))
         })
         .collect::<Vec<_>>();
 
     candidates
         .into_iter()
         .filter(
-            |(logical_browser_id, profile_identity_digest, owner_generation, process_group_id)| {
+            |(
+                logical_browser_id,
+                profile_identity_digest,
+                owner_generation,
+                process_group_id,
+                profile_lock_evidence,
+            )| {
                 crate::native::runtime_lifecycle::complete_reconciled_close(
                     &mut state.runtime_owner_registry,
                     logical_browser_id.clone(),
@@ -492,7 +501,7 @@ fn reconcile_absent_closing_runtime_lifecycles(state: &mut ServiceState) -> usiz
                     *owner_generation,
                     vec![
                         format!("service_reconcile_process_group_absent:{process_group_id}"),
-                        "service_reconcile_profile_lock_absent".to_string(),
+                        profile_lock_evidence.clone(),
                     ],
                 )
                 .is_ok()
@@ -501,14 +510,33 @@ fn reconcile_absent_closing_runtime_lifecycles(state: &mut ServiceState) -> usiz
         .count()
 }
 
-fn profile_lock_is_absent(profile_root: &Path) -> bool {
-    fs::symlink_metadata(profile_root.join("SingletonLock"))
-        .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+fn reconciled_profile_lock_evidence(profile_root: &Path, process_group_id: u32) -> Option<String> {
+    let lock_path = profile_root.join("SingletonLock");
+    match fs::symlink_metadata(&lock_path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            Some("service_reconcile_profile_lock_absent".to_string())
+        }
+        #[cfg(unix)]
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            let target = fs::read_link(lock_path).ok()?;
+            let target = target.file_name()?.to_str()?;
+            let lock_pid = target.rsplit_once('-')?.1.parse::<u32>().ok()?;
+            (lock_pid == process_group_id && !process_is_running(lock_pid))
+                .then(|| format!("service_reconcile_profile_lock_stale_pid_absent:{lock_pid}"))
+        }
+        _ => None,
+    }
 }
 
 #[cfg(unix)]
 fn process_group_is_running(process_group_id: u32) -> bool {
     let result = unsafe { libc::kill(-(process_group_id as i32), 0) };
+    result == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+}
+
+#[cfg(unix)]
+fn process_is_running(pid: u32) -> bool {
+    let result = unsafe { libc::kill(pid as i32, 0) };
     result == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
 }
 
@@ -3335,6 +3363,48 @@ mod tests {
                 "service_reconcile_profile_lock_absent".to_string(),
             ]
         );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn reconcile_completes_exact_closing_lane_with_stale_matching_lock_pid() {
+        use crate::runtime_owner_transfer::{CleanupObligationState, RuntimeLaneLifecycleState};
+        use std::os::unix::fs::symlink;
+
+        let profile_root = temp_home("service-health-stale-closing-lock");
+        fs::create_dir_all(&profile_root).unwrap();
+        let absent_process_group = (2_002_000..2_003_000)
+            .find(|process_group_id| {
+                !process_group_is_running(*process_group_id)
+                    && !process_is_running(*process_group_id)
+            })
+            .unwrap();
+        symlink(
+            format!("fixture-host-{absent_process_group}"),
+            profile_root.join("SingletonLock"),
+        )
+        .unwrap();
+        let mut state = closing_runtime_lifecycle_state(&profile_root, absent_process_group);
+
+        reconcile_service_state(&mut state).await;
+
+        let lifecycle = &state.runtime_owner_registry.lifecycle_records["browser-closing"];
+        assert_eq!(
+            lifecycle.lifecycle_state,
+            RuntimeLaneLifecycleState::Terminal
+        );
+        assert_eq!(
+            lifecycle.cleanup_obligation_state,
+            CleanupObligationState::Satisfied
+        );
+        assert_eq!(
+            lifecycle.terminal_evidence,
+            vec![
+                format!("service_reconcile_process_group_absent:{absent_process_group}"),
+                format!("service_reconcile_profile_lock_stale_pid_absent:{absent_process_group}"),
+            ]
+        );
+        let _ = fs::remove_dir_all(profile_root);
     }
 
     #[cfg(unix)]
