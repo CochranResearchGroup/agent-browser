@@ -2,11 +2,13 @@
 
 Date: 2026-08-24
 
+Completed: 2026-08-25
+
 Plan: `docs/dev/plans/0124-2026-08-23-scalable-desktop-evidence-and-presentation-capacity-plan.md`
 
 Authority: DEVELOPMENT RUNTIME EFFECTS | PRODUCTION READ-ONLY
 
-Status: PARTIAL ACCEPTED | UNRELATED ELASTIC CYCLE CPU-CAPACITY-DEFERRED
+Status: ACCEPTED
 
 ## Accepted Retained Browser Boundary
 
@@ -95,17 +97,22 @@ The dashboard timeout repair passed:
 - the authenticated installed dashboard smoke.
 
 The development doctor passed with all three development units selected on
-the final generation. Production remained read-only and retained selected
-generation `0.28.0-c128349c482f-d9745dc2e128`, binary SHA-256
+the final generation. At the first checkpoint, production remained read-only
+on generation `0.28.0-c128349c482f-d9745dc2e128`, binary SHA-256
 `c128349c482fc049b70fe5f3dbfeadd3a9336cdd3ad5f81731dc2cb6b3d5cd63`.
+Concurrent Plan 0130 acceptance later selected production generation
+`0.28.0-80d87ab7be0d-5926db67f48a`, binary SHA-256
+`80d87ab7be0d2b3a1c8241a6bc5865fe556a00dcf700c2489759ab1a947af97a`.
+Plan 0124 did not perform that update. Both its scale-out and scale-in receipts
+proved the then-current production snapshot unchanged across their own
+transactions.
 
-## Remaining Boundary
+## Accepted Pressure Admission And Elastic Cycle
 
-The unrelated elastic cycle is not yet accepted in this packet. Repeated
-scale-out requests correctly deferred at four slots with
+Initial unrelated scale-out requests correctly deferred at four slots with
 `reason=pressure_admission`, `reasons=[cpu_load]`, and
-`productionUnchanged=true`. The retained authenticated browser remains alive
-while current host pressure is allowed to decay.
+`productionUnchanged=true` while the retained authenticated browser remained
+alive.
 
 The original CPU gate used one-minute load average as its only CPU-pressure
 signal. Commit `eec463d6` deepened pressure admission into a typed snapshot
@@ -127,7 +134,62 @@ making the same typed decision.
 The first corrected live request returned `reasons=[cpu_capacity]`, zero
 idle-core equivalents against a required two on the 20-CPU host, four slots
 before and after, and `productionUnchanged=true`. This proves the current
-deferral is real CPU saturation rather than a stale load-average false
-positive. Plan 0124 closes only after one admitted fifth route is reclaimed
-after cooldown and the same PID, process token, profile, target, and
-authenticated result survive that unrelated scale-in.
+deferral was real CPU saturation rather than a stale load-average false
+positive.
+
+The accepted scale-out then measured `15.158648925281476` idle-core
+equivalents against a required two while one-minute load still lagged at
+`29.13`. It admitted six slots and provisioned exactly route
+`development-route-5`, slot `development-slot-5`, and display reservation
+`development-display-5`, moving capacity from four to five. Receipt:
+`lifecycle-1787663403038-67989-294f0da5-539d-49d4-b0cf-2e7e255efab6.json`.
+
+After scale-out, browser `session:p124-auth-live2` still had PID `26642`, the
+same process start token, profile, route 2 binding, and target
+`34561B17DC2C1BD6A3A3D4D5F6FE8F6E`; direct CDP readback remained
+`authenticated`. After `41,774.4287109375` ms of cooldown, exact reference
+checking returned no blockers or ambiguities and reclaimed route 5, moving
+capacity from five to four. Receipt:
+`lifecycle-1787663450079-80415-7cbf52f7-8ad1-4e21-a987-2ff616e84c81.json`.
+The same browser identity and authenticated result survived scale-in and a
+following reconciliation.
+
+Exact service-owned close then removed the acceptance browser. Final
+reconciliation reported zero browsers, four `warm_idle` slots, no route 5
+processes, no route 5 or authenticated-profile singleton lock, four provider
+displays, zero resource candidates, and one owned cleanup obligation for the
+explicitly protected legacy row. The development skill was synchronized after
+concurrent Plan 0130 source drift, and development doctor returned success
+without restarting development units. The local authentication fixture was
+stopped after the final browser close.
+
+Current-main release build completed through bounded Cargo admission in
+12 minutes 38 seconds and copied matching SHA-256
+`451690603f76392cf6f5654cd5e06cb42e55161a3d6370181105b33da3646933`
+to `cli/target/release/agent-browser` and `bin/agent-browser-linux-x64`. This
+build did not restart either runtime or replace the accepted installed
+development generation.
+
+Final source closeout also repaired two pre-existing validator gaps exposed by
+the current runtime-host topology. The fixed-input status harness now invokes
+Cargo through the bounded WSL wrapper and captures output in regular files, so
+an inherited pipe cannot keep the Node process alive after Cargo exits. Shared
+smoke fixtures now opt into the supported single runtime host, and daemon
+startup allows 60 seconds for executable provenance hashing under pressure.
+The owner effect-admission transaction was also moved behind the runtime
+lifecycle deep module, restoring the final dispatcher architecture boundary.
+
+The final source validation passed:
+
+- generated service-client contracts, JavaScript types, package exports,
+  request and observability helpers, the fixed-input producer-to-client
+  harness, managed-profile flow, and all no-launch client examples;
+- service API and MCP parity, the no-launch service contracts smoke, dashboard
+  view-stream tests, dashboard inspector action tests, and the final actions
+  architecture check;
+- route-confusion gates, three CDP screencast view-stream tests, and the
+  isolated live CDP tab-streaming smoke;
+- Rust formatting, clippy with warnings denied, 26 desktop-capture tests, three
+  desktop-control coordinator tests, and the remote-view reattachment stress
+  test;
+- documentation build and repository diff hygiene.

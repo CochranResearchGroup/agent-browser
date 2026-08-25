@@ -2,9 +2,9 @@
 
 Date: 2026-08-23
 
-State: IN PROGRESS
+State: COMPLETE
 
-Execution state: `retained_browser_partial_and_final_episode_accepted_elastic_cpu_capacity_deferred_legacy_row_protected`
+Execution state: `complete_development_live_accepted_production_input_deferred_to_plan0110`
 
 Lane: P124
 
@@ -378,7 +378,7 @@ are independently satisfied.
 
 ### Slice G | Controlled Installed Acceptance
 
-Status: IN PROGRESS. Capacity projection and the exact development elastic
+Status: COMPLETE. Capacity projection and the exact development elastic
 lifecycle are installed and live accepted. Three complete 4→6→4 cycles and
 their fresh convergence census are recorded in
 `docs/dev/notes/0124-10-2026-08-23-development-elastic-lifecycle-live-acceptance.md`.
@@ -468,17 +468,26 @@ profile mapping exists, so the row remains quarantined and ineligible for
 reuse instead of being guessed away. Evidence is recorded in
 `docs/dev/notes/0124-20-2026-08-24-retained-browser-and-final-episode-live-acceptance.md`.
 
-The remaining installed boundary is one unrelated elastic scale-out and
-cooldown scale-in while the same authenticated browser identity remains live.
+The final installed boundary passed through one unrelated elastic scale-out and
+cooldown scale-in while the same authenticated browser identity remained live.
 Commit `eec463d6` replaced one-minute load average as the primary CPU admission
 signal with a bounded one-second idle-headroom sample. The sampler requires at
 least ten percent idle capacity with a one-core floor, rejects I/O wait above
 ten percent, and retains load average as a fail-closed fallback when a fresh
-CPU sample is unavailable. The latest scale-out remains correctly deferred
-because the 20-CPU host measured zero idle-core equivalents against a required
-two, not merely because its load average was high. Configured production input
-remains outside this plan's live authority until Plan 0110 is independently
-accepted.
+CPU sample is unavailable. Saturated samples correctly deferred with zero
+idle-core equivalents against a required two. The accepted sample measured
+15.158648925281476 idle-core equivalents while lagging one-minute load remained
+29.13, then provisioned exactly route 5 from four to five slots. Exact
+reference checking after 41,774.4287109375 ms of cooldown reclaimed route 5
+from five to four slots. PID, process start token, profile, route 2 binding,
+target, and authenticated CDP result survived scale-out, scale-in, and
+reconciliation. Exact browser close then converged to zero browsers, four warm
+slots, zero route 5 processes, and zero resource candidates. Evidence is
+recorded in
+`docs/dev/notes/0124-20-2026-08-24-retained-browser-and-final-episode-live-acceptance.md`.
+Configured production input remains outside this plan's authority until Plan
+0110 is independently accepted; that preserved external gate is not an
+unfinished Plan 0124 development acceptance item.
 
 After source acceptance and separate explicit live authority:
 
