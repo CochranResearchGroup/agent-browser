@@ -248,7 +248,8 @@ process count, tab acquisition, tab release, and final resource census.
 - one source integration reconciliation with the active presentation lane;
 - one closed-world remediation pass after focused review;
 - one provider-free cooperative-transfer proof;
-- one transactional candidate dry-run and one apply;
+- one transactional candidate dry-run, one failed-safe blind apply, and one
+  evidence-coordinated retry only after the old generation is proven selected;
 - one harmless installed Last30Days tab acquisition and release proof;
 - one stale-route reattachment proof;
 - checkpoint after every completed work unit or 90 minutes, whichever occurs
@@ -361,3 +362,26 @@ process count, tab acquisition, tab release, and final resource census.
 - P130-F is source-integration ready. Remaining authority is the exact
   integrated candidate build, one transactional workstation dry-run and apply,
   install doctor, and the bounded harmless Last30Days runtime proof.
+
+## 2026-08-24 transactional qualification checkpoint
+
+- Candidate SHA-256 `93dc7492503e750585eb8fe713bc5b390daf445d55b7dc5f07b27153188582fb`
+  passed the exact-binary source-free workstation fixture and a live dry-run
+  with `success=true`, `state=planned`, and `mutated=false`.
+- Transaction `upgrade-bf2e171c-5bbf-493d-9ee6-67f44b016dfd` transferred the
+  cooperative Last30Days owners, preserved their presentations, and then
+  rolled all three lanes back through receipted owner generations when no
+  independently authenticated candidate-dashboard journey was committed
+  during the five-minute window.
+- The transaction terminal state is `failed_preserved_old_generation`, its
+  stop reason is `candidate_dashboard_presentation_unproven`, and the selected
+  installed binary remains SHA-256
+  `c128349c482fc049b70fe5f3dbfeadd3a9336cdd3ad5f81731dc2cb6b3d5cd63`.
+- This was an orchestration miss: the apply output is buffered while the
+  required candidate revision, port, and handoff commit must be supplied by a
+  second client. A blind retry is prohibited. One retry is authorized only
+  with concurrent shadow-dashboard handoff resolution and
+  `dashboard ingress commit --handoff-id` evidence.
+- Main subsequently published `cd2967f9`, which hardens dashboard ingress
+  against pressured service snapshots. Because it changes the failed proof
+  surface, the final candidate must include it before the coordinated retry.
