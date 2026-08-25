@@ -451,3 +451,20 @@ process count, tab acquisition, tab release, and final resource census.
 - P130-G source and packaging acceptance is complete. P130-F remains open only
   for a future authorized transactional installation and bounded installed
   Last30Days proof; this slice will not perform a third apply.
+
+## 2026-08-25 publication and runtime checkpoint
+
+- Source integration is published on `origin/main` at `b8233deb`. The installed
+  shared Agent Browser skill now exactly matches the repository skill at
+  SHA-256 `5d8f826851e64fd199ea8320a1bce45ea25d7e7650cd4854839776bb9ef97574`.
+- The selected binary remains the preserved old generation
+  `0.28.0-c128349c482f-d9745dc2e128`, SHA-256
+  `c128349c482fc049b70fe5f3dbfeadd3a9336cdd3ad5f81731dc2cb6b3d5cd63`.
+  Dashboard ingress is ready at revision 318 with no staged candidate.
+- Transaction `upgrade-12045b44-16d8-4d94-8994-30ef360e2839` remains
+  `failed_preserved_old_generation` with stop reason
+  `candidate_dashboard_presentation_unproven`.
+- Last30Days remains healthy on browser
+  `session:last30days-facebook--last30days-facebook`, PID 95745, session
+  `handoff-17959ea3e226ee61`, ready owner generation 18, and durable handoff
+  `r895695`. No temporary candidate-proof browser remains.
