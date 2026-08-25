@@ -2,9 +2,9 @@
 
 Date: 2026-08-25
 
-State: OPEN
+State: CLOSED
 
-Execution state: `source_validated_integration_ready`
+Execution state: `installed_runtime_accepted`
 
 Lane: P132
 
@@ -180,3 +180,55 @@ release candidate, and stop at its exact transactional installation gate.
 - Progress classification: `acceptance_advance`.
 - Next action: reconcile current `origin/main`, integrate the coherent hotfix,
   then build and qualify one exact candidate SHA before transactional install.
+
+## 2026-08-25 integration and installed-runtime acceptance
+
+- Source commit `93b355baee7dcf4f4fc7f18979bbdb95bbfd09cb` was pushed
+  directly to `origin/main` from the isolated Plan 0132 worktree after a fresh
+  remote readback proved no intervening mainline commits.
+- The dashboard production payload built successfully. The isolated release
+  candidate reports version `0.28.0` and SHA-256
+  `05d9da26035e0e86b55d6b2beaed25ae6dfe45ee6eeb0aa14362ce4ec08b0d10`.
+  Its source-free workstation fixture and live-host transactional dry run both
+  passed against that exact file.
+- The first transactional apply failed safely at candidate presentation. The
+  existing durable handoff was ready, but its Guacamole route was orphaned and
+  resolution reported `runtime_handoff_orphan_owner_present`. Transaction
+  `upgrade-9aa8a12c-39a1-484a-b3ba-5fc7da1b65fb` preserved the old generation,
+  and exact installed-binary and ingress readbacks confirmed no partial swap.
+- A normal service reconciliation refreshed the route to the current owner
+  session. Resolving the same opaque handoff then returned `resolved=true` and
+  `status=ready`, without browser replacement, provider navigation, or page
+  inspection.
+- The coordinated retry staged generation
+  `0.28.0-05d9da26035e-7fa3fbcb7248`. Authenticated candidate resolution of
+  the same durable handoff committed presentation generation 7. Transaction
+  `upgrade-3a9d3ace-cd02-48aa-851d-f1452c0832f5` completed with
+  `success=true`, `complete=true`, `state=ready`, and `mutated=true`.
+- The installed binary and qualified candidate both hash to exact SHA-256
+  `05d9da26035e0e86b55d6b2beaed25ae6dfe45ee6eeb0aa14362ce4ec08b0d10`.
+  Final doctor exits zero with no issues, converged runtime state, one selected
+  executable generation, one dashboard process, one runtime host, zero legacy
+  daemons, and a healthy runtime monitor with zero consecutive failures.
+- The installed no-launch BILL-profile access plan exposes
+  `replacementSessionName=bill-soylei`, copies `sessionName=bill-soylei`, and
+  authorizes `supersede_terminal_owner`. One provider-free `about:blank`
+  request succeeded as job
+  `http-service-request-tab_new-720331d0-d416-4283-a6aa-60bac0f5d9b8`, advanced
+  the terminal owner from generation 4 to ready generation 5, and acquired
+  exact target `515E783FDA7998B5AAA42DBF243DAECF` on
+  `session:bill-soylei`.
+- Chrome restored retained profile tabs during the cold profile launch,
+  including old BILL login targets. No page content was inspected and no UI,
+  login, transaction, or provider mutation was attempted. Releasing the exact
+  requested `about:blank` handle returned `released=true`,
+  `tabReleased=true`, `browserProcessPreserved=true`, and
+  `sessionRoutePreserved=true`; the released target is absent afterward.
+- The final access plan now returns `reuse_existing_browser` with exact
+  `browserId=session:bill-soylei` and `sessionName=bill-soylei`, and
+  `blockedByLifecycleOwner=false`. Books Receipts may retry through that copied
+  broker route without an Agent Browser upgrade.
+- Acceptance state: criteria 1 through 9 complete. Criterion 10 is complete in
+  its provider-free form: exact BILL-profile acquisition, release, and
+  post-release reuse were proven without intentionally opening BILL.
+- Progress classification: `objective_complete`.
