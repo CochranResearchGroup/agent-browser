@@ -4,7 +4,7 @@ Date: 2026-08-24
 
 State: OPEN
 
-Execution state: `candidate_qualified_runtime_apply_authorization_required`
+Execution state: `candidate_rebuild_required_after_e2e_fixture`
 
 Lane: P130
 
@@ -485,3 +485,16 @@ process count, tab acquisition, tab release, and final resource census.
 - Candidate preparation is complete. A live apply remains outside this slice's
   bound and requires a separate explicit authorization for the third
   transactional attempt.
+
+## 2026-08-25 provider-free selection proof
+
+- The durable-handoff fixture now persists an isolated Service State, stages a
+  candidate with a live runtime-manifest endpoint, executes the same
+  authenticated candidate commit repository path used by the dashboard, and
+  proves selected generation and presentation receipt advance together.
+- The focused transition test passes, all 121 handoff-filtered tests pass, and
+  clippy, formatting, and diff hygiene pass.
+- This testability refactor changes Rust bytes without changing the public
+  contract. The previously qualified candidate SHA-256 `09d98c8b...` is now
+  stale and must not be installed. Build and qualify a new exact candidate
+  before requesting live-apply authorization.

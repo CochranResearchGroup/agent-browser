@@ -725,11 +725,25 @@ pub(crate) fn commit_authenticated_dashboard_candidate_from_handoff(
     dashboard_generation: &str,
     handoff_id: &str,
 ) -> Result<bool, String> {
+    commit_authenticated_dashboard_candidate_from_handoff_at_paths(
+        &DashboardIngressRepository::default_path(),
+        &crate::native::service_store::JsonServiceStateStore::default_path()?,
+        dashboard_generation,
+        handoff_id,
+    )
+}
+
+fn commit_authenticated_dashboard_candidate_from_handoff_at_paths(
+    ingress_path: &Path,
+    service_state_path: &Path,
+    dashboard_generation: &str,
+    handoff_id: &str,
+) -> Result<bool, String> {
     use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
 
-    let repository = DashboardIngressRepository::new(DashboardIngressRepository::default_path());
+    let repository = DashboardIngressRepository::new(ingress_path);
     let registry = repository.load()?;
-    let state = JsonServiceStateStore::new(JsonServiceStateStore::default_path()?).load()?;
+    let state = JsonServiceStateStore::new(service_state_path).load()?;
     let Some(evidence) = authenticated_candidate_handoff_evidence(
         &registry,
         &state,
@@ -1457,6 +1471,73 @@ mod tests {
         )
         .unwrap()
         .is_none());
+
+        let fixture_root = std::env::temp_dir().join(format!(
+            "agent-browser-authenticated-candidate-commit-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&fixture_root).unwrap();
+        let ingress_path = fixture_root.join("dashboard-ingress.json");
+        let service_state_path = fixture_root.join("service-state.json");
+        let listener = StdTcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let candidate_port = listener.local_addr().unwrap().port();
+        let manifest = serde_json::json!({
+            "schemaVersion": "agent-browser.runtime-manifest.v1",
+            "generationId": "generation-new",
+        });
+        let manifest_body = manifest.to_string();
+        let manifest_sha256 = format!("{:x}", Sha256::digest(manifest_body.as_bytes()));
+        let manifest_server = thread::spawn(move || {
+            let (mut connection, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 1024];
+            let _ = connection.read(&mut request).unwrap();
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                manifest_body.len(),
+                manifest_body
+            );
+            connection.write_all(response.as_bytes()).unwrap();
+        });
+        let repository = DashboardIngressRepository::new(&ingress_path);
+        let initial = repository
+            .initialize(DashboardBackend::new(
+                "generation-old",
+                candidate_port.saturating_add(1),
+                "old-manifest",
+            ))
+            .unwrap();
+        repository
+            .stage_candidate(
+                initial.revision,
+                DashboardBackend::new("generation-new", candidate_port, manifest_sha256),
+            )
+            .unwrap();
+        use crate::native::service_store::ServiceStateStore;
+        crate::native::service_store::JsonServiceStateStore::new(&service_state_path)
+            .save(&state)
+            .unwrap();
+
+        assert!(
+            commit_authenticated_dashboard_candidate_from_handoff_at_paths(
+                &ingress_path,
+                &service_state_path,
+                "generation-new",
+                "r1",
+            )
+            .unwrap()
+        );
+        manifest_server.join().unwrap();
+        let selected = repository.load().unwrap();
+        assert_eq!(selected.selected_backend().generation_id, "generation-new");
+        assert_eq!(
+            selected
+                .last_presentation_receipt()
+                .unwrap()
+                .dashboard_deployment_generation,
+            "generation-new"
+        );
+        fs::remove_dir_all(fixture_root).unwrap();
 
         state.remote_view_routes.get_mut("route-1").unwrap().state = "orphaned".to_string();
         assert_eq!(
