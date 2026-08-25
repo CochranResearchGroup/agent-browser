@@ -456,41 +456,12 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
         {
             return error_response(&id, &error);
         }
-        if state.runtime_owner_binding.is_none() {
-            let repository =
-                match crate::native::service_store::LockedServiceStateRepository::default_json() {
-                    Ok(repository) => repository,
-                    Err(error) => return error_response(&id, &error),
-                };
-            state.runtime_owner_binding =
-                match crate::runtime_owner_transfer::owner_binding_for_session(
-                    &repository,
-                    &state.session_id,
-                ) {
-                    Ok(binding) => binding,
-                    Err(error) => return error_response(&id, &error),
-                };
-        }
-        let owner_admission = if let Some(binding) = state.runtime_owner_binding.as_mut() {
-            let repository =
-                match crate::native::service_store::LockedServiceStateRepository::default_json() {
-                    Ok(repository) => repository,
-                    Err(error) => return error_response(&id, &error),
-                };
-            match crate::native::runtime_lifecycle::RuntimeLifecycleAuthority::new(&repository)
-                .admit_action_effect(binding, action, &state.session_id)
-            {
-                Ok(admission) => Some(admission),
-                Err(error) => return error_response(&id, &error),
-            }
-        } else {
-            None
-        };
-        if matches!(
-            owner_admission,
-            Some(crate::native::runtime_lifecycle::RuntimeEffectAdmission::TerminalReplacement)
+        if let Err(error) = crate::native::runtime_lifecycle::admit_default_action_effect(
+            &mut state.runtime_owner_binding,
+            action,
+            &state.session_id,
         ) {
-            state.runtime_owner_binding = None;
+            return error_response(&id, &error);
         }
     }
     // Desktop evidence is service-owned and does not require a daemon-local

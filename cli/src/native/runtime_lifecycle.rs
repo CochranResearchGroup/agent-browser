@@ -1,4 +1,4 @@
-use crate::native::service_store::ServiceStateRepository;
+use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use crate::runtime_owner_transfer::{
     CandidateOwnerAttachment, CleanupObligationState, OwnerAuthorityClaim, OwnerTransferError,
     OwnerTransferProposal, OwnerTransferReceipt, OwnerTransferRequest, ProfileOwner,
@@ -88,6 +88,33 @@ pub(crate) enum RuntimeLifecycleTransition {
 pub(crate) enum RuntimeEffectAdmission {
     CurrentOwner,
     TerminalReplacement,
+}
+
+/// Hydrate and validate the daemon's effect-capable owner binding through the
+/// concrete lifecycle authority. The command dispatcher supplies only its
+/// cached binding and action context; repository ownership stays in this deep
+/// module.
+pub(crate) fn admit_default_action_effect(
+    binding: &mut Option<RuntimeOwnerBinding>,
+    action: &str,
+    session_id: &str,
+) -> Result<(), String> {
+    let repository = LockedServiceStateRepository::default_json()?;
+    if binding.is_none() {
+        *binding =
+            crate::runtime_owner_transfer::owner_binding_for_session(&repository, session_id)?;
+    }
+    let admission = binding
+        .as_mut()
+        .map(|binding| {
+            RuntimeLifecycleAuthority::new(&repository)
+                .admit_action_effect(binding, action, session_id)
+        })
+        .transpose()?;
+    if admission == Some(RuntimeEffectAdmission::TerminalReplacement) {
+        *binding = None;
+    }
+    Ok(())
 }
 
 /// Concrete lifecycle owner backed by the existing locked Service State
