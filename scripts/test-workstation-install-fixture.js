@@ -573,7 +573,7 @@ try {
   assert.notEqual(
     reconcile.status,
     null,
-    'workstation reconcile must finish through the public command interface',
+    `workstation reconcile must finish through the public command interface: signal=${reconcile.signal} error=${reconcile.error?.message || 'none'}\n${reconcile.stdout}${reconcile.stderr}`,
   );
   assert.doesNotMatch(
     `${reconcile.stdout}${reconcile.stderr}`,
@@ -581,7 +581,11 @@ try {
     'workstation reconcile must be accepted as an operational command',
   );
   const reconcilePayload = JSON.parse(reconcile.stdout);
-  assert.equal(reconcile.status, 0, reconcile.stderr);
+  assert.equal(
+    reconcile.status,
+    0,
+    `workstation reconcile must succeed:\n${reconcile.stdout}${reconcile.stderr}`,
+  );
   assert.equal(reconcilePayload.schemaVersion, 'agent-browser.runtime-monitor.v1');
   assert.equal(reconcilePayload.state, 'healthy');
   assert.equal(reconcilePayload.effects?.generations?.mode, 'apply');
@@ -767,6 +771,7 @@ function runInstaller(root, flags, extraEnv = {}) {
   return spawnSync(agentBrowser, ['install', 'workstation', ...flags], {
     cwd: fixtureRoot,
     encoding: 'utf8',
+    maxBuffer: 16 * 1024 * 1024,
     env: {
       ...process.env,
       HOME: home,
