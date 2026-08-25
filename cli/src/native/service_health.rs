@@ -1679,6 +1679,11 @@ pub fn merge_reconciled_service_state(
     {
         target.runtime_owner_registry = reconciled.runtime_owner_registry.clone();
     }
+    if reconciled.presentation_capacity != before.presentation_capacity
+        && target.presentation_capacity == before.presentation_capacity
+    {
+        target.presentation_capacity = reconciled.presentation_capacity.clone();
+    }
 
     for (id, reconciled_browser) in &reconciled.browsers {
         match target.browsers.get_mut(id) {
@@ -4234,7 +4239,7 @@ mod tests {
         active_slot.state = PresentationSlotState::Active;
         active_slot.browser_id = Some(browser_id.to_string());
 
-        let mut state = ServiceState {
+        let state = ServiceState {
             display_allocations: BTreeMap::from([(
                 display_id.to_string(),
                 DisplayAllocation {
@@ -4281,17 +4286,45 @@ mod tests {
             ..ServiceState::default()
         };
 
-        let repair =
-            reconcile_remote_view_state_with_display_probe(&mut state, |_display_name| true, false);
+        let before = state;
+        let mut reconciled = before.clone();
+        let repair = reconcile_remote_view_state_with_display_probe(
+            &mut reconciled,
+            |_display_name| true,
+            false,
+        );
+        let mut target = before.clone();
+        merge_reconciled_service_state(&mut target, &before, &reconciled);
 
         assert_eq!(repair.released_viewer_leases, 1);
-        assert_eq!(state.viewer_leases[lease_id].state, "disconnected");
-        assert!(state.remote_view_routes[route_id]
+        assert_eq!(target.viewer_leases[lease_id].state, "disconnected");
+        assert!(target.remote_view_routes[route_id]
             .viewer_lease_ids
             .is_empty());
-        let slot = &state.presentation_capacity.as_ref().unwrap().slots[0];
+        let slot = &target.presentation_capacity.as_ref().unwrap().slots[0];
         assert_eq!(slot.state, PresentationSlotState::WarmIdle);
         assert_eq!(slot.browser_id, None);
+
+        let mut concurrently_leased = before.clone();
+        let slot = &mut concurrently_leased
+            .presentation_capacity
+            .as_mut()
+            .unwrap()
+            .slots[0];
+        slot.lease_request_id = Some("recovery-started-concurrently".to_string());
+        slot.lease_priority =
+            Some(crate::native::presentation_capacity::PresentationPriority::Recovery);
+        merge_reconciled_service_state(&mut concurrently_leased, &before, &reconciled);
+        let slot = &concurrently_leased
+            .presentation_capacity
+            .as_ref()
+            .unwrap()
+            .slots[0];
+        assert_eq!(slot.state, PresentationSlotState::Active);
+        assert_eq!(
+            slot.lease_request_id.as_deref(),
+            Some("recovery-started-concurrently")
+        );
     }
 
     #[tokio::test]
