@@ -154,6 +154,10 @@ always explicit. Reload, route reattach, viewer reconnect or release, and
 Guacamole input settings are grouped under **Advanced connection controls**.
 Automatic recovery never launches another browser, mutates its profile, takes
 control, or releases a viewer.
+When presentation capacity is configured, route reattach and route switch
+reserve the exact browser, route, and display slot at recovery priority before
+route mutation. The operation returns matching `recoveryAdmission` and
+`recoveryRelease` receipts and leaves the retained browser attached.
 
 ## Keep URL roles separate
 

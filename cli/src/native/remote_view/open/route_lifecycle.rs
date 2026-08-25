@@ -11,7 +11,115 @@ use super::route_pool::{
 };
 use super::shared::*;
 use crate::native::desktop_control_coordinator::global_desktop_control_coordinator;
+use crate::native::presentation_capacity::{
+    CapacityDecision, PresentationRequest, PressureAdmission,
+};
 use crate::native::service_model::advance_route_controller_authority;
+
+#[derive(Debug, Clone)]
+struct BoundRecoveryReservation {
+    request_id: String,
+    slot_id: String,
+    pressure: PressureAdmission,
+}
+
+fn reserve_bound_recovery<R>(
+    repository: &R,
+    browser_id: &str,
+    route_id: &str,
+    display_allocation_id: &str,
+) -> Result<(Option<BoundRecoveryReservation>, Value), String>
+where
+    R: ServiceStateRepository,
+{
+    let request_id = format!(
+        "remote-view-recovery:{}:{}",
+        browser_id,
+        service_remote_view_timestamp()
+    );
+    let mut unavailable = None;
+    let reservation = repository.mutate(|state| {
+        let Some(mut capacity) = state.presentation_capacity.take() else {
+            return Ok(None);
+        };
+        let pressure = PressureAdmission::admit(capacity.config.hard_maximum);
+        let decision = capacity.request_bound_recovery(
+            PresentationRequest::recovery(request_id.clone()).for_browser(browser_id),
+            pressure,
+            state,
+            route_id,
+            display_allocation_id,
+        );
+        state.presentation_capacity = Some(capacity);
+        match decision {
+            CapacityDecision::Granted { slot_id, .. } => Ok(Some(BoundRecoveryReservation {
+                request_id: request_id.clone(),
+                slot_id,
+                pressure,
+            })),
+            decision => {
+                unavailable = Some(decision);
+                Err("presentation_recovery_not_admitted".to_string())
+            }
+        }
+    });
+    match reservation {
+        Ok(Some(reservation)) => Ok((
+            Some(reservation.clone()),
+            json!({
+                "status": "granted",
+                "priority": "recovery",
+                "requestId": reservation.request_id,
+                "slotId": reservation.slot_id,
+            }),
+        )),
+        Ok(None) => Ok((
+            None,
+            json!({
+                "status": "not_configured",
+                "priority": "recovery",
+                "reason": "presentation_capacity_unavailable",
+            }),
+        )),
+        Err(_) if unavailable.is_some() => Err(format!(
+            "presentation_recovery_not_admitted: {:?}",
+            unavailable.expect("checked above")
+        )),
+        Err(error) => Err(format!("presentation_recovery_persistence_failed: {error}")),
+    }
+}
+
+fn release_bound_recovery<R>(
+    repository: &R,
+    reservation: &BoundRecoveryReservation,
+) -> Result<Value, String>
+where
+    R: ServiceStateRepository,
+{
+    repository.mutate(|state| {
+        let Some(mut capacity) = state.presentation_capacity.take() else {
+            return Err("presentation_capacity_unavailable".to_string());
+        };
+        let result = capacity.release_bound_presentation(
+            &reservation.slot_id,
+            &reservation.request_id,
+            reservation.pressure,
+            state,
+        );
+        state.presentation_capacity = Some(capacity);
+        result?;
+        Ok(json!({
+            "status": "released",
+            "priority": "recovery",
+            "requestId": reservation.request_id,
+            "slotId": reservation.slot_id,
+        }))
+    })
+}
+
+/// Reattach or move one retained remote-headed browser. Configured
+/// presentation capacity is reserved at recovery priority before any route
+/// mutation and released after success or failure.
 pub(crate) async fn handle_service_remote_view_browser_reattach(
     cmd: &Value,
     daemon_state: &DaemonState,
@@ -205,106 +313,139 @@ pub(crate) async fn handle_service_remote_view_browser_reattach(
     if let Some(stream) = stream.as_ref() {
         merge_stream_into_checkout(&mut checkout, stream);
     }
-    let reattach_repair = if !route_switch {
-        selected_pool_entry
-            .as_ref()
-            .filter(|entry| {
-                entry.state == "pending"
-                    && entry.current_route_allocation_id.as_deref()
-                        == Some(selected_route_id.as_str())
-            })
-            .and_then(|entry| {
-                route
-                    .as_ref()
-                    .filter(|route| {
-                        route.browser_id.as_deref() == Some(browser_id.as_str())
-                            && route.session_id.as_deref() == Some(session_name.as_str())
-                    })
-                    .map(|_| entry.id.clone())
-            })
-            .map(|entry_id| {
-                let now = service_remote_view_timestamp();
-                repository.mutate(|state| {
-                    if let Some(entry) = state.route_pool.get_mut(&entry_id) {
-                        entry.state = "available".to_string();
-                        entry.current_route_allocation_id = None;
-                        entry.readiness = Some(json!(
-                            { "state" : "ready", "reason" :
-                            "browser_reattach_reclaimed_stale_pending_route",
-                            "previousRouteAllocationId" : selected_route_id, "browserId"
-                            : browser_id, "sessionName" : session_name, "updatedAt" :
-                            now, }
-                        ));
-                    }
-                    Ok(json!(
-                        { "status" : "repaired", "routePoolEntryId" : entry_id,
-                        "routeId" : selected_route_id, "reason" :
-                        "browser_reattach_reclaimed_stale_pending_route",
-                        "updatedAt" : now, }
-                    ))
+    let (recovery_reservation, recovery_admission) = reserve_bound_recovery(
+        &repository,
+        &browser_id,
+        &selected_route_id,
+        &display_allocation_id,
+    )?;
+    let operation_result: Result<Value, String> = async {
+        let reattach_repair = if !route_switch {
+            selected_pool_entry
+                .as_ref()
+                .filter(|entry| {
+                    entry.state == "pending"
+                        && entry.current_route_allocation_id.as_deref()
+                            == Some(selected_route_id.as_str())
                 })
-            })
-            .transpose()?
-    } else {
-        None
-    };
-    let release_result = if route_switch {
-        if let Some(previous_route_id) = previous_owned_route_id.as_ref() {
-            Some(
-                handle_service_remote_view_route_release(
-                    &Value::Object(remote_view_route_release_command(
-                        cmd,
-                        previous_route_id,
-                        true,
-                    )),
-                    daemon_state,
-                )
-                .await?,
-            )
+                .and_then(|entry| {
+                    route
+                        .as_ref()
+                        .filter(|route| {
+                            route.browser_id.as_deref() == Some(browser_id.as_str())
+                                && route.session_id.as_deref() == Some(session_name.as_str())
+                        })
+                        .map(|_| entry.id.clone())
+                })
+                .map(|entry_id| {
+                    let now = service_remote_view_timestamp();
+                    repository.mutate(|state| {
+                        if let Some(entry) = state.route_pool.get_mut(&entry_id) {
+                            entry.state = "available".to_string();
+                            entry.current_route_allocation_id = None;
+                            entry.readiness = Some(json!(
+                                { "state" : "ready", "reason" :
+                                "browser_reattach_reclaimed_stale_pending_route",
+                                "previousRouteAllocationId" : selected_route_id, "browserId"
+                                : browser_id, "sessionName" : session_name, "updatedAt" :
+                                now, }
+                            ));
+                        }
+                        Ok(json!(
+                            { "status" : "repaired", "routePoolEntryId" : entry_id,
+                            "routeId" : selected_route_id, "reason" :
+                            "browser_reattach_reclaimed_stale_pending_route",
+                            "updatedAt" : now, }
+                        ))
+                    })
+                })
+                .transpose()?
         } else {
             None
-        }
-    } else {
-        None
-    };
-    let parked_release_result = if route_switch {
-        if let Some(parked_route) = parked_route.as_ref() {
-            Some(
-                handle_service_remote_view_route_release(
-                    &Value::Object(remote_view_route_release_command(
-                        cmd,
-                        &parked_route.route_id,
-                        true,
-                    )),
-                    daemon_state,
+        };
+        let release_result = if route_switch {
+            if let Some(previous_route_id) = previous_owned_route_id.as_ref() {
+                Some(
+                    handle_service_remote_view_route_release(
+                        &Value::Object(remote_view_route_release_command(
+                            cmd,
+                            previous_route_id,
+                            true,
+                        )),
+                        daemon_state,
+                    )
+                    .await?,
                 )
-                .await?,
-            )
+            } else {
+                None
+            }
         } else {
             None
+        };
+        let parked_release_result = if route_switch {
+            if let Some(parked_route) = parked_route.as_ref() {
+                Some(
+                    handle_service_remote_view_route_release(
+                        &Value::Object(remote_view_route_release_command(
+                            cmd,
+                            &parked_route.route_id,
+                            true,
+                        )),
+                        daemon_state,
+                    )
+                    .await?,
+                )
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        let checkout_command = Value::Object(checkout);
+        let checkout_result =
+            handle_service_remote_view_route_checkout(&checkout_command, daemon_state).await?;
+        Ok(json!(
+            { "status" : if route_switch { "route_switched" } else { "reattached" },
+            "browserId" : browser_id, "sessionName" : session_name, "streamId" :
+            stream_id, "routeId" : selected_route_id, "displayAllocationId" :
+            display_allocation_id, "routePoolEntryId" : selected_pool_entry.as_ref()
+            .map(| entry | entry.id.clone()), "previousRouteId" : previous_route_id,
+            "previousRoutePoolEntryId" : previous_route_pool_entry.as_ref().map(| entry |
+            entry.id.clone()), "newRouteId" : selected_route_id, "newRoutePoolEntryId" :
+            selected_pool_entry.map(| entry | entry.id), "routeSwitchParking" :
+            parked_route.map(| parking | json!({ "status" : "parked", "routeId" : parking
+            .route_id, "routePoolEntryId" : parking.route_pool_entry_id, "browserId" :
+            parking.browser_id, "sessionName" : parking.session_id, "controllerLeaseId" :
+            parking.controller_lease_id, "release" : parked_release_result, })),
+            "reattachRepair" : reattach_repair, "routeSwitchRelease" : release_result,
+            "checkout" : checkout_result, }
+        ))
+    }
+    .await;
+    let recovery_release = recovery_reservation
+        .as_ref()
+        .map(|reservation| release_bound_recovery(&repository, reservation))
+        .transpose();
+    match (operation_result, recovery_release) {
+        (Ok(mut response), Ok(recovery_release)) => {
+            response["recoveryAdmission"] = recovery_admission;
+            response["recoveryRelease"] = recovery_release.unwrap_or_else(|| {
+                json!({
+                    "status": "not_configured",
+                    "priority": "recovery",
+                    "reason": "presentation_capacity_unavailable",
+                })
+            });
+            Ok(response)
         }
-    } else {
-        None
-    };
-    let checkout_command = Value::Object(checkout);
-    let checkout_result =
-        handle_service_remote_view_route_checkout(&checkout_command, daemon_state).await?;
-    Ok(json!(
-        { "status" : if route_switch { "route_switched" } else { "reattached" },
-        "browserId" : browser_id, "sessionName" : session_name, "streamId" :
-        stream_id, "routeId" : selected_route_id, "displayAllocationId" :
-        display_allocation_id, "routePoolEntryId" : selected_pool_entry.as_ref()
-        .map(| entry | entry.id.clone()), "previousRouteId" : previous_route_id,
-        "previousRoutePoolEntryId" : previous_route_pool_entry.as_ref().map(| entry |
-        entry.id.clone()), "newRouteId" : selected_route_id, "newRoutePoolEntryId" :
-        selected_pool_entry.map(| entry | entry.id), "routeSwitchParking" :
-        parked_route.map(| parking | json!({ "status" : "parked", "routeId" : parking
-        .route_id, "routePoolEntryId" : parking.route_pool_entry_id, "browserId" :
-        parking.browser_id, "sessionName" : parking.session_id, "controllerLeaseId" :
-        parking.controller_lease_id, "release" : parked_release_result, })),
-        "reattachRepair" : reattach_repair, "routeSwitchRelease" : release_result,
-        "checkout" : checkout_result, }
-    ))
+        (Err(operation_error), Ok(_)) => Err(operation_error),
+        (Ok(_), Err(release_error)) => Err(format!(
+            "presentation_recovery_release_failed: {release_error}"
+        )),
+        (Err(operation_error), Err(release_error)) => Err(format!(
+            "{operation_error}; presentation_recovery_release_failed: {release_error}"
+        )),
+    }
 }
 pub(crate) fn remote_view_route_release_command(
     cmd: &Value,
@@ -494,6 +635,9 @@ pub(crate) async fn handle_service_remote_view_route_checkout(
                 entry.readiness = readiness.clone();
             }
         }
+        if let Some(capacity) = state.presentation_capacity.as_mut() {
+            capacity.activate_bound_browser(&route_id, &display_allocation_id, &browser_id)?;
+        }
         if let Some(browser) = state.browsers.get_mut(&browser_id) {
             browser.display_allocation_id = Some(display_allocation_id.clone());
             browser.active_session_ids.push(session_id.clone());
@@ -565,6 +709,13 @@ pub(crate) async fn handle_service_remote_view_route_release(
         let browser_id = route.browser_id.clone();
         let session_id = route.session_id.clone();
         let viewer_lease_ids = route.viewer_lease_ids.clone();
+        if let (Some(capacity), Some(display_allocation_id), Some(browser_id)) = (
+            state.presentation_capacity.as_mut(),
+            display_allocation_id.as_deref(),
+            browser_id.as_deref(),
+        ) {
+            capacity.release_bound_browser(&route_id, display_allocation_id, browser_id)?;
+        }
         if route.controller_lease_id.is_some() {
             advance_route_controller_authority(state, &route_id, None)?;
         }

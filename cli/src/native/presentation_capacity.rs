@@ -536,10 +536,50 @@ impl PresentationCapacityAuthority {
         route_id: &str,
         display_allocation_id: &str,
     ) -> CapacityDecision {
+        self.request_bound_presentation(
+            request,
+            PresentationPriority::Observation,
+            pressure,
+            service_state,
+            route_id,
+            display_allocation_id,
+        )
+    }
+
+    /// Reserve the exact presentation being restored by a recovery operation.
+    /// Recovery outranks observations and may reuse a durable handoff binding,
+    /// but it remains subordinate to an active human controller.
+    pub(crate) fn request_bound_recovery(
+        &mut self,
+        request: PresentationRequest,
+        pressure: PressureAdmission,
+        service_state: &ServiceState,
+        route_id: &str,
+        display_allocation_id: &str,
+    ) -> CapacityDecision {
+        self.request_bound_presentation(
+            request,
+            PresentationPriority::Recovery,
+            pressure,
+            service_state,
+            route_id,
+            display_allocation_id,
+        )
+    }
+
+    fn request_bound_presentation(
+        &mut self,
+        request: PresentationRequest,
+        expected_priority: PresentationPriority,
+        pressure: PressureAdmission,
+        service_state: &ServiceState,
+        route_id: &str,
+        display_allocation_id: &str,
+    ) -> CapacityDecision {
         self.queue_clock = self.queue_clock.saturating_add(1);
         let browser_id = request.browser_id.as_deref();
         if request.id.trim().is_empty()
-            || request.priority != PresentationPriority::Observation
+            || request.priority != expected_priority
             || request.requires_staging
             || browser_id.is_none()
             || self
@@ -618,9 +658,9 @@ impl PresentationCapacityAuthority {
         }
     }
 
-    /// Release an observation lease without parking an already-active retained
-    /// browser. Warm-slot reservations continue through normal dispatch.
-    pub(crate) fn release_bound_observation(
+    /// Release a bound presentation lease without parking an already-active
+    /// retained browser. Warm-slot reservations continue through normal dispatch.
+    pub(crate) fn release_bound_presentation(
         &mut self,
         slot_id: &str,
         request_id: &str,
@@ -701,6 +741,72 @@ impl PresentationCapacityAuthority {
             }
         }
         warnings.into_iter().collect()
+    }
+
+    /// Reflect a service-authoritative route checkout in the matching slot.
+    /// An in-flight bound recovery reservation is preserved while the slot
+    /// becomes active for the retained browser.
+    pub(crate) fn activate_bound_browser(
+        &mut self,
+        route_id: &str,
+        display_allocation_id: &str,
+        browser_id: &str,
+    ) -> Result<(), String> {
+        let slot = self
+            .slots
+            .iter_mut()
+            .find(|slot| {
+                slot.route_id.as_deref() == Some(route_id)
+                    && slot.display_allocation_id.as_deref() == Some(display_allocation_id)
+            })
+            .ok_or_else(|| "presentation_bound_slot_missing".to_string())?;
+        if !matches!(
+            slot.state,
+            PresentationSlotState::WarmIdle
+                | PresentationSlotState::Reserved
+                | PresentationSlotState::Active
+        ) || slot
+            .browser_id
+            .as_deref()
+            .is_some_and(|current| current != browser_id)
+        {
+            return Err("presentation_bound_slot_not_activatable".to_string());
+        }
+        slot.state = PresentationSlotState::Active;
+        slot.browser_id = Some(browser_id.to_string());
+        Ok(())
+    }
+
+    /// Reflect a service-authoritative route release without reclaiming the
+    /// warm provider slot. Active episode and recovery leases fail closed.
+    pub(crate) fn release_bound_browser(
+        &mut self,
+        route_id: &str,
+        display_allocation_id: &str,
+        browser_id: &str,
+    ) -> Result<(), String> {
+        let slot = self
+            .slots
+            .iter_mut()
+            .find(|slot| {
+                slot.route_id.as_deref() == Some(route_id)
+                    && slot.display_allocation_id.as_deref() == Some(display_allocation_id)
+            })
+            .ok_or_else(|| "presentation_bound_slot_missing".to_string())?;
+        if slot.browser_id.as_deref() != Some(browser_id) {
+            return Err("presentation_bound_slot_browser_mismatch".to_string());
+        }
+        if slot.lease_request_id.is_some() {
+            return Err("presentation_bound_slot_lease_active".to_string());
+        }
+        if slot.state != PresentationSlotState::Active {
+            return Err("presentation_bound_slot_not_releasable".to_string());
+        }
+        slot.state = PresentationSlotState::WarmIdle;
+        slot.browser_id = None;
+        slot.lease_priority = None;
+        slot.restoration_pending = false;
+        Ok(())
     }
 
     pub(crate) fn transition_slot(

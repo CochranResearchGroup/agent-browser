@@ -1236,7 +1236,7 @@ where
                 state.presentation_capacity = Some(capacity);
                 return Err("presentation_reserved_slot_missing".to_string());
             }
-            capacity.release_bound_observation(&slot_id, &request_id, pressure, state)?;
+            capacity.release_bound_presentation(&slot_id, &request_id, pressure, state)?;
             state.presentation_capacity = Some(capacity);
             Ok(())
         });
