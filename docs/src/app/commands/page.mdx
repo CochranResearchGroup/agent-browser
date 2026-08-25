@@ -1240,7 +1240,11 @@ select it with `dashboard ingress commit --evidence <path>`, or discard it
 before commit with `dashboard ingress rollback`. Every mutation requires the
 current `--expected-revision`. Stage and commit both probe the candidate
 runtime manifest; commit also requires ready authenticated operator-journey
-evidence. `dashboard ingress status` reports selected, candidate, fallback,
+evidence. A ready durable-handoff response served by the staged candidate
+automatically runs the same checked commit. The explicit
+`dashboard ingress commit --handoff-id <id>` form recovers a ready receipt when
+automatic selection did not complete. `dashboard ingress status` reports
+selected, candidate, fallback,
 `dashboardIngressReady`, `operatorJourneyReady`, and the matching presentation
 receipt. Set `AGENT_BROWSER_DASHBOARD_INGRESS_STATE` only to isolate the
 private registry for a dedicated runtime. Set

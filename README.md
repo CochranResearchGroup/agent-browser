@@ -278,11 +278,13 @@ On real-host apply, the installer starts the candidate dashboard backend on
 the second port after the stable ingress port and stages it in the ingress
 registry before admission drain. After runtime transfer reaches candidate
 readiness, apply waits up to five minutes for an authenticated candidate
-journey to be committed with `agent-browser dashboard ingress commit
---expected-revision <revision> --handoff-id <id>`. The candidate dashboard
-must first resolve that opaque durable handoff to a ready operator surface.
-Commit rechecks its candidate-bound presentation receipt against the current
-runtime owner, route, display, target, provider, and deployment generation.
+journey. Resolving an opaque durable handoff to a ready operator surface
+through the staged candidate automatically commits that exact generation.
+The commit rechecks its candidate-bound presentation receipt against the
+current runtime owner, route, display, target, provider, and deployment
+generation. `agent-browser dashboard ingress commit --expected-revision
+<revision> --handoff-id <id>` remains an explicit recovery command for a ready
+receipt that was recorded before automatic selection completed.
 The file-based `--evidence <presentation-evidence.json>` form remains available
 for externally receipted integrations. The
 stable ingress continues serving the selected backend while that proof is
@@ -3552,8 +3554,10 @@ route state with the original view stream and control-input posture. If the
 original daemon is gone, the resolver requests adoption of the exact retained
 browser identity. It never substitutes a raw provider URL, launches a
 replacement browser, opens a replacement target, or replays navigation during
-ordinary resolution. The dashboard renders only
-after the resulting presentation receipt matches the dashboard deployment,
+ordinary resolution. When the request is served by a staged dashboard
+candidate and resolves ready, that authenticated response atomically selects
+the candidate after revalidating its exact presentation receipt. The dashboard
+renders only after the resulting presentation receipt matches the dashboard deployment,
 logical browser, daemon owner generation, process identity, target, and
 requested provider. Until then it reports a
 retryable converging state on the same durable URL. Resolution fails closed when

@@ -591,6 +591,41 @@ async fn handle_service_api_request(
                                 return;
                             }
                         };
+                        if let Some(handoff_id) =
+                            authenticated_candidate_handoff_commit_id(body, &response)
+                        {
+                            if let Some(generation) =
+                                std::env::var("AGENT_BROWSER_DASHBOARD_GENERATION")
+                                    .ok()
+                                    .filter(|value| !value.trim().is_empty())
+                            {
+                                let commit = tokio::task::spawn_blocking(move || {
+                                    crate::dashboard_ingress::
+                                        commit_authenticated_dashboard_candidate_from_handoff(
+                                            &generation,
+                                            &handoff_id,
+                                        )
+                                })
+                                .await
+                                .map_err(|err| {
+                                    format!("candidate ingress commit task failed: {err}")
+                                })
+                                .and_then(|result| result);
+                                if let Err(err) = commit {
+                                    write_json_error_with_code(
+                                        stream,
+                                        "409 Conflict",
+                                        &format!(
+                                            "Authenticated candidate handoff could not commit dashboard ingress: {err}"
+                                        ),
+                                        Some("candidate_ingress_commit_failed"),
+                                        None,
+                                    )
+                                    .await;
+                                    return;
+                                }
+                            }
+                        }
                         let _ = stream.write_all(&response).await;
                         return;
                     }
@@ -1432,6 +1467,27 @@ fn http_response_body(response: &[u8]) -> Option<&[u8]> {
         .windows(4)
         .position(|window| window == b"\r\n\r\n")
         .map(|index| &response[index + 4..])
+}
+
+fn authenticated_candidate_handoff_commit_id(body: &str, response: &[u8]) -> Option<String> {
+    let request = serde_json::from_str::<Value>(body).ok()?;
+    if request.get("action").and_then(Value::as_str) != Some("service_remote_view_handoff_resolve")
+    {
+        return None;
+    }
+    let handoff_id = request
+        .pointer("/params/handoffId")
+        .or_else(|| request.get("handoffId"))
+        .and_then(Value::as_str)?
+        .trim();
+    if handoff_id.is_empty() || !matches!(http_response_status(response), Some(200..=299)) {
+        return None;
+    }
+    let payload = serde_json::from_slice::<Value>(http_response_body(response)?).ok()?;
+    let ready = payload.get("success").and_then(Value::as_bool) == Some(true)
+        && payload.pointer("/data/resolved").and_then(Value::as_bool) == Some(true)
+        && payload.pointer("/data/status").and_then(Value::as_str) == Some("ready");
+    ready.then(|| handoff_id.to_string())
 }
 
 fn require_json_backend_response(
@@ -3434,6 +3490,49 @@ mod tests {
         assert_eq!(
             service_api_proxy_timeout("GET", "/api/service/status", ""),
             DASHBOARD_SERVICE_STATUS_PROXY_TIMEOUT
+        );
+    }
+
+    #[test]
+    fn authenticated_ready_handoff_response_selects_candidate_commit_identity() {
+        let request = r##"{"action":"service_remote_view_handoff_resolve","params":{"handoffId":"handoff-a"}}"##;
+        let ready = json_http_response(
+            "200 OK",
+            json!({
+                "success": true,
+                "data": {"status": "ready", "resolved": true},
+            }),
+        );
+
+        assert_eq!(
+            authenticated_candidate_handoff_commit_id(request, &ready),
+            Some("handoff-a".to_string())
+        );
+    }
+
+    #[test]
+    fn incomplete_handoff_response_cannot_select_candidate() {
+        let request = r##"{"action":"service_remote_view_handoff_resolve","params":{"handoffId":"handoff-a"}}"##;
+        for payload in [
+            json!({"success": true, "data": {"status": "converging", "resolved": false}}),
+            json!({"success": true, "data": {"status": "ready", "resolved": false}}),
+            json!({"success": false, "error": "blocked"}),
+        ] {
+            let response = json_http_response("200 OK", payload);
+            assert_eq!(
+                authenticated_candidate_handoff_commit_id(request, &response),
+                None
+            );
+        }
+
+        let unrelated = r##"{"action":"service_status","params":{"handoffId":"handoff-a"}}"##;
+        let ready = json_http_response(
+            "200 OK",
+            json!({"success": true, "data": {"status": "ready", "resolved": true}}),
+        );
+        assert_eq!(
+            authenticated_candidate_handoff_commit_id(unrelated, &ready),
+            None
         );
     }
 

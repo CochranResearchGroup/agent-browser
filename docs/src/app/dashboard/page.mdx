@@ -104,7 +104,11 @@ agent-browser dashboard ingress rollback --expected-revision 2 --generation cand
 
 The mutating ingress commands use revision compare-and-swap. `commit` probes
 the candidate again and refuses selection when its manifest changed or the
-evidence does not describe a ready authenticated operator surface. Set
+evidence does not describe a ready authenticated operator surface. An
+authenticated durable-handoff response served by the staged candidate
+automatically performs this same checked commit when the response is ready.
+The explicit `commit --handoff-id` form remains the recovery path for a receipt
+that was persisted before automatic selection completed. Set
 `AGENT_BROWSER_DASHBOARD_INGRESS_STATE` only for an isolated private registry.
 Set `AGENT_BROWSER_DASHBOARD_AUTH_DIR` as well when a fixture must isolate the
 auth store, bootstrap credentials, and managed environment file.

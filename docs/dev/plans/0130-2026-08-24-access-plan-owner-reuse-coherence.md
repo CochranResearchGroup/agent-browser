@@ -4,13 +4,13 @@ Date: 2026-08-24
 
 State: OPEN
 
-Execution state: `source_integration_ready`
+Execution state: `candidate_presentation_commit_repair_active`
 
 Lane: P130
 
 Branch: `hotfix/access-plan-owner-reuse-coherence`
 
-Target: `main` through `4587e8f433a5af07dd3680e362ef75ba467186f4`
+Target: `main` through `98141d07907bd5a7594a10465a39238410dabd1d`
 
 Integration method: direct local merge after active-lane reconciliation
 
@@ -185,6 +185,24 @@ proof.
 Exit condition: every acceptance criterion has current evidence bound to the
 integrated commit and installed binary identity.
 
+### P130-G | Remove the candidate presentation two-client trap
+
+An authenticated durable-handoff resolution served by the staged dashboard
+candidate must select that exact candidate when its response is ready and its
+persisted receipt passes the existing owner, route, display, target, provider,
+and deployment-generation checks. Selected or stale generations, converging
+responses, failed responses, and unrelated actions must not select a
+candidate.
+
+Keep the explicit `dashboard ingress commit --handoff-id` command as a
+recovery surface for a ready receipt that was persisted before automatic
+selection completed. Do not accept client-supplied deployment generation or
+weaken the independently authenticated candidate journey.
+
+Exit condition: one authenticated candidate request performs resolution and
+checked ingress selection without a second client, while every incomplete or
+generation-mismatched path remains no-commit.
+
 ## Write surfaces
 
 Primary source ownership:
@@ -252,6 +270,9 @@ process count, tab acquisition, tab release, and final resource census.
   evidence-coordinated retry only after the old generation is proven selected;
 - one harmless installed Last30Days tab acquisition and release proof;
 - one stale-route reattachment proof;
+- no third live apply in this repair slice; runtime installation resumes only
+  after the automatic candidate-commit packet is integrated and separately
+  authorized;
 - checkpoint after every completed work unit or 90 minutes, whichever occurs
   first;
 - active-agent concurrency is one for the critical source path.
@@ -385,3 +406,37 @@ process count, tab acquisition, tab release, and final resource census.
 - Main subsequently published `cd2967f9`, which hardens dashboard ingress
   against pressured service snapshots. Because it changes the failed proof
   surface, the final candidate must include it before the coordinated retry.
+
+## 2026-08-24 candidate presentation replan
+
+- Transaction `upgrade-12045b44-16d8-4d94-8994-30ef360e2839` reached the exact
+  candidate dashboard but also ended as `failed_preserved_old_generation` with
+  stop reason `candidate_dashboard_presentation_unproven`. Ingress returned to
+  revision 318 with no staged candidate and the old installed SHA-256
+  `c128349c482fc049b70fe5f3dbfeadd3a9336cdd3ad5f81731dc2cb6b3d5cd63`
+  selected.
+- The failure is a product orchestration defect. The authenticated candidate
+  request stamps and persists the exact dashboard deployment generation, but
+  the successful response does not select ingress. The installer waits while
+  a second client must discover the hidden revision and run the explicit
+  commit command.
+- P130-G test-drives automatic checked selection from the authenticated ready
+  response. Focused handoff evidence currently passes 121 tests. No third live
+  apply is authorized in this source repair slice.
+
+## 2026-08-24 candidate presentation source validation
+
+- The ready-only response gate and durable-evidence selection path pass all 121
+  handoff-filtered Rust tests. The complete 91-test workstation installer
+  module passes, and clippy passes with warnings denied.
+- The source-free workstation fixture passes against the sealed payload. The
+  host-provision, fresh-workstation, Guacamole asset, route-user sync,
+  durable-handoff documentation, docs production build, and dashboard handoff
+  contract gates pass.
+- PostgreSQL durability validation exposed a pre-existing fixture race: old
+  retained dumps received current mtimes and could outrank the newly published
+  backup. The fixture now pins historical artifacts to an old timestamp; the
+  durability contract passes twice consecutively.
+- This checkpoint proves the source packet and packaging behavior only. The
+  installed runtime remains the preserved old generation, and P130-F installed
+  acceptance remains open.

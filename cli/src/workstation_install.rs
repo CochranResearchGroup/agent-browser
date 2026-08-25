@@ -6337,7 +6337,7 @@ fn wait_for_dashboard_candidate_commit(
         }
         if started.elapsed() >= timeout {
             return Err(format!(
-                "candidate dashboard presentation was not committed within {} seconds; validate the authenticated candidate on 127.0.0.1:{port}, then run `agent-browser dashboard ingress commit --expected-revision {staged_revision} --evidence <presentation-evidence.json>`; generation={generation_id}; manifestSha256={manifest_sha256}",
+                "candidate dashboard presentation was not committed within {} seconds; resolve one durable /remote-view/<handoff-id> through the authenticated candidate on 127.0.0.1:{port}; a ready response commits automatically, while `agent-browser dashboard ingress commit --expected-revision {staged_revision} --handoff-id <id>` is the recovery path for an already-ready receipt; generation={generation_id}; manifestSha256={manifest_sha256}",
                 timeout.as_secs()
             ));
         }

@@ -5598,9 +5598,12 @@ status for a redacted selected-generation, migration, blocker, terminal, and
 seven-axis readiness projection without private paths or endpoint evidence.
 Real-host apply starts a shadow candidate dashboard on the second port after
 ingress. After runtime transfer it waits up to five minutes for an authenticated
-candidate journey committed with dashboard ingress commit. Stable ingress stays
-on the old backend until that receipt exists, then moves to the managed
-candidate backend on the next port. Workstation gc remains available as a
+candidate handoff resolution. A ready response served by the staged candidate
+automatically commits that exact generation after revalidating its presentation
+receipt. Stable ingress stays on the old backend until that receipt exists,
+then moves to the managed candidate backend on the next port. The explicit
+dashboard ingress commit command remains a recovery path for an already-ready
+receipt. Workstation gc remains available as a
 reviewed operator operation. It retains the selected generation and every
 generation referenced by a live process, supervisor, rollback-capable, failed,
 or unclosed transaction. Dry run reports candidates without deleting them.

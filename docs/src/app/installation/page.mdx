@@ -196,12 +196,14 @@ required.
 On real-host apply, the installer starts the candidate dashboard backend on
 the second port after stable ingress and stages it before admission drain.
 After runtime transfer reaches candidate readiness, apply waits up to five
-minutes for an authenticated candidate journey to be committed with
-<code>agent-browser dashboard ingress commit --expected-revision
-&lt;revision&gt; --handoff-id &lt;id&gt;</code> after the candidate dashboard resolves
-that opaque durable handoff to a ready operator surface. Commit rechecks the
-candidate-bound receipt against the current runtime owner, route, display,
-target, provider, and deployment generation. The file-based evidence form
+minutes for an authenticated candidate journey. Resolving an opaque durable
+handoff to a ready operator surface through the staged candidate automatically
+commits that exact generation. The commit rechecks the candidate-bound receipt
+against the current runtime owner, route, display, target, provider, and
+deployment generation. <code>agent-browser dashboard ingress commit
+--expected-revision &lt;revision&gt; --handoff-id &lt;id&gt;</code> remains an explicit
+recovery command for a ready receipt recorded before automatic selection
+completed. The file-based evidence form
 remains available for externally receipted integrations. Stable ingress
 continues serving the selected backend while proof is pending. Reconciliation
 then quiesces only the generation backend, runtime interlock, and backup timer,

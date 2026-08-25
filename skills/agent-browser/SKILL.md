@@ -137,13 +137,15 @@ seven readiness axes. The axes are `payloadReady`,
 and `rollbackReady`; overall `ready` stays false until all axes agree and the
 admission drain is closed. Real-host apply starts a candidate dashboard on the
 second port after ingress, then waits up to five minutes after runtime transfer
-for `dashboard ingress commit --expected-revision <revision> --handoff-id
-<id>` after the candidate dashboard resolves that opaque durable handoff to a
-ready operator surface. The command rechecks its candidate-bound receipt
-against the current owner, route, display, target, provider, and deployment
-generation. Do not synthesize file-based presentation evidence. The stable
-ingress remains on the old backend until the authenticated candidate journey
-is committed. Keep the accepted rollback generation for the 24-hour rollback
+for an authenticated candidate journey. Resolving an opaque durable handoff
+to a ready operator surface through the staged candidate automatically commits
+that exact generation after rechecking its receipt against the current owner,
+route, display, target, provider, and deployment generation. Use `dashboard
+ingress commit --expected-revision <revision> --handoff-id <id>` only as an
+explicit recovery command when the ready receipt landed before automatic
+selection completed. Do not synthesize file-based presentation evidence. The
+stable ingress remains on the old backend until the authenticated candidate
+journey is committed. Keep the accepted rollback generation for the 24-hour rollback
 window. `agent-browser install workstation gc --apply --json` automatically
 finalizes an eligible accepted transaction while retaining its durable
 metadata. It keeps the selected and immediately previous healthy generations

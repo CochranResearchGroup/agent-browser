@@ -714,6 +714,50 @@ pub(crate) fn commit_dashboard_candidate_from_handoff(
     commit_dashboard_candidate(expected_revision, evidence)
 }
 
+/// Commits the staged ingress candidate after that exact dashboard generation
+/// has completed an authenticated, ready durable-handoff resolution.
+///
+/// Requests served by the selected or a stale dashboard generation are a
+/// no-op. The staged candidate may commit only from service-state evidence
+/// that passes the same owner, route, display, target, provider, and
+/// generation checks as the explicit CLI commit path.
+pub(crate) fn commit_authenticated_dashboard_candidate_from_handoff(
+    dashboard_generation: &str,
+    handoff_id: &str,
+) -> Result<bool, String> {
+    use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
+
+    let repository = DashboardIngressRepository::new(DashboardIngressRepository::default_path());
+    let registry = repository.load()?;
+    let state = JsonServiceStateStore::new(JsonServiceStateStore::default_path()?).load()?;
+    let Some(evidence) = authenticated_candidate_handoff_evidence(
+        &registry,
+        &state,
+        dashboard_generation,
+        handoff_id,
+    )?
+    else {
+        return Ok(false);
+    };
+    repository.commit_candidate(registry.revision, CandidateOperatorJourney::ready(evidence))?;
+    Ok(true)
+}
+
+fn authenticated_candidate_handoff_evidence(
+    registry: &DashboardIngressRegistry,
+    state: &crate::native::service_model::ServiceState,
+    dashboard_generation: &str,
+    handoff_id: &str,
+) -> Result<Option<PresentationEvidence>, String> {
+    let candidate_matches = registry
+        .candidate_backend()
+        .is_some_and(|candidate| candidate.generation_id == dashboard_generation);
+    if !candidate_matches {
+        return Ok(None);
+    }
+    presentation_evidence_from_durable_handoff(registry, state, handoff_id).map(Some)
+}
+
 fn presentation_evidence_from_durable_handoff(
     registry: &DashboardIngressRegistry,
     state: &crate::native::service_model::ServiceState,
@@ -1397,6 +1441,22 @@ mod tests {
         assert_eq!(evidence.selected_target_generation, 3);
         assert_eq!(evidence.required_stream_provider, "rdp_gateway");
         assert!(evidence.receipt_id.starts_with("durable-handoff-"));
+        assert!(authenticated_candidate_handoff_evidence(
+            &registry,
+            &state,
+            "generation-new",
+            "r1",
+        )
+        .unwrap()
+        .is_some());
+        assert!(authenticated_candidate_handoff_evidence(
+            &registry,
+            &state,
+            "generation-old",
+            "r1",
+        )
+        .unwrap()
+        .is_none());
 
         state.remote_view_routes.get_mut("route-1").unwrap().state = "orphaned".to_string();
         assert_eq!(
