@@ -4,7 +4,7 @@ Date: 2026-08-24
 
 State: OPEN
 
-Execution state: `candidate_presentation_commit_repair_active`
+Execution state: `source_integrated_runtime_acceptance_open`
 
 Lane: P130
 
@@ -440,3 +440,14 @@ process count, tab acquisition, tab release, and final resource census.
 - This checkpoint proves the source packet and packaging behavior only. The
   installed runtime remains the preserved old generation, and P130-F installed
   acceptance remains open.
+
+## 2026-08-24 P130-G integration checkpoint
+
+- Automatic authenticated candidate selection is committed as `809d9f9f`.
+  The deterministic PostgreSQL fixture repair is committed separately as
+  `1368b85f`.
+- Current `main` checkpoint `98141d07` changed only Plan 0124 documentation and
+  was reconciled without source overlap. Integrated hotfix head is `9ae96c8a`.
+- P130-G source and packaging acceptance is complete. P130-F remains open only
+  for a future authorized transactional installation and bounded installed
+  Last30Days proof; this slice will not perform a third apply.
