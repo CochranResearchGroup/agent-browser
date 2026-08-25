@@ -443,7 +443,7 @@ behavior.
 
 ## P110 | Desktop Perception And Interaction Foundation
 
-State: ALL FIVE POCS SOURCE ACCEPTED | LIVE FOUNDATION ACCEPTANCE BLOCKED
+State: ALL FIVE POCS SOURCE ACCEPTED | PLAN 0131 CONTROLLED PROVIDER PLANNED
 Current state: Plan 0110-1 is source accepted at `853c2d90`. The canonical
 `desktop_capture` service action resolves an exact service-owned RDP workspace,
 requires operator-visible display proof, captures a bounded ephemeral PNG, and
@@ -474,6 +474,13 @@ provider-neutral evidence, service-owned ready handoff resolution, a complete
 separate aggregate planning-only entry gate. Every individual operation
 receipt remains live closed. No production desktop provider or controlled live
 recipe was authorized or exercised.
+
+Plan 0131 is now planned at source baseline `e8695f82`. It freezes one
+development-first X11 provider behind the existing `desktop_interact` engine,
+an OS-visible route fence shared by input and controller mutations, a private
+prepared/acknowledged/uncertain effect journal, a repository-owned RDP fixture,
+transactional development installation, rollback, and a separately authorized
+production controlled-fixture boundary. No source implementation has started.
 
 Separately authorized live fieldwork on 2026-08-22 demonstrated that fresh
 service-bound desktop capture, deterministic OCR and geometry checks, and one
@@ -704,11 +711,12 @@ The foundational lane is not accepted until:
 
 ### Next Recommendation
 
-Write a separately authorized controlled-provider plan before live work. It
-should freeze the production provider and cross-process fence, installed-binary
-identity, controlled RDP or Guacamole fixture, rollback, and live evidence.
-Do not start a real challenge or authentication integration until that proof
-passes.
+Start Plan 0131 Slice A only in its dedicated feature worktree. Freeze the
+controlled X11 provider, OS-visible route fence, effect journal, red fixtures,
+and provider-free failure contracts before selecting a library or changing
+configured dispatch. Do not start a real challenge or authentication
+integration until the separately authorized production controlled-fixture
+proof passes.
 
 ### Evidence
 
@@ -725,6 +733,7 @@ passes.
 - `docs/dev/notes/0110-3-2026-08-12-guarded-desktop-interaction-source-acceptance.md`
 - `docs/dev/notes/0110-2-2026-08-12-deterministic-fixture-location-source-acceptance.md`
 - `docs/dev/notes/0110-1-2026-08-12-display-bound-frame-capture-source-acceptance.md`
+- `docs/dev/plans/0131-2026-08-25-controlled-x11-desktop-provider-foundation-acceptance-plan.md`
 - `docs/dev/notes/2026-04-22-agent-browser-service-roadmap.md`
 - `docs/dev/notes/2026-04-24-service-model-roadmap-review.md`
 - `docs/dev/notes/2026-05-20-remote-view-control-posture-checkpoint.md`

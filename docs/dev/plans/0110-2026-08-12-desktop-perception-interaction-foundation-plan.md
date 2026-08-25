@@ -2,7 +2,7 @@
 
 Date: 2026-08-12
 
-State: ALL FIVE POCS SOURCE ACCEPTED | LIVE FOUNDATION ACCEPTANCE BLOCKED
+State: ALL FIVE POCS SOURCE ACCEPTED | PLAN 0131 CONTROLLED PROVIDER PLANNED
 
 Authority: SOURCE-ONLY
 
@@ -15,17 +15,22 @@ Sources:
 - `docs/dev/plans/0110-1-2026-08-12-p110-poc1-display-bound-frame-capture-plan.md`
 - `docs/dev/plans/0110-2-2026-08-12-p110-poc2-deterministic-fixture-location-plan.md`
 - `docs/dev/plans/0110-3-2026-08-12-p110-poc3-guarded-desktop-interaction-plan.md`
+- `docs/dev/plans/0110-4-2026-08-12-p110-poc4-browser-external-prompt-perception-plan.md`
+- `docs/dev/plans/0110-5-2026-08-12-p110-poc5-foundation-stress-and-entry-gate-plan.md`
+- `docs/dev/plans/0131-2026-08-25-controlled-x11-desktop-provider-foundation-acceptance-plan.md`
 - existing service-owned browser, display-allocation, view-stream, route,
   lease, challenge, and durable remote-view handoff contracts
 
 ## Current State
 
-The product direction and five proof-of-concept sequence are frozen. Existing
-service state can bind a browser to a display allocation, remote-view route,
-view stream, and operator-visible proof, but production code has no
-provider-neutral desktop frame source, desktop observation contract, locator,
-or machine-controlled desktop input path. CDP page screenshots remain a
-separate browser-page capability.
+The product direction and five proof-of-concept sequence are source accepted.
+Service state binds a browser to a display allocation, remote-view route, view
+stream, and operator-visible proof. Canonical desktop capture, locator, prompt
+observation, and interaction contracts now exist, but configured production
+machine input remains unavailable. The current route event fence is
+process-local and no real provider closes the XTEST acknowledgement crash gap.
+CDP page screenshots remain a separate browser-page capability. Plan 0131 now
+owns the controlled provider and live Foundation Acceptance bridge.
 
 Proof of Concept 1 is source accepted at `853c2d90` with no live or installed
 proof. The canonical `desktop_capture` action now resolves an exact
@@ -223,8 +228,9 @@ acceptance without separate authority.
 
 ## Current Recommendation
 
-Prepare a separate controlled-provider plan before any live work. It should
-freeze the production capture and input provider, cross-process event fence,
-installed-binary identity, controlled RDP or Guacamole fixture, and live
-rollback evidence. Do not begin a real challenge or authentication integration
-until that separately authorized proof passes.
+Plan 0131 now freezes the controlled X11 provider, cross-process route fence,
+effect journal, installed-binary identity, development RDP fixture, rollback,
+and separate production authority boundary. Start Plan 0131 Slice A only:
+provider contracts and red provider-free fixtures. Do not begin a real
+challenge or authentication integration until its separately authorized
+production controlled-fixture proof passes.
