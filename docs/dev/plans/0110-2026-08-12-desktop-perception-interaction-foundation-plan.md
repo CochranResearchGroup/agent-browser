@@ -2,7 +2,7 @@
 
 Date: 2026-08-12
 
-State: ALL FIVE POCS SOURCE ACCEPTED | PLAN 0131 CONTROLLED PROVIDER PLANNED
+State: ALL FIVE POCS SOURCE ACCEPTED | PLAN 0131 CONTROLLED PROVIDER SOURCE ACCEPTED
 
 Authority: SOURCE-ONLY
 
@@ -228,9 +228,10 @@ acceptance without separate authority.
 
 ## Current Recommendation
 
-Plan 0131 now freezes the controlled X11 provider, cross-process route fence,
-effect journal, installed-binary identity, development RDP fixture, rollback,
-and separate production authority boundary. Start Plan 0131 Slice A only:
-provider contracts and red provider-free fixtures. Do not begin a real
-challenge or authentication integration until its separately authorized
-production controlled-fixture proof passes.
+Plan 0131 Slices A and B are source accepted. The controlled X11 provider,
+cross-process route fence, effect journal, installed-generation admission,
+development RDP fixture, rollback, and separate production authority boundary
+are implemented and source validated. Installed and live capability remain
+unproven pending the separate development preflight and Slice C acceptance.
+Do not begin a real challenge or authentication integration until the
+separately authorized production controlled-fixture proof passes.

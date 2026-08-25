@@ -572,12 +572,6 @@ impl PersistedInteractionOperationLedger {
             .ok_or_else(|| ledger_error("desktop_interaction_operation_ledger_save_failed"))?;
         fs::create_dir_all(parent)
             .map_err(|_| ledger_error("desktop_interaction_operation_ledger_save_failed"))?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(parent, fs::Permissions::from_mode(0o700))
-                .map_err(|_| ledger_error("desktop_interaction_operation_ledger_save_failed"))?;
-        }
         let file_name = self
             .path
             .file_name()
@@ -1058,6 +1052,17 @@ fn run_configured_interaction(
         .ok_or_else(|| "desktop_interaction_operation_ledger_unavailable".to_string())?
         .join("desktop-input")
         .join("operations.json");
+    let ledger_directory = ledger_path
+        .parent()
+        .ok_or_else(|| "desktop_interaction_operation_ledger_unavailable".to_string())?;
+    fs::create_dir_all(ledger_directory)
+        .map_err(|_| "desktop_interaction_operation_ledger_unavailable".to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(ledger_directory, fs::Permissions::from_mode(0o700))
+            .map_err(|_| "desktop_interaction_operation_ledger_unavailable".to_string())?;
+    }
     let mut idempotency = PersistedInteractionOperationLedger::open(ledger_path)
         .map_err(|error| error.to_string())?;
     let mut clock = SystemInteractionClock;

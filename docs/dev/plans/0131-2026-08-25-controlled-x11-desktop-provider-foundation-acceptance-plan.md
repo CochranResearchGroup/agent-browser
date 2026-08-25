@@ -2,9 +2,9 @@
 
 Date: 2026-08-25
 
-State: OPEN
+State: SOURCE ACCEPTED
 
-Execution state: `slice_a_contract_and_red_fixtures_active`
+Execution state: `slice_b_source_accepted_live_preflight_pending`
 
 Lane: P131
 
@@ -12,7 +12,7 @@ Parent: `docs/dev/plans/0110-2026-08-12-desktop-perception-interaction-foundatio
 
 Source baseline: `e8695f82969e684cc4f9a7929b723777f548c3a3e`
 
-Current authority: SOURCE-ONLY SLICES A AND B
+Current authority: DEVELOPMENT LIVE PREFLIGHT ONLY
 
 Future implementation branch:
 `feature/plan0131-controlled-x11-desktop-provider`
@@ -434,6 +434,7 @@ defines their exact inputs, cleanup, resource budget, and receipt location.
 
 ## Current Next Action
 
-Start Slice A only in the dedicated feature worktree. Freeze red contracts and
-provider-free fixtures before selecting an XTEST library, changing configured
-dispatch, building an installed candidate, or touching either runtime.
+Run the Slice C development-runtime preflight from the accepted source commit.
+Do not install, activate, launch the fixture, or emit XTEST input until the
+preflight records the exact production and development identities, resources,
+provider readiness, rollback selector, and retained cleanup state.
