@@ -14,10 +14,24 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct RouteEffectFenceIdentity<'a> {
-    pub environment_id: &'a str,
-    pub route_id: &'a str,
-    pub display_allocation_id: &'a str,
+pub(crate) struct RouteEffectFenceIdentity {
+    pub environment_id: String,
+    pub route_id: String,
+    pub display_allocation_id: String,
+}
+
+impl RouteEffectFenceIdentity {
+    pub(crate) fn new(
+        environment_id: impl Into<String>,
+        route_id: impl Into<String>,
+        display_allocation_id: impl Into<String>,
+    ) -> Self {
+        Self {
+            environment_id: environment_id.into(),
+            route_id: route_id.into(),
+            display_allocation_id: display_allocation_id.into(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -43,7 +57,7 @@ impl DesktopInputProviderError {
 impl RouteEffectFence {
     pub(crate) fn acquire(
         runtime_state_root: &Path,
-        identity: &RouteEffectFenceIdentity<'_>,
+        identity: &RouteEffectFenceIdentity,
         deadline: Duration,
     ) -> Result<Self, DesktopInputProviderError> {
         if identity.environment_id.is_empty()
@@ -182,7 +196,7 @@ pub(crate) struct ProviderEffectJournal {
 impl ProviderEffectJournal {
     pub(crate) fn open(
         runtime_state_root: &Path,
-        identity: &RouteEffectFenceIdentity<'_>,
+        identity: &RouteEffectFenceIdentity,
     ) -> Result<Self, DesktopInputProviderError> {
         if identity.environment_id.is_empty()
             || identity.route_id.is_empty()
@@ -289,20 +303,44 @@ impl ProviderEffectJournal {
         acknowledgement_id: &str,
     ) -> Result<(), DesktopInputProviderError> {
         let key = digest_text(effect_key);
-        self.transition(|journal| {
-            let record = journal.records.get_mut(&key).ok_or_else(|| {
-                DesktopInputProviderError::new("desktop_input_effect_journal_transition_invalid")
-            })?;
-            if !matches!(record.state, PersistedEffectState::Prepared) {
-                return Err(DesktopInputProviderError::new(
-                    "desktop_input_effect_journal_transition_invalid",
-                ));
+        let record = self.journal.records.get_mut(&key).ok_or_else(|| {
+            DesktopInputProviderError::new("desktop_input_effect_journal_transition_invalid")
+        })?;
+        if !matches!(record.state, PersistedEffectState::Prepared) {
+            return Err(DesktopInputProviderError::new(
+                "desktop_input_effect_journal_transition_invalid",
+            ));
+        }
+        record.state = PersistedEffectState::Acknowledged {
+            acknowledgement_id: acknowledgement_id.to_string(),
+        };
+        if self.save().is_err() {
+            if let Some(record) = self.journal.records.get_mut(&key) {
+                record.state = PersistedEffectState::Uncertain;
             }
-            record.state = PersistedEffectState::Acknowledged {
-                acknowledgement_id: acknowledgement_id.to_string(),
-            };
-            Ok(())
-        })
+            let _ = self.save();
+            return Err(DesktopInputProviderError::new(
+                "desktop_input_effect_uncertain",
+            ));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn mark_uncertain(
+        &mut self,
+        effect_key: &str,
+    ) -> Result<(), DesktopInputProviderError> {
+        let key = digest_text(effect_key);
+        let record = self.journal.records.get_mut(&key).ok_or_else(|| {
+            DesktopInputProviderError::new("desktop_input_effect_journal_transition_invalid")
+        })?;
+        if matches!(record.state, PersistedEffectState::Acknowledged { .. }) {
+            return Err(DesktopInputProviderError::new(
+                "desktop_input_effect_journal_transition_invalid",
+            ));
+        }
+        record.state = PersistedEffectState::Uncertain;
+        self.save()
     }
 
     fn transition(
@@ -368,6 +406,111 @@ fn digest_text(value: &str) -> String {
     hex::encode(Sha256::digest(value.as_bytes()))
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ControlledX11Event {
+    PointerMove { x: u32, y: u32 },
+    LeftDown,
+    LeftUp,
+    KeyDown { key: char },
+    KeyUp { key: char },
+}
+
+impl ControlledX11Event {
+    fn kind(&self) -> &'static str {
+        match self {
+            Self::PointerMove { .. } => "pointer_move",
+            Self::LeftDown => "left_down",
+            Self::LeftUp => "left_up",
+            Self::KeyDown { .. } => "key_down",
+            Self::KeyUp { .. } => "key_up",
+        }
+    }
+}
+
+pub(crate) trait ClosedX11Sink {
+    fn emit(&mut self, event: &ControlledX11Event) -> Result<String, DesktopInputProviderError>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ProviderEventReceipt {
+    pub acknowledgement_id: String,
+    pub replayed: bool,
+}
+
+pub(crate) struct ProviderEffectExecutor<S> {
+    identity: RouteEffectFenceIdentity,
+    runtime_state_root: std::path::PathBuf,
+    provider_generation: String,
+    journal: ProviderEffectJournal,
+    sink: S,
+}
+
+impl<S> ProviderEffectExecutor<S>
+where
+    S: ClosedX11Sink,
+{
+    pub(crate) fn new(
+        runtime_state_root: &Path,
+        environment_id: &str,
+        route_id: &str,
+        display_allocation_id: &str,
+        provider_generation: &str,
+        sink: S,
+    ) -> Result<Self, DesktopInputProviderError> {
+        let identity =
+            RouteEffectFenceIdentity::new(environment_id, route_id, display_allocation_id);
+        let journal = ProviderEffectJournal::open(runtime_state_root, &identity)?;
+        Ok(Self {
+            identity,
+            runtime_state_root: runtime_state_root.to_path_buf(),
+            provider_generation: provider_generation.to_string(),
+            journal,
+            sink,
+        })
+    }
+
+    pub(crate) fn execute(
+        &mut self,
+        effect_key: &str,
+        event: &ControlledX11Event,
+        fence_deadline: Duration,
+    ) -> Result<ProviderEventReceipt, DesktopInputProviderError> {
+        let _fence =
+            RouteEffectFence::acquire(&self.runtime_state_root, &self.identity, fence_deadline)?;
+        let descriptor = ProviderEffectDescriptor {
+            provider_generation: &self.provider_generation,
+            event_kind: event.kind(),
+        };
+        match self.journal.prepare(effect_key, &descriptor)? {
+            EffectJournalDecision::Acknowledged { acknowledgement_id } => {
+                Ok(ProviderEventReceipt {
+                    acknowledgement_id,
+                    replayed: true,
+                })
+            }
+            EffectJournalDecision::Uncertain => Err(DesktopInputProviderError::new(
+                "desktop_input_effect_uncertain",
+            )),
+            EffectJournalDecision::Prepared => {
+                let acknowledgement_id = match self.sink.emit(event) {
+                    Ok(acknowledgement_id) => acknowledgement_id,
+                    Err(_) => {
+                        let _ = self.journal.mark_uncertain(effect_key);
+                        return Err(DesktopInputProviderError::new(
+                            "desktop_input_effect_uncertain",
+                        ));
+                    }
+                };
+                self.journal.acknowledge(effect_key, &acknowledgement_id)?;
+                Ok(ProviderEventReceipt {
+                    acknowledgement_id,
+                    replayed: false,
+                })
+            }
+        }
+    }
+}
+
 #[cfg(unix)]
 use std::os::fd::AsRawFd;
 
@@ -386,6 +529,7 @@ impl Drop for RouteEffectFence {
 mod tests {
     use super::*;
     use std::fs;
+    use std::sync::{Arc, Mutex};
 
     fn test_root(name: &str) -> std::path::PathBuf {
         std::env::temp_dir().join(format!(
@@ -398,16 +542,8 @@ mod tests {
     #[test]
     fn same_route_contends_while_unrelated_route_progresses() {
         let root = test_root("route-fence");
-        let route_a = RouteEffectFenceIdentity {
-            environment_id: "development",
-            route_id: "route-a",
-            display_allocation_id: "display-a",
-        };
-        let route_b = RouteEffectFenceIdentity {
-            environment_id: "development",
-            route_id: "route-b",
-            display_allocation_id: "display-b",
-        };
+        let route_a = RouteEffectFenceIdentity::new("development", "route-a", "display-a");
+        let route_b = RouteEffectFenceIdentity::new("development", "route-b", "display-b");
 
         let held = RouteEffectFence::acquire(&root, &route_a, Duration::ZERO).unwrap();
         let contention = RouteEffectFence::acquire(&root, &route_a, Duration::ZERO).unwrap_err();
@@ -422,11 +558,7 @@ mod tests {
     #[test]
     fn acknowledged_effect_replays_without_new_emission_authority() {
         let root = test_root("effect-journal-acknowledged");
-        let identity = RouteEffectFenceIdentity {
-            environment_id: "development",
-            route_id: "route-a",
-            display_allocation_id: "display-a",
-        };
+        let identity = RouteEffectFenceIdentity::new("development", "route-a", "display-a");
         let descriptor = ProviderEffectDescriptor {
             provider_generation: "generation-a",
             event_kind: "left_down",
@@ -454,11 +586,7 @@ mod tests {
     #[test]
     fn abandoned_prepared_effect_reopens_as_uncertain() {
         let root = test_root("effect-journal-abandoned");
-        let identity = RouteEffectFenceIdentity {
-            environment_id: "development",
-            route_id: "route-a",
-            display_allocation_id: "display-a",
-        };
+        let identity = RouteEffectFenceIdentity::new("development", "route-a", "display-a");
         let descriptor = ProviderEffectDescriptor {
             provider_generation: "generation-a",
             event_kind: "left_down",
@@ -475,6 +603,109 @@ mod tests {
             reloaded.prepare("effect-a", &descriptor).unwrap(),
             EffectJournalDecision::Uncertain
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[derive(Clone)]
+    struct FakeX11Sink {
+        events: Arc<Mutex<Vec<ControlledX11Event>>>,
+    }
+
+    impl ClosedX11Sink for FakeX11Sink {
+        fn emit(
+            &mut self,
+            event: &ControlledX11Event,
+        ) -> Result<String, DesktopInputProviderError> {
+            let mut events = self.events.lock().unwrap();
+            events.push(event.clone());
+            Ok(format!("x11-acknowledgement-{}", events.len()))
+        }
+    }
+
+    #[test]
+    fn acknowledged_executor_replay_emits_zero_additional_x11_events() {
+        let root = test_root("effect-executor-replay");
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let sink = FakeX11Sink {
+            events: events.clone(),
+        };
+        let mut executor = ProviderEffectExecutor::new(
+            &root,
+            "development",
+            "route-a",
+            "display-a",
+            "generation-a",
+            sink.clone(),
+        )
+        .unwrap();
+        let first = executor
+            .execute("effect-a", &ControlledX11Event::LeftDown, Duration::ZERO)
+            .unwrap();
+        assert!(!first.replayed);
+        drop(executor);
+
+        let mut reloaded = ProviderEffectExecutor::new(
+            &root,
+            "development",
+            "route-a",
+            "display-a",
+            "generation-a",
+            sink,
+        )
+        .unwrap();
+        let replay = reloaded
+            .execute("effect-a", &ControlledX11Event::LeftDown, Duration::ZERO)
+            .unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.acknowledgement_id, first.acknowledgement_id);
+        assert_eq!(events.lock().unwrap().len(), 1);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    struct FailOnceX11Sink {
+        calls: Arc<Mutex<usize>>,
+    }
+
+    impl ClosedX11Sink for FailOnceX11Sink {
+        fn emit(
+            &mut self,
+            _event: &ControlledX11Event,
+        ) -> Result<String, DesktopInputProviderError> {
+            let mut calls = self.calls.lock().unwrap();
+            *calls += 1;
+            if *calls == 1 {
+                return Err(DesktopInputProviderError::new(
+                    "desktop_input_sink_acknowledgement_missing",
+                ));
+            }
+            Ok(format!("unexpected-retry-{calls}"))
+        }
+    }
+
+    #[test]
+    fn possible_effect_failure_becomes_uncertain_and_never_retries() {
+        let root = test_root("effect-executor-uncertain");
+        let calls = Arc::new(Mutex::new(0));
+        let mut executor = ProviderEffectExecutor::new(
+            &root,
+            "development",
+            "route-a",
+            "display-a",
+            "generation-a",
+            FailOnceX11Sink {
+                calls: calls.clone(),
+            },
+        )
+        .unwrap();
+        assert!(executor
+            .execute("effect-a", &ControlledX11Event::LeftDown, Duration::ZERO)
+            .is_err());
+
+        let retry = executor
+            .execute("effect-a", &ControlledX11Event::LeftDown, Duration::ZERO)
+            .unwrap_err();
+        assert_eq!(retry.code(), "desktop_input_effect_uncertain");
+        assert_eq!(*calls.lock().unwrap(), 1);
         fs::remove_dir_all(root).unwrap();
     }
 }
