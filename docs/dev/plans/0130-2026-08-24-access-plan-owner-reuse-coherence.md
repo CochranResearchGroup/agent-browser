@@ -305,3 +305,21 @@ process count, tab acquisition, tab release, and final resource census.
   replacement blocking, and partial route-hint completion.
 - Next action: validate cooperative-transfer projection and implement the
   generated-client plan consumer.
+
+## 2026-08-24 transfer and client checkpoint
+
+- P130-C is complete. The cooperative-transfer fixture proves the candidate
+  inherits the exact browser, tab, exclusive profile lease, `close_tabs`
+  cleanup policy, and refreshed tab-handle ownership while stale aliases are
+  released.
+- P130-D is complete for the maintained Agent Browser client. The existing
+  `requestServiceTabFromAccessPlan` path now rejects unavailable plans,
+  incomplete reuse hints, and caller overrides that contradict the planned
+  browser or session route.
+- Generated request-client types permit a null request only when the plan is
+  unavailable and expose the acquisition blocker.
+- Focused evidence: the transfer fixture and the complete
+  `pnpm test:service-client` suite pass.
+- The active presentation lane published commits `8964dbf8` and `543da5e7`;
+  the primary `main` worktree is clean. P130-E can now reconcile against that
+  checkpoint.

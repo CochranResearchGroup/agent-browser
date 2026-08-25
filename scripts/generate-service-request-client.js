@@ -1431,7 +1431,9 @@ export interface ServiceTabAccessPlan {
   decision: {
     manualSeedingRequired?: boolean;
     serviceRequest: {
-      request: ServiceRequestForAction<"tab_new">;
+      available?: boolean;
+      acquisitionBlocker?: string | null;
+      request: ServiceRequestForAction<"tab_new"> | null;
       [key: string]: unknown;
     };
     profileReuse?: {

@@ -2230,6 +2230,13 @@ mod tests {
     fn handoff_transfers_profile_lease_to_candidate_session() {
         let logical_browser_id = "browser-a";
         let mut state = ServiceState {
+            profiles: std::collections::BTreeMap::from([(
+                "social-profile".to_string(),
+                BrowserProfile {
+                    id: "social-profile".to_string(),
+                    ..BrowserProfile::default()
+                },
+            )]),
             sessions: std::collections::BTreeMap::from([
                 (
                     "old-owner".to_string(),
@@ -2239,6 +2246,7 @@ mod tests {
                         lease: LeaseState::Exclusive,
                         profile_id: Some("social-profile".to_string()),
                         profile_lease_disposition: Some(ProfileLeaseDisposition::ReusedBrowser),
+                        cleanup: SessionCleanupPolicy::CloseTabs,
                         browser_ids: vec![logical_browser_id.to_string()],
                         tab_ids: vec!["tab-a".to_string()],
                         ..BrowserSession::default()
@@ -2282,6 +2290,14 @@ mod tests {
             )]),
             ..ServiceState::default()
         };
+        state.refresh_service_tab_handles();
+        assert_eq!(
+            state.tabs["tab-a"]
+                .service_tab_handle
+                .as_ref()
+                .and_then(|handle| handle.session_name.as_deref()),
+            Some("old-owner")
+        );
 
         rebind_runtime_handoff_service_projection_in_state(
             &mut state,
@@ -2309,6 +2325,7 @@ mod tests {
         );
         assert_eq!(candidate.browser_ids, [logical_browser_id]);
         assert_eq!(candidate.tab_ids, ["tab-a"]);
+        assert_eq!(candidate.cleanup, SessionCleanupPolicy::CloseTabs);
         assert_eq!(
             state.browsers[logical_browser_id].active_session_ids,
             ["candidate"]
@@ -2317,6 +2334,17 @@ mod tests {
         assert_eq!(
             state.tabs["tab-a"].owner_session_id.as_deref(),
             Some("candidate")
+        );
+        let tab_handle = state.tabs["tab-a"].service_tab_handle.as_ref().unwrap();
+        assert_eq!(tab_handle.session_name.as_deref(), Some("candidate"));
+        assert_eq!(tab_handle.owner_session_id.as_deref(), Some("candidate"));
+        assert_eq!(
+            tab_handle.cleanup_policy,
+            Some(SessionCleanupPolicy::CloseTabs)
+        );
+        assert_eq!(
+            state.browsers[logical_browser_id].tab_handles[0],
+            *tab_handle
         );
     }
 

@@ -220,6 +220,18 @@ export function createServiceTabRequest(input) {
   const plannedRequest =
     accessPlan !== undefined ? accessPlanServiceTabRequest(accessPlan, { allowManualAction }) : {};
   const { params: plannedParams, ...plannedRequestFields } = plannedRequest;
+  for (const routeField of ['browserId', 'sessionName']) {
+    if (
+      accessPlan !== undefined &&
+      plannedRequestFields[routeField] !== undefined &&
+      request[routeField] !== undefined &&
+      request[routeField] !== plannedRequestFields[routeField]
+    ) {
+      throw new TypeError(
+        `service tab request ${routeField} contradicts the access-plan route`,
+      );
+    }
+  }
 
   const tabParams = { ...plainRecordOrEmpty(plannedParams), ...(params ?? {}) };
   if (url !== undefined) {
@@ -2337,6 +2349,15 @@ function accessPlanServiceTabRequest(accessPlan, options = {}) {
   const serviceRequest = decisionRecord.serviceRequest;
   assertPlainObject(serviceRequest, 'service access plan serviceRequest');
   const serviceRequestRecord = /** @type {Record<string, unknown>} */ (serviceRequest);
+  const manualActionOverride =
+    options.allowManualAction === true && serviceRequestRecord.blockedByManualAction === true;
+  if (serviceRequestRecord.available === false && !manualActionOverride) {
+    const blocker =
+      typeof serviceRequestRecord.acquisitionBlocker === 'string'
+        ? `: ${serviceRequestRecord.acquisitionBlocker}`
+        : '';
+    throw new Error(`service access plan service request is unavailable${blocker}`);
+  }
   const request = serviceRequestRecord.request;
   assertPlainObject(request, 'service access plan serviceRequest.request');
   const requestRecord = /** @type {Record<string, unknown>} */ (request);
@@ -2346,12 +2367,19 @@ function accessPlanServiceTabRequest(accessPlan, options = {}) {
 
   const { action: _action, ...tabRequest } = requestRecord;
   const sharedAcquisition = accessPlanSharedTabAcquisition(decisionRecord);
-  if (sharedAcquisition) {
-    if (tabRequest.browserId === undefined) {
-      tabRequest.browserId = sharedAcquisition.browserId;
+  const profileReuse = recordFromUnknown(decisionRecord.profileReuse);
+  if (profileReuse?.recommendedAction === 'reuse_existing_browser') {
+    if (!sharedAcquisition) {
+      throw new TypeError(
+        'service access plan reuse requires complete browserId and sessionName route hints',
+      );
     }
-    if (tabRequest.sessionName === undefined) {
-      tabRequest.sessionName = sharedAcquisition.sessionName;
+    for (const routeField of ['browserId', 'sessionName']) {
+      if (tabRequest[routeField] !== sharedAcquisition[routeField]) {
+        throw new TypeError(
+          `service access plan serviceRequest.request ${routeField} contradicts shared acquisition`,
+        );
+      }
     }
   }
   return tabRequest;

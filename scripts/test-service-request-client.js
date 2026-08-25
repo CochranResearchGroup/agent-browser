@@ -1116,6 +1116,8 @@ async function main() {
           runtimeProfile: 'last30days-facebook',
           profileId: 'last30days-facebook',
           profileLeasePolicy: 'wait',
+          browserId: 'browser-shared',
+          sessionName: 'shared-session',
           action: 'tab_new',
         },
       },
@@ -1177,27 +1179,50 @@ async function main() {
       },
     },
   );
-  assert.deepEqual(
-    createServiceTabRequestFromAccessPlan(sharedProfileAccessPlan, {
-      browserId: 'browser-override',
-      sessionName: 'override-session',
-      url: 'https://chatgpt.com/',
-    }),
-    {
-      serviceName: 'AuraCall',
-      agentName: 'auracall-agent',
-      taskName: 'openSharedTab',
-      targetServiceIds: ['chatgpt'],
-      runtimeProfile: 'last30days-facebook',
-      profileId: 'last30days-facebook',
-      profileLeasePolicy: 'wait',
-      browserId: 'browser-override',
-      sessionName: 'override-session',
-      action: 'tab_new',
-      params: {
+  assert.throws(
+    () =>
+      createServiceTabRequestFromAccessPlan(sharedProfileAccessPlan, {
+        browserId: 'browser-override',
+        sessionName: 'override-session',
         url: 'https://chatgpt.com/',
-      },
-    },
+      }),
+    /browserId contradicts the access-plan route/,
+  );
+  assert.throws(
+    () =>
+      createServiceTabRequestFromAccessPlan({
+        decision: {
+          serviceRequest: {
+            available: false,
+            acquisitionBlocker: 'lifecycle_owner_blocks_replacement',
+            request: null,
+          },
+        },
+      }),
+    /service request is unavailable: lifecycle_owner_blocks_replacement/,
+  );
+  assert.throws(
+    () =>
+      createServiceTabRequestFromAccessPlan({
+        decision: {
+          profileReuse: {
+            recommendedAction: 'reuse_existing_browser',
+            sharedAcquisition: {
+              mode: 'tab_new',
+              browserId: 'browser-shared',
+              sessionName: 'shared-session',
+            },
+          },
+          serviceRequest: {
+            available: true,
+            request: {
+              action: 'tab_new',
+              browserId: 'browser-shared',
+            },
+          },
+        },
+      }),
+    /sessionName contradicts shared acquisition/,
   );
   assert.deepEqual(summarizeServiceSharedProfileAcquisition(sharedProfileAccessPlan), {
     available: true,
