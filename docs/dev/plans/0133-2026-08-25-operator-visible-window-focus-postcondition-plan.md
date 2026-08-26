@@ -2,9 +2,9 @@
 
 Date: 2026-08-25
 
-State: SOURCE VALIDATED
+State: DEVELOPMENT ACCEPTED
 
-Execution state: `source_validated`
+Execution state: `development_accepted`
 
 Lane: P133
 
@@ -106,3 +106,11 @@ allowed recovery mechanism.
 Plan 0133 completes only when provider-free tests and one development-runtime
 acceptance prove the stronger postcondition, identity invariants, human control
 priority, and cleanup. Production remains unchanged.
+
+## Acceptance
+
+Source validation and isolated development-runtime acceptance passed. The
+qualified runtime artifact, exact retained identity readbacks, strict
+operator-presentation predicates, reattach convergence, cleanup proof, and
+production boundary are recorded in
+`docs/dev/notes/0133-1-2026-08-25-operator-visible-window-focus-development-acceptance.md`.
