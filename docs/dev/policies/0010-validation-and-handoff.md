@@ -30,6 +30,11 @@
   reproducer, confidence, and suggested disposition. A useful independent
   review may return no findings; novelty and finding count are not quality
   metrics.
+- When both conformance and objective correctness matter, report them as
+  separate review axes: one for repository standards and one for the frozen
+  specification or acceptance contract. Do not let a pass on one axis mask a
+  failure on the other, and do not let the separation bypass primary-agent
+  evidence review and disposition.
 - Separate review modes. Use at most one broad fresh-context `drift_discovery`
   pass when observed drift, consequence, or uncertainty justifies it. After
   adjudication, use `closed_world` remediation

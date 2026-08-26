@@ -27,6 +27,15 @@ tags:
 - Review profile changes separately from module changes; a profile upgrade should not silently force a repo into every newly suggested module.
 - When a local repo has customized policy, prefer merge review over blind overwrite.
 - Retire superseded local policy files explicitly when a shared replacement makes them unnecessary.
+- Resolve upgrades by module identity before allocating a new ordinal filename.
+  Replace or merge the existing adopted path when one identity exists; when
+  several paths claim the identity, stop and require explicit reconciliation.
+- An upgrade is incomplete while `AGENTS.md` wires both a superseded and current
+  generation. Remove the retired pointer in the same transaction and verify
+  that exactly one retained path remains.
+- Never infer the winner between divergent duplicates from filename recency,
+  modification time, or list order. Compare content and local overrides, retain
+  the intended semantics, and record the retirement decision.
 - Scope upgrades against the repo's retained module set first; a broader profile recommendation should not automatically become the new local baseline when fit review says otherwise.
 - When the policy library publishes release notes, changelog entries, or comparable upgrade summaries, use them to scope the upgrade review before patching local policy.
 - If the repo follows upstream commits directly instead of releases, define how often to check and what level of change justifies adoption.

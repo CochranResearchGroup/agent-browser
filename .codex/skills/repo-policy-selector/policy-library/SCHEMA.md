@@ -239,8 +239,12 @@ For deployment and installation:
 - profile and module enumeration should come from deterministic library artifacts such as `catalog.yaml`
 - adoption wiring into target repos should be deterministic:
   - adopted policy files live under `docs/dev/policies/`
+  - each shared module identity has exactly one active adopted policy path,
+    regardless of the local ordinal filename
   - `AGENTS.md` acts as the entrypoint that wires those files into the repo contract
   - `AGENTS.md` should tell agents when to re-read relevant adopted policy files, especially at the start of non-trivial turns and when scope changes
+  - duplicate identities are reported with all claiming paths and block write
+    mode until explicit content and wire-in reconciliation chooses one path
 
 ## Harvesting Contract
 
