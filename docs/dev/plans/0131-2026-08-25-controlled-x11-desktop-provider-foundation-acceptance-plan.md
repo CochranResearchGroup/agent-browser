@@ -2,9 +2,9 @@
 
 Date: 2026-08-25
 
-State: DEVELOPMENT LIVE ACCEPTED
+State: PRODUCTION CANDIDATE QUALIFIED | LIVE TRANSACTION DEFERRED
 
-Execution state: `development_live_accepted`
+Execution state: `production_candidate_qualified_live_transaction_deferred`
 
 Lane: P131
 
@@ -12,16 +12,20 @@ Parent: `docs/dev/plans/0110-2026-08-12-desktop-perception-interaction-foundatio
 
 Source baseline: `e8695f82969e684cc4f9a7929b723777f548c3a3e`
 
-Current authority: NONE. SLICE E REQUIRES FRESH EXPLICIT AUTHORITY.
+Current authority: SLICE E PRODUCTION AUTHORITY GRANTED. THE SWAP-FREE CARGO
+ADMISSION THRESHOLD MAY BE SET TO ZERO WHILE ALL OTHER WRAPPER AND CGROUP
+GUARDS REMAIN ENFORCED. THE OPERATOR-VISIBLE FOCUS-GAP HARD STOP STILL
+PROHIBITS A WORKSTATION UPGRADE, PRODUCTION PROVIDER MUTATION, ROUTE
+EXPANSION, TAKEOVER, OR WORKLOAD DISPLACEMENT.
 
-Future implementation branch:
-`feature/plan0131-controlled-x11-desktop-provider`
+Current implementation branch:
+`feature/plan0131-production-candidate`
 
 Execution start baseline: `a54b0f976fb20e801d8e09e844708753c80ac79d`
 
 Owned worktree scope:
-`feature/plan0131-controlled-x11-desktop-provider` in the dedicated local
-Plan 0131 worktree.
+`feature/plan0131-production-candidate` in the dedicated local Plan 0131
+worktree.
 
 Depends on:
 
@@ -274,13 +278,23 @@ and explicit slice start.
 
 ### Slice E | Transactional Production Candidate
 
-Authority: NOT GRANTED BY THIS PLAN RECORD.
+Authority: GRANTED BY THE OPERATOR AFTER DEVELOPMENT ACCEPTANCE. The operator
+also authorized setting only the Cargo wrapper's swap-free admission threshold
+to zero. All other wrapper, job, cgroup, memory, and aggregate-slice controls
+remain mandatory.
 
-This slice requires fresh explicit authority after development acceptance. It
-must re-anchor current source, candidate hash, installed generation, runtime
-census, retained browsers, handoffs, provider state, resources, and rollback.
-It then uses the workstation hot-upgrade transaction and one controlled
-repository fixture. It does not use a real authentication challenge.
+Source commit `9ec6a2b4` and candidate SHA-256
+`2202890a31370f6693f8f50db06448b5a4b2b1b36d930538afe34d910b6fc245`
+are qualified for the production transaction. The current installed-runtime
+re-anchor, validation receipts, and remaining gate are recorded in
+`docs/dev/notes/0131-4-2026-08-25-controlled-x11-provider-production-candidate-preflight.md`.
+
+The workstation hot-upgrade transaction and controlled repository fixture
+remain unapplied. The newer operator-visible focus-gap lane prohibits another
+workstation upgrade, and the current runtime has no apply-safe fixture route or
+cleanup candidate. Continuing would require route expansion, takeover, or
+workload displacement beyond current authority. It does not use a real
+authentication challenge.
 
 Production input remains unavailable unless the candidate transaction and the
 controlled fixture both pass. Failure rolls back the selected generation and
