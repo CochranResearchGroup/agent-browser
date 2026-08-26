@@ -3716,6 +3716,8 @@ fn install_doctor_reports_expected_upgrade_ready(
     let shadow_dashboard_transition_ready =
         expected_upgrade_shadow_dashboard_transition_ready(upgrade, expected);
     let supervisor_transition_ready = expected_upgrade_supervisor_transition_ready(data, expected);
+    let runtime_host_transition_ready =
+        expected_upgrade_runtime_host_transition_ready(data, expected);
     let remaining_issues = issues
         .iter()
         .filter(|issue| {
@@ -3739,6 +3741,13 @@ fn install_doctor_reports_expected_upgrade_ready(
             if code == Some("executable_drift") && supervisor_transition_ready {
                 return false;
             }
+            if runtime_host_transition_ready
+                && (code == Some("daemon_socket_multiple_listeners")
+                    || (code == Some("active_runtime_stale_executable")
+                        && issue.get("session").and_then(Value::as_str) == Some("runtime-host")))
+            {
+                return false;
+            }
             !(code == Some("active_runtime_stale_executable")
                 && issue
                     .get("session")
@@ -3752,6 +3761,73 @@ fn install_doctor_reports_expected_upgrade_ready(
         .cloned()
         .collect::<Vec<_>>();
     transaction_issue_count == 1 && install_doctor_issues_are_advisory(data, &remaining_issues)
+}
+
+fn expected_upgrade_runtime_host_transition_ready(
+    data: &Value,
+    expected: &crate::runtime_adoption::UpgradeTransaction,
+) -> bool {
+    let Some(convergence) = expected.runtime_host_convergence.as_ref() else {
+        return false;
+    };
+    let (Some(old), Some(candidate)) = (
+        convergence.old_host.as_ref(),
+        convergence.candidate_host.as_ref(),
+    ) else {
+        return false;
+    };
+    if candidate.generation_id != expected.candidate_generation_id
+        || expected.old_generation_id.as_deref() != Some(old.generation_id.as_str())
+    {
+        return false;
+    }
+    let multiplicity = data.get("runtimeMultiplicity").unwrap_or(&Value::Null);
+    if multiplicity
+        .get("selectedGenerationId")
+        .and_then(Value::as_str)
+        != Some(expected.candidate_generation_id.as_str())
+        || multiplicity
+            .pointer("/convergenceWindow/active")
+            .and_then(Value::as_bool)
+            != Some(true)
+        || multiplicity
+            .pointer("/convergenceWindow/transactionId")
+            .and_then(Value::as_str)
+            != Some(expected.transaction_id.as_str())
+    {
+        return false;
+    }
+    let Some(hosts) = multiplicity.get("runtimeHosts").and_then(Value::as_array) else {
+        return false;
+    };
+    let exact_host =
+        |host: &Value, expected_host: &crate::runtime_adoption::RuntimeHostIdentityEvidence| {
+            host.get("pid").and_then(Value::as_u64) == Some(u64::from(expected_host.pid))
+                && host.get("generationId").and_then(Value::as_str)
+                    == Some(expected_host.generation_id.as_str())
+        };
+    if hosts.len() != 2
+        || !hosts.iter().any(|host| exact_host(host, old))
+        || !hosts.iter().any(|host| exact_host(host, candidate))
+    {
+        return false;
+    }
+    let Some(listeners) = data
+        .pointer("/daemonListenerInventory/listeners")
+        .and_then(Value::as_array)
+    else {
+        return false;
+    };
+    let listener_pid = |listener: &Value, pid: u32| {
+        listener.get("pid").and_then(Value::as_u64) == Some(u64::from(pid))
+    };
+    listeners.len() == 2
+        && listeners
+            .iter()
+            .any(|listener| listener_pid(listener, old.pid))
+        && listeners
+            .iter()
+            .any(|listener| listener_pid(listener, candidate.pid))
 }
 
 fn expected_upgrade_supervisor_transition_ready(
@@ -11407,6 +11483,93 @@ mod tests {
             &route_blocked,
             &transaction,
             &["source-owner".to_string()]
+        ));
+    }
+
+    #[test]
+    fn transaction_validation_allows_only_the_exact_runtime_host_pair() {
+        use crate::runtime_adoption::{RuntimeHostConvergenceRecord, RuntimeHostIdentityEvidence};
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-upgrade-host-doctor-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "generation-new".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.old_generation_id = Some("generation-old".to_string());
+        transaction.state = crate::runtime_adoption::UpgradeTransactionState::PostCommitValidating;
+        let host =
+            |generation_id: &str, pid: u32, observation_only: bool| RuntimeHostIdentityEvidence {
+                endpoint_key: "runtime-host".to_string(),
+                generation_id: generation_id.to_string(),
+                binary_sha256: if observation_only { "a" } else { "c" }.repeat(64),
+                pid,
+                process_start_token: format!("linux:boot:{pid}"),
+                socket_identity: format!("unix:1:{pid}"),
+                observation_only,
+            };
+        transaction.runtime_host_convergence = Some(RuntimeHostConvergenceRecord {
+            schema_version: "agent-browser.runtime-host-convergence.v1".to_string(),
+            deadline_at: "2026-08-26T00:00:00Z".to_string(),
+            deadline_unix_seconds: 0,
+            queue_transfer_policy: "drain_then_commit".to_string(),
+            old_host: Some(host("generation-old", 41, false)),
+            candidate_host: Some(host("generation-new", 42, true)),
+            lanes: Vec::new(),
+        });
+        let report = serde_json::json!({
+            "success": false,
+            "data": {
+                "issues": [
+                    {"code": "workstation_upgrade_transaction_not_terminal"},
+                    {"code": "active_runtime_stale_executable", "session": "runtime-host"},
+                    {"code": "daemon_socket_multiple_listeners"},
+                ],
+                "sessionSupervisors": {"sessions": [], "issues": []},
+                "runtimeMultiplicity": {
+                    "selectedGenerationId": "generation-new",
+                    "convergenceWindow": {
+                        "active": true,
+                        "transactionId": transaction.transaction_id.clone(),
+                    },
+                    "runtimeHosts": [
+                        {"generationId": "generation-old", "pid": 41},
+                        {"generationId": "generation-new", "pid": 42},
+                    ],
+                },
+                "daemonListenerInventory": {
+                    "listeners": [{"pid": 41}, {"pid": 42}],
+                },
+                "liveDashboardRuntime": {
+                    "workstationUpgrade": {
+                        "selectedGenerationId": "generation-new",
+                        "admissionDraining": true,
+                        "latestTransaction": {
+                            "transactionId": transaction.transaction_id.clone(),
+                            "state": "post_commit_validating",
+                        }
+                    }
+                }
+            }
+        });
+
+        assert!(install_doctor_reports_expected_upgrade_ready(
+            &report,
+            &transaction,
+            &[]
+        ));
+        let mut unrelated = report;
+        unrelated["data"]["daemonListenerInventory"]["listeners"] =
+            serde_json::json!([{"pid": 41}, {"pid": 42}, {"pid": 43}]);
+        assert!(!install_doctor_reports_expected_upgrade_ready(
+            &unrelated,
+            &transaction,
+            &[]
         ));
     }
 
