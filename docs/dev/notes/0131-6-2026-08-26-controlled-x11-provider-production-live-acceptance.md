@@ -129,6 +129,26 @@ The only install-doctor issue is the pre-existing
 `service_duplicate_profile_pressure` warning for `last30days-facebook`. It is
 outside Plan 0131 and did not affect the fixture route or accepted transaction.
 
+## Post-Integration Validation
+
+Remote main commit `4f79b89d` already contained the earlier Plan 0131 candidate
+merge and its post-integration gate note. It was merged into this branch after
+the acceptance receipt without conflict. The four later production hotfixes
+and this receipt remain the branch's unique integration delta.
+
+The validation selector chose diff hygiene, Rust formatting, strict Clippy,
+six workstation and Guacamole fixture contracts, the workstation installer
+Rust module, the service-health Rust module, and a selector self-check. Every
+selected gate passed on the merged branch.
+
+The first installer-module run used Cargo's default parallel test execution and
+reported one PID-identity test failure while another Cargo lane was active. The
+same exact test passed alone, and the complete 92-test installer module then
+passed with `--test-threads=1`. The 78-test service-health selection also passed
+serially, including the new controller-fence regression. This is classified as
+parallel test interference, not a product failure. The failed result remains
+part of the validation history.
+
 ## Boundary After Acceptance
 
 Slice E is complete. This acceptance proves the controlled production input
