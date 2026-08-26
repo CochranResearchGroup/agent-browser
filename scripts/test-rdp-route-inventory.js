@@ -101,4 +101,33 @@ assert.equal(
   6,
 );
 
+const secretFile = join(fixtureBin, 'guacamole.env');
+writeFileSync(
+  secretFile,
+  `XRDP_AGENT_BROWSER_ROUTE_USER_POOL_JSON=${JSON.stringify(six.map((route) => ({
+    id: route.id,
+    connectionName: route.connectionName,
+    legacyConnectionName: '',
+    routeUser: route.target.routeUser,
+    password: 'fixture-only',
+  })))}\n`,
+);
+const secretBackedInspection = spawnSync(process.execPath, ['scripts/inspect-rdp-route-displays.js'], {
+  cwd: new URL('..', import.meta.url),
+  encoding: 'utf8',
+  env: {
+    ...process.env,
+    PATH: `${fixtureBin}:${process.env.PATH || ''}`,
+    AGENT_BROWSER_RDP_ROUTE_POOL_JSON: '',
+    AGENT_BROWSER_GUACAMOLE_SECRET_FILE: secretFile,
+  },
+});
+assert.equal(secretBackedInspection.status, 0, secretBackedInspection.stderr || secretBackedInspection.stdout);
+const secretBackedPayload = JSON.parse(secretBackedInspection.stdout);
+assert.equal(secretBackedPayload.routeInventory.length, 6);
+assert.deepEqual(
+  secretBackedPayload.routeInventory.map((route) => route.target.routeUser),
+  six.map((route) => route.target.routeUser),
+);
+
 console.log('RDP route inventory fixtures passed.');

@@ -107,7 +107,7 @@ DESIRED_ROUTE_USER_POOL_JSON="$(python3 "$ROUTE_USER_HELPER" resolve \
   --secret-file "$SECRET_FILE" --allow-missing-passwords)"
 ROUTE_COUNT="$(python3 -c 'import json,sys; print(len(json.load(sys.stdin)))' \
   <<<"$DESIRED_ROUTE_USER_POOL_JSON")"
-ROUTE_SUMMARY="$(python3 -c 'import json,sys; print("\n".join(f"  {r[\"id\"]}: {r[\"routeUser\"]} -> {r[\"connectionName\"]}" for r in json.load(sys.stdin)))' \
+ROUTE_SUMMARY="$(python3 -c 'import json,sys; print("\n".join("  {}: {} -> {}".format(r["id"], r["routeUser"], r["connectionName"]) for r in json.load(sys.stdin)))' \
   <<<"$DESIRED_ROUTE_USER_POOL_JSON")"
 
 if [[ "$DRY_RUN" == "1" ]]; then

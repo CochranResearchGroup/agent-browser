@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   canonicalRouteInventory,
   legacyRouteLabel,
@@ -126,8 +128,37 @@ function attachDisplayContent(route) {
 
 function configuredRouteSubjects() {
   const raw = process.env.AGENT_BROWSER_RDP_ROUTE_POOL_JSON;
-  if (!raw) return legacyTwoRouteDisplaySubjects(process.env);
-  return canonicalRouteInventory(JSON.parse(raw));
+  if (raw?.trim()) return canonicalRouteInventory(JSON.parse(raw));
+  const routeUsers = configuredRouteUsers();
+  if (routeUsers) {
+    return canonicalRouteInventory(routeUsers.map((route) => ({
+      id: route.id,
+      connectionName: route.connectionName,
+      target: { routeUser: route.routeUser },
+    })));
+  }
+  return legacyTwoRouteDisplaySubjects(process.env);
+}
+
+function configuredRouteUsers() {
+  const configured = process.env.AGENT_BROWSER_RDP_ROUTE_USER_POOL_JSON;
+  if (configured?.trim()) return JSON.parse(configured);
+  const agentHome = process.env.AGENT_BROWSER_HOME || join(process.env.HOME || '', '.agent-browser');
+  const secretPath = process.env.AGENT_BROWSER_GUACAMOLE_SECRET_FILE ||
+    join(agentHome, 'secrets', 'guacamole.env');
+  if (!existsSync(secretPath)) return null;
+  for (const line of readFileSync(secretPath, 'utf8').split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#') || !trimmed.includes('=')) continue;
+    const separator = trimmed.indexOf('=');
+    if (trimmed.slice(0, separator).trim() !== 'XRDP_AGENT_BROWSER_ROUTE_USER_POOL_JSON') continue;
+    let value = trimmed.slice(separator + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    return JSON.parse(value.replace(/\\"/g, '"'));
+  }
+  return null;
 }
 
 const rows = processRows();
