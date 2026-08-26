@@ -958,10 +958,11 @@ pub(crate) fn run_desktop_interaction(
     }
 }
 
-/// Dispatch the controlled provider only from an exact admitted development
-/// generation. Production and unmanifested binaries fail before capture,
-/// authority lookup, controller mutation, or input. Raw provider routing is
-/// never accepted as a compatibility contract.
+/// Dispatch the controlled provider only from an exact admitted immutable
+/// generation. Development and production use separate manifest schemas and
+/// state roots. Unmanifested binaries fail before capture, authority lookup,
+/// controller mutation, or input. Raw provider routing is never accepted as a
+/// compatibility contract.
 pub(crate) async fn handle_desktop_interact(command: &Value) -> Result<Value, String> {
     for forbidden in [
         "coordinates",
@@ -979,9 +980,8 @@ pub(crate) async fn handle_desktop_interact(command: &Value) -> Result<Value, St
             ));
         }
     }
-    let admission =
-        super::desktop_input_provider_admission::current_development_provider_admission()
-            .map_err(|code| format!("{code}: controlled desktop input admission failed"))?;
+    let admission = super::desktop_input_provider_admission::current_provider_admission()
+        .map_err(|code| format!("{code}: controlled desktop input admission failed"))?;
     let request = parse_configured_interaction_request(command)?;
     tokio::task::spawn_blocking(move || run_configured_interaction(request, admission))
         .await
@@ -1034,7 +1034,7 @@ fn parse_configured_interaction_request(
 
 fn run_configured_interaction(
     request: DesktopInteractionRequest,
-    admission: super::desktop_input_provider_admission::DevelopmentProviderAdmission,
+    admission: super::desktop_input_provider_admission::ProviderAdmission,
 ) -> Result<Value, String> {
     use super::controlled_x11_provider::{ControlledX11Provider, SystemInteractionClock};
     use super::desktop_control_coordinator::global_desktop_control_coordinator;
@@ -3343,11 +3343,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn production_dispatch_is_unavailable_without_effect_resolution() {
+    async fn unmanifested_dispatch_fails_without_effect_resolution() {
         let error = handle_desktop_interact(&json!({ "action": "desktop_interact" }))
             .await
             .unwrap_err();
-        assert!(error.starts_with("desktop_input_provider_unavailable:"));
+        assert!(error.starts_with("desktop_input_provider_generation_unavailable:"));
     }
 
     #[tokio::test]

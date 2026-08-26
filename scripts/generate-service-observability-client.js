@@ -890,7 +890,7 @@ export interface ServiceDesktopEvidencePolicyProjection {
   captureReadyProofRequired: true;
   pairedPageAbsenceRequired: true;
   genericCdpFailureAuthorizesDesktop: false;
-  configuredProductionInput: 'unavailable_pending_plan_0110';
+  configuredProductionInput: 'controlled_x11_exact_generation_required';
 }
 
 export interface ServiceStatusMcpToolCallOptions {
