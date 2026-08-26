@@ -740,16 +740,38 @@ pub async fn reconcile_service_state_in_repository(
     repository: &impl ServiceStateRepository,
 ) -> Result<ServiceReconcileSummary, String> {
     let before = repository.load_snapshot()?;
-    let _controller_mutations = before
-        .remote_view_routes
-        .values()
-        .filter(|route| route.controller_lease_id.is_some())
-        .map(|route| begin_service_controller_mutation(&before, &route.id))
-        .collect::<Result<Vec<_>, _>>()?;
     let mut reconciled_state = before.clone();
     let summary = reconcile_service_state_with_controller_fence(&mut reconciled_state, true).await;
+    let controller_routes_to_change =
+        reconciled_controller_authority_changes(&before, &reconciled_state);
+    let _controller_mutations = controller_routes_to_change
+        .iter()
+        .map(|route_id| begin_service_controller_mutation(&before, route_id))
+        .collect::<Result<Vec<_>, _>>()?;
     persist_reconciled_service_state_in_repository(repository, &before, &reconciled_state)?;
     Ok(summary)
+}
+
+/// Return only routes whose persisted primary-controller authority would change.
+/// Health and readiness refreshes must not cancel an active desktop interaction.
+fn reconciled_controller_authority_changes(
+    before: &ServiceState,
+    reconciled: &ServiceState,
+) -> Vec<String> {
+    before
+        .remote_view_routes
+        .iter()
+        .filter(|(route_id, route)| {
+            reconciled
+                .remote_view_routes
+                .get(*route_id)
+                .is_some_and(|candidate| {
+                    candidate.controller_lease_id != route.controller_lease_id
+                        || candidate.controller_epoch != route.controller_epoch
+                })
+        })
+        .map(|(route_id, _route)| route_id.clone())
+        .collect()
 }
 
 pub fn persist_reconciled_service_state_in_repository(
@@ -3870,6 +3892,46 @@ mod tests {
         assert!(!target.browsers.contains_key("browser-1"));
         assert!(!target.sessions.contains_key("session-1"));
         assert!(!target.tabs.contains_key("target:old"));
+    }
+
+    #[test]
+    fn reconcile_fences_only_primary_controller_authority_changes() {
+        let before = ServiceState {
+            remote_view_routes: BTreeMap::from([(
+                "guacamole:3".to_string(),
+                RemoteViewRoute {
+                    id: "guacamole:3".to_string(),
+                    controller_lease_id: Some("viewer:fixture-agent".to_string()),
+                    controller_epoch: 7,
+                    readiness: Some(json!({ "state": "ready" })),
+                    ..RemoteViewRoute::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let mut health_only = before.clone();
+        health_only
+            .remote_view_routes
+            .get_mut("guacamole:3")
+            .unwrap()
+            .readiness = Some(json!({
+            "state": "ready",
+            "observedAt": "2026-08-26T19:30:00Z",
+        }));
+
+        assert!(reconciled_controller_authority_changes(&before, &health_only).is_empty());
+
+        let mut controller_released = health_only;
+        let route = controller_released
+            .remote_view_routes
+            .get_mut("guacamole:3")
+            .unwrap();
+        route.controller_lease_id = None;
+        route.controller_epoch += 1;
+        assert_eq!(
+            reconciled_controller_authority_changes(&before, &controller_released),
+            vec!["guacamole:3".to_string()]
+        );
     }
 
     #[tokio::test]
