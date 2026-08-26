@@ -325,17 +325,6 @@ pub(crate) async fn route_bound_open_wait_for_target<R: RouteBoundOpenRuntime>(
     else {
         return;
     };
-    if let Ok(switched) = supervisor
-        .forward(
-            "switch_target",
-            runtime.switch_target(SwitchTargetRequest {
-                target_id: target_id.clone(),
-            }),
-        )
-        .await
-    {
-        tab["targetSwitch"] = switched.into_value();
-    }
     let observed_url = tab
         .pointer("/targetSwitch/url")
         .and_then(Value::as_str)

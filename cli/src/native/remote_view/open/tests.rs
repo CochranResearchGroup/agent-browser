@@ -136,10 +136,12 @@ impl RouteBoundOpenRuntime for ScriptedRuntime {
 
     fn navigate_target(
         &mut self,
-        _request: NavigateTargetRequest,
+        request: NavigateTargetRequest,
     ) -> RouteBoundOpenFuture<'_, NavigateTargetResult> {
         Box::pin(async move {
-            self.effect("navigate_target", json!({ "url": "https://example.test" }))
+            self.observation.active_target_id = Some("target-1".to_string());
+            self.observation.active_url = Some(request.url.clone());
+            self.effect("navigate_target", json!({ "url": request.url }))
                 .await
                 .map(|value| NavigateTargetResult::from_compatibility(value).unwrap())
         })
@@ -496,6 +498,31 @@ async fn scripted_runtime_success_records_only_completed_effects() {
     assert_eq!(
         *runtime.events.lock().unwrap(),
         vec!["observe_browser", "launch_browser", "open_target"]
+    );
+}
+
+#[tokio::test]
+async fn newly_opened_target_navigates_without_redundant_target_switch() {
+    let supervisor = RouteBoundOpenSupervisor::system(None, None);
+    let mut runtime = ScriptedRuntime::new();
+    let mut tab = json!({
+        "targetId": "target-1",
+        "url": "about:blank",
+        "tabAcquisitionDecision": "opened_new_target",
+    });
+
+    route_bound_open_wait_for_target(
+        &json!({ "url": "https://example.test" }),
+        &mut runtime,
+        &supervisor,
+        &mut tab,
+    )
+    .await;
+
+    assert_eq!(tab["targetReadiness"], "ready");
+    assert_eq!(
+        *runtime.events.lock().unwrap(),
+        vec!["navigate_target", "refresh_targets"]
     );
 }
 
