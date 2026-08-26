@@ -1811,6 +1811,67 @@ pub fn visible_browser_window_proof(
     ))
 }
 
+/// Prove operator usability from process-bound native presentation evidence.
+/// The legacy display-content classifier remains useful for diagnostics, but
+/// it cannot establish operator readiness without this additional evidence.
+pub(crate) fn operator_visible_browser_window_proof(
+    route_id: &str,
+    display_name: &str,
+    display_content: Value,
+) -> Result<Value, String> {
+    if !display_content
+        .get("operatorPresentation")
+        .is_some_and(Value::is_object)
+    {
+        return Err(format!(
+            "operator_presentation_evidence_missing: route '{}' display '{}' has no process-bound operator presentation evidence",
+            route_id, display_name
+        ));
+    }
+    visible_browser_window_proof(route_id, display_name, display_content)
+}
+
+pub(crate) fn operator_presentation_from_x11_scene(
+    evidence: crate::native::x11_scene::X11SceneEvidence,
+) -> Value {
+    json!({
+        "processBound": true,
+        "mapped": true,
+        "minimized": false,
+        "visibleWorkspace": evidence.active_window_owned || evidence.topmost_window_owned,
+        "activeWindowOwned": evidence.active_window_owned,
+        "topmostWindowOwned": evidence.topmost_window_owned,
+        "authorizedGeometry": evidence.authorized_geometry,
+        "captureRegionUnoccluded": evidence.capture_region_unoccluded,
+        "frameWidth": evidence.frame_width,
+        "frameHeight": evidence.frame_height,
+    })
+}
+
+pub(crate) fn operator_visible_browser_window_proof_for_process(
+    route_id: &str,
+    display_name: &str,
+    browser_pid: u32,
+) -> Result<Value, String> {
+    let mut display_content = route_bound_display_content(display_name).unwrap_or_else(|| {
+        json!({
+            "state": "display_probe_unavailable",
+            "displayName": display_name,
+            "windows": [],
+            "error": "route display probe returned no content"
+        })
+    });
+    let scene = crate::native::x11_scene::observe_browser_scene(browser_pid, display_name)
+        .map_err(|error| {
+            format!(
+                "operator_presentation_observation_failed: route '{}' display '{}' process '{}' could not be proved: {}",
+                route_id, display_name, browser_pid, error
+            )
+        })?;
+    display_content["operatorPresentation"] = operator_presentation_from_x11_scene(scene);
+    operator_visible_browser_window_proof(route_id, display_name, display_content)
+}
+
 fn validate_operator_presentation_if_present(
     route_id: &str,
     display_name: &str,
@@ -3172,6 +3233,84 @@ mod tests {
 
         assert!(error.contains("operator_presentation_not_ready"));
         assert!(error.contains("minimized"));
+    }
+
+    #[test]
+    fn operator_visible_window_proof_rejects_missing_process_bound_evidence() {
+        let error = operator_visible_browser_window_proof(
+            "route-a",
+            ":12",
+            json!({
+                "state": "browser_window_visible",
+                "displayName": ":12"
+            }),
+        )
+        .unwrap_err();
+
+        assert!(error.contains("operator_presentation_evidence_missing"));
+    }
+
+    #[test]
+    fn operator_visible_window_proof_accepts_complete_process_bound_scene() {
+        let presentation =
+            operator_presentation_from_x11_scene(crate::native::x11_scene::X11SceneEvidence {
+                active_window_owned: true,
+                topmost_window_owned: true,
+                authorized_geometry: true,
+                capture_region_unoccluded: true,
+                frame_width: 1280,
+                frame_height: 720,
+            });
+        let proof = operator_visible_browser_window_proof(
+            "route-a",
+            ":12",
+            json!({
+                "state": "browser_window_visible",
+                "displayName": ":12",
+                "operatorPresentation": presentation
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(proof["state"], "ready");
+        assert_eq!(
+            proof["displayContent"]["operatorPresentation"]["mapped"],
+            true
+        );
+        assert_eq!(
+            proof["displayContent"]["operatorPresentation"]["minimized"],
+            false
+        );
+        assert_eq!(
+            proof["displayContent"]["operatorPresentation"]["visibleWorkspace"],
+            true
+        );
+    }
+
+    #[test]
+    fn operator_visible_window_proof_rejects_wrong_workspace() {
+        let error = operator_visible_browser_window_proof(
+            "route-a",
+            ":12",
+            json!({
+                "state": "browser_window_visible",
+                "displayName": ":12",
+                "operatorPresentation": {
+                    "processBound": true,
+                    "mapped": true,
+                    "minimized": false,
+                    "visibleWorkspace": false,
+                    "activeWindowOwned": false,
+                    "topmostWindowOwned": false,
+                    "authorizedGeometry": true,
+                    "captureRegionUnoccluded": true
+                }
+            }),
+        )
+        .unwrap_err();
+
+        assert!(error.contains("operator_presentation_not_ready"));
+        assert!(error.contains("wrong_workspace"));
     }
 
     #[test]

@@ -67,6 +67,7 @@ pub(crate) struct DisplayAccessRequest {
 #[derive(Debug, Clone)]
 pub(crate) struct VisibleWindowRequest {
     pub(crate) binding: RemoteViewRouteBinding,
+    pub(crate) browser_pid: Option<u32>,
 }
 #[derive(Debug, Clone)]
 pub(crate) struct OperatorAccessRequest {
@@ -308,11 +309,20 @@ impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
     ) -> RouteBoundOpenFuture<'_, LaunchBrowserResult> {
         Box::pin(async move {
             let command = request.command.into_value();
-            let value = handle_launch(&command, self.state)
+            let mut value = handle_launch(&command, self.state)
                 .await
                 .map_err(|message| {
                     route_bound_runtime_issue("launch_browser", message, Some(&command))
                 })?;
+            if let Some(browser_pid) = self
+                .state
+                .browser
+                .as_ref()
+                .and_then(|manager| manager.browser_pid())
+                .or(self.state.attached_browser_pid)
+            {
+                value["browserPid"] = json!(browser_pid);
+            }
             LaunchBrowserResult::from_compatibility(value)
                 .map_err(|message| route_bound_runtime_issue("launch_browser", message, None))
         })
@@ -452,7 +462,7 @@ impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
         request: VisibleWindowRequest,
     ) -> RouteBoundOpenFuture<'_, VisibleWindowResult> {
         Box::pin(async move {
-            remote_view_open_visible_window_proof(&request.binding)
+            remote_view_open_visible_window_proof(&request.binding, request.browser_pid)
                 .and_then(VisibleWindowResult::from_compatibility)
                 .map_err(|message| {
                     route_bound_runtime_issue("observe_visible_window", message, None)

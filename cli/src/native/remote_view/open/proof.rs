@@ -1,7 +1,9 @@
 #![allow(unused_imports)]
 use super::shared::*;
+use crate::native::remote_view::operator_visible_browser_window_proof_for_process;
 pub(crate) fn remote_view_open_visible_window_proof(
     route_binding: &super::super::super::remote_view::RemoteViewRouteBinding,
+    browser_pid: Option<u32>,
 ) -> Result<Value, String> {
     let display_name = route_binding
         .launch_display_name
@@ -28,26 +30,22 @@ pub(crate) fn remote_view_open_visible_window_proof(
     let interval = Duration::from_millis(500);
     let started_at = Instant::now();
     let mut attempts = 0_u32;
+    let browser_pid = browser_pid.ok_or_else(|| {
+        format!(
+            "operator_presentation_process_missing: route '{}' display '{}' has no retained browser process identity",
+            route_binding.route_id, display_name
+        )
+    })?;
     loop {
         attempts += 1;
-        let display_content = route_bound_display_content(display_name).unwrap_or_else(|| {
-            json!(
-                { "state" : "display_probe_unavailable", "displayName" :
-                display_name, "windows" : [], "error" :
-                "route display probe returned no content", }
-            )
-        });
-        match visible_browser_window_proof(
+        match operator_visible_browser_window_proof_for_process(
             &route_binding.route_id,
             display_name,
-            display_content.clone(),
+            browser_pid,
         ) {
             Ok(proof) => return Ok(proof),
             Err(error) => {
-                let state = remote_view_visible_window_proof_state(&display_content);
-                if !remote_view_visible_window_proof_retryable_state(state)
-                    || started_at.elapsed() >= timeout
-                {
+                if started_at.elapsed() >= timeout {
                     return Err(format!(
                         "{error}; visible_window_proof_attempts={attempts}; timeoutMs={}",
                         timeout.as_millis()

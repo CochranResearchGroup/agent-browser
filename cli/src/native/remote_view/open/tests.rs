@@ -32,6 +32,7 @@ struct ScriptedRuntime {
     observation: RouteBoundBrowserObservation,
     launch_issue: Option<RouteBoundRuntimeIssue>,
     operator_access: Option<Value>,
+    visible_window_issue: Option<RouteBoundRuntimeIssue>,
     adoption_observation: Option<RouteBoundBrowserObservation>,
     adoption_issue: Option<RouteBoundRuntimeIssue>,
 }
@@ -54,6 +55,7 @@ impl ScriptedRuntime {
             },
             launch_issue: None,
             operator_access: Some(json!({ "state": "ready" })),
+            visible_window_issue: None,
             adoption_observation: None,
             adoption_issue: Some(RouteBoundRuntimeIssue::EffectFailed {
                 operation: "adopt_retained_browser",
@@ -214,9 +216,11 @@ impl RouteBoundOpenRuntime for ScriptedRuntime {
         _request: VisibleWindowRequest,
     ) -> RouteBoundOpenFuture<'_, VisibleWindowResult> {
         Box::pin(async move {
-            self.effect("observe_visible_window", json!({ "state": "ready" }))
-                .await
-                .map(|value| VisibleWindowResult::from_compatibility(value).unwrap())
+            self.events.lock().unwrap().push("observe_visible_window");
+            if let Some(issue) = self.visible_window_issue.clone() {
+                return Err(issue);
+            }
+            Ok(VisibleWindowResult::from_compatibility(json!({ "state": "ready" })).unwrap())
         })
     }
 
@@ -232,6 +236,38 @@ impl RouteBoundOpenRuntime for ScriptedRuntime {
                 .map(|value| OperatorAccessResult::from_compatibility(value).unwrap()))
         })
     }
+}
+
+#[tokio::test]
+async fn focus_success_followed_by_failed_reobservation_never_returns_ready() {
+    let mut runtime = ScriptedRuntime::new();
+    runtime.visible_window_issue = Some(RouteBoundRuntimeIssue::EffectFailed {
+        operation: "observe_visible_window",
+        message: "operator_presentation_not_ready: blockers=occluded".to_string(),
+    });
+
+    let focus = runtime
+        .focus_target(FocusTargetRequest {
+            command: FocusTargetCommand::from_compatibility(json!({})).unwrap(),
+        })
+        .await
+        .unwrap();
+    assert_eq!(focus.into_value()["focused"], true);
+    let error = runtime
+        .observe_visible_window(VisibleWindowRequest {
+            binding: test_binding(),
+            browser_pid: Some(4242),
+        })
+        .await
+        .unwrap_err();
+
+    assert!(error
+        .compatibility_message()
+        .contains("operator_presentation_not_ready"));
+    assert_eq!(
+        *runtime.events.lock().unwrap(),
+        vec!["focus_target", "observe_visible_window"]
+    );
 }
 
 fn test_binding() -> RemoteViewRouteBinding {

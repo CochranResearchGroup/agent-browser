@@ -154,10 +154,16 @@ always explicit. Reload, route reattach, viewer reconnect or release, and
 Guacamole input settings are grouped under **Advanced connection controls**.
 Automatic recovery never launches another browser, mutates its profile, takes
 control, or releases a viewer.
-When presentation capacity is configured, route reattach and route switch
-reserve the exact browser, route, and display slot at recovery priority before
-route mutation. The operation returns matching `recoveryAdmission` and
-`recoveryRelease` receipts and leaves the retained browser attached.
+Route reattach requires configured presentation capacity and reserves the
+exact browser, route, and display slot at recovery priority before route
+mutation. It rejects active human control, focuses and maximizes the exact
+retained browser, and independently re-observes process-bound X11 state before
+checkout can report `attached_ready`. Missing process, display, active or
+topmost, visible-workspace, geometry, or occlusion evidence returns a typed
+operator-presentation blocker without launching a replacement. Route switch
+retains its existing recovery reservation contract. Both operations return
+matching `recoveryAdmission` and `recoveryRelease` receipts for granted
+capacity and leave the retained browser attached.
 Route switch applies that reservation as an atomic migration: the source
 browser remains retained during admission, an occupied destination stays bound
 until parking, and checkout transfers the leased slot before final release.

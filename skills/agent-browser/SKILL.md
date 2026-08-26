@@ -378,11 +378,17 @@ live browser's route, release that route surface, and return
 `routeSwitchParking` with the parked browser and release evidence. Browser and
 RDP stream records expose `attachability` with the recommended action and
 route/display/proof agreement evidence.
-On a runtime with configured presentation capacity, both operations acquire
-recovery priority on the exact bound slot before route mutation. Require
-`recoveryAdmission.status=granted` and `recoveryRelease.status=released` as the
-capacity receipt pair. A `not_configured` status is compatibility evidence for
-an older state, not proof that recovery capacity was admitted.
+Reattach requires configured presentation capacity and recovery priority on the
+exact bound slot. It must reject an active human controller, focus and maximize
+the exact retained browser, then independently re-observe process-bound X11
+state before checkout can report `attached_ready`. Treat missing process,
+display, active or topmost ownership, visible workspace, approved geometry, or
+unoccluded evidence as an operator-presentation blocker. Do not issue a second
+`view_focus`, launch a replacement, or treat a focus acknowledgement as proof.
+Require `recoveryAdmission.status=granted` and
+`recoveryRelease.status=released` as the reattach capacity receipt pair. Route
+switch retains its existing recovery reservation contract; `not_configured` is
+compatibility evidence for route switch only, not reattach authority.
 For route switch, the reservation is an atomic migration. The moving browser
 may retain its active source slot while admission is checked, and an occupied
 destination retains its browser until the route-switch parking step transfers

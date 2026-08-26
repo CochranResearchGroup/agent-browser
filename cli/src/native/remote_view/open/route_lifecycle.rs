@@ -9,11 +9,13 @@ use super::route_pool::{
     merge_route_into_checkout, merge_route_pool_entry_into_checkout, merge_stream_into_checkout,
     select_browser_reattach_route_pool_entry,
 };
+use super::runtime::observe_daemon_browser;
 use super::shared::*;
 use crate::native::desktop_control_coordinator::begin_service_controller_mutation;
 use crate::native::presentation_capacity::{
     CapacityDecision, PresentationRequest, PressureAdmission,
 };
+use crate::native::remote_view::operator_visible_browser_window_proof_for_process;
 use crate::native::service_model::advance_route_controller_authority;
 
 #[derive(Debug, Clone)]
@@ -134,7 +136,7 @@ where
 /// mutation and released after success or failure.
 pub(crate) async fn handle_service_remote_view_browser_reattach(
     cmd: &Value,
-    daemon_state: &DaemonState,
+    daemon_state: &mut DaemonState,
     route_switch: bool,
 ) -> Result<Value, String> {
     let browser_id = optional_command_or_params_string(cmd, "browserId")
@@ -332,7 +334,88 @@ pub(crate) async fn handle_service_remote_view_browser_reattach(
         &display_allocation_id,
         route_switch,
     )?;
+    if !route_switch && recovery_reservation.is_none() {
+        return Err(
+            "operator_presentation_authority_unavailable: presentation recovery capacity is not configured"
+                .to_string(),
+        );
+    }
     let operation_result: Result<Value, String> = async {
+        let (focus, visible_window_proof) = if route_switch {
+            (
+                json!({
+                    "state": "not_requested",
+                    "reason": "route_switch_uses_existing_transition_contract",
+                }),
+                Value::Null,
+            )
+        } else {
+            let display_name = checkout
+            .get("launchDisplayName")
+            .or_else(|| checkout.get("displayName"))
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .or_else(|| {
+                snapshot
+                    .display_allocations
+                    .get(&display_allocation_id)
+                    .and_then(|allocation| allocation.display_name.clone())
+            })
+            .ok_or_else(|| {
+                format!(
+                    "operator_presentation_display_missing: route '{}' has no launch display",
+                    selected_route_id
+                )
+            })?;
+            let before_focus = observe_daemon_browser(daemon_state)
+            .await
+            .map_err(|error| error.compatibility_message().to_string())?;
+        if !before_focus.browser_present
+            || before_focus.browser_id != browser_id
+            || before_focus.session_id != session_name
+        {
+            return Err(format!(
+                "operator_presentation_identity_mismatch: expected browser '{}' session '{}', observed browser '{}' session '{}' present={}",
+                browser_id,
+                session_name,
+                before_focus.browser_id,
+                before_focus.session_id,
+                before_focus.browser_present
+            ));
+        }
+            let focus = handle_view_focus(
+            &json!({
+                "action": "view_focus",
+                "maximize": true,
+            }),
+            daemon_state,
+        )
+        .await
+        .map_err(|error| format!("operator_presentation_focus_failed: {error}"))?;
+            let after_focus = observe_daemon_browser(daemon_state)
+            .await
+            .map_err(|error| error.compatibility_message().to_string())?;
+        if !after_focus.browser_present
+            || after_focus.browser_id != before_focus.browser_id
+            || after_focus.session_id != before_focus.session_id
+            || after_focus.browser_pid != before_focus.browser_pid
+        {
+            return Err(
+                "operator_presentation_identity_changed: retained browser identity changed during focus"
+                    .to_string(),
+            );
+        }
+            let browser_pid = after_focus.browser_pid.ok_or_else(|| {
+                "operator_presentation_process_missing: retained browser has no process identity"
+                    .to_string()
+            })?;
+            let visible_window_proof = operator_visible_browser_window_proof_for_process(
+                &selected_route_id,
+                &display_name,
+                browser_pid,
+            )?;
+            (focus, visible_window_proof)
+        };
         let reattach_repair = if !route_switch {
             selected_pool_entry
                 .as_ref()
@@ -414,6 +497,16 @@ pub(crate) async fn handle_service_remote_view_browser_reattach(
         } else {
             None
         };
+        if !visible_window_proof.is_null() {
+            checkout.insert(
+                "readiness".to_string(),
+                json!({
+                    "state": "ready",
+                    "component": "operator_visible_window",
+                    "displayContent": visible_window_proof["displayContent"].clone(),
+                }),
+            );
+        }
         let checkout_command = Value::Object(checkout);
         let checkout_result =
             handle_service_remote_view_route_checkout(&checkout_command, daemon_state).await?;
@@ -431,7 +524,8 @@ pub(crate) async fn handle_service_remote_view_browser_reattach(
             parking.browser_id, "sessionName" : parking.session_id, "controllerLeaseId" :
             parking.controller_lease_id, "release" : parked_release_result, })),
             "reattachRepair" : reattach_repair, "routeSwitchRelease" : release_result,
-            "checkout" : checkout_result, }
+            "checkout" : checkout_result, "focus" : focus,
+            "operatorVisible" : visible_window_proof, }
         ))
     }
     .await;

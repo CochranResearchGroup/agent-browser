@@ -555,7 +555,7 @@ async fn test_remote_view_route_checkout_and_release_clear_stale_acquisition_pen
     let _ = fs::remove_dir_all(&home);
 }
 #[tokio::test]
-async fn test_remote_view_browser_reattach_reuses_retained_browser_without_duplicate_row() {
+async fn test_remote_view_browser_reattach_blocks_without_live_process_and_preserves_rows() {
     let guard = EnvGuard::new(&["HOME"]);
     let home = unique_socket_dir("remote-view-browser-reattach-home");
     fs::create_dir_all(&home).unwrap();
@@ -675,34 +675,25 @@ async fn test_remote_view_browser_reattach_reuses_retained_browser_without_dupli
         &mut state,
     )
     .await;
-    assert_eq!(result["success"], true, "{result}");
-    assert_eq!(result["data"]["status"], "reattached");
-    assert_eq!(result["data"]["routeId"], "route-a");
-    assert_eq!(result["data"]["recoveryAdmission"]["status"], "granted");
-    assert_eq!(result["data"]["recoveryAdmission"]["slotId"], "slot:pool-a");
-    assert_eq!(result["data"]["recoveryRelease"]["status"], "released");
-    assert_eq!(
-        result["data"]["checkout"]["attachability"]["state"],
-        "attached_ready"
-    );
+    assert_eq!(result["success"], false, "{result}");
+    assert!(result["error"]
+        .as_str()
+        .unwrap()
+        .contains("operator_presentation_identity_mismatch"));
     let persisted = store.load().unwrap();
     assert_eq!(persisted.browsers.len(), 1);
     assert!(persisted.browsers.contains_key("session:rdp-a"));
     let browser = persisted.browsers.get("session:rdp-a").unwrap();
     assert_eq!(browser.view_streams.len(), 1);
     assert_eq!(browser.view_streams[0].route_id.as_deref(), Some("route-a"));
-    assert_eq!(persisted.route_pool["pool-a"].state, "checked_out");
-    assert_eq!(
-        persisted.display_allocations["display-a"].host,
-        Some(ServiceBrowserHost::RemoteHeaded)
-    );
+    assert_eq!(persisted.route_pool["pool-a"].state, "pending");
     assert_eq!(
         persisted.remote_view_routes["route-a"]
             .display_allocation_id
             .as_deref(),
-        Some("display-a")
+        Some("display-stale")
     );
-    assert_eq!(persisted.remote_view_routes["route-a"].state, "ready");
+    assert_eq!(persisted.remote_view_routes["route-a"].state, "orphaned");
     let slot = &persisted.presentation_capacity.as_ref().unwrap().slots[0];
     assert_eq!(slot.state, PresentationSlotState::Active);
     assert_eq!(slot.browser_id.as_deref(), Some("session:rdp-a"));

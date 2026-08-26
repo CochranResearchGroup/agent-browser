@@ -772,6 +772,12 @@ pub(crate) async fn execute_direct_open<R: RouteBoundOpenRuntime, P: RouteBoundO
             "observe_visible_window",
             runtime.observe_visible_window(VisibleWindowRequest {
                 binding: route_binding.clone(),
+                browser_pid: initial_browser.browser_pid.or_else(|| {
+                    launch
+                        .get("browserPid")
+                        .and_then(Value::as_u64)
+                        .and_then(|pid| u32::try_from(pid).ok())
+                }),
             }),
         )
         .await

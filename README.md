@@ -3450,11 +3450,17 @@ shown again without launching or acquiring its profile, and use
 different available or parkable Guacamole route. When both route slots are
 occupied, route switch can park another live browser's route surface and returns
 `routeSwitchParking` with the parked browser and release evidence.
-When presentation capacity is configured, reattach and route switch reserve
-the exact bound slot at recovery priority before changing route state, then
-release that lease without parking the retained browser. Their responses expose
-`recoveryAdmission` and `recoveryRelease`; `not_configured` is explicit on
-older states that do not have presentation-capacity authority.
+Reattach requires configured presentation capacity and reserves the exact bound
+slot at recovery priority before changing route state. It rejects active human
+control, focuses and maximizes the exact retained browser, then independently
+re-observes process-bound X11 state. Checkout reports `attached_ready` only when
+the browser is mapped, non-minimized, on the visible workspace, active or
+topmost, within approved geometry, and unobscured. Missing process, display, or
+scene evidence returns a typed operator-presentation blocker without launching
+a replacement or changing route records. Route switch retains its existing
+recovery reservation contract. Both operations release granted recovery leases;
+`not_configured` remains compatibility evidence for route switch only and is not
+reattach authority.
 Route switch treats that reservation as an atomic migration: the moving
 browser may remain active on its source slot, an occupied destination keeps
 its current browser until parking, and checkout transfers the leased
