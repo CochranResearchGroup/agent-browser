@@ -2,9 +2,9 @@
 
 Date: 2026-08-25
 
-State: PRODUCTION CANDIDATE QUALIFIED | LIVE TRANSACTION DEFERRED
+State: PRODUCTION CONTROLLED FIXTURE ACCEPTED | FORMAL RELEASE NOT AUTHORIZED
 
-Execution state: `production_candidate_qualified_live_deferred`
+Execution state: `production_controlled_fixture_accepted`
 
 Lane: P131
 
@@ -12,13 +12,9 @@ Parent: `docs/dev/plans/0110-2026-08-12-desktop-perception-interaction-foundatio
 
 Source baseline: `e8695f82969e684cc4f9a7929b723777f548c3a3e`
 
-Current authority: SLICE E SOURCE RECONCILIATION AND PRODUCTION AUTHORITY
-GRANTED. THE SWAP-FREE CARGO
-ADMISSION THRESHOLD MAY BE SET TO ZERO WHILE ALL OTHER WRAPPER AND CGROUP
-GUARDS REMAIN ENFORCED. PLAN 0133 IS DEVELOPMENT ACCEPTED BUT RETAINS ITS
-PRODUCTION-READ-ONLY BOUNDARY. LIVE INSTALLATION STILL REQUIRES EXPLICIT
-CLEARANCE OF THAT BOUNDARY AND AN APPLY-SAFE FIXTURE ROUTE WITHOUT EXPANSION,
-TAKEOVER, OR WORKLOAD DISPLACEMENT.
+Current authority: SLICE E IS COMPLETE. NO FURTHER RUNTIME EFFECT, FORMAL
+RELEASE, REAL AUTHENTICATION WORKFLOW, OR SLICE F EXECUTION IS AUTHORIZED BY
+THIS PLAN RECORD.
 
 Current implementation branch:
 `feature/plan0131-production-candidate-reconciled`
@@ -293,24 +289,51 @@ production transaction. Their historical validation receipts are recorded in
 
 Current-main reconciliation split the unattended service-GC clock repair from
 the provider feature and added exact provider-generation revalidation inside
-the route fence before every event. Candidate source-tree head `2d940811`,
-version `0.28.0`, and SHA-256
-`69c6829fe432d77fc4da140b91509a5d861e5efd981765447643c54f98e8d766`
-are qualified in
+the route fence before every event. The initially qualified candidate is
+recorded in
 `docs/dev/notes/0131-5-2026-08-26-controlled-x11-provider-current-main-candidate.md`.
-The source branch is merge-ready subject to a final remote-main drift check.
+Subsequent hotfix reconciliation retained current-main behavior and repaired
+route inventory restoration, controlled host-transition admission, and
+controller fence scope. The accepted source-tree head is `cdb883f5`, version
+`0.28.0`, candidate generation
+`0.28.0-32e8c9318beb-b2bd0fba532f`, and candidate SHA-256
+`32e8c9318bebfd6de2ed4027cbeb0f4d0416766b7264c63ba103ee5d759782c2`.
 
-The workstation hot-upgrade transaction and controlled repository fixture
-remain unapplied. Plan 0133 is development accepted, but its
-production-read-only boundary has not been cleared for another workstation
-upgrade. The latest runtime census also had no apply-safe fixture route or
-cleanup candidate. Continuing live execution would require fresh proof that
-neither route expansion, takeover, nor workload displacement is necessary. It
-does not use a real authentication challenge.
+The separately authorized workstation hot upgrade completed as transaction
+`upgrade-337eda48-7200-4fca-8f08-76e6792db568`. The selected generation,
+dashboard backend, runtime host, and presentation receipt all resolve to the
+accepted candidate. Earlier presentation-validation attempts failed closed
+and preserved the old generation.
 
-Production input remains unavailable unless the candidate transaction and the
-controlled fixture both pass. Failure rolls back the selected generation and
-leaves Plan 110 live acceptance closed.
+One repository-owned fixture used the third static route without takeover,
+route expansion, or workload displacement. Transaction
+`desktop-interaction-3f3b29b28dec7e2ad91c5938` completed with 34 attempted and
+34 acknowledged effects, passed after-state verification, released cleanup,
+and retained no pixels. Replaying the same operation returned the same
+terminal transaction without another execution.
+
+One earlier transaction stopped after nine acknowledged pointer-movement
+events when controller authority changed. It emitted no click or keyboard
+event, remains durably uncertain, and was never retried. A source repair now
+acquires the controller mutation fence only when reconciliation actually
+changes primary controller authority. The focused regression, existing
+controller cancellation regression, formatting, strict Clippy, rebuilt exact
+candidate, and final controlled fixture all passed.
+
+Cleanup closed the exact fixture browser, disconnected both fixture controller
+leases, stopped the repository fixture process, released route 3 and display
+16, and returned the third static route-pool entry to `available`. Fresh
+process readback found no fixture process or fixture Chrome tree. Workstation
+GC reported zero candidates. Install doctor reported steady current runtime
+multiplicity with one runtime host, one dashboard, one executable generation,
+and zero legacy daemons. Its only issue is the unrelated pre-existing
+duplicate profile pressure for `last30days-facebook`.
+
+The full production receipt, including retained failed evidence and exact
+cleanup readback, is recorded in
+`docs/dev/notes/0131-6-2026-08-26-controlled-x11-provider-production-live-acceptance.md`.
+Slice E is accepted. This does not authorize a formal release, Slice F, or a
+real authentication or credential workflow.
 
 ### Slice F | Plan 0110 Closure And Authentication Entry
 
@@ -460,10 +483,9 @@ defines their exact inputs, cleanup, resource budget, and receipt location.
 
 ## Current Next Action
 
-Development acceptance is recorded in
-`docs/dev/notes/0131-3-2026-08-25-controlled-x11-provider-development-live-acceptance.md`.
-Production input remains unavailable, Plan 0110 remains open at its separate
-live Foundation Acceptance boundary, and no further runtime effect is
-authorized. The next executable slice is Slice E only after fresh explicit
-authority and a new source, installed-generation, process, browser, handoff,
-provider, resource, production, and rollback preflight.
+Production controlled-fixture acceptance is recorded in
+`docs/dev/notes/0131-6-2026-08-26-controlled-x11-provider-production-live-acceptance.md`.
+The recommended next action is review and integration of the reconciled
+feature branch. Slice F may update Plan 0110 and open the separate synthetic
+authentication planning boundary only after explicit execution authority. No
+formal release or real credential workflow is authorized.
