@@ -7979,7 +7979,7 @@ mod tests {
                 "captureReadyProofRequired": true,
                 "pairedPageAbsenceRequired": true,
                 "genericCdpFailureAuthorizesDesktop": false,
-                "configuredProductionInput": "unavailable_pending_plan_0110"
+                "configuredProductionInput": "controlled_x11_exact_generation_required"
             }
         });
 
@@ -8001,7 +8001,7 @@ mod tests {
             "Presentation capacity: warm=2/4 admitted=4 hard_max=6 human_reserved=1 recovery_reserved=1 queued=2 binding_warnings=0"
         ));
         assert!(rendered.contains(
-            "Desktop evidence: page_transport=cdp capture_ready_proof=true paired_page_absence=true generic_cdp_failure_fallback=false configured_input=unavailable_pending_plan_0110"
+            "Desktop evidence: page_transport=cdp capture_ready_proof=true paired_page_absence=true generic_cdp_failure_fallback=false configured_input=controlled_x11_exact_generation_required"
         ));
         assert!(rendered.contains("Profiles: 1"));
         assert!(rendered.contains(

@@ -2,9 +2,9 @@
 
 Date: 2026-08-25
 
-State: DEVELOPMENT LIVE ACCEPTED
+State: PRODUCTION CANDIDATE QUALIFIED | LIVE TRANSACTION DEFERRED
 
-Execution state: `development_live_accepted`
+Execution state: `production_candidate_qualified_live_deferred`
 
 Lane: P131
 
@@ -12,16 +12,22 @@ Parent: `docs/dev/plans/0110-2026-08-12-desktop-perception-interaction-foundatio
 
 Source baseline: `e8695f82969e684cc4f9a7929b723777f548c3a3e`
 
-Current authority: NONE. SLICE E REQUIRES FRESH EXPLICIT AUTHORITY.
+Current authority: SLICE E SOURCE RECONCILIATION AND PRODUCTION AUTHORITY
+GRANTED. THE SWAP-FREE CARGO
+ADMISSION THRESHOLD MAY BE SET TO ZERO WHILE ALL OTHER WRAPPER AND CGROUP
+GUARDS REMAIN ENFORCED. PLAN 0133 IS DEVELOPMENT ACCEPTED BUT RETAINS ITS
+PRODUCTION-READ-ONLY BOUNDARY. LIVE INSTALLATION STILL REQUIRES EXPLICIT
+CLEARANCE OF THAT BOUNDARY AND AN APPLY-SAFE FIXTURE ROUTE WITHOUT EXPANSION,
+TAKEOVER, OR WORKLOAD DISPLACEMENT.
 
-Future implementation branch:
-`feature/plan0131-controlled-x11-desktop-provider`
+Current implementation branch:
+`feature/plan0131-production-candidate-reconciled`
 
 Execution start baseline: `a54b0f976fb20e801d8e09e844708753c80ac79d`
 
 Owned worktree scope:
-`feature/plan0131-controlled-x11-desktop-provider` in the dedicated local
-Plan 0131 worktree.
+`feature/plan0131-production-candidate-reconciled` in the dedicated local Plan
+0131 worktree.
 
 Depends on:
 
@@ -274,13 +280,33 @@ and explicit slice start.
 
 ### Slice E | Transactional Production Candidate
 
-Authority: NOT GRANTED BY THIS PLAN RECORD.
+Authority: GRANTED BY THE OPERATOR AFTER DEVELOPMENT ACCEPTANCE. The operator
+also authorized setting only the Cargo wrapper's swap-free admission threshold
+to zero. All other wrapper, job, cgroup, memory, and aggregate-slice controls
+remain mandatory.
 
-This slice requires fresh explicit authority after development acceptance. It
-must re-anchor current source, candidate hash, installed generation, runtime
-census, retained browsers, handoffs, provider state, resources, and rollback.
-It then uses the workstation hot-upgrade transaction and one controlled
-repository fixture. It does not use a real authentication challenge.
+The earlier source commit `9ec6a2b4` and candidate SHA-256
+`2202890a31370f6693f8f50db06448b5a4b2b1b36d930538afe34d910b6fc245`
+were qualified before Plan 0133 landed and are no longer eligible for a
+production transaction. Their historical validation receipts are recorded in
+`docs/dev/notes/0131-4-2026-08-25-controlled-x11-provider-production-candidate-preflight.md`.
+
+Current-main reconciliation split the unattended service-GC clock repair from
+the provider feature and added exact provider-generation revalidation inside
+the route fence before every event. Candidate source-tree head `2d940811`,
+version `0.28.0`, and SHA-256
+`69c6829fe432d77fc4da140b91509a5d861e5efd981765447643c54f98e8d766`
+are qualified in
+`docs/dev/notes/0131-5-2026-08-26-controlled-x11-provider-current-main-candidate.md`.
+The source branch is merge-ready subject to a final remote-main drift check.
+
+The workstation hot-upgrade transaction and controlled repository fixture
+remain unapplied. Plan 0133 is development accepted, but its
+production-read-only boundary has not been cleared for another workstation
+upgrade. The latest runtime census also had no apply-safe fixture route or
+cleanup candidate. Continuing live execution would require fresh proof that
+neither route expansion, takeover, nor workload displacement is necessary. It
+does not use a real authentication challenge.
 
 Production input remains unavailable unless the candidate transaction and the
 controlled fixture both pass. Failure rolls back the selected generation and

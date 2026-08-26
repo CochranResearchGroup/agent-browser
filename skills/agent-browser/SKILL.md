@@ -725,11 +725,12 @@ agent-browser desktop interact \
 ```
 
 The `p131-controlled-x11-v1` recipe is admitted only by an exact installed
-development-generation manifest. It uses the repository-owned, network-free
-X11 fixture and a closed native XTEST event schema. Production and
-unmanifested binaries must fail with `desktop_input_provider_unavailable`
-before capture, controller mutation, or input. Do not interpret contract
-discovery as installed or live readiness.
+development or production generation manifest whose digest matches the running
+binary. It uses the repository-owned, network-free X11 fixture and a closed
+native XTEST event schema. Unmanifested binaries and unknown runtime
+environments must fail before capture, controller mutation, or input. Do not
+interpret contract discovery as installed or live readiness, and never treat
+this recipe as general desktop-control authority.
 
 The pointer-keyboard recipe owns the fresh locator, server-derived pointer arc, one left click,
 fixed benign test text, release cleanup, and after-state verifier. Never pass
@@ -1515,9 +1516,12 @@ window, or stacking and occlusion. A generic CDP failure does not authorize
 desktop fallback. Browser-external evidence requires paired CDP absence
 evidence plus capture-ready proof for the exact maximized, topmost, unoccluded
 scene before and after capture. Biometric, secure-desktop, PIN,
-master-password, and consent surfaces require a human continuation. Do not
-request configured production desktop input while
-`configuredProductionInput` is `unavailable_pending_plan_0110`.
+master-password, and consent surfaces require a human continuation. Request the
+controlled production recipe only when `configuredProductionInput` is
+`controlled_x11_exact_generation_required`; execution still requires the exact
+selected immutable generation to admit it. This status does not authorize
+credential, private-profile, arbitrary-input, or general desktop-control
+workflows.
 
 Run `pnpm test:mcp-read-no-launch` to validate that MCP resource reads remain read-only under the same launch defaults.
 
