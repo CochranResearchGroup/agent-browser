@@ -182,6 +182,33 @@ def adopted_policy_id(path: Path) -> str:
     return stem
 
 
+def duplicate_adopted_policy_ids(existing_policy_surfaces: list[dict]) -> dict[str, list[str]]:
+    paths_by_id: dict[str, list[str]] = {}
+    for item in existing_policy_surfaces:
+        if item.get("source_type") != "canonical-policy":
+            continue
+        path = Path(item["path"])
+        paths_by_id.setdefault(adopted_policy_id(path), []).append(str(path))
+    return {
+        module_id: sorted(paths)
+        for module_id, paths in sorted(paths_by_id.items())
+        if len(paths) > 1
+    }
+
+
+def policy_identity_problems(duplicates: dict[str, list[str]]) -> list[str]:
+    return [
+        f"duplicate adopted policy identity {module_id}: {', '.join(paths)}"
+        for module_id, paths in sorted(duplicates.items())
+    ]
+
+
+def require_unique_policy_identities(coverage: dict[str, Any]) -> None:
+    duplicates = coverage.get("duplicate_policy_ids", {})
+    if duplicates:
+        raise ValueError("; ".join(policy_identity_problems(duplicates)))
+
+
 def next_policy_serial(repo_root: Path) -> int:
     policy_dir = repo_root / "docs" / "dev" / "policies"
     max_serial = 0
@@ -1797,6 +1824,7 @@ def policy_adoption_coverage(
     recommended_modules: list[str],
     installed_library: dict[str, Any],
 ) -> dict[str, Any]:
+    duplicate_policy_ids = duplicate_adopted_policy_ids(existing_policy_surfaces)
     canonical_ids = sorted(
         {
             adopted_policy_id(Path(item["path"]))
@@ -1811,7 +1839,9 @@ def policy_adoption_coverage(
     adopted_set = set(canonical_ids) | set(semantically_adopted)
     already_adopted = [module_id for module_id in recommended_modules if module_id in adopted_set]
     missing = [module_id for module_id in recommended_modules if module_id not in adopted_set]
-    if not recommended_modules:
+    if duplicate_policy_ids:
+        readiness = "conflicted-local-policy"
+    elif not recommended_modules:
         readiness = "fresh-adoption"
     elif len(already_adopted) == len(recommended_modules):
         readiness = "fully-installed"
@@ -1831,6 +1861,7 @@ def policy_adoption_coverage(
             module_id: semantic_matches[module_id]
             for module_id in semantically_adopted
         },
+        "duplicate_policy_ids": duplicate_policy_ids,
         "already_adopted_modules": already_adopted,
         "missing_recommended_modules": missing,
     }
@@ -1838,6 +1869,8 @@ def policy_adoption_coverage(
 
 def recommendation_mode(coverage: dict[str, Any]) -> str:
     readiness = coverage["readiness"]
+    if readiness == "conflicted-local-policy":
+        return "identity-reconciliation-required"
     if readiness == "fully-installed":
         return "already-aligned"
     if readiness in {"partial-local-policy", "mostly-installed"}:
@@ -2285,9 +2318,12 @@ def main() -> int:
     expectation_gaps = profile_expectation_gaps(profile, signals, installed_library)
     adoption_mode, migration_reasons, migration_targets = choose_adoption_mode(signals, expectation_gaps, coverage)
     validation_problems = validate_recommendations(profile, modules, installed_library)
+    validation_problems.extend(policy_identity_problems(coverage["duplicate_policy_ids"]))
     rec_mode = recommendation_mode(coverage)
     next_modules = (
-        coverage["missing_recommended_modules"]
+        []
+        if rec_mode == "identity-reconciliation-required"
+        else coverage["missing_recommended_modules"]
         if rec_mode == "patch-missing"
         else modules
     )
@@ -2295,6 +2331,7 @@ def main() -> int:
     agents_patch = render_agents_wirein(repo_root, install_plan, existing_policy_surfaces, purpose)
     written_paths: list[str] = []
     if args.write_drafts:
+        require_unique_policy_identities(coverage)
         written_paths = write_drafts(repo_root, install_plan, agents_patch)
     out = {
         "repo_root": str(repo_root),

@@ -39,6 +39,12 @@ That extraction should inventory current policy-bearing files and classify them 
 - `merge`
 - `retire`
 
+Derive adopted identity from the module id encoded by the local policy filename,
+not from the ordinal prefix. Report every canonical path when more than one file
+claims an identity, use recommendation mode `identity-reconciliation-required`,
+and refuse write mode until a maintainer preserves the intended local semantics
+in one retained file and removes superseded wire-in entries.
+
 When `AGENTS.md` already contains substantive local guidance, infer repo-local policy sections and classify them as:
 - `keep`
 - `merge`
@@ -161,8 +167,8 @@ Return:
 - inferred `execution_bias` when applicable
 - recommended profile
 - recommended modules
-- recommendation mode such as `full-profile`, `patch-missing`, or
-  `already-aligned`
+- recommendation mode such as `full-profile`, `patch-missing`,
+  `already-aligned`, or `identity-reconciliation-required`
 - next modules to add when the repo already partially matches the selected profile
 - deterministic install-plan entries with target local policy paths and rendered draft content
 - an `AGENTS.md` wire-in patch for the planned policy set
@@ -178,6 +184,7 @@ Return:
 - per-surface migration actions such as `keep`, `merge`, or `retire`
 - extracted plan, note, and memory migration surfaces
 - validation problems if recommended profiles/modules are missing from the installed library
+- duplicate adopted-policy identities with every conflicting canonical path
 - strong signals observed
 - gaps between current local policy and selected shared policy
 - whether to patch `docs/dev/policies/` and the `AGENTS.md` wire-in now or only produce a recommendation

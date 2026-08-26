@@ -15,6 +15,15 @@ tags:
   - reusable enough for the shared policy repo
 - Prefer normalizing reusable rules into small modules rather than copying giant `AGENTS.md` sections wholesale.
 - Preserve the original repo-specific wording only when the local context is essential.
+- Before adding prose policy, choose the cheapest reliable enforcement surface:
+  a deterministic check or linter, a review standard, a precise routing
+  pointer, repo-local policy, or shared policy. Prefer automation for an
+  objective failure that tooling can detect, and reserve always-loaded steering
+  text for behavior that actually requires agent judgment.
+- Treat repeated navigation cost, tool inefficiency, stale pointers, no-op
+  instructions, and unavailable evidence as harvest candidates alongside
+  behavioral rules. The durable improvement may be better information access
+  or tooling rather than more policy text.
 - Harvest from:
   - repo `AGENTS.md`
   - repeated session behavior

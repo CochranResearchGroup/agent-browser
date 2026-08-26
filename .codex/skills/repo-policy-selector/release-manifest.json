@@ -1,16 +1,16 @@
 {
   "bundle_name": "repo-policy-selector",
-  "bundle_version": "0.1.20",
+  "bundle_version": "0.1.21",
   "policy_library": {
     "catalog_path": "policy-library/catalog.yaml",
-    "content_sha256": "34201761708317a70be469dd896d1e3d57754b6328b7466e66eef837c6daffee",
+    "content_sha256": "e524dd1d539e277cc3d51c299dc9a8f5233673ddecd599fb3cb437a7664e046b",
     "relative_root": "policy-library",
     "schema_path": "policy-library/SCHEMA.md"
   },
-  "release_ref": "v0.1.20",
+  "release_ref": "v0.1.21",
   "schema_version": 1,
-  "source_commit": "6a67ab044e1110d18f5f12d8b5b9a9a6fc3a6265",
-  "source_ref": "6a67ab0",
+  "source_commit": "afaa0542e8f1ad056eb6aebbe4b83b59088dc55b",
+  "source_ref": "afaa0542e8f1ad056eb6aebbe4b83b59088dc55b",
   "source_repo_root": "/home/ecochran76/workspace.local/agent-policies",
   "source_tree_state": "clean-ref"
 }

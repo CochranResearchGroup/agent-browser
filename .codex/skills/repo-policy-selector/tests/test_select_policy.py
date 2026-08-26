@@ -185,6 +185,8 @@ class SelectPolicyRegressionTests(unittest.TestCase):
             "periodic comprehensive run",
             "Preserve the first failure",
             "pass-on-retry as flaky",
+            "If no such seam exists",
+            "architecture or testability gap",
             "retained-risk mapping",
             "presubmit_blocking_budget",
             "presubmit_compute_budget",
@@ -210,6 +212,32 @@ class SelectPolicyRegressionTests(unittest.TestCase):
         self.assertEqual(coverage["readiness"], "fully-installed")
         self.assertEqual(coverage["missing_recommended_modules"], [])
         self.assertEqual(self.select_policy.recommendation_mode(coverage), "already-aligned")
+
+    def test_duplicate_policy_identity_is_reported_and_blocks_writes(self):
+        repo_root = self.make_repo()
+        policy_dir = repo_root / "docs" / "dev" / "policies"
+        policy_dir.mkdir(parents=True, exist_ok=True)
+        first = policy_dir / "0001-planning-discipline.md"
+        second = policy_dir / "0008-planning-discipline.md"
+        first.write_text("# Policy | Planning Discipline\n\n- Old.\n", encoding="utf-8")
+        second.write_text("# Policy | Planning Discipline\n\n- Current.\n", encoding="utf-8")
+
+        installed_library = self.select_policy.enumerate_policy_library(self.policy_root)
+        modules = self.select_policy.base_modules_for_profile("standalone-library", installed_library)
+        surfaces = self.select_policy.extract_existing_policy_surfaces(repo_root)
+        coverage = self.select_policy.policy_adoption_coverage(surfaces, modules, installed_library)
+
+        self.assertEqual(coverage["readiness"], "conflicted-local-policy")
+        self.assertEqual(
+            coverage["duplicate_policy_ids"],
+            {"planning-discipline": [str(first), str(second)]},
+        )
+        self.assertEqual(
+            self.select_policy.recommendation_mode(coverage),
+            "identity-reconciliation-required",
+        )
+        with self.assertRaisesRegex(ValueError, "duplicate adopted policy identity planning-discipline"):
+            self.select_policy.require_unique_policy_identities(coverage)
 
     def test_harvest_policy_does_not_semantically_adopt_feedback_or_preview_policy(self):
         repo_root = self.make_repo()

@@ -15,6 +15,11 @@ tags:
 - Treat tests as maintained product assets with both protective value and lifecycle cost. Test count, assertion count, and raw coverage percentage are not success metrics by themselves.
 - Name the invariant or failure risk before adding a test. Place it at the cheapest layer that can prove it reliably: prefer a focused unit or contract test, use a narrow integration test for boundary behavior, and reserve end-to-end, live, soak, and exhaustive tests for risks that cheaper layers cannot establish.
 - Before adding a regression test, inspect existing coverage for the invariant. Demonstrate that the new or changed test detects the defect before the fix when practical, then passes after the fix. Consolidate overlapping cases instead of accumulating historical duplicates.
+- Put a regression test at a stable seam that exercises the real failure
+  pattern. If no such seam exists, do not add a shallow or implementation-
+  coupled proxy merely to claim coverage; record the unprotected risk and the
+  architecture or testability gap, then route remediation as a separate bounded
+  decision.
 - Keep each test independent, deterministic, order-agnostic, and hermetic by default. Declare inputs, isolate writable state, use explicit readiness signals instead of arbitrary sleeps, and keep network, provider, browser, large-data, and live-system tests out of the default local lane unless their exact risk requires them.
 - Define repo-local execution tiers and concrete wall-clock plus compute/resource budgets. At minimum distinguish focused development checks, blocking presubmit checks, periodic comprehensive regression, and opt-in live/soak/provider checks. A long comprehensive lane may remain valuable without blocking every change.
 - Use affected-test selection or explicit changed-surface manifests for fast feedback only when the dependency mapping is trustworthy. Unknown impact must widen to a documented safe fallback, and a periodic comprehensive run must detect selection drift. Never describe a selected subset as the full suite.
