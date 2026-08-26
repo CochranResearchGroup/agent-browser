@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -128,6 +128,13 @@ assert.equal(secretBackedPayload.routeInventory.length, 6);
 assert.deepEqual(
   secretBackedPayload.routeInventory.map((route) => route.target.routeUser),
   six.map((route) => route.target.routeUser),
+);
+
+const readinessSource = readFileSync('scripts/smoke-rdp-guac-route-pool-readiness.js', 'utf8');
+assert.match(
+  readinessSource,
+  /if \(!Object\.hasOwn\(process\.env, key\)\) process\.env\[key\] =/,
+  'route readiness must preserve an intentionally blank route-pool override',
 );
 
 console.log('RDP route inventory fixtures passed.');

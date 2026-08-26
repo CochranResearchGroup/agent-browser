@@ -34,7 +34,7 @@ function loadEnvFile(envPath) {
     if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
       value = value.slice(1, -1);
     }
-    if (!process.env[key]) process.env[key] = value.replace(/\\"/g, '"');
+    if (!Object.hasOwn(process.env, key)) process.env[key] = value.replace(/\\"/g, '"');
   }
 }
 
