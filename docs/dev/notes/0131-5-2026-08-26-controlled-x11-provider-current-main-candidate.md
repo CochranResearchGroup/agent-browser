@@ -117,6 +117,32 @@ attempt.
 The release build completed from source-tree head `2d940811` in 13 minutes 49
 seconds and produced the candidate identity above.
 
+## Post-Integration Read-Only Re-anchor
+
+Source integration advanced remote main to merge commit
+`9948469c80409c2cc535ead084892735b2721830`. The candidate branch remains
+published at `6bd2d7fba47ec97e442908e012764d5f6ac26e19`.
+
+A fresh production readback after integration confirmed:
+
+- the installed path command remains `agent-browser 0.28.0` and matches the
+  current installed executable;
+- workstation payload and service readiness remain true;
+- installed doctor reports only
+  `path_command_workspace_binary_mismatch`, which is expected because the
+  qualified workspace candidate was not installed;
+- the resource projection observed 238 processes and about 15.5 GB resident
+  memory, with 188 protected, 50 observed, and zero cleanup candidates;
+- cleanup obligations report 6 owned, 13 satisfied, zero transferring, and
+  zero unknown;
+- two remote-view routes remain present;
+- all 20 retained display records remain ineligible for apply, with 4 live and
+  16 diagnostic-retained classifications;
+- current service state contains no admitted production provider.
+
+This re-anchor independently confirms that the live route gate remains closed.
+No install, route, browser, controller, provider, or process mutation was made.
+
 ## Remaining Transaction Gate
 
 Before any production execution, re-anchor the remote main, exact candidate,
