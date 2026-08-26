@@ -2,9 +2,9 @@
 
 Date: 2026-08-25
 
-State: PRODUCTION CANDIDATE REQUALIFICATION IN PROGRESS
+State: PRODUCTION CANDIDATE QUALIFIED | LIVE TRANSACTION DEFERRED
 
-Execution state: `production_candidate_requalification_in_progress`
+Execution state: `production_candidate_qualified_live_deferred`
 
 Lane: P131
 
@@ -293,8 +293,12 @@ production transaction. Their historical validation receipts are recorded in
 
 Current-main reconciliation split the unattended service-GC clock repair from
 the provider feature and added exact provider-generation revalidation inside
-the route fence before every event. A new candidate identity and receipt are
-required before source integration is merge-ready.
+the route fence before every event. Candidate source-tree head `2d940811`,
+version `0.28.0`, and SHA-256
+`69c6829fe432d77fc4da140b91509a5d861e5efd981765447643c54f98e8d766`
+are qualified in
+`docs/dev/notes/0131-5-2026-08-26-controlled-x11-provider-current-main-candidate.md`.
+The source branch is merge-ready subject to a final remote-main drift check.
 
 The workstation hot-upgrade transaction and controlled repository fixture
 remain unapplied. Plan 0133 is development accepted, but its
