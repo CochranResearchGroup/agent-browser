@@ -5539,7 +5539,8 @@ no-launch and also reports service-status, runtime multiplicity, duplicate
 profile pressure, and remote-view privilege readiness. Warning-severity
 observations remain visible but do not make doctor exit nonzero. Workstation
 payload checks bind the installed binary and support assets to recorded
-SHA-256 provenance. Real-host preflight
+SHA-256 provenance. Runtime-host transition checks bind each host to its PID,
+process start token, binary hash, generation, and socket identity. Real-host preflight
 requires at least 6 GiB free before sudo, payload staging, or package mutation.
 
 Fresh install and upgrade use one durable transaction engine. Before candidate

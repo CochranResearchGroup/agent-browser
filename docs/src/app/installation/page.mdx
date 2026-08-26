@@ -315,7 +315,9 @@ fields for the Guacamole/RDP path, plus <code>service</code> readiness from a
 no-launch service-status probe. The <code>runtimeMultiplicity</code> object is a
 read-only census of dashboard processes, runtime hosts, legacy per-session
 daemons, executable generations, and any active convergence window. A drift
-report does not authorize cleanup by itself.
+report does not authorize cleanup by itself. During a bounded upgrade, each
+accepted runtime host must match its recorded PID, process start token, binary
+hash, generation, and socket identity.
 
 The authenticated runtime-health and Service Status responses project the same
 <code>runtimeLifecycle</code> contract. It distinguishes steady state from a

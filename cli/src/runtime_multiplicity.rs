@@ -13,6 +13,9 @@ pub(crate) struct RuntimeProcessEvidence {
     pub(crate) pid: u32,
     pub(crate) executable_path: String,
     pub(crate) generation_id: Option<String>,
+    pub(crate) process_start_token: Option<String>,
+    pub(crate) binary_sha256: Option<String>,
+    pub(crate) socket_identity: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -166,7 +169,9 @@ pub(crate) fn runtime_multiplicity_report(
 }
 
 /// Builds the read-only install-doctor projection from current process and
-/// workstation transaction evidence.
+/// workstation transaction evidence. Runtime-host entries retain the process
+/// start token, binary hash, and socket identity needed for exact transition
+/// validation.
 pub(crate) fn runtime_multiplicity_report_from_doctor_inputs(
     daemon_listener_inventory: &Value,
     runtime_inventory: &Value,
@@ -198,6 +203,18 @@ pub(crate) fn runtime_multiplicity_report_from_doctor_inputs(
             pid,
             generation_id: generation_id_from_executable_path(&executable_path),
             executable_path,
+            process_start_token: listener
+                .get("processStartToken")
+                .and_then(Value::as_str)
+                .map(str::to_string),
+            binary_sha256: listener
+                .get("binarySha256")
+                .and_then(Value::as_str)
+                .map(str::to_string),
+            socket_identity: listener
+                .get("socketIdentity")
+                .and_then(Value::as_str)
+                .map(str::to_string),
         };
         let socket_path = listener
             .get("socketPath")
@@ -326,6 +343,7 @@ fn dashboard_backend_process() -> Option<RuntimeProcessEvidence> {
             pid,
             generation_id: generation_id_from_executable_path(&executable_path),
             executable_path,
+            ..RuntimeProcessEvidence::default()
         })
     }
     #[cfg(not(target_os = "linux"))]
@@ -345,7 +363,41 @@ mod tests {
                 "/tmp/agent-browser/generations/{generation}/bin/agent-browser"
             ),
             generation_id: Some(generation.to_string()),
+            ..RuntimeProcessEvidence::default()
         }
+    }
+
+    #[test]
+    fn doctor_projection_preserves_exact_runtime_host_identity() {
+        let report = runtime_multiplicity_report_from_doctor_inputs(
+            &serde_json::json!({
+                "available": true,
+                "listeners": [{
+                    "pid": 42,
+                    "socketPath": "/tmp/runtime-host.sock",
+                    "exe": "/tmp/agent-browser/generations/candidate/bin/agent-browser",
+                    "processStartToken": "linux:boot:42",
+                    "binarySha256": "abc123",
+                    "socketIdentity": "unix:1:42",
+                }],
+            }),
+            &serde_json::json!({"status": "ok"}),
+            &serde_json::json!({}),
+            &serde_json::json!({"selectedGenerationId": "candidate"}),
+        );
+
+        assert_eq!(
+            report.pointer("/runtimeHosts/0/processStartToken"),
+            Some(&Value::String("linux:boot:42".to_string()))
+        );
+        assert_eq!(
+            report.pointer("/runtimeHosts/0/binarySha256"),
+            Some(&Value::String("abc123".to_string()))
+        );
+        assert_eq!(
+            report.pointer("/runtimeHosts/0/socketIdentity"),
+            Some(&Value::String("unix:1:42".to_string()))
+        );
     }
 
     #[test]

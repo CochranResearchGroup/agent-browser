@@ -2565,6 +2565,7 @@ fn daemon_listener_inventory(current_executable_realpath: Option<&str>) -> serde
                 let deleted_executable = exe_text.ends_with(" (deleted)");
                 let matches_current_executable =
                     current_executable_realpath.is_some_and(|expected| exe_text == expected);
+                let runtime_host_identity = runtime_host_listener_identity(socket_path, pid);
                 listeners.push(json!({
                     "pid": pid,
                     "socketPath": socket_path,
@@ -2573,6 +2574,9 @@ fn daemon_listener_inventory(current_executable_realpath: Option<&str>) -> serde
                     "cmdline": cmdline,
                     "deletedExecutable": deleted_executable,
                     "matchesCurrentExecutable": matches_current_executable,
+                    "processStartToken": runtime_host_identity.as_ref().map(|identity| identity.process_start_token.as_str()),
+                    "binarySha256": runtime_host_identity.as_ref().map(|identity| identity.binary_sha256.as_str()),
+                    "socketIdentity": runtime_host_identity.as_ref().map(|identity| identity.socket_identity.as_str()),
                 }));
             }
         }
@@ -2673,6 +2677,43 @@ fn daemon_listener_inventory(current_executable_realpath: Option<&str>) -> serde
             "defaultSocketDeletedExecutableCount": 0,
         })
     }
+}
+
+#[derive(Debug)]
+struct RuntimeHostListenerIdentity {
+    process_start_token: String,
+    binary_sha256: String,
+    socket_identity: String,
+}
+
+#[cfg(unix)]
+fn runtime_host_listener_identity(
+    socket_path: &str,
+    expected_pid: u32,
+) -> Option<RuntimeHostListenerIdentity> {
+    let socket_path = Path::new(socket_path);
+    if socket_path.file_name()?.to_str()? != "runtime-host.sock" {
+        return None;
+    }
+    let socket_dir = socket_path.parent()?;
+    let identity: crate::process_identity::RecordedProcessIdentity =
+        serde_json::from_slice(&fs::read(socket_dir.join("runtime-host.identity.json")).ok()?)
+            .ok()?;
+    let manifest: crate::runtime_host::RuntimeHostManifest =
+        serde_json::from_slice(&fs::read(socket_dir.join("runtime-host.json")).ok()?).ok()?;
+    if identity.pid != expected_pid
+        || manifest.pid != expected_pid
+        || manifest.executable_generation.trim().is_empty()
+        || manifest.socket_identity.trim().is_empty()
+        || !crate::process_identity::recorded_process_is_running(&identity).ok()?
+    {
+        return None;
+    }
+    Some(RuntimeHostListenerIdentity {
+        process_start_token: identity.start_token,
+        binary_sha256: manifest.executable_generation,
+        socket_identity: manifest.socket_identity,
+    })
 }
 
 #[cfg(unix)]

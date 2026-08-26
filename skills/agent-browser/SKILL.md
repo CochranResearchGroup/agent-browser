@@ -174,6 +174,8 @@ SHA-256 provenance recorded by the installer. Read `runtimeMultiplicity` for
 the independent dashboard-process, runtime-host, legacy-daemon, executable-
 generation, and active convergence-window census. A `drift` result is
 diagnostic in the compatibility phase and does not authorize process cleanup.
+During a bounded upgrade, accept a runtime host only when its PID, process
+start token, binary hash, generation, and socket identity match the transaction.
 Warning-severity doctor observations remain visible without making the command
 nonzero. Treat a quiescent historical stopped supervisor as advisory, but keep
 active-process or stream evidence, startup failure, executable drift, port

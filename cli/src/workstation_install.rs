@@ -3805,6 +3805,12 @@ fn expected_upgrade_runtime_host_transition_ready(
             host.get("pid").and_then(Value::as_u64) == Some(u64::from(expected_host.pid))
                 && host.get("generationId").and_then(Value::as_str)
                     == Some(expected_host.generation_id.as_str())
+                && host.get("processStartToken").and_then(Value::as_str)
+                    == Some(expected_host.process_start_token.as_str())
+                && host.get("binarySha256").and_then(Value::as_str)
+                    == Some(expected_host.binary_sha256.as_str())
+                && host.get("socketIdentity").and_then(Value::as_str)
+                    == Some(expected_host.socket_identity.as_str())
         };
     if hosts.len() != 2
         || !hosts.iter().any(|host| exact_host(host, old))
@@ -11538,8 +11544,20 @@ mod tests {
                         "transactionId": transaction.transaction_id.clone(),
                     },
                     "runtimeHosts": [
-                        {"generationId": "generation-old", "pid": 41},
-                        {"generationId": "generation-new", "pid": 42},
+                        {
+                            "generationId": "generation-old",
+                            "pid": 41,
+                            "processStartToken": "linux:boot:41",
+                            "binarySha256": "c".repeat(64),
+                            "socketIdentity": "unix:1:41",
+                        },
+                        {
+                            "generationId": "generation-new",
+                            "pid": 42,
+                            "processStartToken": "linux:boot:42",
+                            "binarySha256": "a".repeat(64),
+                            "socketIdentity": "unix:1:42",
+                        },
                     ],
                 },
                 "daemonListenerInventory": {
@@ -11561,6 +11579,48 @@ mod tests {
         assert!(install_doctor_reports_expected_upgrade_ready(
             &report,
             &transaction,
+            &[]
+        ));
+        let mut reused_process = transaction.clone();
+        reused_process
+            .runtime_host_convergence
+            .as_mut()
+            .unwrap()
+            .candidate_host
+            .as_mut()
+            .unwrap()
+            .process_start_token = "linux:other-boot:42".to_string();
+        assert!(!install_doctor_reports_expected_upgrade_ready(
+            &report,
+            &reused_process,
+            &[]
+        ));
+        let mut different_binary = transaction.clone();
+        different_binary
+            .runtime_host_convergence
+            .as_mut()
+            .unwrap()
+            .candidate_host
+            .as_mut()
+            .unwrap()
+            .binary_sha256 = "b".repeat(64);
+        assert!(!install_doctor_reports_expected_upgrade_ready(
+            &report,
+            &different_binary,
+            &[]
+        ));
+        let mut different_socket = transaction.clone();
+        different_socket
+            .runtime_host_convergence
+            .as_mut()
+            .unwrap()
+            .candidate_host
+            .as_mut()
+            .unwrap()
+            .socket_identity = "unix:other:42".to_string();
+        assert!(!install_doctor_reports_expected_upgrade_ready(
+            &report,
+            &different_socket,
             &[]
         ));
         let mut unrelated = report;

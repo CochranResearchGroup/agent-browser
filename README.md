@@ -361,7 +361,9 @@ files against the SHA-256 provenance recorded during installation. The
 `runtimeMultiplicity` report separately counts the dashboard process, runtime
 hosts, legacy per-session daemons, and executable generations. Until the
 single-host migration is complete, legacy daemons are reported as typed drift
-without changing or terminating them.
+without changing or terminating them. During a bounded upgrade, each accepted
+runtime host must match its recorded PID, process start token, binary hash,
+generation, and socket identity.
 
 ```bash
 agent-browser install doctor

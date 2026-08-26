@@ -1827,20 +1827,34 @@ pub fn merge_reconciled_service_state(
     }
 
     for (id, reconciled_route) in &reconciled.remote_view_routes {
-        let target_released_after_reconcile_started =
-            target.remote_view_routes.get(id).is_some_and(|route| {
-                route.state == "released"
-                    && before
-                        .remote_view_routes
-                        .get(id)
-                        .is_some_and(|before_route| before_route != route)
-            });
+        let target_route = target.remote_view_routes.get(id).cloned();
+        let target_released_after_reconcile_started = target_route.as_ref().is_some_and(|route| {
+            route.state == "released"
+                && before
+                    .remote_view_routes
+                    .get(id)
+                    .is_some_and(|before_route| before_route != route)
+        });
         if target_released_after_reconcile_started {
             continue;
         }
-        target
+        let target_authority_changed_after_reconcile_started = before
             .remote_view_routes
-            .insert(id.clone(), reconciled_route.clone());
+            .get(id)
+            .zip(target_route.as_ref())
+            .is_some_and(|(before_route, target_route)| {
+                target_route.controller_lease_id != before_route.controller_lease_id
+                    || target_route.controller_epoch != before_route.controller_epoch
+                    || target_route.viewer_lease_ids != before_route.viewer_lease_ids
+            });
+        let mut merged_route = reconciled_route.clone();
+        if target_authority_changed_after_reconcile_started {
+            let target_route = target_route.expect("changed route authority requires target route");
+            merged_route.controller_lease_id = target_route.controller_lease_id;
+            merged_route.controller_epoch = target_route.controller_epoch;
+            merged_route.viewer_lease_ids = target_route.viewer_lease_ids;
+        }
+        target.remote_view_routes.insert(id.clone(), merged_route);
     }
 
     for (id, reconciled_lease) in &reconciled.viewer_leases {
@@ -4507,6 +4521,38 @@ mod tests {
                         ..BrowserSession::default()
                     },
                 )]),
+                display_allocations: BTreeMap::from([(
+                    "display-1".to_string(),
+                    DisplayAllocation {
+                        id: "display-1".to_string(),
+                        owner_browser_id: Some("browser-1".to_string()),
+                        state: "ready".to_string(),
+                        ..DisplayAllocation::default()
+                    },
+                )]),
+                remote_view_routes: BTreeMap::from([(
+                    "route-1".to_string(),
+                    RemoteViewRoute {
+                        id: "route-1".to_string(),
+                        display_allocation_id: Some("display-1".to_string()),
+                        browser_id: Some("browser-1".to_string()),
+                        state: "ready".to_string(),
+                        viewer_lease_ids: vec!["controller-a".to_string()],
+                        controller_lease_id: Some("controller-a".to_string()),
+                        controller_epoch: 1,
+                        ..RemoteViewRoute::default()
+                    },
+                )]),
+                viewer_leases: BTreeMap::from([(
+                    "controller-a".to_string(),
+                    ViewerLease {
+                        id: "controller-a".to_string(),
+                        route_id: Some("route-1".to_string()),
+                        browser_id: Some("browser-1".to_string()),
+                        state: "controlling".to_string(),
+                        ..ViewerLease::default()
+                    },
+                )]),
                 ..ServiceState::default()
             })
             .unwrap();
@@ -4546,6 +4592,23 @@ mod tests {
                 message: "operator acknowledged overlapping incident".to_string(),
                 ..ServiceEvent::default()
             });
+            state.viewer_leases.insert(
+                "controller-b".to_string(),
+                ViewerLease {
+                    id: "controller-b".to_string(),
+                    route_id: Some("route-1".to_string()),
+                    browser_id: Some("browser-1".to_string()),
+                    state: "controlling".to_string(),
+                    ..ViewerLease::default()
+                },
+            );
+            advance_route_controller_authority(state, "route-1", Some("controller-b".to_string()))?;
+            state
+                .remote_view_routes
+                .get_mut("route-1")
+                .expect("controller route exists")
+                .viewer_lease_ids
+                .push("controller-b".to_string());
             Ok(())
         })
         .unwrap();
@@ -4568,6 +4631,17 @@ mod tests {
             .iter()
             .any(|event| event.kind == ServiceEventKind::Reconciliation));
         assert!(persisted.tabs.contains_key("target:page-1"));
+        assert_eq!(
+            persisted.remote_view_routes["route-1"]
+                .controller_lease_id
+                .as_deref(),
+            Some("controller-b")
+        );
+        assert_eq!(persisted.remote_view_routes["route-1"].controller_epoch, 2);
+        assert!(persisted.remote_view_routes["route-1"]
+            .viewer_lease_ids
+            .iter()
+            .any(|id| id == "controller-b"));
         assert_eq!(
             persisted.sessions["session-1"].tab_ids,
             vec!["target:page-1".to_string()]

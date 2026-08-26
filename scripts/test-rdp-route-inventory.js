@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -11,6 +11,7 @@ import {
   legacyTwoRouteInventory,
   selectManagedRouteCandidates,
 } from './lib/rdp-route-inventory.js';
+import { loadAgentBrowserEnv } from './lib/agent-browser-env.js';
 
 const six = canonicalRouteInventory(
   Array.from({ length: 6 }, (_, index) => ({
@@ -130,10 +131,15 @@ assert.deepEqual(
   six.map((route) => route.target.routeUser),
 );
 
-const readinessSource = readFileSync('scripts/smoke-rdp-guac-route-pool-readiness.js', 'utf8');
-assert.match(
-  readinessSource,
-  /if \(!Object\.hasOwn\(process\.env, key\)\) process\.env\[key\] =/,
+const blankOverrideEnvironment = {
+  HOME: fixtureBin,
+  AGENT_BROWSER_GUACAMOLE_SECRET_FILE: secretFile,
+  AGENT_BROWSER_RDP_ROUTE_POOL_JSON: '',
+};
+loadAgentBrowserEnv(blankOverrideEnvironment);
+assert.equal(
+  blankOverrideEnvironment.AGENT_BROWSER_RDP_ROUTE_POOL_JSON,
+  '',
   'route readiness must preserve an intentionally blank route-pool override',
 );
 

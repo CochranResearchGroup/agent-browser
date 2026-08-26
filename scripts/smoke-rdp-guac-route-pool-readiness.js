@@ -3,7 +3,7 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { loadAgentBrowserEnv } from './lib/agent-browser-env.js';
 import {
   routeDisplayInspectorPath,
   selectRouteDisplayName,
@@ -20,29 +20,6 @@ const allowSharedTarget = process.argv.includes('--allow-shared-target');
 const shellOutput = process.argv.includes('--shell');
 
 loadAgentBrowserEnv();
-
-function loadEnvFile(envPath) {
-  if (!existsSync(envPath)) return;
-  const text = readFileSync(envPath, 'utf8');
-  for (const line of text.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const separatorIndex = trimmed.indexOf('=');
-    if (separatorIndex <= 0) continue;
-    const key = trimmed.slice(0, separatorIndex).trim();
-    let value = trimmed.slice(separatorIndex + 1).trim();
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
-    }
-    if (!Object.hasOwn(process.env, key)) process.env[key] = value.replace(/\\"/g, '"');
-  }
-}
-
-function loadAgentBrowserEnv() {
-  const agentHome = process.env.AGENT_BROWSER_HOME || join(process.env.HOME || '', '.agent-browser');
-  loadEnvFile(join(agentHome, '.env'));
-  loadEnvFile(process.env.AGENT_BROWSER_GUACAMOLE_SECRET_FILE || join(agentHome, 'secrets', 'guacamole.env'));
-}
 
 function commandResult(command, args, options = {}) {
   return spawnSync(command, args, {

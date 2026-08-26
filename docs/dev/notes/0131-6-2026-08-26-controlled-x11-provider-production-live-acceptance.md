@@ -157,3 +157,40 @@ Slice F. The next recommended step is review and integration of this reconciled
 feature branch, followed by separately authorized Slice F planning updates.
 Formal release and any real credential workflow remain separate maintainer
 decisions.
+
+## Merge Review Remediation
+
+A later review against the production hotfixes found three source-level merge
+blockers. They did not invalidate the retained live acceptance receipt, but the
+branch was not ready to merge until they were corrected:
+
+- reconciliation could restore stale controller authority if another
+  controller took over while the asynchronous health probe was running;
+- transitional runtime-host acceptance compared only PID and generation, so it
+  did not reject every form of PID reuse or binary and socket substitution;
+- the blank route-pool override regression inspected source text instead of
+  exercising the environment-loading behavior.
+
+The reconciled source now preserves a newer controller lease, controller epoch,
+and viewer set while still applying fresh health observations. Transitional
+runtime hosts must match the transaction's PID, process start token, binary
+hash, generation, and socket identity. The route-pool test now loads an actual
+fixture environment and proves that an intentionally blank override remains
+blank.
+
+In plain English, a background health check can no longer undo a controller
+handoff that happened while it was checking the browser. An upgrade can no
+longer mistake a reused process number or a different binary or socket for the
+runtime host it approved. The environment regression now tests what the code
+does instead of checking how the code happens to be written.
+
+The remediation passed strict Clippy, Rust formatting, all 92 workstation
+installer tests, all 78 service-health tests, focused runtime-multiplicity and
+host-identity regressions, the route-inventory behavior test, six workstation
+and Guacamole fixture suites, the remote-view documentation contract, and the
+production docs build.
+
+This is a source merge-readiness update only. The installed production
+candidate remains the accepted `cdb883f5` artifact identified above. No binary
+was rebuilt or installed, no workstation transaction was started, and no live
+runtime or provider state was changed during merge remediation.
