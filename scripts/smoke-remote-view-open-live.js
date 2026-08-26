@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process';
-import { createServer } from 'node:http';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -62,25 +61,12 @@ function createFixtureServer() {
     '</body>',
     '</html>',
   ].join('');
-  const server = createServer((_req, res) => {
-    res.writeHead(200, {
-      'content-type': 'text/html; charset=utf-8',
-      'cache-control': 'no-store',
-    });
-    res.end(html);
-  });
-  return new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      resolve({
-        marker,
-        ocrMarker,
-        targetUrl: `http://127.0.0.1:${address.port}/`,
-        close: () => new Promise((done) => server.close(done)),
-      });
-    });
-  });
+  return {
+    marker,
+    ocrMarker,
+    targetUrl: `data:text/html;charset=utf-8,${encodeURIComponent(html)}`,
+    close: async () => {},
+  };
 }
 
 function envValue(name) {
@@ -408,6 +394,8 @@ function remoteViewOpenRepeatCliArgs(routeEntry, openedIds, taskName, targetUrl)
     displayIsolationForRoute(routeEntry),
     '--route-id',
     openedIds.routeId,
+    '--route-pool-entry-id',
+    routeEntry.id,
     '--display-allocation-id',
     openedIds.displayAllocationId,
     '--service-name',
