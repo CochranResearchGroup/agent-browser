@@ -1254,3 +1254,36 @@ Do not implement migration or installer effects in Slice A.
   rebuilt candidate, candidate-led reconciliation, successful old-reader
   reconciliation, the authenticated candidate presentation gate, and final
   installed doctor plus consumer acceptance.
+
+## 2026-08-27 rebuilt candidate and legacy handoff blocker
+
+- Candidate-led reconciliation normalized seven historical terminal records,
+  removed only one unreferenced failed generation, terminated no processes,
+  and removed no Service State records. The selected old generation then read
+  the projected ledger and completed its own reconciliation with a healthy
+  zero-failure monitor. This closes the mixed-version terminal-ledger defect.
+- The rebuilt release candidate is bound to source commit `efacc2a2`, binary
+  SHA-256 `8b1a06e4c4a173e6b6fab0e3ad688e7c118630fa0d03617b967eb5ced5bee5e3`,
+  and immutable generation `0.28.0-8b1a06e4c4a1-a8e1f6eca3d4`.
+- Guarded transaction `upgrade-46ca56d5-6385-4141-8363-c9b065016e2c`
+  reached the authenticated candidate-presentation gate. Authenticated
+  resolutions through candidate port 4850 were attempted only against
+  existing ready durable handoffs. They performed no provider-route creation
+  or rebinding.
+- Every sampled retained handoff failed current-owner resolution with
+  `runtime_handoff_orphan_browser_hint_mismatch`: its recorded source session
+  was no longer bound to its recorded logical browser. The old-generation
+  presentation receipt therefore could not be promoted into candidate
+  evidence. No guard was bypassed.
+- The transaction rolled back to
+  `0.28.0-32e8c9318beb-b2bd0fba532f` at revision 12 with stop reason
+  `candidate_dashboard_presentation_unproven`. Ingress returned to the old
+  backend, the candidate process and generation were removed, and both the
+  candidate and installed readers reconciled with no process or Service State
+  deletion.
+- Installation now needs one of two separately reviewed prerequisites: an
+  exact migration or reconciliation that proves and repairs a legacy durable
+  handoff's current owner, session, browser, process, target, route, and
+  display binding without provider mutation; or exact authorization for one
+  fresh production presentation route and durable handoff. A retry before one
+  prerequisite is satisfied will repeat the five-minute zero-effect rollback.
