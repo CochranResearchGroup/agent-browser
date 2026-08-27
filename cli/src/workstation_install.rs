@@ -1837,7 +1837,12 @@ fn install_transaction_classification(
     transaction: &crate::runtime_adoption::UpgradeTransaction,
 ) -> &'static str {
     use crate::runtime_adoption::UpgradeTransactionState::*;
-    if transaction.terminal_result.as_deref() == Some("closed_zero_effect") {
+    if transaction.terminal_result.as_deref() == Some("closed_zero_effect")
+        || transaction.checkpoints.iter().any(|checkpoint| {
+            checkpoint.name == "closed_zero_effect"
+                || checkpoint.name == "closed_zero_effect_old_reader_compatible"
+        })
+    {
         return "terminal_zero_effect_history";
     }
     match transaction.state {
@@ -2928,6 +2933,8 @@ fn reconcile_runtime_maintenance() -> Result<Value, String> {
                 },
             }))
         })?;
+        let normalized_terminal_transactions =
+            normalize_terminal_install_transactions_for_old_reader(&root)?;
         let generation_gc = workstation_generation_gc_locked(&root, &paths, InstallMode::Apply)?;
         Ok(serde_json::json!({
             "routeUsers": {
@@ -2935,6 +2942,7 @@ fn reconcile_runtime_maintenance() -> Result<Value, String> {
                 "credentialContract": "non_pam_sha512",
             },
             "service": service_effects,
+            "normalizedTerminalTransactionIds": normalized_terminal_transactions,
             "generations": generation_gc,
         }))
     })();
@@ -5611,7 +5619,104 @@ fn persist_upgrade_transition(
         checkpoint_name,
         &runtime_adoption_timestamp(),
     )?;
+    if next_state == crate::runtime_adoption::UpgradeTransactionState::FailedPreservedOldGeneration
+        && terminal_transaction_requires_old_reader_projection(transaction)
+    {
+        persist_full_terminal_transaction_detail(path, transaction)?;
+        make_terminal_transaction_old_reader_compatible(transaction);
+    }
     write_private_json_atomic(path, transaction)
+}
+
+fn persist_full_terminal_transaction_detail(
+    transaction_path: &Path,
+    transaction: &crate::runtime_adoption::UpgradeTransaction,
+) -> Result<(), String> {
+    let artifacts_dir = transaction_path
+        .parent()
+        .and_then(Path::parent)
+        .ok_or_else(|| "install_transaction_artifacts_directory_unavailable".to_string())?
+        .join("transaction-artifacts");
+    write_private_json_atomic(
+        &artifacts_dir.join(format!(
+            "{}.terminal-detail.json",
+            transaction.transaction_id
+        )),
+        transaction,
+    )
+}
+
+fn terminal_transaction_requires_old_reader_projection(
+    transaction: &crate::runtime_adoption::UpgradeTransaction,
+) -> bool {
+    !transaction.runtime_handoffs.is_empty()
+        || transaction.service_state_migration.is_some()
+        || transaction.terminal_result.as_deref() == Some("closed_zero_effect")
+}
+
+/// Reduces a successfully rolled-back transaction to the field vocabulary
+/// understood by the restored generation. The full candidate record is kept
+/// in the private terminal-detail artifact before this projection is written.
+fn make_terminal_transaction_old_reader_compatible(
+    transaction: &mut crate::runtime_adoption::UpgradeTransaction,
+) {
+    transaction.runtime_handoffs.clear();
+    transaction.service_state_migration = None;
+    if transaction.terminal_result.as_deref() == Some("closed_zero_effect") {
+        transaction.terminal_result = Some("old_generation_preserved".to_string());
+    }
+}
+
+/// Repairs terminal records produced before terminal projection was enforced.
+/// Active or operator-recovery transactions are never rewritten.
+fn normalize_terminal_install_transactions_for_old_reader(
+    root: &Path,
+) -> Result<Vec<String>, String> {
+    use crate::runtime_adoption::{UpgradeCheckpoint, UpgradeTransaction, UpgradeTransactionState};
+
+    let transaction_dir = root.join(".agent-browser/runtime-adoption/transactions");
+    let entries = match fs::read_dir(&transaction_dir) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => {
+            return Err(display_io(
+                "read install transaction directory",
+                &transaction_dir,
+            )(error))
+        }
+    };
+    let mut paths = entries
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().and_then(|value| value.to_str()) == Some("json"))
+        .collect::<Vec<_>>();
+    paths.sort();
+    let mut normalized = Vec::new();
+    for path in paths {
+        let mut transaction: UpgradeTransaction = serde_json::from_slice(
+            &fs::read(&path).map_err(display_io("read install transaction", &path))?,
+        )
+        .map_err(|error| format!("install_transaction_invalid:{}:{error}", path.display()))?;
+        if transaction.state != UpgradeTransactionState::FailedPreservedOldGeneration
+            || !terminal_transaction_requires_old_reader_projection(&transaction)
+        {
+            continue;
+        }
+        persist_full_terminal_transaction_detail(&path, &transaction)?;
+        transaction.revision = transaction
+            .revision
+            .checked_add(1)
+            .ok_or_else(|| "upgrade_transaction_revision_exhausted".to_string())?;
+        transaction.checkpoints.push(UpgradeCheckpoint {
+            name: "terminal_ledger_old_reader_compatible".to_string(),
+            transaction_revision: transaction.revision,
+            recorded_at: runtime_adoption_timestamp(),
+        });
+        make_terminal_transaction_old_reader_compatible(&mut transaction);
+        write_private_json_atomic(&path, &transaction)?;
+        normalized.push(transaction.transaction_id);
+    }
+    Ok(normalized)
 }
 
 fn persist_admission_drain(
@@ -14136,12 +14241,15 @@ mod tests {
             serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
         assert_eq!(
             persisted.terminal_result.as_deref(),
-            Some("closed_zero_effect")
+            Some("old_generation_preserved")
         );
         assert_eq!(
             install_transaction_classification(&persisted),
             "terminal_zero_effect_history"
         );
+        let legacy_projection: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert!(legacy_projection.get("runtimeHandoffs").is_none());
+        assert!(legacy_projection.get("serviceStateMigration").is_none());
 
         fs::remove_dir_all(root).unwrap();
     }
@@ -14188,12 +14296,82 @@ mod tests {
         assert_eq!(persisted.revision, 5);
         assert_eq!(
             persisted.terminal_result.as_deref(),
-            Some("closed_zero_effect")
+            Some("old_generation_preserved")
         );
         assert_eq!(
             install_transaction_classification(&persisted),
             "terminal_zero_effect_history"
         );
+        let legacy_projection: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert!(legacy_projection.get("runtimeHandoffs").is_none());
+        assert!(legacy_projection.get("serviceStateMigration").is_none());
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn unattended_reconcile_normalizes_terminal_candidate_fields_for_old_reader() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-terminal-ledger-compatibility-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "generation-candidate".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.state =
+            crate::runtime_adoption::UpgradeTransactionState::FailedPreservedOldGeneration;
+        transaction.revision = 12;
+        transaction.terminal_result = Some("old_generation_preserved".to_string());
+        transaction.service_state_migration =
+            Some(crate::runtime_adoption::UpgradeServiceStateMigration {
+                schema_version: "agent-browser.upgrade-service-state-migration.v1".to_string(),
+                source_state_schema: "agent-browser.service-state.unversioned".to_string(),
+                target_state_schema: "agent-browser.service-state.v2".to_string(),
+                source_profile_lease_schema: None,
+                target_profile_lease_schema: "agent-browser.profile-lease.v1".to_string(),
+                status: "staged_validated_forward".to_string(),
+                authoritative_state_path: root
+                    .join(".agent-browser/service/state.json")
+                    .display()
+                    .to_string(),
+                authoritative_state_existed: true,
+                snapshot_path: Some("snapshot.json".to_string()),
+                snapshot_sha256: Some("c".repeat(64)),
+                staged_path: Some("staged.json".to_string()),
+                staged_sha256: Some("d".repeat(64)),
+                committed: false,
+                rollback_ready: true,
+                old_reader_compatible: true,
+            });
+        let path = transaction_path(&root, &transaction.transaction_id);
+        write_private_json_atomic(&path, &transaction).unwrap();
+
+        let normalized = normalize_terminal_install_transactions_for_old_reader(&root).unwrap();
+        assert_eq!(normalized, vec![transaction.transaction_id.clone()]);
+        let legacy_projection: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert!(legacy_projection.get("runtimeHandoffs").is_none());
+        assert!(legacy_projection.get("serviceStateMigration").is_none());
+        assert_eq!(legacy_projection["revision"], 13);
+        assert_eq!(
+            legacy_projection["checkpoints"]
+                .as_array()
+                .unwrap()
+                .last()
+                .unwrap()["name"],
+            "terminal_ledger_old_reader_compatible"
+        );
+        let detail = root
+            .join(".agent-browser/runtime-adoption/transaction-artifacts")
+            .join(format!(
+                "{}.terminal-detail.json",
+                transaction.transaction_id
+            ));
+        let retained_detail: Value = serde_json::from_slice(&fs::read(detail).unwrap()).unwrap();
+        assert!(retained_detail.get("serviceStateMigration").is_some());
 
         fs::remove_dir_all(root).unwrap();
     }
@@ -14364,6 +14542,11 @@ mod tests {
         );
         assert_eq!(selected_generation_id(&install_paths(&root)), None);
         assert!(!root.join(".agent-browser/service/state.json").exists());
+        let transaction_path = transaction_path(&root, &guard.transaction_id);
+        let legacy_projection: Value =
+            serde_json::from_slice(&fs::read(transaction_path).unwrap()).unwrap();
+        assert!(legacy_projection.get("runtimeHandoffs").is_none());
+        assert!(legacy_projection.get("serviceStateMigration").is_none());
 
         remove_generation_tree(&root).unwrap();
     }

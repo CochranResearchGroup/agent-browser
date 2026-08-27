@@ -1316,6 +1316,11 @@ publish or replace the installed binary, recreate Guacamole, quiesce user
 units, or restart the dashboard. It records current state and bounded backoff
 in <code>~/.agent-browser/convergence/runtime-monitor.json</code> and emits a
 typed incident after three consecutive effect failures.
+When rollback restores the old generation, the active transaction ledger keeps
+only fields and terminal values that old generation can parse. The full
+candidate-era record is retained in a private terminal-detail artifact.
+Reconciliation repairs older terminal records that predate this projection,
+but does not rewrite active or operator-recovery transactions.
 After finalization marks the old generation retirable, readiness no longer
 requires reviewed GC to retain that obsolete rollback payload.
 Duplicate-profile pressure and a quiescent stopped optional session supervisor

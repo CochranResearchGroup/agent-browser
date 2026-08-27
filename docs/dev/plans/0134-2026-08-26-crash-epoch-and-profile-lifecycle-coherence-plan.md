@@ -1234,3 +1234,23 @@ Do not implement migration or installer effects in Slice A.
   contract drift improved, but the installed acceptance state did not change.
   No provider, profile, owner, lease, Service State, browser, route, or
   generation effect occurred during this audit.
+
+## 2026-08-27 terminal ledger compatibility follow-up
+
+- Candidate reconciliation cleared the prior seven-failure monitor incident,
+  but the restored old binary then failed on a terminal transaction's
+  candidate-only `serviceStateMigration` field. Rollback had preserved runtime
+  effects correctly while leaving its active bookkeeping forward-only.
+- Terminal rollback now retains the complete candidate record in a private
+  `transaction-artifacts/<transaction-id>.terminal-detail.json` artifact and
+  writes only old-reader-compatible fields and terminal values to the active
+  transaction ledger. The checkpoint history preserves zero-effect
+  classification.
+- Unattended reconciliation applies the same projection to already-terminal
+  `failed_preserved_old_generation` records. It does not rewrite active,
+  accepted, or operator-recovery transactions.
+- Focused tests cover guarded close, retroactive terminal normalization, and a
+  real post-commit Service State rollback. Installed proof still requires a
+  rebuilt candidate, candidate-led reconciliation, successful old-reader
+  reconciliation, the authenticated candidate presentation gate, and final
+  installed doctor plus consumer acceptance.

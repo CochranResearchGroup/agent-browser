@@ -192,10 +192,13 @@ agent-browser install transactions rollback --transaction-id <id> --expected-rev
 
 These guards are compare-and-swap evidence. A mismatch means re-inspect; do not
 bypass it. `close` accepts only a proven zero-effect terminal transaction.
-The ledger keeps an older-reader-compatible failed terminal state and records
-`terminalResult: closed_zero_effect`; current list and inspect output classify
-that combination as terminal zero-effect history. A legacy
+The active ledger keeps an older-reader-compatible failed terminal state and
+terminal result. Full candidate-era fields remain in a private terminal-detail
+artifact, while the close checkpoint lets current list and inspect output
+classify the projection as terminal zero-effect history. A legacy
 `closed_zero_effect` enum advertises one exact guarded `close` normalization.
+Workstation reconciliation repairs this projection for older terminal records
+without rewriting active or operator-recovery transactions.
 There is no generic force unlock. Resume revalidates immutable candidate and
 schema evidence, while rollback restores the exact pre-migration bytes and
 prior selector when commit already occurred.

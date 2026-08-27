@@ -347,11 +347,12 @@ agent-browser install transactions close --transaction-id upgrade-... --expected
 
 Every mismatch fails compare-and-swap without changing the selected generation
 or Service State. `close` is limited to a proven zero-effect terminal record.
-For mixed-version safety, the durable state remains an older-reader-compatible
-failed terminal state while `terminalResult: closed_zero_effect` records the
-more precise outcome. Newer list and inspect output still classify it as
-terminal zero-effect history. A legacy `closed_zero_effect` enum advertises
-one exact guarded `close` action to normalize that record.
+For mixed-version safety, the active ledger uses an older-reader-compatible
+failed terminal state and terminal result. The precise candidate-era record is
+retained as a private terminal-detail artifact, and the close checkpoint keeps
+zero-effect history distinguishable in newer list and inspect output. A legacy
+`closed_zero_effect` enum advertises one exact guarded `close` action to
+normalize that record.
 Rollback after generation and state commit restores the exact state snapshot
 and previous selector or enters typed operator recovery. There is no inferred
 latest transaction and no broad force-unlock operation.
@@ -379,7 +380,10 @@ bounded backoff and become a typed incident on the third consecutive failure;
 ambiguous and reviewable resources remain untouched. The authenticated
 dashboard summarizes steady-state multiplicity, protected, reclaimable, and
 unowned RSS, cleanup obligations, retention results, monitor freshness, and
-blocking reconciliation incidents from the same receipts.
+blocking reconciliation incidents from the same receipts. Reconciliation also
+repairs already-terminal rollback records that contain candidate-only fields,
+while preserving their full detail privately. It never applies that projection
+to active or operator-recovery transactions.
 `agent-browser install workstation backup --json` performs the same protected
 PostgreSQL backup operation used by the installed timer.
 
