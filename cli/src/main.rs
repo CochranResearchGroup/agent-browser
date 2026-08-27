@@ -3277,6 +3277,7 @@ fn command_executes_locally_before_daemon(cmd: &serde_json::Value) -> bool {
                     | "service_resources_monitor_summary"
                     | "service_resources_write_monitor_summary"
                     | "service_status"
+                    | "service_profile_leases"
                     | "service_gc"
                     | "service_prune_retained"
                     | "service_repair_retained"
@@ -3453,6 +3454,7 @@ mod tests {
     fn test_command_skips_browser_launch_for_service_resource_maintenance() {
         for action in [
             "service_resources",
+            "service_profile_leases",
             "service_resources_monitor_summary",
             "service_resources_write_monitor_summary",
             "service_gc",

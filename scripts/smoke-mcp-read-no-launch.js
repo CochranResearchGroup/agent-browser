@@ -28,7 +28,8 @@ let mcp;
 
 const MCP_TOOL_ALLOWLIST = [
   'service_access_plan', 'service_request', 'desktop_capture', 'desktop_locate',
-  'desktop_prompt_observe', 'desktop_interact', 'service_job_cancel', 'service_browser_retry',
+  'desktop_evidence_observe', 'desktop_prompt_observe', 'desktop_interact',
+  'service_job_cancel', 'service_browser_retry',
   'service_status',
   'service_incidents', 'service_remedies_apply', 'service_profile_upsert',
   'service_profile_delete', 'service_profile_freshness_update',
@@ -63,7 +64,8 @@ const MCP_RESOURCE_ALLOWLIST = [
   'agent-browser://browser-capability-registry', 'agent-browser://incidents',
   'agent-browser://profiles', 'agent-browser://sessions', 'agent-browser://browsers',
   'agent-browser://display-allocations', 'agent-browser://remote-view-routes',
-  'agent-browser://route-pool', 'agent-browser://viewer-leases', 'agent-browser://tabs',
+  'agent-browser://route-pool', 'agent-browser://viewer-leases',
+  'agent-browser://profile-leases', 'agent-browser://tabs',
   'agent-browser://monitors', 'agent-browser://site-policies', 'agent-browser://providers',
   'agent-browser://challenges', 'agent-browser://jobs', 'agent-browser://events',
 ];
@@ -225,7 +227,7 @@ try {
     };
     assert(
       isDeepStrictEqual(inventory.tools.tools?.map((tool) => tool.name), MCP_TOOL_ALLOWLIST),
-      'MCP tool inventory drifted from the frozen allowlist',
+      `MCP tool inventory drifted from the frozen allowlist: ${JSON.stringify(inventory.tools.tools?.map((tool) => tool.name))}`,
     );
     assert(
       isDeepStrictEqual(

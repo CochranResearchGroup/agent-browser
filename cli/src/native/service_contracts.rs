@@ -21,6 +21,7 @@ pub const SERVICE_DISPLAY_ALLOCATIONS_HTTP_ROUTE: &str = "/api/service/display-a
 pub const SERVICE_REMOTE_VIEW_ROUTES_HTTP_ROUTE: &str = "/api/service/remote-view-routes";
 pub const SERVICE_ROUTE_POOL_HTTP_ROUTE: &str = "/api/service/route-pool";
 pub const SERVICE_VIEWER_LEASES_HTTP_ROUTE: &str = "/api/service/viewer-leases";
+pub const SERVICE_PROFILE_LEASES_HTTP_ROUTE: &str = "/api/service/profile-leases";
 pub const SERVICE_REMEDIES_APPLY_HTTP_ROUTE: &str = "/api/service/remedies/apply";
 pub const SERVICE_MONITORS_RUN_DUE_HTTP_ROUTE: &str = "/api/service/monitors/run-due";
 pub const SERVICE_MONITOR_PAUSE_HTTP_ROUTE: &str = "/api/service/monitors/<id>/pause";
@@ -33,6 +34,7 @@ pub const SERVICE_DISPLAY_ALLOCATIONS_MCP_RESOURCE: &str = "agent-browser://disp
 pub const SERVICE_REMOTE_VIEW_ROUTES_MCP_RESOURCE: &str = "agent-browser://remote-view-routes";
 pub const SERVICE_ROUTE_POOL_MCP_RESOURCE: &str = "agent-browser://route-pool";
 pub const SERVICE_VIEWER_LEASES_MCP_RESOURCE: &str = "agent-browser://viewer-leases";
+pub const SERVICE_PROFILE_LEASES_MCP_RESOURCE: &str = "agent-browser://profile-leases";
 pub const SERVICE_ACCESS_PLAN_MCP_TOOL_NAME: &str = "service_access_plan";
 pub const SERVICE_REQUEST_MCP_TOOL_NAME: &str = "service_request";
 pub const DESKTOP_CAPTURE_MCP_TOOL_NAME: &str = "desktop_capture";
@@ -102,6 +104,8 @@ pub const SERVICE_ROUTE_POOL_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-route-pool-response.v1.schema.json";
 pub const SERVICE_VIEWER_LEASES_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-viewer-leases-response.v1.schema.json";
+pub const SERVICE_PROFILE_LEASES_RESPONSE_SCHEMA_ID: &str =
+    "https://agent-browser.local/contracts/service-profile-leases-response.v1.schema.json";
 pub const SERVICE_MONITOR_RUN_DUE_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-monitor-run-due-response.v1.schema.json";
 pub const SERVICE_MONITOR_STATE_RESPONSE_SCHEMA_ID: &str =
@@ -712,6 +716,24 @@ pub fn service_contracts_metadata() -> Value {
                 },
                 "noLaunch": true,
             },
+            "serviceProfileLeasesResponse": {
+                "version": SERVICE_REQUEST_CONTRACT_VERSION,
+                "schemaId": SERVICE_PROFILE_LEASES_RESPONSE_SCHEMA_ID,
+                "schemaPath": "docs/dev/contracts/service-profile-leases-response.v1.schema.json",
+                "http": {
+                    "method": "GET",
+                    "route": SERVICE_PROFILE_LEASES_HTTP_ROUTE,
+                },
+                "mcp": {
+                    "resource": SERVICE_PROFILE_LEASES_MCP_RESOURCE,
+                },
+                "client": {
+                    "module": "@agent-browser/client/service-observability",
+                    "helpers": ["getServiceProfileLeases", "findServiceProfileLease"],
+                },
+                "operations": ["list", "inspect", "explain", "doctor", "watch", "rejoin", "renew", "release", "reconcile_plan", "reconcile_apply"],
+                "noLaunch": true,
+            },
             "serviceMonitorRunDueResponse": {
                 "version": SERVICE_REQUEST_CONTRACT_VERSION,
                 "schemaId": SERVICE_MONITOR_RUN_DUE_RESPONSE_SCHEMA_ID,
@@ -836,6 +858,7 @@ pub fn service_contracts_metadata() -> Value {
             "serviceRemoteViewRoutesResource": SERVICE_REMOTE_VIEW_ROUTES_MCP_RESOURCE,
             "serviceRoutePoolResource": SERVICE_ROUTE_POOL_MCP_RESOURCE,
             "serviceViewerLeasesResource": SERVICE_VIEWER_LEASES_MCP_RESOURCE,
+            "serviceProfileLeasesResource": SERVICE_PROFILE_LEASES_MCP_RESOURCE,
             "serviceRemediesApplyTool": SERVICE_REMEDIES_APPLY_MCP_TOOL_NAME,
             "serviceMonitorsRunDueTool": SERVICE_MONITORS_RUN_DUE_MCP_TOOL_NAME,
             "serviceMonitorPauseTool": SERVICE_MONITOR_PAUSE_MCP_TOOL_NAME,
@@ -1144,6 +1167,18 @@ mod tests {
         assert_eq!(
             metadata["contracts"]["serviceViewerLeasesResponse"]["mcp"]["resource"],
             SERVICE_VIEWER_LEASES_MCP_RESOURCE
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceProfileLeasesResponse"]["schemaId"],
+            SERVICE_PROFILE_LEASES_RESPONSE_SCHEMA_ID
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceProfileLeasesResponse"]["http"]["route"],
+            SERVICE_PROFILE_LEASES_HTTP_ROUTE
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceProfileLeasesResponse"]["mcp"]["resource"],
+            SERVICE_PROFILE_LEASES_MCP_RESOURCE
         );
         assert_eq!(
             metadata["contracts"]["serviceMonitorRunDueResponse"]["schemaId"],

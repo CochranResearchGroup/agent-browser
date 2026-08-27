@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-profile-lease-record.v1.schema.json",
+  "title": "agent-browser service profile lease record",
+  "description": "Authenticated principal-scoped profile lease with exact lifecycle recourse.",
+  "type": "object",
+  "required": [
+    "schemaVersion", "id", "leaseRevision", "principalId", "principalProvenance",
+    "profileId", "profileIdentityDigest", "browserId", "sessionIds", "tabIds",
+    "mode", "state", "ownerGeneration", "processInstanceDigest", "routeIds",
+    "lastHeartbeatAt", "expiresAt", "cleanupObligation", "blockingIdentityAxes",
+    "authorizedActions", "recourse", "observationOnly"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "agent-browser.profile-lease.v1" },
+    "id": { "type": "string" },
+    "leaseRevision": { "type": "string" },
+    "principalId": { "type": ["string", "null"] },
+    "principalProvenance": { "type": ["string", "null"], "enum": ["registered_capability", "authenticated_transport", "unproven_legacy", null] },
+    "profileId": { "type": "string" },
+    "profileIdentityDigest": { "type": ["string", "null"] },
+    "browserId": { "type": ["string", "null"] },
+    "sessionIds": { "type": "array", "items": { "type": "string" } },
+    "tabIds": { "type": "array", "items": { "type": "string" } },
+    "mode": { "type": "string" },
+    "state": { "type": "string" },
+    "ownerGeneration": { "type": ["integer", "null"], "minimum": 0 },
+    "processInstanceDigest": { "type": ["string", "null"] },
+    "routeIds": { "type": "array", "items": { "type": "string" } },
+    "lastHeartbeatAt": { "type": ["string", "null"], "format": "date-time" },
+    "expiresAt": { "type": ["string", "null"], "format": "date-time" },
+    "cleanupObligation": { "type": ["string", "null"] },
+    "blockingIdentityAxes": { "type": "array", "items": { "type": "string" } },
+    "authorizedActions": { "type": "array", "items": { "type": "string" } },
+    "recourse": { "type": "string", "enum": ["rejoin_owned_browser", "replace_stale_same_principal_session", "wait_for_foreign_principal", "reconcile_principal_identity"] },
+    "observationOnly": { "type": "boolean" }
+  },
+  "additionalProperties": false
+}

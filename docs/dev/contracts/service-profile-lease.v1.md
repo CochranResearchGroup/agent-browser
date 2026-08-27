@@ -54,6 +54,9 @@ available for diagnosis but returns `effectCapable: false` with
 `boot_epoch_unavailable`. This prevents the control plane from applying a
 cross-boot repair using incomplete evidence.
 
-The current source checkpoint provides the canonical model and pure guarded
-operations. CLI, HTTP, MCP, dashboard, generated-client, event, schema, and
-watch parity remain in progress within Slice C.
+The current source checkpoint provides the canonical model, pure guarded
+operations, record and collection schemas, and collection parity through CLI
+`agent-browser service leases`, HTTP `GET /api/service/profile-leases`, MCP
+`agent-browser://profile-leases`, and generated client helpers. Owner mutation,
+detail, explain, watch, event, and dashboard parity remain in progress within
+Slice C.

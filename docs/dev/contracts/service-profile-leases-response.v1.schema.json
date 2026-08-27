@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-profile-leases-response.v1.schema.json",
+  "title": "agent-browser service profile leases response",
+  "description": "Compact first-class profile lease collection with doctor findings.",
+  "type": "object",
+  "required": ["profileLeases", "count", "observedAt", "doctor"],
+  "properties": {
+    "profileLeases": { "type": "array", "items": { "$ref": "service-profile-lease-record.v1.schema.json" } },
+    "count": { "type": "integer", "minimum": 0 },
+    "observedAt": { "type": "string", "format": "date-time" },
+    "doctor": { "type": "object" }
+  },
+  "additionalProperties": true
+}

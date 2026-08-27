@@ -453,6 +453,32 @@ export interface ServiceViewerLeaseRecord {
   [key: string]: unknown;
 }
 
+export interface ServiceProfileLeaseRecord {
+  schemaVersion: 'agent-browser.profile-lease.v1';
+  id: string;
+  leaseRevision: string;
+  principalId: string | null;
+  principalProvenance: 'registered_capability' | 'authenticated_transport' | 'unproven_legacy' | null;
+  profileId: string;
+  profileIdentityDigest: string | null;
+  browserId: string | null;
+  sessionIds: string[];
+  tabIds: string[];
+  mode: 'idle' | 'shared' | 'exclusive' | 'human_takeover' | string;
+  state: 'active' | 'owned_idle' | 'stale' | 'foreign_held' | 'identity_reconciliation_required' | string;
+  ownerGeneration: number | null;
+  processInstanceDigest: string | null;
+  routeIds: string[];
+  lastHeartbeatAt: string | null;
+  expiresAt: string | null;
+  cleanupObligation: string | null;
+  blockingIdentityAxes: string[];
+  authorizedActions: string[];
+  recourse: 'rejoin_owned_browser' | 'replace_stale_same_principal_session' | 'wait_for_foreign_principal' | 'reconcile_principal_identity';
+  observationOnly: boolean;
+  [key: string]: unknown;
+}
+
 export interface ServiceSessionRecord {
   id: string;
   serviceName: string | null;
@@ -1107,6 +1133,12 @@ export interface ServiceRoutePoolResponse extends ServiceListResponse<ServiceRou
 
 export interface ServiceViewerLeasesResponse extends ServiceListResponse<ServiceViewerLeaseRecord> {
   viewerLeases: ServiceViewerLeaseRecord[];
+}
+
+export interface ServiceProfileLeasesResponse extends ServiceListResponse<ServiceProfileLeaseRecord> {
+  profileLeases: ServiceProfileLeaseRecord[];
+  observedAt: string;
+  doctor: Record<string, unknown>;
 }
 
 export interface ServiceSessionsResponse extends ServiceListResponse<ServiceSessionRecord> {
@@ -2892,9 +2924,11 @@ export declare function getServiceDisplayAllocations(options: ServiceQueryOption
 export declare function getServiceRemoteViewRoutes(options: ServiceQueryOptions): Promise<ServiceRemoteViewRoutesResponse>;
 export declare function getServiceRoutePool(options: ServiceQueryOptions): Promise<ServiceRoutePoolResponse>;
 export declare function getServiceViewerLeases(options: ServiceQueryOptions): Promise<ServiceViewerLeasesResponse>;
+export declare function getServiceProfileLeases(options: ServiceQueryOptions): Promise<ServiceProfileLeasesResponse>;
 export declare function findServiceDisplayAllocation(records: ServiceDisplayAllocationRecord[] | ServiceDisplayAllocationsResponse | null | undefined, id: string): ServiceDisplayAllocationRecord | null;
 export declare function findServiceRemoteViewRoute(records: ServiceRemoteViewRouteRecord[] | ServiceRemoteViewRoutesResponse | null | undefined, id: string): ServiceRemoteViewRouteRecord | null;
 export declare function findServiceViewerLease(records: ServiceViewerLeaseRecord[] | ServiceViewerLeasesResponse | null | undefined, id: string): ServiceViewerLeaseRecord | null;
+export declare function findServiceProfileLease(records: ServiceProfileLeaseRecord[] | ServiceProfileLeasesResponse | null | undefined, id: string): ServiceProfileLeaseRecord | null;
 export declare function getServiceSessions(options: ServiceQueryOptions): Promise<ServiceSessionsResponse>;
 export declare function getServiceTabs(options: ServiceQueryOptions): Promise<ServiceTabsResponse>;
 export declare function getServiceMonitors(options: ServiceMonitorQueryOptions): Promise<ServiceMonitorsResponse>;

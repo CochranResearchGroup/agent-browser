@@ -29,6 +29,8 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceRoutePoolResponse} ServiceRoutePoolResponse
  * @typedef {import('./service-observability.generated.js').ServiceViewerLeaseRecord} ServiceViewerLeaseRecord
  * @typedef {import('./service-observability.generated.js').ServiceViewerLeasesResponse} ServiceViewerLeasesResponse
+ * @typedef {import('./service-observability.generated.js').ServiceProfileLeaseRecord} ServiceProfileLeaseRecord
+ * @typedef {import('./service-observability.generated.js').ServiceProfileLeasesResponse} ServiceProfileLeasesResponse
  * @typedef {import('./service-observability.generated.js').ServiceChallengesResponse} ServiceChallengesResponse
  * @typedef {import('./service-observability.generated.js').ServiceMonitorsResponse} ServiceMonitorsResponse
  * @typedef {import('./service-observability.generated.js').ServiceMonitorDeleteResponse} ServiceMonitorDeleteResponse
@@ -866,6 +868,14 @@ export function getServiceViewerLeases(options) {
 }
 
 /**
+ * @param {ServiceQueryOptions} options
+ * @returns {Promise<ServiceProfileLeasesResponse>}
+ */
+export function getServiceProfileLeases(options) {
+  return serviceGet(options, '/api/service/profile-leases');
+}
+
+/**
  * @param {ServiceDisplayAllocationRecord[] | ServiceDisplayAllocationsResponse | null | undefined} records
  * @param {string} id
  * @returns {ServiceDisplayAllocationRecord | null}
@@ -890,6 +900,15 @@ export function findServiceRemoteViewRoute(records, id) {
  */
 export function findServiceViewerLease(records, id) {
   return findServiceCollectionRecord(records, 'viewerLeases', id);
+}
+
+/**
+ * @param {ServiceProfileLeaseRecord[] | ServiceProfileLeasesResponse | null | undefined} records
+ * @param {string} id
+ * @returns {ServiceProfileLeaseRecord | null}
+ */
+export function findServiceProfileLease(records, id) {
+  return findServiceCollectionRecord(records, 'profileLeases', id);
 }
 
 /**

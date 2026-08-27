@@ -9,6 +9,7 @@ import {
   createServiceIncidentHandoff,
   createServiceTraceHandoff,
   findServiceProfileForIdentity,
+  findServiceProfileLease,
   deleteServiceMonitor,
   getServiceAccessPlan,
   getServiceBrowserCapabilityPreflight,
@@ -17,6 +18,7 @@ import {
   getServiceProfileAllocation,
   getServiceProfileAllocationForAccessPlan,
   getServiceProfileForIdentity,
+  getServiceProfileLeases,
   getServiceProfileReadiness,
   getServiceProfileSeedingHandoff,
   getServiceRemoteViewRoutePreflight,
@@ -109,6 +111,27 @@ async function main() {
   assert.equal(contracts.calls[0].url, 'http://127.0.0.1:4849/api/service/contracts');
   assert.equal(contracts.calls[0].init.method, 'GET');
   assert.equal(contractResult.schemaVersion, 'v1');
+
+  const profileLeases = createFetchRecorder({
+    success: true,
+    data: {
+      profileLeases: [{ id: 'lease-1', state: 'active' }],
+      count: 1,
+      observedAt: '2026-08-27T12:00:00.000Z',
+      doctor: { state: 'healthy', findings: [] },
+    },
+  });
+  const profileLeaseResult = await getServiceProfileLeases({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: profileLeases.fetch,
+  });
+  assert.equal(
+    profileLeases.calls[0].url,
+    'http://127.0.0.1:4849/api/service/profile-leases',
+  );
+  assert.equal(profileLeases.calls[0].init.method, 'GET');
+  assert.equal(findServiceProfileLease(profileLeaseResult, 'lease-1')?.state, 'active');
+  assert.equal(findServiceProfileLease(profileLeaseResult, 'missing'), null);
 
   const status = createFetchRecorder({
     success: true,

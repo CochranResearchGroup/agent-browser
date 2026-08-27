@@ -8062,6 +8062,14 @@ mod tests {
             ),
             (
                 serde_json::from_str::<serde_json::Value>(include_str!(
+                    "../../../docs/dev/contracts/service-profile-leases-response.v1.schema.json"
+                ))
+                .unwrap(),
+                "profileLeases",
+                "profile leases response",
+            ),
+            (
+                serde_json::from_str::<serde_json::Value>(include_str!(
                     "../../../docs/dev/contracts/service-tabs-response.v1.schema.json"
                 ))
                 .unwrap(),
@@ -8158,6 +8166,8 @@ mod tests {
                 );
             } else if field == "sitePolicies" {
                 assert_schema_required_fields(&schema, &[field, "sitePolicySources", "count"]);
+            } else if field == "profileLeases" {
+                assert_schema_required_fields(&schema, &[field, "count", "observedAt", "doctor"]);
             } else {
                 assert_schema_required_fields(&schema, &[field, "count"]);
             }
@@ -8173,6 +8183,13 @@ mod tests {
                     field: [],
                     "sitePolicySources": [],
                     "count": 0,
+                })
+            } else if field == "profileLeases" {
+                json!({
+                    field: [],
+                    "count": 0,
+                    "observedAt": "2026-08-27T12:00:00Z",
+                    "doctor": {},
                 })
             } else {
                 json!({

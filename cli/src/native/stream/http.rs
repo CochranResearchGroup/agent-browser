@@ -22,8 +22,9 @@ use crate::native::service_access::{
 use crate::native::service_config::refresh_persisted_profile_seeding_handoffs;
 use crate::native::service_contracts::{
     service_contracts_metadata, SERVICE_BROWSER_CAPABILITY_PREFLIGHT_HTTP_ROUTE,
-    SERVICE_BROWSER_CAPABILITY_REGISTRY_HTTP_ROUTE, SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_HTTP_ROUTE,
-    SERVICE_REQUEST_ACTIONS, SERVICE_REQUEST_HTTP_ROUTE,
+    SERVICE_BROWSER_CAPABILITY_REGISTRY_HTTP_ROUTE, SERVICE_PROFILE_LEASES_HTTP_ROUTE,
+    SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_HTTP_ROUTE, SERVICE_REQUEST_ACTIONS,
+    SERVICE_REQUEST_HTTP_ROUTE,
 };
 use crate::native::service_lifecycle::{
     discover_service_profiles, ProfileDiscoveryRequest, ProfileSelectionRequest,
@@ -36,10 +37,12 @@ use crate::native::service_model::{
 use crate::native::service_monitors::{
     parse_monitor_state, service_monitors_response, MonitorCollectionFilters,
 };
+use crate::native::service_profile_lease::{doctor_profile_leases, profile_leases_for_state};
 use crate::native::service_request::{
     apply_service_request_attribution, normalize_service_request, ServiceRequestFallbackPrincipal,
     ServiceRequestNormalization, ServiceRequestPrincipalSource,
 };
+use crate::native::service_trace::service_commands::service_now_timestamp;
 
 use super::app_intelligence::{
     app_intelligence_status_json, inspect_workspace_response, operator_confirm_response,
@@ -2103,6 +2106,17 @@ fn service_collection_contents(path: &str, query: Option<&str>) -> Option<Value>
             Some(json!({
                 "viewerLeases": viewer_leases,
                 "count": viewer_leases.len(),
+            }))
+        }
+        SERVICE_PROFILE_LEASES_HTTP_ROUTE => {
+            let now = service_now_timestamp();
+            let profile_leases = profile_leases_for_state(&service_state, &now);
+            let doctor = doctor_profile_leases(&service_state, &now);
+            Some(json!({
+                "profileLeases": profile_leases,
+                "count": profile_leases.len(),
+                "observedAt": now,
+                "doctor": doctor,
             }))
         }
         "/api/service/tabs" => {
@@ -4472,6 +4486,8 @@ mod tests {
         let route_pool = service_collection_contents("/api/service/route-pool", None).unwrap();
         let viewer_leases =
             service_collection_contents("/api/service/viewer-leases", None).unwrap();
+        let profile_leases =
+            service_collection_contents(SERVICE_PROFILE_LEASES_HTTP_ROUTE, None).unwrap();
         let tabs = service_collection_contents("/api/service/tabs", None).unwrap();
         let monitors = service_collection_contents("/api/service/monitors", None).unwrap();
         let site_policies =
@@ -4490,6 +4506,8 @@ mod tests {
         assert!(remote_view_routes["remoteViewRoutes"].is_array());
         assert!(route_pool["routePool"].is_array());
         assert!(viewer_leases["viewerLeases"].is_array());
+        assert!(profile_leases["profileLeases"].is_array());
+        assert!(profile_leases["doctor"].is_object());
         assert!(tabs["tabs"].is_array());
         assert!(monitors["monitors"].is_array());
         assert!(site_policies["sitePolicies"].is_array());

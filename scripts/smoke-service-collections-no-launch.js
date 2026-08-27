@@ -7,6 +7,7 @@ import {
   getServiceBrowsers,
   getServiceChallenges,
   getServiceMonitors,
+  getServiceProfileLeases,
   getServiceProfiles,
   getServiceProviders,
   getServiceSessions,
@@ -37,6 +38,7 @@ const CLI_TIMEOUT_MS = 180000;
 
 const collections = [
   ['profiles', 'profiles', getServiceProfiles],
+  ['leases', 'profileLeases', getServiceProfileLeases, 'profile-leases', 'service_profile_leases'],
   ['browsers', 'browsers', getServiceBrowsers],
   ['sessions', 'sessions', getServiceSessions],
   ['tabs', 'tabs', getServiceTabs],
@@ -104,7 +106,7 @@ try {
   );
   assert(!existsSync(launchMarker), 'an unattributed HTTP effect request reached the browser executable');
 
-  for (const [command, key, clientRead] of collections) {
+  for (const [command, key, clientRead, transportName = command] of collections) {
     const cliResult = await runCli(
       context,
       ['--json', '--session', session, 'service', command],
@@ -114,7 +116,7 @@ try {
     assert(cli.success === true, `CLI service ${command} failed: ${cliResult.stdout}${cliResult.stderr}`);
     assert(Array.isArray(cli.data?.[key]), `CLI ${command} response was not a collection`);
 
-    const http = await httpJson(port, 'GET', `/api/service/${command}`);
+    const http = await httpJson(port, 'GET', `/api/service/${transportName}`);
     assert(http.success === true, `HTTP service ${command} failed: ${JSON.stringify(http)}`);
 
     const mcpResult = await runCli(
@@ -125,7 +127,7 @@ try {
         session,
         'mcp',
         'read',
-        `agent-browser://${command}`,
+        `agent-browser://${transportName}`,
       ],
       CLI_TIMEOUT_MS,
     );
@@ -143,7 +145,7 @@ try {
   const finalState = JSON.parse(readFileSync(statePath, 'utf8'));
   const allowedLifecycleActions = new Set([
     'stream_status',
-    ...collections.map(([command]) => `service_${command.replaceAll('-', '_')}`),
+    ...collections.map(([command, , , , action]) => action ?? `service_${command.replaceAll('-', '_')}`),
   ]);
   const jobs = Object.values(finalState.jobs ?? {});
   assert(

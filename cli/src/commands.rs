@@ -3401,6 +3401,19 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                     "serviceState": flags.service_state.clone(),
                 }))
             }
+            Some("leases") => {
+                if rest.len() > 1 {
+                    return Err(ParseError::InvalidValue {
+                        message: format!("Unknown argument for service leases: {}", rest[1]),
+                        usage: "service leases",
+                    });
+                }
+                Ok(json!({
+                    "id": id,
+                    "action": "service_profile_leases",
+                    "serviceState": flags.service_state.clone(),
+                }))
+            }
             Some("browsers") => {
                 if rest.len() > 1 {
                     return Err(ParseError::InvalidValue {
@@ -8964,6 +8977,14 @@ mod tests {
         let cmd = parse_command(&args("service profiles"), &default_flags()).unwrap();
 
         assert_eq!(cmd["action"], "service_profiles");
+        assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_profile_leases() {
+        let cmd = parse_command(&args("service leases"), &default_flags()).unwrap();
+
+        assert_eq!(cmd["action"], "service_profile_leases");
         assert!(cmd["serviceState"].is_object());
     }
 

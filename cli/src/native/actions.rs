@@ -164,6 +164,7 @@ use super::service_monitors::{
 };
 use super::service_network_capture::handle_service_network_capture;
 use super::service_probe::handle_service_probe;
+use super::service_profile_lease::handle_service_profile_leases;
 use super::service_renderer_crash::{
     race_action_with_renderer_crash, renderer_crash_error_response, RendererCrashRace,
 };
@@ -294,6 +295,7 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_incident_activity"
             | "service_trace"
             | "service_profiles"
+            | "service_profile_leases"
             | "service_profile_lookup"
             | "service_profile_seeding_handoff"
             | "service_sessions"
@@ -853,6 +855,7 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
             "service_incident_activity" => handle_service_incident_activity(cmd).await,
             "service_trace" => handle_service_trace(cmd).await,
             "service_profiles" => handle_service_profiles(cmd).await,
+            "service_profile_leases" => handle_service_profile_leases(cmd).await,
             "service_profile_lookup" => handle_service_profile_lookup(cmd).await,
             "service_profile_seeding_handoff" => handle_service_profile_seeding_handoff(cmd).await,
             "service_sessions" => handle_service_sessions(cmd).await,

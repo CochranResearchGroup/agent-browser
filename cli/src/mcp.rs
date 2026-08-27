@@ -14,9 +14,10 @@ use crate::native::service_contracts::{
     DESKTOP_PROMPT_OBSERVE_MCP_TOOL_NAME, SERVICE_ACCESS_PLAN_MCP_RESOURCE,
     SERVICE_ACCESS_PLAN_MCP_TOOL_NAME, SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME,
     SERVICE_BROWSER_CAPABILITY_REGISTRY_RESOURCE, SERVICE_CONTRACTS_RESOURCE,
-    SERVICE_DISPLAY_ALLOCATIONS_MCP_RESOURCE, SERVICE_PROFILE_SEEDING_HANDOFF_UPDATE_MCP_TOOL_NAME,
-    SERVICE_REMOTE_VIEW_ROUTES_MCP_RESOURCE, SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME,
-    SERVICE_REQUEST_ACTIONS, SERVICE_ROUTE_POOL_MCP_RESOURCE, SERVICE_VIEWER_LEASES_MCP_RESOURCE,
+    SERVICE_DISPLAY_ALLOCATIONS_MCP_RESOURCE, SERVICE_PROFILE_LEASES_MCP_RESOURCE,
+    SERVICE_PROFILE_SEEDING_HANDOFF_UPDATE_MCP_TOOL_NAME, SERVICE_REMOTE_VIEW_ROUTES_MCP_RESOURCE,
+    SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME, SERVICE_REQUEST_ACTIONS,
+    SERVICE_ROUTE_POOL_MCP_RESOURCE, SERVICE_VIEWER_LEASES_MCP_RESOURCE,
 };
 use crate::native::service_incidents::{
     service_incident_summary, service_incidents_response, ServiceIncidentFilters,
@@ -25,11 +26,13 @@ use crate::native::service_model::{
     service_profile_allocations, service_profile_seeding_handoff, service_profile_sources,
     service_site_policy_sources, ServiceState,
 };
+use crate::native::service_profile_lease::{doctor_profile_leases, profile_leases_for_state};
 use crate::native::service_request::{
     apply_service_request_attribution, normalize_service_request, ServiceRequestFallbackPrincipal,
     ServiceRequestNormalization, ServiceRequestPrincipalSource,
 };
 use crate::native::service_store::load_default_service_state_snapshot;
+use crate::native::service_trace::service_commands::service_now_timestamp;
 use crate::native::service_trace::{service_trace_response, ServiceTraceFilters};
 use crate::native::stream::service_profile_lookup_response_for_state;
 
@@ -224,6 +227,12 @@ fn service_mcp_resources() -> Vec<Value> {
             "name": "Service viewer leases",
             "mimeType": "application/json",
             "description": "Service-owned observer and controller leases for remote-view routes sorted by lease id"
+        }),
+        json!({
+            "uri": SERVICE_PROFILE_LEASES_MCP_RESOURCE,
+            "name": "Service profile leases",
+            "mimeType": "application/json",
+            "description": "Authenticated principal-scoped profile leases with exact recourse and authorized actions"
         }),
         json!({
             "uri": TABS_RESOURCE,
@@ -484,6 +493,17 @@ fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Resu
             json!({
                 "viewerLeases": viewer_leases,
                 "count": viewer_leases.len(),
+            })
+        }
+        SERVICE_PROFILE_LEASES_MCP_RESOURCE => {
+            let now = service_now_timestamp();
+            let profile_leases = profile_leases_for_state(&state, &now);
+            let doctor = doctor_profile_leases(&state, &now);
+            json!({
+                "profileLeases": profile_leases,
+                "count": profile_leases.len(),
+                "observedAt": now,
+                "doctor": doctor,
             })
         }
         TABS_RESOURCE => {
@@ -10752,6 +10772,7 @@ mod tests {
                 SERVICE_REMOTE_VIEW_ROUTES_MCP_RESOURCE,
                 SERVICE_ROUTE_POOL_MCP_RESOURCE,
                 SERVICE_VIEWER_LEASES_MCP_RESOURCE,
+                SERVICE_PROFILE_LEASES_MCP_RESOURCE,
                 TABS_RESOURCE,
                 MONITORS_RESOURCE,
                 SITE_POLICIES_RESOURCE,

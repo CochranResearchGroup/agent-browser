@@ -15,6 +15,8 @@ use super::service_principal::{
     authenticated_authority_is_current, AuthenticatedServicePrincipal, PrincipalContinuityRecourse,
     ServicePrincipalProvenance, ServicePrincipalState, ServiceProfileCapabilityState,
 };
+use super::service_resources::load_service_state_for_maintenance;
+use super::service_trace::service_commands::service_now_timestamp;
 
 pub(crate) const PROFILE_LEASE_SCHEMA_VERSION: &str = "agent-browser.profile-lease.v1";
 pub(crate) const PROFILE_LEASE_RECONCILE_PLAN_SCHEMA_VERSION: &str =
@@ -136,6 +138,7 @@ pub(crate) struct ProfileLeaseError {
     pub(crate) message: String,
 }
 
+/// Projects the canonical first-class profile lease collection from retained authority and work.
 pub(crate) fn profile_leases_for_state(state: &ServiceState, now: &str) -> Vec<ProfileLeaseRecord> {
     let mut records = Vec::new();
     let mut bound_profiles = BTreeSet::new();
@@ -171,6 +174,22 @@ pub(crate) fn profile_leases_for_state(state: &ServiceState, now: &str) -> Vec<P
     }
     records.sort_by(|left, right| left.id.cmp(&right.id));
     records
+}
+
+/// Handles the no-launch CLI collection read and includes the matching doctor result.
+pub(crate) async fn handle_service_profile_leases(
+    command: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let state = load_service_state_for_maintenance(command)?;
+    let now = service_now_timestamp();
+    let profile_leases = profile_leases_for_state(&state, &now);
+    let doctor = doctor_profile_leases(&state, &now);
+    Ok(json!({
+        "profileLeases": profile_leases,
+        "count": profile_leases.len(),
+        "observedAt": now,
+        "doctor": doctor,
+    }))
 }
 
 pub(crate) fn inspect_profile_lease(
@@ -1042,6 +1061,22 @@ mod tests {
         assert!(lease.authorized_actions.contains(&"renew".to_string()));
         assert!(lease.authorized_actions.contains(&"release".to_string()));
         assert!(!lease.observation_only);
+
+        let schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/service-profile-lease-record.v1.schema.json"
+        ))
+        .unwrap();
+        let value = serde_json::to_value(&lease).unwrap();
+        for field in schema["required"].as_array().unwrap() {
+            assert!(
+                value.get(field.as_str().unwrap()).is_some(),
+                "profile lease record omitted required field {field}"
+            );
+        }
+        assert_eq!(
+            value.as_object().unwrap().len(),
+            schema["required"].as_array().unwrap().len()
+        );
     }
 
     #[test]

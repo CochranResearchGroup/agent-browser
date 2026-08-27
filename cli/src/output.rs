@@ -6243,6 +6243,7 @@ Usage:
   agent-browser service browser-capability guide [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--service-name <name>] [--task-name <name>] [--reason <text>]
   agent-browser service browser-capability prefer --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> --preferred-executable-id <id> [--id <binding-id>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--service-name <name>] [--task-name <name>] [--preferred-host-id <id>] [--preferred-capability-id <id>] [--priority <n>] [--reason <text>]
   agent-browser service profiles
+  agent-browser service leases
   agent-browser service profiles lookup [--search <text>] [--hostname <host>] [--profile-id <id>] [--profile-name <name>] [--service-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--authentication-state <state>] [--freshness-state <state>] [--tag <tag>] [--url <url>] [--browser-build <build>]
   agent-browser service sessions
   agent-browser service browsers
@@ -6374,6 +6375,7 @@ Notes:
   - Service retry records a browser_recovery_override event and makes a faulted browser retryable again. HTTP retry requests accept service-name, agent-name, and task-name query parameters for filtered traces.
   - Text service status includes profile, profile allocation, browser, and session summary lines for operator traceability.
   - Text service profiles includes the derived profileAllocations view with holder sessions, waiting jobs, conflicts, browser health summaries, and recommended actions.
+  - service leases returns principal-scoped profile leases with exact owner generation, subordinate work, blocking identity axes, authorized actions, typed recourse, and doctor findings.
   - Text service profiles includes targetReadiness for no-launch profile readiness; Google first-login profiles can report needs_manual_seeding with seedingMode=detached_headed_no_cdp, cdpAttachmentAllowedDuringSeeding=false, preferredKeyring=basic_password_store, and setup scopes for sign-in, Chrome sync, passkeys, and browser plugins. Explicit freshness rows are preserved through readiness refreshes.
   - service profiles <id> seeding-handoff [target] returns the exact detached runtime login command plus lifecycle, operator steps, and close-detection state for completing Google sign-in, Chrome sync, passkey, and plugin setup before CDP attaches.
   - service profiles <id> verify-seeding <target> records a bounded post-close auth probe by reusing the serialized profile freshness update path. Fresh evidence moves a matching closed handoff to fresh; stale, blocked, or inconclusive evidence moves it to verification_pending. Pass --account-id or --account-ids to add account labels that later profile selection can match.

@@ -4,7 +4,7 @@ Date: 2026-08-26
 
 State: OPEN
 
-Execution state: `slice_c_in_progress_core_model_complete_public_surfaces_pending`
+Execution state: `slice_c_in_progress_read_parity_complete_owner_mutations_pending`
 
 Lane: P134
 
@@ -799,3 +799,31 @@ Do not implement migration or installer effects in Slice A.
   profile-lease gate filters, plus all service model tests. No browser,
   provider, development-runtime, installed-runtime, Service State, owner,
   lease, route, display, unit, Guacamole, or profile effect occurred.
+
+## 2026-08-27 Slice C read-side parity checkpoint
+
+- The first-class profile lease collection is available without launching a
+  browser through CLI `agent-browser service leases`, HTTP
+  `GET /api/service/profile-leases`, MCP `agent-browser://profile-leases`, and
+  generated client helpers `getServiceProfileLeases()` and
+  `findServiceProfileLease()`.
+- The shared response includes the exact projected lease records, count,
+  observation time, and doctor report. Contract metadata advertises the same
+  route, resource, helpers, no-launch posture, and Slice C operation family.
+- Record and collection JSON schemas are canonical under
+  `docs/dev/contracts/`. Rust tests guard required wire fields, and the
+  generated client is derived from those schemas.
+- README, CLI help, repository skill guidance, docs-site commands and service
+  mode pages, and the contract registry describe the same authority and
+  observation-only legacy behavior.
+- Validation passed for focused lease, HTTP collection, MCP resource, service
+  model, and contract tests; generated-client checks and type checking; API and
+  MCP parity; no-launch MCP and service collection smokes; docs build; Rust
+  formatting; strict Clippy; and `git diff --check`.
+- The MCP no-launch smoke had a pre-existing stale expected inventory for the
+  already-supported `desktop_evidence_observe` tool. The frozen allowlist now
+  matches the current source inventory and the smoke passes.
+- Owner mutation transports, detail, explain, watch, event, and dashboard
+  parity remain open. No browser, provider, development-runtime,
+  installed-runtime, Service State, owner, lease, route, display, unit,
+  Guacamole, or profile effect occurred.
