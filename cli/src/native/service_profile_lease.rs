@@ -5,7 +5,8 @@
 //! leases. Labels never grant authority. Every mutation uses an exact lease
 //! revision and the caller's authenticated profile capability.
 //! Rejoin may repair one unproven live session only when it is the unique exact
-//! session of the capability-bound current runtime owner. The repair binds only
+//! session of the capability-bound runtime owner. It may compare-and-swap the
+//! same capability binding to a newer current owner generation, then binds only
 //! that session and its same-browser active tabs, with an explicit expiry.
 
 use serde::{Deserialize, Serialize};
@@ -767,8 +768,10 @@ pub(crate) fn rejoin_profile_lease(
     let expires_at = expires_at
         .filter(|expires_at| *expires_at > now)
         .ok_or_else(|| lease_error(ProfileLeaseFailureCode::ActionNotAuthorized, lease_id))?;
-    let (session_id, tab_ids) = exact_unproven_rejoin_target(state, authority, now)
+    let (session_id, tab_ids) = exact_rejoin_target(state, authority, now)
         .ok_or_else(|| lease_error(ProfileLeaseFailureCode::ActionNotAuthorized, lease_id))?;
+    refresh_principal_binding_to_current_owner(state, authority)
+        .map_err(|_| lease_error(ProfileLeaseFailureCode::ActionNotAuthorized, lease_id))?;
     bind_session_work_lease(state, &session_id, authority, expires_at.to_string())
         .map_err(|_| lease_error(ProfileLeaseFailureCode::ActionNotAuthorized, lease_id))?;
     for tab_id in tab_ids {
@@ -1086,10 +1089,16 @@ fn bound_profile_lease(
     }
     let coherent = blocking.is_empty();
     let authority = authority_for_binding(state, binding);
-    let rejoin_repairable = blocking == ["unproven_session_authority"]
+    let rejoin_repairable = !blocking.is_empty()
+        && blocking.iter().all(|axis| {
+            matches!(
+                axis.as_str(),
+                "owner_generation_or_binding_mismatch" | "unproven_session_authority"
+            )
+        })
         && authority
             .as_ref()
-            .is_some_and(|authority| exact_unproven_rejoin_target(state, authority, now).is_some());
+            .is_some_and(|authority| exact_rejoin_target(state, authority, now).is_some());
     let (lease_state, recourse) = if !foreign.is_empty() {
         (
             "foreign_held",
@@ -1401,7 +1410,7 @@ fn active_subordinate_tabs<'a>(
     })
 }
 
-fn exact_unproven_rejoin_target(
+fn exact_rejoin_target(
     state: &ServiceState,
     authority: &AuthenticatedServicePrincipal,
     now: &str,
@@ -1419,16 +1428,15 @@ fn exact_unproven_rejoin_target(
                 && binding.capability_id == authority.capability_id
                 && binding.provenance == authority.provenance
         })?;
-    if !state
-        .runtime_owner_registry
-        .principal_binding_is_current(Some(binding))
-    {
-        return None;
-    }
     let owner = state
         .runtime_owner_registry
         .owners
         .get(&binding.profile_identity_digest)?;
+    if owner.state != crate::runtime_owner_transfer::ProfileOwnerState::Ready
+        || owner.owner_generation < binding.owner_generation
+    {
+        return None;
+    }
     let active_sessions = state
         .sessions
         .values()
@@ -1445,13 +1453,11 @@ fn exact_unproven_rejoin_target(
             .browser_ids
             .iter()
             .any(|browser_id| browser_id == &owner.browser_id);
-    let authority_is_unproven_but_uncontested = session
+    let authority_is_uncontested = session
         .principal_id
         .as_deref()
-        .is_none_or(|principal_id| principal_id == authority.principal_id)
-        && (session.principal_id.is_none()
-            || session.principal_provenance != Some(authority.provenance));
-    if !exact_owner_session || !authority_is_unproven_but_uncontested {
+        .is_none_or(|principal_id| principal_id == authority.principal_id);
+    if !exact_owner_session || !authority_is_uncontested {
         return None;
     }
     let active_tabs = state
@@ -1477,6 +1483,46 @@ fn exact_unproven_rejoin_target(
         .collect::<Vec<_>>();
     tab_ids.sort();
     Some((session.id.clone(), tab_ids))
+}
+
+fn refresh_principal_binding_to_current_owner(
+    state: &mut ServiceState,
+    authority: &AuthenticatedServicePrincipal,
+) -> Result<(), String> {
+    let existing = state
+        .runtime_owner_registry
+        .principal_bindings
+        .values()
+        .find(|binding| {
+            binding.principal_id == authority.principal_id
+                && binding.profile_id == authority.profile_id
+                && binding.capability_id == authority.capability_id
+                && binding.provenance == authority.provenance
+        })
+        .cloned()
+        .ok_or_else(|| "profile_owner_binding_missing".to_string())?;
+    if state
+        .runtime_owner_registry
+        .principal_binding_is_current(Some(&existing))
+    {
+        return Ok(());
+    }
+    let owner_generation = state
+        .runtime_owner_registry
+        .owners
+        .get(&existing.profile_identity_digest)
+        .map(|owner| owner.owner_generation)
+        .ok_or_else(|| "profile_owner_missing".to_string())?;
+    state
+        .runtime_owner_registry
+        .refresh_principal_authority(
+            crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
+                owner_generation,
+                ..existing
+            },
+        )
+        .map_err(|error| format!("profile_owner_binding_refresh_failed:{error:?}"))?;
+    Ok(())
 }
 
 fn sessions_for_profile<'a>(
@@ -2126,6 +2172,89 @@ mod tests {
         assert_eq!(
             state.tabs["tab-foreign"].principal_id.as_deref(),
             Some("principal:foreign")
+        );
+    }
+
+    #[test]
+    fn rejoin_refreshes_same_capability_after_owner_generation_changes() {
+        let (mut state, authority, lease_id) = state_with_lease();
+        let profile_digest = state
+            .runtime_owner_registry
+            .principal_bindings
+            .values()
+            .next()
+            .unwrap()
+            .profile_identity_digest
+            .clone();
+        state.sessions.get_mut("session-odollo").unwrap().lease = LeaseState::Released;
+        let owner = state
+            .runtime_owner_registry
+            .owners
+            .get_mut(&profile_digest)
+            .unwrap();
+        owner.owner_generation = 10;
+        owner.browser_id = "browser-odollo-replayed".to_string();
+        owner.daemon_session_route = "session-odollo-replayed".to_string();
+        owner.process_instance_digest = "process-odollo-replayed".to_string();
+        state.sessions.insert(
+            "session-odollo-replayed".to_string(),
+            BrowserSession {
+                id: "session-odollo-replayed".to_string(),
+                profile_id: Some("odollo-fulfillment".to_string()),
+                lease: LeaseState::Exclusive,
+                browser_ids: vec!["browser-odollo-replayed".to_string()],
+                ..BrowserSession::default()
+            },
+        );
+        state.tabs.insert(
+            "tab-odollo-replayed".to_string(),
+            BrowserTab {
+                id: "tab-odollo-replayed".to_string(),
+                browser_id: "browser-odollo-replayed".to_string(),
+                owner_session_id: Some("session-odollo-replayed".to_string()),
+                lifecycle: TabLifecycle::Ready,
+                ..BrowserTab::default()
+            },
+        );
+
+        let blocked = inspect_profile_lease(&state, &lease_id, NOW).unwrap();
+        assert_eq!(
+            blocked.blocking_identity_axes,
+            vec![
+                "owner_generation_or_binding_mismatch",
+                "unproven_session_authority"
+            ]
+        );
+        assert!(blocked.authorized_actions.contains(&"rejoin".to_string()));
+        assert_eq!(
+            blocked.recourse,
+            PrincipalContinuityRecourse::RejoinOwnedBrowser
+        );
+
+        let rejoined = rejoin_profile_lease(
+            &mut state,
+            &lease_id,
+            &blocked.lease_revision,
+            &authority,
+            NOW,
+            Some("2026-08-27T13:00:00Z"),
+        )
+        .unwrap();
+        assert!(!rejoined.observation_only);
+        assert_eq!(rejoined.owner_generation, Some(10));
+        assert_eq!(
+            state.runtime_owner_registry.principal_bindings[&profile_digest].owner_generation,
+            10
+        );
+        assert_eq!(
+            state.sessions["session-odollo-replayed"]
+                .principal_id
+                .as_deref(),
+            Some("principal:odollo-fulfillment")
+        );
+        assert_eq!(
+            state.tabs["tab-odollo-replayed"].principal_id.as_deref(),
+            Some("principal:odollo-fulfillment")
         );
     }
 

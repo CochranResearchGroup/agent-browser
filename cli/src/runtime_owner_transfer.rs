@@ -404,6 +404,53 @@ impl RuntimeOwnerRegistry {
         Ok(binding)
     }
 
+    pub(crate) fn refresh_principal_authority(
+        &mut self,
+        binding: RuntimeOwnerPrincipalBinding,
+    ) -> Result<RuntimeOwnerPrincipalBinding, OwnerTransferError> {
+        if binding.principal_id.trim().is_empty()
+            || binding.profile_id.trim().is_empty()
+            || binding.capability_id.trim().is_empty()
+            || binding.owner_generation == 0
+            || binding.provenance == ServicePrincipalProvenance::UnprovenLegacy
+            || !is_sha256(&binding.profile_identity_digest)
+        {
+            return Err(transfer_error(OwnerTransferFailureCode::InvalidEvidence));
+        }
+        let owner = self
+            .owners
+            .get(&binding.profile_identity_digest)
+            .ok_or_else(|| transfer_error(OwnerTransferFailureCode::OwnerMissing))?;
+        if owner.state != ProfileOwnerState::Ready
+            || owner.owner_generation != binding.owner_generation
+        {
+            return Err(transfer_error(
+                OwnerTransferFailureCode::OwnerCompareAndSwapMismatch,
+            ));
+        }
+        let existing = self
+            .principal_bindings
+            .get(&binding.profile_identity_digest)
+            .ok_or_else(|| transfer_error(OwnerTransferFailureCode::OwnerMissing))?;
+        let same_capability_authority = existing.principal_id == binding.principal_id
+            && existing.profile_id == binding.profile_id
+            && existing.profile_identity_digest == binding.profile_identity_digest
+            && existing.capability_id == binding.capability_id
+            && existing.provenance == binding.provenance;
+        if !same_capability_authority || existing.owner_generation > binding.owner_generation {
+            return Err(transfer_error(
+                OwnerTransferFailureCode::OwnerCompareAndSwapMismatch,
+            ));
+        }
+        if existing == &binding {
+            return Ok(existing.clone());
+        }
+        self.principal_bindings
+            .insert(binding.profile_identity_digest.clone(), binding.clone());
+        self.revision = self.revision.saturating_add(1);
+        Ok(binding)
+    }
+
     pub(crate) fn principal_binding_is_current(
         &self,
         binding: Option<&RuntimeOwnerPrincipalBinding>,
@@ -1278,6 +1325,51 @@ mod tests {
         assert_eq!(
             registry.principal_bindings[&digest("profile")].principal_id,
             "principal:odollo-fulfillment"
+        );
+    }
+
+    #[test]
+    fn principal_binding_refresh_requires_same_capability_and_current_owner() {
+        let mut registry = RuntimeOwnerRegistry::from_owner(owner());
+        let binding = RuntimeOwnerPrincipalBinding {
+            principal_id: "principal:odollo-fulfillment".to_string(),
+            profile_id: "odollo-fulfillment".to_string(),
+            profile_identity_digest: digest("profile"),
+            capability_id: "profile-capability-v1:synthetic".to_string(),
+            provenance: ServicePrincipalProvenance::RegisteredCapability,
+            owner_generation: 7,
+        };
+        registry.bind_principal_authority(binding.clone()).unwrap();
+        registry
+            .owners
+            .get_mut(&digest("profile"))
+            .unwrap()
+            .owner_generation = 8;
+
+        let mut refreshed = binding.clone();
+        refreshed.owner_generation = 8;
+        let committed = registry
+            .refresh_principal_authority(refreshed.clone())
+            .unwrap();
+        assert_eq!(committed, refreshed);
+        assert!(registry.principal_binding_is_current(Some(&committed)));
+
+        registry
+            .owners
+            .get_mut(&digest("profile"))
+            .unwrap()
+            .owner_generation = 9;
+        let mut foreign = refreshed;
+        foreign.owner_generation = 9;
+        foreign.capability_id = "profile-capability-v1:foreign".to_string();
+        let error = registry.refresh_principal_authority(foreign).unwrap_err();
+        assert_eq!(
+            error.code,
+            OwnerTransferFailureCode::OwnerCompareAndSwapMismatch
+        );
+        assert_eq!(
+            registry.principal_bindings[&digest("profile")].capability_id,
+            "profile-capability-v1:synthetic"
         );
     }
 
