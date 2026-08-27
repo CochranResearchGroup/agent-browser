@@ -1,4 +1,4 @@
-# Plan 0134 | Service Principal And Crash Lifecycle Coherence
+# Plan 0134 | Service Principal, Lease Control, And Crash Coherence
 
 Date: 2026-08-26
 
@@ -8,7 +8,7 @@ Execution state: `provider_free_reproducer_pending`
 
 Lane: P134
 
-Source baseline: `4a2d18ffdbd7f2aeab02be240593bbfb1936b8de`
+Source baseline: `df795a650f54b29254434a0d0d0910eba641e0eb`
 
 Branch: `plan/crash-profile-lifecycle-coherence`
 
@@ -45,6 +45,13 @@ wait on the same principal's contradictory or stale holder, silently
 reattribute the browser to `default`, release another principal's work, or
 launch a duplicate profile process.
 
+Make profile leases first-class managed resources. Services and operators must
+be able to list, inspect, explain, rejoin, renew, release, and reconcile leases
+through stable CLI, HTTP, MCP, dashboard, and generated-client contracts. The
+normal recovery path must not require editing state files, killing browsers, or
+shipping a new lifecycle hotfix for every combination of stale session,
+process, route, or boot evidence.
+
 The same identity model must drive crash startup. Boot-scoped process, socket,
 display, viewer, and lease observations are rediscovered; stable profile,
 browser, route, connection, user, and opaque handoff identities are preserved.
@@ -71,6 +78,19 @@ The missing abstraction is a stable, authenticated service principal with a
 profile capability that survives request and session churn. Sessions and tabs
 are subordinate work leases under that principal. User-supplied service names
 must never become authority merely because their strings match.
+
+### Profile leases have observability but no control plane
+
+Current service status, profile allocation, trace, and diagnostics expose
+lease holders and wait pressure. `tab_handle_release` can release one tab
+handle, and viewer leases have request, heartbeat, and release actions. There
+is no equivalent profile-lease resource or action family.
+
+A service cannot ask which proof blocks reuse, rejoin its own retained lane,
+renew a legitimate task lease, release an exact idle lease, or request bounded
+reconciliation. Operators are left with indirect cleanup, hand-edited runtime
+state, process termination, or a source hotfix. Those are not acceptable
+recourse mechanisms for routine lifecycle drift.
 
 ### Self-blocking exclusive profile lease
 
@@ -144,6 +164,20 @@ profile attribution, stale lease ownership, or general crash regeneration.
 16. Software and operators receive only the durable opaque
     `/remote-view/<handoff-id>` URL. Provider and Guacamole URLs remain
     internal evidence.
+17. Every lease has a stable `leaseId`, principal identity, profile identity,
+    lease revision, owner generation, mode, state, subordinate session and tab
+    bindings, heartbeat policy, expiry policy, and cleanup obligation.
+18. Lease inspection and explanation are read-only. Every mutation requires an
+    authenticated principal or operator authority plus exact expected lease
+    revision and owner generation.
+19. There is no generic `force unlock`. Release, replacement, transfer, and
+    reconciliation are distinct actions with different preconditions.
+20. Safe lifecycle repair is expressed as idempotent, compare-and-swap
+    transitions over the frozen identity axes. Unknown or contradictory state
+    is quarantined with explicit missing proofs rather than improvised cleanup.
+21. Lease capabilities are advertised in the service contract so clients can
+    discover supported reads, actions, and preconditions without reconstructing
+    server behavior or depending on matching source internals.
 
 ## Execution Slices
 
@@ -191,7 +225,40 @@ public CLI, HTTP, or MCP behavior before implementation.
 Exit condition: the service control plane can prove same-principal continuity
 without trusting labels and without weakening cross-principal isolation.
 
-### Slice C | Make access and admission principal-aware
+### Slice C | Add a first-class profile-lease control plane
+
+- Add canonical profile-lease collection and detail projections. Each record
+  includes principal provenance, profile, logical browser, sessions, tabs,
+  mode, state, revision, owner generation, heartbeat and expiry state, cleanup
+  obligation, blocking identity axes, and currently authorized actions.
+- Add read-only `list`, `inspect`, `explain`, `doctor`, and `watch` surfaces.
+  `doctor` evaluates all identity invariants and returns typed findings plus
+  exact safe actions without mutating state.
+- Add owner-scoped `rejoin`, `renew`, and `release` actions. `release` refuses
+  active subordinate work unless the exact cleanup policy and authority permit
+  it; it never releases another principal's lease.
+- Add `reconcile plan` and `reconcile apply`. Planning returns a sealed,
+  expiring action descriptor bound to lease revision, owner generation,
+  principal, profile, browser, process, route, boot epoch, proposed
+  transitions, and idempotency key. Apply accepts only that exact descriptor
+  and converges on replay.
+- Keep explicit owner transfer on the existing owner-transfer authority path.
+  Do not disguise transfer, takeover, browser close, or profile deletion as
+  lease reconciliation.
+- Project the contract through CLI `service leases`, HTTP
+  `/api/service/profile-leases`, MCP resources and tools, dashboard actions,
+  service request metadata, and generated client helpers.
+- Advertise supported lease operations and schema versions through
+  `/api/service/contracts` and `agent-browser://contracts` so clients can
+  feature-detect instead of guessing from a binary version.
+- Record append-only lease lifecycle events and idempotent receipts without
+  storing private page data, credentials, or raw capability material.
+
+Exit condition: an authorized service or operator can diagnose and safely
+resolve every modeled lease state without editing runtime files, terminating a
+browser, or installing another binary.
+
+### Slice D | Make access and admission principal-aware
 
 - Derive browser reuse and holder coherence from one principal-aware
   acquisition decision.
@@ -210,7 +277,7 @@ without trusting labels and without weakening cross-principal isolation.
 Exit condition: a service can rejoin its own lane, a foreign service cannot,
 and no path waits on itself or recommends duplicate launch.
 
-### Slice D | Make canonical profile identity authoritative
+### Slice E | Make canonical profile identity authoritative
 
 - Resolve an existing managed session against the exact current owner binding
   before applying the new-lane `default` fallback.
@@ -223,7 +290,7 @@ and no path waits on itself or recommends duplicate launch.
 Exit condition: omitted selectors cannot reattribute an owned browser, and no
 second profile or owner registry is introduced.
 
-### Slice E | Bind ephemeral evidence to a boot epoch
+### Slice F | Bind ephemeral evidence to a boot epoch
 
 - Introduce one boot or host epoch field for package-owned PID, socket,
   runtime-host, display, viewer, and lease observations.
@@ -237,7 +304,7 @@ second profile or owner registry is introduced.
 Exit condition: a simulated reboot cannot authenticate PID reuse, a stale
 socket, or a stale display allocation as current state.
 
-### Slice F | Add one idempotent crash-regeneration transaction
+### Slice G | Add one idempotent crash-regeneration transaction
 
 - Atomically derive the runtime-host unit from the selected immutable
   generation and selected runtime-host ingress.
@@ -256,7 +323,7 @@ socket, or a stale display allocation as current state.
 Exit condition: the crash fixture reaches ready on replay with unchanged
 stable identities and newly observed ephemeral identities.
 
-### Slice G | Align public surfaces and clients
+### Slice H | Align public surfaces and clients
 
 - Expose principal identity provenance, the typed inconsistency, blocking
   identity axes, and safe next action consistently through profile allocation,
@@ -270,7 +337,7 @@ stable identities and newly observed ephemeral identities.
 Exit condition: maintained clients consume one generated contract and do not
 reconstruct profile or lifecycle ownership.
 
-### Slice H | Validate in bounded environments
+### Slice I | Validate in bounded environments
 
 - Run focused provider-free access-plan, profile resolution, lifecycle,
   adoption, reconciliation, crash-replay, and contract tests.
@@ -314,6 +381,22 @@ no production or provider effect.
 16. No path launches a duplicate profile process, releases another task's
     lease, or adopts ambiguous metadata.
 17. CLI, HTTP, MCP, dashboard, schemas, and generated clients agree.
+18. Lease list, inspect, explain, and doctor are read-only and identify the
+    same holder, principal provenance, identity blockers, and authorized
+    actions across every public transport.
+19. Same-principal rejoin and renew succeed with current evidence and fail on
+    stale principal capability, lease revision, owner generation, or boot
+    epoch.
+20. Exact idle lease release is idempotent. Active subordinate tabs or sessions
+    block release unless their recorded cleanup policy explicitly authorizes
+    the same transition.
+21. Reconcile planning produces no effects. Reconcile apply accepts only the
+    sealed current plan, rejects changed evidence, and replays without a second
+    mutation.
+22. No profile-lease command offers broad force release, process killing,
+    profile deletion, or cross-principal takeover.
+23. Contract capability discovery lets an older client detect unavailable
+    lease operations and return a typed unsupported-capability result.
 
 ## Validation
 
@@ -379,3 +462,5 @@ Add the unscoped existing-session command-path fixture and the boot-epoch crash
 fixture without implementing recovery effects. Stop after the tests
 deterministically reproduce the principal self-block, the profile contradiction,
 and the crash contradiction, and identify the first profile-attribution write.
+Also freeze the public profile-lease contract shape and prove that current
+clients have no first-class inspect, rejoin, renew, release, or reconcile path.
