@@ -775,9 +775,13 @@ from ordinary attachable login flows without parsing prose recommendations.
 Explicit freshness rows are preserved when they report `fresh`, `stale`,
 `blocked_by_attached_devtools`, `lastVerifiedAt`, or `freshnessExpiresAt`.
 Session records include `profileSelectionReason` so clients can distinguish
-`authenticated_target`, `target_match`, `service_allow_list`, and
-`explicit_profile` profile choices without reconstructing selector behavior
-from events.
+`existing_owner`, `authenticated_target`, `account_match`, `target_match`,
+`service_allow_list`, `browser_build_default`, and `explicit_profile` choices
+without reconstructing selector behavior from events. Existing managed sessions
+inherit the profile proven by their exact current runtime owner before generic
+fallback. Request route hints cannot override the daemon's exact current route,
+conflicting explicit profiles fail, and ambiguous retained identity observations
+remain preserve-only.
 They also include `profileLeaseDisposition` and
 `profileLeaseConflictSessionIds` so clients can see whether the selected
 profile started a new browser, reused a retained session browser, or hit

@@ -595,9 +595,17 @@ pub(crate) fn insert_planned_param_if_missing(
 pub(crate) fn apply_service_profile_selection(
     options: &mut LaunchOptions,
     cmd: &Value,
-) -> Option<ProfileSelectionReason> {
+    effective_session: Option<&str>,
+) -> Result<Option<ProfileSelectionReason>, String> {
+    let repository = LockedServiceStateRepository::default_json()?;
+    let service_state = repository.load_snapshot()?;
+    if let Some(selection) =
+        apply_existing_session_profile_selection(options, cmd, effective_session, &service_state)?
+    {
+        return Ok(Some(selection));
+    }
     if options.profile.is_some() {
-        return None;
+        return Ok(None);
     }
     let service_owned_launch = cmd.get("action").and_then(Value::as_str) == Some("launch")
         && optional_command_string(cmd, "serviceName").is_some();
@@ -606,9 +614,9 @@ pub(crate) fn apply_service_profile_selection(
             .or_else(|| optional_command_or_params_string(cmd, "profileId"))
     });
     if let Some(profile_id) = explicit_profile_id.flatten() {
-        let repository = LockedServiceStateRepository::default_json().ok()?;
-        let service_state = repository.load_snapshot().ok()?;
-        let profile = service_state.profiles.get(&profile_id)?;
+        let Some(profile) = service_state.profiles.get(&profile_id) else {
+            return Ok(None);
+        };
         options.runtime_profile = Some(profile_id);
         if let Some(user_data_dir) = profile
             .user_data_dir
@@ -623,10 +631,10 @@ pub(crate) fn apply_service_profile_selection(
         {
             options.executable_path = None;
         }
-        return Some(ProfileSelectionReason::ExplicitProfile);
+        return Ok(Some(ProfileSelectionReason::ExplicitProfile));
     }
     if options.runtime_profile.is_some() {
-        return None;
+        return Ok(None);
     }
     let request = ProfileSelectionRequest {
         service_name: optional_command_string(cmd, "serviceName"),
@@ -641,12 +649,14 @@ pub(crate) fn apply_service_profile_selection(
         && request.target_url.is_none()
         && request.browser_build.is_none()
     {
-        return None;
+        return Ok(None);
     }
-    let repository = LockedServiceStateRepository::default_json().ok()?;
-    let service_state = repository.load_snapshot().ok()?;
-    let selection = select_service_profile_for_request(&service_state, &request)?;
-    let profile = service_state.profiles.get(&selection.profile_id)?;
+    let Some(selection) = select_service_profile_for_request(&service_state, &request) else {
+        return Ok(None);
+    };
+    let Some(profile) = service_state.profiles.get(&selection.profile_id) else {
+        return Ok(None);
+    };
     options.runtime_profile = Some(selection.profile_id.clone());
     if let Some(user_data_dir) = profile
         .user_data_dir
@@ -661,7 +671,123 @@ pub(crate) fn apply_service_profile_selection(
     {
         options.executable_path = None;
     }
-    Some(selection.reason)
+    Ok(Some(selection.reason))
+}
+
+fn apply_existing_session_profile_selection(
+    options: &mut LaunchOptions,
+    command: &Value,
+    effective_session: Option<&str>,
+    state: &ServiceState,
+) -> Result<Option<ProfileSelectionReason>, String> {
+    let requested_session =
+        optional_command_or_params_string(command, "sessionName").or_else(|| {
+            optional_command_or_params_string(command, "browserId")
+                .and_then(|browser_id| browser_id.strip_prefix("session:").map(str::to_string))
+        });
+    let session_id = effective_session.map(str::to_string).or(requested_session);
+    let Some(session_id) = session_id else {
+        return Ok(None);
+    };
+    let binding = state
+        .runtime_owner_registry
+        .binding_for_session(&session_id)
+        .map_err(|_| "existing_session_profile_identity_ambiguous".to_string())?;
+    let retained_observation = state
+        .sessions
+        .get(&session_id)
+        .is_some_and(|session| session.profile_id.is_some() || !session.browser_ids.is_empty())
+        || state.browsers.values().any(|browser| {
+            browser
+                .active_session_ids
+                .iter()
+                .any(|id| id == &session_id)
+        });
+    let Some(binding) = binding else {
+        return if retained_observation {
+            Err("existing_session_profile_identity_unproven".to_string())
+        } else {
+            Ok(None)
+        };
+    };
+    if !binding.effect_capable {
+        return Err("existing_session_profile_identity_unproven".to_string());
+    }
+    let session = state
+        .sessions
+        .get(&session_id)
+        .ok_or_else(|| "existing_session_profile_identity_unproven".to_string())?;
+    let profile_id = session
+        .profile_id
+        .as_deref()
+        .ok_or_else(|| "existing_session_profile_identity_unproven".to_string())?;
+    let browser = state
+        .browsers
+        .get(&binding.claim.logical_browser_id)
+        .ok_or_else(|| "existing_session_profile_identity_unproven".to_string())?;
+    if !session
+        .browser_ids
+        .iter()
+        .any(|browser_id| browser_id == &binding.claim.logical_browser_id)
+        || !browser
+            .active_session_ids
+            .iter()
+            .any(|active_session| active_session == &session_id)
+        || browser.profile_id.as_deref() != Some(profile_id)
+    {
+        return Err("existing_session_profile_identity_inconsistent".to_string());
+    }
+    let profile = state
+        .profiles
+        .get(profile_id)
+        .ok_or_else(|| "existing_session_profile_identity_unproven".to_string())?;
+    let user_data_dir = profile
+        .user_data_dir
+        .as_deref()
+        .map(std::path::PathBuf::from)
+        .unwrap_or(crate::runtime_profile::runtime_profile_user_data_dir(
+            profile_id,
+        )?);
+    let profile_digest = crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir)?;
+    if profile_digest != binding.claim.profile_identity_digest {
+        return Err("existing_session_profile_identity_inconsistent".to_string());
+    }
+    if let Some(principal_binding) = state
+        .runtime_owner_registry
+        .principal_bindings
+        .get(&binding.claim.profile_identity_digest)
+    {
+        if principal_binding.profile_id != profile_id
+            || !state
+                .runtime_owner_registry
+                .principal_binding_is_current(Some(principal_binding))
+        {
+            return Err("existing_session_profile_identity_inconsistent".to_string());
+        }
+    }
+    if options
+        .runtime_profile
+        .as_deref()
+        .is_some_and(|requested| requested != profile_id)
+    {
+        return Err("explicit_profile_conflicts_with_current_owner".to_string());
+    }
+    if let Some(requested_path) = options.profile.as_deref() {
+        let requested_digest = crate::runtime_profile::canonical_profile_identity_digest(
+            std::path::Path::new(requested_path),
+        )?;
+        if requested_digest != binding.claim.profile_identity_digest {
+            return Err("explicit_profile_conflicts_with_current_owner".to_string());
+        }
+    }
+    options.runtime_profile = Some(profile_id.to_string());
+    options.profile = profile.user_data_dir.clone();
+    if profile.browser_build == Some(BrowserBuild::StockChrome)
+        && command.get("executablePath").is_none()
+    {
+        options.executable_path = None;
+    }
+    Ok(Some(ProfileSelectionReason::ExistingOwner))
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct BrowserCapabilityLaunchSelection {

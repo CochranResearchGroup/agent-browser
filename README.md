@@ -1346,17 +1346,22 @@ can force an intentional mismatch by setting
 The `service.profiles` and `service.sessions` maps define service control-plane
 metadata for profile allocation, keyring posture, caller ownership, profile
 binding, lease state, and cleanup policy. These records are exposed through
-service status, MCP resources, and the HTTP service APIs. Explicit
-`--runtime-profile` and `--profile` values still win. When a launch command omits
-both, `serviceName` plus `targetServiceId`, `targetService`, `targetServiceIds`,
+service status, MCP resources, and the HTTP service APIs. An existing managed
+session inherits the profile proven by its exact current runtime owner before
+any generic default. A request route hint cannot override the daemon's exact
+current route. A conflicting explicit profile is rejected, and retained session or browser records without current ownership
+proof remain available for inspection instead of being reassigned. Explicit
+`--runtime-profile` and `--profile` values select identity for genuinely new,
+unbound sessions. When a new launch command omits both, `serviceName` plus
+`targetServiceId`, `targetService`, `targetServiceIds`,
 `targetServices`, `siteId`, `siteIds`, `loginId`, or `loginIds` lets
 agent-browser choose a persisted service profile. The
 selector first prefers `authenticatedServiceIds` matches, then
 `targetServiceIds` matches, then the caller `sharedServiceIds` match. Launches
 that select a runtime profile or custom profile path now bind the active browser
 record to a service profile. Session records expose `profileSelectionReason`
-as `authenticated_target`, `target_match`, `service_allow_list`, or
-`explicit_profile`, and launch events mirror that value in
+as `existing_owner`, `authenticated_target`, `account_match`, `target_match`,
+`service_allow_list`, `browser_build_default`, or `explicit_profile`, and launch events mirror that value in
 `details.profileSelectionReason`. They also expose `profileLeaseDisposition`
 as `new_browser`, `reused_browser`, or `active_lease_conflict` plus
 `profileLeaseConflictSessionIds` when another exclusive session already holds
@@ -1531,11 +1536,14 @@ await requestServiceTab({
 });
 ```
 
-The selector prefers `authenticatedServiceIds`, then `targetServiceIds`, then
-`sharedServiceIds`. The retained session record reports the chosen path in
-`profileSelectionReason`, so operators can tell whether agent-browser selected
-the profile by authenticated target state, target scope, caller service
-fallback, or explicit override. Inspect `profileLeaseDisposition` to tell
+An existing managed session first inherits the profile proven by its exact
+current runtime owner. For a new session, the selector prefers
+`authenticatedServiceIds`, then `targetServiceIds`, then `sharedServiceIds`.
+The retained session record reports the chosen path in
+`profileSelectionReason`, so operators can tell whether agent-browser inherited
+the current owner, selected by authenticated target or account state, used
+target scope or caller-service fallback, chose a browser-build default, or
+accepted an explicit profile for a new session. Inspect `profileLeaseDisposition` to tell
 whether the selected profile opened a new browser, reused a retained session
 browser, or hit another exclusive profile lease. Active exclusive conflicts are
 rejected before a service-scoped launch starts another browser unless

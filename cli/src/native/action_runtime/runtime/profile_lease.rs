@@ -60,7 +60,8 @@ pub(crate) fn service_profile_lease_gate(
     session_id: &str,
     waited_ms: Option<u64>,
 ) -> Result<ServiceProfileLeaseGate, String> {
-    let Some(metadata) = service_profile_lease_metadata_for_command(command) else {
+    let Some(metadata) = service_profile_lease_metadata_for_command(command, Some(session_id))?
+    else {
         return Ok(ServiceProfileLeaseGate::Ready);
     };
     let Some(profile_id) = metadata.profile_id.as_deref() else {
@@ -115,11 +116,12 @@ pub(crate) fn service_profile_lease_gate(
 }
 pub(crate) fn service_profile_lease_metadata_for_command(
     command: &Value,
-) -> Option<ServiceLaunchMetadata> {
+    effective_session: Option<&str>,
+) -> Result<Option<ServiceLaunchMetadata>, String> {
     // An attributed handle routes work to an existing service-owned tab. It is
     // not a request to acquire or launch another browser profile lane.
     if command.get("serviceTabHandle").is_some() {
-        return None;
+        return Ok(None);
     }
     if command
         .get("action")
@@ -136,7 +138,7 @@ pub(crate) fn service_profile_lease_metadata_for_command(
                 )
         })
     {
-        return None;
+        return Ok(None);
     }
     let mut launch_options = LaunchOptions {
         profile: launch_profile_from_sources(command, true),
@@ -148,13 +150,14 @@ pub(crate) fn service_profile_lease_metadata_for_command(
         use_real_keychain: use_real_keychain_from_env(),
         ..LaunchOptions::default()
     };
-    let selection_reason = apply_service_profile_selection(&mut launch_options, command);
+    let selection_reason =
+        apply_service_profile_selection(&mut launch_options, command, effective_session)?;
     let metadata = ServiceLaunchMetadata::from_launch_options(
         &launch_options,
         Some(command),
         selection_reason,
     );
-    (metadata.service_name.is_some() && metadata.profile_id.is_some()).then_some(metadata)
+    Ok((metadata.service_name.is_some() && metadata.profile_id.is_some()).then_some(metadata))
 }
 pub(crate) fn apply_explicit_launch_identity_from_command(
     options: &mut LaunchOptions,
@@ -176,25 +179,30 @@ pub(crate) fn apply_auto_launch_command_hints(
     options: &mut LaunchOptions,
     command: &Value,
     retained_remote_headed: Option<&RetainedRemoteHeadedLaunchHint>,
-) -> (
-    ServiceBrowserHost,
-    Option<ProfileSelectionReason>,
-    BrowserCapabilityLaunchResolution,
-    Value,
-) {
+    effective_session: &str,
+) -> Result<
+    (
+        ServiceBrowserHost,
+        Option<ProfileSelectionReason>,
+        BrowserCapabilityLaunchResolution,
+        Value,
+    ),
+    String,
+> {
     let effective_command = launch_command_with_effective_service_defaults(command, options);
     apply_explicit_launch_identity_from_command(options, &effective_command);
     apply_retained_remote_headed_launch_hints(options, retained_remote_headed);
     let service_host = apply_launch_host_hints(options, &effective_command);
-    let selection_reason = apply_service_profile_selection(options, &effective_command);
+    let selection_reason =
+        apply_service_profile_selection(options, &effective_command, Some(effective_session))?;
     let browser_capability_launch =
         apply_service_browser_capability_selection(options, &effective_command);
-    (
+    Ok((
         service_host,
         selection_reason,
         browser_capability_launch,
         effective_command,
-    )
+    ))
 }
 pub(crate) fn service_profile_lease_conflict_session_ids(
     metadata: &ServiceLaunchMetadata,

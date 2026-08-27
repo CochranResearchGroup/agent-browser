@@ -13626,6 +13626,13 @@ mod tests {
 
         let mut canonical_names = canonical_properties.keys().collect::<Vec<_>>();
         let mut mcp_names = mcp_properties.keys().collect::<Vec<_>>();
+        let profile_capability = mcp_names
+            .iter()
+            .position(|name| name.as_str() == "profileCapability")
+            .map(|index| mcp_names.remove(index))
+            .expect("MCP service_request should expose the ephemeral profile capability");
+        assert_eq!(profile_capability, "profileCapability");
+        assert_eq!(mcp_properties["profileCapability"]["type"], "string");
         canonical_names.sort();
         mcp_names.sort();
         let field_roles: Value = serde_json::from_str(include_str!(

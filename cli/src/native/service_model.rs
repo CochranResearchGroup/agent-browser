@@ -121,12 +121,14 @@ pub const SERVICE_LEASE_STATE_VALUES: [&str; 5] = [
 ];
 pub const SERVICE_SESSION_CLEANUP_VALUES: [&str; 4] =
     ["detach", "close_tabs", "close_browser", "release_only"];
-pub const SERVICE_PROFILE_SELECTION_REASON_VALUES: [&str; 5] = [
+pub const SERVICE_PROFILE_SELECTION_REASON_VALUES: [&str; 7] = [
     "explicit_profile",
+    "existing_owner",
     "authenticated_target",
     "account_match",
     "target_match",
     "service_allow_list",
+    "browser_build_default",
 ];
 pub const SERVICE_PROFILE_LEASE_DISPOSITION_VALUES: [&str; 3] =
     ["new_browser", "reused_browser", "active_lease_conflict"];
@@ -5718,6 +5720,8 @@ impl Default for BrowserSession {
 pub enum ProfileSelectionReason {
     /// Caller explicitly supplied a profile or runtime profile override.
     ExplicitProfile,
+    /// The exact current runtime owner proves this existing session's profile.
+    ExistingOwner,
     /// Selected profile has authenticated state for a requested target service.
     AuthenticatedTarget,
     /// Selected profile matches a requested account identity.

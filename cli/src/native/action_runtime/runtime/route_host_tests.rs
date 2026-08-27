@@ -427,7 +427,9 @@ fn test_apply_service_profile_selection_prefers_authenticated_target() {
             "targetServices" : ["google", "microsoft", "orcid", "nih", "pubmed",
             "crossref", "scopus", "wos", "canvas", "github", "gmail", "outlook"] }
         ),
-    );
+        None,
+    )
+    .unwrap();
     assert_eq!(selected, Some(ProfileSelectionReason::AuthenticatedTarget));
     assert_eq!(options.runtime_profile.as_deref(), Some("journal-auth"));
     let expected_profile = home.join("journal-auth").display().to_string();
@@ -442,7 +444,9 @@ fn test_apply_service_profile_selection_preserves_explicit_profile() {
     let selected = apply_service_profile_selection(
         &mut options,
         &json!({ "serviceName" : "JournalDownloader", "targetServiceId" : "acs" }),
-    );
+        None,
+    )
+    .unwrap();
     assert!(selected.is_none());
     assert_eq!(options.profile.as_deref(), Some("/tmp/explicit-profile"));
     assert!(options.runtime_profile.is_none());
@@ -480,7 +484,9 @@ fn test_apply_service_profile_selection_resolves_explicit_runtime_profile_direct
             { "action" : "launch", "serviceName" : "im-receipts", "runtimeProfile" :
             "google-messages-main", "browserBuild" : "stock_chrome" }
         ),
-    );
+        None,
+    )
+    .unwrap();
     assert_eq!(selected, Some(ProfileSelectionReason::ExplicitProfile));
     assert_eq!(
         options.profile.as_deref(),
@@ -492,6 +498,319 @@ fn test_apply_service_profile_selection_resolves_explicit_runtime_profile_direct
     );
     assert!(options.executable_path.is_none());
 }
+
+#[test]
+fn test_existing_session_inherits_exact_current_owner_profile_before_default() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("existing-owner-profile-home");
+    fs::create_dir_all(&home).expect("test home should be created");
+    guard.set("HOME", home.to_str().expect("test home should be utf-8"));
+    let profile_id = "odollo-fedex";
+    let session_id = "odollo-fulfillment";
+    let browser_id = "browser-odollo-fedex";
+    let user_data_dir = home.join(profile_id);
+    fs::create_dir_all(&user_data_dir).unwrap();
+    let profile_digest =
+        crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir).unwrap();
+    let owner = crate::runtime_owner_transfer::ProfileOwner {
+        owner_id: "owner-odollo-fedex".to_string(),
+        profile_identity_digest: profile_digest,
+        state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+        owner_generation: 4,
+        browser_id: browser_id.to_string(),
+        daemon_session_route: session_id.to_string(),
+        process_instance_digest: "1".repeat(64),
+        browser_family: "chrome".to_string(),
+        cdp_endpoint_identity_digest: "2".repeat(64),
+        target_set_digest: "3".repeat(64),
+        pending_transfer: None,
+        last_transition: None,
+    };
+    let state = ServiceState {
+        profiles: BTreeMap::from([(
+            profile_id.to_string(),
+            BrowserProfile {
+                id: profile_id.to_string(),
+                user_data_dir: Some(user_data_dir.display().to_string()),
+                ..BrowserProfile::default()
+            },
+        )]),
+        sessions: BTreeMap::from([(
+            session_id.to_string(),
+            BrowserSession {
+                id: session_id.to_string(),
+                profile_id: Some(profile_id.to_string()),
+                browser_ids: vec![browser_id.to_string()],
+                lease: LeaseState::Exclusive,
+                ..BrowserSession::default()
+            },
+        )]),
+        browsers: BTreeMap::from([(
+            browser_id.to_string(),
+            BrowserProcess {
+                id: browser_id.to_string(),
+                profile_id: Some(profile_id.to_string()),
+                active_session_ids: vec![session_id.to_string()],
+                health: ServiceBrowserHealth::Ready,
+                ..BrowserProcess::default()
+            },
+        )]),
+        runtime_owner_registry: crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(
+            owner,
+        ),
+        ..ServiceState::default()
+    };
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&state)
+        .unwrap();
+    let mut options = LaunchOptions::default();
+
+    let selected = apply_service_profile_selection(
+        &mut options,
+        &json!({
+            "action": "launch",
+            "serviceName": "OdolloFulfillment",
+            "sessionName": "request-route-hint-does-not-override-daemon"
+        }),
+        Some(session_id),
+    )
+    .unwrap();
+
+    assert_eq!(selected, Some(ProfileSelectionReason::ExistingOwner));
+    assert_eq!(options.runtime_profile.as_deref(), Some(profile_id));
+    assert_eq!(
+        options.profile.as_deref(),
+        Some(user_data_dir.to_str().unwrap())
+    );
+    let cdp_free_plan = build_cdp_free_launch_plan(
+        &json!({ "action": "cdp_free_launch", "serviceName": "OdolloFulfillment" }),
+        Some(session_id),
+    )
+    .unwrap();
+    assert_eq!(
+        cdp_free_plan.launch_options.runtime_profile.as_deref(),
+        Some(profile_id)
+    );
+    assert_eq!(
+        cdp_free_plan.metadata.profile_selection_reason,
+        Some(ProfileSelectionReason::ExistingOwner)
+    );
+}
+
+#[test]
+fn test_existing_session_rejects_explicit_profile_conflict() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("existing-owner-conflict-home");
+    fs::create_dir_all(&home).unwrap();
+    guard.set("HOME", home.to_str().unwrap());
+    let owned_path = home.join("owned-profile");
+    fs::create_dir_all(&owned_path).unwrap();
+    let owner = crate::runtime_owner_transfer::ProfileOwner {
+        owner_id: "owner-books".to_string(),
+        profile_identity_digest: crate::runtime_profile::canonical_profile_identity_digest(
+            &owned_path,
+        )
+        .unwrap(),
+        state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+        owner_generation: 2,
+        browser_id: "browser-books".to_string(),
+        daemon_session_route: "books-receipts".to_string(),
+        process_instance_digest: "4".repeat(64),
+        browser_family: "chrome".to_string(),
+        cdp_endpoint_identity_digest: "5".repeat(64),
+        target_set_digest: "6".repeat(64),
+        pending_transfer: None,
+        last_transition: None,
+    };
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&ServiceState {
+            profiles: BTreeMap::from([(
+                "books-bank".to_string(),
+                BrowserProfile {
+                    id: "books-bank".to_string(),
+                    user_data_dir: Some(owned_path.display().to_string()),
+                    ..BrowserProfile::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "books-receipts".to_string(),
+                BrowserSession {
+                    id: "books-receipts".to_string(),
+                    profile_id: Some("books-bank".to_string()),
+                    browser_ids: vec!["browser-books".to_string()],
+                    lease: LeaseState::Exclusive,
+                    ..BrowserSession::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                "browser-books".to_string(),
+                BrowserProcess {
+                    id: "browser-books".to_string(),
+                    profile_id: Some("books-bank".to_string()),
+                    active_session_ids: vec!["books-receipts".to_string()],
+                    health: ServiceBrowserHealth::Ready,
+                    ..BrowserProcess::default()
+                },
+            )]),
+            runtime_owner_registry: crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(
+                owner,
+            ),
+            ..ServiceState::default()
+        })
+        .unwrap();
+    let mut options = LaunchOptions {
+        runtime_profile: Some("default".to_string()),
+        ..LaunchOptions::default()
+    };
+
+    let error = apply_service_profile_selection(
+        &mut options,
+        &json!({ "action": "launch", "serviceName": "BooksReceipts" }),
+        Some("books-receipts"),
+    )
+    .unwrap_err();
+
+    assert_eq!(error, "explicit_profile_conflicts_with_current_owner");
+}
+
+#[test]
+fn test_existing_session_rejects_retained_identity_without_current_owner() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("existing-owner-unproven-home");
+    fs::create_dir_all(&home).unwrap();
+    guard.set("HOME", home.to_str().unwrap());
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&ServiceState {
+            sessions: BTreeMap::from([(
+                "odollo-fulfillment".to_string(),
+                BrowserSession {
+                    id: "odollo-fulfillment".to_string(),
+                    profile_id: Some("odollo-fedex".to_string()),
+                    browser_ids: vec!["browser-odollo-fedex".to_string()],
+                    ..BrowserSession::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                "browser-odollo-fedex".to_string(),
+                BrowserProcess {
+                    id: "browser-odollo-fedex".to_string(),
+                    profile_id: Some("odollo-fedex".to_string()),
+                    active_session_ids: vec!["odollo-fulfillment".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            ..ServiceState::default()
+        })
+        .unwrap();
+    let mut options = LaunchOptions::default();
+
+    let error = apply_service_profile_selection(
+        &mut options,
+        &json!({ "action": "launch", "serviceName": "OdolloFulfillment" }),
+        Some("odollo-fulfillment"),
+    )
+    .unwrap_err();
+
+    assert_eq!(error, "existing_session_profile_identity_unproven");
+    assert!(options.runtime_profile.is_none());
+    assert!(options.profile.is_none());
+}
+
+#[test]
+fn test_existing_session_rejects_contradictory_browser_profile() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("existing-owner-inconsistent-home");
+    fs::create_dir_all(&home).unwrap();
+    guard.set("HOME", home.to_str().unwrap());
+    let owned_path = home.join("owned-profile");
+    fs::create_dir_all(&owned_path).unwrap();
+    let owner = crate::runtime_owner_transfer::ProfileOwner {
+        owner_id: "owner-odollo".to_string(),
+        profile_identity_digest: crate::runtime_profile::canonical_profile_identity_digest(
+            &owned_path,
+        )
+        .unwrap(),
+        state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+        owner_generation: 7,
+        browser_id: "browser-odollo".to_string(),
+        daemon_session_route: "odollo-fulfillment".to_string(),
+        process_instance_digest: "7".repeat(64),
+        browser_family: "chrome".to_string(),
+        cdp_endpoint_identity_digest: "8".repeat(64),
+        target_set_digest: "9".repeat(64),
+        pending_transfer: None,
+        last_transition: None,
+    };
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&ServiceState {
+            profiles: BTreeMap::from([(
+                "odollo-fedex".to_string(),
+                BrowserProfile {
+                    id: "odollo-fedex".to_string(),
+                    user_data_dir: Some(owned_path.display().to_string()),
+                    ..BrowserProfile::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "odollo-fulfillment".to_string(),
+                BrowserSession {
+                    id: "odollo-fulfillment".to_string(),
+                    profile_id: Some("odollo-fedex".to_string()),
+                    browser_ids: vec!["browser-odollo".to_string()],
+                    ..BrowserSession::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                "browser-odollo".to_string(),
+                BrowserProcess {
+                    id: "browser-odollo".to_string(),
+                    profile_id: Some("foreign-profile".to_string()),
+                    active_session_ids: vec!["odollo-fulfillment".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            runtime_owner_registry: crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(
+                owner,
+            ),
+            ..ServiceState::default()
+        })
+        .unwrap();
+    let mut options = LaunchOptions::default();
+
+    let error = apply_service_profile_selection(
+        &mut options,
+        &json!({ "action": "launch", "serviceName": "OdolloFulfillment" }),
+        Some("odollo-fulfillment"),
+    )
+    .unwrap_err();
+
+    assert_eq!(error, "existing_session_profile_identity_inconsistent");
+}
+
+#[test]
+fn test_new_unbound_session_retains_default_profile_fallback() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("new-unbound-default-home");
+    fs::create_dir_all(&home).unwrap();
+    guard.set("HOME", home.to_str().unwrap());
+    JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+        .save(&ServiceState::default())
+        .unwrap();
+    let mut options = LaunchOptions::default();
+
+    let selection = apply_service_profile_selection(
+        &mut options,
+        &json!({ "action": "launch" }),
+        Some("genuinely-new-session"),
+    )
+    .unwrap();
+
+    assert!(selection.is_none());
+    assert!(options.runtime_profile.is_none());
+    let resolved = crate::runtime_profile::resolve_profile(None, None).unwrap();
+    assert_eq!(resolved.runtime_profile.as_deref(), Some("default"));
+}
+
 #[test]
 fn test_apply_auto_launch_command_hints_honors_planned_identity_and_capability() {
     let guard = EnvGuard::new(&["AGENT_BROWSER_EXECUTABLE_PATH"]);
@@ -529,7 +848,7 @@ fn test_apply_auto_launch_command_hints_honors_planned_identity_and_capability()
     );
     let mut options = LaunchOptions::default();
     let (host, selection_reason, browser_capability_launch, effective_command) =
-        apply_auto_launch_command_hints(&mut options, &command, None);
+        apply_auto_launch_command_hints(&mut options, &command, None, "test-session").unwrap();
     let metadata = ServiceLaunchMetadata::from_launch_options(
         &options,
         Some(&effective_command),
@@ -605,7 +924,7 @@ fn test_apply_auto_launch_command_hints_preserves_explicit_runtime_profile() {
     );
     let mut options = LaunchOptions::default();
     let (_host, selection_reason, _browser_capability_launch, effective_command) =
-        apply_auto_launch_command_hints(&mut options, &command, None);
+        apply_auto_launch_command_hints(&mut options, &command, None, "test-session").unwrap();
     assert!(selection_reason.is_none());
     assert_eq!(options.runtime_profile.as_deref(), Some("switch-b-profile"));
     assert!(options.profile.is_none());
@@ -666,7 +985,7 @@ fn test_open_preserves_runtime_profile_when_default_profile_is_locked_shape() {
     );
     let mut options = LaunchOptions::default();
     let (host, selection_reason, _browser_capability_launch, effective_command) =
-        apply_auto_launch_command_hints(&mut options, &command, None);
+        apply_auto_launch_command_hints(&mut options, &command, None, "test-session").unwrap();
     assert_eq!(host, ServiceBrowserHost::RemoteHeaded);
     assert!(selection_reason.is_none());
     assert_eq!(
@@ -730,7 +1049,7 @@ fn test_apply_auto_launch_command_hints_preserves_explicit_profile_id() {
     );
     let mut options = LaunchOptions::default();
     let (_host, selection_reason, _browser_capability_launch, effective_command) =
-        apply_auto_launch_command_hints(&mut options, &command, None);
+        apply_auto_launch_command_hints(&mut options, &command, None, "test-session").unwrap();
     assert!(selection_reason.is_none());
     assert_eq!(options.runtime_profile.as_deref(), Some("switch-c-profile"));
     assert!(options.profile.is_none());
@@ -779,7 +1098,7 @@ fn test_apply_auto_launch_command_hints_uses_effective_service_default() {
     );
     let mut options = LaunchOptions::default();
     let (host, selection_reason, browser_capability_launch, effective_command) =
-        apply_auto_launch_command_hints(&mut options, &command, None);
+        apply_auto_launch_command_hints(&mut options, &command, None, "test-session").unwrap();
     let metadata = ServiceLaunchMetadata::from_launch_options(
         &options,
         Some(&effective_command),
@@ -875,7 +1194,8 @@ fn test_apply_auto_launch_command_hints_preserves_retained_remote_headed_surface
         true, "headlessExplicit" : true })
     ));
     let (host, selection_reason, _, effective_command) =
-        apply_auto_launch_command_hints(&mut options, &command, Some(&retained));
+        apply_auto_launch_command_hints(&mut options, &command, Some(&retained), "test-session")
+            .unwrap();
     let mut metadata = ServiceLaunchMetadata::from_launch_options(
         &options,
         Some(&effective_command),
@@ -930,7 +1250,9 @@ fn test_explicit_local_headless_launch_surface_overrides_retained_remote_hint() 
         "headlessExplicit" : true }
     );
     let mut options = LaunchOptions::default();
-    let (host, _, _, _) = apply_auto_launch_command_hints(&mut options, &command, Some(&retained));
+    let (host, _, _, _) =
+        apply_auto_launch_command_hints(&mut options, &command, Some(&retained), "test-session")
+            .unwrap();
     assert_eq!(host, ServiceBrowserHost::LocalHeadless);
     assert!(options.headless);
     assert!(!options.remote_headed);
@@ -946,7 +1268,7 @@ fn test_private_remote_headed_metadata_waits_for_launched_display_name() {
     );
     let mut options = LaunchOptions::default();
     let (host, selection_reason, _, effective_command) =
-        apply_auto_launch_command_hints(&mut options, &command, None);
+        apply_auto_launch_command_hints(&mut options, &command, None, "test-session").unwrap();
     let metadata = ServiceLaunchMetadata::from_launch_options(
         &options,
         Some(&effective_command),
@@ -968,7 +1290,7 @@ fn test_remote_headed_defaults_to_private_display_when_display_is_inherited() {
     );
     let mut options = LaunchOptions::default();
     let (host, selection_reason, _, effective_command) =
-        apply_auto_launch_command_hints(&mut options, &command, None);
+        apply_auto_launch_command_hints(&mut options, &command, None, "test-session").unwrap();
     let metadata = ServiceLaunchMetadata::from_launch_options(
         &options,
         Some(&effective_command),
@@ -1427,7 +1749,7 @@ fn test_cdp_free_launch_plan_is_no_devtools_headed_lifecycle_only() {
         ["--window-size=960,720"], "requiresCdpFree" : true, "cdpAttachmentAllowed" :
         false }
     );
-    let plan = build_cdp_free_launch_plan(&cmd).expect("plan should parse without launching");
+    let plan = build_cdp_free_launch_plan(&cmd, None).expect("plan should parse without launching");
     assert!(!plan.launch_options.headless);
     assert!(!plan.launch_options.attachable);
     assert!(plan.launch_options.manual_login);
@@ -1469,7 +1791,7 @@ fn test_cdp_free_launch_plan_preserves_remote_headed_route_without_devtools() {
         "https://agent-browser.example/guacamole/#/client/opaque", "connectionId" :
         "1", "connectionName" : "Agent Browser RDP Route A" } }
     );
-    let plan = build_cdp_free_launch_plan(&cmd).expect("plan should parse without launching");
+    let plan = build_cdp_free_launch_plan(&cmd, None).expect("plan should parse without launching");
     assert_eq!(plan.service_host, ServiceBrowserHost::RemoteHeaded);
     assert!(!plan.launch_options.headless);
     assert!(plan.launch_options.remote_headed);
@@ -1548,6 +1870,7 @@ fn test_cdp_free_launch_response_reports_unsupported_cdp_operations() {
 fn test_cdp_free_launch_plan_rejects_dash_prefixed_url() {
     let result = build_cdp_free_launch_plan(
         &json!({ "action" : "cdp_free_launch", "url" : "--remote-debugging-port=9222" }),
+        None,
     );
     let err = match result {
         Ok(_) => panic!("dash-prefixed url should be rejected"),
@@ -2230,7 +2553,11 @@ fn test_service_profile_lease_gate_defers_to_attributed_tab_handle() {
             "targetId": "target-carrier-evidence"
         }
     });
-    assert!(service_profile_lease_metadata_for_command(&command).is_none());
+    assert!(
+        service_profile_lease_metadata_for_command(&command, Some("test-session"))
+            .unwrap()
+            .is_none()
+    );
     assert!(matches!(
         service_profile_lease_gate(&command, "existing-session", Some(0))
             .expect("attributed tab handle should bypass launch-profile leasing"),

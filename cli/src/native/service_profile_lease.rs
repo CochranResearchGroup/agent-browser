@@ -1613,7 +1613,7 @@ mod tests {
             &mut state,
             "session-odollo",
             &authority,
-            "2026-08-27T13:00:00Z".to_string(),
+            "2099-08-27T13:00:00Z".to_string(),
         )
         .unwrap();
         let lease_id = profile_leases_for_state(&state, NOW)[0].id.clone();
@@ -1744,7 +1744,7 @@ mod tests {
             "leaseId": lease_id,
             "leaseRevision": lease_revision,
             "profileCapabilityFile": capability_path,
-            "expiresAt": "2026-08-27T14:00:00Z",
+            "expiresAt": "2100-08-27T14:00:00Z",
             "serviceName": "OdolloFulfillment",
         }))
         .await

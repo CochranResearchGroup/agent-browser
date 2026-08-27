@@ -443,7 +443,7 @@ export interface ServiceSessionRecord {
   agentName: string | null;
   taskName: string | null;
   profileId: string | null;
-  profileSelectionReason: 'explicit_profile' | 'authenticated_target' | 'account_match' | 'target_match' | 'service_allow_list' | 'browser_build_default' | null;
+  profileSelectionReason: 'explicit_profile' | 'existing_owner' | 'authenticated_target' | 'account_match' | 'target_match' | 'service_allow_list' | 'browser_build_default' | null;
   profileLeaseDisposition: 'new_browser' | 'reused_browser' | 'active_lease_conflict' | null;
   profileLeaseConflictSessionIds: string[];
   browserCapabilityLaunch: Record<string, unknown> | null;

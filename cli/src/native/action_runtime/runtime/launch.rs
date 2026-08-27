@@ -594,7 +594,12 @@ pub(crate) async fn auto_launch(state: &mut DaemonState, command: &Value) -> Res
     }
     let retained_remote_headed = retained_remote_headed_launch_hint(&state.session_id, command);
     let (service_host, selection_reason, browser_capability_launch, effective_command) =
-        apply_auto_launch_command_hints(&mut options, command, retained_remote_headed.as_ref());
+        apply_auto_launch_command_hints(
+            &mut options,
+            command,
+            retained_remote_headed.as_ref(),
+            &state.session_id,
+        )?;
     let mut metadata = ServiceLaunchMetadata::from_launch_options(
         &options,
         Some(&effective_command),
@@ -933,7 +938,11 @@ pub(crate) async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Resul
     let retained_remote_headed = retained_remote_headed_launch_hint(&state.session_id, cmd);
     apply_retained_remote_headed_launch_hints(&mut launch_options, retained_remote_headed.as_ref());
     let service_host = apply_launch_host_hints(&mut launch_options, &effective_cmd);
-    let selection_reason = apply_service_profile_selection(&mut launch_options, &effective_cmd);
+    let selection_reason = apply_service_profile_selection(
+        &mut launch_options,
+        &effective_cmd,
+        Some(&state.session_id),
+    )?;
     let browser_capability_launch =
         apply_service_browser_capability_selection(&mut launch_options, &effective_cmd);
     let mut metadata = ServiceLaunchMetadata::from_launch_options(
@@ -1233,7 +1242,7 @@ pub(crate) async fn handle_cdp_free_launch(
     cmd: &Value,
     state: &mut DaemonState,
 ) -> Result<Value, String> {
-    let plan = build_cdp_free_launch_plan(cmd)?;
+    let plan = build_cdp_free_launch_plan(cmd, Some(&state.session_id))?;
     ensure_service_profile_lease_available(&plan.metadata, &state.session_id, cmd).await?;
     validate_cdp_free_launch_plan(&plan)?;
     let launch = launch_chrome_detached(&plan.launch_options)?;

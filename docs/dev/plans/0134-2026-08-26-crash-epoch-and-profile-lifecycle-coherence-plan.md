@@ -4,7 +4,7 @@ Date: 2026-08-26
 
 State: OPEN
 
-Execution state: `slice_d_complete_slice_e_pending`
+Execution state: `slice_e_complete_slice_f_pending`
 
 Lane: P134
 
@@ -35,7 +35,9 @@ Current checkpoint:
 - Same-principal coherent reuse returns the exact browser and session route.
   Foreign principals wait, unauthenticated callers must authenticate, and
   profile contradictions return a typed lifecycle identity inconsistency.
-- Slice E is the next source packet. Slices E through K remain pending.
+- Slice E makes the exact current runtime owner authoritative for an existing
+  managed session before any new-lane profile fallback. Slices F through K
+  remain pending.
 
 Depends on:
 
@@ -909,3 +911,36 @@ Do not implement migration or installer effects in Slice A.
 - No browser, provider, development-runtime, installed-runtime, Service State,
   owner, lease, route, display, unit, Guacamole, or profile effect occurred.
   The next authorized packet is Slice E only.
+
+## 2026-08-27 Slice E canonical profile identity checkpoint
+
+- Existing managed launches, automatic launches, profile-lease admission, and
+  CDP-free launches now resolve the daemon's exact current session through the
+  single runtime owner registry before applying request selection or the
+  generic `default` fallback.
+- A ready effect-capable owner must agree with the Service State session,
+  browser, profile, canonical profile-directory digest, route, owner
+  generation, and any retained principal binding. Contradictions return typed
+  profile identity errors instead of republishing the browser.
+- Conflicting explicit profile IDs or paths are rejected. Request route hints
+  cannot override the daemon's actual route, but remain available to the
+  existing duplicate-lane lease policy. Retained session or browser evidence
+  without a current owner remains preserve-only.
+- A genuinely new unbound session still reaches the existing `default`
+  runtime-profile behavior. Session records and generated clients expose
+  `existing_owner` alongside the complete profile-selection reason enum.
+- The broad service partition found and repaired one adjacent Slice D test
+  contract gap: MCP `profileCapability` is explicitly tested as an ephemeral
+  transport-only extension rather than a persisted service-request field. A
+  date-bound lease fixture was also moved out of the current time window so it
+  continues testing revision compare-and-swap instead of accidental expiry.
+- Validation passed: all 71 route-host tests; all 35 service-model and 45
+  access-plan tests; the 700-test service partition with 698 passed and 2
+  intentionally ignored; strict Clippy; generated-client contract, type, and
+  full client checks; API and MCP parity; service collection and profile lookup
+  no-launch smokes; source-free workstation, host, VM, Guacamole, durability,
+  route-user, and remote-view documentation fixtures; and the docs production
+  build.
+- No browser, provider, development-runtime, installed-runtime, Service State,
+  owner, lease, route, display, unit, Guacamole, or profile effect occurred.
+  The next authorized packet is Slice F only.

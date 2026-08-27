@@ -33,7 +33,10 @@ use crate::native::webdriver::safari;
 use serde_json::{json, Map, Value};
 use std::env;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
-pub(crate) fn build_cdp_free_launch_plan(cmd: &Value) -> Result<CdpFreeLaunchPlan, String> {
+pub(crate) fn build_cdp_free_launch_plan(
+    cmd: &Value,
+    effective_session: Option<&str>,
+) -> Result<CdpFreeLaunchPlan, String> {
     let url = optional_command_string(cmd, "url");
     if url.as_deref().is_some_and(|value| value.starts_with('-')) {
         return Err("cdp_free_launch url must not start with '-'".to_string());
@@ -133,7 +136,8 @@ pub(crate) fn build_cdp_free_launch_plan(cmd: &Value) -> Result<CdpFreeLaunchPla
     // CDP-free is a control-plane posture, not a request to abandon an
     // explicitly allocated remote-headed display or its operator view stream.
     let service_host = apply_launch_host_hints(&mut launch_options, cmd);
-    let selection_reason = apply_service_profile_selection(&mut launch_options, cmd);
+    let selection_reason =
+        apply_service_profile_selection(&mut launch_options, cmd, effective_session)?;
     let browser_capability_launch =
         apply_service_browser_capability_selection(&mut launch_options, cmd);
     let mut metadata =

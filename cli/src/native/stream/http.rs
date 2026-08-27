@@ -2942,6 +2942,9 @@ fn service_profile_match_details(
             }),
         ),
         ProfileSelectionReason::ExplicitProfile => (None, None),
+        ProfileSelectionReason::ExistingOwner => {
+            (Some("runtimeOwnerRegistry"), Some(profile.id.clone()))
+        }
     }
 }
 
