@@ -1188,3 +1188,49 @@ Do not implement migration or installer effects in Slice A.
   `/remote-view/<handoff-id>` through the candidate during a new guarded
   transaction. Do not retry apply without that prerequisite because the
   presentation state has not changed.
+
+## 2026-08-27 closed-world completion audit checkpoint
+
+- Graphiti discovery was healthy but returned no current Plan 0134 episode.
+  This audit therefore used the plan, current source, tests, commits, and
+  installed receipts as authority.
+- The canonical `test:plan-0134-repro-fixtures` gate was stale. It still failed
+  when first-class lease commands, generated helpers, or MCP resources were
+  present. The fixture now names its empty operation set as the Slice A
+  baseline, while the gate positively requires all ten lease operations across
+  CLI, generated client, HTTP and MCP contract metadata, and dashboard action
+  wiring. It also requires the public exact install transaction surface.
+- Contract documentation no longer describes public capability ingestion,
+  lease mutations, detail, watch, reconciliation, dashboard controls, staged
+  migration, or generated clients as future work. It preserves the exact
+  ephemeral capability channels and keeps installed acceptance tied to the
+  candidate transaction and final doctor.
+- Required Acceptance Matrix items 1 through 11 and 16 through 24 have current
+  source evidence from 45 access-plan tests, 30 profile-lease tests, the exact
+  request-admission test, API and MCP parity, the full generated service-client
+  suite, dashboard lease and inspector checks, and the foreign-principal
+  control.
+- Matrix item 6 previously had explicit positive retained-profile coverage
+  only for Odollo fulfillment. One fixture-driven authenticated acceptance now
+  proves Last30Days, Books Receipts, and Odollo fulfillment each retain their
+  exact browser and session route under matching capability and owner
+  generation.
+- Matrix items 12 through 15 have current provider-free crash evidence from six
+  crash-regeneration tests, including dependency-ordered replay, stable
+  operation IDs, boot and identity rejection, durable serialization, and the
+  independent operator-visible interruption. The isolated development
+  checkpoint remains the runtime evidence for the harmless browser replay.
+- Matrix items 24 through 29 have current migration and transaction evidence
+  from 14 migration tests, 104 workstation installer tests, the green
+  zero-effect dry run, exact legacy-ledger normalization, and the clean
+  candidate rollback receipt.
+- Matrix items 30 through 32 remain unproved. The candidate was not accepted,
+  the installed CLI, runtime host, dashboard, contracts, skill, and schemas do
+  not yet report one candidate generation, and final installed doctor is not
+  green. Slice K also still owes the provider-free installed consumer matrix,
+  accepted rollback review, second idempotent apply, and final doctor after the
+  presentation prerequisite is authorized and satisfied.
+- Progress classification: `hardening`. Source acceptance evidence and stale
+  contract drift improved, but the installed acceptance state did not change.
+  No provider, profile, owner, lease, Service State, browser, route, or
+  generation effect occurred during this audit.

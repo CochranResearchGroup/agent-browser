@@ -145,7 +145,7 @@
     "requiredReadOperations": ["list", "inspect", "explain", "doctor", "watch"],
     "requiredOwnerOperations": ["rejoin", "renew", "release"],
     "requiredReconcileOperations": ["reconcile_plan", "reconcile_apply"],
-    "currentFirstClassOperations": [],
+    "baselineFirstClassOperations": [],
     "existingAdjacentOperations": ["tab_handle_release", "viewer_lease_request", "viewer_lease_heartbeat", "viewer_lease_release"]
   }
 }

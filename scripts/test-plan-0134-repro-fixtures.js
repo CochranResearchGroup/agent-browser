@@ -27,7 +27,7 @@ assert.equal(
   lifecycle.accessPlanCases.find((fixture) => !fixture.samePrincipal)?.requiredFutureAction,
   'wait_for_foreign_principal',
 );
-assert.deepEqual(lifecycle.publicLeaseContract.currentFirstClassOperations, []);
+assert.deepEqual(lifecycle.publicLeaseContract.baselineFirstClassOperations, []);
 assert.deepEqual(lifecycle.publicLeaseContract.requiredReadOperations, [
   'list',
   'inspect',
@@ -67,45 +67,97 @@ assert.equal(install.skillStaging.rollbackRestoresAcceptedSkill, true);
 const output = readText('cli/src/output.rs');
 const client = readText('packages/client/src/service-observability.js');
 const contracts = readText('cli/src/native/service_contracts.rs');
-for (const absentSurface of [
-  'service leases list',
-  'service leases inspect',
-  'service leases rejoin',
-  'service leases renew',
-  'service leases reconcile',
+const dashboard = readText('packages/dashboard/src/components/service-panel.tsx');
+for (const acceptedInstallSurface of [
+  'agent-browser install doctor --json',
+  'agent-browser install workstation --dry-run --json',
+  'agent-browser install transactions list [--json]',
+  'agent-browser install transactions inspect --transaction-id <id> [--json]',
+  'agent-browser install transactions <resume|rollback|close> --transaction-id <id> --expected-revision <revision> --candidate-generation <generation> --census-digest <sha256|none> [--json]',
 ]) {
   assert.equal(
-    output.includes(absentSurface),
-    false,
-    `current CLI unexpectedly exposes ${absentSurface}; advance the frozen contract fixture with the implementation`,
+    output.includes(acceptedInstallSurface),
+    true,
+    `accepted install control plane is missing ${acceptedInstallSurface}`,
   );
 }
-for (const absentHelper of [
-  'listServiceProfileLeases',
-  'inspectServiceProfileLease',
+for (const acceptedSurface of [
+  'agent-browser service leases',
+  'agent-browser service leases doctor',
+  'agent-browser service leases watch',
+  'agent-browser service leases register',
+  'service leases <lease-id> explain',
+  'service leases <lease-id> rejoin',
+  'service leases <lease-id> renew',
+  'service leases <lease-id> release',
+  'service leases <lease-id> reconcile plan',
+  'service leases <lease-id> reconcile apply',
+]) {
+  assert.equal(
+    output.includes(acceptedSurface),
+    true,
+    `accepted CLI is missing ${acceptedSurface}`,
+  );
+}
+for (const acceptedHelper of [
+  'getServiceProfileLeases',
+  'watchServiceProfileLeases',
+  'getServiceProfileLease',
+  'explainServiceProfileLease',
+  'doctorServiceProfileLeases',
   'rejoinServiceProfileLease',
   'renewServiceProfileLease',
-  'reconcileServiceProfileLease',
+  'releaseServiceProfileLease',
+  'planServiceProfileLeaseReconciliation',
+  'applyServiceProfileLeaseReconciliation',
 ]) {
   assert.equal(
-    client.includes(absentHelper),
-    false,
-    `current generated client unexpectedly exposes ${absentHelper}; advance the frozen contract fixture with the implementation`,
+    client.includes(acceptedHelper),
+    true,
+    `accepted generated client is missing ${acceptedHelper}`,
   );
 }
-assert.equal(
-  contracts.includes('agent-browser://profile-leases'),
-  false,
-  'current MCP contracts unexpectedly expose the first-class profile lease collection',
-);
+for (const acceptedContract of [
+  'agent-browser://profile-leases',
+  'agent-browser://profile-leases/doctor',
+  'agent-browser://profile-leases/{lease_id}',
+  'agent-browser://profile-leases/{lease_id}/explain',
+  '/api/service/profile-leases/<id>/<rejoin|renew|release>',
+  '/api/service/profile-leases/<id>/reconcile/plan',
+  '/api/service/profile-leases/<id>/reconcile/apply',
+]) {
+  assert.equal(
+    contracts.includes(acceptedContract),
+    true,
+    `accepted service contracts are missing ${acceptedContract}`,
+  );
+}
+for (const dashboardContract of [
+  'onManageProfileLease',
+  'profileLeaseActionAllowed',
+  'rejoinServiceProfileLease(common)',
+  'renewServiceProfileLease({',
+  'releaseServiceProfileLease(common)',
+  'planServiceProfileLeaseReconciliation({',
+  'applyServiceProfileLeaseReconciliation({',
+]) {
+  assert.equal(
+    dashboard.includes(dashboardContract),
+    true,
+    `accepted dashboard is missing ${dashboardContract}`,
+  );
+}
 
 process.stdout.write(
   `${JSON.stringify({
     success: true,
     accessPlanFixtureCount: lifecycle.accessPlanCases.length,
-    currentFirstClassLeaseOperationCount:
-      lifecycle.publicLeaseContract.currentFirstClassOperations.length,
-    installContractFrozen: true,
+    baselineFirstClassLeaseOperationCount:
+      lifecycle.publicLeaseContract.baselineFirstClassOperations.length,
+    acceptedFirstClassLeaseOperationCount: 10,
+    publicLeaseContractAccepted: true,
+    installContractBaselineFrozen: true,
+    installPublicTransactionSurfaceAccepted: true,
   })}\n`,
 );
 

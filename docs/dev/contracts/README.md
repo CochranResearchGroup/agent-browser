@@ -9,8 +9,9 @@ software clients and MCP agents are expected to consume directly.
 principal-to-profile capability, runtime owner binding, subordinate session
 and tab work leases, conservative legacy migration, and four typed continuity
 recourse states. Caller labels remain attribution only. Public capability
-ingestion and first-class profile lease operations are intentionally deferred
-to later Plan 0134 slices.
+ingestion and first-class profile lease operations are available through the
+maintained CLI, HTTP, MCP, dashboard, and generated-client surfaces described
+below.
 
 `service-profile-lease.v1.md` defines the first-class derived lease record,
 exact revision compare-and-swap, read and owner-scoped action families,
@@ -18,7 +19,8 @@ doctor findings, and sealed idempotent reconciliation protocol. Its public
 collection transport is available through CLI `agent-browser service leases`,
 HTTP `GET /api/service/profile-leases`, MCP
 `agent-browser://profile-leases`, and generated client helpers. Mutation,
-detail, watch, and dashboard parity remain in progress under Plan 0134 Slice C.
+detail, explanation, doctor, watch, registration, reconciliation, and dashboard
+parity are implemented under Plan 0134.
 
 `service-profile-lease-record.v1.schema.json` describes each projected lease.
 `service-profile-leases-response.v1.schema.json` describes the collection and
@@ -28,7 +30,6 @@ doctor projection. `service-profile-lease-detail-response.v1.schema.json`,
 `service-profile-lease-mutation-response.v1.schema.json` cover exact reads and
 authenticated owner actions. Raw profile capabilities are transport-only
 secrets and never belong in retained service contracts or events.
-doctor envelope shared by the public read transports.
 
 MCP agents should begin shared, authenticated, profile-sensitive, or
 operator-visible work with `agent-browser://operating-guide`. This read-only

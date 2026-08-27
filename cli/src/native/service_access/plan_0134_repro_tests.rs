@@ -2,7 +2,7 @@ use super::*;
 use crate::native::service_model::{DisplayAllocation, ViewerLease};
 use crate::runtime_owner_transfer::{
     CleanupObligationState, ProfileOwner, ProfileOwnerState, RuntimeLaneLifecycleState,
-    RuntimeLifecycleRecord, RuntimeOwnerRegistry,
+    RuntimeLifecycleRecord, RuntimeOwnerPrincipalBinding, RuntimeOwnerRegistry,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -203,6 +203,117 @@ fn p134_slice_a_public_access_plan_rejects_principal_authority_input() {
 }
 
 #[test]
+fn p134_authenticated_consumer_matrix_reuses_each_principal_owned_profile() {
+    use crate::native::service_principal::{
+        authenticate_profile_capability, register_profile_capability, ServicePrincipalProvenance,
+        ServicePrincipalRegistrationRequest,
+    };
+
+    let corpus = corpus();
+    let accepted_consumers = [
+        "last30days-repeated-task",
+        "books-receipts-post-crash-reconnect",
+        "odollo-fulfillment-fedex-tracking-lookup",
+    ];
+    for case in corpus
+        .access_plan_cases
+        .iter()
+        .filter(|case| accepted_consumers.contains(&case.consumer_shape.as_str()))
+    {
+        let mut state = state_for_case(case);
+        state.browsers.insert(
+            case.holder_browser_id.clone(),
+            BrowserProcess {
+                id: case.holder_browser_id.clone(),
+                profile_id: Some(case.profile_id.clone()),
+                health: BrowserHealth::Ready,
+                active_session_ids: vec![case.holder_session_id.clone()],
+                ..BrowserProcess::default()
+            },
+        );
+        let session = state.sessions.get_mut(&case.holder_session_id).unwrap();
+        session.principal_id = Some(case.requester_principal_id.clone());
+        session.principal_provenance = Some(ServicePrincipalProvenance::RegisteredCapability);
+
+        let capability = format!(
+            "p134-synthetic-capability-{}-0123456789abcdef0123456789abcdef",
+            case.fixture_id
+        );
+        let registration = register_profile_capability(
+            &mut state.service_principals,
+            ServicePrincipalRegistrationRequest {
+                principal_id: case.requester_principal_id.clone(),
+                display_name: Some(case.service_name.clone()),
+                profile_id: case.profile_id.clone(),
+                registered_at: Some("2026-08-27T00:00:00Z".to_string()),
+                registered_by: Some("plan-0134-acceptance".to_string()),
+            },
+            &capability,
+        )
+        .unwrap();
+        let profile_identity_digest = state
+            .runtime_owner_registry
+            .owners
+            .values()
+            .next()
+            .unwrap()
+            .profile_identity_digest
+            .clone();
+        state
+            .runtime_owner_registry
+            .bind_principal_authority(RuntimeOwnerPrincipalBinding {
+                principal_id: case.requester_principal_id.clone(),
+                profile_id: case.profile_id.clone(),
+                profile_identity_digest,
+                capability_id: registration.capability.capability_id,
+                provenance: ServicePrincipalProvenance::RegisteredCapability,
+                owner_generation: 7,
+            })
+            .unwrap();
+        let authority = authenticate_profile_capability(
+            &state.service_principals,
+            &capability,
+            Some(&case.profile_id),
+        )
+        .unwrap();
+
+        let plan = service_access_plan_for_state_with_principal(
+            &state,
+            ServiceAccessPlanRequest {
+                service_name: Some(case.service_name.clone()),
+                agent_name: Some(case.agent_name.clone()),
+                task_name: Some(case.task_name.clone()),
+                target_service_ids: vec![case.target_service_id.clone()],
+                runtime_profile: Some(case.profile_id.clone()),
+                ..ServiceAccessPlanRequest::default()
+            },
+            Some(&authority),
+        );
+
+        assert_eq!(
+            plan["decision"]["profileReuse"]["recommendedAction"], "reuse_existing_browser",
+            "{} did not reuse its principal-owned profile",
+            case.consumer_shape
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["reusableBrowserId"], case.holder_browser_id,
+            "{} lost its retained browser identity",
+            case.consumer_shape
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["sessionName"], case.holder_session_id,
+            "{} lost its retained session route",
+            case.consumer_shape
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["available"], true,
+            "{} remained blocked after authenticated reuse",
+            case.consumer_shape
+        );
+    }
+}
+
+#[test]
 fn p134_slice_a_freezes_default_attribution_crash_and_lease_contract_gaps() {
     let corpus = corpus();
     let resolved = crate::runtime_profile::resolve_profile(None, None)
@@ -224,7 +335,7 @@ fn p134_slice_a_freezes_default_attribution_crash_and_lease_contract_gaps() {
         Some(5)
     );
     assert_eq!(
-        corpus.public_lease_contract["currentFirstClassOperations"],
+        corpus.public_lease_contract["baselineFirstClassOperations"],
         serde_json::json!([])
     );
 

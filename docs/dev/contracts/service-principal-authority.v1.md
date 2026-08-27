@@ -26,9 +26,11 @@ containing:
 - registered-capability provenance.
 
 Caller-supplied request fields cannot construct that record. Public transport
-ingestion remains unavailable until the capability can be supplied through a
-reviewed authenticated channel. A caller-supplied `principalId` therefore
-continues to fail request validation.
+ingestion accepts the capability only through the reviewed ephemeral channel
+for that transport: an absolute private capability file for CLI mutations, an
+`Authorization: Bearer` header for HTTP, or the `profileCapability` argument
+for MCP tools. A caller-supplied `principalId` therefore continues to fail
+request validation.
 
 ## Owner binding
 
@@ -85,7 +87,8 @@ Migration planning is conservative:
   `unproven_principal`, observation-only, with
   `reconcile_principal_identity` recourse.
 
-This slice introduces the source model only. First-class lease commands,
-public HTTP and MCP operations, generated-client helpers, dashboard controls,
-state migration effects, and installed-runtime adoption are later Plan 0134
-slices and must feature-detect their contracts when shipped.
+First-class lease commands, public HTTP and MCP operations, generated-client
+helpers, dashboard controls, and staged state migration are implemented.
+Clients must feature-detect the advertised contract. Installed-runtime
+acceptance remains bound to the exact candidate transaction and final doctor
+receipt recorded by Plan 0134.
