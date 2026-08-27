@@ -4,6 +4,9 @@
 //! existing runtime owner registry, and subordinate session and tab work
 //! leases. Labels never grant authority. Every mutation uses an exact lease
 //! revision and the caller's authenticated profile capability.
+//! Rejoin may repair one unproven live session only when it is the unique exact
+//! session of the capability-bound current runtime owner. The repair binds only
+//! that session and its same-browser active tabs, with an explicit expiry.
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -20,10 +23,10 @@ use super::service_model::{
     LeaseState, ServiceEvent, ServiceEventKind, ServiceState, TabLifecycle,
 };
 use super::service_principal::{
-    authenticate_profile_capability, authenticated_authority_is_current,
-    generate_profile_capability_token, register_profile_capability, AuthenticatedServicePrincipal,
-    PrincipalContinuityRecourse, ServicePrincipalProvenance, ServicePrincipalRegistrationRequest,
-    ServicePrincipalState, ServiceProfileCapabilityState,
+    authenticate_profile_capability, authenticated_authority_is_current, bind_session_work_lease,
+    bind_tab_work_lease, generate_profile_capability_token, register_profile_capability,
+    AuthenticatedServicePrincipal, PrincipalContinuityRecourse, ServicePrincipalProvenance,
+    ServicePrincipalRegistrationRequest, ServicePrincipalState, ServiceProfileCapabilityState,
 };
 use super::service_resources::load_service_state_for_maintenance;
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
@@ -489,9 +492,14 @@ fn mutate_profile_lease(command: &serde_json::Value) -> Result<serde_json::Value
         .map_err(principal_error_string)?;
         let before = inspect_profile_lease(state, &lease_id, &now).map_err(lease_error_string)?;
         let lease = match operation {
-            "rejoin" => {
-                rejoin_profile_lease(state, &lease_id, &expected_revision, &authority, &now)
-            }
+            "rejoin" => rejoin_profile_lease(
+                state,
+                &lease_id,
+                &expected_revision,
+                &authority,
+                &now,
+                expires_at.as_deref(),
+            ),
             "renew" => renew_profile_lease(
                 state,
                 &lease_id,
@@ -744,15 +752,30 @@ pub(crate) fn doctor_profile_leases(state: &ServiceState, now: &str) -> ProfileL
 }
 
 pub(crate) fn rejoin_profile_lease(
-    state: &ServiceState,
+    state: &mut ServiceState,
     lease_id: &str,
     expected_revision: &str,
     authority: &AuthenticatedServicePrincipal,
     now: &str,
+    expires_at: Option<&str>,
 ) -> Result<ProfileLeaseRecord, ProfileLeaseError> {
     let lease = authorized_lease(state, lease_id, expected_revision, authority, now)?;
     require_action(&lease, "rejoin")?;
-    Ok(lease)
+    if !lease.observation_only {
+        return Ok(lease);
+    }
+    let expires_at = expires_at
+        .filter(|expires_at| *expires_at > now)
+        .ok_or_else(|| lease_error(ProfileLeaseFailureCode::ActionNotAuthorized, lease_id))?;
+    let (session_id, tab_ids) = exact_unproven_rejoin_target(state, authority, now)
+        .ok_or_else(|| lease_error(ProfileLeaseFailureCode::ActionNotAuthorized, lease_id))?;
+    bind_session_work_lease(state, &session_id, authority, expires_at.to_string())
+        .map_err(|_| lease_error(ProfileLeaseFailureCode::ActionNotAuthorized, lease_id))?;
+    for tab_id in tab_ids {
+        bind_tab_work_lease(state, &tab_id, authority, expires_at.to_string())
+            .map_err(|_| lease_error(ProfileLeaseFailureCode::ActionNotAuthorized, lease_id))?;
+    }
+    inspect_profile_lease(state, lease_id, now)
 }
 
 pub(crate) fn renew_profile_lease(
@@ -1062,10 +1085,20 @@ fn bound_profile_lease(
         blocking.push("unproven_session_authority".to_string());
     }
     let coherent = blocking.is_empty();
+    let authority = authority_for_binding(state, binding);
+    let rejoin_repairable = blocking == ["unproven_session_authority"]
+        && authority
+            .as_ref()
+            .is_some_and(|authority| exact_unproven_rejoin_target(state, authority, now).is_some());
     let (lease_state, recourse) = if !foreign.is_empty() {
         (
             "foreign_held",
             PrincipalContinuityRecourse::WaitForForeignPrincipal,
+        )
+    } else if rejoin_repairable {
+        (
+            "identity_reconciliation_required",
+            PrincipalContinuityRecourse::RejoinOwnedBrowser,
         )
     } else if !coherent {
         (
@@ -1094,7 +1127,6 @@ fn bound_profile_lease(
         if !same.is_empty() {
             actions.push("renew".to_string());
         }
-        let authority = authority_for_binding(state, binding);
         let has_active_tabs = authority.as_ref().is_some_and(|authority| {
             active_subordinate_tabs(state, authority, now)
                 .next()
@@ -1103,6 +1135,8 @@ fn bound_profile_lease(
         if !same.is_empty() && !has_active_tabs {
             actions.push("release".to_string());
         }
+    } else if rejoin_repairable {
+        actions.push("rejoin".to_string());
     }
     if stale_same || !blocking.is_empty() {
         actions.push("reconcile_plan".to_string());
@@ -1365,6 +1399,84 @@ fn active_subordinate_tabs<'a>(
                 .as_deref()
                 .is_none_or(|expires_at| expires_at > now)
     })
+}
+
+fn exact_unproven_rejoin_target(
+    state: &ServiceState,
+    authority: &AuthenticatedServicePrincipal,
+    now: &str,
+) -> Option<(String, Vec<String>)> {
+    if !authenticated_authority_is_current(&state.service_principals, authority) {
+        return None;
+    }
+    let binding = state
+        .runtime_owner_registry
+        .principal_bindings
+        .values()
+        .find(|binding| {
+            binding.principal_id == authority.principal_id
+                && binding.profile_id == authority.profile_id
+                && binding.capability_id == authority.capability_id
+                && binding.provenance == authority.provenance
+        })?;
+    if !state
+        .runtime_owner_registry
+        .principal_binding_is_current(Some(binding))
+    {
+        return None;
+    }
+    let owner = state
+        .runtime_owner_registry
+        .owners
+        .get(&binding.profile_identity_digest)?;
+    let active_sessions = state
+        .sessions
+        .values()
+        .filter(|session| {
+            session.profile_id.as_deref() == Some(authority.profile_id.as_str())
+                && !inactive_or_expired(session.lease, session.expires_at.as_deref(), now)
+        })
+        .collect::<Vec<_>>();
+    let [session] = active_sessions.as_slice() else {
+        return None;
+    };
+    let exact_owner_session = session.id == owner.daemon_session_route
+        || session
+            .browser_ids
+            .iter()
+            .any(|browser_id| browser_id == &owner.browser_id);
+    let authority_is_unproven_but_uncontested = session
+        .principal_id
+        .as_deref()
+        .is_none_or(|principal_id| principal_id == authority.principal_id)
+        && (session.principal_id.is_none()
+            || session.principal_provenance != Some(authority.provenance));
+    if !exact_owner_session || !authority_is_unproven_but_uncontested {
+        return None;
+    }
+    let active_tabs = state
+        .tabs
+        .values()
+        .filter(|tab| {
+            tab.owner_session_id.as_deref() == Some(session.id.as_str())
+                && !matches!(tab.lifecycle, TabLifecycle::Closed | TabLifecycle::Crashed)
+        })
+        .collect::<Vec<_>>();
+    if active_tabs.iter().any(|tab| {
+        tab.browser_id != owner.browser_id
+            || tab
+                .principal_id
+                .as_deref()
+                .is_some_and(|principal_id| principal_id != authority.principal_id)
+    }) {
+        return None;
+    }
+    let mut tab_ids = active_tabs
+        .into_iter()
+        .map(|tab| tab.id.clone())
+        .collect::<Vec<_>>();
+    tab_ids.sort();
+    Some((session.id.clone(), tab_ids))
 }
 
 fn sessions_for_profile<'a>(
@@ -1685,6 +1797,11 @@ mod tests {
         let (mut state, _, _) = state_with_lease();
         state.service_principals = Default::default();
         state.runtime_owner_registry.principal_bindings.clear();
+        let session = state.sessions.get_mut("session-odollo").unwrap();
+        session.principal_id = None;
+        session.principal_provenance = None;
+        session.work_lease_id = None;
+        session.expires_at = None;
         save_default_state(state);
 
         let capability_path = home.join("odollo.cap");
@@ -1717,6 +1834,12 @@ mod tests {
             .unwrap();
         assert_eq!(persisted.service_principals.profile_capabilities.len(), 1);
         assert_eq!(persisted.runtime_owner_registry.principal_bindings.len(), 1);
+        let blocked = profile_leases_for_state(&persisted, NOW)
+            .into_iter()
+            .find(|lease| lease.profile_id == "odollo-fulfillment")
+            .unwrap();
+        assert!(blocked.observation_only);
+        assert!(blocked.authorized_actions.contains(&"rejoin".to_string()));
         assert!(persisted.events.iter().any(|event| {
             event.kind == ServiceEventKind::ProfileLeaseLifecycleChanged
                 && event
@@ -1725,6 +1848,26 @@ mod tests {
                     .and_then(|details| details["operation"].as_str())
                     == Some("register")
         }));
+
+        let rejoined = handle_service_profile_lease_command(&json!({
+            "action": "service_profile_lease_rejoin",
+            "leaseId": blocked.id,
+            "leaseRevision": blocked.lease_revision,
+            "profileCapabilityFile": capability_path,
+            "expiresAt": "2100-08-27T13:00:00Z",
+        }))
+        .await
+        .unwrap();
+        assert_eq!(rejoined["operation"], "rejoin");
+        assert_eq!(rejoined["lease"]["observationOnly"], false);
+        let persisted = LockedServiceStateRepository::default_json()
+            .unwrap()
+            .load_snapshot()
+            .unwrap();
+        assert_eq!(
+            persisted.sessions["session-odollo"].principal_id.as_deref(),
+            Some("principal:odollo-fulfillment")
+        );
 
         drop(guard);
         fs::remove_dir_all(home).unwrap();
@@ -1853,6 +1996,137 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(error.code, ProfileLeaseFailureCode::ActionNotAuthorized);
+    }
+
+    #[test]
+    fn rejoin_claims_exact_unproven_owner_session_and_tabs() {
+        let (mut state, authority, lease_id) = state_with_lease();
+        let session = state.sessions.get_mut("session-odollo").unwrap();
+        session.principal_id = None;
+        session.principal_provenance = None;
+        session.work_lease_id = None;
+        session.expires_at = None;
+        session.browser_ids = vec!["browser-odollo".to_string()];
+        state.tabs.insert(
+            "tab-odollo".to_string(),
+            BrowserTab {
+                id: "tab-odollo".to_string(),
+                browser_id: "browser-odollo".to_string(),
+                owner_session_id: Some("session-odollo".to_string()),
+                lifecycle: TabLifecycle::Ready,
+                ..BrowserTab::default()
+            },
+        );
+
+        let blocked = inspect_profile_lease(&state, &lease_id, NOW).unwrap();
+        assert!(blocked.observation_only);
+        assert_eq!(
+            blocked.blocking_identity_axes,
+            vec!["unproven_session_authority"]
+        );
+        assert!(blocked.authorized_actions.contains(&"rejoin".to_string()));
+
+        let rejoined = rejoin_profile_lease(
+            &mut state,
+            &lease_id,
+            &blocked.lease_revision,
+            &authority,
+            NOW,
+            Some("2026-08-27T13:00:00Z"),
+        )
+        .unwrap();
+        assert!(!rejoined.observation_only);
+        assert_eq!(rejoined.state, "active");
+        assert_eq!(
+            state.sessions["session-odollo"].principal_id.as_deref(),
+            Some("principal:odollo-fulfillment")
+        );
+        assert_eq!(
+            state.tabs["tab-odollo"].principal_id.as_deref(),
+            Some("principal:odollo-fulfillment")
+        );
+        assert_eq!(
+            state.tabs["tab-odollo"].work_lease_expires_at.as_deref(),
+            Some("2026-08-27T13:00:00Z")
+        );
+    }
+
+    #[test]
+    fn rejoin_refuses_ambiguous_unproven_profile_work() {
+        let (mut state, authority, lease_id) = state_with_lease();
+        let session = state.sessions.get_mut("session-odollo").unwrap();
+        session.principal_id = None;
+        session.principal_provenance = None;
+        session.work_lease_id = None;
+        session.expires_at = None;
+        session.browser_ids = vec!["browser-odollo".to_string()];
+        state.sessions.insert(
+            "unrelated-same-profile".to_string(),
+            BrowserSession {
+                id: "unrelated-same-profile".to_string(),
+                profile_id: Some("odollo-fulfillment".to_string()),
+                lease: LeaseState::Exclusive,
+                browser_ids: vec!["browser-unrelated".to_string()],
+                ..BrowserSession::default()
+            },
+        );
+
+        let blocked = inspect_profile_lease(&state, &lease_id, NOW).unwrap();
+        assert!(!blocked.authorized_actions.contains(&"rejoin".to_string()));
+        let error = rejoin_profile_lease(
+            &mut state,
+            &lease_id,
+            &blocked.lease_revision,
+            &authority,
+            NOW,
+            Some("2026-08-27T13:00:00Z"),
+        )
+        .unwrap_err();
+        assert_eq!(error.code, ProfileLeaseFailureCode::ActionNotAuthorized);
+        assert!(state.sessions["session-odollo"].principal_id.is_none());
+        assert!(state.sessions["unrelated-same-profile"]
+            .principal_id
+            .is_none());
+    }
+
+    #[test]
+    fn rejoin_refuses_foreign_tab_on_exact_owner_session() {
+        let (mut state, authority, lease_id) = state_with_lease();
+        let session = state.sessions.get_mut("session-odollo").unwrap();
+        session.principal_id = None;
+        session.principal_provenance = None;
+        session.work_lease_id = None;
+        session.expires_at = None;
+        session.browser_ids = vec!["browser-odollo".to_string()];
+        state.tabs.insert(
+            "tab-foreign".to_string(),
+            BrowserTab {
+                id: "tab-foreign".to_string(),
+                browser_id: "browser-odollo".to_string(),
+                owner_session_id: Some("session-odollo".to_string()),
+                principal_id: Some("principal:foreign".to_string()),
+                lifecycle: TabLifecycle::Ready,
+                ..BrowserTab::default()
+            },
+        );
+
+        let blocked = inspect_profile_lease(&state, &lease_id, NOW).unwrap();
+        assert!(!blocked.authorized_actions.contains(&"rejoin".to_string()));
+        let error = rejoin_profile_lease(
+            &mut state,
+            &lease_id,
+            &blocked.lease_revision,
+            &authority,
+            NOW,
+            Some("2026-08-27T13:00:00Z"),
+        )
+        .unwrap_err();
+        assert_eq!(error.code, ProfileLeaseFailureCode::ActionNotAuthorized);
+        assert!(state.sessions["session-odollo"].principal_id.is_none());
+        assert_eq!(
+            state.tabs["tab-foreign"].principal_id.as_deref(),
+            Some("principal:foreign")
+        );
     }
 
     #[test]

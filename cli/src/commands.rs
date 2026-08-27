@@ -9253,6 +9253,16 @@ mod tests {
         assert_eq!(renew["expiresAt"], "2026-08-28T12:00:00Z");
         assert!(renew.get("profileCapability").is_none());
 
+        let rejoin = parse_command(
+            &args(
+                "service leases lease-1 rejoin --revision sha256:one --capability-file /tmp/odollo.cap --expires-at 2026-08-28T12:00:00Z",
+            ),
+            &default_flags(),
+        )
+        .unwrap();
+        assert_eq!(rejoin["action"], "service_profile_lease_rejoin");
+        assert_eq!(rejoin["expiresAt"], "2026-08-28T12:00:00Z");
+
         assert!(parse_command(
             &args("service leases lease-1 release --revision sha256:one"),
             &default_flags(),

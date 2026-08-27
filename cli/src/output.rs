@@ -6260,6 +6260,7 @@ Usage:
   agent-browser service leases watch --interval 1000 --count 5
   agent-browser service leases register --principal-id odollo-fulfillment --profile-id fedex --capability-out /absolute/private/path/fedex.cap
   agent-browser service leases <lease-id> explain
+  agent-browser service leases <lease-id> rejoin --revision <lease-revision> --capability-file /absolute/private/path/fedex.cap --expires-at <rfc3339>
   agent-browser service leases <lease-id> renew --revision <lease-revision> --capability-file /absolute/private/path/fedex.cap --expires-at <rfc3339>
   agent-browser service leases <lease-id> release --revision <lease-revision> --capability-file /absolute/private/path/fedex.cap
   agent-browser service leases <lease-id> reconcile plan --revision <lease-revision> --capability-file /absolute/private/path/fedex.cap --expires-at <rfc3339>
@@ -6395,7 +6396,7 @@ Notes:
   - Service retry records a browser_recovery_override event and makes a faulted browser retryable again. HTTP retry requests accept service-name, agent-name, and task-name query parameters for filtered traces.
   - Text service status includes profile, profile allocation, browser, and session summary lines for operator traceability.
   - Text service profiles includes the derived profileAllocations view with holder sessions, waiting jobs, conflicts, browser health summaries, and recommended actions.
-  - service leases returns principal-scoped profile leases with exact owner generation, subordinate work, blocking identity axes, authorized actions, typed recourse, and doctor findings.
+  - service leases returns principal-scoped profile leases with exact owner generation, subordinate work, blocking identity axes, authorized actions, typed recourse, and doctor findings. An authenticated rejoin can repair one unproven live session only when it is the unique exact session of the capability-bound current owner; it binds only that session and its same-browser active tabs through the supplied expiry.
   - Text service profiles includes targetReadiness for no-launch profile readiness; Google first-login profiles can report needs_manual_seeding with seedingMode=detached_headed_no_cdp, cdpAttachmentAllowedDuringSeeding=false, preferredKeyring=basic_password_store, and setup scopes for sign-in, Chrome sync, passkeys, and browser plugins. Explicit freshness rows are preserved through readiness refreshes.
   - service profiles <id> seeding-handoff [target] returns the exact detached runtime login command plus lifecycle, operator steps, and close-detection state for completing Google sign-in, Chrome sync, passkey, and plugin setup before CDP attaches.
   - service profiles <id> verify-seeding <target> records a bounded post-close auth probe by reusing the serialized profile freshness update path. Fresh evidence moves a matching closed handoff to fresh; stale, blocked, or inconclusive evidence moves it to verification_pending. Pass --account-id or --account-ids to add account labels that later profile selection can match.
