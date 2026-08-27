@@ -4,7 +4,7 @@ Date: 2026-08-26
 
 State: OPEN
 
-Execution state: `slice_f_complete_slice_g_pending`
+Execution state: `slice_g_complete_slice_h_pending`
 
 Lane: P134
 
@@ -40,7 +40,12 @@ Current checkpoint:
 - Slice F binds package-owned process, runtime-host socket, display, viewer,
   acquisition, lifecycle, and session-lease observations to one host boot
   epoch. Prior-boot evidence requires rediscovery and has no effect or cleanup
-  authority. Slices G through K remain pending.
+  authority.
+- Slice G adds one persisted, compare-and-swap crash-regeneration transaction.
+  It resumes in dependency order with stable operation IDs, retains invalid
+  visibility as an interruption, and converges after either effect failure or
+  receipt-persistence failure without duplicating logical effects. Slices H
+  through K remain pending.
 
 Depends on:
 
@@ -981,3 +986,29 @@ Do not implement migration or installer effects in Slice A.
 - No browser, provider, development-runtime, installed-runtime, Service State,
   owner, lease, route, display, unit, Guacamole, or profile effect occurred.
   The next authorized packet is Slice G only.
+
+## 2026-08-27 Slice G idempotent crash-regeneration checkpoint
+
+- A single persisted transaction now orders runtime-host authority, browser
+  authority, display discovery, Guacamole recovery, route projection, durable
+  handoff resolution, and independent operator-visible proof.
+- Every phase uses a stable transaction-and-phase operation ID. Completed
+  receipts are persisted with compare-and-swap revision checks, and replay
+  resumes at the first incomplete dependency while preserving principal,
+  profile, logical-browser, daemon-route, remote-route, connection,
+  route-user, and durable-handoff identities.
+- The Plan 0134 crash fixture reaches ready after an injected Guacamole
+  interruption. A separate injected receipt-persistence failure proves that a
+  successful provider operation is replayed through the same operation ID and
+  still produces exactly seven logical effects.
+- Invalid operator-visible evidence is retained as a typed interrupted
+  transaction. A changed boot epoch or changed stable identity cannot reuse an
+  existing transaction ID, and transaction state survives Service State JSON
+  serialization.
+- Focused validation passed all five crash-regeneration tests, strict Clippy,
+  and Rust formatting.
+- This is a provider-free transaction coordinator checkpoint. Runtime effect
+  adapters and installation migration remain bounded to Slice I; no browser,
+  provider, development-runtime, installed-runtime, Service State, owner,
+  lease, route, display, unit, Guacamole, or profile effect occurred. The next
+  authorized packet is Slice H only.

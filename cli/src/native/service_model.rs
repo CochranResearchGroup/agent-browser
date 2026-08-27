@@ -2416,6 +2416,10 @@ pub struct ServiceState {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) profile_lease_reconcile_receipts:
         BTreeMap<String, super::service_profile_lease::ProfileLeaseReconcileReceipt>,
+    /// Replayable dependency-ordered crash recovery transactions.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) crash_regeneration_transactions:
+        BTreeMap<String, super::service_crash_regeneration::CrashRegenerationTransaction>,
     pub browsers: BTreeMap<String, BrowserProcess>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub browser_process_identities: BTreeMap<String, ServiceBrowserProcessIdentity>,

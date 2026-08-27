@@ -124,6 +124,8 @@ mod service_boot_epoch;
 pub mod service_config;
 #[allow(dead_code)]
 pub mod service_contracts;
+#[allow(dead_code)] // Slice I wires effects after Slice H publishes the contract.
+mod service_crash_regeneration;
 #[allow(dead_code)]
 pub mod service_diagnostics;
 #[allow(dead_code)]
