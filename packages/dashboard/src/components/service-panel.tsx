@@ -3,8 +3,14 @@
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  applyServiceProfileLeaseReconciliation,
   createServiceIncidentHandoff,
   createServiceTraceHandoff,
+  planServiceProfileLeaseReconciliation,
+  rejoinServiceProfileLease,
+  releaseServiceProfileLease,
+  renewServiceProfileLease,
+  type ServiceProfileLeaseReconcilePlan,
 } from "@agent-browser/client/service-observability";
 import { useAtomValue } from "jotai/react";
 import {
@@ -101,6 +107,16 @@ import {
   profileAllocationFromLookupPayload,
   serviceProfileAllocationLookupUrl,
 } from "@/lib/service-profile-allocation";
+import {
+  defaultProfileLeaseExpiry,
+  profileLeaseActionAllowed,
+  profileLeaseExpiryToIso,
+  projectProfileLeases,
+  type ServiceProfileLeaseAction,
+  type ServiceProfileLeaseFinding,
+  type ServiceProfileLeaseRecord,
+  type ServiceProfileLeasesData,
+} from "@/lib/service-profile-leases";
 import {
   canControlViewStream,
   canEmbedViewStream,
@@ -238,6 +254,8 @@ export type ServiceProfileAllocation = {
   browserIds?: string[];
   browserSummaries?: ServiceProfileAllocationBrowserSummary[];
   tabIds?: string[];
+  profileLease?: ServiceProfileLeaseRecord | null;
+  profileLeaseFindings?: ServiceProfileLeaseFinding[];
 };
 
 type ServiceProfileRecord = {
@@ -367,6 +385,7 @@ export type ServiceInspectorActions = {
   onResolveIncident?: (incident: IncidentRecord, note: string) => void;
   onShowIncidentTrace?: (incident: IncidentRecord) => void;
   onCancelJob?: (job: ServiceJob) => void;
+  onManageProfileLease?: (allocation: ServiceProfileAllocation, action: ServiceProfileLeaseAction) => void;
 };
 
 type ServiceBrowserCloseData = {
@@ -4569,6 +4588,7 @@ export function ServiceDetailInspector({
             onSelectSessionId={actions.onSelectSessionId}
             onSelectTabId={actions.onSelectTabId}
             onSelectJobId={actions.onSelectJobId}
+            onManageProfileLease={actions.onManageProfileLease}
           />
         )}
         {selection.kind === "incident" && (
@@ -4845,6 +4865,11 @@ function ProfileAllocationRow({
           {readinessAttention && (
             <Badge variant="outline" className="service-profile-attention-badge h-4 max-w-36 truncate px-1.5 text-[9px]">
               readiness attention
+            </Badge>
+          )}
+          {allocation.profileLease && (
+            <Badge variant="outline" className="h-4 max-w-36 truncate px-1.5 text-[9px]">
+              {allocation.profileLease.principalId ?? "unproven principal"}
             </Badge>
           )}
         </div>
@@ -5199,11 +5224,13 @@ function ProfileAllocationDetailDialog({
   loading,
   error,
   onOpenChange,
+  onManageProfileLease,
 }: {
   allocation: ServiceProfileAllocation | null;
   loading: boolean;
   error: string;
   onOpenChange: (open: boolean) => void;
+  onManageProfileLease: (allocation: ServiceProfileAllocation, action: ServiceProfileLeaseAction) => void;
 }) {
   return (
     <Dialog open={!!allocation} onOpenChange={onOpenChange}>
@@ -5220,7 +5247,216 @@ function ProfileAllocationDetailDialog({
                   : `${allocation.leaseState ?? "unknown"} / ${allocation.recommendedAction ?? "inspect"}`}
               </DialogDescription>
             </DialogHeader>
-            <ProfileAllocationDetailContent allocation={allocation} loading={loading} error={error} />
+            <ProfileAllocationDetailContent
+              allocation={allocation}
+              loading={loading}
+              error={error}
+              onManageProfileLease={onManageProfileLease}
+            />
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+type ProfileLeaseActionTarget = {
+  allocation: ServiceProfileAllocation;
+  action: ServiceProfileLeaseAction;
+};
+
+function ProfileLeaseActionDialog({
+  target,
+  baseUrl,
+  agentName,
+  onOpenChange,
+  onCompleted,
+}: {
+  target: ProfileLeaseActionTarget | null;
+  baseUrl: string;
+  agentName: string;
+  onOpenChange: (open: boolean) => void;
+  onCompleted: () => Promise<void>;
+}) {
+  const [capability, setCapability] = useState("");
+  const [expiresAt, setExpiresAt] = useState(() => defaultProfileLeaseExpiry());
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState<unknown>(null);
+  const [reconcilePlan, setReconcilePlan] = useState<ServiceProfileLeaseReconcilePlan | null>(null);
+  const lease = target?.allocation.profileLease;
+  const action = target?.action;
+
+  useEffect(() => {
+    setCapability("");
+    setExpiresAt(defaultProfileLeaseExpiry());
+    setPending(false);
+    setError("");
+    setResult(null);
+    setReconcilePlan(null);
+  }, [target]);
+
+  const close = useCallback(() => {
+    setCapability("");
+    setResult(null);
+    setReconcilePlan(null);
+    setError("");
+    onOpenChange(false);
+  }, [onOpenChange]);
+
+  const runAction = useCallback(async () => {
+    if (!lease || !action) return;
+    if (!profileLeaseActionAllowed(lease, action)) {
+      setError(`${action} is not authorized for the current lease state.`);
+      return;
+    }
+    const profileCapability = capability.trim();
+    if (!profileCapability) {
+      setError("Enter the private capability issued when this profile lease was registered.");
+      return;
+    }
+    setPending(true);
+    setError("");
+    setResult(null);
+    try {
+      const common = {
+        baseUrl,
+        id: lease.id,
+        leaseRevision: lease.leaseRevision,
+        profileCapability,
+        serviceName: "agent-browser-dashboard",
+        agentName,
+        taskName: `profile-lease-${action}`,
+      };
+      let response: unknown;
+      if (action === "rejoin") {
+        response = await rejoinServiceProfileLease(common);
+      } else if (action === "renew") {
+        response = await renewServiceProfileLease({
+          ...common,
+          expiresAt: profileLeaseExpiryToIso(expiresAt),
+        });
+      } else if (action === "release") {
+        response = await releaseServiceProfileLease(common);
+      } else {
+        const planned = await planServiceProfileLeaseReconciliation({
+          ...common,
+          expiresAt: profileLeaseExpiryToIso(expiresAt),
+        });
+        response = planned;
+        setReconcilePlan(planned.plan);
+      }
+      setResult(response);
+      if (action !== "reconcile") setCapability("");
+      await onCompleted();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Profile lease ${action} failed`);
+    } finally {
+      setPending(false);
+    }
+  }, [action, agentName, baseUrl, capability, expiresAt, lease, onCompleted]);
+
+  const applyReconciliation = useCallback(async () => {
+    if (!lease || !reconcilePlan?.effectCapable) return;
+    const profileCapability = capability.trim();
+    if (!profileCapability) {
+      setError("Re-enter the private capability before applying this reconciliation plan.");
+      return;
+    }
+    setPending(true);
+    setError("");
+    try {
+      const response = await applyServiceProfileLeaseReconciliation({
+        baseUrl,
+        id: lease.id,
+        profileCapability,
+        plan: reconcilePlan,
+        serviceName: "agent-browser-dashboard",
+        agentName,
+        taskName: "profile-lease-reconcile-apply",
+      });
+      setResult(response);
+      setCapability("");
+      setReconcilePlan(null);
+      await onCompleted();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Profile lease reconciliation apply failed");
+    } finally {
+      setPending(false);
+    }
+  }, [agentName, baseUrl, capability, lease, onCompleted, reconcilePlan]);
+
+  return (
+    <Dialog open={!!target} onOpenChange={(open) => { if (!open) close(); }}>
+      <DialogContent className="sm:max-w-xl">
+        {target && lease && action && (
+          <>
+            <DialogHeader>
+              <DialogTitle className="capitalize">{action === "reconcile" ? "Plan profile lease reconciliation" : `${action} profile lease`}</DialogTitle>
+              <DialogDescription>
+                {lease.profileId} / {lease.principalId ?? "unproven principal"}. The capability is held only in this dialog and is cleared when the dialog closes.
+              </DialogDescription>
+            </DialogHeader>
+            {action === "release" && (
+              <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                Release ends this principal's lease. The service will refuse unsafe release while active tabs or other exact blockers remain.
+              </div>
+            )}
+            <label className="grid gap-1.5 text-xs font-semibold">
+              Private profile capability
+              <input
+                type="password"
+                autoComplete="off"
+                spellCheck={false}
+                value={capability}
+                onChange={(event) => setCapability(event.target.value)}
+                className="h-9 rounded-lg border border-border bg-background px-3 font-mono text-xs outline-none focus:border-ring"
+                placeholder="Paste for this action only"
+              />
+            </label>
+            {(action === "renew" || action === "reconcile") && (
+              <label className="grid gap-1.5 text-xs font-semibold">
+                {action === "renew" ? "New lease expiry" : "Plan expiry"}
+                <input
+                  type="datetime-local"
+                  value={expiresAt}
+                  onChange={(event) => setExpiresAt(event.target.value)}
+                  className="h-9 rounded-lg border border-border bg-background px-3 text-xs outline-none focus:border-ring"
+                />
+              </label>
+            )}
+            {error && <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">{error}</p>}
+            {reconcilePlan && !reconcilePlan.effectCapable && (
+              <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
+                Apply remains disabled: {formatStringList(reconcilePlan.blockedReasons)}
+              </p>
+            )}
+            {result != null && (
+              <details className="rounded-xl border border-border/70 bg-foreground/[0.03] px-3 py-2 text-xs">
+                <summary className="cursor-pointer font-semibold">Operation evidence</summary>
+                <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap font-mono text-[10px]">{formatDetails(result)}</pre>
+              </details>
+            )}
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="outline" disabled={pending} onClick={close}>Close</Button>
+              {reconcilePlan?.effectCapable && (
+                <Button type="button" disabled={pending || !capability.trim()} onClick={applyReconciliation}>
+                  {pending ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                  Apply sealed plan
+                </Button>
+              )}
+              {!reconcilePlan && (
+                <Button
+                  type="button"
+                  variant={action === "release" ? "destructive" : "default"}
+                  disabled={pending || !capability.trim()}
+                  onClick={runAction}
+                >
+                  {pending ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                  {action === "reconcile" ? "Create sealed plan" : `Confirm ${action}`}
+                </Button>
+              )}
+            </div>
           </>
         )}
       </DialogContent>
@@ -5236,6 +5472,7 @@ function ProfileAllocationDetailContent({
   onSelectSessionId,
   onSelectTabId,
   onSelectJobId,
+  onManageProfileLease,
 }: {
   allocation: ServiceProfileAllocation;
   loading?: boolean;
@@ -5244,6 +5481,7 @@ function ProfileAllocationDetailContent({
   onSelectSessionId?: (sessionId: string) => void;
   onSelectTabId?: (tabId: string) => void;
   onSelectJobId?: (jobId: string) => void;
+  onManageProfileLease?: (allocation: ServiceProfileAllocation, action: ServiceProfileLeaseAction) => void;
 }) {
   const raw = formatDetails(allocation);
   const holderCount = allocation.holderCount ?? allocation.holderSessionIds?.length ?? 0;
@@ -5346,6 +5584,65 @@ function ProfileAllocationDetailContent({
         <ProfileAllocationTokenSection title="Waiting jobs" values={allocation.waitingJobIds} />
         <ProfileAllocationTokenSection title="Conflicts" values={allocation.conflictSessionIds} />
       </InspectorSection>
+      <InspectorSection title="Profile Lease Authority">
+        {allocation.profileLease ? (
+          <>
+            <InspectorFactRows
+              rows={[
+                { label: "Lease ID", value: allocation.profileLease.id, mono: true },
+                { label: "Principal", value: allocation.profileLease.principalId ?? "unproven" },
+                { label: "Provenance", value: allocation.profileLease.principalProvenance ?? "unproven" },
+                { label: "Lease state", value: allocation.profileLease.state ?? "unknown" },
+                { label: "Mode", value: allocation.profileLease.mode ?? "unknown" },
+                { label: "Owner generation", value: allocation.profileLease.ownerGeneration == null ? "unknown" : String(allocation.profileLease.ownerGeneration) },
+                { label: "Revision", value: allocation.profileLease.leaseRevision, mono: true },
+                { label: "Recourse", value: allocation.profileLease.recourse ?? "inspect" },
+                { label: "Observation only", value: allocation.profileLease.observationOnly ? "yes" : "no" },
+                { label: "Doctor findings", value: String(allocation.profileLeaseFindings?.length ?? 0) },
+              ]}
+            />
+            <ProfileAllocationTokenSection title="Authorized actions" values={allocation.profileLease.authorizedActions} />
+            <ProfileAllocationTokenSection title="Blocking identity axes" values={allocation.profileLease.blockingIdentityAxes} />
+            <ProfileAllocationTokenSection title="Routes" values={allocation.profileLease.routeIds} />
+            {onManageProfileLease && (
+              <InspectorActionBar>
+                {(["rejoin", "renew", "release", "reconcile"] as const).map((action) => (
+                  <Button
+                    key={action}
+                    type="button"
+                    size="sm"
+                    variant={action === "release" ? "destructive" : "outline"}
+                    className="gap-1.5 rounded-full capitalize"
+                    disabled={!profileLeaseActionAllowed(allocation.profileLease, action)}
+                    title={profileLeaseActionAllowed(allocation.profileLease, action)
+                      ? `Authenticate and ${action} this lease`
+                      : `${action} is not authorized for the current lease state`}
+                    onClick={() => onManageProfileLease(allocation, action)}
+                  >
+                    <ShieldCheck className="size-3.5" />
+                    {action === "reconcile" ? "Reconcile plan" : action}
+                  </Button>
+                ))}
+              </InspectorActionBar>
+            )}
+            {(allocation.profileLeaseFindings?.length ?? 0) > 0 && (
+              <div className="space-y-2">
+                {allocation.profileLeaseFindings?.map((finding) => (
+                  <div key={`${finding.leaseId}:${finding.code}`} className="rounded-2xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-xs">
+                    <p className="font-bold text-foreground">{finding.code}</p>
+                    <p className="mt-1 text-muted-foreground">{finding.message}</p>
+                    <p className="mt-1 text-[10px] text-muted-foreground">Safe actions: {formatStringList(finding.safeActions)}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="rounded-2xl bg-foreground/[0.04] px-3 py-4 text-xs text-muted-foreground">
+            No first-class profile lease is projected for this profile. Inspect the lease doctor before attempting lifecycle repair.
+          </p>
+        )}
+      </InspectorSection>
       <InspectorSection title="Ownership">
         <ProfileAllocationTokenSection title="Services" values={allocation.serviceNames} />
         <ProfileAllocationTokenSection title="Agents" values={allocation.agentNames} />
@@ -5362,6 +5659,7 @@ function ProfileAllocationDetailContent({
           { label: "Target readiness JSON", value: formatDetails(allocation.targetReadiness), code: true },
           { label: "Browser summaries JSON", value: formatDetails(allocation.browserSummaries), code: true },
           { label: "Raw allocation", value: raw, code: true },
+          { label: "Profile lease", value: formatDetails(allocation.profileLease), code: true },
         ]}
       />
     </div>
@@ -6408,6 +6706,7 @@ export function ServicePanel({
   const [incidents, setIncidents] = useState<ServiceIncidentsData | null>(null);
   const [resources, setResources] = useState<ServiceResourcesData | null>(null);
   const [contracts, setContracts] = useState<ServiceContractsData | null>(null);
+  const [profileLeases, setProfileLeases] = useState<ServiceProfileLeasesData | null>(null);
   const [trace, setTrace] = useState<ServiceTraceData | null>(null);
   const [traceLoading, setTraceLoading] = useState(false);
   const [traceError, setTraceError] = useState("");
@@ -6473,6 +6772,7 @@ export function ServicePanel({
   const [selectedProfileAllocation, setSelectedProfileAllocation] = useState<ServiceProfileAllocation | null>(null);
   const [selectedProfileAllocationLoading, setSelectedProfileAllocationLoading] = useState(false);
   const [selectedProfileAllocationError, setSelectedProfileAllocationError] = useState("");
+  const [profileLeaseActionTarget, setProfileLeaseActionTarget] = useState<ProfileLeaseActionTarget | null>(null);
   const [selectedProfileConfig, setSelectedProfileConfig] = useState<ServiceProfileRecord | null>(null);
   const [profileConfigSaving, setProfileConfigSaving] = useState(false);
   const [profileConfigDeleting, setProfileConfigDeleting] = useState(false);
@@ -6538,13 +6838,14 @@ export function ServicePanel({
         params.set("since", new Date(Date.now() - windowOption.milliseconds).toISOString());
       }
       const contractsPromise = fetch(`${serviceBase(activePort)}/contracts`).catch(() => null);
-      const [statusResp, jobsResp, eventsResp, incidentsResp, resourcesResp, contractsResp] = await Promise.all([
+      const [statusResp, jobsResp, eventsResp, incidentsResp, resourcesResp, contractsResp, profileLeasesResp] = await Promise.all([
         fetch(`${serviceBase(activePort)}/status`),
         fetch(`${serviceBase(activePort)}/jobs?limit=${jobLimit}`),
         fetch(`${serviceBase(activePort)}/events?${params.toString()}`),
         fetch(`${serviceBase(activePort)}/incidents?summary=true&limit=50`),
         fetch(`${serviceBase(activePort)}/resources`).catch(() => null),
         contractsPromise,
+        fetch(`${serviceBase(activePort)}/profile-leases`).catch(() => null),
       ]);
       const statusJson = (await statusResp.json()) as ApiResponse<ServiceStatusData>;
       const jobsJson = (await jobsResp.json()) as ApiResponse<ServiceJobsData>;
@@ -6556,6 +6857,9 @@ export function ServicePanel({
       const contractsJson = contractsResp?.ok
         ? ((await contractsResp.json()) as ApiResponse<ServiceContractsData>)
         : null;
+      const profileLeasesJson = profileLeasesResp?.ok
+        ? ((await profileLeasesResp.json()) as ApiResponse<ServiceProfileLeasesData>)
+        : null;
       if (!statusJson.success) throw new Error(statusJson.error || "Service status failed");
       if (!jobsJson.success) throw new Error(jobsJson.error || "Service jobs failed");
       if (!eventsJson.success) throw new Error(eventsJson.error || "Service events failed");
@@ -6565,6 +6869,7 @@ export function ServicePanel({
       setIncidents(incidentsJson.success ? incidentsJson.data ?? null : null);
       setResources(resourcesJson?.success ? resourcesJson.data ?? null : null);
       setContracts(contractsJson?.success ? contractsJson.data ?? null : null);
+      setProfileLeases(profileLeasesJson?.success ? profileLeasesJson.data ?? null : null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Service API unavailable");
     } finally {
@@ -6578,6 +6883,7 @@ export function ServicePanel({
     setEvents(null);
     setIncidents(null);
     setResources(null);
+    setProfileLeases(null);
     setTrace(null);
     setTraceError("");
     setError("");
@@ -6692,6 +6998,14 @@ export function ServicePanel({
     }
   }, [activePort, canFetch, onInspectSelection, syncWorkspaceSelection]);
 
+  const manageProfileLease = useCallback((allocation: ServiceProfileAllocation, action: ServiceProfileLeaseAction) => {
+    if (!profileLeaseActionAllowed(allocation.profileLease, action)) {
+      setError(`${action} is not authorized for this profile lease.`);
+      return;
+    }
+    setProfileLeaseActionTarget({ allocation, action });
+  }, []);
+
   const inspectProfileAllocation = useCallback(async (
     allocation: ServiceProfileAllocation,
     options: { syncWorkspace?: boolean; historyMode?: "push" | "replace" } = {},
@@ -6714,7 +7028,11 @@ export function ServicePanel({
       const resp = await fetch(serviceProfileAllocationLookupUrl(serviceBase(activePort), allocation.profileId));
       const json = (await resp.json()) as ApiResponse<ServiceProfileAllocationData>;
       if (profileAllocationLookupId.current === lookupId) {
-        const selected = profileAllocationFromLookupPayload(json, allocation);
+        const selected = {
+          ...profileAllocationFromLookupPayload(json, allocation),
+          profileLease: allocation.profileLease,
+          profileLeaseFindings: allocation.profileLeaseFindings,
+        };
         if (onInspectSelection) {
           onInspectSelection({ kind: "profile", allocation: selected });
         } else {
@@ -7081,8 +7399,8 @@ export function ServicePanel({
     [serviceState?.sessions],
   );
   const profileAllocations = useMemo(
-    () => status?.profileAllocations ?? [],
-    [status?.profileAllocations],
+    () => projectProfileLeases(status?.profileAllocations ?? [], profileLeases),
+    [profileLeases, status?.profileAllocations],
   );
   const profileAllocationById = useMemo(() => {
     const byId = new Map<string, ServiceProfileAllocation>();
@@ -7776,6 +8094,7 @@ export function ServicePanel({
       onResolveIncident: resolveInspectorIncident,
       onShowIncidentTrace: showIncidentTrace,
       onCancelJob: cancelInspectorJob,
+      onManageProfileLease: manageProfileLease,
     });
   }, [
     acknowledgeInspectorIncident,
@@ -7783,6 +8102,7 @@ export function ServicePanel({
     cancelInspectorJob,
     focusBrowserViewStream,
     inspectTabViewStream,
+    manageProfileLease,
     onInspectorActionsChange,
     resolveInspectorIncident,
     selectBrowserById,
@@ -7974,6 +8294,7 @@ export function ServicePanel({
         allocation={selectedProfileAllocation}
         loading={selectedProfileAllocationLoading}
         error={selectedProfileAllocationError}
+        onManageProfileLease={manageProfileLease}
         onOpenChange={(open) => {
           if (!open) {
             profileAllocationLookupId.current += 1;
@@ -7982,6 +8303,13 @@ export function ServicePanel({
             setSelectedProfileAllocationLoading(false);
           }
         }}
+      />
+      <ProfileLeaseActionDialog
+        target={profileLeaseActionTarget}
+        baseUrl={serviceBase(activePort)}
+        agentName={operatorIdentity.trim() || activeSession || "operator"}
+        onOpenChange={(open) => { if (!open) setProfileLeaseActionTarget(null); }}
+        onCompleted={async () => { await fetchService(false); }}
       />
       <RuntimeProfileConfigDialog
         profile={selectedProfileConfig}

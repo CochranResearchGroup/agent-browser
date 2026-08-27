@@ -4,7 +4,7 @@ Date: 2026-08-26
 
 State: OPEN
 
-Execution state: `slice_c_in_progress_read_parity_complete_owner_mutations_pending`
+Execution state: `slice_c_dashboard_complete_validation_in_progress`
 
 Lane: P134
 
@@ -16,6 +16,21 @@ Target: `main`
 
 Authority: SOURCE AND PROVIDER-FREE DEVELOPMENT ONLY. DEVELOPMENT-RUNTIME OR
 PRODUCTION EFFECTS REQUIRE A SEPARATE EXACT-CANDIDATE AUTHORIZATION.
+
+Current checkpoint:
+
+- Slice A consumer failures and Slice B authenticated principal authority are
+  implemented and validated.
+- Slice C now projects lease collection, detail, explanation, doctor,
+  lifecycle mutations, sealed reconciliation, lifecycle events, contract
+  capability discovery, generated clients, and dashboard management.
+- Dashboard controls require the exact ephemeral profile capability, honor the
+  lease's current `authorizedActions`, disable observation-only mutations, and
+  keep reconciliation planning separate from effect-capable apply. Capability
+  input is held only in the open dialog and is never written to browser
+  storage or Service State.
+- Slice C closeout still requires the complete selected validation set and an
+  integrated checkpoint. Slices D through K remain pending.
 
 Depends on:
 

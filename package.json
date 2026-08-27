@@ -91,6 +91,7 @@
     "test:route-confusion-gates": "node scripts/test-route-confusion-gates.js",
     "test:dashboard-launcher-eligibility": "node --no-warnings --experimental-strip-types scripts/test-dashboard-launcher-eligibility.js",
     "test:dashboard-profile-allocation": "node --no-warnings --experimental-strip-types scripts/test-dashboard-profile-allocation.js",
+    "test:dashboard-profile-leases": "node --no-warnings --experimental-strip-types scripts/test-dashboard-profile-leases.js",
     "test:service-api-mcp-parity": "node scripts/check-service-api-mcp-parity.js",
     "test:browser-capability-registry-draft": "node scripts/smoke-browser-capability-registry-draft.js",
     "test:service-client": "pnpm test:service-client-contract && pnpm test:service-client-types && pnpm test:service-client-exports && pnpm test:service-request-client && pnpm test:service-observability-client && pnpm test:service-status-fixed-input-harness && pnpm test:service-client-managed-profile-flow && pnpm test:service-client-example",
