@@ -506,11 +506,19 @@ fn close_install_transaction(
     use crate::runtime_adoption::UpgradeTransactionState;
 
     let (path, mut transaction) = load_guarded_install_transaction(root, guard)?;
+    // Preserve the precise outcome in terminal_result while persisting an enum
+    // variant understood by selected generations that predate guarded close.
     if transaction.state == UpgradeTransactionState::ClosedZeroEffect {
+        persist_upgrade_transition(
+            &path,
+            &mut transaction,
+            UpgradeTransactionState::FailedPreservedOldGeneration,
+            "closed_zero_effect_old_reader_compatible",
+        )?;
         return Ok(serde_json::json!({
             "schemaVersion": "agent-browser.install-transaction-action.v1",
             "success": true,
-            "changed": false,
+            "changed": true,
             "action": "close",
             "transaction": install_transaction_summary(&transaction),
         }));
@@ -533,7 +541,7 @@ fn close_install_transaction(
     persist_upgrade_transition(
         &path,
         &mut transaction,
-        UpgradeTransactionState::ClosedZeroEffect,
+        UpgradeTransactionState::FailedPreservedOldGeneration,
         "closed_zero_effect",
     )?;
     Ok(serde_json::json!({
@@ -1828,6 +1836,9 @@ fn install_transaction_classification(
     transaction: &crate::runtime_adoption::UpgradeTransaction,
 ) -> &'static str {
     use crate::runtime_adoption::UpgradeTransactionState::*;
+    if transaction.terminal_result.as_deref() == Some("closed_zero_effect") {
+        return "terminal_zero_effect_history";
+    }
     match transaction.state {
         Accepted => "accepted",
         OldGenerationRetirable => "rollback_window_reviewed",
@@ -14118,7 +14129,63 @@ mod tests {
         assert_eq!(close["changed"], true);
         assert_eq!(
             close.pointer("/transaction/state").and_then(Value::as_str),
+            Some("failed_preserved_old_generation")
+        );
+        let persisted: crate::runtime_adoption::UpgradeTransaction =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert_eq!(
+            persisted.terminal_result.as_deref(),
             Some("closed_zero_effect")
+        );
+        assert_eq!(
+            install_transaction_classification(&persisted),
+            "terminal_zero_effect_history"
+        );
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn guarded_close_rewrites_legacy_incompatible_zero_effect_state() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-legacy-zero-effect-transaction-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        let mut transaction = new_upgrade_transaction(
+            &paths,
+            "generation-candidate".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.state = crate::runtime_adoption::UpgradeTransactionState::ClosedZeroEffect;
+        transaction.revision = 4;
+        transaction.terminal_result = Some("closed_zero_effect".to_string());
+        let path = transaction_path(&root, &transaction.transaction_id);
+        write_private_json_atomic(&path, &transaction).unwrap();
+        let guard = InstallTransactionMutationGuard {
+            transaction_id: transaction.transaction_id.clone(),
+            expected_revision: transaction.revision,
+            candidate_generation_id: transaction.candidate_generation_id.clone(),
+            census_digest: None,
+        };
+
+        let close = close_install_transaction(&root, &guard).unwrap();
+        assert_eq!(close["changed"], true);
+        assert_eq!(
+            close.pointer("/transaction/state").and_then(Value::as_str),
+            Some("failed_preserved_old_generation")
+        );
+        let persisted: crate::runtime_adoption::UpgradeTransaction =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert_eq!(persisted.revision, 5);
+        assert_eq!(
+            persisted.terminal_result.as_deref(),
+            Some("closed_zero_effect")
+        );
+        assert_eq!(
+            install_transaction_classification(&persisted),
+            "terminal_zero_effect_history"
         );
 
         fs::remove_dir_all(root).unwrap();

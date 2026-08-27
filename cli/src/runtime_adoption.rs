@@ -683,6 +683,11 @@ fn upgrade_transition_allowed(
                     | RolledBackBeforeCommit,
                 ClosedZeroEffect
             )
+            | (
+                BlockedCandidateIncompatible | RolledBackBeforeCommit,
+                FailedPreservedOldGeneration
+            )
+            | (ClosedZeroEffect, FailedPreservedOldGeneration)
     )
 }
 

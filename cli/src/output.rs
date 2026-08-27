@@ -7079,7 +7079,7 @@ Dashboard:
 Setup:
   install                    Install browser binaries
   install workstation        Install and reconcile the source-free Linux workstation
-  install transactions       Inspect, resume, rollback, or close exact install transactions
+  install transactions       Inspect, resume, rollback, or close exact install transactions; zero-effect close uses an old-reader-safe terminal state
   install doctor             Check install drift, runtime multiplicity, and launch readiness
   doctor windows-browser     Diagnose WSL to Windows browser CDP routing
   doctor remote-view         Diagnose Guacamole and RDP remote-view setup

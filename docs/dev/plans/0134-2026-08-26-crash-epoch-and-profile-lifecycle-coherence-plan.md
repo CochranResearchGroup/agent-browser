@@ -1125,3 +1125,29 @@ Do not implement migration or installer effects in Slice A.
   from this checkpoint, rerun the guarded workstation preflight, and retain
   the accepted installation unless a genuinely ready authenticated
   operator-visible surface satisfies the final commit gate.
+
+## 2026-08-27 Slice K mixed-version transaction compatibility checkpoint
+
+- Installed-runtime inspection found that a candidate-written
+  `closed_zero_effect` enum could not be deserialized by the older selected
+  generation. That prevented the installed reconciliation monitor from
+  reading its own transaction ledger and is an installation compatibility
+  defect, not a presentation-provider failure.
+- Guarded zero-effect close now persists the older-reader-compatible
+  `failed_preserved_old_generation` enum and retains
+  `terminalResult: closed_zero_effect` as the precise outcome. Current list,
+  inspect, readiness, and doctor projections classify that pair as terminal
+  zero-effect history.
+- The same exact guarded close action can normalize a legacy
+  `closed_zero_effect` record after revision, candidate generation, census
+  digest, selected generation, admission drain, migration, and runtime-effect
+  checks pass. There is still no broad unlock or unguarded ledger rewrite.
+- Validation passed the two exact guarded-close cases, all 104 workstation
+  installer tests, strict Clippy, Rust formatting, docs production build, the
+  source-free idempotence and host-provision fixtures, fresh-VM harness,
+  Guacamole asset and PostgreSQL durability checks, and route-specific user
+  synchronization.
+- No production provider or selected-generation mutation occurred during this
+  repair. The next step is to commit and build the exact successor candidate,
+  normalize only incompatible retained records through the guarded CLI, and
+  re-read installed doctor and preflight evidence before any apply.

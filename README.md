@@ -347,6 +347,10 @@ agent-browser install transactions close --transaction-id upgrade-... --expected
 
 Every mismatch fails compare-and-swap without changing the selected generation
 or Service State. `close` is limited to a proven zero-effect terminal record.
+For mixed-version safety, the durable state remains an older-reader-compatible
+failed terminal state while `terminalResult: closed_zero_effect` records the
+more precise outcome. Newer list and inspect output still classify it as
+terminal zero-effect history.
 Rollback after generation and state commit restores the exact state snapshot
 and previous selector or enters typed operator recovery. There is no inferred
 latest transaction and no broad force-unlock operation.

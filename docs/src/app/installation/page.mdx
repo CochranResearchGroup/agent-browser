@@ -287,6 +287,11 @@ agent-browser install transactions rollback --transaction-id upgrade-... --expec
 
 Any compare-and-swap mismatch is zero-effect and requires a fresh inspect.
 Close is available only for a proven zero-effect terminal transaction. There
+is a mixed-version compatibility boundary: the durable enum remains an
+older-reader-compatible failed terminal state, while
+<code>terminalResult: closed_zero_effect</code> carries the precise outcome.
+Current list and inspect output classify that combination as terminal
+zero-effect history. There
 is no inferred latest mutation or broad force unlock. A post-commit rollback
 restores the exact state snapshot and previous generation selector or records
 typed operator recovery with rollback evidence retained.
