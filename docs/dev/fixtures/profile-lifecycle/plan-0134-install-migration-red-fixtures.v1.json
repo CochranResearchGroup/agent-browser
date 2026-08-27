@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "agent-browser.plan-0134-install-migration-red-fixtures.v1",
+  "legacyState": {
+    "inputSchema": "legacy-session-scoped-unversioned",
+    "requiredOutputStateSchema": "agent-browser.service-state.v2",
+    "requiredOutputLeaseSchema": "agent-browser.profile-lease.v1",
+    "principalDerivation": "authenticated_registration_and_exact_profile_capability_only",
+    "ambiguousDisposition": "unproven_principal",
+    "authoritativeInputMutationAllowed": false
+  },
+  "dryRun": {
+    "createsActiveTransaction": false,
+    "requiredReadbacks": [
+      "candidateIdentity",
+      "runtimeCensusDigest",
+      "compatibilityReport",
+      "migrationPlan",
+      "rollbackRequirements"
+    ]
+  },
+  "blockedPreflight": {
+    "terminalState": "blocked_preflight",
+    "effectOccurred": false,
+    "requiredReadbacks": ["blockers", "diagnostics", "safeActions", "transactionRevision"],
+    "doctorClassification": "terminal_blocked_history"
+  },
+  "exactMutationKeys": [
+    "transactionId",
+    "expectedTransactionRevision",
+    "candidateGenerationId",
+    "currentCensusDigest"
+  ],
+  "resume": {
+    "requiresExactMutationKeys": true,
+    "replaysByTransactionId": true
+  },
+  "rollback": {
+    "requiresExactMutationKeys": true,
+    "requiresReverseCompatibility": true,
+    "preservesPreMigrationSnapshot": true
+  },
+  "contractCapability": {
+    "requiredReadbacks": ["serviceStateSchemaVersion", "profileLeaseSchemaVersion", "supportedLeaseOperations", "compatibilityMatrix"]
+  },
+  "skillStaging": {
+    "publishAfter": "generation_and_contract_commit",
+    "failedCandidatePreservesAcceptedSkill": true,
+    "rollbackRestoresAcceptedSkill": true
+  },
+  "doctor": {
+    "requiredClassifications": [
+      "workspace_candidate",
+      "terminal_blocked_history",
+      "active_convergence",
+      "installed_drift",
+      "schema_incompatibility",
+      "lease_owner_divergence"
+    ],
+    "greenRequires": [
+      "sourceIdentity",
+      "selectedGeneration",
+      "installedSha256",
+      "stateSchemas",
+      "runtimeCensus",
+      "owners",
+      "leases",
+      "ingress",
+      "contracts",
+      "skillIdentity",
+      "rollbackReadiness",
+      "operatorVisibleReadiness"
+    ]
+  }
+}

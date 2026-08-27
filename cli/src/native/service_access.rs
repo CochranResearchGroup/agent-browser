@@ -6941,3 +6941,7 @@ pub(crate) mod service_commands {
     }
 }
 pub(crate) use service_commands::*;
+
+#[cfg(test)]
+#[path = "service_access/plan_0134_repro_tests.rs"]
+mod plan_0134_repro_tests;

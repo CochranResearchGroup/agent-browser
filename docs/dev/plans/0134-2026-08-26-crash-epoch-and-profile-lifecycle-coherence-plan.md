@@ -2,13 +2,13 @@
 
 Date: 2026-08-26
 
-State: PLANNED
+State: OPEN
 
-Execution state: `provider_free_reproducer_pending`
+Execution state: `slice_a_complete_slice_b_pending`
 
 Lane: P134
 
-Source baseline: `16403c3b53f75b2c0350028d64b56e7e1c8e262d`
+Source baseline: `1efab249b7908cf703d5facae132dd658a3daf97`
 
 Branch: `plan/crash-profile-lifecycle-coherence`
 
@@ -697,3 +697,42 @@ Add provider-free legacy-state and install-transaction fixtures that freeze the
 required schema-version, migration-plan, terminal blocked-preflight, exact
 resume, rollback, contract-capability, skill-staging, and doctor readbacks.
 Do not implement migration or installer effects in Slice A.
+
+## 2026-08-27 Slice A execution checkpoint
+
+- Slice A is complete at source scope. The provider-free corpus at
+  `docs/dev/fixtures/profile-lifecycle/plan-0134-red-fixtures.v1.json`
+  freezes five public access-plan cases: one profile-attribution
+  contradiction, same-principal Last30Days, Books Receipts, and Odollo
+  fulfillment reconnects, plus one foreign-principal isolation control.
+- The current public request rejects `principalId`. All four same-principal
+  cases reproduce `wait_for_profile_lease` with no reusable browser and no
+  route hint. The foreign-principal control produces the same bounded wait.
+  This proves the planner cannot currently distinguish self-continuity from
+  foreign contention.
+- The unscoped existing-session fixture resolves an omitted profile to
+  `default`. The first durable attribution write is
+  `cli/src/native/cdp/chrome.rs write_runtime_state`; the later Service State
+  projection is `BrowserProcess.profile_id` in
+  `cli/src/native/action_runtime/runtime/navigation.rs`.
+- The crash fixture preserves synthetic stable principal, profile, logical
+  browser, route, Guacamole connection and user, and opaque handoff identities
+  while freezing prior-epoch runtime-host, socket, display, viewer, and lease
+  observations. Current Service State serializes no top-level state schema,
+  profile-lease collection, or boot epoch.
+- The lease contract fixture proves that current maintained surfaces have no
+  first-class list, inspect, explain, doctor, watch, rejoin, renew, release,
+  reconcile-plan, or reconcile-apply family. Adjacent tab-handle and viewer
+  lease operations remain explicitly separate.
+- The install and migration corpus at
+  `docs/dev/fixtures/profile-lifecycle/plan-0134-install-migration-red-fixtures.v1.json`
+  freezes the required legacy reader, explicit schema versions, no-effect dry
+  run, terminal blocked preflight, exact resume and rollback keys, capability
+  discovery, accepted-skill staging, and doctor classifications without
+  implementing effects.
+- Validation passed: the three focused P134 reproductions, all 45
+  `service_access_plan` tests, the fixture contract audit, the workstation
+  source-free fixture, Rust formatting, strict Clippy, and `git diff --check`.
+- No browser, provider, development-runtime, installed-runtime, Service State,
+  owner, lease, route, display, unit, Guacamole, or profile effect occurred.
+  The next authorized packet is Slice B only.

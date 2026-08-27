@@ -1,0 +1,151 @@
+{
+  "schemaVersion": "agent-browser.plan-0134-red-fixtures.v1",
+  "accessPlanCases": [
+    {
+      "fixtureId": "mismatched-holder-browser-profile-self-blocks",
+      "consumerShape": "profile-attribution-contradiction",
+      "serviceName": "SyntheticProfileOwner",
+      "agentName": "synthetic-agent",
+      "taskName": "reconnect-owned-profile",
+      "targetServiceId": "synthetic-target",
+      "profileId": "synthetic-owned-profile",
+      "holderSessionId": "synthetic-holder-session",
+      "holderBrowserId": "synthetic-holder-browser",
+      "holderBrowserProfileId": "default",
+      "requesterPrincipalId": "principal:synthetic-owner",
+      "holderPrincipalId": "principal:synthetic-owner",
+      "samePrincipal": true,
+      "retainedOwnerEvidence": false,
+      "expectedCurrentAction": "wait_for_profile_lease",
+      "expectedCurrentReusableBrowserCount": 0,
+      "requiredFutureAction": "lifecycle_profile_identity_inconsistent"
+    },
+    {
+      "fixtureId": "last30days-same-principal-reconnect-self-waits",
+      "consumerShape": "last30days-repeated-task",
+      "serviceName": "SyntheticLast30Days",
+      "agentName": "social-research-agent",
+      "taskName": "repeat-public-feed-check",
+      "targetServiceId": "synthetic-social-site",
+      "profileId": "synthetic-last30days-profile",
+      "holderSessionId": "synthetic-last30days-old-session",
+      "holderBrowserId": "synthetic-last30days-browser",
+      "holderBrowserProfileId": null,
+      "requesterPrincipalId": "principal:synthetic-last30days",
+      "holderPrincipalId": "principal:synthetic-last30days",
+      "samePrincipal": true,
+      "retainedOwnerEvidence": true,
+      "expectedCurrentAction": "wait_for_profile_lease",
+      "expectedCurrentReusableBrowserCount": 0,
+      "requiredFutureAction": "rejoin_owned_browser"
+    },
+    {
+      "fixtureId": "books-receipts-post-crash-reconnect-self-waits",
+      "consumerShape": "books-receipts-post-crash-reconnect",
+      "serviceName": "SyntheticBooksReceipts",
+      "agentName": "receipt-agent",
+      "taskName": "resume-receipt-download",
+      "targetServiceId": "synthetic-books-site",
+      "profileId": "synthetic-books-receipts-profile",
+      "holderSessionId": "synthetic-books-old-session",
+      "holderBrowserId": "synthetic-books-browser",
+      "holderBrowserProfileId": null,
+      "requesterPrincipalId": "principal:synthetic-books-receipts",
+      "holderPrincipalId": "principal:synthetic-books-receipts",
+      "samePrincipal": true,
+      "retainedOwnerEvidence": true,
+      "expectedCurrentAction": "wait_for_profile_lease",
+      "expectedCurrentReusableBrowserCount": 0,
+      "requiredFutureAction": "replace_stale_same_principal_session"
+    },
+    {
+      "fixtureId": "odollo-fedex-lookup-reconnect-self-waits",
+      "consumerShape": "odollo-fulfillment-fedex-tracking-lookup",
+      "serviceName": "SyntheticOdolloFulfillment",
+      "agentName": "fulfillment-agent",
+      "taskName": "lookup-synthetic-fedex-tracking",
+      "targetServiceId": "synthetic-carrier-site",
+      "profileId": "synthetic-odollo-fulfillment-profile",
+      "holderSessionId": "synthetic-odollo-old-session",
+      "holderBrowserId": "synthetic-odollo-browser",
+      "holderBrowserProfileId": null,
+      "requesterPrincipalId": "principal:synthetic-odollo-fulfillment",
+      "holderPrincipalId": "principal:synthetic-odollo-fulfillment",
+      "samePrincipal": true,
+      "retainedOwnerEvidence": true,
+      "expectedCurrentAction": "wait_for_profile_lease",
+      "expectedCurrentReusableBrowserCount": 0,
+      "requiredFutureAction": "rejoin_owned_browser"
+    },
+    {
+      "fixtureId": "foreign-principal-remains-bounded-contention",
+      "consumerShape": "foreign-principal-negative-control",
+      "serviceName": "SyntheticForeignConsumer",
+      "agentName": "foreign-agent",
+      "taskName": "request-foreign-profile",
+      "targetServiceId": "synthetic-shared-target",
+      "profileId": "synthetic-foreign-control-profile",
+      "holderSessionId": "synthetic-owner-session",
+      "holderBrowserId": "synthetic-owner-browser",
+      "holderBrowserProfileId": null,
+      "requesterPrincipalId": "principal:synthetic-foreign",
+      "holderPrincipalId": "principal:synthetic-owner",
+      "samePrincipal": false,
+      "retainedOwnerEvidence": true,
+      "expectedCurrentAction": "wait_for_profile_lease",
+      "expectedCurrentReusableBrowserCount": 0,
+      "requiredFutureAction": "wait_for_foreign_principal"
+    }
+  ],
+  "unscopedExistingSession": {
+    "fixtureId": "omitted-profile-falls-through-to-default-before-attribution-write",
+    "sessionName": "synthetic-existing-managed-session",
+    "canonicalOwnerProfileId": "synthetic-owned-profile",
+    "suppliedRuntimeProfile": null,
+    "currentResolvedRuntimeProfile": "default",
+    "firstAttributionWrite": {
+      "sourceAnchor": "cli/src/native/cdp/chrome.rs write_runtime_state",
+      "durableTarget": "runtime-profiles/default/runtime.json",
+      "projectedFollowOnAnchor": "cli/src/native/action_runtime/runtime/navigation.rs BrowserProcess.profile_id"
+    },
+    "requiredBehavior": "resolve_existing_lane_against_canonical_owner_before_new_lane_default"
+  },
+  "crashEpoch": {
+    "fixtureId": "new-boot-retains-stable-identities-but-stale-ephemeral-evidence-has-no-epoch",
+    "previousBootEpoch": "boot:synthetic-previous",
+    "currentBootEpoch": "boot:synthetic-current",
+    "stableIdentities": {
+      "principalId": "principal:synthetic-books-receipts",
+      "profileId": "synthetic-books-receipts-profile",
+      "logicalBrowserId": "synthetic-books-browser",
+      "sessionRoute": "synthetic-books-session-route",
+      "connectionId": "synthetic-guac-connection",
+      "routeUserId": "synthetic-route-user",
+      "handoffId": "synthetic-opaque-handoff"
+    },
+    "staleEphemeralEvidence": {
+      "runtimeHostPid": 41001,
+      "socketPath": "/tmp/agent-browser-synthetic/previous.sock",
+      "display": ":91",
+      "viewerSessionId": "synthetic-viewer-previous",
+      "leaseObservationId": "synthetic-lease-observation-previous"
+    },
+    "currentFailures": [
+      "runtime_host_evidence_has_no_boot_epoch",
+      "display_allocation_has_no_boot_epoch",
+      "viewer_lease_has_no_boot_epoch",
+      "profile_lease_is_not_first_class",
+      "dead_guacamole_web_tier_has_no_single_crash_replay_transaction"
+    ],
+    "requiredBehavior": "rediscover_ephemeral_evidence_in_dependency_order_without_changing_stable_identities"
+  },
+  "publicLeaseContract": {
+    "fixtureId": "profile-lease-observability-without-control-plane",
+    "requiredSchemaVersion": "agent-browser.profile-lease.v1",
+    "requiredReadOperations": ["list", "inspect", "explain", "doctor", "watch"],
+    "requiredOwnerOperations": ["rejoin", "renew", "release"],
+    "requiredReconcileOperations": ["reconcile_plan", "reconcile_apply"],
+    "currentFirstClassOperations": [],
+    "existingAdjacentOperations": ["tab_handle_release", "viewer_lease_request", "viewer_lease_heartbeat", "viewer_lease_release"]
+  }
+}

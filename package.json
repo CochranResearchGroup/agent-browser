@@ -165,6 +165,7 @@
     "install:privileges": "bash scripts/install-agent-browser-privileges.sh",
     "test:install-privileges-clean-fixture": "bash scripts/smoke-install-privileges-clean-fixture.sh",
     "test:workstation-install-fixture": "node scripts/test-workstation-install-fixture.js",
+    "test:plan-0134-repro-fixtures": "node scripts/test-plan-0134-repro-fixtures.js",
     "test:workstation-guacamole-assets": "node scripts/test-workstation-guacamole-assets.js",
     "test:workstation-host-provision": "bash scripts/smoke-install-workstation-host-fixture.sh",
     "test:fresh-workstation-vm-harness": "node scripts/test-fresh-workstation-vm-harness.js",
