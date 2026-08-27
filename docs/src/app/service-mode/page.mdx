@@ -1408,9 +1408,12 @@ identity axes, authorized actions, typed continuity recourse, and doctor
 findings. Legacy retained evidence remains observation-only and cannot acquire
 authority from caller labels. Exact lease detail, explanation, and doctor reads
 are available through CLI, HTTP, MCP resources, and generated client helpers.
-Registering a principal writes its new capability only to an operator-selected
-absolute private file. Owner rejoin, renew, and release operations require the
-exact current lease revision plus that capability. HTTP accepts it only in an
+Registering a principal before or after first launch writes its new capability
+only to an operator-selected absolute private file. When a pre-registered
+capability later has one exact uncontested ready owner session, authenticated
+rejoin can establish the missing owner binding and bind only that session and
+its same-browser active tabs. Owner rejoin, renew, and release operations
+require the exact current lease revision plus that capability. HTTP accepts it only in an
 <code>Authorization: Bearer</code> header and MCP accepts it only as an
 ephemeral <code>profileCapability</code> argument. The raw value is never
 retained in Service State or lifecycle events.
