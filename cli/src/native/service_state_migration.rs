@@ -5,7 +5,7 @@
 //! existing principal registry and exact runtime-owner bindings remain the
 //! only migration inputs that can produce effect-capable lease authority.
 
-use super::service_model::ServiceState;
+use super::service_model::{BrowserProfile, ServiceState};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -128,6 +128,7 @@ pub(crate) fn stage_service_state_migration(
     }
     let mut state = read_service_state(raw).map_err(|error| error.to_string())?;
     prepare_service_state_for_persistence(&mut state)?;
+    materialize_inert_legacy_profile_placeholders(&mut state);
     // Full cross-projection integrity is an installation migration commit
     // gate. Ordinary runtime writes can update related projections in
     // multiple repository mutations and must remain able to converge them.
@@ -136,6 +137,45 @@ pub(crate) fn stage_service_state_migration(
         .map_err(|error| format!("service_state_migration_serialize_failed:{error}"))?;
     bytes.push(b'\n');
     Ok(StagedServiceStateMigration { plan, bytes })
+}
+
+/// Preserve an inert legacy lease whose profile row was never persisted.
+///
+/// A placeholder restores only referential identity. It cannot manufacture
+/// principal authority because the source session has no principal, work
+/// capability, browser, or tab binding. Any dangling profile reference with
+/// effect-bearing evidence remains untouched and fails invariant validation.
+fn materialize_inert_legacy_profile_placeholders(state: &mut ServiceState) {
+    let missing_profiles = state
+        .sessions
+        .values()
+        .filter_map(|session| {
+            let profile_id = session.profile_id.as_ref()?;
+            (!profile_id.trim().is_empty()
+                && !state.profiles.contains_key(profile_id)
+                && session.principal_id.is_none()
+                && session.work_lease_id.is_none()
+                && session.browser_ids.is_empty()
+                && session.tab_ids.is_empty())
+            .then(|| profile_id.clone())
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+
+    for profile_id in missing_profiles {
+        state.profiles.insert(
+            profile_id.clone(),
+            BrowserProfile {
+                id: profile_id.clone(),
+                name: profile_id,
+                description: Some(
+                    "Migrated placeholder for an inert legacy session; principal authority remains unproven."
+                        .to_string(),
+                ),
+                persistent: true,
+                ..BrowserProfile::default()
+            },
+        );
+    }
 }
 
 fn stamp_current_versions(state: &mut ServiceState) {
@@ -459,6 +499,59 @@ mod tests {
         let legacy: LegacyProjection = serde_json::from_slice(&staged.bytes).unwrap();
         assert!(legacy.profiles.contains_key("fedex"));
         assert!(legacy.sessions.is_empty());
+    }
+
+    #[test]
+    fn inert_legacy_session_materializes_missing_profile_without_authority() {
+        let raw = json!({
+            "sessions": {
+                "holder": {
+                    "id": "holder",
+                    "owner": "system",
+                    "lease": "exclusive",
+                    "profileId": "work",
+                    "browserIds": [],
+                    "tabIds": []
+                }
+            }
+        })
+        .to_string();
+
+        let staged = stage_service_state_migration(&raw).unwrap();
+        let migrated: Value = serde_json::from_slice(&staged.bytes).unwrap();
+        assert_eq!(migrated["profiles"]["work"]["id"], "work");
+        assert_eq!(migrated["profiles"]["work"]["name"], "work");
+        assert_eq!(migrated["profiles"]["work"]["persistent"], true);
+        assert_eq!(
+            migrated["profiles"]["work"]["description"],
+            "Migrated placeholder for an inert legacy session; principal authority remains unproven."
+        );
+        assert!(migrated
+            .get("servicePrincipals")
+            .and_then(Value::as_object)
+            .is_none_or(|registry| registry.is_empty()));
+    }
+
+    #[test]
+    fn principal_bound_session_with_missing_profile_stays_blocked() {
+        let raw = json!({
+            "sessions": {
+                "holder": {
+                    "id": "holder",
+                    "principalId": "service-a",
+                    "lease": "exclusive",
+                    "profileId": "work",
+                    "browserIds": [],
+                    "tabIds": []
+                }
+            }
+        })
+        .to_string();
+
+        assert_eq!(
+            stage_service_state_migration(&raw).unwrap_err(),
+            "service_state_session_profile_missing:holder:work"
+        );
     }
 
     #[test]

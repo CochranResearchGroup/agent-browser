@@ -5600,6 +5600,10 @@ same recovery-only result.
 Successful JSON output includes runtimeCensusTransaction. Use workstation
 status for a redacted selected-generation, migration, blocker, terminal, and
 seven-axis readiness projection without private paths or endpoint evidence.
+Legacy migration materializes a persistent placeholder profile only for an
+inert session with no principal, work capability, browser, or tab. This repairs
+referential identity without granting authority; effect-bearing missing-profile
+references still block before commit.
 Real-host apply starts a shadow candidate dashboard on the second port after
 ingress. After runtime transfer it waits up to five minutes for an authenticated
 candidate handoff resolution. A ready response served by the staged candidate

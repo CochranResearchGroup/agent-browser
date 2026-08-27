@@ -169,6 +169,12 @@ never inferred from the latest record. Copy the exact revision, candidate
 generation, and `runtimeCensusDigest` from inspect into `resume`, `rollback`,
 or `close`. Pass `none` when `runtimeCensusDigest` is null:
 
+During Service State migration, a missing profile row is materialized as a
+persistent placeholder only when every referencing legacy session is unbound:
+no principal, work capability, browser, or tab. This restores referential
+identity without granting authority. Effect-bearing missing-profile references
+remain a pre-commit blocker.
+
 ```bash
 agent-browser install transactions rollback --transaction-id <id> --expected-revision <revision> --candidate-generation <generation> --census-digest <sha256-or-none> --json
 ```

@@ -244,6 +244,10 @@ reconciliation incidents from the same receipts. Use
 protected PostgreSQL backup operation invoked by the installed timer. Use
 <code>agent-browser install workstation status --json</code> for a redacted
 selected-generation, migration, blocker, admission, and terminal-state view.
+Legacy migration materializes a persistent placeholder profile only for an
+inert session with no principal, work capability, browser, or tab. The
+placeholder restores referential identity without granting authority. An
+effect-bearing missing-profile reference still blocks before commit.
 If a rollback reports <code>operator_recovery_required</code>, run
 <code>agent-browser install workstation recover --transaction-id &lt;id&gt;
 --json</code> with the exact admission-owning transaction ID from the failure.

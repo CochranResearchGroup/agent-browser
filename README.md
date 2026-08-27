@@ -311,6 +311,11 @@ a usable password or project label fails closed.
 `agent-browser install workstation status --json` reports the selected and
 candidate generations, migration dispositions, blockers, admission state, and
 terminal result without exposing private paths, endpoints, or profile evidence.
+Legacy migration preserves an inert, unbound session whose profile row is
+missing by materializing a persistent placeholder profile. The placeholder
+restores referential identity only and grants no principal authority. A missing
+profile referenced by a principal, work capability, browser, or tab still
+blocks before commit.
 When rollback leaves an explicit operator-recovery state, run
 `agent-browser install workstation recover --transaction-id <id> --json` with
 the exact admission-owning transaction ID from the failure. Recovery fails
