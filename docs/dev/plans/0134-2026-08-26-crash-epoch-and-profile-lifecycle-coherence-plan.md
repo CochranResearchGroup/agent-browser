@@ -4,13 +4,13 @@ Date: 2026-08-26
 
 State: OPEN
 
-Execution state: `slice_j_complete_slice_k_candidate_presentation_pending`
+Execution state: `slice_k_candidate_built_install_presentation_authority_pending`
 
 Lane: P134
 
 Source baseline: `1efab249b7908cf703d5facae132dd658a3daf97`
 
-Branch: `plan/crash-profile-lifecycle-coherence`
+Branch: `main`
 
 Target: `main`
 
@@ -50,13 +50,13 @@ Current checkpoint:
   MCP, generated clients, and dashboard controls. Public status adds redacted
   crash-regeneration progress while removing its private ephemeral evidence
   from both bounded and full-history Service State projections.
-- Slice I is complete. Slice J source and isolated development acceptance are
-  complete at source commit `49c28874`. Slice K built and exercised candidate
-  `06a24ebb603550ccac6aa10803d68ba35ed49dccf08ba0a057bbc12f69560c8b`,
-  repaired migration and runtime-host epoch blockers, and rolled back cleanly
-  when no current operator-visible presentation could satisfy final commit.
-  A successor candidate is required because Slice J live inspection found and
-  repaired one exact ready-owner binding recourse gap after that build.
+- Slice I and Slice J are complete. Slice K candidate
+  `ecaa9b7f849c7ae31d64a36f5e27bc3262eedeaf109a8a14bd051344b6e84c1d`
+  from source commit `5b38a2e0` includes the ready-owner binding recourse and
+  mixed-version ledger repairs. Its guarded install rolled back cleanly at the
+  separately authorized presentation boundary. Production remains on
+  `0.28.0-32e8c9318beb-b2bd0fba532f` until an authenticated candidate durable
+  handoff is approved and proven.
 
 Depends on:
 
@@ -1153,3 +1153,38 @@ Do not implement migration or installer effects in Slice A.
   repair. The next step is to commit and build the exact successor candidate,
   normalize only incompatible retained records through the guarded CLI, and
   re-read installed doctor and preflight evidence before any apply.
+
+## 2026-08-27 Slice K exact candidate and guarded rollback checkpoint
+
+- Source commits `65c09ff3` and `5b38a2e0` are on `origin/main`. The final
+  release-mode candidate has SHA-256
+  `ecaa9b7f849c7ae31d64a36f5e27bc3262eedeaf109a8a14bd051344b6e84c1d`
+  and immutable generation
+  `0.28.0-ecaa9b7f849c-944c8908102f`.
+- All three retained `closed_zero_effect` records advertised exact guarded
+  `close`. Their compare-and-swap normalization advanced only the expected
+  revisions and persisted `failed_preserved_old_generation` with
+  `terminalResult: closed_zero_effect`. Candidate inspection reports zero
+  incompatible records.
+- A zero-effect dry run passed. Before apply, production had zero active
+  sessions, zero runtime inventory, one selected dashboard, and one selected
+  runtime host. An exact idle runtime-host restart changed PID only and proved
+  that the current supervisor warning comes from the prior-epoch ingress
+  authority boundary, not a foreign listener or retained browser.
+- The guarded install transaction
+  `upgrade-a2550c23-fcb9-4d77-9c5c-5a7060cdff15` staged and validated the
+  Service State migration, refreshed runtime evidence, and reached the final
+  presentation gate. It rolled back after 300 seconds because no authenticated
+  durable handoff was resolved through candidate port 4850. The transaction
+  is `failed_preserved_old_generation` at revision 12 with zero outstanding
+  owner obligations.
+- Fresh rollback evidence shows production still selected at
+  `0.28.0-32e8c9318beb-b2bd0fba532f`, one old dashboard, one old runtime host,
+  no candidate process, steady multiplicity, and converged old ingress. No
+  profile, owner, lease, Service State, generation selector, or provider route
+  change survived rollback.
+- Completion now requires separate exact authorization to establish or reuse
+  one production presentation route and resolve its authenticated durable
+  `/remote-view/<handoff-id>` through the candidate during a new guarded
+  transaction. Do not retry apply without that prerequisite because the
+  presentation state has not changed.
