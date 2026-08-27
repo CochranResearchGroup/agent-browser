@@ -7414,17 +7414,26 @@ fn selected_runtime_host_capture_action(
     topology: crate::runtime_host_ingress::RuntimeHostTopology,
     selected_host_absent: bool,
     old_host_present: bool,
+    boot_epoch_status: crate::process_identity::BootEpochStatus,
 ) -> SelectedRuntimeHostCaptureAction {
     if old_host_present || topology != crate::runtime_host_ingress::RuntimeHostTopology::SingleHost
     {
         SelectedRuntimeHostCaptureAction::Skip
-    } else if selected_host_absent {
+    } else if selected_host_absent
+        || matches!(
+            boot_epoch_status,
+            crate::process_identity::BootEpochStatus::Missing
+                | crate::process_identity::BootEpochStatus::Prior
+        )
+    {
         SelectedRuntimeHostCaptureAction::RefreshIdentity
     } else {
         SelectedRuntimeHostCaptureAction::CaptureExact
     }
 }
 
+/// Re-observe a live selected host when its persisted boot epoch is missing or
+/// prior, then CAS-refresh only the same generation, socket, and binary scope.
 fn capture_selected_runtime_host_before_transfer(
     transaction: &mut crate::runtime_adoption::UpgradeTransaction,
 ) -> Result<(), String> {
@@ -7454,6 +7463,7 @@ fn capture_selected_runtime_host_before_transfer(
         selected.topology,
         selected_host_absent,
         old_host_present,
+        registry.boot_epoch_status(),
     );
     if capture_action == SelectedRuntimeHostCaptureAction::Skip {
         return Ok(());
@@ -10817,6 +10827,7 @@ mod tests {
                 crate::runtime_host_ingress::RuntimeHostTopology::SingleHost,
                 false,
                 false,
+                crate::process_identity::BootEpochStatus::Current,
             ),
             SelectedRuntimeHostCaptureAction::CaptureExact,
         );
@@ -10825,6 +10836,7 @@ mod tests {
                 crate::runtime_host_ingress::RuntimeHostTopology::SingleHost,
                 true,
                 false,
+                crate::process_identity::BootEpochStatus::Current,
             ),
             SelectedRuntimeHostCaptureAction::RefreshIdentity,
         );
@@ -10833,8 +10845,27 @@ mod tests {
                 crate::runtime_host_ingress::RuntimeHostTopology::SingleHost,
                 true,
                 true,
+                crate::process_identity::BootEpochStatus::Missing,
             ),
             SelectedRuntimeHostCaptureAction::Skip,
+        );
+        assert_eq!(
+            selected_runtime_host_capture_action(
+                crate::runtime_host_ingress::RuntimeHostTopology::SingleHost,
+                false,
+                false,
+                crate::process_identity::BootEpochStatus::Missing,
+            ),
+            SelectedRuntimeHostCaptureAction::RefreshIdentity,
+        );
+        assert_eq!(
+            selected_runtime_host_capture_action(
+                crate::runtime_host_ingress::RuntimeHostTopology::SingleHost,
+                false,
+                false,
+                crate::process_identity::BootEpochStatus::Prior,
+            ),
+            SelectedRuntimeHostCaptureAction::RefreshIdentity,
         );
     }
 

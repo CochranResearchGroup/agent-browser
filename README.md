@@ -323,6 +323,10 @@ no process identity, active viewer or controller lease, principal-bound owner,
 or existing session binding. A unique unbound legacy owner is preserved as
 historical identity rather than converted into new authority. Effect-bearing
 references still block.
+When a live selected runtime host predates boot-epoch persistence or was
+observed on a prior boot, guarded apply re-observes its exact process, socket,
+generation, and binary and CAS-refreshes that same ingress identity before
+staging the candidate. Ambiguous or changed identity still blocks.
 When rollback leaves an explicit operator-recovery state, run
 `agent-browser install workstation recover --transaction-id <id> --json` with
 the exact admission-owning transaction ID from the failure. Recovery fails

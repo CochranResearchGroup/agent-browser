@@ -182,6 +182,9 @@ Terminal orphaned or released remote-view evidence may use the same inert
 placeholders only without process identity, active viewer or controller leases,
 principal-bound ownership, or existing session binding. A unique unbound legacy
 owner is preserved as historical identity, not converted into new authority.
+A live selected runtime host with a missing or prior boot epoch is re-observed
+and CAS-refreshed only when its exact process, socket, generation, and binary
+remain in the selected scope. Ambiguous or changed identity still blocks.
 
 ```bash
 agent-browser install transactions rollback --transaction-id <id> --expected-revision <revision> --candidate-generation <generation> --census-digest <sha256-or-none> --json

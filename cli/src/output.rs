@@ -5609,6 +5609,9 @@ not_started browser and released system-session placeholders. Terminal orphaned
 or released remote-view evidence can do the same only without process identity,
 active viewer or controller leases, principal-bound ownership, or existing
 session binding. Effect-bearing references still block.
+A live selected runtime host with a missing or prior boot epoch is re-observed
+and CAS-refreshed only when its exact process, socket, generation, and binary
+remain in the selected scope. Ambiguous or changed identity still blocks.
 Real-host apply starts a shadow candidate dashboard on the second port after
 ingress. After runtime transfer it waits up to five minutes for an authenticated
 candidate handoff resolution. A ready response served by the staged candidate
