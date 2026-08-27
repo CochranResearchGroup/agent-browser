@@ -4,7 +4,7 @@ Date: 2026-08-26
 
 State: OPEN
 
-Execution state: `slice_e_complete_slice_f_pending`
+Execution state: `slice_f_complete_slice_g_pending`
 
 Lane: P134
 
@@ -36,8 +36,11 @@ Current checkpoint:
   Foreign principals wait, unauthenticated callers must authenticate, and
   profile contradictions return a typed lifecycle identity inconsistency.
 - Slice E makes the exact current runtime owner authoritative for an existing
-  managed session before any new-lane profile fallback. Slices F through K
-  remain pending.
+  managed session before any new-lane profile fallback.
+- Slice F binds package-owned process, runtime-host socket, display, viewer,
+  acquisition, lifecycle, and session-lease observations to one host boot
+  epoch. Prior-boot evidence requires rediscovery and has no effect or cleanup
+  authority. Slices G through K remain pending.
 
 Depends on:
 
@@ -944,3 +947,37 @@ Do not implement migration or installer effects in Slice A.
 - No browser, provider, development-runtime, installed-runtime, Service State,
   owner, lease, route, display, unit, Guacamole, or profile effect occurred.
   The next authorized packet is Slice F only.
+
+## 2026-08-27 Slice F boot-scoped evidence checkpoint
+
+- Linux captures the kernel boot ID; macOS and Windows derive a stable host
+  epoch from the platform process-start identity. The typed classifier
+  distinguishes current, prior, missing, and unavailable evidence.
+- Service browser, display, viewer, remote-view acquisition, session work
+  lease, and runtime lifecycle records now retain the boot epoch that
+  authenticated their ephemeral observations. Runtime-host ingress retains the
+  same epoch for its selected PID and socket identity.
+- Prior-boot browser rows cannot be reused by access planning, prior display
+  allocations cannot satisfy remote-view reuse, and prior runtime-host sockets
+  cannot be selected. Exact runtime-host identity refresh is the bounded
+  readmission path. Prior evidence is retained and never becomes an automatic
+  cleanup candidate.
+- Stable profile, logical browser, route, connection, route-user, and durable
+  handoff identities are unchanged. Legacy missing-epoch records remain
+  visible with typed `rediscover_current_evidence` findings.
+- Profile-lease reconciliation plan and apply now capture and compare the real
+  current boot epoch instead of remaining permanently blocked by
+  `boot_epoch_unavailable` on supported hosts.
+- The Plan 0134 reboot fixture proves that PID, display, viewer, and lease
+  observations from a prior epoch are rediscovery-only, that the stale browser
+  is not returned as reusable, and that the stable logical browser row
+  survives. Runtime-host tests prove stale PID and socket authority stays
+  blocked until exact identity refresh.
+- Focused validation passed for Slice F fixture tests, boot-epoch diagnostics,
+  all runtime-host ingress tests, all service-access, profile-lease, resource,
+  and remote-view test partitions, strict Clippy, and Rust formatting. Broader
+  service and documentation gates remain part of continuing Slice G through J
+  validation.
+- No browser, provider, development-runtime, installed-runtime, Service State,
+  owner, lease, route, display, unit, Guacamole, or profile effect occurred.
+  The next authorized packet is Slice G only.

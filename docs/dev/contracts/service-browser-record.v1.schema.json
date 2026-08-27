@@ -21,6 +21,10 @@
     "id": {
       "type": "string"
     },
+    "bootEpoch": {
+      "description": "Host boot that authenticated process-scoped observations on this record.",
+      "type": "string"
+    },
     "profileId": {
       "type": ["string", "null"]
     },

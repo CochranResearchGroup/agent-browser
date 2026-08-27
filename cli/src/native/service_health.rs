@@ -831,6 +831,7 @@ pub fn persist_service_browser_record_in_repository(
         };
         let mut browser = BrowserProcess {
             id: id.clone(),
+            boot_epoch: crate::process_identity::current_boot_epoch(),
             profile_id: profile_id.clone(),
             host,
             health,
@@ -993,11 +994,13 @@ fn upsert_browser_display_allocation(
         .entry(allocation_id.clone())
         .or_insert_with(|| DisplayAllocation {
             id: allocation_id.clone(),
+            boot_epoch: crate::process_identity::current_boot_epoch(),
             display_isolation: display_isolation.clone(),
             created_at: Some(now.clone()),
             ..DisplayAllocation::default()
         });
     allocation.display_name = browser.display_name.clone();
+    allocation.boot_epoch = crate::process_identity::current_boot_epoch();
     allocation.display_isolation = display_isolation;
     allocation.owner_browser_id = Some(browser.id.clone());
     allocation.owner_session_id = Some(session_id.to_string());
@@ -1243,6 +1246,7 @@ pub(crate) fn stale_browser_process_record(
 ) -> BrowserProcess {
     let mut browser = BrowserProcess {
         id: id.to_string(),
+        boot_epoch: crate::process_identity::current_boot_epoch(),
         profile_id: previous.and_then(|browser| browser.profile_id.clone()),
         host: previous
             .map(|browser| browser.host)
@@ -1523,6 +1527,7 @@ pub(crate) fn persist_closed_browser_health_in_repository(
         if let Some(session) = service_state.sessions.get_mut(session_id) {
             session.lease = LeaseState::Released;
             session.last_lease_observed_at = Some(current_timestamp());
+            session.boot_epoch = crate::process_identity::current_boot_epoch();
             session.profile_lease_conflict_session_ids.clear();
         }
         if health == BrowserHealth::NotStarted {
@@ -3319,6 +3324,7 @@ mod tests {
             logical_browser_id.clone(),
             RuntimeLifecycleRecord {
                 logical_browser_id,
+                boot_epoch: None,
                 profile_identity_digest,
                 owner_generation,
                 lifecycle_state: RuntimeLaneLifecycleState::Closing,

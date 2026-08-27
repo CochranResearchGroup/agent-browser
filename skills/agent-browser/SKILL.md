@@ -1770,6 +1770,14 @@ Service control jobs do not time out at the worker boundary by default. Set `ser
 
 Browser recovery defaults to 3 relaunch attempts, 1000 ms base backoff, and 30000 ms max backoff before marking a browser `faulted`. Set `service.recoveryRetryBudget`, `service.recoveryBaseBackoffMs`, and `service.recoveryMaxBackoffMs`, pass `--service-recovery-retry-budget <n>`, `--service-recovery-base-backoff <ms>`, or `--service-recovery-max-backoff <ms>`, or set the matching `AGENT_BROWSER_SERVICE_RECOVERY_*` environment variables to tune this for a service host. Recovery-started trace events include `details.policySource.retryBudget`, `details.policySource.baseBackoffMs`, and `details.policySource.maxBackoffMs` so agents can see whether each active value came from defaults, config, environment, or CLI flags.
 
+Service-resource JSON includes the current `bootEpoch` and typed
+`bootEpochFindings` for prior, missing, or unavailable browser, session-lease,
+display, viewer, runtime-lifecycle, PID, and socket observations. Treat
+`rediscover_current_evidence` as a readmission requirement, never as cleanup
+permission. Stable profile, logical-browser, route, connection, route-user,
+and durable handoff IDs survive reboot. Profile-lease reconciliation plans are
+sealed to the current epoch and fail closed if it changes or is unavailable.
+
 ## Batch Execution
 
 Use `batch` when running 2 or more commands in sequence. Batch executes commands in order, so dependent commands like navigate then screenshot work correctly. Each quoted argument is a separate command.

@@ -198,10 +198,12 @@ fn finalize_display_allocation(
         .entry(facts.display_allocation_id.clone())
         .or_insert_with(|| DisplayAllocation {
             id: facts.display_allocation_id.clone(),
+            boot_epoch: crate::process_identity::current_boot_epoch(),
             created_at: Some(observed_at.to_string()),
             ..DisplayAllocation::default()
         });
     allocation.display_name = display_name;
+    allocation.boot_epoch = crate::process_identity::current_boot_epoch();
     allocation.display_isolation = display_isolation;
     allocation.owner_browser_id = Some(facts.browser_id.clone());
     allocation.owner_session_id = Some(facts.session_id.clone());

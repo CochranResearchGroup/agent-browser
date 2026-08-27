@@ -280,6 +280,9 @@ pub(crate) enum CleanupObligationState {
 #[serde(default, rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct RuntimeLifecycleRecord {
     pub(crate) logical_browser_id: String,
+    /// Host boot that authenticated process-group and launch observations.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) boot_epoch: Option<String>,
     pub(crate) profile_identity_digest: String,
     pub(crate) owner_generation: u64,
     pub(crate) lifecycle_state: RuntimeLaneLifecycleState,
@@ -1285,6 +1288,7 @@ mod tests {
             "browser-a".to_string(),
             RuntimeLifecycleRecord {
                 logical_browser_id: "browser-a".to_string(),
+                boot_epoch: None,
                 profile_identity_digest: digest("profile"),
                 owner_generation: 7,
                 lifecycle_state: RuntimeLaneLifecycleState::Retained,

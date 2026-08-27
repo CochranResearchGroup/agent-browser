@@ -211,6 +211,7 @@ pub(crate) mod service_commands {
             for session_id in &missing_lease_observed_at {
                 if let Some(session) = state.sessions.get_mut(session_id) {
                     session.last_lease_observed_at = Some(observed_at.to_string());
+                    session.boot_epoch = crate::process_identity::current_boot_epoch();
                 }
             }
         }

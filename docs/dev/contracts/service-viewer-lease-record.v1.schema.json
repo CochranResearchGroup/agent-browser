@@ -24,6 +24,10 @@
     "id": {
       "type": "string"
     },
+    "bootEpoch": {
+      "description": "Host boot that authenticated the package-owned viewer observation.",
+      "type": "string"
+    },
     "routeId": {
       "type": ["string", "null"]
     },

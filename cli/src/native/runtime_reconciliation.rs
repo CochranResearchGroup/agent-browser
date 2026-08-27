@@ -394,6 +394,7 @@ mod tests {
             owner.browser_id.clone(),
             RuntimeLifecycleRecord {
                 logical_browser_id: owner.browser_id.clone(),
+                boot_epoch: None,
                 profile_identity_digest: profile_identity_digest.clone(),
                 owner_generation: owner.owner_generation,
                 lifecycle_state: RuntimeLaneLifecycleState::Closing,

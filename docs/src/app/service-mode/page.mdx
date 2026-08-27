@@ -772,7 +772,12 @@ session ids, display allocation id, disposition, and safety reasons. It protects
 the dashboard service main PID, retained active browser PIDs, and named or
 persistent managed profiles. The response also includes
 <code>runtimeLanes</code> and summary counts for managed lanes and cleanup
-obligations. Package-launched and managed-attached Chrome lanes register
+obligations. JSON includes the current <code>bootEpoch</code> and typed
+<code>bootEpochFindings</code> for prior, missing, or unavailable ephemeral
+evidence. Findings require current-evidence rediscovery and never authorize
+cleanup. Stable profile, logical-browser, route, connection, route-user, and
+durable handoff identities survive reboot. Package-launched and
+managed-attached Chrome lanes register
 canonical profile, exact process, CDP endpoint, owner-generation, and target
 evidence before ready state. Transfer, retained detach, recovery, and owned
 close move the same cleanup obligation, and terminal close requires exact
@@ -1417,7 +1422,9 @@ Rejoin, renew, release, and reconciliation controls accept the private
 capability only in an ephemeral password field that is cleared on close or
 successful mutation. Observation-only leases cannot mutate. Reconciliation
 planning is read-only, and apply remains disabled unless the sealed plan
-reports <code>effectCapable: true</code>.
+reports <code>effectCapable: true</code>. Plans bind the current host boot epoch,
+and apply fails closed after an epoch change or when the host cannot establish
+one.
 
 Service tools include `service_request`, `desktop_capture`, `desktop_evidence_observe`, `service_job_cancel`, `service_browser_retry`, `service_incidents`, `service_remedies_apply`, `service_trace`, `service_profile_upsert`, `service_profile_freshness_update`, `service_profile_delete`, `service_session_upsert`, `service_session_delete`, `service_site_policy_upsert`, `service_site_policy_delete`, `service_monitor_upsert`, `service_monitor_delete`, `service_monitors_run_due`, `service_monitor_pause`, `service_monitor_resume`, `service_monitor_reset_failures`, `service_monitor_triage`, `service_provider_upsert`, `service_provider_delete`, `service_browser_capability_registry_upsert`, and `service_browser_capability_preflight`. Use `service_browser_capability_preflight` to evaluate a requested browser build without launching Chrome. Use `service_request` to queue one intent-based browser action with caller context and site/login hints. Use `desktop_capture` for the low-level route-bound diagnostic and `desktop_evidence_observe` for the task-shaped browser-external scene observation. Pass `summary: true` to `service_incidents` for the same escalation, severity, and state remedy groups as HTTP `summary=true`; add `remediesOnly: true` for the compact active `browser_degraded`, `monitor_attention`, and `os_degraded_possible` operator ladder. Use `service_remedies_apply` with `escalation: "monitor_attention"` to apply active monitor remedies, `escalation: "browser_degraded"` after operator review to batch degraded-browser retry enablement, or `escalation: "os_degraded_possible"` after host inspection to batch faulted-browser retry remedies through the service worker.
 

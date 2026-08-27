@@ -303,6 +303,7 @@ fn plan_profile_lease_command(command: &serde_json::Value) -> Result<serde_json:
     let idempotency_key = optional_command_string(command, "idempotencyKey")
         .unwrap_or_else(|| format!("profile-lease-reconcile-{}", uuid::Uuid::new_v4()));
     let now = service_now_timestamp();
+    let boot_epoch = crate::process_identity::current_boot_epoch();
     let plan = plan_profile_lease_reconciliation(
         &state,
         lease_id,
@@ -310,7 +311,7 @@ fn plan_profile_lease_command(command: &serde_json::Value) -> Result<serde_json:
         &authority,
         &now,
         expires_at,
-        None,
+        boot_epoch,
         idempotency_key,
         raw_capability.as_bytes(),
     )
@@ -332,6 +333,7 @@ fn apply_profile_lease_command(command: &serde_json::Value) -> Result<serde_json
             .map_err(|error| format!("profile_lease_plan_invalid:{error}"))?
     };
     let now = service_now_timestamp();
+    let boot_epoch = crate::process_identity::current_boot_epoch();
     let repository = LockedServiceStateRepository::default_json()?;
     repository.mutate(|state| {
         let authority = authenticate_profile_capability(
@@ -345,7 +347,7 @@ fn apply_profile_lease_command(command: &serde_json::Value) -> Result<serde_json
             &plan,
             &authority,
             &now,
-            None,
+            boot_epoch.as_deref(),
             raw_capability.as_bytes(),
         )
         .map_err(lease_error_string)?;
@@ -776,6 +778,7 @@ pub(crate) fn renew_profile_lease(
     }) {
         session.expires_at = Some(expires_at.to_string());
         session.last_lease_observed_at = Some(now.to_string());
+        session.boot_epoch = crate::process_identity::current_boot_epoch();
         session.work_lease_revision = session.work_lease_revision.saturating_add(1).max(1);
     }
     inspect_profile_lease(state, lease_id, now)
@@ -807,6 +810,7 @@ pub(crate) fn release_profile_lease(
         session.lease = LeaseState::Released;
         session.expires_at = Some(now.to_string());
         session.last_lease_observed_at = Some(now.to_string());
+        session.boot_epoch = crate::process_identity::current_boot_epoch();
         session.work_lease_revision = session.work_lease_revision.saturating_add(1).max(1);
     }
     inspect_profile_lease(state, lease_id, now)
@@ -963,6 +967,7 @@ pub(crate) fn apply_profile_lease_reconciliation(
         session.lease = LeaseState::Released;
         session.expires_at = Some(now.to_string());
         session.last_lease_observed_at = Some(now.to_string());
+        session.boot_epoch = crate::process_identity::current_boot_epoch();
         session.work_lease_revision = session.work_lease_revision.saturating_add(1).max(1);
     }
     let resulting = inspect_profile_lease(state, &plan.lease_id, now)?;

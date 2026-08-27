@@ -612,6 +612,7 @@ fn apply_transition(
             lifecycle.owner_generation = owner.owner_generation;
             lifecycle.process_group_id = process_group_id;
             lifecycle.package_launch_identity_digest = Some(package_launch_identity_digest);
+            lifecycle.boot_epoch = crate::process_identity::current_boot_epoch();
             store_lifecycle(registry, lifecycle)?;
             Ok(RuntimeLifecycleTransition::OwnerRegistered(owner))
         }
@@ -664,6 +665,7 @@ fn apply_transition(
             lifecycle.cleanup_obligation_state = CleanupObligationState::Owned;
             lifecycle.process_group_id = process_group_id;
             lifecycle.package_launch_identity_digest = Some(package_launch_identity_digest);
+            lifecycle.boot_epoch = crate::process_identity::current_boot_epoch();
             lifecycle.terminal_evidence.clear();
             store_lifecycle(registry, lifecycle)?;
             Ok(RuntimeLifecycleTransition::TerminalReplacementActivated(
@@ -929,6 +931,7 @@ fn take_or_bootstrap_lifecycle(
     }
     Ok(RuntimeLifecycleRecord {
         logical_browser_id: owner.browser_id.clone(),
+        boot_epoch: None,
         profile_identity_digest: owner.profile_identity_digest.clone(),
         owner_generation: owner.owner_generation,
         lifecycle_state: RuntimeLaneLifecycleState::Unknown,
@@ -1081,6 +1084,32 @@ mod tests {
     }
 
     #[test]
+    fn retained_lifecycle_transition_does_not_reauthenticate_prior_process_evidence() {
+        let current_owner = owner();
+        let mut registry = RuntimeOwnerRegistry::from_owner(current_owner.clone());
+        registry.lifecycle_records.insert(
+            current_owner.browser_id.clone(),
+            RuntimeLifecycleRecord {
+                logical_browser_id: current_owner.browser_id.clone(),
+                boot_epoch: Some("boot:synthetic-previous".to_string()),
+                profile_identity_digest: current_owner.profile_identity_digest.clone(),
+                owner_generation: current_owner.owner_generation,
+                lifecycle_state: RuntimeLaneLifecycleState::Ready,
+                cleanup_obligation_state: CleanupObligationState::Owned,
+                process_group_id: Some(4100),
+                package_launch_identity_digest: Some(digest("launch")),
+                terminal_evidence: Vec::new(),
+            },
+        );
+
+        let lifecycle = take_or_bootstrap_lifecycle(&mut registry, &current_owner).unwrap();
+        assert_eq!(
+            lifecycle.boot_epoch.as_deref(),
+            Some("boot:synthetic-previous")
+        );
+    }
+
+    #[test]
     fn managed_lane_registration_derives_identity_and_returns_effect_binding() {
         let repository = MemoryRepository::default();
         let authority = RuntimeLifecycleAuthority::new(&repository);
@@ -1107,6 +1136,10 @@ mod tests {
         let registered = repository.load_snapshot().unwrap();
         let lifecycle = &registered.runtime_owner_registry.lifecycle_records["session:alpha"];
         assert_eq!(lifecycle.process_group_id, Some(4100));
+        assert_eq!(
+            lifecycle.boot_epoch,
+            crate::process_identity::current_boot_epoch()
+        );
         assert!(lifecycle
             .package_launch_identity_digest
             .as_deref()
@@ -1182,6 +1215,7 @@ mod tests {
                     current.browser_id.clone(),
                     RuntimeLifecycleRecord {
                         logical_browser_id: current.browser_id.clone(),
+                        boot_epoch: None,
                         profile_identity_digest,
                         owner_generation: current.owner_generation,
                         lifecycle_state: RuntimeLaneLifecycleState::Ready,

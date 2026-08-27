@@ -518,6 +518,14 @@ fn allocation_reuse_mismatches(
     if allocation.state != "ready" {
         mismatches.push(format!("display_allocation_state:{}", allocation.state));
     }
+    let current_boot_epoch = crate::process_identity::current_boot_epoch();
+    let boot_epoch_status = crate::process_identity::boot_epoch_status(
+        allocation.boot_epoch.as_deref(),
+        current_boot_epoch.as_deref(),
+    );
+    if boot_epoch_status == crate::process_identity::BootEpochStatus::Prior {
+        mismatches.push("display_allocation_boot_epoch_prior".to_string());
+    }
     if allocation
         .owner_browser_id
         .as_deref()
@@ -595,6 +603,7 @@ fn command_display_allocation_from_intent(
     let display_name = intent.remote_headed_display.clone()?;
     Some(DisplayAllocation {
         id: display_allocation_id.to_string(),
+        boot_epoch: crate::process_identity::current_boot_epoch(),
         display_name: Some(display_name),
         display_isolation: intent
             .display_isolation
@@ -803,19 +812,24 @@ pub fn plan_remote_view_acquisition(
         ));
     }
     if let Some(allocation) = existing_display_allocation {
+        let current_boot_epoch = crate::process_identity::current_boot_epoch();
         let allocation_is_inactive = matches!(
             allocation.state.as_str(),
             "released" | "orphaned" | "failed" | "unavailable"
-        ) || allocation
-            .readiness
-            .as_ref()
-            .and_then(readiness_state)
-            .is_some_and(|state| {
-                matches!(
-                    state.as_str(),
-                    "released" | "orphaned" | "failed" | "unavailable"
-                )
-            });
+        ) || crate::process_identity::boot_epoch_status(
+            allocation.boot_epoch.as_deref(),
+            current_boot_epoch.as_deref(),
+        ) == crate::process_identity::BootEpochStatus::Prior
+            || allocation
+                .readiness
+                .as_ref()
+                .and_then(readiness_state)
+                .is_some_and(|state| {
+                    matches!(
+                        state.as_str(),
+                        "released" | "orphaned" | "failed" | "unavailable"
+                    )
+                });
         if allocation
             .owner_session_id
             .as_deref()

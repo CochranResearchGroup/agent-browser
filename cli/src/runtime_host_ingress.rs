@@ -55,6 +55,9 @@ impl RuntimeHostBackend {
 pub(crate) struct RuntimeHostIngressRegistry {
     pub(crate) schema_version: String,
     pub(crate) revision: u64,
+    /// Host boot that authenticated the selected PID and socket identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) boot_epoch: Option<String>,
     pub(crate) active_transaction_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     selected_transaction_id: Option<String>,
@@ -69,6 +72,7 @@ impl RuntimeHostIngressRegistry {
         Ok(Self {
             schema_version: RUNTIME_HOST_INGRESS_SCHEMA_VERSION.to_string(),
             revision: 1,
+            boot_epoch: crate::process_identity::current_boot_epoch(),
             active_transaction_id: None,
             selected_transaction_id: None,
             selected_backend,
@@ -79,6 +83,13 @@ impl RuntimeHostIngressRegistry {
 
     pub(crate) fn selected_backend(&self) -> &RuntimeHostBackend {
         &self.selected_backend
+    }
+
+    pub(crate) fn boot_epoch_status(&self) -> crate::process_identity::BootEpochStatus {
+        crate::process_identity::boot_epoch_status(
+            self.boot_epoch.as_deref(),
+            crate::process_identity::current_boot_epoch().as_deref(),
+        )
     }
 
     pub(crate) fn candidate_backend(&self) -> Option<&RuntimeHostBackend> {
@@ -94,6 +105,7 @@ impl RuntimeHostIngressRegistry {
         transaction_id: &str,
         candidate: RuntimeHostBackend,
     ) -> Result<(), String> {
+        self.require_current_boot_epoch()?;
         candidate.validate()?;
         if transaction_id.trim().is_empty() {
             return Err("runtime host ingress transaction ID is missing".to_string());
@@ -122,6 +134,7 @@ impl RuntimeHostIngressRegistry {
         transaction_id: &str,
         expected_generation: &str,
     ) -> Result<(), String> {
+        self.require_current_boot_epoch()?;
         self.require_transaction(transaction_id)?;
         let candidate = self
             .candidate_backend
@@ -140,6 +153,7 @@ impl RuntimeHostIngressRegistry {
     }
 
     fn rollback(&mut self, transaction_id: &str, expected_generation: &str) -> Result<(), String> {
+        self.require_current_boot_epoch()?;
         if self.active_transaction_id.as_deref() == Some(transaction_id) {
             let candidate = self
                 .candidate_backend
@@ -179,6 +193,7 @@ impl RuntimeHostIngressRegistry {
         expected_selected_pid: u32,
         expected_fallback_generation: &str,
     ) -> Result<(), String> {
+        self.require_current_boot_epoch()?;
         if self.active_transaction_id.is_some() || self.candidate_backend.is_some() {
             return Err("runtime host ingress transaction changed before recovery".to_string());
         }
@@ -226,6 +241,7 @@ impl RuntimeHostIngressRegistry {
             return Err("runtime host replacement identity changed selected scope".to_string());
         }
         self.selected_backend = replacement;
+        self.boot_epoch = crate::process_identity::current_boot_epoch();
         self.selected_transaction_id = None;
         self.revision = self.revision.saturating_add(1);
         Ok(())
@@ -236,6 +252,21 @@ impl RuntimeHostIngressRegistry {
             return Err("runtime host ingress transaction changed".to_string());
         }
         Ok(())
+    }
+
+    fn require_current_boot_epoch(&self) -> Result<(), String> {
+        match self.boot_epoch_status() {
+            crate::process_identity::BootEpochStatus::Current => Ok(()),
+            crate::process_identity::BootEpochStatus::Prior => {
+                Err("runtime_host_boot_epoch_prior:rediscover_current_evidence".to_string())
+            }
+            crate::process_identity::BootEpochStatus::Missing => {
+                Err("runtime_host_boot_epoch_missing:rediscover_current_evidence".to_string())
+            }
+            crate::process_identity::BootEpochStatus::Unavailable => {
+                Err("runtime_host_boot_epoch_unavailable:rediscover_current_evidence".to_string())
+            }
+        }
     }
 }
 
@@ -357,7 +388,8 @@ pub(crate) fn selected_socket_dir() -> Option<PathBuf> {
     let repository =
         RuntimeHostIngressRepository::new(RuntimeHostIngressRepository::default_path());
     repository.load().ok().and_then(|registry| {
-        (registry.selected_backend().topology == RuntimeHostTopology::SingleHost)
+        (registry.boot_epoch_status() == crate::process_identity::BootEpochStatus::Current
+            && registry.selected_backend().topology == RuntimeHostTopology::SingleHost)
             .then(|| registry.selected_backend().socket_dir.clone())
     })
 }
@@ -696,5 +728,39 @@ mod tests {
             RuntimeHostTopology::LegacyPerSession
         );
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn prior_boot_pid_and_socket_are_not_selected_until_exact_identity_refresh() {
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-runtime-host-ingress-prior-boot-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let selected = backend(&root, "stable-generation", 41001);
+        let mut registry = RuntimeHostIngressRegistry::new(selected.clone()).unwrap();
+        registry.boot_epoch = Some("boot:synthetic-previous".to_string());
+
+        let error = registry
+            .stage_candidate("tx-prior", backend(&root, "candidate", 41002))
+            .unwrap_err();
+        assert_eq!(
+            error,
+            "runtime_host_boot_epoch_prior:rediscover_current_evidence"
+        );
+        assert_eq!(registry.selected_backend(), &selected);
+        assert!(registry.candidate_backend().is_none());
+
+        let mut replacement = selected.clone();
+        replacement.pid = 42001;
+        replacement.host_id = "host-stable-generation-rediscovered".to_string();
+        replacement.socket_identity = "socket-stable-generation-rediscovered".to_string();
+        registry
+            .refresh_selected_backend_identity(&selected, replacement.clone())
+            .unwrap();
+        assert_eq!(
+            registry.boot_epoch_status(),
+            crate::process_identity::BootEpochStatus::Current
+        );
+        assert_eq!(registry.selected_backend(), &replacement);
     }
 }

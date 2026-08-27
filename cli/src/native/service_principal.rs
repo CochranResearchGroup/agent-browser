@@ -398,6 +398,7 @@ pub(crate) fn bind_session_work_lease(
         ));
     }
     session.principal_id = Some(authority.principal_id.clone());
+    session.boot_epoch = crate::process_identity::current_boot_epoch();
     session.principal_provenance = Some(authority.provenance);
     session.work_lease_id = Some(work_lease_id(
         "session",

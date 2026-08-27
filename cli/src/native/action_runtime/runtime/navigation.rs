@@ -1596,6 +1596,7 @@ fn rebind_runtime_handoff_service_projection_in_state(
         next_session.cleanup = inherited.cleanup;
         if next_session.last_lease_observed_at.is_none() {
             next_session.last_lease_observed_at = inherited.last_lease_observed_at;
+            next_session.boot_epoch = crate::process_identity::current_boot_epoch();
         }
         if next_session.expires_at.is_none() {
             next_session.expires_at = inherited.expires_at;

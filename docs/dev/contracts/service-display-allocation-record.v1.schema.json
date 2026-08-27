@@ -23,6 +23,10 @@
     "id": {
       "type": "string"
     },
+    "bootEpoch": {
+      "description": "Host boot that authenticated the display and package-owned PID observations.",
+      "type": "string"
+    },
     "displayName": {
       "type": ["string", "null"]
     },

@@ -119,6 +119,7 @@ pub mod screenshot;
 pub mod service_access;
 #[allow(dead_code)]
 pub mod service_activity;
+mod service_boot_epoch;
 #[allow(dead_code)]
 pub mod service_config;
 #[allow(dead_code)]

@@ -250,6 +250,7 @@ pub(crate) fn upsert_service_profile_and_session(
         .entry(session_id.to_string())
         .or_insert_with(|| BrowserSession {
             id: session_id.to_string(),
+            boot_epoch: crate::process_identity::current_boot_epoch(),
             ..BrowserSession::default()
         });
     session.service_name = metadata
@@ -282,6 +283,7 @@ pub(crate) fn upsert_service_profile_and_session(
         session.lease
     };
     session.last_lease_observed_at = Some(lease_observed_at);
+    session.boot_epoch = crate::process_identity::current_boot_epoch();
     session.cleanup = metadata.cleanup;
     merge_unique(
         &mut session.browser_ids,

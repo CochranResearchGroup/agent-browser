@@ -27,6 +27,10 @@
     "id": {
       "type": "string"
     },
+    "bootEpoch": {
+      "description": "Host boot that authenticated the current work-lease observation.",
+      "type": "string"
+    },
     "serviceName": {
       "type": ["string", "null"]
     },

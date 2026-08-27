@@ -1870,15 +1870,23 @@ fn browser_has_live_health(browser: &BrowserProcess) -> bool {
     matches!(
         browser.health,
         BrowserHealth::Ready | BrowserHealth::Launching | BrowserHealth::Reconnecting
-    )
+    ) && boot_epoch_is_not_prior(browser.boot_epoch.as_deref())
 }
 
 fn session_blocks_profile_reuse(session: &BrowserSession, profile_id: &str) -> bool {
     session.profile_id.as_deref() == Some(profile_id)
+        && boot_epoch_is_not_prior(session.boot_epoch.as_deref())
         && matches!(
             session.lease,
             LeaseState::Exclusive | LeaseState::HumanTakeover
         )
+}
+
+fn boot_epoch_is_not_prior(recorded_boot_epoch: Option<&str>) -> bool {
+    crate::process_identity::boot_epoch_status(
+        recorded_boot_epoch,
+        crate::process_identity::current_boot_epoch().as_deref(),
+    ) != crate::process_identity::BootEpochStatus::Prior
 }
 
 /// Summarize who should act next without prescribing a UI presentation.

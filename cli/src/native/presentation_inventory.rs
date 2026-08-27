@@ -302,6 +302,7 @@ impl PresentationProviderInventory {
             let display_id = provider_route.display_reservation_id.clone();
             let mut display = DisplayAllocation {
                 id: display_id.clone(),
+                boot_epoch: crate::process_identity::current_boot_epoch(),
                 display_name: Some(display_name),
                 display_isolation: "private_virtual_display".to_string(),
                 state: "ready".to_string(),

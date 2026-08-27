@@ -23,6 +23,62 @@ pub struct ObservedProcessIdentity {
     pub command_line: Option<Vec<String>>,
 }
 
+/// Relationship between retained ephemeral evidence and the current host boot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum BootEpochStatus {
+    Current,
+    Prior,
+    Missing,
+    Unavailable,
+}
+
+/// Return one stable epoch for the current operating-system boot when the
+/// platform exposes enough process identity evidence.
+pub(crate) fn current_boot_epoch() -> Option<String> {
+    #[cfg(target_os = "linux")]
+    {
+        return std::fs::read_to_string("/proc/sys/kernel/random/boot_id")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .map(|value| format!("linux:{value}"));
+    }
+    #[cfg(target_os = "macos")]
+    {
+        return process_start_epoch(1);
+    }
+    #[cfg(windows)]
+    {
+        return process_start_epoch(4);
+    }
+    #[allow(unreachable_code)]
+    None
+}
+
+#[cfg(any(target_os = "macos", windows))]
+fn process_start_epoch(pid: u32) -> Option<String> {
+    match observe_process(pid) {
+        ProcessObservation::Observed(observation) => observation
+            .start_token
+            .filter(|value| !value.trim().is_empty())
+            .map(|value| format!("host-process:{value}")),
+        ProcessObservation::Missing | ProcessObservation::Failed { .. } => None,
+    }
+}
+
+pub(crate) fn boot_epoch_status(
+    recorded_boot_epoch: Option<&str>,
+    current_boot_epoch: Option<&str>,
+) -> BootEpochStatus {
+    match (recorded_boot_epoch, current_boot_epoch) {
+        (_, None) => BootEpochStatus::Unavailable,
+        (None, Some(_)) => BootEpochStatus::Missing,
+        (Some(recorded), Some(current)) if recorded == current => BootEpochStatus::Current,
+        (Some(_), Some(_)) => BootEpochStatus::Prior,
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RuntimeProcessOwnership {
     MatchingBrowser,
@@ -1034,6 +1090,26 @@ pub(crate) fn browser_family_for_path(path: Option<&Path>) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn boot_epoch_status_distinguishes_current_prior_missing_and_unavailable() {
+        assert_eq!(
+            boot_epoch_status(Some("boot:a"), Some("boot:a")),
+            BootEpochStatus::Current
+        );
+        assert_eq!(
+            boot_epoch_status(Some("boot:a"), Some("boot:b")),
+            BootEpochStatus::Prior
+        );
+        assert_eq!(
+            boot_epoch_status(None, Some("boot:b")),
+            BootEpochStatus::Missing
+        );
+        assert_eq!(
+            boot_epoch_status(Some("boot:a"), None),
+            BootEpochStatus::Unavailable
+        );
+    }
 
     fn observed(start_token: Option<&str>, executable: Option<&str>) -> ObservedProcessIdentity {
         ObservedProcessIdentity {

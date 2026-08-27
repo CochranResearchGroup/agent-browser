@@ -1524,6 +1524,7 @@ pub fn begin_route_bound_handoff_acquisition(
             .entry(input.acquisition_plan.display_allocation_id.clone())
             .or_insert_with(|| DisplayAllocation {
                 id: input.acquisition_plan.display_allocation_id.clone(),
+                boot_epoch: crate::process_identity::current_boot_epoch(),
                 display_name: input.acquisition_plan.display_name.clone(),
                 display_isolation: input
                     .acquisition_plan
@@ -1538,6 +1539,7 @@ pub fn begin_route_bound_handoff_acquisition(
                 ..DisplayAllocation::default()
             });
         display_allocation.display_name = input.acquisition_plan.display_name.clone();
+        display_allocation.boot_epoch = crate::process_identity::current_boot_epoch();
         display_allocation.display_isolation = input
             .acquisition_plan
             .route_binding
@@ -1604,6 +1606,7 @@ pub fn begin_route_bound_handoff_acquisition(
 
         let lease = RemoteViewAcquisitionLease {
             id: lease_id.clone(),
+            boot_epoch: crate::process_identity::current_boot_epoch(),
             browser_id: input.browser_id.to_string(),
             session_id: input.session_id.to_string(),
             route_id: input.acquisition_plan.selected_route_id.clone(),

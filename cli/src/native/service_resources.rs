@@ -358,10 +358,17 @@ fn service_resources_response_from_samples_for_environment(
         collection_warnings,
         &environment,
     );
+    let current_boot_epoch = crate::process_identity::current_boot_epoch();
+    let boot_epoch_findings = super::service_boot_epoch::service_boot_epoch_findings(
+        state,
+        current_boot_epoch.as_deref(),
+    );
     json!({
         "summary": snapshot.summary,
         "resources": snapshot.resources,
         "runtimeLanes": state.runtime_owner_registry.lifecycle_records.values().collect::<Vec<_>>(),
+        "bootEpoch": current_boot_epoch,
+        "bootEpochFindings": boot_epoch_findings,
         "warnings": snapshot.warnings,
         "policy": {
             "protectsDashboardMainPid": snapshot.protects_dashboard_main_pid,
@@ -1920,6 +1927,7 @@ mod tests {
             owner.browser_id.clone(),
             crate::runtime_owner_transfer::RuntimeLifecycleRecord {
                 logical_browser_id: owner.browser_id.clone(),
+                boot_epoch: None,
                 profile_identity_digest,
                 owner_generation: owner.owner_generation,
                 lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Closing,
@@ -2132,6 +2140,7 @@ mod tests {
             "browser-owned".to_string(),
             crate::runtime_owner_transfer::RuntimeLifecycleRecord {
                 logical_browser_id: "browser-owned".to_string(),
+                boot_epoch: None,
                 profile_identity_digest: "a".repeat(64),
                 owner_generation: 3,
                 lifecycle_state: crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Retained,

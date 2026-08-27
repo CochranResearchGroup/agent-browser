@@ -168,6 +168,7 @@ pub(crate) fn mutate_service_viewer_lease(
         };
         let lease = ViewerLease {
             id: viewer_lease_id.clone(),
+            boot_epoch: crate::process_identity::current_boot_epoch(),
             route_id: Some(route_id.clone()),
             browser_id: Some(browser_id.clone()),
             viewer_id: Some(viewer_id),

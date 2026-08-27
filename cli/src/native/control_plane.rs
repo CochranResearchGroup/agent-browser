@@ -695,6 +695,7 @@ fn persist_process_exited_browser_health_in_repository(
 
         let mut browser = BrowserProcess {
             id: id.clone(),
+            boot_epoch: crate::process_identity::current_boot_epoch(),
             profile_id: previous
                 .as_ref()
                 .and_then(|browser| browser.profile_id.clone()),

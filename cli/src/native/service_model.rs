@@ -2735,6 +2735,7 @@ impl ServiceState {
             if let Some(session) = self.sessions.get_mut(session_id) {
                 session.lease = LeaseState::Expired;
                 session.last_lease_observed_at = Some(observed_at.to_string());
+                session.boot_epoch = crate::process_identity::current_boot_epoch();
             }
         }
         for browser in self.browsers.values_mut() {
@@ -5086,6 +5087,9 @@ pub enum ProfileReadinessState {
 #[serde(default, rename_all = "camelCase")]
 pub struct BrowserProcess {
     pub id: String,
+    /// Host boot that authenticated process-scoped observations on this row.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub boot_epoch: Option<String>,
     pub profile_id: Option<String>,
     pub host: BrowserHost,
     pub health: BrowserHealth,
@@ -5120,6 +5124,7 @@ impl Default for BrowserProcess {
     fn default() -> Self {
         Self {
             id: String::new(),
+            boot_epoch: None,
             profile_id: None,
             host: BrowserHost::LocalHeaded,
             health: BrowserHealth::NotStarted,
@@ -5143,6 +5148,9 @@ impl Default for BrowserProcess {
 #[serde(default, rename_all = "camelCase")]
 pub struct DisplayAllocation {
     pub id: String,
+    /// Host boot that authenticated the display and its package-owned PIDs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub boot_epoch: Option<String>,
     pub display_name: Option<String>,
     pub display_isolation: String,
     pub owner_browser_id: Option<String>,
@@ -5163,6 +5171,7 @@ impl Default for DisplayAllocation {
     fn default() -> Self {
         Self {
             id: String::new(),
+            boot_epoch: None,
             display_name: None,
             display_isolation: "private_virtual_display".to_string(),
             owner_browser_id: None,
@@ -5359,6 +5368,24 @@ fn classify_retained_display_allocation(
     state: &ServiceState,
     allocation: &DisplayAllocation,
 ) -> RetainedDisplayAllocationCandidate {
+    let current_boot_epoch = crate::process_identity::current_boot_epoch();
+    if crate::process_identity::boot_epoch_status(
+        allocation.boot_epoch.as_deref(),
+        current_boot_epoch.as_deref(),
+    ) == crate::process_identity::BootEpochStatus::Prior
+    {
+        return RetainedDisplayAllocationCandidate {
+            id: allocation.id.clone(),
+            class_name: "prior-boot-observation",
+            reason: "allocation_boot_epoch_is_not_current",
+            apply_safe: false,
+            linked_route_ids: allocation.route_ids.clone(),
+            linked_browser_ids: allocation.owner_browser_id.iter().cloned().collect(),
+            linked_session_ids: allocation.owner_session_id.iter().cloned().collect(),
+            linked_incident_ids: Vec::new(),
+            linked_route_pool_entry_ids: Vec::new(),
+        };
+    }
     let mut linked_route_ids = allocation
         .route_ids
         .iter()
@@ -5532,6 +5559,9 @@ fn classify_retained_display_allocation(
 #[serde(default, rename_all = "camelCase")]
 pub struct RemoteViewAcquisitionLease {
     pub id: String,
+    /// Host boot that authenticated this in-flight acquisition observation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub boot_epoch: Option<String>,
     pub browser_id: String,
     pub session_id: String,
     pub route_id: String,
@@ -5555,6 +5585,7 @@ impl Default for RemoteViewAcquisitionLease {
     fn default() -> Self {
         Self {
             id: String::new(),
+            boot_epoch: None,
             browser_id: String::new(),
             session_id: String::new(),
             route_id: String::new(),
@@ -5581,6 +5612,9 @@ impl Default for RemoteViewAcquisitionLease {
 #[serde(default, rename_all = "camelCase")]
 pub struct ViewerLease {
     pub id: String,
+    /// Host boot that authenticated the package-owned viewer observation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub boot_epoch: Option<String>,
     pub route_id: Option<String>,
     pub browser_id: Option<String>,
     pub viewer_id: Option<String>,
@@ -5600,6 +5634,7 @@ impl Default for ViewerLease {
     fn default() -> Self {
         Self {
             id: String::new(),
+            boot_epoch: None,
             route_id: None,
             browser_id: None,
             viewer_id: None,
@@ -5649,6 +5684,9 @@ impl Default for BrowserHealthObservation {
 #[serde(default, rename_all = "camelCase")]
 pub struct BrowserSession {
     pub id: String,
+    /// Host boot that authenticated the current work-lease observation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub boot_epoch: Option<String>,
     /// Calling service label supplied by MCP, CLI, HTTP, or API clients.
     pub service_name: Option<String>,
     /// Calling agent label supplied by MCP, CLI, HTTP, or API clients.
@@ -5690,6 +5728,7 @@ impl Default for BrowserSession {
     fn default() -> Self {
         Self {
             id: String::new(),
+            boot_epoch: None,
             service_name: None,
             agent_name: None,
             task_name: None,

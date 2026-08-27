@@ -49,10 +49,10 @@ routes, boot epoch, proposed transitions, expiry, idempotency key, and a
 service seal. Apply rejects any mismatch and stores an idempotent receipt.
 Replay returns that receipt without repeating transitions.
 
-Until Plan 0134 introduces a current boot epoch, reconciliation planning is
-available for diagnosis but returns `effectCapable: false` with
-`boot_epoch_unavailable`. This prevents the control plane from applying a
-cross-boot repair using incomplete evidence.
+Reconciliation planning captures the current host boot epoch, and apply
+requires that exact epoch to remain current. If the platform cannot establish
+one, planning remains diagnostic-only with `boot_epoch_unavailable`. This
+prevents a cross-boot repair from using incomplete or prior-boot evidence.
 
 Registration writes a newly generated capability only to an absolute private
 file supplied with `--capability-out`. Retained Service State stores its digest,
