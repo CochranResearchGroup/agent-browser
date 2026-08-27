@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use tokio::sync::{mpsc, oneshot};
 
-use super::action_runtime::runtime::{handle_close, CloseBehavior};
+use super::action_runtime::runtime::{handle_close, handle_recovery_close, CloseBehavior};
 use super::action_runtime::{service_profile_lease_gate, DaemonState, ServiceProfileLeaseGate};
 use super::actions::execute_command;
 use super::cancellation::CancellationToken as RunningJobCancel;
@@ -728,6 +728,13 @@ fn persist_process_exited_browser_health_in_repository(
         let observation_details = browser_health_observation_details(&browser, None);
         apply_browser_health_observation(&mut browser, Some(&observation_details));
         record_browser_health_changed_event(service_state, &id, previous.as_ref(), &browser);
+        let preserved_registered_session =
+            crate::native::service_principal::authenticated_session_work_authority(
+                service_state,
+                &state.session_id,
+                &current_timestamp(),
+            )
+            .and_then(|_| service_state.sessions.get(&state.session_id).cloned());
         if let Some(display_allocation_id) = browser.display_allocation_id.as_ref() {
             if let Some(allocation) = service_state
                 .display_allocations
@@ -744,6 +751,16 @@ fn persist_process_exited_browser_health_in_repository(
             }
         }
         remove_browser_operational_record(service_state, &id, Some(&state.session_id));
+        // A dead process and its tabs are terminal, but a current registered
+        // work lease remains the service's authority to relaunch this profile.
+        if let Some(mut session) = preserved_registered_session {
+            session.browser_ids.clear();
+            session.tab_ids.clear();
+            service_state
+                .sessions
+                .insert(state.session_id.clone(), session);
+            service_state.refresh_derived_views();
+        }
         Ok(())
     })
 }
@@ -1886,7 +1903,7 @@ async fn cleanup_exited_browser(state: &mut DaemonState) {
     }
     if state.browser.is_some() {
         state.close_behavior = CloseBehavior::CloseBrowser;
-        let _ = handle_close(state).await;
+        let _ = handle_recovery_close(state).await;
     }
 }
 
@@ -3322,6 +3339,124 @@ mod tests {
                 |event| event.browser_id.as_deref() == Some(browser_id.as_str())
                     && event.current_health == Some(ServiceBrowserHealth::ProcessExited)
             ));
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn process_exited_browser_health_preserves_registered_session_work() {
+        let home = temp_home("control-plane-registered-process-exit");
+        let profile_path = home.join("registered-profile");
+        std::fs::create_dir_all(&profile_path).unwrap();
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+        let session_id = "registered-session";
+        let profile_id = "registered-profile";
+        let principal_id = "principal:registered-session";
+        let browser_id = service_browser_id(session_id);
+        let profile_digest =
+            crate::runtime_profile::canonical_profile_identity_digest(&profile_path).unwrap();
+        let mut service_state = ServiceState {
+            browsers: std::collections::BTreeMap::from([(
+                browser_id.clone(),
+                BrowserProcess {
+                    id: browser_id.clone(),
+                    profile_id: Some(profile_id.to_string()),
+                    health: ServiceBrowserHealth::Ready,
+                    active_session_ids: vec![session_id.to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            sessions: std::collections::BTreeMap::from([(
+                session_id.to_string(),
+                crate::native::service_model::BrowserSession {
+                    id: session_id.to_string(),
+                    profile_id: Some(profile_id.to_string()),
+                    browser_ids: vec![browser_id.clone()],
+                    tab_ids: vec!["target:old".to_string()],
+                    lease: crate::native::service_model::LeaseState::Exclusive,
+                    ..crate::native::service_model::BrowserSession::default()
+                },
+            )]),
+            tabs: std::collections::BTreeMap::from([(
+                "target:old".to_string(),
+                crate::native::service_model::BrowserTab {
+                    id: "target:old".to_string(),
+                    browser_id: browser_id.clone(),
+                    session_id: Some(session_id.to_string()),
+                    ..crate::native::service_model::BrowserTab::default()
+                },
+            )]),
+            runtime_owner_registry: crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(
+                crate::runtime_owner_transfer::ProfileOwner {
+                    owner_id: "owner-registered-session".to_string(),
+                    profile_identity_digest: profile_digest.clone(),
+                    state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+                    owner_generation: 1,
+                    browser_id: browser_id.clone(),
+                    daemon_session_route: session_id.to_string(),
+                    process_instance_digest: "1".repeat(64),
+                    browser_family: "chrome".to_string(),
+                    cdp_endpoint_identity_digest: "2".repeat(64),
+                    target_set_digest: "3".repeat(64),
+                    pending_transfer: None,
+                    last_transition: None,
+                },
+            ),
+            ..ServiceState::default()
+        };
+        let capability = "registered-process-exit-capability-with-more-than-thirty-two-characters";
+        let registered = crate::native::service_principal::register_profile_capability(
+            &mut service_state.service_principals,
+            crate::native::service_principal::ServicePrincipalRegistrationRequest {
+                principal_id: principal_id.to_string(),
+                display_name: None,
+                profile_id: profile_id.to_string(),
+                registered_at: Some("2026-08-27T17:00:00Z".to_string()),
+                registered_by: Some("test".to_string()),
+            },
+            capability,
+        )
+        .unwrap();
+        service_state
+            .runtime_owner_registry
+            .bind_principal_authority(
+                crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
+                    principal_id: principal_id.to_string(),
+                    profile_id: profile_id.to_string(),
+                    profile_identity_digest: profile_digest,
+                    capability_id: registered.capability.capability_id,
+                    provenance: crate::native::service_principal::ServicePrincipalProvenance::RegisteredCapability,
+                    owner_generation: 1,
+                },
+            )
+            .unwrap();
+        let authority = crate::native::service_principal::authenticate_profile_capability(
+            &service_state.service_principals,
+            capability,
+            Some(profile_id),
+        )
+        .unwrap();
+        crate::native::service_principal::bind_session_work_lease(
+            &mut service_state,
+            session_id,
+            &authority,
+            "2099-08-27T19:00:00Z".to_string(),
+        )
+        .unwrap();
+        store.save(&service_state).unwrap();
+        let mut state = DaemonState::new();
+        state.session_id = session_id.to_string();
+
+        persist_process_exited_browser_health_in_repository(&repository, &state).unwrap();
+
+        let persisted = store.load().unwrap();
+        let session = &persisted.sessions[session_id];
+        assert_eq!(session.principal_id.as_deref(), Some(principal_id));
+        assert_eq!(session.profile_id.as_deref(), Some(profile_id));
+        assert!(session.browser_ids.is_empty());
+        assert!(session.tab_ids.is_empty());
+        assert!(!persisted.browsers.contains_key(&browser_id));
+        assert!(!persisted.tabs.contains_key("target:old"));
         let _ = std::fs::remove_dir_all(&home);
     }
 
