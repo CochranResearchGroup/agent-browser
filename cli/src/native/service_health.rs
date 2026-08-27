@@ -1437,6 +1437,23 @@ pub(crate) fn persist_closed_browser_health_in_repository(
     session_id: &str,
     outcome: Option<&BrowserShutdownOutcome>,
 ) -> Result<(), String> {
+    persist_closed_browser_health_with_context(repository, session_id, outcome, false)
+}
+
+pub(crate) fn persist_recovery_closed_browser_health_in_repository(
+    repository: &impl ServiceStateRepository,
+    session_id: &str,
+    outcome: Option<&BrowserShutdownOutcome>,
+) -> Result<(), String> {
+    persist_closed_browser_health_with_context(repository, session_id, outcome, true)
+}
+
+fn persist_closed_browser_health_with_context(
+    repository: &impl ServiceStateRepository,
+    session_id: &str,
+    outcome: Option<&BrowserShutdownOutcome>,
+    preserve_registered_work: bool,
+) -> Result<(), String> {
     let snapshot = repository.load_snapshot()?;
     let browser_id = service_browser_id_for_session(session_id);
     let _controller_mutations = snapshot
@@ -1453,24 +1470,7 @@ pub(crate) fn persist_closed_browser_health_in_repository(
         let id = service_browser_id_for_session(session_id);
         let previous = service_state.browsers.get(&id).cloned();
         let now = current_timestamp();
-        let latest_health_event_is_unexpected_exit = service_state
-            .events
-            .iter()
-            .rev()
-            .find(|event| {
-                event.kind == ServiceEventKind::BrowserHealthChanged
-                    && event.browser_id.as_deref() == Some(id.as_str())
-            })
-            .and_then(|event| event.details.as_ref())
-            .is_some_and(|details| {
-                details["currentReasonKind"] == "process_exited"
-                    && details["processExitCause"] == "unexpected_process_exit"
-            });
-        let unexpected_exit_recorded = previous
-            .as_ref()
-            .is_some_and(|browser| browser.health == BrowserHealth::ProcessExited)
-            || latest_health_event_is_unexpected_exit;
-        let preserve_registered_crash_continuity = unexpected_exit_recorded
+        let preserve_registered_crash_continuity = preserve_registered_work
             && crate::native::service_principal::authenticated_session_work_authority(
                 service_state,
                 session_id,
@@ -5127,7 +5127,7 @@ mod tests {
         .unwrap();
         store.save(&state).unwrap();
 
-        persist_closed_browser_health_in_repository(
+        persist_recovery_closed_browser_health_in_repository(
             &repository,
             session_id,
             Some(&BrowserShutdownOutcome {
@@ -5146,6 +5146,22 @@ mod tests {
             Some(principal_id)
         );
         assert_eq!(persisted.browsers[&browser_id].health, BrowserHealth::Ready);
+
+        persist_closed_browser_health_in_repository(
+            &repository,
+            session_id,
+            Some(&BrowserShutdownOutcome {
+                polite_close_attempted: true,
+                polite_close_succeeded: true,
+                exact_process_exited: true,
+                ..BrowserShutdownOutcome::default()
+            }),
+        )
+        .unwrap();
+
+        let explicitly_closed = store.load().unwrap();
+        assert!(!explicitly_closed.sessions.contains_key(session_id));
+        assert!(!explicitly_closed.browsers.contains_key(&browser_id));
         let _ = fs::remove_dir_all(&home);
     }
 

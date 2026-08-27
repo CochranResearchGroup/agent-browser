@@ -38,11 +38,12 @@ use crate::native::recording::{self, RecordingState};
 use crate::native::service_health::{
     persist_browser_recovery_started_in_repository, persist_closed_browser_health_in_repository,
     persist_current_browser_stale_health_in_repository,
-    persist_reconciled_service_state_in_repository, persist_service_browser_record_in_repository,
-    reconcile_service_state, retry_degraded_service_browser_in_state,
-    retry_persisted_service_browser_in_repository, retry_service_browser_in_state,
-    BrowserRecoveryPersistence, BrowserRecoveryPolicyConfig, BrowserRecoveryPolicySource,
-    BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
+    persist_reconciled_service_state_in_repository,
+    persist_recovery_closed_browser_health_in_repository,
+    persist_service_browser_record_in_repository, reconcile_service_state,
+    retry_degraded_service_browser_in_state, retry_persisted_service_browser_in_repository,
+    retry_service_browser_in_state, BrowserRecoveryPersistence, BrowserRecoveryPolicyConfig,
+    BrowserRecoveryPolicySource, BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
 };
 use crate::native::service_lifecycle::{
     profile_lease_telemetry, select_service_profile_for_request, service_profile_id,
@@ -110,6 +111,18 @@ pub(crate) fn persist_closed_browser_health(
     if let Ok(repository) = LockedServiceStateRepository::default_json() {
         let _ =
             persist_closed_browser_health_in_repository(&repository, &state.session_id, outcome);
+    }
+}
+pub(crate) fn persist_recovery_closed_browser_health(
+    state: &DaemonState,
+    outcome: Option<&BrowserShutdownOutcome>,
+) {
+    if let Ok(repository) = LockedServiceStateRepository::default_json() {
+        let _ = persist_recovery_closed_browser_health_in_repository(
+            &repository,
+            &state.session_id,
+            outcome,
+        );
     }
 }
 pub(crate) struct DaemonState {

@@ -35,11 +35,11 @@ mod state_tests;
 use super::action_runtime::runtime::{
     active_browser_profile_mismatch, auto_launch, detect_browser_stale_state, handle_cdp_attach,
     handle_cdp_detach, handle_cdp_free_launch, handle_close, handle_external_byop_adopt,
-    handle_launch, handle_navigate, handle_runtime_handoff_abort, handle_runtime_handoff_finalize,
-    handle_runtime_handoff_prepare, handle_runtime_handoff_resume, handle_runtime_handoff_rollback,
-    handle_snapshot, persist_browser_recovery_started_from_persisted_state,
-    persist_current_browser_stale_health, BackendType, CloseBehavior, DaemonState,
-    PendingConfirmation,
+    handle_launch, handle_navigate, handle_recovery_close, handle_runtime_handoff_abort,
+    handle_runtime_handoff_finalize, handle_runtime_handoff_prepare, handle_runtime_handoff_resume,
+    handle_runtime_handoff_rollback, handle_snapshot,
+    persist_browser_recovery_started_from_persisted_state, persist_current_browser_stale_health,
+    BackendType, CloseBehavior, DaemonState, PendingConfirmation,
 };
 use super::auth::{
     handle_auth_show, handle_credentials_delete, handle_credentials_get, handle_credentials_list,
@@ -606,7 +606,7 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
                     );
                 }
                 state.close_behavior = CloseBehavior::CloseBrowser;
-                if let Err(error) = handle_close(state).await {
+                if let Err(error) = handle_recovery_close(state).await {
                     return error_response(&id, &error);
                 }
             }

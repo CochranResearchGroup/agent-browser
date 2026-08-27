@@ -1820,6 +1820,17 @@ pub(crate) fn runtime_handoff_process_assessment(
     )
 }
 pub(crate) async fn handle_close(state: &mut DaemonState) -> Result<Value, String> {
+    handle_close_with_context(state, false).await
+}
+
+pub(crate) async fn handle_recovery_close(state: &mut DaemonState) -> Result<Value, String> {
+    handle_close_with_context(state, true).await
+}
+
+async fn handle_close_with_context(
+    state: &mut DaemonState,
+    preserve_registered_work: bool,
+) -> Result<Value, String> {
     let attached_runtime_profile = state.attached_runtime_profile.take();
     let attached_browser_pid = state.attached_browser_pid.take();
     let close_behavior = std::mem::take(&mut state.close_behavior);
@@ -1946,7 +1957,11 @@ pub(crate) async fn handle_close(state: &mut DaemonState) -> Result<Value, Strin
     state.screencasting = false;
     state.reset_input_state();
     state.update_stream_client().await;
-    persist_closed_browser_health(state, Some(&shutdown_outcome));
+    if preserve_registered_work {
+        super::recovery::persist_recovery_closed_browser_health(state, Some(&shutdown_outcome));
+    } else {
+        persist_closed_browser_health(state, Some(&shutdown_outcome));
+    }
     if let Some(task) = state.fetch_handler_task.take() {
         task.abort();
     }
