@@ -1,4 +1,4 @@
-# Plan 0134 | Service Principal, Lease Control, And Crash Coherence
+# Plan 0134 | Comprehensive Principal, Lease, Crash, And Install Coherence
 
 Date: 2026-08-26
 
@@ -8,7 +8,7 @@ Execution state: `provider_free_reproducer_pending`
 
 Lane: P134
 
-Source baseline: `df795a650f54b29254434a0d0d0910eba641e0eb`
+Source baseline: `16403c3b53f75b2c0350028d64b56e7e1c8e262d`
 
 Branch: `plan/crash-profile-lifecycle-coherence`
 
@@ -22,6 +22,7 @@ Depends on:
 - `docs/dev/notes/0134-2026-08-26-exclusive-profile-lease-holder-reuse-divergence.md`;
 - `docs/dev/notes/2026-08-26-books-receipts-post-crash-browser-regeneration.md`;
 - Plan 0081 route-pool state reconciliation;
+- Plan 0116 runtime adoption and transactional upgrade architecture;
 - Plan 0117 runtime lifecycle authority and convergence;
 - Plan 0128 runtime lifecycle hotfix collection;
 - Plan 0130 access-plan owner reuse coherence;
@@ -55,6 +56,17 @@ process, route, or boot evidence.
 The same identity model must drive crash startup. Boot-scoped process, socket,
 display, viewer, and lease observations are rediscovered; stable profile,
 browser, route, connection, user, and opaque handoff identities are preserved.
+
+Deliver the model through one transactional installation and migration path.
+The candidate must understand legacy session-scoped state without mutating it,
+stage and validate the new principal and lease schema, preserve rollback, adopt
+or transfer every live owner, atomically commit the selected generation and
+state, and prove the installed CLI, service, dashboard, HTTP, MCP, generated
+client, and user-scoped skill all describe the same contract.
+
+P134 is the comprehensive delivery authority for this defect family. It uses
+Plan 0116's immutable-generation, runtime-census, owner-transfer, ingress, and
+rollback machinery rather than creating a second installer architecture.
 
 ## Current Defects
 
@@ -123,6 +135,25 @@ candidate runtime host. It prevents candidate commands from colliding with an
 old-generation route daemon during upgrade. It does not repair inconsistent
 profile attribution, stale lease ownership, or general crash regeneration.
 
+### Installation can preserve a bad model or strand a candidate
+
+The principal and first-class lease schema changes durable Service State,
+owner authority, public contracts, generated clients, dashboard behavior, and
+runtime reconciliation. Replacing only the executable would leave old
+session-scoped records ambiguous and could make old and candidate generations
+interpret the same lease differently.
+
+Runtime-census rejection must remain fail-closed, but a rejected preflight must
+also have a terminal, inspectable disposition. It must not leave an
+effect-free candidate recorded as an indefinitely active upgrade or make
+doctor report unexplained install drift. Conversely, marking a transaction
+terminal must never bypass unresolved live-owner ambiguity.
+
+The installer currently has immutable-generation and transaction seams, but
+P134 still needs an exact state-migration contract, mixed-version behavior,
+resume and rollback tooling, installed contract parity, and acceptance proof
+for live principal-bound leases.
+
 ## Frozen Invariants
 
 1. Profile-process exclusivity, service-principal authority, task/session
@@ -178,6 +209,120 @@ profile attribution, stale lease ownership, or general crash regeneration.
 21. Lease capabilities are advertised in the service contract so clients can
     discover supported reads, actions, and preconditions without reconstructing
     server behavior or depending on matching source internals.
+22. Candidate preflight reads legacy state without modifying it and produces a
+    deterministic migration plan, compatibility report, runtime census digest,
+    and rollback requirements.
+23. No durable state migration occurs in place. The installer snapshots the
+    exact authoritative inputs, migrates into a staged copy, validates all
+    identities and references, then atomically commits or preserves the old
+    state byte-for-byte.
+24. A candidate may commit only when every discovered live browser, lease,
+    route, viewer, controller, process, and owner generation has one proven
+    adoption, preservation, transfer, or explicit blocking disposition.
+25. Mixed generations never both hold effect authority over one logical
+    browser or profile lease. Old clients may read capability metadata, but an
+    unsupported mutation fails with a typed compatibility result.
+26. Rollback after state commit requires either proven old-generation read
+    compatibility or a validated reverse migration. An unproven reverse path
+    blocks commit.
+27. A preflight rejection before effects is a terminal `blocked_preflight`
+    transaction with zero mutations, preserved diagnostics, and an explicit
+    retry-or-close path. It is not reported as an active stranded upgrade.
+28. Installer resume, rollback, and close operations require the exact
+    transaction id, expected transaction revision, candidate generation, and
+    current census digest. They cannot operate on an inferred latest record.
+29. Candidate acceptance binds source commit, candidate binary SHA, immutable
+    generation id, migrated-state receipt, installed executable SHA, contract
+    digests, runtime-owner generations, and final doctor receipt.
+30. Installation completion requires consumer acceptance for synthetic
+    Last30Days, Books Receipts, and Odollo fulfillment principals plus one
+    foreign-principal isolation control. Provider navigation is not required.
+
+## Installation And Migration Contract
+
+### State schema and compatibility
+
+- Add an explicit Service State schema version and a profile-lease schema
+  version. Unknown newer versions fail read-only with a typed compatibility
+  result instead of being rewritten through serde defaults.
+- Define legacy session-scoped state as an input format, not an authority
+  source. Migration derives a principal binding only from authenticated
+  registration, current owner evidence, and exact profile capability. Labels
+  alone produce an `unproven_principal` lease that is observation-only.
+- Preserve stable profile ids, logical browser ids, authenticated profile
+  directories, durable handoff ids, Guacamole connection and user identities,
+  and owner generations. Regenerate only explicitly ephemeral current-epoch
+  observations.
+- Validate referential integrity across profiles, principals, leases,
+  sessions, tabs, browsers, routes, handoffs, viewer/controller leases,
+  cleanup obligations, and runtime-owner records before commit.
+- Publish forward and reverse compatibility matrices in service contracts and
+  install status. A migration with no safe reverse reader or reverse transform
+  cannot enter the installed acceptance lane.
+
+### Transaction lifecycle
+
+Use the Plan 0116 immutable generation and transaction engine with these P134
+phases:
+
+```text
+discovered
+  -> preflighted
+  -> census_stable
+  -> state_snapshot_created
+  -> state_migration_staged
+  -> state_migration_validated
+  -> owners_prepared
+  -> candidate_runtime_ready
+  -> owners_committed
+  -> generation_and_state_committed
+  -> installed_acceptance_passed
+  -> rollback_window_open
+  -> complete
+```
+
+Terminal alternatives are `blocked_preflight`, `blocked_census`,
+`blocked_migration`, `rolled_back_before_commit`, `rolled_back_after_commit`,
+and `failed_operator_required`. Every terminal state records whether any effect
+occurred, selected generation, authoritative state pointer, rollback
+availability, outstanding owner or cleanup obligations, and the exact next
+safe action.
+
+### Operator and client install surfaces
+
+- `install transactions list|inspect` are read-only and expose transaction
+  revision, phase, candidate identity, census status, migration status,
+  rollback readiness, blockers, and safe actions.
+- `install workstation --dry-run` creates no active transaction and mutates no
+  runtime state. It returns the candidate, census, compatibility, migration,
+  and rollback plan.
+- `install transactions resume|rollback|close` use exact transaction and
+  compare-and-swap evidence. `close` is allowed only for a proven zero-effect
+  terminal transaction or after all obligations are satisfied.
+- `install doctor` distinguishes workspace-versus-installed binary identity,
+  selected-versus-candidate generation, active convergence, terminal blocked
+  history, state-schema compatibility, owner/lease convergence, contract
+  parity, rollback readiness, and operator-visible readiness.
+- The installer publishes the repository skill to the installed user-scoped
+  skill only after generation and contract commit. Failed candidates leave the
+  accepted skill untouched.
+
+### Rollback and recovery
+
+- Keep the old immutable generation, exact pre-migration state snapshot, unit
+  definitions, ingress selection, contract metadata, and owner-transfer
+  receipts until installed acceptance and the rollback review both pass.
+- Before owner commit, rollback discards only staged candidate material.
+- After owner commit, rollback reverses owner generations through existing
+  receipted authority, restores the accepted state pointer and generation
+  selector, and re-proves the durable handoff and operator-visible
+  postcondition.
+- Interrupted migration, install, resume, or rollback replays by transaction id
+  and converges without duplicate leases, browsers, routes, generations, or
+  cleanup obligations.
+- Garbage collection refuses any generation, state snapshot, or receipt still
+  referenced by a live process, owner, lease, rollback window, or nonterminal
+  transaction.
 
 ## Execution Slices
 
@@ -337,20 +482,64 @@ stable identities and newly observed ephemeral identities.
 Exit condition: maintained clients consume one generated contract and do not
 reconstruct profile or lifecycle ownership.
 
-### Slice I | Validate in bounded environments
+### Slice I | Integrate state migration and transactional installation
+
+- Add explicit state and lease schema versions plus legacy readers that never
+  silently promote labels to principal authority.
+- Implement staged forward migration, full invariant validation, atomic state
+  selection, and the validated reverse or old-reader compatibility path.
+- Extend the Plan 0116 workstation transaction with P134 migration phases,
+  candidate runtime routing, owner and lease transfer, atomic generation and
+  state commit, exact resume, rollback, and zero-effect terminal close.
+- Add install transaction list and inspect surfaces first, then guarded resume,
+  rollback, and close actions.
+- Teach install doctor to distinguish a harmless workspace candidate,
+  terminal blocked history, active convergence, true installed drift, schema
+  incompatibility, and lease or owner divergence.
+- Sync the installed skill only after accepted contract commit and preserve the
+  prior skill on rollback.
+
+Exit condition: every injected install and migration boundary has one durable,
+replayable, inspectable outcome with exactly one selected generation and state.
+
+### Slice J | Validate source and isolated development runtime
 
 - Run focused provider-free access-plan, profile resolution, lifecycle,
-  adoption, reconciliation, crash-replay, and contract tests.
+  lease-control, migration, installation, adoption, reconciliation,
+  crash-replay, and contract tests.
 - Run the validation selector, canonical Rust partitions, formatting, strict
   Clippy, and all selected client and documentation checks.
 - In the isolated development runtime, replay one disposable crash with a
-  harmless `about:blank` browser and prove exact reacquisition, release, and
-  cleanup.
-- Stop before production installation. A later exact-candidate authorization
-  must name the candidate SHA and installed acceptance scope.
+  harmless `about:blank` browser, migrate one legacy fixture, and prove exact
+  reacquisition, lease recourse, rollback, release, and cleanup.
 
 Exit condition: source and isolated development acceptance are complete with
 no production or provider effect.
+
+### Slice K | Qualify and install one exact candidate
+
+- Build one release-mode candidate and bind its source commit, binary SHA,
+  generation id, support-manifest digest, contract digests, and migration
+  schema versions into the qualification record.
+- Run dry-run preflight against the current workstation and require a stable
+  closed-world census, complete migration plan, rollback readiness, and no
+  unexplained owner, lease, route, or process ambiguity.
+- If preflight blocks before effects, record terminal `blocked_preflight` or
+  `blocked_census`, preserve the accepted installation unchanged, and return
+  the exact first-class recourse path. Do not bypass the guard.
+- Under separate exact-candidate authorization, apply the transaction, run the
+  provider-free installed consumer matrix, inject and prove one rollback, then
+  apply the same candidate again and prove idempotent convergence.
+- Run `agent-browser install doctor` from the accepted installed path and
+  require selected generation, installed SHA, state schema, lease schema,
+  owner generations, contract parity, skill identity, rollback readiness, and
+  operator-visible readiness to agree.
+- Retain rollback material until explicit acceptance closeout; garbage
+  collection is a later reviewed action.
+
+Exit condition: the accepted installed candidate supports first-class lease
+recourse and crash recovery for all three synthetic consumers while preserving
+foreign-principal isolation and a proven rollback path.
 
 ## Required Acceptance Matrix
 
@@ -397,6 +586,28 @@ no production or provider effect.
     profile deletion, or cross-principal takeover.
 23. Contract capability discovery lets an older client detect unavailable
     lease operations and return a typed unsupported-capability result.
+24. Legacy session-scoped state migration preserves authenticated profiles and
+    stable logical identities while leaving ambiguous principals
+    observation-only.
+25. Every migration failure before commit leaves authoritative state
+    byte-identical and the accepted generation selected.
+26. Failure after state or owner commit completes a receipted rollback or
+    enters typed `failed_operator_required` with old and candidate generations
+    preserved.
+27. Dry-run produces no active transaction, state snapshot, owner transfer,
+    unit change, selector change, skill change, or browser effect.
+28. A rejected zero-effect preflight is terminal and inspectable and does not
+    keep install doctor red as a nonterminal upgrade.
+29. Resume and rollback reject stale transaction revision, census digest,
+    generation id, state pointer, lease revision, or owner generation.
+30. Installed CLI, runtime host, dashboard, HTTP, MCP, generated client,
+    contracts, and user-scoped skill all report the same accepted generation
+    and lease capabilities.
+31. Injected failure at each migration and installation phase preserves exactly
+    one effect-capable owner and one authoritative profile lease.
+32. Final installed doctor is green only after source identity, generation,
+    state schemas, runtime census, owners, leases, ingress, contracts, skill,
+    rollback, and operator-visible readiness all agree.
 
 ## Validation
 
@@ -414,6 +625,7 @@ scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml service_access_plan
 scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml runtime_profile -- --test-threads=1
 scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml runtime_lifecycle -- --test-threads=1
 scripts/ci/cargo-safe.sh test --manifest-path cli/Cargo.toml runtime_reconciliation -- --test-threads=1
+pnpm test:workstation-install-fixture
 scripts/ci/cargo-safe.sh fmt --manifest-path cli/Cargo.toml -- --check
 scripts/ci/cargo-safe.sh clippy --manifest-path cli/Cargo.toml -- -D warnings
 scripts/ci/rust-tests.sh
@@ -423,12 +635,20 @@ Contract changes also run the generated-client, service-request parity,
 dashboard, MCP, HTTP, documentation, and no-launch checks selected by changed
 paths.
 
+Migration and installer work additionally runs failure injection for every new
+transaction phase, old-to-new and new-to-old compatibility fixtures, repeated
+resume and rollback, contract-digest parity, installed-skill staging, and one
+isolated development-runtime transaction. These are source or disposable
+development checks until Slice K receives exact-candidate authority.
+
 ## Bounds
 
 - Two implementation attempts per failing behavioral seam before local
   replanning.
 - Provider-free fixtures before any browser or installed-runtime effect.
 - One disposable development crash replay after source acceptance.
+- One forward migration and one rollback per legacy fixture class.
+- One injected failure per transaction phase, with exact replay only.
 - One exact candidate qualification packet only after separate authorization.
 - No provider navigation or authentication inspection is required for source
   or development acceptance.
@@ -447,6 +667,15 @@ paths.
   operator-visible agreement checks.
 - Do not use broad Docker cleanup, database recreation, garbage collection, or
   workstation installation as crash recovery.
+- Do not migrate the only authoritative Service State copy in place.
+- Do not mark a transaction complete or closed while it retains an owner,
+  lease, route, rollback, or cleanup obligation.
+- Do not let an old generation write a schema it cannot understand or let a
+  candidate write authoritative state before migration validation and commit.
+- Do not delete the accepted generation, pre-migration snapshot, accepted
+  skill, or rollback receipts during candidate qualification.
+- Do not interpret `--dry-run`, preflight, doctor, list, inspect, or explain as
+  authority for an install or runtime mutation.
 - Do not classify a longer client timeout as a lifecycle repair.
 - Do not consume a provider request or private page as acceptance evidence.
 - Do not expose credentials, cookies, raw handoff URLs, provider URLs, private
@@ -464,3 +693,7 @@ deterministically reproduce the principal self-block, the profile contradiction,
 and the crash contradiction, and identify the first profile-attribution write.
 Also freeze the public profile-lease contract shape and prove that current
 clients have no first-class inspect, rejoin, renew, release, or reconcile path.
+Add provider-free legacy-state and install-transaction fixtures that freeze the
+required schema-version, migration-plan, terminal blocked-preflight, exact
+resume, rollback, contract-capability, skill-staging, and doctor readbacks.
+Do not implement migration or installer effects in Slice A.
