@@ -81,6 +81,7 @@ pub fn gen_id() -> String {
 
 const SERVICE_PROFILE_VERIFY_SEEDING_USAGE: &str = "service profiles <profile-id> verify-seeding <target-service-id> [--state <fresh|stale|seeded_unknown_freshness|blocked_by_attached_devtools>] [--evidence <text>] [--account-id <id>] [--account-ids <id,id>] [--last-verified-at <rfc3339>] [--freshness-expires-at <rfc3339>] [--no-authenticated-service-update]";
 const SERVICE_PROFILE_LOOKUP_USAGE: &str = "service profiles lookup [--search <text>] [--hostname <host>] [--profile-id <id>] [--profile-name <name>] [--service-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--authentication-state <state>] [--freshness-state <state>] [--tag <tag>] [--url <url>] [--readiness-profile-id <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>]";
+const SERVICE_PROFILE_LEASES_USAGE: &str = "service leases [doctor|register --principal-id <id> --profile-id <id> --capability-out <absolute-path> [--display-name <name>] [--registered-by <name>]|<lease-id> [inspect|explain|rejoin|renew|release] [--revision <revision>] [--capability-file <absolute-path>] [--expires-at <rfc3339>] [--service-name <name>] [--agent-name <name>] [--task-name <name>]]";
 
 const SERVICE_BROWSER_CAPABILITY_PREFLIGHT_USAGE: &str = "service browser-capability preflight --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--runtime-profile <id>] [--profile <path>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--headed|--headless] [--cdp-free]";
 
@@ -150,6 +151,214 @@ fn parse_service_profile_lookup(
         }
         cmd[field] = json!(value);
         i += 2;
+    }
+    Ok(cmd)
+}
+
+fn parse_service_profile_leases(
+    id: String,
+    rest: &[&str],
+    flags: &Flags,
+) -> Result<Value, ParseError> {
+    if rest.len() == 1 {
+        return Ok(json!({
+            "id": id,
+            "action": "service_profile_leases",
+            "serviceState": flags.service_state.clone(),
+        }));
+    }
+    if rest[1] == "doctor" {
+        if rest.len() != 2 {
+            return Err(ParseError::InvalidValue {
+                message: format!("Unknown argument for service leases doctor: {}", rest[2]),
+                usage: SERVICE_PROFILE_LEASES_USAGE,
+            });
+        }
+        return Ok(json!({
+            "id": id,
+            "action": "service_profile_lease_doctor",
+            "serviceState": flags.service_state.clone(),
+        }));
+    }
+    if rest[1] == "watch" {
+        let mut cmd = json!({
+            "id": id,
+            "action": "service_profile_leases",
+            "serviceState": flags.service_state.clone(),
+            "watch": true,
+        });
+        let mut i = 2;
+        while i < rest.len() {
+            let (field, label) = match rest[i] {
+                "--interval" => ("watchIntervalMs", "--interval"),
+                "--count" => ("watchCount", "--count"),
+                flag => {
+                    return Err(ParseError::InvalidValue {
+                        message: format!("Unknown flag for service leases watch: {flag}"),
+                        usage: SERVICE_PROFILE_LEASES_USAGE,
+                    })
+                }
+            };
+            let Some(raw) = rest.get(i + 1) else {
+                return Err(ParseError::InvalidValue {
+                    message: format!("Missing value for {label}"),
+                    usage: SERVICE_PROFILE_LEASES_USAGE,
+                });
+            };
+            let value = raw.parse::<u64>().map_err(|_| ParseError::InvalidValue {
+                message: format!("Invalid {label} value: {raw}"),
+                usage: SERVICE_PROFILE_LEASES_USAGE,
+            })?;
+            cmd[field] = json!(value);
+            i += 2;
+        }
+        return Ok(cmd);
+    }
+    if rest[1] == "register" {
+        let mut cmd = json!({
+            "id": id,
+            "action": "service_profile_lease_register",
+        });
+        let mut i = 2;
+        while i < rest.len() {
+            let (field, label) = match rest[i] {
+                "--principal-id" => ("principalId", "--principal-id"),
+                "--profile-id" => ("profileId", "--profile-id"),
+                "--capability-out" => ("capabilityOut", "--capability-out"),
+                "--display-name" => ("displayName", "--display-name"),
+                "--registered-by" => ("registeredBy", "--registered-by"),
+                flag => {
+                    return Err(ParseError::InvalidValue {
+                        message: format!("Unknown flag for service leases register: {flag}"),
+                        usage: SERVICE_PROFILE_LEASES_USAGE,
+                    })
+                }
+            };
+            let Some(value) = rest.get(i + 1) else {
+                return Err(ParseError::InvalidValue {
+                    message: format!("Missing value for {label}"),
+                    usage: SERVICE_PROFILE_LEASES_USAGE,
+                });
+            };
+            cmd[field] = json!(value);
+            i += 2;
+        }
+        for field in ["principalId", "profileId", "capabilityOut"] {
+            if cmd.get(field).is_none() {
+                return Err(ParseError::InvalidValue {
+                    message: format!("Missing required service lease registration field: {field}"),
+                    usage: SERVICE_PROFILE_LEASES_USAGE,
+                });
+            }
+        }
+        return Ok(cmd);
+    }
+
+    let lease_id = rest[1];
+    let mut operation = rest.get(2).copied().unwrap_or("inspect");
+    let mut argument_start = if rest.get(2).is_some_and(|value| !value.starts_with("--")) {
+        3
+    } else {
+        2
+    };
+    if operation == "reconcile" {
+        operation = match rest.get(3).copied() {
+            Some("plan") => "reconcile-plan",
+            Some("apply") => "reconcile-apply",
+            value => {
+                return Err(ParseError::InvalidValue {
+                    message: format!(
+                        "Unknown service lease reconcile operation: {}",
+                        value.unwrap_or("missing")
+                    ),
+                    usage: SERVICE_PROFILE_LEASES_USAGE,
+                })
+            }
+        };
+        argument_start = 4;
+    }
+    let action = match operation {
+        "inspect" => "service_profile_lease_inspect",
+        "explain" => "service_profile_lease_explain",
+        "rejoin" => "service_profile_lease_rejoin",
+        "renew" => "service_profile_lease_renew",
+        "release" => "service_profile_lease_release",
+        "reconcile-plan" => "service_profile_lease_reconcile_plan",
+        "reconcile-apply" => "service_profile_lease_reconcile_apply",
+        value if value.starts_with("--") => "service_profile_lease_inspect",
+        value => {
+            return Err(ParseError::InvalidValue {
+                message: format!("Unknown service lease operation: {value}"),
+                usage: SERVICE_PROFILE_LEASES_USAGE,
+            })
+        }
+    };
+    let mut cmd = json!({
+        "id": id,
+        "action": action,
+        "leaseId": lease_id,
+        "serviceState": flags.service_state.clone(),
+    });
+    let mut i = argument_start;
+    while i < rest.len() {
+        let (field, label) = match rest[i] {
+            "--revision" => ("leaseRevision", "--revision"),
+            "--capability-file" => ("profileCapabilityFile", "--capability-file"),
+            "--expires-at" => ("expiresAt", "--expires-at"),
+            "--idempotency-key" => ("idempotencyKey", "--idempotency-key"),
+            "--plan-file" => ("planFile", "--plan-file"),
+            "--service-name" => ("serviceName", "--service-name"),
+            "--agent-name" => ("agentName", "--agent-name"),
+            "--task-name" => ("taskName", "--task-name"),
+            flag => {
+                return Err(ParseError::InvalidValue {
+                    message: format!("Unknown flag for service leases {operation}: {flag}"),
+                    usage: SERVICE_PROFILE_LEASES_USAGE,
+                })
+            }
+        };
+        let Some(value) = rest.get(i + 1) else {
+            return Err(ParseError::InvalidValue {
+                message: format!("Missing value for {label}"),
+                usage: SERVICE_PROFILE_LEASES_USAGE,
+            });
+        };
+        cmd[field] = json!(value);
+        i += 2;
+    }
+    if matches!(
+        operation,
+        "rejoin" | "renew" | "release" | "reconcile-plan" | "reconcile-apply"
+    ) {
+        for field in ["leaseRevision", "profileCapabilityFile"] {
+            if cmd.get(field).is_none() {
+                return Err(ParseError::InvalidValue {
+                    message: format!("Missing required service lease mutation field: {field}"),
+                    usage: SERVICE_PROFILE_LEASES_USAGE,
+                });
+            }
+        }
+        if matches!(operation, "renew" | "reconcile-plan") && cmd.get("expiresAt").is_none() {
+            return Err(ParseError::InvalidValue {
+                message: "Missing required service lease renewal field: expiresAt".to_string(),
+                usage: SERVICE_PROFILE_LEASES_USAGE,
+            });
+        }
+        if operation == "reconcile-apply" && cmd.get("planFile").is_none() {
+            return Err(ParseError::InvalidValue {
+                message: "Missing required service lease reconcile apply field: planFile"
+                    .to_string(),
+                usage: SERVICE_PROFILE_LEASES_USAGE,
+            });
+        }
+    } else if cmd.get("leaseRevision").is_some()
+        || cmd.get("profileCapabilityFile").is_some()
+        || cmd.get("expiresAt").is_some()
+    {
+        return Err(ParseError::InvalidValue {
+            message: "Mutation flags require rejoin, renew, or release".to_string(),
+            usage: SERVICE_PROFILE_LEASES_USAGE,
+        });
     }
     Ok(cmd)
 }
@@ -3402,17 +3611,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                 }))
             }
             Some("leases") => {
-                if rest.len() > 1 {
-                    return Err(ParseError::InvalidValue {
-                        message: format!("Unknown argument for service leases: {}", rest[1]),
-                        usage: "service leases",
-                    });
-                }
-                Ok(json!({
-                    "id": id,
-                    "action": "service_profile_leases",
-                    "serviceState": flags.service_state.clone(),
-                }))
+                parse_service_profile_leases(id, &rest, flags)
             }
             Some("browsers") => {
                 if rest.len() > 1 {
@@ -8986,6 +9185,98 @@ mod tests {
 
         assert_eq!(cmd["action"], "service_profile_leases");
         assert!(cmd["serviceState"].is_object());
+    }
+
+    #[test]
+    fn test_service_profile_lease_detail_and_doctor() {
+        let inspect = parse_command(
+            &args("service leases profile-lease-1 inspect"),
+            &default_flags(),
+        )
+        .unwrap();
+        assert_eq!(inspect["action"], "service_profile_lease_inspect");
+        assert_eq!(inspect["leaseId"], "profile-lease-1");
+
+        let explain = parse_command(
+            &args("service leases profile-lease-1 explain"),
+            &default_flags(),
+        )
+        .unwrap();
+        assert_eq!(explain["action"], "service_profile_lease_explain");
+
+        let doctor = parse_command(&args("service leases doctor"), &default_flags()).unwrap();
+        assert_eq!(doctor["action"], "service_profile_lease_doctor");
+    }
+
+    #[test]
+    fn test_service_profile_lease_watch_options() {
+        let cmd = parse_command(
+            &args("service leases watch --interval 250 --count 2"),
+            &default_flags(),
+        )
+        .unwrap();
+        assert_eq!(cmd["action"], "service_profile_leases");
+        assert_eq!(cmd["watch"], true);
+        assert_eq!(cmd["watchIntervalMs"], 250);
+        assert_eq!(cmd["watchCount"], 2);
+    }
+
+    #[test]
+    fn test_service_profile_lease_register_uses_capability_output_file() {
+        let cmd = parse_command(
+            &args(
+                "service leases register --principal-id principal:odollo --profile-id odollo --capability-out /tmp/odollo.cap --display-name Odollo --registered-by operator",
+            ),
+            &default_flags(),
+        )
+        .unwrap();
+
+        assert_eq!(cmd["action"], "service_profile_lease_register");
+        assert_eq!(cmd["principalId"], "principal:odollo");
+        assert_eq!(cmd["profileId"], "odollo");
+        assert_eq!(cmd["capabilityOut"], "/tmp/odollo.cap");
+        assert!(cmd.get("profileCapability").is_none());
+    }
+
+    #[test]
+    fn test_service_profile_lease_owner_mutations_require_revision_and_capability_file() {
+        let renew = parse_command(
+            &args(
+                "service leases lease-1 renew --revision sha256:one --capability-file /tmp/odollo.cap --expires-at 2026-08-28T12:00:00Z --service-name OdolloFulfillment",
+            ),
+            &default_flags(),
+        )
+        .unwrap();
+        assert_eq!(renew["action"], "service_profile_lease_renew");
+        assert_eq!(renew["leaseRevision"], "sha256:one");
+        assert_eq!(renew["profileCapabilityFile"], "/tmp/odollo.cap");
+        assert_eq!(renew["expiresAt"], "2026-08-28T12:00:00Z");
+        assert!(renew.get("profileCapability").is_none());
+
+        assert!(parse_command(
+            &args("service leases lease-1 release --revision sha256:one"),
+            &default_flags(),
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn test_service_profile_lease_reconcile_plan_and_apply() {
+        let plan = parse_command(
+            &args("service leases lease-1 reconcile plan --revision rev-1 --capability-file /tmp/lease.cap --expires-at 2026-08-27T12:00:00Z --idempotency-key repair-1"),
+            &default_flags(),
+        )
+        .unwrap();
+        assert_eq!(plan["action"], "service_profile_lease_reconcile_plan");
+        assert_eq!(plan["idempotencyKey"], "repair-1");
+
+        let apply = parse_command(
+            &args("service leases lease-1 reconcile apply --revision rev-1 --capability-file /tmp/lease.cap --plan-file /tmp/lease-plan.json"),
+            &default_flags(),
+        )
+        .unwrap();
+        assert_eq!(apply["action"], "service_profile_lease_reconcile_apply");
+        assert_eq!(apply["planFile"], "/tmp/lease-plan.json");
     }
 
     #[test]

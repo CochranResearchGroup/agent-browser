@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-profile-lease-explain-response.v1.schema.json",
+  "title": "agent-browser service profile lease explanation response",
+  "type": "object",
+  "required": ["lease", "explanation", "observedAt"],
+  "properties": {
+    "lease": { "$ref": "service-profile-lease-record.v1.schema.json" },
+    "explanation": {
+      "type": "object",
+      "required": ["recourse", "blockingIdentityAxes", "authorizedActions", "observationOnly", "findings"],
+      "properties": {
+        "recourse": { "type": "string" },
+        "blockingIdentityAxes": { "type": "array", "items": { "type": "string" } },
+        "authorizedActions": { "type": "array", "items": { "type": "string" } },
+        "observationOnly": { "type": "boolean" },
+        "findings": { "type": "array", "items": { "type": "object" } }
+      },
+      "additionalProperties": false
+    },
+    "observedAt": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

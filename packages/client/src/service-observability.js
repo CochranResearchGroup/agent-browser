@@ -31,6 +31,18 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceViewerLeasesResponse} ServiceViewerLeasesResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileLeaseRecord} ServiceProfileLeaseRecord
  * @typedef {import('./service-observability.generated.js').ServiceProfileLeasesResponse} ServiceProfileLeasesResponse
+ * @typedef {import('./service-observability.generated.js').ServiceProfileLeaseDetailOptions} ServiceProfileLeaseDetailOptions
+ * @typedef {import('./service-observability.generated.js').ServiceProfileLeaseDetailResponse} ServiceProfileLeaseDetailResponse
+ * @typedef {import('./service-observability.generated.js').ServiceProfileLeaseExplainResponse} ServiceProfileLeaseExplainResponse
+ * @typedef {import('./service-observability.generated.js').ServiceProfileLeaseDoctorResponse} ServiceProfileLeaseDoctorResponse
+ * @typedef {import('./service-observability.generated.js').ServiceProfileLeaseMutationOptions} ServiceProfileLeaseMutationOptions
+ * @typedef {import('./service-observability.generated.js').ServiceProfileLeaseRenewOptions} ServiceProfileLeaseRenewOptions
+ * @typedef {import('./service-observability.generated.js').ServiceProfileLeaseWatchOptions} ServiceProfileLeaseWatchOptions
+ * @typedef {import('./service-observability.generated.js').ServiceProfileLeaseReconcilePlanOptions} ServiceProfileLeaseReconcilePlanOptions
+ * @typedef {import('./service-observability.generated.js').ServiceProfileLeaseReconcileApplyOptions} ServiceProfileLeaseReconcileApplyOptions
+ * @typedef {import('./service-observability.generated.js').ServiceProfileLeaseReconcilePlanResponse} ServiceProfileLeaseReconcilePlanResponse
+ * @typedef {import('./service-observability.generated.js').ServiceProfileLeaseReconcileApplyResponse} ServiceProfileLeaseReconcileApplyResponse
+ * @typedef {import('./service-observability.generated.js').ServiceProfileLeaseMutationResponse} ServiceProfileLeaseMutationResponse
  * @typedef {import('./service-observability.generated.js').ServiceChallengesResponse} ServiceChallengesResponse
  * @typedef {import('./service-observability.generated.js').ServiceMonitorsResponse} ServiceMonitorsResponse
  * @typedef {import('./service-observability.generated.js').ServiceMonitorDeleteResponse} ServiceMonitorDeleteResponse
@@ -873,6 +885,161 @@ export function getServiceViewerLeases(options) {
  */
 export function getServiceProfileLeases(options) {
   return serviceGet(options, '/api/service/profile-leases');
+}
+
+/**
+ * Poll profile lease authority without opening a browser or retaining credentials.
+ *
+ * @param {ServiceProfileLeaseWatchOptions} options
+ * @returns {AsyncGenerator<ServiceProfileLeasesResponse, void, void>}
+ */
+export async function* watchServiceProfileLeases({ intervalMs = 1000, count, ...options }) {
+  if (!Number.isInteger(intervalMs) || intervalMs < 100) {
+    throw new TypeError('watchServiceProfileLeases requires intervalMs >= 100');
+  }
+  if (count !== undefined && (!Number.isInteger(count) || count < 1)) {
+    throw new TypeError('watchServiceProfileLeases count must be a positive integer');
+  }
+  let observations = 0;
+  while (count === undefined || observations < count) {
+    yield await getServiceProfileLeases(options);
+    observations += 1;
+    if (count !== undefined && observations >= count) return;
+    await waitForServicePoll(intervalMs, options.signal);
+  }
+}
+
+function waitForServicePoll(intervalMs, signal) {
+  if (signal?.aborted) return Promise.reject(signal.reason ?? new Error('Profile lease watch aborted'));
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, intervalMs);
+    signal?.addEventListener('abort', () => {
+      clearTimeout(timer);
+      reject(signal.reason ?? new Error('Profile lease watch aborted'));
+    }, { once: true });
+  });
+}
+
+/**
+ * @param {ServiceProfileLeaseDetailOptions} options
+ * @returns {Promise<ServiceProfileLeaseDetailResponse>}
+ */
+export function getServiceProfileLease({ id, ...options }) {
+  assertServiceId(id, 'getServiceProfileLease');
+  return serviceGet(options, `/api/service/profile-leases/${encodeURIComponent(id)}`);
+}
+
+/**
+ * @param {ServiceProfileLeaseDetailOptions} options
+ * @returns {Promise<ServiceProfileLeaseExplainResponse>}
+ */
+export function explainServiceProfileLease({ id, ...options }) {
+  assertServiceId(id, 'explainServiceProfileLease');
+  return serviceGet(options, `/api/service/profile-leases/${encodeURIComponent(id)}/explain`);
+}
+
+/**
+ * @param {ServiceQueryOptions} options
+ * @returns {Promise<ServiceProfileLeaseDoctorResponse>}
+ */
+export function doctorServiceProfileLeases(options) {
+  return serviceGet(options, '/api/service/profile-leases/doctor');
+}
+
+/**
+ * @param {ServiceProfileLeaseMutationOptions} options
+ * @returns {Promise<ServiceProfileLeaseMutationResponse>}
+ */
+export function rejoinServiceProfileLease(options) {
+  return mutateServiceProfileLease('rejoin', options);
+}
+
+/**
+ * @param {ServiceProfileLeaseRenewOptions} options
+ * @returns {Promise<ServiceProfileLeaseMutationResponse>}
+ */
+export function renewServiceProfileLease(options) {
+  return mutateServiceProfileLease('renew', options);
+}
+
+/**
+ * @param {ServiceProfileLeaseMutationOptions} options
+ * @returns {Promise<ServiceProfileLeaseMutationResponse>}
+ */
+export function releaseServiceProfileLease(options) {
+  return mutateServiceProfileLease('release', options);
+}
+
+/** @param {ServiceProfileLeaseReconcilePlanOptions} options @returns {Promise<ServiceProfileLeaseReconcilePlanResponse>} */
+export function planServiceProfileLeaseReconciliation({
+  id, leaseRevision, profileCapability, expiresAt, idempotencyKey, serviceName, agentName, taskName, ...options
+}) {
+  assertServiceId(id, 'planServiceProfileLeaseReconciliation');
+  if (!leaseRevision || !profileCapability || !expiresAt) {
+    throw new TypeError('planServiceProfileLeaseReconciliation requires leaseRevision, profileCapability, and expiresAt');
+  }
+  return servicePost(
+    { ...options, headers: { authorization: `Bearer ${profileCapability}` } },
+    `/api/service/profile-leases/${encodeURIComponent(id)}/reconcile/plan`,
+    { leaseRevision, expiresAt, ...(idempotencyKey ? { idempotencyKey } : {}), ...(serviceName ? { serviceName } : {}), ...(agentName ? { agentName } : {}), ...(taskName ? { taskName } : {}) },
+  );
+}
+
+/** @param {ServiceProfileLeaseReconcileApplyOptions} options @returns {Promise<ServiceProfileLeaseReconcileApplyResponse>} */
+export function applyServiceProfileLeaseReconciliation({
+  id, profileCapability, plan, serviceName, agentName, taskName, ...options
+}) {
+  assertServiceId(id, 'applyServiceProfileLeaseReconciliation');
+  if (!profileCapability || !plan || typeof plan !== 'object') {
+    throw new TypeError('applyServiceProfileLeaseReconciliation requires profileCapability and plan');
+  }
+  return servicePost(
+    { ...options, headers: { authorization: `Bearer ${profileCapability}` } },
+    `/api/service/profile-leases/${encodeURIComponent(id)}/reconcile/apply`,
+    { plan, ...(serviceName ? { serviceName } : {}), ...(agentName ? { agentName } : {}), ...(taskName ? { taskName } : {}) },
+  );
+}
+
+/**
+ * @param {'rejoin' | 'renew' | 'release'} operation
+ * @param {ServiceProfileLeaseMutationOptions} mutationOptions
+ * @returns {Promise<ServiceProfileLeaseMutationResponse>}
+ */
+async function mutateServiceProfileLease(operation, mutationOptions) {
+  const {
+    id,
+    leaseRevision,
+    profileCapability,
+    expiresAt,
+    serviceName,
+    agentName,
+    taskName,
+    ...options
+  } = mutationOptions;
+  assertServiceId(id, `${operation}ServiceProfileLease`);
+  if (typeof leaseRevision !== 'string' || leaseRevision.length === 0) {
+    throw new TypeError(`${operation}ServiceProfileLease requires leaseRevision`);
+  }
+  if (typeof profileCapability !== 'string' || profileCapability.length === 0) {
+    throw new TypeError(`${operation}ServiceProfileLease requires profileCapability`);
+  }
+  if (operation === 'renew' && (typeof expiresAt !== 'string' || expiresAt.length === 0)) {
+    throw new TypeError('renewServiceProfileLease requires expiresAt');
+  }
+  return servicePost(
+    {
+      ...options,
+      headers: { authorization: `Bearer ${profileCapability}` },
+    },
+    `/api/service/profile-leases/${encodeURIComponent(id)}/${operation}`,
+    {
+      leaseRevision,
+      ...(expiresAt ? { expiresAt } : {}),
+      ...(serviceName ? { serviceName } : {}),
+      ...(agentName ? { agentName } : {}),
+      ...(taskName ? { taskName } : {}),
+    },
+  );
 }
 
 /**
@@ -2464,13 +2631,18 @@ function findServiceCollectionRecord(records, collectionKey, id) {
 
 /**
  * @template TResult
- * @param {{ baseUrl: string, fetch?: typeof globalThis.fetch, signal?: AbortSignal }} options
+ * @param {{ baseUrl: string, fetch?: typeof globalThis.fetch, signal?: AbortSignal, headers?: Record<string, string> }} options
  * @param {string} pathname
  * @param {unknown} [body]
  * @param {Record<string, string | number | boolean | null | undefined>} [query]
  * @returns {Promise<TResult>}
  */
-async function servicePost({ baseUrl, fetch = globalThis.fetch, signal }, pathname, body = undefined, query = undefined) {
+async function servicePost(
+  { baseUrl, fetch = globalThis.fetch, signal, headers = {} },
+  pathname,
+  body = undefined,
+  query = undefined,
+) {
   if (typeof fetch !== 'function') {
     throw new TypeError('service observability helpers require a fetch implementation');
   }
@@ -2483,7 +2655,7 @@ async function servicePost({ baseUrl, fetch = globalThis.fetch, signal }, pathna
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...headers },
     body: body === undefined ? undefined : JSON.stringify(body),
     signal,
   });

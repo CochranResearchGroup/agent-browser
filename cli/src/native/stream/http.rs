@@ -37,7 +37,9 @@ use crate::native::service_model::{
 use crate::native::service_monitors::{
     parse_monitor_state, service_monitors_response, MonitorCollectionFilters,
 };
-use crate::native::service_profile_lease::{doctor_profile_leases, profile_leases_for_state};
+use crate::native::service_profile_lease::{
+    doctor_profile_leases, inspect_profile_lease, profile_leases_for_state,
+};
 use crate::native::service_request::{
     apply_service_request_attribution, normalize_service_request, ServiceRequestFallbackPrincipal,
     ServiceRequestNormalization, ServiceRequestPrincipalSource,
@@ -62,7 +64,7 @@ const SERVICE_REQUEST_ALLOWED_ACTIONS: &[&str] = SERVICE_REQUEST_ACTIONS;
 #[folder = "../packages/dashboard/out/"]
 struct DashboardAssets;
 
-pub(super) const CORS_HEADERS: &str = "Access-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\n";
+pub(super) const CORS_HEADERS: &str = "Access-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\n";
 
 pub(crate) fn runtime_manifest_json() -> Value {
     static RUNTIME_MANIFEST: OnceLock<Value> = OnceLock::new();
@@ -172,7 +174,7 @@ pub(super) fn cors_headers_for_origin(origin: Option<&str>) -> String {
         _ => "http://localhost",
     };
     format!(
-        "Access-Control-Allow-Origin: {}\r\nAccess-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\n",
+        "Access-Control-Allow-Origin: {}\r\nAccess-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\n",
         allowed_origin
     )
 }
@@ -484,6 +486,35 @@ pub(super) async fn handle_http_request(
             return;
         }
 
+        if let Some((encoded_lease_id, operation)) = service_profile_lease_mutation_route(path) {
+            let lease_id = match decode_path_segment(encoded_lease_id, "profile lease id") {
+                Ok(lease_id) => lease_id,
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                    return;
+                }
+            };
+            let capability = match profile_capability_bearer(&headers) {
+                Ok(capability) => capability,
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "401 Unauthorized").await;
+                    return;
+                }
+            };
+            let cmd = match service_profile_lease_mutation_command(
+                &lease_id, operation, body_str, capability,
+            ) {
+                Ok(cmd) => cmd,
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                    return;
+                }
+            };
+            let result = relay_service_command(session_name, cmd).await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
+            return;
+        }
+
         if let Some(profile_id) = service_profile_id(path) {
             let cmd = match service_profile_upsert_command(profile_id, body_str) {
                 Ok(cmd) => cmd,
@@ -772,6 +803,77 @@ pub(super) async fn handle_http_request(
     }
 
     if method == "GET" {
+        if path == "/api/service/profile-leases/doctor" {
+            let state = load_service_state();
+            let now = service_now_timestamp();
+            write_json_value(
+                &mut stream,
+                "200 OK",
+                json!({
+                    "success": true,
+                    "data": { "doctor": doctor_profile_leases(&state, &now) },
+                }),
+            )
+            .await;
+            return;
+        }
+
+        if let Some((encoded_lease_id, explain)) = service_profile_lease_read_route(path) {
+            let lease_id = match decode_path_segment(encoded_lease_id, "profile lease id") {
+                Ok(lease_id) => lease_id,
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                    return;
+                }
+            };
+            let state = load_service_state();
+            let now = service_now_timestamp();
+            match inspect_profile_lease(&state, &lease_id, &now) {
+                Ok(lease) => {
+                    let data = if explain {
+                        let doctor = doctor_profile_leases(&state, &now);
+                        let findings = doctor
+                            .findings
+                            .into_iter()
+                            .filter(|finding| finding.lease_id == lease.id)
+                            .collect::<Vec<_>>();
+                        json!({
+                            "lease": lease,
+                            "explanation": {
+                                "recourse": lease.recourse,
+                                "blockingIdentityAxes": lease.blocking_identity_axes,
+                                "authorizedActions": lease.authorized_actions,
+                                "observationOnly": lease.observation_only,
+                                "findings": findings,
+                            },
+                            "observedAt": now,
+                        })
+                    } else {
+                        json!({ "lease": lease, "observedAt": now })
+                    };
+                    write_json_value(
+                        &mut stream,
+                        "200 OK",
+                        json!({ "success": true, "data": data }),
+                    )
+                    .await;
+                }
+                Err(error) => {
+                    write_json_result(
+                        &mut stream,
+                        Err(format!(
+                            "profile_lease_{}:{}",
+                            error.code.as_str(),
+                            error.message
+                        )),
+                        "404 Not Found",
+                    )
+                    .await;
+                }
+            }
+            return;
+        }
+
         if let Some(profile_id) = service_profile_seeding_handoff_id(path) {
             let mut service_state = load_service_state();
             service_state.refresh_profile_readiness();
@@ -2968,6 +3070,47 @@ fn service_profile_freshness_id(path: &str) -> Option<&str> {
         .filter(|id| !id.is_empty() && !id.contains('/'))
 }
 
+fn service_profile_lease_read_route(path: &str) -> Option<(&str, bool)> {
+    let suffix = path.strip_prefix("/api/service/profile-leases/")?;
+    if suffix.is_empty() || suffix == "doctor" {
+        return None;
+    }
+    if let Some(id) = suffix.strip_suffix("/explain") {
+        return (!id.is_empty() && !id.contains('/')).then_some((id, true));
+    }
+    (!suffix.contains('/')).then_some((suffix, false))
+}
+
+fn service_profile_lease_mutation_route(path: &str) -> Option<(&str, &str)> {
+    let suffix = path.strip_prefix("/api/service/profile-leases/")?;
+    for (route_suffix, operation) in [
+        ("/reconcile/plan", "reconcile_plan"),
+        ("/reconcile/apply", "reconcile_apply"),
+    ] {
+        if let Some(id) = suffix.strip_suffix(route_suffix) {
+            return (!id.is_empty() && !id.contains('/')).then_some((id, operation));
+        }
+    }
+    let (id, operation) = suffix.rsplit_once('/')?;
+    (!id.is_empty() && !id.contains('/') && matches!(operation, "rejoin" | "renew" | "release"))
+        .then_some((id, operation))
+}
+
+fn profile_capability_bearer(headers: &[(String, String)]) -> Result<String, String> {
+    let authorization = headers
+        .iter()
+        .find(|(name, _)| name == "authorization")
+        .map(|(_, value)| value.as_str())
+        .ok_or_else(|| "profile_capability_authorization_required".to_string())?;
+    let capability = authorization
+        .strip_prefix("Bearer ")
+        .or_else(|| authorization.strip_prefix("bearer "))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "profile_capability_bearer_invalid".to_string())?;
+    Ok(capability.to_string())
+}
+
 fn service_session_id(path: &str) -> Option<&str> {
     path.strip_prefix("/api/service/sessions/")
         .filter(|id| !id.is_empty() && !id.contains('/'))
@@ -3045,6 +3188,56 @@ fn service_profile_freshness_command(profile_id: &str, body: &str) -> Result<Val
         "profileId": profile_id,
         "freshness": freshness,
     }))
+}
+
+fn service_profile_lease_mutation_command(
+    lease_id: &str,
+    operation: &str,
+    body: &str,
+    profile_capability: String,
+) -> Result<Value, String> {
+    let input = parse_service_config_body(body, "profile lease mutation")?;
+    let lease_revision = input
+        .get("leaseRevision")
+        .and_then(Value::as_str)
+        .map(str::trim);
+    if operation != "reconcile_apply" && lease_revision.is_none_or(str::is_empty) {
+        return Err("profile_lease_revision_required".to_string());
+    }
+    let mut command = json!({
+        "id": format!("http-service-profile-lease-{operation}-{}", uuid::Uuid::new_v4()),
+        "action": format!("service_profile_lease_{operation}"),
+        "leaseId": lease_id,
+        "profileCapability": profile_capability,
+    });
+    if let Some(lease_revision) = lease_revision.filter(|value| !value.is_empty()) {
+        command["leaseRevision"] = json!(lease_revision);
+    }
+    for field in [
+        "expiresAt",
+        "idempotencyKey",
+        "plan",
+        "serviceName",
+        "agentName",
+        "taskName",
+    ] {
+        if let Some(value) = input.get(field) {
+            command[field] = value.clone();
+        }
+    }
+    if matches!(operation, "renew" | "reconcile_plan")
+        && command
+            .get("expiresAt")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .is_none_or(str::is_empty)
+    {
+        return Err("profile_lease_expires_at_required".to_string());
+    }
+    if operation == "reconcile_apply" && !command.get("plan").is_some_and(Value::is_object) {
+        return Err("profile_lease_reconcile_plan_required".to_string());
+    }
+    Ok(command)
 }
 
 fn service_profile_seeding_handoff_update_command(
@@ -4436,6 +4629,64 @@ mod tests {
             service_incident_action_id("/api/service/incidents//resolve", "/resolve"),
             None
         );
+    }
+
+    #[test]
+    fn service_profile_lease_routes_and_bearer_auth_are_exact() {
+        assert_eq!(
+            service_profile_lease_read_route("/api/service/profile-leases/lease%3Aone"),
+            Some(("lease%3Aone", false))
+        );
+        assert_eq!(
+            service_profile_lease_read_route("/api/service/profile-leases/lease%3Aone/explain"),
+            Some(("lease%3Aone", true))
+        );
+        assert_eq!(
+            service_profile_lease_mutation_route("/api/service/profile-leases/lease%3Aone/renew"),
+            Some(("lease%3Aone", "renew"))
+        );
+        assert_eq!(
+            service_profile_lease_mutation_route(
+                "/api/service/profile-leases/lease%3Aone/reconcile/plan"
+            ),
+            Some(("lease%3Aone", "reconcile_plan"))
+        );
+        assert_eq!(
+            service_profile_lease_mutation_route(
+                "/api/service/profile-leases/lease%3Aone/reconcile/apply"
+            ),
+            Some(("lease%3Aone", "reconcile_apply"))
+        );
+        assert_eq!(
+            service_profile_lease_mutation_route("/api/service/profile-leases/lease%3Aone/delete"),
+            None
+        );
+        assert_eq!(
+            profile_capability_bearer(&[(
+                "authorization".to_string(),
+                "Bearer secret-capability".to_string(),
+            )])
+            .unwrap(),
+            "secret-capability"
+        );
+        assert!(profile_capability_bearer(&[]).is_err());
+    }
+
+    #[test]
+    fn service_profile_lease_http_mutation_keeps_capability_out_of_body_fields() {
+        let command = service_profile_lease_mutation_command(
+            "lease-1",
+            "renew",
+            r#"{"leaseRevision":"sha256:one","expiresAt":"2026-08-28T12:00:00Z","serviceName":"OdolloFulfillment"}"#,
+            "secret-capability".to_string(),
+        )
+        .unwrap();
+
+        assert_eq!(command["action"], "service_profile_lease_renew");
+        assert_eq!(command["leaseId"], "lease-1");
+        assert_eq!(command["leaseRevision"], "sha256:one");
+        assert_eq!(command["profileCapability"], "secret-capability");
+        assert!(command.get("capabilityFile").is_none());
     }
 
     #[test]

@@ -1101,6 +1101,7 @@ pub(crate) mod service_commands {
             ServiceEventKind::TabLifecycleChanged => "tab_lifecycle_changed",
             ServiceEventKind::ProfileLeaseWaitStarted => "profile_lease_wait_started",
             ServiceEventKind::ProfileLeaseWaitEnded => "profile_lease_wait_ended",
+            ServiceEventKind::ProfileLeaseLifecycleChanged => "profile_lease_lifecycle_changed",
             ServiceEventKind::ViewerTakeoverRequested => "viewer_takeover_requested",
             ServiceEventKind::ViewerConnected => "viewer_connected",
             ServiceEventKind::ViewerDisconnected => "viewer_disconnected",

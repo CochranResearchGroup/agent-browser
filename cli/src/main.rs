@@ -132,6 +132,34 @@ fn format_service_watch_line(resp: &connection::Response) -> String {
     )
 }
 
+fn format_profile_lease_watch_line(resp: &connection::Response) -> String {
+    let Some(data) = resp.data.as_ref() else {
+        return "profile leases unavailable".to_string();
+    };
+    let count = data
+        .get("count")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let doctor = data.get("doctor").unwrap_or(&serde_json::Value::Null);
+    let healthy = doctor
+        .get("healthy")
+        .and_then(|value| value.as_bool())
+        .map(|value| if value { "true" } else { "false" })
+        .unwrap_or("unknown");
+    let findings = doctor
+        .get("findings")
+        .and_then(|value| value.as_array())
+        .map(Vec::len)
+        .unwrap_or(0);
+    let observed_at = data
+        .get("observedAt")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    format!(
+        "profile_leases={count} healthy={healthy} findings={findings} observed_at={observed_at}"
+    )
+}
+
 fn run_service_watch(cmd: &serde_json::Value, flags: &Flags) -> ! {
     let interval_ms = cmd
         .get("watchIntervalMs")
@@ -164,7 +192,14 @@ fn run_service_watch(cmd: &serde_json::Value, flags: &Flags) -> ! {
                 if flags.json {
                     println!("{}", serde_json::to_string(&resp).unwrap_or_default());
                 } else if resp.success {
-                    println!("{}", format_service_watch_line(&resp));
+                    let line = if cmd.get("action").and_then(|value| value.as_str())
+                        == Some("service_profile_leases")
+                    {
+                        format_profile_lease_watch_line(&resp)
+                    } else {
+                        format_service_watch_line(&resp)
+                    };
+                    println!("{line}");
                 } else {
                     eprintln!(
                         "{} {}",
@@ -2942,8 +2977,10 @@ fn main() {
         return;
     }
 
-    if cmd.get("action").and_then(|v| v.as_str()) == Some("service_status")
-        && cmd.get("watch").and_then(|v| v.as_bool()).unwrap_or(false)
+    if matches!(
+        cmd.get("action").and_then(|v| v.as_str()),
+        Some("service_status" | "service_profile_leases")
+    ) && cmd.get("watch").and_then(|v| v.as_bool()).unwrap_or(false)
     {
         run_service_watch(&cmd, &flags);
     }
@@ -3278,6 +3315,15 @@ fn command_executes_locally_before_daemon(cmd: &serde_json::Value) -> bool {
                     | "service_resources_write_monitor_summary"
                     | "service_status"
                     | "service_profile_leases"
+                    | "service_profile_lease_inspect"
+                    | "service_profile_lease_explain"
+                    | "service_profile_lease_doctor"
+                    | "service_profile_lease_register"
+                    | "service_profile_lease_rejoin"
+                    | "service_profile_lease_renew"
+                    | "service_profile_lease_release"
+                    | "service_profile_lease_reconcile_plan"
+                    | "service_profile_lease_reconcile_apply"
                     | "service_gc"
                     | "service_prune_retained"
                     | "service_repair_retained"
@@ -3455,6 +3501,15 @@ mod tests {
         for action in [
             "service_resources",
             "service_profile_leases",
+            "service_profile_lease_inspect",
+            "service_profile_lease_explain",
+            "service_profile_lease_doctor",
+            "service_profile_lease_register",
+            "service_profile_lease_rejoin",
+            "service_profile_lease_renew",
+            "service_profile_lease_release",
+            "service_profile_lease_reconcile_plan",
+            "service_profile_lease_reconcile_apply",
             "service_resources_monitor_summary",
             "service_resources_write_monitor_summary",
             "service_gc",

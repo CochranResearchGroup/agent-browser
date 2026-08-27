@@ -6244,6 +6244,14 @@ Usage:
   agent-browser service browser-capability prefer --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> --preferred-executable-id <id> [--id <binding-id>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--service-name <name>] [--task-name <name>] [--preferred-host-id <id>] [--preferred-capability-id <id>] [--priority <n>] [--reason <text>]
   agent-browser service profiles
   agent-browser service leases
+  agent-browser service leases doctor
+  agent-browser service leases watch --interval 1000 --count 5
+  agent-browser service leases register --principal-id odollo-fulfillment --profile-id fedex --capability-out /absolute/private/path/fedex.cap
+  agent-browser service leases <lease-id> explain
+  agent-browser service leases <lease-id> renew --revision <lease-revision> --capability-file /absolute/private/path/fedex.cap --expires-at <rfc3339>
+  agent-browser service leases <lease-id> release --revision <lease-revision> --capability-file /absolute/private/path/fedex.cap
+  agent-browser service leases <lease-id> reconcile plan --revision <lease-revision> --capability-file /absolute/private/path/fedex.cap --expires-at <rfc3339>
+  agent-browser service leases <lease-id> reconcile apply --revision <lease-revision> --capability-file /absolute/private/path/fedex.cap --plan-file /absolute/path/plan.json
   agent-browser service profiles lookup [--search <text>] [--hostname <host>] [--profile-id <id>] [--profile-name <name>] [--service-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--authentication-state <state>] [--freshness-state <state>] [--tag <tag>] [--url <url>] [--browser-build <build>]
   agent-browser service sessions
   agent-browser service browsers

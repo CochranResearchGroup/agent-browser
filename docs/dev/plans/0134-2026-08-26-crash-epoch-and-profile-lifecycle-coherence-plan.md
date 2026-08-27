@@ -827,3 +827,32 @@ Do not implement migration or installer effects in Slice A.
   parity remain open. No browser, provider, development-runtime,
   installed-runtime, Service State, owner, lease, route, display, unit,
   Guacamole, or profile effect occurred.
+
+## 2026-08-27 Slice C authenticated lifecycle checkpoint
+
+- CLI, HTTP, MCP, and generated-client surfaces now provide exact lease
+  detail, explanation, doctor, bounded or abortable watch, owner rejoin,
+  renewal, release, and sealed reconcile plan and apply contracts.
+- Principal registration generates a capability once and writes it only to an
+  operator-selected absolute private file. Retained Service State stores only
+  the digest. CLI reads the secret from a private file, HTTP accepts it only in
+  `Authorization: Bearer`, and MCP accepts it only as ephemeral tool input.
+- Every mutation requires exact revision compare-and-swap evidence. Release
+  refuses active subordinate tabs. Lifecycle events contain operation,
+  principal, profile, revision, recourse, and trace labels without raw
+  capability material.
+- Reconcile plans are sealed by the authenticated capability and bind all
+  currently modeled authority axes. They remain `effectCapable: false` with
+  `boot_epoch_unavailable`; apply fails closed until Slice F supplies a current
+  boot epoch.
+- Contract metadata and dedicated collection, detail, explanation, doctor,
+  and mutation schemas support feature detection. README, CLI help, repository
+  skill guidance, contract documentation, and docs-site pages describe the
+  same secret-transport and fail-closed behavior.
+- Focused validation passed for 22 Rust profile-lease tests, all 35 service
+  model tests, service-contract metadata, generated client checks and types,
+  API/MCP parity, service collection and MCP read no-launch smokes, strict
+  Clippy, Rust formatting, and the docs production build. Dashboard lease
+  workspace parity remains open, so Slice C is not complete.
+- No browser, provider, development-runtime, installed-runtime, Service State,
+  owner, lease, route, display, unit, Guacamole, or profile effect occurred.

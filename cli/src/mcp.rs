@@ -15,6 +15,8 @@ use crate::native::service_contracts::{
     SERVICE_ACCESS_PLAN_MCP_TOOL_NAME, SERVICE_BROWSER_CAPABILITY_PREFLIGHT_MCP_TOOL_NAME,
     SERVICE_BROWSER_CAPABILITY_REGISTRY_RESOURCE, SERVICE_CONTRACTS_RESOURCE,
     SERVICE_DISPLAY_ALLOCATIONS_MCP_RESOURCE, SERVICE_PROFILE_LEASES_MCP_RESOURCE,
+    SERVICE_PROFILE_LEASE_DETAIL_MCP_RESOURCE_TEMPLATE, SERVICE_PROFILE_LEASE_DOCTOR_MCP_RESOURCE,
+    SERVICE_PROFILE_LEASE_EXPLAIN_MCP_RESOURCE_TEMPLATE,
     SERVICE_PROFILE_SEEDING_HANDOFF_UPDATE_MCP_TOOL_NAME, SERVICE_REMOTE_VIEW_ROUTES_MCP_RESOURCE,
     SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME, SERVICE_REQUEST_ACTIONS,
     SERVICE_ROUTE_POOL_MCP_RESOURCE, SERVICE_VIEWER_LEASES_MCP_RESOURCE,
@@ -26,7 +28,9 @@ use crate::native::service_model::{
     service_profile_allocations, service_profile_seeding_handoff, service_profile_sources,
     service_site_policy_sources, ServiceState,
 };
-use crate::native::service_profile_lease::{doctor_profile_leases, profile_leases_for_state};
+use crate::native::service_profile_lease::{
+    doctor_profile_leases, inspect_profile_lease, profile_leases_for_state,
+};
 use crate::native::service_request::{
     apply_service_request_attribution, normalize_service_request, ServiceRequestFallbackPrincipal,
     ServiceRequestNormalization, ServiceRequestPrincipalSource,
@@ -235,6 +239,12 @@ fn service_mcp_resources() -> Vec<Value> {
             "description": "Authenticated principal-scoped profile leases with exact recourse and authorized actions"
         }),
         json!({
+            "uri": SERVICE_PROFILE_LEASE_DOCTOR_MCP_RESOURCE,
+            "name": "Service profile lease doctor",
+            "mimeType": "application/json",
+            "description": "No-launch profile lease lifecycle findings with exact safe recourse"
+        }),
+        json!({
             "uri": TABS_RESOURCE,
             "name": "Service tabs",
             "mimeType": "application/json",
@@ -316,6 +326,18 @@ fn service_mcp_resource_templates() -> Vec<Value> {
             "name": "Service profile seeding handoff",
             "mimeType": "application/json",
             "description": "Operator-ready detached profile-seeding command, lifecycle, and intervention payload for one profile target"
+        }),
+        json!({
+            "uriTemplate": SERVICE_PROFILE_LEASE_DETAIL_MCP_RESOURCE_TEMPLATE,
+            "name": "Service profile lease detail",
+            "mimeType": "application/json",
+            "description": "One authenticated principal-scoped profile lease by exact lease id"
+        }),
+        json!({
+            "uriTemplate": SERVICE_PROFILE_LEASE_EXPLAIN_MCP_RESOURCE_TEMPLATE,
+            "name": "Service profile lease explanation",
+            "mimeType": "application/json",
+            "description": "Recourse, blockers, findings, and authorized actions for one profile lease"
         }),
     ]
 }
@@ -506,6 +528,10 @@ fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Resu
                 "doctor": doctor,
             })
         }
+        SERVICE_PROFILE_LEASE_DOCTOR_MCP_RESOURCE => {
+            let now = service_now_timestamp();
+            json!({ "doctor": doctor_profile_leases(&state, &now) })
+        }
         TABS_RESOURCE => {
             let tabs = state.tabs.values().cloned().collect::<Vec<_>>();
             json!({
@@ -592,6 +618,31 @@ fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Resu
             } else if let Some(query) = access_plan_resource_query(uri) {
                 let request = parse_service_access_plan_query(query)?;
                 service_access_plan_for_state(&state, request)
+            } else if let Some((lease_id, explain)) = profile_lease_resource(uri) {
+                let now = service_now_timestamp();
+                let lease = inspect_profile_lease(&state, &lease_id, &now).map_err(|error| {
+                    format!("profile_lease_{}:{}", error.code.as_str(), error.message)
+                })?;
+                if explain {
+                    let findings = doctor_profile_leases(&state, &now)
+                        .findings
+                        .into_iter()
+                        .filter(|finding| finding.lease_id == lease.id)
+                        .collect::<Vec<_>>();
+                    json!({
+                        "lease": lease,
+                        "explanation": {
+                            "recourse": lease.recourse,
+                            "blockingIdentityAxes": lease.blocking_identity_axes,
+                            "authorizedActions": lease.authorized_actions,
+                            "observationOnly": lease.observation_only,
+                            "findings": findings,
+                        },
+                        "observedAt": now,
+                    })
+                } else {
+                    json!({ "lease": lease, "observedAt": now })
+                }
             } else {
                 return Err(format!("Unknown MCP resource URI: {}", uri));
             }
@@ -789,6 +840,74 @@ fn initialize_result(params: Option<&Value>) -> Value {
             "version": env!("CARGO_PKG_VERSION"),
         },
         "instructions": "For shared, authenticated, profile-sensitive, or operator-visible work, read agent-browser://operating-guide and call service_access_plan before service_request. Keep browser acquisition, operator presentation, and runtime maintenance separate. Include serviceName, agentName, and taskName on tools/call whenever possible.",
+    })
+}
+
+fn service_profile_lease_mutation_tool_schema(operation: &str, title: &str) -> Value {
+    let mut required = vec!["leaseId", "leaseRevision", "profileCapability"];
+    if operation == "renew" {
+        required.push("expiresAt");
+    }
+    json!({
+        "name": format!("service_profile_lease_{operation}"),
+        "title": title,
+        "description": format!("{title} through exact lease revision compare-and-swap. profileCapability is authenticated ephemerally and is never persisted or returned."),
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "leaseId": {
+                    "type": "string",
+                    "description": "Exact profile lease id from agent-browser://profile-leases."
+                },
+                "leaseRevision": {
+                    "type": "string",
+                    "description": "Exact current leaseRevision from the inspected lease."
+                },
+                "profileCapability": {
+                    "type": "string",
+                    "writeOnly": true,
+                    "description": "Secret profile capability issued by service leases register. Do not log or persist it."
+                },
+                "expiresAt": {
+                    "type": "string",
+                    "description": "Required RFC 3339 subordinate-work expiry for renew."
+                },
+                "serviceName": { "type": "string" },
+                "agentName": { "type": "string" },
+                "taskName": { "type": "string" }
+            },
+            "required": required
+        }
+    })
+}
+
+fn service_profile_lease_reconcile_tool_schema(operation: &str, title: &str) -> Value {
+    let is_plan = operation == "plan";
+    json!({
+        "name": format!("service_profile_lease_reconcile_{operation}"),
+        "title": title,
+        "description": format!("{title}. The profile capability is ephemeral and never persisted or returned."),
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "leaseId": { "type": "string" },
+                "leaseRevision": { "type": "string" },
+                "profileCapability": { "type": "string", "writeOnly": true },
+                "expiresAt": { "type": "string" },
+                "idempotencyKey": { "type": "string" },
+                "plan": { "type": "object" },
+                "serviceName": { "type": "string" },
+                "agentName": { "type": "string" },
+                "taskName": { "type": "string" }
+            },
+            "required": if is_plan {
+                vec!["leaseId", "leaseRevision", "profileCapability", "expiresAt"]
+            } else {
+                vec!["leaseId", "profileCapability", "plan"]
+            }
+        }
     })
 }
 
@@ -3075,6 +3194,26 @@ fn service_mcp_tools() -> Vec<Value> {
         browser_tab_close_tool_schema(),
         browser_set_content_tool_schema(),
         browser_command_tool_schema(),
+        service_profile_lease_mutation_tool_schema(
+            "rejoin",
+            "Rejoin an owned profile lease",
+        ),
+        service_profile_lease_mutation_tool_schema(
+            "renew",
+            "Renew an owned profile lease",
+        ),
+        service_profile_lease_mutation_tool_schema(
+            "release",
+            "Release an owned profile lease",
+        ),
+        service_profile_lease_reconcile_tool_schema(
+            "plan",
+            "Plan profile lease reconciliation",
+        ),
+        service_profile_lease_reconcile_tool_schema(
+            "apply",
+            "Apply an exact sealed profile lease reconciliation plan",
+        ),
         json!({
             "name": "service_trace",
             "title": "Read service trace",
@@ -5132,6 +5271,14 @@ fn call_service_mcp_tool(
             call_service_profile_seeding_handoff_update(arguments, session)
         }
         "service_profile_delete" => call_service_profile_delete(arguments, session),
+        "service_profile_lease_rejoin"
+        | "service_profile_lease_renew"
+        | "service_profile_lease_release" => {
+            call_service_profile_lease_mutation(name, arguments, session)
+        }
+        "service_profile_lease_reconcile_plan" | "service_profile_lease_reconcile_apply" => {
+            call_service_profile_lease_reconcile(name, arguments, session)
+        }
         "service_session_upsert" => call_service_session_upsert(arguments, session),
         "service_session_delete" => call_service_session_delete(arguments, session),
         "service_site_policy_upsert" => call_service_site_policy_upsert(arguments, session),
@@ -5653,6 +5800,87 @@ fn call_service_profile_delete(arguments: &Value, session: &str) -> Result<Value
     let command = service_profile_delete_command(id, service_name, agent_name, task_name);
 
     send_queued_tool_command("service_profile_delete", session, trace, command)
+}
+
+fn call_service_profile_lease_mutation(
+    action: &str,
+    arguments: &Value,
+    session: &str,
+) -> Result<Value, JsonRpcError> {
+    let lease_id = required_string_argument(arguments, "leaseId")?;
+    let lease_revision = required_string_argument(arguments, "leaseRevision")?;
+    let profile_capability = required_string_argument(arguments, "profileCapability")?;
+    let expires_at = optional_string_argument(arguments, "expiresAt")?;
+    if action == "service_profile_lease_renew" && expires_at.is_none() {
+        return Err(JsonRpcError::invalid_params(
+            "service_profile_lease_renew requires expiresAt",
+        ));
+    }
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let command = service_profile_lease_mutation_command(
+        action,
+        lease_id,
+        lease_revision,
+        profile_capability,
+        expires_at,
+        service_name,
+        agent_name,
+        task_name,
+    );
+    send_queued_tool_command(action, session, trace, command)
+}
+
+fn call_service_profile_lease_reconcile(
+    action: &str,
+    arguments: &Value,
+    session: &str,
+) -> Result<Value, JsonRpcError> {
+    let lease_id = required_string_argument(arguments, "leaseId")?;
+    let profile_capability = required_string_argument(arguments, "profileCapability")?;
+    let lease_revision = optional_string_argument(arguments, "leaseRevision")?;
+    let expires_at = optional_string_argument(arguments, "expiresAt")?;
+    let idempotency_key = optional_string_argument(arguments, "idempotencyKey")?;
+    let plan = arguments
+        .get("plan")
+        .filter(|value| value.is_object())
+        .cloned();
+    if action.ends_with("_plan") && (lease_revision.is_none() || expires_at.is_none()) {
+        return Err(JsonRpcError::invalid_params(
+            "service_profile_lease_reconcile_plan requires leaseRevision and expiresAt",
+        ));
+    }
+    if action.ends_with("_apply") && plan.is_none() {
+        return Err(JsonRpcError::invalid_params(
+            "service_profile_lease_reconcile_apply requires plan",
+        ));
+    }
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let mut command = json!({
+        "id": format!("mcp-{action}-{}", uuid::Uuid::new_v4()),
+        "action": action,
+        "leaseId": lease_id,
+        "profileCapability": profile_capability,
+    });
+    for (field, value) in [
+        ("leaseRevision", lease_revision),
+        ("expiresAt", expires_at),
+        ("idempotencyKey", idempotency_key),
+    ] {
+        if let Some(value) = value {
+            command[field] = json!(value);
+        }
+    }
+    if let Some(plan) = plan {
+        command["plan"] = plan;
+    }
+    apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
+    send_queued_tool_command(action, session, trace, command)
 }
 
 fn call_service_session_upsert(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
@@ -7793,6 +8021,31 @@ fn service_profile_delete_command(
         "action": "service_profile_delete",
         "profileId": profile_id,
     });
+    apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
+    command
+}
+
+#[allow(clippy::too_many_arguments)]
+fn service_profile_lease_mutation_command(
+    action: &str,
+    lease_id: &str,
+    lease_revision: &str,
+    profile_capability: &str,
+    expires_at: Option<&str>,
+    service_name: Option<&str>,
+    agent_name: Option<&str>,
+    task_name: Option<&str>,
+) -> Value {
+    let mut command = json!({
+        "id": format!("mcp-{action}-{}", uuid::Uuid::new_v4()),
+        "action": action,
+        "leaseId": lease_id,
+        "leaseRevision": lease_revision,
+        "profileCapability": profile_capability,
+    });
+    if let Some(expires_at) = expires_at {
+        command["expiresAt"] = json!(expires_at);
+    }
     apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
     command
 }
@@ -10741,6 +10994,21 @@ fn profile_seeding_handoff_resource(uri: &str) -> Option<(String, Option<String>
     Some((profile_id, target_service_id))
 }
 
+fn profile_lease_resource(uri: &str) -> Option<(String, bool)> {
+    let rest = uri.strip_prefix("agent-browser://profile-leases/")?;
+    if rest == "doctor" {
+        return None;
+    }
+    let (lease_id, explain) = match rest.strip_suffix("/explain") {
+        Some(lease_id) => (lease_id, true),
+        None => (rest, false),
+    };
+    if lease_id.is_empty() || lease_id.contains('/') {
+        return None;
+    }
+    Some((urlencoding::decode(lease_id).ok()?.into_owned(), explain))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -10773,6 +11041,7 @@ mod tests {
                 SERVICE_ROUTE_POOL_MCP_RESOURCE,
                 SERVICE_VIEWER_LEASES_MCP_RESOURCE,
                 SERVICE_PROFILE_LEASES_MCP_RESOURCE,
+                SERVICE_PROFILE_LEASE_DOCTOR_MCP_RESOURCE,
                 TABS_RESOURCE,
                 MONITORS_RESOURCE,
                 SITE_POLICIES_RESOURCE,
@@ -10813,6 +11082,30 @@ mod tests {
         assert_eq!(
             response["data"]["resourceTemplates"][5]["uriTemplate"],
             PROFILE_SEEDING_HANDOFF_TEMPLATE
+        );
+        assert_eq!(
+            response["data"]["resourceTemplates"][6]["uriTemplate"],
+            SERVICE_PROFILE_LEASE_DETAIL_MCP_RESOURCE_TEMPLATE
+        );
+        assert_eq!(
+            response["data"]["resourceTemplates"][7]["uriTemplate"],
+            SERVICE_PROFILE_LEASE_EXPLAIN_MCP_RESOURCE_TEMPLATE
+        );
+    }
+
+    #[test]
+    fn profile_lease_resource_maps_detail_and_explain_uris() {
+        assert_eq!(
+            profile_lease_resource("agent-browser://profile-leases/lease%3Aone"),
+            Some(("lease:one".to_string(), false))
+        );
+        assert_eq!(
+            profile_lease_resource("agent-browser://profile-leases/lease%3Aone/explain"),
+            Some(("lease:one".to_string(), true))
+        );
+        assert_eq!(
+            profile_lease_resource(SERVICE_PROFILE_LEASE_DOCTOR_MCP_RESOURCE),
+            None
         );
     }
 

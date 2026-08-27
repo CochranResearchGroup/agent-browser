@@ -35,6 +35,11 @@ pub const SERVICE_REMOTE_VIEW_ROUTES_MCP_RESOURCE: &str = "agent-browser://remot
 pub const SERVICE_ROUTE_POOL_MCP_RESOURCE: &str = "agent-browser://route-pool";
 pub const SERVICE_VIEWER_LEASES_MCP_RESOURCE: &str = "agent-browser://viewer-leases";
 pub const SERVICE_PROFILE_LEASES_MCP_RESOURCE: &str = "agent-browser://profile-leases";
+pub const SERVICE_PROFILE_LEASE_DOCTOR_MCP_RESOURCE: &str = "agent-browser://profile-leases/doctor";
+pub const SERVICE_PROFILE_LEASE_DETAIL_MCP_RESOURCE_TEMPLATE: &str =
+    "agent-browser://profile-leases/{lease_id}";
+pub const SERVICE_PROFILE_LEASE_EXPLAIN_MCP_RESOURCE_TEMPLATE: &str =
+    "agent-browser://profile-leases/{lease_id}/explain";
 pub const SERVICE_ACCESS_PLAN_MCP_TOOL_NAME: &str = "service_access_plan";
 pub const SERVICE_REQUEST_MCP_TOOL_NAME: &str = "service_request";
 pub const DESKTOP_CAPTURE_MCP_TOOL_NAME: &str = "desktop_capture";
@@ -106,6 +111,14 @@ pub const SERVICE_VIEWER_LEASES_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-viewer-leases-response.v1.schema.json";
 pub const SERVICE_PROFILE_LEASES_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-profile-leases-response.v1.schema.json";
+pub const SERVICE_PROFILE_LEASE_DETAIL_RESPONSE_SCHEMA_ID: &str =
+    "https://agent-browser.local/contracts/service-profile-lease-detail-response.v1.schema.json";
+pub const SERVICE_PROFILE_LEASE_EXPLAIN_RESPONSE_SCHEMA_ID: &str =
+    "https://agent-browser.local/contracts/service-profile-lease-explain-response.v1.schema.json";
+pub const SERVICE_PROFILE_LEASE_DOCTOR_RESPONSE_SCHEMA_ID: &str =
+    "https://agent-browser.local/contracts/service-profile-lease-doctor-response.v1.schema.json";
+pub const SERVICE_PROFILE_LEASE_MUTATION_RESPONSE_SCHEMA_ID: &str =
+    "https://agent-browser.local/contracts/service-profile-lease-mutation-response.v1.schema.json";
 pub const SERVICE_MONITOR_RUN_DUE_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-monitor-run-due-response.v1.schema.json";
 pub const SERVICE_MONITOR_STATE_RESPONSE_SCHEMA_ID: &str =
@@ -729,9 +742,67 @@ pub fn service_contracts_metadata() -> Value {
                 },
                 "client": {
                     "module": "@agent-browser/client/service-observability",
-                    "helpers": ["getServiceProfileLeases", "findServiceProfileLease"],
+                    "helpers": ["getServiceProfileLeases", "watchServiceProfileLeases", "findServiceProfileLease"],
                 },
                 "operations": ["list", "inspect", "explain", "doctor", "watch", "rejoin", "renew", "release", "reconcile_plan", "reconcile_apply"],
+                "noLaunch": true,
+            },
+            "serviceProfileLeaseDetailResponse": {
+                "version": SERVICE_REQUEST_CONTRACT_VERSION,
+                "schemaId": SERVICE_PROFILE_LEASE_DETAIL_RESPONSE_SCHEMA_ID,
+                "schemaPath": "docs/dev/contracts/service-profile-lease-detail-response.v1.schema.json",
+                "http": { "method": "GET", "route": "/api/service/profile-leases/<id>" },
+                "mcp": { "resourceTemplate": SERVICE_PROFILE_LEASE_DETAIL_MCP_RESOURCE_TEMPLATE },
+                "client": { "helper": "getServiceProfileLease" },
+                "noLaunch": true,
+            },
+            "serviceProfileLeaseExplainResponse": {
+                "version": SERVICE_REQUEST_CONTRACT_VERSION,
+                "schemaId": SERVICE_PROFILE_LEASE_EXPLAIN_RESPONSE_SCHEMA_ID,
+                "schemaPath": "docs/dev/contracts/service-profile-lease-explain-response.v1.schema.json",
+                "http": { "method": "GET", "route": "/api/service/profile-leases/<id>/explain" },
+                "mcp": { "resourceTemplate": SERVICE_PROFILE_LEASE_EXPLAIN_MCP_RESOURCE_TEMPLATE },
+                "client": { "helper": "explainServiceProfileLease" },
+                "noLaunch": true,
+            },
+            "serviceProfileLeaseDoctorResponse": {
+                "version": SERVICE_REQUEST_CONTRACT_VERSION,
+                "schemaId": SERVICE_PROFILE_LEASE_DOCTOR_RESPONSE_SCHEMA_ID,
+                "schemaPath": "docs/dev/contracts/service-profile-lease-doctor-response.v1.schema.json",
+                "http": { "method": "GET", "route": "/api/service/profile-leases/doctor" },
+                "mcp": { "resource": SERVICE_PROFILE_LEASE_DOCTOR_MCP_RESOURCE },
+                "client": { "helper": "doctorServiceProfileLeases" },
+                "noLaunch": true,
+            },
+            "serviceProfileLeaseMutationResponse": {
+                "version": SERVICE_REQUEST_CONTRACT_VERSION,
+                "schemaId": SERVICE_PROFILE_LEASE_MUTATION_RESPONSE_SCHEMA_ID,
+                "schemaPath": "docs/dev/contracts/service-profile-lease-mutation-response.v1.schema.json",
+                "http": { "method": "POST", "route": "/api/service/profile-leases/<id>/<rejoin|renew|release>", "authentication": "Authorization: Bearer <profile-capability>" },
+                "mcp": { "tools": ["service_profile_lease_rejoin", "service_profile_lease_renew", "service_profile_lease_release"], "capabilityField": "profileCapability", "ephemeral": true },
+                "client": { "helpers": ["rejoinServiceProfileLease", "renewServiceProfileLease", "releaseServiceProfileLease"] },
+                "noLaunch": true,
+            },
+            "serviceProfileLeaseReconciliation": {
+                "version": SERVICE_REQUEST_CONTRACT_VERSION,
+                "http": {
+                    "plan": "/api/service/profile-leases/<id>/reconcile/plan",
+                    "apply": "/api/service/profile-leases/<id>/reconcile/apply",
+                    "authentication": "Authorization: Bearer <profile-capability>",
+                },
+                "mcp": {
+                    "planTool": "service_profile_lease_reconcile_plan",
+                    "applyTool": "service_profile_lease_reconcile_apply",
+                    "capabilityField": "profileCapability",
+                    "ephemeral": true,
+                },
+                "client": {
+                    "planHelper": "planServiceProfileLeaseReconciliation",
+                    "applyHelper": "applyServiceProfileLeaseReconciliation",
+                },
+                "currentBootEpochAvailable": false,
+                "effectCapable": false,
+                "blockedReason": "boot_epoch_unavailable",
                 "noLaunch": true,
             },
             "serviceMonitorRunDueResponse": {

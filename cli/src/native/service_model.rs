@@ -220,7 +220,7 @@ pub const SERVICE_CHALLENGE_STATE_VALUES: [&str; 6] = [
     "failed",
     "denied",
 ];
-pub const SERVICE_EVENT_KIND_VALUES: [&str; 18] = [
+pub const SERVICE_EVENT_KIND_VALUES: [&str; 19] = [
     "reconciliation",
     "browser_launch_recorded",
     "browser_health_changed",
@@ -229,6 +229,7 @@ pub const SERVICE_EVENT_KIND_VALUES: [&str; 18] = [
     "tab_lifecycle_changed",
     "profile_lease_wait_started",
     "profile_lease_wait_ended",
+    "profile_lease_lifecycle_changed",
     "viewer_takeover_requested",
     "viewer_connected",
     "viewer_disconnected",
@@ -241,7 +242,7 @@ pub const SERVICE_EVENT_KIND_VALUES: [&str; 18] = [
     "incident_resolved",
 ];
 pub const SERVICE_TRACE_ACTIVITY_SOURCE_VALUES: [&str; 3] = ["event", "job", "metadata"];
-pub const SERVICE_TRACE_ACTIVITY_KIND_VALUES: [&str; 21] = [
+pub const SERVICE_TRACE_ACTIVITY_KIND_VALUES: [&str; 22] = [
     "reconciliation",
     "browser_launch_recorded",
     "browser_health_changed",
@@ -250,6 +251,7 @@ pub const SERVICE_TRACE_ACTIVITY_KIND_VALUES: [&str; 21] = [
     "tab_lifecycle_changed",
     "profile_lease_wait_started",
     "profile_lease_wait_ended",
+    "profile_lease_lifecycle_changed",
     "viewer_takeover_requested",
     "viewer_connected",
     "viewer_disconnected",
@@ -3931,6 +3933,7 @@ pub enum ServiceEventKind {
     TabLifecycleChanged,
     ProfileLeaseWaitStarted,
     ProfileLeaseWaitEnded,
+    ProfileLeaseLifecycleChanged,
     ViewerTakeoverRequested,
     ViewerConnected,
     ViewerDisconnected,
@@ -4234,6 +4237,7 @@ fn service_event_is_incident(event: &ServiceEvent) -> bool {
         | ServiceEventKind::BrowserRecoveryStarted
         | ServiceEventKind::ProfileLeaseWaitStarted
         | ServiceEventKind::ProfileLeaseWaitEnded
+        | ServiceEventKind::ProfileLeaseLifecycleChanged
         | ServiceEventKind::ViewerTakeoverRequested
         | ServiceEventKind::ViewerConnected
         | ServiceEventKind::ViewerDisconnected
@@ -4764,6 +4768,7 @@ fn service_event_kind_name(kind: ServiceEventKind) -> &'static str {
         ServiceEventKind::TabLifecycleChanged => "tab_lifecycle_changed",
         ServiceEventKind::ProfileLeaseWaitStarted => "profile_lease_wait_started",
         ServiceEventKind::ProfileLeaseWaitEnded => "profile_lease_wait_ended",
+        ServiceEventKind::ProfileLeaseLifecycleChanged => "profile_lease_lifecycle_changed",
         ServiceEventKind::ViewerTakeoverRequested => "viewer_takeover_requested",
         ServiceEventKind::ViewerConnected => "viewer_connected",
         ServiceEventKind::ViewerDisconnected => "viewer_disconnected",

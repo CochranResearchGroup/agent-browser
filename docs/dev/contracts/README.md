@@ -22,6 +22,12 @@ detail, watch, and dashboard parity remain in progress under Plan 0134 Slice C.
 
 `service-profile-lease-record.v1.schema.json` describes each projected lease.
 `service-profile-leases-response.v1.schema.json` describes the collection and
+doctor projection. `service-profile-lease-detail-response.v1.schema.json`,
+`service-profile-lease-explain-response.v1.schema.json`,
+`service-profile-lease-doctor-response.v1.schema.json`, and
+`service-profile-lease-mutation-response.v1.schema.json` cover exact reads and
+authenticated owner actions. Raw profile capabilities are transport-only
+secrets and never belong in retained service contracts or events.
 doctor envelope shared by the public read transports.
 
 MCP agents should begin shared, authenticated, profile-sensitive, or

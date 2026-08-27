@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-profile-lease-mutation-response.v1.schema.json",
+  "title": "agent-browser service profile lease mutation response",
+  "type": "object",
+  "required": ["operation", "lease", "previousLeaseRevision", "leaseRevision", "principalId", "profileId", "appliedAt"],
+  "properties": {
+    "operation": { "type": "string", "enum": ["rejoin", "renew", "release"] },
+    "lease": { "$ref": "service-profile-lease-record.v1.schema.json" },
+    "previousLeaseRevision": { "type": "string" },
+    "leaseRevision": { "type": "string" },
+    "principalId": { "type": "string" },
+    "profileId": { "type": "string" },
+    "appliedAt": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

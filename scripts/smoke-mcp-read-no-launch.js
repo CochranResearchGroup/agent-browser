@@ -56,7 +56,10 @@ const MCP_TOOL_ALLOWLIST = [
   'browser_unroute', 'browser_console', 'browser_errors', 'browser_pdf',
   'browser_response_body', 'browser_clipboard', 'browser_back', 'browser_forward',
   'browser_reload', 'browser_tab_new', 'browser_tab_switch', 'browser_tab_close',
-  'browser_set_content', 'browser_command', 'service_trace',
+  'browser_set_content', 'browser_command',
+  'service_profile_lease_rejoin', 'service_profile_lease_renew',
+  'service_profile_lease_release', 'service_profile_lease_reconcile_plan',
+  'service_profile_lease_reconcile_apply', 'service_trace',
 ];
 
 const MCP_RESOURCE_ALLOWLIST = [
@@ -65,7 +68,8 @@ const MCP_RESOURCE_ALLOWLIST = [
   'agent-browser://profiles', 'agent-browser://sessions', 'agent-browser://browsers',
   'agent-browser://display-allocations', 'agent-browser://remote-view-routes',
   'agent-browser://route-pool', 'agent-browser://viewer-leases',
-  'agent-browser://profile-leases', 'agent-browser://tabs',
+  'agent-browser://profile-leases', 'agent-browser://profile-leases/doctor',
+  'agent-browser://tabs',
   'agent-browser://monitors', 'agent-browser://site-policies', 'agent-browser://providers',
   'agent-browser://challenges', 'agent-browser://jobs', 'agent-browser://events',
 ];
@@ -77,6 +81,8 @@ const MCP_TEMPLATE_ALLOWLIST = [
   'agent-browser://profiles/{profile_id}/readiness',
   'agent-browser://profiles/{profile_id}/allocation',
   'agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}',
+  'agent-browser://profile-leases/{lease_id}',
+  'agent-browser://profile-leases/{lease_id}/explain',
 ];
 
 function mcpToolResultClassification(name) {

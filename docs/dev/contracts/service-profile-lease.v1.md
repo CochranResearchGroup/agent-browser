@@ -54,9 +54,16 @@ available for diagnosis but returns `effectCapable: false` with
 `boot_epoch_unavailable`. This prevents the control plane from applying a
 cross-boot repair using incomplete evidence.
 
-The current source checkpoint provides the canonical model, pure guarded
-operations, record and collection schemas, and collection parity through CLI
-`agent-browser service leases`, HTTP `GET /api/service/profile-leases`, MCP
-`agent-browser://profile-leases`, and generated client helpers. Owner mutation,
-detail, explain, watch, event, and dashboard parity remain in progress within
-Slice C.
+Registration writes a newly generated capability only to an absolute private
+file supplied with `--capability-out`. Retained Service State stores its digest,
+never the raw capability. CLI mutations read that capability from an absolute
+private file, HTTP mutations accept it only as an `Authorization: Bearer`
+header, and MCP mutations accept it only as the ephemeral
+`profileCapability` tool argument. Clients must not log or persist that value.
+
+The source checkpoint provides the canonical model, guarded operations, record
+and collection schemas, CLI and HTTP detail, explanation, doctor, registration,
+and owner mutations, MCP read resources and owner mutation tools, generated
+client helpers, and `profile_lease_lifecycle_changed` events. Watch,
+reconciliation transport, and dashboard parity remain in progress within Slice
+C.

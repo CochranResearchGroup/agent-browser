@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-browser.local/contracts/service-profile-lease-detail-response.v1.schema.json",
+  "title": "agent-browser service profile lease detail response",
+  "type": "object",
+  "required": ["lease", "observedAt"],
+  "properties": {
+    "lease": { "$ref": "service-profile-lease-record.v1.schema.json" },
+    "observedAt": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

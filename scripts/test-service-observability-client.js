@@ -11,6 +11,8 @@ import {
   findServiceProfileForIdentity,
   findServiceProfileLease,
   deleteServiceMonitor,
+  doctorServiceProfileLeases,
+  explainServiceProfileLease,
   getServiceAccessPlan,
   getServiceBrowserCapabilityPreflight,
   getServiceContracts,
@@ -18,6 +20,7 @@ import {
   getServiceProfileAllocation,
   getServiceProfileAllocationForAccessPlan,
   getServiceProfileForIdentity,
+  getServiceProfileLease,
   getServiceProfileLeases,
   getServiceProfileReadiness,
   getServiceProfileSeedingHandoff,
@@ -28,6 +31,9 @@ import {
   pauseServiceMonitor,
   registerExternalProfile,
   registerServiceLoginProfile,
+  rejoinServiceProfileLease,
+  releaseServiceProfileLease,
+  renewServiceProfileLease,
   resumeServiceMonitor,
   resetServiceMonitorFailures,
   runDueServiceMonitors,
@@ -132,6 +138,68 @@ async function main() {
   assert.equal(profileLeases.calls[0].init.method, 'GET');
   assert.equal(findServiceProfileLease(profileLeaseResult, 'lease-1')?.state, 'active');
   assert.equal(findServiceProfileLease(profileLeaseResult, 'missing'), null);
+
+  const profileLeaseDetail = createFetchRecorder({
+    success: true,
+    data: { lease: { id: 'lease-1', leaseRevision: 'sha256:one' }, observedAt: 'now' },
+  });
+  await getServiceProfileLease({
+    baseUrl: 'http://127.0.0.1:4849',
+    id: 'lease:one',
+    fetch: profileLeaseDetail.fetch,
+  });
+  assert.equal(
+    profileLeaseDetail.calls[0].url,
+    'http://127.0.0.1:4849/api/service/profile-leases/lease%3Aone',
+  );
+
+  const profileLeaseExplain = createFetchRecorder({ success: true, data: { lease: {} } });
+  await explainServiceProfileLease({
+    baseUrl: 'http://127.0.0.1:4849',
+    id: 'lease-1',
+    fetch: profileLeaseExplain.fetch,
+  });
+  assert.equal(
+    profileLeaseExplain.calls[0].url,
+    'http://127.0.0.1:4849/api/service/profile-leases/lease-1/explain',
+  );
+
+  const profileLeaseDoctor = createFetchRecorder({ success: true, data: { doctor: {} } });
+  await doctorServiceProfileLeases({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: profileLeaseDoctor.fetch,
+  });
+  assert.equal(
+    profileLeaseDoctor.calls[0].url,
+    'http://127.0.0.1:4849/api/service/profile-leases/doctor',
+  );
+
+  for (const [operation, helper] of [
+    ['rejoin', rejoinServiceProfileLease],
+    ['renew', renewServiceProfileLease],
+    ['release', releaseServiceProfileLease],
+  ]) {
+    const mutation = createFetchRecorder({
+      success: true,
+      data: { operation, lease: { id: 'lease-1' } },
+    });
+    await helper({
+      baseUrl: 'http://127.0.0.1:4849',
+      id: 'lease-1',
+      leaseRevision: 'sha256:one',
+      profileCapability: 'secret-capability',
+      ...(operation === 'renew' ? { expiresAt: '2026-08-28T12:00:00Z' } : {}),
+      serviceName: 'OdolloFulfillment',
+      fetch: mutation.fetch,
+    });
+    assert.equal(
+      mutation.calls[0].url,
+      `http://127.0.0.1:4849/api/service/profile-leases/lease-1/${operation}`,
+    );
+    assert.equal(mutation.calls[0].init.headers.authorization, 'Bearer secret-capability');
+    assert.equal(mutation.calls[0].body.profileCapability, undefined);
+    assert.equal(mutation.calls[0].body.leaseRevision, 'sha256:one');
+  }
 
   const status = createFetchRecorder({
     success: true,

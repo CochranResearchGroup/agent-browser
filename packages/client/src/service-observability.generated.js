@@ -67,6 +67,7 @@ export const SERVICE_EVENT_KINDS = [
   "tab_lifecycle_changed",
   "profile_lease_wait_started",
   "profile_lease_wait_ended",
+  "profile_lease_lifecycle_changed",
   "viewer_takeover_requested",
   "viewer_connected",
   "viewer_disconnected",

@@ -1387,7 +1387,14 @@ authority without launching a browser. Records expose the authenticated
 principal, exact owner generation, subordinate session and tab work, blocking
 identity axes, authorized actions, typed continuity recourse, and doctor
 findings. Legacy retained evidence remains observation-only and cannot acquire
-authority from caller labels.
+authority from caller labels. Exact lease detail, explanation, and doctor reads
+are available through CLI, HTTP, MCP resources, and generated client helpers.
+Registering a principal writes its new capability only to an operator-selected
+absolute private file. Owner rejoin, renew, and release operations require the
+exact current lease revision plus that capability. HTTP accepts it only in an
+<code>Authorization: Bearer</code> header and MCP accepts it only as an
+ephemeral <code>profileCapability</code> argument. The raw value is never
+retained in Service State or lifecycle events.
 
 Service tools include `service_request`, `desktop_capture`, `desktop_evidence_observe`, `service_job_cancel`, `service_browser_retry`, `service_incidents`, `service_remedies_apply`, `service_trace`, `service_profile_upsert`, `service_profile_freshness_update`, `service_profile_delete`, `service_session_upsert`, `service_session_delete`, `service_site_policy_upsert`, `service_site_policy_delete`, `service_monitor_upsert`, `service_monitor_delete`, `service_monitors_run_due`, `service_monitor_pause`, `service_monitor_resume`, `service_monitor_reset_failures`, `service_monitor_triage`, `service_provider_upsert`, `service_provider_delete`, `service_browser_capability_registry_upsert`, and `service_browser_capability_preflight`. Use `service_browser_capability_preflight` to evaluate a requested browser build without launching Chrome. Use `service_request` to queue one intent-based browser action with caller context and site/login hints. Use `desktop_capture` for the low-level route-bound diagnostic and `desktop_evidence_observe` for the task-shaped browser-external scene observation. Pass `summary: true` to `service_incidents` for the same escalation, severity, and state remedy groups as HTTP `summary=true`; add `remediesOnly: true` for the compact active `browser_degraded`, `monitor_attention`, and `os_degraded_possible` operator ladder. Use `service_remedies_apply` with `escalation: "monitor_attention"` to apply active monitor remedies, `escalation: "browser_degraded"` after operator review to batch degraded-browser retry enablement, or `escalation: "os_degraded_possible"` after host inspection to batch faulted-browser retry remedies through the service worker.
 

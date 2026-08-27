@@ -9,13 +9,24 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
+use std::path::{Path, PathBuf};
 
-use super::service_model::{LeaseState, ServiceState, TabLifecycle};
+#[cfg(unix)]
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+
+use super::service_model::{
+    LeaseState, ServiceEvent, ServiceEventKind, ServiceState, TabLifecycle,
+};
 use super::service_principal::{
-    authenticated_authority_is_current, AuthenticatedServicePrincipal, PrincipalContinuityRecourse,
-    ServicePrincipalProvenance, ServicePrincipalState, ServiceProfileCapabilityState,
+    authenticate_profile_capability, authenticated_authority_is_current,
+    generate_profile_capability_token, register_profile_capability, AuthenticatedServicePrincipal,
+    PrincipalContinuityRecourse, ServicePrincipalProvenance, ServicePrincipalRegistrationRequest,
+    ServicePrincipalState, ServiceProfileCapabilityState,
 };
 use super::service_resources::load_service_state_for_maintenance;
+use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use super::service_trace::service_commands::service_now_timestamp;
 
 pub(crate) const PROFILE_LEASE_SCHEMA_VERSION: &str = "agent-browser.profile-lease.v1";
@@ -138,13 +149,43 @@ pub(crate) struct ProfileLeaseError {
     pub(crate) message: String,
 }
 
+impl ProfileLeaseFailureCode {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::LeaseNotFound => "lease_not_found",
+            Self::AuthorityMismatch => "authority_mismatch",
+            Self::RevisionMismatch => "revision_mismatch",
+            Self::ActionNotAuthorized => "action_not_authorized",
+            Self::ActiveSubordinateWork => "active_subordinate_work",
+            Self::PlanInvalid => "plan_invalid",
+            Self::PlanExpired => "plan_expired",
+            Self::BootEpochMismatch => "boot_epoch_mismatch",
+        }
+    }
+}
+
 /// Projects the canonical first-class profile lease collection from retained authority and work.
 pub(crate) fn profile_leases_for_state(state: &ServiceState, now: &str) -> Vec<ProfileLeaseRecord> {
     let mut records = Vec::new();
     let mut bound_profiles = BTreeSet::new();
+    let mut bound_capability_ids = BTreeSet::new();
     for binding in state.runtime_owner_registry.principal_bindings.values() {
         bound_profiles.insert(binding.profile_id.clone());
+        bound_capability_ids.insert(binding.capability_id.clone());
         records.push(bound_profile_lease(state, binding, now));
+    }
+
+    for capability in state
+        .service_principals
+        .profile_capabilities
+        .values()
+        .filter(|capability| {
+            capability.state == ServiceProfileCapabilityState::Active
+                && !bound_capability_ids.contains(&capability.capability_id)
+        })
+    {
+        bound_profiles.insert(capability.profile_id.clone());
+        records.push(unbound_capability_profile_lease(state, capability, now));
     }
 
     let mut legacy_profiles = state
@@ -190,6 +231,464 @@ pub(crate) async fn handle_service_profile_leases(
         "observedAt": now,
         "doctor": doctor,
     }))
+}
+
+/// Handles first-class profile lease detail, diagnosis, registration, and owner actions.
+///
+/// Raw profile capabilities are accepted only as ephemeral command input or read
+/// from a private capability file. They are authenticated against the retained
+/// digest and never persisted in Service State or lifecycle events.
+pub(crate) async fn handle_service_profile_lease_command(
+    command: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let action = required_command_string(command, "action")?;
+    match action {
+        "service_profile_lease_inspect" => {
+            let state = load_service_state_for_maintenance(command)?;
+            let now = service_now_timestamp();
+            let lease_id = required_command_string(command, "leaseId")?;
+            let lease =
+                inspect_profile_lease(&state, lease_id, &now).map_err(lease_error_string)?;
+            Ok(json!({ "lease": lease, "observedAt": now }))
+        }
+        "service_profile_lease_explain" => {
+            let state = load_service_state_for_maintenance(command)?;
+            let now = service_now_timestamp();
+            let lease_id = required_command_string(command, "leaseId")?;
+            let lease =
+                inspect_profile_lease(&state, lease_id, &now).map_err(lease_error_string)?;
+            let doctor = doctor_profile_leases(&state, &now);
+            let findings = doctor
+                .findings
+                .iter()
+                .filter(|finding| finding.lease_id == lease.id)
+                .cloned()
+                .collect::<Vec<_>>();
+            Ok(json!({
+                "lease": lease,
+                "explanation": {
+                    "recourse": lease.recourse,
+                    "blockingIdentityAxes": lease.blocking_identity_axes,
+                    "authorizedActions": lease.authorized_actions,
+                    "observationOnly": lease.observation_only,
+                    "findings": findings,
+                },
+                "observedAt": now,
+            }))
+        }
+        "service_profile_lease_doctor" => {
+            let state = load_service_state_for_maintenance(command)?;
+            let now = service_now_timestamp();
+            Ok(json!({ "doctor": doctor_profile_leases(&state, &now) }))
+        }
+        "service_profile_lease_register" => register_profile_lease_principal(command),
+        "service_profile_lease_rejoin"
+        | "service_profile_lease_renew"
+        | "service_profile_lease_release" => mutate_profile_lease(command),
+        "service_profile_lease_reconcile_plan" => plan_profile_lease_command(command),
+        "service_profile_lease_reconcile_apply" => apply_profile_lease_command(command),
+        _ => Err(format!("Unsupported profile lease command: {action}")),
+    }
+}
+
+fn plan_profile_lease_command(command: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let state = load_service_state_for_maintenance(command)?;
+    let lease_id = required_command_string(command, "leaseId")?;
+    let expected_revision = required_command_string(command, "leaseRevision")?;
+    let expires_at = required_command_string(command, "expiresAt")?;
+    let raw_capability = profile_capability_from_command(command)?;
+    let authority =
+        authenticate_profile_capability(&state.service_principals, raw_capability.as_str(), None)
+            .map_err(principal_error_string)?;
+    let idempotency_key = optional_command_string(command, "idempotencyKey")
+        .unwrap_or_else(|| format!("profile-lease-reconcile-{}", uuid::Uuid::new_v4()));
+    let now = service_now_timestamp();
+    let plan = plan_profile_lease_reconciliation(
+        &state,
+        lease_id,
+        expected_revision,
+        &authority,
+        &now,
+        expires_at,
+        None,
+        idempotency_key,
+        raw_capability.as_bytes(),
+    )
+    .map_err(lease_error_string)?;
+    Ok(json!({ "plan": plan }))
+}
+
+fn apply_profile_lease_command(command: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let raw_capability = profile_capability_from_command(command)?;
+    let plan = if let Some(plan) = command.get("plan") {
+        serde_json::from_value::<ProfileLeaseReconcilePlan>(plan.clone())
+            .map_err(|error| format!("profile_lease_plan_invalid:{error}"))?
+    } else {
+        let path = absolute_command_path(command, "planFile")?;
+        let encoded = fs::read(&path).map_err(|error| {
+            format!("Failed to read reconcile plan {}: {error}", path.display())
+        })?;
+        serde_json::from_slice::<ProfileLeaseReconcilePlan>(&encoded)
+            .map_err(|error| format!("profile_lease_plan_invalid:{error}"))?
+    };
+    let now = service_now_timestamp();
+    let repository = LockedServiceStateRepository::default_json()?;
+    repository.mutate(|state| {
+        let authority = authenticate_profile_capability(
+            &state.service_principals,
+            raw_capability.as_str(),
+            None,
+        )
+        .map_err(principal_error_string)?;
+        let receipt = apply_profile_lease_reconciliation(
+            state,
+            &plan,
+            &authority,
+            &now,
+            None,
+            raw_capability.as_bytes(),
+        )
+        .map_err(lease_error_string)?;
+        append_profile_lease_event(
+            state,
+            "reconcile_apply",
+            None,
+            None,
+            &authority.principal_id,
+            &authority.profile_id,
+            plan.browser_id.as_deref(),
+            &now,
+            command,
+        );
+        Ok(json!({ "receipt": receipt }))
+    })
+}
+
+fn register_profile_lease_principal(
+    command: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let principal_id = required_command_string(command, "principalId")?.to_string();
+    let profile_id = required_command_string(command, "profileId")?.to_string();
+    let capability_path = absolute_command_path(command, "capabilityOut")?;
+    let display_name = optional_command_string(command, "displayName");
+    let registered_by = optional_command_string(command, "registeredBy");
+    let now = service_now_timestamp();
+    let raw_capability = generate_profile_capability_token();
+
+    write_private_capability_file(&capability_path, &raw_capability)?;
+    let repository = LockedServiceStateRepository::default_json()?;
+    let result = repository.mutate(|state| {
+        let registered = register_profile_capability(
+            &mut state.service_principals,
+            ServicePrincipalRegistrationRequest {
+                principal_id: principal_id.clone(),
+                display_name: display_name.clone(),
+                profile_id: profile_id.clone(),
+                registered_at: Some(now.clone()),
+                registered_by: registered_by.clone(),
+            },
+            &raw_capability,
+        )
+        .map_err(principal_error_string)?;
+
+        let owner_binding = bind_registered_principal_to_current_owner(state, &registered)?;
+        append_profile_lease_event(
+            state,
+            "register",
+            None,
+            None,
+            &registered.principal.principal_id,
+            &registered.capability.profile_id,
+            None,
+            &now,
+            command,
+        );
+        Ok(json!({
+            "principal": registered.principal,
+            "capability": {
+                "capabilityId": registered.capability.capability_id,
+                "profileId": registered.capability.profile_id,
+                "revision": registered.capability.revision,
+                "state": registered.capability.state,
+            },
+            "boundToCurrentOwner": owner_binding,
+            "capabilityFile": capability_path,
+            "capabilityWritten": true,
+        }))
+    });
+    if let Err(error) = result {
+        let cleanup = fs::remove_file(&capability_path);
+        return match cleanup {
+            Ok(()) => Err(error),
+            Err(cleanup_error) => Err(format!(
+                "{error}; failed to remove unregistered capability file {}: {cleanup_error}",
+                capability_path.display()
+            )),
+        };
+    }
+    result
+}
+
+fn bind_registered_principal_to_current_owner(
+    state: &mut ServiceState,
+    registered: &super::service_principal::RegisteredProfileCapability,
+) -> Result<bool, String> {
+    let Some(profile_path) = state
+        .profiles
+        .get(&registered.capability.profile_id)
+        .and_then(|profile| profile.user_data_dir.as_deref())
+    else {
+        return Ok(false);
+    };
+    let profile_identity_digest =
+        crate::runtime_profile::canonical_profile_identity_digest(Path::new(profile_path))?;
+    let Some(owner) = state
+        .runtime_owner_registry
+        .owners
+        .get(&profile_identity_digest)
+        .cloned()
+    else {
+        return Ok(false);
+    };
+    state
+        .runtime_owner_registry
+        .bind_principal_authority(
+            crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
+                principal_id: registered.principal.principal_id.clone(),
+                profile_id: registered.capability.profile_id.clone(),
+                profile_identity_digest,
+                capability_id: registered.capability.capability_id.clone(),
+                provenance: ServicePrincipalProvenance::RegisteredCapability,
+                owner_generation: owner.owner_generation,
+            },
+        )
+        .map_err(|error| format!("profile_owner_binding_failed:{error:?}"))?;
+    Ok(true)
+}
+
+fn mutate_profile_lease(command: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let action = required_command_string(command, "action")?;
+    let operation = action
+        .strip_prefix("service_profile_lease_")
+        .ok_or_else(|| format!("Invalid profile lease action: {action}"))?;
+    let lease_id = required_command_string(command, "leaseId")?.to_string();
+    let expected_revision = required_command_string(command, "leaseRevision")?.to_string();
+    let raw_capability = profile_capability_from_command(command)?;
+    let expires_at = optional_command_string(command, "expiresAt");
+    let now = service_now_timestamp();
+    let repository = LockedServiceStateRepository::default_json()?;
+
+    repository.mutate(|state| {
+        let authority = authenticate_profile_capability(
+            &state.service_principals,
+            raw_capability.as_str(),
+            None,
+        )
+        .map_err(principal_error_string)?;
+        let before = inspect_profile_lease(state, &lease_id, &now).map_err(lease_error_string)?;
+        let lease = match operation {
+            "rejoin" => {
+                rejoin_profile_lease(state, &lease_id, &expected_revision, &authority, &now)
+            }
+            "renew" => renew_profile_lease(
+                state,
+                &lease_id,
+                &expected_revision,
+                &authority,
+                &now,
+                expires_at
+                    .as_deref()
+                    .ok_or_else(|| "profile_lease_expires_at_required".to_string())?,
+            ),
+            "release" => {
+                release_profile_lease(state, &lease_id, &expected_revision, &authority, &now)
+            }
+            _ => return Err(format!("Unsupported profile lease operation: {operation}")),
+        }
+        .map_err(lease_error_string)?;
+        append_profile_lease_event(
+            state,
+            operation,
+            Some(&before),
+            Some(&lease),
+            &authority.principal_id,
+            &authority.profile_id,
+            lease.browser_id.as_deref(),
+            &now,
+            command,
+        );
+        Ok(json!({
+            "operation": operation,
+            "lease": lease,
+            "previousLeaseRevision": before.lease_revision,
+            "leaseRevision": lease.lease_revision,
+            "principalId": authority.principal_id,
+            "profileId": authority.profile_id,
+            "appliedAt": now,
+        }))
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn append_profile_lease_event(
+    state: &mut ServiceState,
+    operation: &str,
+    before: Option<&ProfileLeaseRecord>,
+    after: Option<&ProfileLeaseRecord>,
+    principal_id: &str,
+    profile_id: &str,
+    browser_id: Option<&str>,
+    now: &str,
+    command: &serde_json::Value,
+) {
+    state.events.push(ServiceEvent {
+        id: format!("event-{}", uuid::Uuid::new_v4()),
+        timestamp: now.to_string(),
+        kind: ServiceEventKind::ProfileLeaseLifecycleChanged,
+        message: format!("Profile lease {operation}: {profile_id}"),
+        browser_id: browser_id.map(ToString::to_string),
+        profile_id: Some(profile_id.to_string()),
+        session_id: after
+            .or(before)
+            .and_then(|lease| lease.session_ids.first().cloned()),
+        service_name: optional_command_string(command, "serviceName"),
+        agent_name: optional_command_string(command, "agentName"),
+        task_name: optional_command_string(command, "taskName"),
+        details: Some(json!({
+            "operation": operation,
+            "principalId": principal_id,
+            "previousLeaseRevision": before.map(|lease| lease.lease_revision.as_str()),
+            "leaseRevision": after.map(|lease| lease.lease_revision.as_str()),
+            "authorizedActions": after.map(|lease| &lease.authorized_actions),
+            "recourse": after.map(|lease| lease.recourse),
+        })),
+        ..ServiceEvent::default()
+    });
+    if state.events.len() > 100 {
+        let excess = state.events.len() - 100;
+        state.events.drain(0..excess);
+    }
+}
+
+fn profile_capability_from_command(command: &serde_json::Value) -> Result<String, String> {
+    if let Some(capability) = optional_command_string(command, "profileCapability") {
+        return Ok(capability);
+    }
+    let path = absolute_command_path(command, "profileCapabilityFile")?;
+    read_private_capability_file(&path)
+}
+
+fn read_private_capability_file(path: &Path) -> Result<String, String> {
+    let metadata = fs::metadata(path).map_err(|error| {
+        format!(
+            "profile_capability_file_unreadable:{}:{error}",
+            path.display()
+        )
+    })?;
+    if !metadata.is_file() {
+        return Err(format!(
+            "profile_capability_file_not_regular:{}",
+            path.display()
+        ));
+    }
+    #[cfg(unix)]
+    if metadata.permissions().mode() & 0o077 != 0 {
+        return Err(format!(
+            "profile_capability_file_permissions_too_open:{}",
+            path.display()
+        ));
+    }
+    let raw = fs::read_to_string(path).map_err(|error| {
+        format!(
+            "profile_capability_file_unreadable:{}:{error}",
+            path.display()
+        )
+    })?;
+    if raw.len() > 4096 {
+        return Err("profile_capability_file_too_large".to_string());
+    }
+    let capability = raw.trim().to_string();
+    if capability.is_empty() {
+        return Err("profile_capability_file_empty".to_string());
+    }
+    Ok(capability)
+}
+
+fn write_private_capability_file(path: &Path, capability: &str) -> Result<(), String> {
+    if !path.is_absolute() {
+        return Err("profile_capability_output_must_be_absolute".to_string());
+    }
+    let parent = path
+        .parent()
+        .ok_or_else(|| "profile_capability_output_has_no_parent".to_string())?;
+    if !parent.is_dir() {
+        return Err(format!(
+            "profile_capability_output_parent_missing:{}",
+            parent.display()
+        ));
+    }
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    options.mode(0o600);
+    let mut file = options.open(path).map_err(|error| {
+        format!(
+            "profile_capability_output_create_failed:{}:{error}",
+            path.display()
+        )
+    })?;
+    if let Err(error) = file
+        .write_all(format!("{capability}\n").as_bytes())
+        .and_then(|_| file.sync_all())
+    {
+        let _ = fs::remove_file(path);
+        return Err(format!(
+            "profile_capability_output_write_failed:{}:{error}",
+            path.display()
+        ));
+    }
+    Ok(())
+}
+
+fn required_command_string<'a>(
+    command: &'a serde_json::Value,
+    field: &str,
+) -> Result<&'a str, String> {
+    command
+        .get(field)
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| format!("Missing required profile lease field: {field}"))
+}
+
+fn optional_command_string(command: &serde_json::Value, field: &str) -> Option<String> {
+    command
+        .get(field)
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+}
+
+fn absolute_command_path(command: &serde_json::Value, field: &str) -> Result<PathBuf, String> {
+    let path = PathBuf::from(required_command_string(command, field)?);
+    if !path.is_absolute() {
+        return Err(format!("{field} must be an absolute path"));
+    }
+    Ok(path)
+}
+
+fn lease_error_string(error: ProfileLeaseError) -> String {
+    format!("profile_lease_{}:{}", error.code.as_str(), error.message)
+}
+
+fn principal_error_string(error: super::service_principal::ServicePrincipalError) -> String {
+    format!(
+        "service_principal_{}:{}",
+        error.code.as_str(),
+        error.message
+    )
 }
 
 pub(crate) fn inspect_profile_lease(
@@ -649,6 +1148,79 @@ fn bound_profile_lease(
     record
 }
 
+fn unbound_capability_profile_lease(
+    state: &ServiceState,
+    capability: &super::service_principal::ServiceProfileCapability,
+    now: &str,
+) -> ProfileLeaseRecord {
+    let profile_identity_digest = state
+        .profiles
+        .get(&capability.profile_id)
+        .and_then(|profile| profile.user_data_dir.as_deref())
+        .and_then(|path| {
+            crate::runtime_profile::canonical_profile_identity_digest(Path::new(path)).ok()
+        });
+    let owner = profile_identity_digest
+        .as_deref()
+        .and_then(|digest| state.runtime_owner_registry.owners.get(digest));
+    let sessions = sessions_for_profile(state, &capability.profile_id);
+    let session_ids = sessions
+        .iter()
+        .map(|session| session.id.clone())
+        .collect::<Vec<_>>();
+    let active = sessions
+        .iter()
+        .copied()
+        .filter(|session| !inactive_or_expired(session.lease, session.expires_at.as_deref(), now))
+        .collect::<Vec<_>>();
+    let mut record = ProfileLeaseRecord {
+        schema_version: PROFILE_LEASE_SCHEMA_VERSION.to_string(),
+        id: profile_lease_id(
+            &capability.principal_id,
+            profile_identity_digest
+                .as_deref()
+                .unwrap_or(capability.profile_id.as_str()),
+        ),
+        lease_revision: String::new(),
+        principal_id: Some(capability.principal_id.clone()),
+        principal_provenance: Some(ServicePrincipalProvenance::RegisteredCapability),
+        profile_id: capability.profile_id.clone(),
+        profile_identity_digest,
+        browser_id: owner.map(|owner| owner.browser_id.clone()),
+        session_ids: session_ids.clone(),
+        tab_ids: tabs_for_sessions(state, &session_ids),
+        mode: lease_mode(&active),
+        state: "identity_reconciliation_required".to_string(),
+        owner_generation: owner.map(|owner| owner.owner_generation),
+        process_instance_digest: owner.map(|owner| owner.process_instance_digest.clone()),
+        route_ids: owner
+            .map(|owner| routes_for_browser(state, &owner.browser_id))
+            .unwrap_or_default(),
+        last_heartbeat_at: latest_value(
+            sessions
+                .iter()
+                .filter_map(|session| session.last_lease_observed_at.as_deref()),
+        ),
+        expires_at: earliest_value(
+            active
+                .iter()
+                .filter_map(|session| session.expires_at.as_deref()),
+        ),
+        cleanup_obligation: owner
+            .and_then(|owner| cleanup_obligation_for_browser(state, &owner.browser_id)),
+        blocking_identity_axes: vec!["runtime_owner_principal_binding_missing".to_string()],
+        authorized_actions: READ_ACTIONS
+            .iter()
+            .chain(std::iter::once(&"reconcile_plan"))
+            .map(ToString::to_string)
+            .collect(),
+        recourse: PrincipalContinuityRecourse::ReconcilePrincipalIdentity,
+        observation_only: true,
+    };
+    record.lease_revision = lease_revision(&record);
+    record
+}
+
 fn legacy_profile_lease(state: &ServiceState, profile_id: &str, now: &str) -> ProfileLeaseRecord {
     let sessions = sessions_for_profile(state, profile_id);
     let session_ids = sessions
@@ -959,6 +1531,7 @@ mod tests {
     use crate::runtime_owner_transfer::{
         ProfileOwner, ProfileOwnerState, RuntimeOwnerPrincipalBinding, RuntimeOwnerRegistry,
     };
+    use crate::test_utils::EnvGuard;
     use std::collections::BTreeMap;
 
     const CAPABILITY: &str = "profile-lease-test-capability-with-more-than-thirty-two-characters";
@@ -1047,6 +1620,25 @@ mod tests {
         (state, authority, lease_id)
     }
 
+    fn temp_service_home(label: &str) -> PathBuf {
+        let home = std::env::temp_dir().join(format!(
+            "agent-browser-profile-lease-{label}-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&home).unwrap();
+        home
+    }
+
+    fn save_default_state(state: ServiceState) {
+        let repository = LockedServiceStateRepository::default_json().unwrap();
+        repository
+            .mutate(|current| {
+                *current = state;
+                Ok(())
+            })
+            .unwrap();
+    }
+
     #[test]
     fn projection_exposes_exact_owner_and_authorized_recourse() {
         let (state, _, lease_id) = state_with_lease();
@@ -1077,6 +1669,106 @@ mod tests {
             value.as_object().unwrap().len(),
             schema["required"].as_array().unwrap().len()
         );
+    }
+
+    #[tokio::test]
+    async fn registration_writes_private_capability_and_persists_only_its_digest() {
+        let home = temp_service_home("register");
+        let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+        guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+        let (mut state, _, _) = state_with_lease();
+        state.service_principals = Default::default();
+        state.runtime_owner_registry.principal_bindings.clear();
+        save_default_state(state);
+
+        let capability_path = home.join("odollo.cap");
+        let response = handle_service_profile_lease_command(&json!({
+            "action": "service_profile_lease_register",
+            "principalId": "principal:odollo-fulfillment",
+            "profileId": "odollo-fulfillment",
+            "displayName": "Odollo fulfillment",
+            "registeredBy": "test-operator",
+            "capabilityOut": capability_path,
+        }))
+        .await
+        .unwrap();
+
+        assert_eq!(response["boundToCurrentOwner"], true);
+        assert_eq!(response["capabilityWritten"], true);
+        let raw_capability = fs::read_to_string(&capability_path).unwrap();
+        assert!(raw_capability.starts_with("abpc_v1_"));
+        #[cfg(unix)]
+        assert_eq!(
+            fs::metadata(&capability_path).unwrap().permissions().mode() & 0o077,
+            0
+        );
+        let state_path = super::super::service_store::default_service_state_path().unwrap();
+        let persisted_raw = fs::read_to_string(&state_path).unwrap();
+        assert!(!persisted_raw.contains(raw_capability.trim()));
+        let persisted = LockedServiceStateRepository::default_json()
+            .unwrap()
+            .load_snapshot()
+            .unwrap();
+        assert_eq!(persisted.service_principals.profile_capabilities.len(), 1);
+        assert_eq!(persisted.runtime_owner_registry.principal_bindings.len(), 1);
+        assert!(persisted.events.iter().any(|event| {
+            event.kind == ServiceEventKind::ProfileLeaseLifecycleChanged
+                && event
+                    .details
+                    .as_ref()
+                    .and_then(|details| details["operation"].as_str())
+                    == Some("register")
+        }));
+
+        drop(guard);
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[tokio::test]
+    async fn capability_file_mutation_is_revision_guarded_and_never_persisted() {
+        let home = temp_service_home("mutate");
+        let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+        guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+        let (state, _, lease_id) = state_with_lease();
+        let lease_revision = inspect_profile_lease(&state, &lease_id, NOW)
+            .unwrap()
+            .lease_revision;
+        save_default_state(state);
+        let capability_path = home.join("odollo.cap");
+        write_private_capability_file(&capability_path, CAPABILITY).unwrap();
+
+        let response = handle_service_profile_lease_command(&json!({
+            "action": "service_profile_lease_renew",
+            "leaseId": lease_id,
+            "leaseRevision": lease_revision,
+            "profileCapabilityFile": capability_path,
+            "expiresAt": "2026-08-27T14:00:00Z",
+            "serviceName": "OdolloFulfillment",
+        }))
+        .await
+        .unwrap();
+        assert_eq!(response["operation"], "renew");
+        assert_ne!(response["leaseRevision"], response["previousLeaseRevision"]);
+
+        let state_path = super::super::service_store::default_service_state_path().unwrap();
+        let persisted_raw = fs::read_to_string(&state_path).unwrap();
+        assert!(!persisted_raw.contains(CAPABILITY));
+        let persisted = LockedServiceStateRepository::default_json()
+            .unwrap()
+            .load_snapshot()
+            .unwrap();
+        let event = persisted
+            .events
+            .iter()
+            .find(|event| event.kind == ServiceEventKind::ProfileLeaseLifecycleChanged)
+            .unwrap();
+        assert_eq!(event.details.as_ref().unwrap()["operation"], "renew");
+        assert!(!serde_json::to_string(event).unwrap().contains(CAPABILITY));
+
+        drop(guard);
+        fs::remove_dir_all(home).unwrap();
     }
 
     #[test]

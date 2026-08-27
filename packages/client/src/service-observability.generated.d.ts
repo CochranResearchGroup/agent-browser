@@ -59,6 +59,7 @@ export type ServiceEventKind =
   | "tab_lifecycle_changed"
   | "profile_lease_wait_started"
   | "profile_lease_wait_ended"
+  | "profile_lease_lifecycle_changed"
   | "viewer_takeover_requested"
   | "viewer_connected"
   | "viewer_disconnected"
@@ -417,6 +418,23 @@ export interface ServiceProfileLeaseRecord {
   recourse: 'rejoin_owned_browser' | 'replace_stale_same_principal_session' | 'wait_for_foreign_principal' | 'reconcile_principal_identity';
   observationOnly: boolean;
   [key: string]: unknown;
+}
+
+export interface ServiceProfileLeaseFinding {
+  code: string;
+  severity: string;
+  leaseId: string;
+  profileId: string;
+  message: string;
+  safeActions: string[];
+}
+
+export interface ServiceProfileLeaseDoctorReport {
+  schemaVersion: 'agent-browser.profile-lease.v1';
+  observedAt: string;
+  healthy: boolean;
+  leaseCount: number;
+  findings: ServiceProfileLeaseFinding[];
 }
 
 export interface ServiceSessionRecord {
@@ -1078,8 +1096,68 @@ export interface ServiceViewerLeasesResponse extends ServiceListResponse<Service
 export interface ServiceProfileLeasesResponse extends ServiceListResponse<ServiceProfileLeaseRecord> {
   profileLeases: ServiceProfileLeaseRecord[];
   observedAt: string;
-  doctor: Record<string, unknown>;
+  doctor: ServiceProfileLeaseDoctorReport;
 }
+
+export interface ServiceProfileLeaseDetailResponse {
+  lease: ServiceProfileLeaseRecord;
+  observedAt: string;
+}
+
+export interface ServiceProfileLeaseExplainResponse extends ServiceProfileLeaseDetailResponse {
+  explanation: {
+    recourse: ServiceProfileLeaseRecord['recourse'];
+    blockingIdentityAxes: string[];
+    authorizedActions: string[];
+    observationOnly: boolean;
+    findings: ServiceProfileLeaseFinding[];
+  };
+}
+
+export interface ServiceProfileLeaseDoctorResponse {
+  doctor: ServiceProfileLeaseDoctorReport;
+}
+
+export interface ServiceProfileLeaseMutationResponse {
+  operation: 'rejoin' | 'renew' | 'release';
+  lease: ServiceProfileLeaseRecord;
+  previousLeaseRevision: string;
+  leaseRevision: string;
+  principalId: string;
+  profileId: string;
+  appliedAt: string;
+}
+
+export interface ServiceProfileLeaseReconcilePlan {
+  schemaVersion: 'agent-browser.profile-lease-reconcile-plan.v1';
+  planId: string;
+  leaseId: string;
+  leaseRevision: string;
+  principalId: string;
+  profileId: string;
+  bootEpoch: string | null;
+  effectCapable: boolean;
+  blockedReasons: string[];
+  idempotencyKey: string;
+  expiresAt: string;
+  seal: string;
+  [key: string]: unknown;
+}
+
+export interface ServiceProfileLeaseReconcileReceipt {
+  schemaVersion: 'agent-browser.profile-lease-reconcile-receipt.v1';
+  idempotencyKey: string;
+  planId: string;
+  leaseId: string;
+  principalId: string;
+  replayed: boolean;
+  transitionCount: number;
+  resultingLeaseRevision: string;
+  [key: string]: unknown;
+}
+
+export interface ServiceProfileLeaseReconcilePlanResponse { plan: ServiceProfileLeaseReconcilePlan; }
+export interface ServiceProfileLeaseReconcileApplyResponse { receipt: ServiceProfileLeaseReconcileReceipt; }
 
 export interface ServiceSessionsResponse extends ServiceListResponse<ServiceSessionRecord> {
   sessions: ServiceSessionRecord[];
@@ -1668,6 +1746,42 @@ export interface ServiceObservabilityHttpOptions {
 
 export interface ServiceQueryOptions extends ServiceObservabilityHttpOptions {
   query?: Record<string, string | number | boolean | null | undefined>;
+}
+
+export interface ServiceProfileLeaseDetailOptions extends ServiceObservabilityHttpOptions {
+  id: string;
+}
+
+export interface ServiceProfileLeaseWatchOptions extends ServiceObservabilityHttpOptions {
+  intervalMs?: number;
+  count?: number;
+}
+
+export interface ServiceProfileLeaseMutationOptions extends ServiceProfileLeaseDetailOptions {
+  leaseRevision: string;
+  /** Secret issued by service leases register. The helper sends it only in Authorization. */
+  profileCapability: string;
+  expiresAt?: string;
+  serviceName?: string;
+  agentName?: string;
+  taskName?: string;
+}
+
+export interface ServiceProfileLeaseRenewOptions extends ServiceProfileLeaseMutationOptions {
+  expiresAt: string;
+}
+
+export interface ServiceProfileLeaseReconcilePlanOptions extends ServiceProfileLeaseMutationOptions {
+  expiresAt: string;
+  idempotencyKey?: string;
+}
+
+export interface ServiceProfileLeaseReconcileApplyOptions extends ServiceProfileLeaseDetailOptions {
+  profileCapability: string;
+  plan: ServiceProfileLeaseReconcilePlan;
+  serviceName?: string;
+  agentName?: string;
+  taskName?: string;
 }
 
 export interface ServiceMonitorQueryOptions extends ServiceQueryOptions {
@@ -2872,6 +2986,15 @@ export declare function getServiceRemoteViewRoutes(options: ServiceQueryOptions)
 export declare function getServiceRoutePool(options: ServiceQueryOptions): Promise<ServiceRoutePoolResponse>;
 export declare function getServiceViewerLeases(options: ServiceQueryOptions): Promise<ServiceViewerLeasesResponse>;
 export declare function getServiceProfileLeases(options: ServiceQueryOptions): Promise<ServiceProfileLeasesResponse>;
+export declare function watchServiceProfileLeases(options: ServiceProfileLeaseWatchOptions): AsyncGenerator<ServiceProfileLeasesResponse, void, void>;
+export declare function getServiceProfileLease(options: ServiceProfileLeaseDetailOptions): Promise<ServiceProfileLeaseDetailResponse>;
+export declare function explainServiceProfileLease(options: ServiceProfileLeaseDetailOptions): Promise<ServiceProfileLeaseExplainResponse>;
+export declare function doctorServiceProfileLeases(options: ServiceQueryOptions): Promise<ServiceProfileLeaseDoctorResponse>;
+export declare function rejoinServiceProfileLease(options: ServiceProfileLeaseMutationOptions): Promise<ServiceProfileLeaseMutationResponse>;
+export declare function renewServiceProfileLease(options: ServiceProfileLeaseRenewOptions): Promise<ServiceProfileLeaseMutationResponse>;
+export declare function releaseServiceProfileLease(options: ServiceProfileLeaseMutationOptions): Promise<ServiceProfileLeaseMutationResponse>;
+export declare function planServiceProfileLeaseReconciliation(options: ServiceProfileLeaseReconcilePlanOptions): Promise<ServiceProfileLeaseReconcilePlanResponse>;
+export declare function applyServiceProfileLeaseReconciliation(options: ServiceProfileLeaseReconcileApplyOptions): Promise<ServiceProfileLeaseReconcileApplyResponse>;
 export declare function findServiceDisplayAllocation(records: ServiceDisplayAllocationRecord[] | ServiceDisplayAllocationsResponse | null | undefined, id: string): ServiceDisplayAllocationRecord | null;
 export declare function findServiceRemoteViewRoute(records: ServiceRemoteViewRouteRecord[] | ServiceRemoteViewRoutesResponse | null | undefined, id: string): ServiceRemoteViewRouteRecord | null;
 export declare function findServiceViewerLease(records: ServiceViewerLeaseRecord[] | ServiceViewerLeasesResponse | null | undefined, id: string): ServiceViewerLeaseRecord | null;

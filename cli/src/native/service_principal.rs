@@ -137,6 +137,21 @@ pub(crate) enum ServicePrincipalFailureCode {
     WorkLeaseConflict,
 }
 
+impl ServicePrincipalFailureCode {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::InvalidRegistration => "invalid_registration",
+            Self::RegistrationConflict => "registration_conflict",
+            Self::CapabilityMissing => "capability_missing",
+            Self::CapabilityMismatch => "capability_mismatch",
+            Self::CapabilityRevoked => "capability_revoked",
+            Self::PrincipalUnavailable => "principal_unavailable",
+            Self::ProfileMismatch => "profile_mismatch",
+            Self::WorkLeaseConflict => "work_lease_conflict",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ServicePrincipalError {
     pub(crate) code: ServicePrincipalFailureCode,
