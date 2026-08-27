@@ -173,7 +173,15 @@ During Service State migration, a missing profile row is materialized as a
 persistent placeholder only when every referencing legacy session is unbound:
 no principal, work capability, browser, or tab. This restores referential
 identity without granting authority. Effect-bearing missing-profile references
-remain a pre-commit blocker.
+remain a pre-commit blocker. A stale tab whose retained handle is already
+invalid with `browser_missing` may be preserved through an inert `not_started`
+browser placeholder and released system-session placeholder only when it has no
+principal, work lease, process identity, runtime owner, or existing session
+binding.
+Terminal orphaned or released remote-view evidence may use the same inert
+placeholders only without process identity, active viewer or controller leases,
+principal-bound ownership, or existing session binding. A unique unbound legacy
+owner is preserved as historical identity, not converted into new authority.
 
 ```bash
 agent-browser install transactions rollback --transaction-id <id> --expected-revision <revision> --candidate-generation <generation> --census-digest <sha256-or-none> --json

@@ -5604,6 +5604,11 @@ Legacy migration materializes a persistent placeholder profile only for an
 inert session with no principal, work capability, browser, or tab. This repairs
 referential identity without granting authority; effect-bearing missing-profile
 references still block before commit.
+An already-invalid browser_missing tab can retain its evidence through inert
+not_started browser and released system-session placeholders. Terminal orphaned
+or released remote-view evidence can do the same only without process identity,
+active viewer or controller leases, principal-bound ownership, or existing
+session binding. Effect-bearing references still block.
 Real-host apply starts a shadow candidate dashboard on the second port after
 ingress. After runtime transfer it waits up to five minutes for an authenticated
 candidate handoff resolution. A ready response served by the staged candidate

@@ -5,7 +5,9 @@
 //! existing principal registry and exact runtime-owner bindings remain the
 //! only migration inputs that can produce effect-capable lease authority.
 
-use super::service_model::{BrowserProfile, ServiceState};
+use super::service_model::{
+    BrowserProcess, BrowserProfile, BrowserSession, LeaseState, ServiceState,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -129,6 +131,9 @@ pub(crate) fn stage_service_state_migration(
     let mut state = read_service_state(raw).map_err(|error| error.to_string())?;
     prepare_service_state_for_persistence(&mut state)?;
     materialize_inert_legacy_profile_placeholders(&mut state);
+    materialize_inert_legacy_remote_view_placeholders(&mut state);
+    materialize_inert_legacy_browser_placeholders(&mut state);
+    materialize_inert_legacy_session_placeholders(&mut state);
     // Full cross-projection integrity is an installation migration commit
     // gate. Ordinary runtime writes can update related projections in
     // multiple repository mutations and must remain able to converge them.
@@ -137,6 +142,167 @@ pub(crate) fn stage_service_state_migration(
         .map_err(|error| format!("service_state_migration_serialize_failed:{error}"))?;
     bytes.push(b'\n');
     Ok(StagedServiceStateMigration { plan, bytes })
+}
+
+/// Preserve the identity of an already-terminal remote-view projection.
+///
+/// Orphaned and released display or route rows are historical evidence, not
+/// live browser authority. A placeholder is allowed only when every reference
+/// to the missing browser is terminal or already-invalid, no process identity
+/// exists, any retained owner is unique and unbound from a principal, and no
+/// viewer or controller lease can still authorize interaction.
+fn materialize_inert_legacy_remote_view_placeholders(state: &mut ServiceState) {
+    let missing_browsers = state
+        .display_allocations
+        .values()
+        .filter_map(|allocation| allocation.owner_browser_id.as_ref())
+        .chain(
+            state
+                .remote_view_routes
+                .values()
+                .filter_map(|route| route.browser_id.as_ref()),
+        )
+        .filter(|browser_id| !browser_id.trim().is_empty())
+        .filter(|browser_id| !state.browsers.contains_key(*browser_id))
+        .filter(|browser_id| !state.browser_process_identities.contains_key(*browser_id))
+        .filter(|browser_id| {
+            let owners = state
+                .runtime_owner_registry
+                .owners
+                .values()
+                .filter(|owner| owner.browser_id == ***browser_id)
+                .collect::<Vec<_>>();
+            owners.is_empty()
+                || (owners.len() == 1
+                    && owners[0].pending_transfer.is_none()
+                    && !state
+                        .runtime_owner_registry
+                        .principal_bindings
+                        .contains_key(&owners[0].profile_identity_digest))
+        })
+        .filter(|browser_id| {
+            !state
+                .sessions
+                .values()
+                .any(|session| session.browser_ids.iter().any(|id| id == *browser_id))
+        })
+        .filter(|browser_id| {
+            let allocations = state
+                .display_allocations
+                .values()
+                .filter(|allocation| allocation.owner_browser_id.as_ref() == Some(*browser_id))
+                .collect::<Vec<_>>();
+            allocations.iter().all(|allocation| {
+                allocation.boot_epoch.is_none()
+                    && allocation.readiness.as_ref().is_some_and(|readiness| {
+                        (allocation.state == "orphaned"
+                            && readiness.get("state").and_then(Value::as_str) == Some("orphaned")
+                            && readiness.get("reason").and_then(Value::as_str)
+                                == Some("owner_browser_not_ready"))
+                            || (allocation.state == "released"
+                                && readiness.get("state").and_then(Value::as_str)
+                                    == Some("released")
+                                && matches!(
+                                    readiness.get("reason").and_then(Value::as_str),
+                                    Some(
+                                        "operator_requested_close"
+                                            | "duplicate_browser_record_merged"
+                                            | "route_switch_parking"
+                                    )
+                                ))
+                    })
+            })
+        })
+        .filter(|browser_id| {
+            state
+                .tabs
+                .values()
+                .filter(|tab| tab.browser_id == ***browser_id)
+                .all(|tab| {
+                    tab.principal_id.is_none()
+                        && tab.work_lease_id.is_none()
+                        && tab.service_tab_handle.as_ref().is_some_and(|handle| {
+                            !handle.valid
+                                && handle.stale_reason.as_deref() == Some("browser_missing")
+                        })
+                })
+        })
+        .filter(|browser_id| {
+            state
+                .remote_view_routes
+                .values()
+                .filter(|route| route.browser_id.as_ref() == Some(*browser_id))
+                .all(|route| {
+                    route.viewer_lease_ids.is_empty()
+                        && route.controller_lease_id.is_none()
+                        && ((route.state == "orphaned" && route.controller_epoch == 0)
+                            || (route.state == "released"
+                                && route.last_provider_event.as_deref() == Some("route_released")))
+                })
+        })
+        .cloned()
+        .collect::<std::collections::BTreeSet<_>>();
+
+    for browser_id in missing_browsers {
+        let allocations = state
+            .display_allocations
+            .values()
+            .filter(|allocation| allocation.owner_browser_id.as_deref() == Some(&browser_id))
+            .collect::<Vec<_>>();
+        let profile_ids = allocations
+            .iter()
+            .filter_map(|allocation| allocation.profile_id.clone())
+            .collect::<std::collections::BTreeSet<_>>();
+        let allocation_ids = allocations
+            .iter()
+            .map(|allocation| allocation.id.clone())
+            .collect::<std::collections::BTreeSet<_>>();
+        let session_ids = allocations
+            .iter()
+            .filter_map(|allocation| allocation.owner_session_id.clone())
+            .chain(
+                state
+                    .remote_view_routes
+                    .values()
+                    .filter(|route| route.browser_id.as_deref() == Some(&browser_id))
+                    .filter_map(|route| route.session_id.clone()),
+            )
+            .filter(|session_id| !session_id.trim().is_empty())
+            .collect::<std::collections::BTreeSet<_>>();
+
+        let profile_id = (profile_ids.len() == 1)
+            .then(|| profile_ids.iter().next().cloned())
+            .flatten();
+        let display_allocation_id = (allocation_ids.len() == 1)
+            .then(|| allocation_ids.iter().next().cloned())
+            .flatten();
+        state.browsers.insert(
+            browser_id.clone(),
+            BrowserProcess {
+                id: browser_id.clone(),
+                profile_id: profile_id.clone(),
+                host: super::service_model::BrowserHost::RemoteHeaded,
+                display_allocation_id,
+                active_session_ids: session_ids.iter().cloned().collect(),
+                last_error: Some(
+                    "Migrated inert placeholder for orphaned remote-view evidence.".to_string(),
+                ),
+                ..BrowserProcess::default()
+            },
+        );
+        for session_id in session_ids {
+            state
+                .sessions
+                .entry(session_id.clone())
+                .or_insert_with(|| BrowserSession {
+                    id: session_id,
+                    profile_id: profile_id.clone(),
+                    lease: LeaseState::Released,
+                    browser_ids: vec![browser_id.clone()],
+                    ..BrowserSession::default()
+                });
+        }
+    }
 }
 
 /// Preserve an inert legacy lease whose profile row was never persisted.
@@ -173,6 +339,124 @@ fn materialize_inert_legacy_profile_placeholders(state: &mut ServiceState) {
                 ),
                 persistent: true,
                 ..BrowserProfile::default()
+            },
+        );
+    }
+}
+
+/// Preserve a stale tab record whose historical browser row was never kept.
+///
+/// The invalid `browser_missing` handle is the migration proof that the tab
+/// cannot authorize work. Any principal, work lease, process identity, owner,
+/// or retained session reference keeps the missing browser as a hard blocker.
+fn materialize_inert_legacy_browser_placeholders(state: &mut ServiceState) {
+    let missing_browsers = state
+        .tabs
+        .values()
+        .map(|tab| tab.browser_id.as_str())
+        .filter(|browser_id| !browser_id.trim().is_empty())
+        .filter(|browser_id| !state.browsers.contains_key(*browser_id))
+        .filter(|browser_id| !state.browser_process_identities.contains_key(*browser_id))
+        .filter(|browser_id| {
+            !state
+                .sessions
+                .values()
+                .any(|session| session.browser_ids.iter().any(|id| id == *browser_id))
+        })
+        .filter(|browser_id| {
+            !state
+                .runtime_owner_registry
+                .owners
+                .values()
+                .any(|owner| owner.browser_id == **browser_id)
+        })
+        .filter(|browser_id| {
+            let tabs = state
+                .tabs
+                .values()
+                .filter(|tab| tab.browser_id == **browser_id)
+                .collect::<Vec<_>>();
+            !tabs.is_empty()
+                && tabs.iter().all(|tab| {
+                    tab.principal_id.is_none()
+                        && tab.work_lease_id.is_none()
+                        && tab.service_tab_handle.as_ref().is_some_and(|handle| {
+                            !handle.valid
+                                && handle.stale_reason.as_deref() == Some("browser_missing")
+                        })
+                })
+        })
+        .map(str::to_string)
+        .collect::<std::collections::BTreeSet<_>>();
+
+    for browser_id in missing_browsers {
+        state.browsers.insert(
+            browser_id.clone(),
+            BrowserProcess {
+                id: browser_id,
+                last_error: Some(
+                    "Migrated inert placeholder for stale browser_missing tab evidence."
+                        .to_string(),
+                ),
+                ..BrowserProcess::default()
+            },
+        );
+    }
+}
+
+/// Restore the routing identity around an already-invalid stale tab.
+///
+/// The synthesized session is released and system-owned. It retains the
+/// historical browser and tab links without creating a principal or work
+/// capability, so the stale tab stays non-effect-capable.
+fn materialize_inert_legacy_session_placeholders(state: &mut ServiceState) {
+    let mut missing_sessions = std::collections::BTreeMap::<
+        String,
+        (
+            std::collections::BTreeSet<String>,
+            std::collections::BTreeSet<String>,
+        ),
+    >::new();
+    for tab in state.tabs.values() {
+        let inert_missing_browser = tab.principal_id.is_none()
+            && tab.work_lease_id.is_none()
+            && state.browsers.get(&tab.browser_id).is_some_and(|browser| {
+                browser.health == super::service_model::BrowserHealth::NotStarted
+                    && browser.pid.is_none()
+                    && browser.last_error.as_deref()
+                        == Some(
+                            "Migrated inert placeholder for stale browser_missing tab evidence.",
+                        )
+            })
+            && tab.service_tab_handle.as_ref().is_some_and(|handle| {
+                !handle.valid && handle.stale_reason.as_deref() == Some("browser_missing")
+            });
+        if !inert_missing_browser {
+            continue;
+        }
+        let session_ids = [tab.session_id.as_ref(), tab.owner_session_id.as_ref()]
+            .into_iter()
+            .flatten()
+            .filter(|session_id| !session_id.trim().is_empty())
+            .filter(|session_id| !state.sessions.contains_key(*session_id))
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>();
+        for session_id in session_ids {
+            let (browser_ids, tab_ids) = missing_sessions.entry(session_id).or_default();
+            browser_ids.insert(tab.browser_id.clone());
+            tab_ids.insert(tab.id.clone());
+        }
+    }
+
+    for (session_id, (browser_ids, tab_ids)) in missing_sessions {
+        state.sessions.insert(
+            session_id.clone(),
+            BrowserSession {
+                id: session_id,
+                lease: LeaseState::Released,
+                browser_ids: browser_ids.into_iter().collect(),
+                tab_ids: tab_ids.into_iter().collect(),
+                ..BrowserSession::default()
             },
         );
     }
@@ -551,6 +835,262 @@ mod tests {
         assert_eq!(
             stage_service_state_migration(&raw).unwrap_err(),
             "service_state_session_profile_missing:holder:work"
+        );
+    }
+
+    #[test]
+    fn stale_invalid_tab_materializes_inert_missing_browser() {
+        let raw = json!({
+            "tabs": {
+                "target:tab-a": {
+                    "id": "target:tab-a",
+                    "browserId": "session:im-receipts",
+                    "targetId": "tab-a",
+                    "sessionId": "im-receipts",
+                    "lifecycle": "ready",
+                    "serviceTabHandle": {
+                        "browserId": "session:im-receipts",
+                        "sessionName": "im-receipts",
+                        "tabId": "target:tab-a",
+                        "targetId": "tab-a",
+                        "valid": false,
+                        "staleReason": "browser_missing"
+                    }
+                }
+            }
+        })
+        .to_string();
+
+        let staged = stage_service_state_migration(&raw).unwrap();
+        let migrated: Value = serde_json::from_slice(&staged.bytes).unwrap();
+        assert_eq!(
+            migrated["browsers"]["session:im-receipts"]["id"],
+            "session:im-receipts"
+        );
+        assert_eq!(
+            migrated["browsers"]["session:im-receipts"]["health"],
+            "not_started"
+        );
+        assert_eq!(
+            migrated["browsers"]["session:im-receipts"]["lastError"],
+            "Migrated inert placeholder for stale browser_missing tab evidence."
+        );
+        assert_eq!(migrated["sessions"]["im-receipts"]["lease"], "released");
+        assert_eq!(
+            migrated["sessions"]["im-receipts"]["browserIds"],
+            json!(["session:im-receipts"])
+        );
+        assert_eq!(
+            migrated["sessions"]["im-receipts"]["tabIds"],
+            json!(["target:tab-a"])
+        );
+        assert_eq!(migrated["tabs"]["target:tab-a"]["lifecycle"], "ready");
+    }
+
+    #[test]
+    fn valid_tab_with_missing_browser_stays_blocked() {
+        let raw = json!({
+            "tabs": {
+                "target:tab-a": {
+                    "id": "target:tab-a",
+                    "browserId": "session:im-receipts",
+                    "lifecycle": "ready",
+                    "serviceTabHandle": {
+                        "browserId": "session:im-receipts",
+                        "tabId": "target:tab-a",
+                        "valid": true
+                    }
+                }
+            }
+        })
+        .to_string();
+
+        assert_eq!(
+            stage_service_state_migration(&raw).unwrap_err(),
+            "service_state_tab_browser_missing:target:tab-a:session:im-receipts"
+        );
+    }
+
+    #[test]
+    fn orphaned_remote_view_materializes_inert_browser_and_session() {
+        let raw = json!({
+            "profiles": {
+                "bill-soylei": { "id": "bill-soylei", "name": "bill-soylei" }
+            },
+            "displayAllocations": {
+                "display:bill": {
+                    "id": "display:bill",
+                    "ownerBrowserId": "session:bill-soylei",
+                    "ownerSessionId": "bill-soylei",
+                    "profileId": "bill-soylei",
+                    "state": "orphaned",
+                    "readiness": {
+                        "state": "orphaned",
+                        "reason": "owner_browser_not_ready"
+                    }
+                }
+            },
+            "remoteViewRoutes": {
+                "guacamole:2": {
+                    "id": "guacamole:2",
+                    "browserId": "session:bill-soylei",
+                    "sessionId": "bill-soylei",
+                    "state": "orphaned",
+                    "viewerLeaseIds": [],
+                    "controllerLeaseId": null,
+                    "controllerEpoch": 0
+                }
+            }
+        })
+        .to_string();
+
+        let staged = stage_service_state_migration(&raw).unwrap();
+        let migrated: Value = serde_json::from_slice(&staged.bytes).unwrap();
+        assert_eq!(
+            migrated["browsers"]["session:bill-soylei"]["health"],
+            "not_started"
+        );
+        assert_eq!(
+            migrated["browsers"]["session:bill-soylei"]["profileId"],
+            "bill-soylei"
+        );
+        assert_eq!(
+            migrated["browsers"]["session:bill-soylei"]["lastError"],
+            "Migrated inert placeholder for orphaned remote-view evidence."
+        );
+        assert_eq!(migrated["sessions"]["bill-soylei"]["lease"], "released");
+        assert_eq!(
+            migrated["sessions"]["bill-soylei"]["browserIds"],
+            json!(["session:bill-soylei"])
+        );
+    }
+
+    #[test]
+    fn controlled_remote_view_with_missing_browser_stays_blocked() {
+        let raw = json!({
+            "displayAllocations": {
+                "display:bill": {
+                    "id": "display:bill",
+                    "ownerBrowserId": "session:bill-soylei",
+                    "state": "orphaned",
+                    "readiness": {
+                        "state": "orphaned",
+                        "reason": "owner_browser_not_ready"
+                    }
+                }
+            },
+            "remoteViewRoutes": {
+                "guacamole:2": {
+                    "id": "guacamole:2",
+                    "browserId": "session:bill-soylei",
+                    "state": "orphaned",
+                    "controllerLeaseId": "controller:active",
+                    "controllerEpoch": 1
+                }
+            }
+        })
+        .to_string();
+
+        assert_eq!(
+            stage_service_state_migration(&raw).unwrap_err(),
+            "service_state_display_browser_missing:display:bill:session:bill-soylei"
+        );
+    }
+
+    #[test]
+    fn released_remote_view_materializes_inert_browser_and_session() {
+        let raw = json!({
+            "profiles": {
+                "bill-soylei": { "id": "bill-soylei", "name": "bill-soylei" }
+            },
+            "displayAllocations": {
+                "display:dashboard": {
+                    "id": "display:dashboard",
+                    "ownerBrowserId": "session:dashboard-service-backend",
+                    "ownerSessionId": "dashboard-service-backend",
+                    "profileId": "bill-soylei",
+                    "state": "released",
+                    "readiness": {
+                        "state": "released",
+                        "reason": "operator_requested_close"
+                    }
+                },
+                "display:dashboard-duplicate": {
+                    "id": "display:dashboard-duplicate",
+                    "ownerBrowserId": "session:dashboard-service-backend",
+                    "ownerSessionId": "dashboard-service-backend",
+                    "profileId": "bill-soylei",
+                    "state": "released",
+                    "readiness": {
+                        "state": "released",
+                        "reason": "duplicate_browser_record_merged"
+                    }
+                },
+                "display:dashboard-parked": {
+                    "id": "display:dashboard-parked",
+                    "ownerBrowserId": "session:dashboard-service-backend",
+                    "ownerSessionId": "dashboard-service-backend",
+                    "profileId": "bill-soylei",
+                    "state": "released",
+                    "readiness": {
+                        "state": "released",
+                        "reason": "route_switch_parking"
+                    }
+                }
+            },
+            "remoteViewRoutes": {
+                "guacamole:parked": {
+                    "id": "guacamole:parked",
+                    "browserId": "session:dashboard-service-backend",
+                    "sessionId": "dashboard-service-backend",
+                    "state": "released",
+                    "viewerLeaseIds": [],
+                    "controllerLeaseId": null,
+                    "controllerEpoch": 4,
+                    "lastProviderEvent": "route_released"
+                }
+            }
+        })
+        .to_string();
+
+        let staged = stage_service_state_migration(&raw).unwrap();
+        let migrated: Value = serde_json::from_slice(&staged.bytes).unwrap();
+        assert_eq!(
+            migrated["browsers"]["session:dashboard-service-backend"]["health"],
+            "not_started"
+        );
+        assert_eq!(
+            migrated["sessions"]["dashboard-service-backend"]["lease"],
+            "released"
+        );
+    }
+
+    #[test]
+    fn orphaned_route_only_materializes_inert_browser_and_session() {
+        let raw = json!({
+            "remoteViewRoutes": {
+                "guacamole:1": {
+                    "id": "guacamole:1",
+                    "browserId": "session:retired-browser",
+                    "sessionId": "retired-session",
+                    "state": "orphaned",
+                    "viewerLeaseIds": [],
+                    "controllerLeaseId": null,
+                    "controllerEpoch": 0
+                }
+            }
+        })
+        .to_string();
+
+        let staged = stage_service_state_migration(&raw).unwrap();
+        let migrated: Value = serde_json::from_slice(&staged.bytes).unwrap();
+        assert_eq!(
+            migrated["browsers"]["session:retired-browser"]["health"],
+            "not_started"
+        );
+        assert_eq!(
+            migrated["sessions"]["retired-session"]["browserIds"],
+            json!(["session:retired-browser"])
         );
     }
 

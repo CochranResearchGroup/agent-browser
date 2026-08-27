@@ -315,7 +315,14 @@ Legacy migration preserves an inert, unbound session whose profile row is
 missing by materializing a persistent placeholder profile. The placeholder
 restores referential identity only and grants no principal authority. A missing
 profile referenced by a principal, work capability, browser, or tab still
-blocks before commit.
+blocks before commit. A stale tab with an already-invalid `browser_missing`
+handle may likewise retain its evidence through an inert `not_started` browser
+placeholder and a released system-session placeholder. Terminal orphaned or
+released remote-view evidence can use the same inert placeholders when it has
+no process identity, active viewer or controller lease, principal-bound owner,
+or existing session binding. A unique unbound legacy owner is preserved as
+historical identity rather than converted into new authority. Effect-bearing
+references still block.
 When rollback leaves an explicit operator-recovery state, run
 `agent-browser install workstation recover --transaction-id <id> --json` with
 the exact admission-owning transaction ID from the failure. Recovery fails
