@@ -813,21 +813,11 @@ fn apply_registered_session_profile_continuity(
     let Some(profile_id) = session.profile_id.as_deref() else {
         return Ok(false);
     };
-    let Some(principal_id) = session.principal_id.as_deref() else {
+    let Some(authority) = crate::native::service_principal::authenticated_session_work_authority(
+        state, session_id, &now,
+    ) else {
         return Ok(false);
     };
-    if session.principal_provenance
-        != Some(crate::native::service_principal::ServicePrincipalProvenance::RegisteredCapability)
-        || matches!(session.lease, LeaseState::Released | LeaseState::Expired)
-        || session
-            .expires_at
-            .as_deref()
-            .is_none_or(|expires_at| expires_at <= now.as_str())
-        || session.work_lease_id.as_deref().is_none_or(str::is_empty)
-        || session.work_lease_revision == 0
-    {
-        return Ok(false);
-    }
     let Some(profile) = state.profiles.get(profile_id) else {
         return Ok(false);
     };
@@ -846,30 +836,11 @@ fn apply_registered_session_profile_continuity(
     else {
         return Ok(false);
     };
-    if principal_binding.principal_id != principal_id
+    if principal_binding.principal_id != authority.principal_id
         || principal_binding.profile_id != profile_id
-        || principal_binding.provenance != session.principal_provenance.unwrap()
+        || principal_binding.capability_id != authority.capability_id
+        || principal_binding.provenance != authority.provenance
     {
-        return Ok(false);
-    }
-    let Some(capability) = state
-        .service_principals
-        .profile_capabilities
-        .get(&principal_binding.capability_id)
-    else {
-        return Ok(false);
-    };
-    let authority = crate::native::service_principal::AuthenticatedServicePrincipal {
-        principal_id: principal_id.to_string(),
-        profile_id: profile_id.to_string(),
-        capability_id: principal_binding.capability_id.clone(),
-        capability_revision: capability.revision,
-        provenance: principal_binding.provenance,
-    };
-    if !crate::native::service_principal::authenticated_authority_is_current(
-        &state.service_principals,
-        &authority,
-    ) {
         return Ok(false);
     }
     if options

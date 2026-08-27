@@ -1452,6 +1452,19 @@ pub(crate) fn persist_closed_browser_health_in_repository(
     repository.mutate(|service_state| {
         let id = service_browser_id_for_session(session_id);
         let previous = service_state.browsers.get(&id).cloned();
+        let now = current_timestamp();
+        let preserve_registered_crash_continuity = previous
+            .as_ref()
+            .is_some_and(|browser| browser.health == BrowserHealth::ProcessExited)
+            && crate::native::service_principal::authenticated_session_work_authority(
+                service_state,
+                session_id,
+                &now,
+            )
+            .is_some();
+        if preserve_registered_crash_continuity {
+            return Ok(());
+        }
         let host = previous
             .as_ref()
             .map(|browser| browser.host)
@@ -4985,6 +4998,132 @@ mod tests {
             None
         );
 
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn daemon_teardown_preserves_registered_work_after_unexpected_process_exit() {
+        let home = temp_home("service-health-registered-crash-continuity");
+        let profile_path = home.join("odollo-profile");
+        fs::create_dir_all(&profile_path).unwrap();
+        let store = JsonServiceStateStore::new(home.join("state.json"));
+        let repository = LockedServiceStateRepository::new(store.clone());
+        let session_id = "odollo-fulfillment";
+        let browser_id = service_browser_id_for_session(session_id);
+        let profile_id = "odollo-fedex";
+        let principal_id = "principal:odollo-fulfillment";
+        let profile_digest =
+            crate::runtime_profile::canonical_profile_identity_digest(&profile_path).unwrap();
+        let mut state = ServiceState {
+            profiles: BTreeMap::from([(
+                profile_id.to_string(),
+                crate::native::service_model::BrowserProfile {
+                    id: profile_id.to_string(),
+                    user_data_dir: Some(profile_path.display().to_string()),
+                    ..crate::native::service_model::BrowserProfile::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                session_id.to_string(),
+                BrowserSession {
+                    id: session_id.to_string(),
+                    profile_id: Some(profile_id.to_string()),
+                    browser_ids: vec![browser_id.clone()],
+                    lease: LeaseState::Exclusive,
+                    ..BrowserSession::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                browser_id.clone(),
+                BrowserProcess {
+                    id: browser_id.clone(),
+                    profile_id: Some(profile_id.to_string()),
+                    active_session_ids: vec![session_id.to_string()],
+                    health: BrowserHealth::ProcessExited,
+                    ..BrowserProcess::default()
+                },
+            )]),
+            runtime_owner_registry: crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(
+                crate::runtime_owner_transfer::ProfileOwner {
+                    owner_id: "owner-odollo".to_string(),
+                    profile_identity_digest: profile_digest.clone(),
+                    state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+                    owner_generation: 1,
+                    browser_id: browser_id.clone(),
+                    daemon_session_route: session_id.to_string(),
+                    process_instance_digest: "1".repeat(64),
+                    browser_family: "chrome".to_string(),
+                    cdp_endpoint_identity_digest: "2".repeat(64),
+                    target_set_digest: "3".repeat(64),
+                    pending_transfer: None,
+                    last_transition: None,
+                },
+            ),
+            ..ServiceState::default()
+        };
+        let capability = "service-health-capability-with-more-than-thirty-two-characters";
+        let registered = crate::native::service_principal::register_profile_capability(
+            &mut state.service_principals,
+            crate::native::service_principal::ServicePrincipalRegistrationRequest {
+                principal_id: principal_id.to_string(),
+                display_name: None,
+                profile_id: profile_id.to_string(),
+                registered_at: Some("2026-08-27T17:00:00Z".to_string()),
+                registered_by: Some("test".to_string()),
+            },
+            capability,
+        )
+        .unwrap();
+        state
+            .runtime_owner_registry
+            .bind_principal_authority(
+                crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
+                    principal_id: principal_id.to_string(),
+                    profile_id: profile_id.to_string(),
+                    profile_identity_digest: profile_digest,
+                    capability_id: registered.capability.capability_id,
+                    provenance: crate::native::service_principal::ServicePrincipalProvenance::RegisteredCapability,
+                    owner_generation: 1,
+                },
+            )
+            .unwrap();
+        let authority = crate::native::service_principal::authenticate_profile_capability(
+            &state.service_principals,
+            capability,
+            Some(profile_id),
+        )
+        .unwrap();
+        crate::native::service_principal::bind_session_work_lease(
+            &mut state,
+            session_id,
+            &authority,
+            "2099-08-27T19:00:00Z".to_string(),
+        )
+        .unwrap();
+        store.save(&state).unwrap();
+
+        persist_closed_browser_health_in_repository(
+            &repository,
+            session_id,
+            Some(&BrowserShutdownOutcome {
+                polite_close_attempted: true,
+                polite_close_failed: true,
+                exact_process_exited: true,
+                ..BrowserShutdownOutcome::default()
+            }),
+        )
+        .unwrap();
+
+        let persisted = store.load().unwrap();
+        assert_eq!(persisted.sessions[session_id].lease, LeaseState::Exclusive);
+        assert_eq!(
+            persisted.sessions[session_id].principal_id.as_deref(),
+            Some(principal_id)
+        );
+        assert_eq!(
+            persisted.browsers[&browser_id].health,
+            BrowserHealth::ProcessExited
+        );
         let _ = fs::remove_dir_all(&home);
     }
 

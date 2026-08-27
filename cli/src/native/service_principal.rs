@@ -368,6 +368,52 @@ pub(crate) fn authenticated_authority_is_current(
         })
 }
 
+pub(crate) fn authenticated_session_work_authority(
+    state: &ServiceState,
+    session_id: &str,
+    now: &str,
+) -> Option<AuthenticatedServicePrincipal> {
+    let session = state.sessions.get(session_id)?;
+    let principal_id = session.principal_id.as_deref()?;
+    let profile_id = session.profile_id.as_deref()?;
+    if session.principal_provenance != Some(ServicePrincipalProvenance::RegisteredCapability)
+        || matches!(session.lease, LeaseState::Released | LeaseState::Expired)
+        || session
+            .expires_at
+            .as_deref()
+            .is_none_or(|expiry| expiry <= now)
+        || session.work_lease_id.as_deref().is_none_or(str::is_empty)
+        || session.work_lease_revision == 0
+    {
+        return None;
+    }
+    let matching = state
+        .runtime_owner_registry
+        .principal_bindings
+        .values()
+        .filter(|binding| {
+            binding.principal_id == principal_id
+                && binding.profile_id == profile_id
+                && binding.provenance == ServicePrincipalProvenance::RegisteredCapability
+        })
+        .collect::<Vec<_>>();
+    let [binding] = matching.as_slice() else {
+        return None;
+    };
+    let capability = state
+        .service_principals
+        .profile_capabilities
+        .get(&binding.capability_id)?;
+    let authority = AuthenticatedServicePrincipal {
+        principal_id: principal_id.to_string(),
+        profile_id: profile_id.to_string(),
+        capability_id: binding.capability_id.clone(),
+        capability_revision: capability.revision,
+        provenance: binding.provenance,
+    };
+    authenticated_authority_is_current(&state.service_principals, &authority).then_some(authority)
+}
+
 pub(crate) fn bind_session_work_lease(
     state: &mut ServiceState,
     session_id: &str,
