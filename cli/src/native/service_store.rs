@@ -248,7 +248,7 @@ fn parse_service_state_json(raw: String, path: &Path) -> Result<ServiceState, St
     std::thread::Builder::new()
         .name("service-state-json".to_string())
         .stack_size(SERVICE_STATE_JSON_STACK_BYTES)
-        .spawn(move || serde_json::from_str::<ServiceState>(&raw))
+        .spawn(move || super::service_state_migration::read_service_state(&raw))
         .map_err(|err| {
             format!(
                 "Failed to start service state JSON parser for {}: {}",
@@ -271,6 +271,7 @@ fn prepare_service_state_transaction(
             .stack_size(SERVICE_STATE_JSON_STACK_BYTES)
             .spawn_scoped(scope, move || {
                 let mut state = state.clone();
+                super::service_state_migration::prepare_service_state_for_persistence(&mut state)?;
                 state.refresh_derived_views();
                 state.remove_builtin_entity_defaults_for_persistence();
                 let lifecycle_registry_payload =

@@ -475,7 +475,9 @@ mod tests {
             candidate_support_manifest_sha256: "b".repeat(64),
             runtime_census_digest: None,
             runtime_migrations: Vec::new(),
+            runtime_handoffs: Vec::new(),
             runtime_host_convergence: None,
+            service_state_migration: None,
             state: UpgradeTransactionState::Accepted,
             revision: 1,
             checkpoints: vec![UpgradeCheckpoint {

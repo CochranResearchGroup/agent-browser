@@ -4,7 +4,7 @@ Date: 2026-08-26
 
 State: OPEN
 
-Execution state: `slice_h_complete_slice_i_pending`
+Execution state: `slice_i_complete_slice_j_pending`
 
 Lane: P134
 
@@ -1047,3 +1047,39 @@ Do not implement migration or installer effects in Slice A.
   The repository skill is intentionally not copied into the installed skill
   until the guarded candidate transaction in Slice K. The next authorized
   packet is Slice I only.
+
+## 2026-08-27 Slice I transactional migration and installation checkpoint
+
+- Service State and profile leases now carry explicit schema versions. Unknown
+  schemas fail read-only, while legacy labels remain observation-only and
+  cannot manufacture principal authority.
+- Workstation installation snapshots the exact original state, stages a fully
+  validated migration candidate, commits with a digest compare-and-swap, and
+  restores the original bytes or absence on rollback. Full referential
+  validation is owned by this migration commit boundary so ordinary runtime
+  mutations remain able to converge related projections incrementally.
+- The immutable-generation transaction now persists migration, runtime
+  handoff, convergence, generation commit, validation, rollback, and
+  zero-effect close phases. Injected failures before and after state commit
+  preserve one inspectable replay or rollback outcome.
+- `agent-browser install transactions` provides first-class list, inspect,
+  guarded resume, guarded rollback, and guarded close actions. Every mutation
+  requires the exact transaction revision, candidate generation, and census
+  digest. Advertised safe actions are phase-accurate.
+- Install doctor distinguishes schema incompatibility, active convergence,
+  terminal transaction history, installed drift, a harmless workspace
+  candidate, and profile lease or owner divergence without exposing process
+  identity or private state paths.
+- README, CLI help, repository skill guidance, and installation documentation
+  describe the same transaction and compare-and-swap recourse contract. The
+  installed shared skill remains unchanged until guarded candidate install.
+- Validation passed the canonical parallel-safe and serial environment-mutating
+  Rust partitions, strict Clippy, Rust formatting, all 72 route-host tests,
+  all migration tests, exact resume and rollback cases, full service client
+  checks, API and MCP parity, docs production build, source-free workstation
+  fixture, host-provision and fresh-VM harnesses, Guacamole assets and
+  PostgreSQL durability checks, route-specific user sync, remote-view handoff
+  documentation, and patch hygiene.
+- No browser, provider, development-runtime, installed-runtime, Service State,
+  owner, lease, route, display, unit, Guacamole, or profile effect occurred.
+  The next authorized packet is Slice J only.

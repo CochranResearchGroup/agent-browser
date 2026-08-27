@@ -1871,6 +1871,10 @@ fn main() {
             workstation_install::run_workstation_command(&args);
             return;
         }
+        if clean.get(1).map(|s| s.as_str()) == Some("transactions") {
+            workstation_install::run_install_transactions_command(&args);
+            return;
+        }
         if clean.get(1).map(|s| s.as_str()) == Some("stealthcdp-chromium") {
             let force = args.iter().any(|a| a == "--force");
             run_install_stealthcdp_chromium(force);

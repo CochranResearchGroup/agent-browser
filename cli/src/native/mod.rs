@@ -160,6 +160,7 @@ pub mod service_request;
 pub mod service_resources;
 #[allow(dead_code)]
 pub mod service_retained_state;
+pub(crate) mod service_state_migration;
 #[allow(dead_code)]
 pub mod service_status_projection;
 #[allow(dead_code)]

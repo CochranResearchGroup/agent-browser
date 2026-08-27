@@ -2389,6 +2389,14 @@ pub struct DurableHandoffPresentationReceipt {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ServiceState {
+    /// Version of the persisted primary Service State envelope. An absent
+    /// value is accepted only as the legacy unversioned input format.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub(crate) schema_version: String,
+    /// Version of the first-class profile lease projection understood by the
+    /// writer. This is compatibility metadata, not an authority source.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub(crate) profile_lease_schema_version: String,
     pub control_plane: Option<ControlPlaneSnapshot>,
     pub reconciliation: Option<ServiceReconciliationSnapshot>,
     pub events: Vec<ServiceEvent>,

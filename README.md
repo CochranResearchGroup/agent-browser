@@ -173,6 +173,8 @@ agent-browser install workstation status --json
 agent-browser install workstation recover --transaction-id upgrade-... --json
 agent-browser install workstation finalize --json
 agent-browser install workstation gc --dry-run --json
+agent-browser install transactions list --json
+agent-browser install transactions inspect --transaction-id upgrade-... --json
 ```
 
 The first apply uses one `sudo -v` authorization boundary for host preparation.
@@ -316,6 +318,21 @@ closed unless the sealed old generation is selected, no candidate executable
 is live, no candidate dashboard route remains, and a fresh two-round runtime
 census is stable. It retains the transaction ledger, appends a recovery
 checkpoint, and only then reopens runtime admission.
+`agent-browser install transactions list|inspect` are read-only. Guarded
+`resume`, `rollback`, and `close` require the exact transaction ID, current
+revision, candidate generation, and recorded census digest shown by inspect:
+
+```bash
+agent-browser install transactions resume --transaction-id upgrade-... --expected-revision 7 --candidate-generation 0.28.0-... --census-digest <sha256> --json
+agent-browser install transactions rollback --transaction-id upgrade-... --expected-revision 7 --candidate-generation 0.28.0-... --census-digest <sha256> --json
+agent-browser install transactions close --transaction-id upgrade-... --expected-revision 9 --candidate-generation 0.28.0-... --census-digest <sha256> --json
+```
+
+Every mismatch fails compare-and-swap without changing the selected generation
+or Service State. `close` is limited to a proven zero-effect terminal record.
+Rollback after generation and state commit restores the exact state snapshot
+and previous selector or enters typed operator recovery. There is no inferred
+latest transaction and no broad force-unlock operation.
 Its `readiness` object separates `payloadReady`, `selectedGenerationReady`,
 `runtimeConvergenceReady`, `upgradeTransactionState`,
 `dashboardIngressReady`, `operatorJourneyReady`, and `rollbackReady`. Overall

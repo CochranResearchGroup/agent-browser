@@ -987,6 +987,10 @@ pub fn run_install_doctor(flags: &Flags) {
         report.pointer("/data/serviceResources/readinessImpactingCandidates"),
     );
     print_doctor_field(
+        "profile lease healthy",
+        report.pointer("/data/profileLeaseDoctor/healthy"),
+    );
+    print_doctor_field(
         "desktop evidence page transport",
         report.pointer("/data/desktopEvidencePolicy/pageEvidenceTransport"),
     );
@@ -1161,6 +1165,13 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
     let service = service_status_probe();
     install_doctor_trace("service_resources");
     let service_resources = service_resources_probe();
+    install_doctor_trace("profile_lease_doctor");
+    let profile_lease_doctor = crate::native::service_profile_lease::doctor_profile_leases(
+        &flags.service_state,
+        &time::OffsetDateTime::now_utc()
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap_or_else(|_| "timestamp-unavailable".to_string()),
+    );
     install_doctor_trace("runtime_inventory");
     let runtime_inventory = active_runtime_inventory(
         current_executable
@@ -1204,6 +1215,17 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
         runtime_inventory: &runtime_inventory,
         daemon_listener_inventory: &daemon_listener_inventory,
     });
+    issues.extend(profile_lease_doctor.findings.iter().map(|finding| {
+        json!({
+            "code": format!("profile_lease_{}", finding.code),
+            "severity": finding.severity,
+            "message": finding.message,
+            "leaseId": finding.lease_id,
+            "profileId": finding.profile_id,
+            "safeActions": finding.safe_actions,
+            "nextAction": "inspect_profile_lease_doctor",
+        })
+    }));
     issues.extend(workstation_payload_issues(&workstation_payload));
     issues.extend(
         session_supervisors
@@ -1265,6 +1287,7 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
             "launchConfig": launch_config,
             "service": service,
             "serviceResources": service_resources,
+            "profileLeaseDoctor": profile_lease_doctor,
             "desktopEvidencePolicy": crate::native::desktop_evidence::DesktopEvidenceCoordinator::policy_projection(),
             "remoteViewPrivileges": remote_view_privileges,
             "dashboardRuntime": dashboard_runtime,
@@ -1688,8 +1711,10 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
     ) {
         if path_hash != workspace_hash {
             issues.push(json!({
-                "code": "path_command_workspace_binary_mismatch",
-                "message": "the agent-browser command on PATH does not match the binary in the current workspace"
+                "code": "workspace_candidate_differs_from_installed",
+                "severity": "warning",
+                "message": "the workspace contains a different candidate binary; the installed command remains authoritative until a guarded install transaction accepts the candidate",
+                "nextAction": "qualify_workspace_candidate_before_install"
             }));
         }
     }
@@ -1856,7 +1881,12 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
         let transaction_stranded = state.is_some_and(|state| {
             !matches!(
                 state,
-                "accepted" | "old_generation_retirable" | "failed_preserved_old_generation"
+                "accepted"
+                    | "old_generation_retirable"
+                    | "failed_preserved_old_generation"
+                    | "rolled_back_before_commit"
+                    | "rolled_back_after_commit"
+                    | "closed_zero_effect"
             )
         });
         if admission_draining || transaction_stranded {
@@ -1873,6 +1903,37 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
                     "requiresInteractiveSudo": false,
                     "why": "Review the redacted transaction, blocker, runtime dispositions, and rollback state before retrying."
                 }
+            }));
+        }
+        if upgrade
+            .get("stateSchemaCompatibility")
+            .and_then(|compatibility| compatibility.get("compatible"))
+            .and_then(Value::as_bool)
+            == Some(false)
+        {
+            issues.push(json!({
+                "code": "workstation_state_schema_incompatible",
+                "message": "the authoritative Service State schema cannot be read or safely migrated by this candidate",
+                "compatibility": upgrade.get("stateSchemaCompatibility").cloned().unwrap_or(Value::Null),
+                "nextAction": "inspect_install_transaction_migration",
+            }));
+        }
+        if upgrade
+            .get("latestTransaction")
+            .and_then(|transaction| transaction.get("classification"))
+            .and_then(Value::as_str)
+            .is_some_and(|classification| {
+                matches!(
+                    classification,
+                    "terminal_zero_effect_history" | "terminal_rolled_back_history"
+                )
+            })
+        {
+            issues.push(json!({
+                "code": "workstation_upgrade_terminal_history_retained",
+                "severity": "warning",
+                "message": "a closed or rolled-back workstation transaction remains available for audit and rollback evidence",
+                "nextAction": "inspect_install_transaction_history",
             }));
         }
         let workstation_managed = upgrade

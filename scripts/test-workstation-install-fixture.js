@@ -98,6 +98,16 @@ try {
     'runtime-adoption',
     'transactions',
   );
+  const transactionArtifactStore = join(
+    installRoot,
+    '.agent-browser',
+    'runtime-adoption',
+    'transaction-artifacts',
+  );
+  const transactionLedgerPaths = new Set([
+    transactionStore,
+    transactionArtifactStore,
+  ]);
   assert.equal(
     lstatSync(currentSelector).isSymbolicLink(),
     true,
@@ -172,7 +182,12 @@ try {
     /profileIdentityDigest|cdpEndpoint|immutableInstallationPath|transactionPath/,
     'public transaction status must omit private runtime and filesystem evidence',
   );
-  const firstManifest = treeManifest(installRoot, new Set([transactionStore]));
+  const firstManifest = treeManifest(installRoot, transactionLedgerPaths);
+  assert.equal(
+    readdirSync(transactionArtifactStore).length,
+    2,
+    'first apply must retain the original and migrated Service State artifacts',
+  );
   const installedLinks = firstManifest.filter((entry) => entry.type === 'symlink');
   assert.ok(installedLinks.length > 0, 'immutable generation selection must use stable links');
   for (const entry of installedLinks) {
@@ -456,11 +471,16 @@ try {
   );
   assertJsonSuccess(secondApply.stdout, 'second apply');
   assert.deepEqual(
-    treeManifest(installRoot, new Set([transactionStore])),
+    treeManifest(installRoot, transactionLedgerPaths),
     firstManifest,
     'a second apply must leave payload byte content and file modes unchanged',
   );
   assert.equal(readdirSync(transactionStore).length, 2, 'second apply must write one new transaction');
+  assert.equal(
+    readdirSync(transactionArtifactStore).length,
+    4,
+    'second apply must retain a distinct pair of Service State artifacts',
+  );
   assertTransactionTerminal(transactionStore, 'accepted');
   assert.equal(
     statSync(installedBinary).ino,

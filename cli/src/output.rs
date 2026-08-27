@@ -5531,6 +5531,9 @@ Usage: agent-browser install [--with-deps] [--with-remote-view-privileges]
        agent-browser install workstation gc <--dry-run|--apply> [--json]
        agent-browser install workstation reconcile [--json]
        agent-browser install workstation backup [--json]
+       agent-browser install transactions list [--json]
+       agent-browser install transactions inspect --transaction-id <id> [--json]
+       agent-browser install transactions <resume|rollback|close> --transaction-id <id> --expected-revision <revision> --candidate-generation <generation> --census-digest <sha256|none> [--json]
        agent-browser install stealthcdp-chromium [--force]
        agent-browser install doctor [--json]
 
@@ -5667,6 +5670,12 @@ Options:
                        Set the loopback Guacamole port (default: 8092)
   --transaction-id <id>
                        Acknowledge the exact operator-recovery transaction that owns admission
+  --expected-revision <revision>
+                       Compare-and-swap revision required for install transaction mutations
+  --candidate-generation <generation>
+                       Exact immutable candidate generation recorded by the transaction
+  --census-digest <sha256|none>
+                       Exact recorded census digest, or none before census exists
   --json               Output install or doctor results as JSON
 
 Examples:
@@ -5684,6 +5693,9 @@ Examples:
   agent-browser install workstation gc --dry-run --json
   agent-browser install workstation reconcile --json
   agent-browser install workstation backup --json
+  agent-browser install transactions list --json
+  agent-browser install transactions inspect --transaction-id upgrade-... --json
+  agent-browser install transactions rollback --transaction-id upgrade-... --expected-revision 7 --candidate-generation 0.28.0-... --census-digest <sha256> --json
 "##
         }
 
@@ -7054,6 +7066,7 @@ Dashboard:
 Setup:
   install                    Install browser binaries
   install workstation        Install and reconcile the source-free Linux workstation
+  install transactions       Inspect, resume, rollback, or close exact install transactions
   install doctor             Check install drift, runtime multiplicity, and launch readiness
   doctor windows-browser     Diagnose WSL to Windows browser CDP routing
   doctor remote-view         Diagnose Guacamole and RDP remote-view setup

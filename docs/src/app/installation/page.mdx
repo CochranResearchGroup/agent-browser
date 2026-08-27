@@ -100,6 +100,8 @@ agent-browser install workstation status --json
 agent-browser install workstation recover --transaction-id upgrade-... --json
 agent-browser install workstation finalize --json
 agent-browser install workstation gc --dry-run --json
+agent-browser install transactions list --json
+agent-browser install transactions inspect --transaction-id upgrade-... --json
 ```
 
 The first apply uses one <code>sudo -v</code> authorization boundary for host
@@ -249,6 +251,26 @@ Recovery fails closed unless the sealed old generation is selected, no
 candidate executable is live, no candidate dashboard route remains, and a
 fresh two-round runtime census is stable. It preserves the transaction ledger,
 appends a recovery checkpoint, and only then reopens runtime admission.
+Install transaction discovery is read-only:
+
+```bash
+agent-browser install transactions list --json
+agent-browser install transactions inspect --transaction-id upgrade-... --json
+```
+
+Guarded resume, rollback, and close require the exact transaction ID, current
+revision, immutable candidate generation, and recorded census digest returned
+by inspect:
+
+```bash
+agent-browser install transactions rollback --transaction-id upgrade-... --expected-revision 7 --candidate-generation 0.28.0-... --census-digest &lt;sha256&gt; --json
+```
+
+Any compare-and-swap mismatch is zero-effect and requires a fresh inspect.
+Close is available only for a proven zero-effect terminal transaction. There
+is no inferred latest mutation or broad force unlock. A post-commit rollback
+restores the exact state snapshot and previous generation selector or records
+typed operator recovery with rollback evidence retained.
 The <code>readiness</code> object separates
 <code>payloadReady</code>, <code>selectedGenerationReady</code>,
 <code>runtimeConvergenceReady</code>,

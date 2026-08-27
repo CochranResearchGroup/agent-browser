@@ -163,6 +163,22 @@ that owns the admission drain:
 agent-browser install workstation recover --transaction-id <id> --json
 ```
 
+Use `agent-browser install transactions list --json` and `inspect
+--transaction-id <id> --json` for read-only transaction discovery. Mutation is
+never inferred from the latest record. Copy the exact revision, candidate
+generation, and census digest from inspect into `resume`, `rollback`, or
+`close`:
+
+```bash
+agent-browser install transactions rollback --transaction-id <id> --expected-revision <revision> --candidate-generation <generation> --census-digest <sha256-or-none> --json
+```
+
+These guards are compare-and-swap evidence. A mismatch means re-inspect; do not
+bypass it. `close` accepts only a proven zero-effect terminal transaction.
+There is no generic force unlock. Resume revalidates immutable candidate and
+schema evidence, while rollback restores the exact pre-migration bytes and
+prior selector when commit already occurred.
+
 Recovery is not a generic retry. It fails closed unless the sealed old
 generation is selected, the candidate executable and dashboard route are
 absent, and a fresh stable runtime census permits activation. It preserves the

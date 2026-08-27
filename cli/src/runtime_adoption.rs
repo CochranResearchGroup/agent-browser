@@ -74,6 +74,9 @@ pub(crate) enum UpgradeTransactionState {
     CandidateStaged,
     CandidatePreflightReady,
     CensusStable,
+    StateSnapshotCreated,
+    StateMigrationStaged,
+    StateMigrationValidated,
     AdmissionDraining,
     RuntimesTransferring,
     PresentationsRebinding,
@@ -85,8 +88,12 @@ pub(crate) enum UpgradeTransactionState {
     BlockedAmbiguousRuntime,
     BlockedInflightEffect,
     BlockedCandidateIncompatible,
+    BlockedMigration,
     RollbackBeforeCommit,
     RollbackAfterCommit,
+    RolledBackBeforeCommit,
+    RolledBackAfterCommit,
+    ClosedZeroEffect,
     OperatorRecoveryRequired,
     FailedPreservedOldGeneration,
     FailedEffectUncertain,
@@ -385,8 +392,12 @@ pub(crate) struct UpgradeTransaction {
     pub(crate) candidate_support_manifest_sha256: String,
     pub(crate) runtime_census_digest: Option<String>,
     pub(crate) runtime_migrations: Vec<RuntimeMigrationRecord>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) runtime_handoffs: Vec<UpgradeRuntimeHandoff>,
     #[serde(default)]
     pub(crate) runtime_host_convergence: Option<RuntimeHostConvergenceRecord>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) service_state_migration: Option<UpgradeServiceStateMigration>,
     pub(crate) state: UpgradeTransactionState,
     pub(crate) revision: u64,
     pub(crate) checkpoints: Vec<UpgradeCheckpoint>,
@@ -394,6 +405,38 @@ pub(crate) struct UpgradeTransaction {
     pub(crate) presentation_validation_summary: Option<String>,
     pub(crate) terminal_result: Option<String>,
     pub(crate) stop_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct UpgradeRuntimeHandoff {
+    pub(crate) source_session: String,
+    pub(crate) candidate_session: String,
+    pub(crate) source_process_identity: Option<crate::process_identity::RecordedProcessIdentity>,
+    pub(crate) mode: BrowserAdoptionMode,
+    pub(crate) committed: bool,
+    pub(crate) source_finalized: bool,
+    pub(crate) irreversible_source_revocation: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct UpgradeServiceStateMigration {
+    pub(crate) schema_version: String,
+    pub(crate) source_state_schema: String,
+    pub(crate) target_state_schema: String,
+    pub(crate) source_profile_lease_schema: Option<String>,
+    pub(crate) target_profile_lease_schema: String,
+    pub(crate) status: String,
+    pub(crate) authoritative_state_path: String,
+    pub(crate) authoritative_state_existed: bool,
+    pub(crate) snapshot_path: Option<String>,
+    pub(crate) snapshot_sha256: Option<String>,
+    pub(crate) staged_path: Option<String>,
+    pub(crate) staged_sha256: Option<String>,
+    pub(crate) committed: bool,
+    pub(crate) rollback_ready: bool,
+    pub(crate) old_reader_compatible: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -571,7 +614,10 @@ fn upgrade_transition_allowed(
         (Planned, CandidateStaged)
             | (CandidateStaged, CandidatePreflightReady)
             | (CandidatePreflightReady, CensusStable)
-            | (CensusStable, AdmissionDraining)
+            | (CensusStable, StateSnapshotCreated)
+            | (StateSnapshotCreated, StateMigrationStaged)
+            | (StateMigrationStaged, StateMigrationValidated)
+            | (StateMigrationValidated, AdmissionDraining)
             | (AdmissionDraining, RuntimesTransferring)
             | (RuntimesTransferring, PresentationsRebinding)
             | (PresentationsRebinding, CandidateReady)
@@ -584,6 +630,9 @@ fn upgrade_transition_allowed(
                     | CandidateStaged
                     | CandidatePreflightReady
                     | CensusStable
+                    | StateSnapshotCreated
+                    | StateMigrationStaged
+                    | StateMigrationValidated
                     | AdmissionDraining
                     | RuntimesTransferring
                     | PresentationsRebinding
@@ -591,23 +640,49 @@ fn upgrade_transition_allowed(
                 RollbackBeforeCommit
             )
             | (
+                BlockedAmbiguousRuntime
+                    | BlockedInflightEffect
+                    | BlockedCandidateIncompatible
+                    | BlockedMigration,
+                RollbackBeforeCommit
+            )
+            | (
                 GenerationCommitted | PostCommitValidating,
                 RollbackAfterCommit
             )
             | (RollbackBeforeCommit, FailedPreservedOldGeneration)
+            | (RollbackBeforeCommit, RolledBackBeforeCommit)
             | (RollbackBeforeCommit, OperatorRecoveryRequired)
             | (RollbackAfterCommit, FailedPreservedOldGeneration)
+            | (RollbackAfterCommit, RolledBackAfterCommit)
             | (RollbackAfterCommit, OperatorRecoveryRequired)
             | (Accepted, OperatorRecoveryRequired)
             | (OperatorRecoveryRequired, FailedPreservedOldGeneration)
             | (BlockedAmbiguousRuntime, FailedPreservedOldGeneration)
             | (BlockedInflightEffect, FailedPreservedOldGeneration)
+            | (BlockedMigration, FailedPreservedOldGeneration)
             | (
                 Planned | CandidatePreflightReady,
                 BlockedCandidateIncompatible
             )
             | (Planned | CensusStable, BlockedInflightEffect)
             | (Planned | CandidatePreflightReady, BlockedAmbiguousRuntime)
+            | (
+                CensusStable
+                    | StateSnapshotCreated
+                    | StateMigrationStaged
+                    | StateMigrationValidated,
+                BlockedMigration
+            )
+            | (BlockedMigration, StateSnapshotCreated)
+            | (
+                BlockedAmbiguousRuntime
+                    | BlockedInflightEffect
+                    | BlockedCandidateIncompatible
+                    | BlockedMigration
+                    | RolledBackBeforeCommit,
+                ClosedZeroEffect
+            )
     )
 }
 
@@ -2734,6 +2809,28 @@ mod tests {
             .unwrap_err(),
             "upgrade_transaction_revision_mismatch"
         );
+
+        for (state, reason, timestamp) in [
+            (
+                UpgradeTransactionState::StateSnapshotCreated,
+                "state_snapshot_created",
+                "2026-08-16T15:00:00Z",
+            ),
+            (
+                UpgradeTransactionState::StateMigrationStaged,
+                "state_migration_staged",
+                "2026-08-16T15:00:00.250Z",
+            ),
+            (
+                UpgradeTransactionState::StateMigrationValidated,
+                "state_migration_validated",
+                "2026-08-16T15:00:00.500Z",
+            ),
+        ] {
+            let revision = transaction.revision;
+            transition_upgrade_transaction(&mut transaction, revision, state, reason, timestamp)
+                .unwrap();
+        }
 
         let revision = transaction.revision;
         transition_upgrade_transaction(
