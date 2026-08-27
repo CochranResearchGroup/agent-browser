@@ -4,7 +4,7 @@ Date: 2026-08-26
 
 State: OPEN
 
-Execution state: `slice_b_complete_slice_c_pending`
+Execution state: `slice_c_in_progress_core_model_complete_public_surfaces_pending`
 
 Lane: P134
 
@@ -772,3 +772,30 @@ Do not implement migration or installer effects in Slice A.
 - No browser, provider, development-runtime, installed-runtime, Service State,
   owner, lease, route, display, unit, Guacamole, or profile effect occurred.
   The next authorized packet is Slice C only.
+
+## 2026-08-27 Slice C core model checkpoint
+
+- The canonical source model now projects one first-class profile lease from
+  authenticated principal capability, exact runtime owner binding, sessions,
+  tabs, browser, process, route, expiry, and cleanup evidence. Legacy profiles
+  appear only when retained owner or session evidence exists and remain
+  observation-only.
+- Every record publishes an evidence-derived `leaseRevision`, blocking
+  identity axes, exact authorized actions, and one typed continuity recourse.
+  Owner-scoped `rejoin`, `renew`, and `release` require current capability and
+  revision evidence. Release refuses active subordinate tabs.
+- `doctor` returns typed findings and safe actions. Reconciliation planning is
+  sealed and bound to lease revision, owner generation, principal, profile,
+  browser, process, routes, boot epoch, expiry, and idempotency key. Apply is
+  idempotent through persisted receipts.
+- Reconciliation remains non-effect-capable while boot epoch is unavailable.
+  This is an intentional cross-boot safety gate until the later crash-epoch
+  slice supplies the missing identity.
+- The internal contract is documented at
+  `docs/dev/contracts/service-profile-lease.v1.md`. CLI, HTTP, MCP, dashboard,
+  generated-client, event, JSON schema, and watch parity remain open within
+  Slice C; Slice C is not complete.
+- Focused validation passed for the new profile-lease model and existing
+  profile-lease gate filters, plus all service model tests. No browser,
+  provider, development-runtime, installed-runtime, Service State, owner,
+  lease, route, display, unit, Guacamole, or profile effect occurred.

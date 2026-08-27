@@ -2408,6 +2408,10 @@ pub struct ServiceState {
         skip_serializing_if = "super::service_principal::ServicePrincipalRegistry::is_empty"
     )]
     pub(crate) service_principals: super::service_principal::ServicePrincipalRegistry,
+    /// Idempotent receipts for applied profile-lease reconciliation plans.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) profile_lease_reconcile_receipts:
+        BTreeMap<String, super::service_profile_lease::ProfileLeaseReconcileReceipt>,
     pub browsers: BTreeMap<String, BrowserProcess>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub browser_process_identities: BTreeMap<String, ServiceBrowserProcessIdentity>,

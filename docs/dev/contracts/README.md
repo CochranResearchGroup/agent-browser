@@ -12,6 +12,11 @@ recourse states. Caller labels remain attribution only. Public capability
 ingestion and first-class profile lease operations are intentionally deferred
 to later Plan 0134 slices.
 
+`service-profile-lease.v1.md` defines the first-class derived lease record,
+exact revision compare-and-swap, read and owner-scoped action families,
+doctor findings, and sealed idempotent reconciliation protocol. Its public
+transport parity is still in progress under Plan 0134 Slice C.
+
 MCP agents should begin shared, authenticated, profile-sensitive, or
 operator-visible work with `agent-browser://operating-guide`. This read-only
 resource publishes the versioned intent-first workflow, the separate browser
