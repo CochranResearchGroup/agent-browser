@@ -291,7 +291,8 @@ is a mixed-version compatibility boundary: the durable enum remains an
 older-reader-compatible failed terminal state, while
 <code>terminalResult: closed_zero_effect</code> carries the precise outcome.
 Current list and inspect output classify that combination as terminal
-zero-effect history. There
+zero-effect history. A legacy <code>closed_zero_effect</code> enum advertises
+one exact guarded <code>close</code> action to normalize the record. There
 is no inferred latest mutation or broad force unlock. A post-commit rollback
 restores the exact state snapshot and previous generation selector or records
 typed operator recovery with rollback evidence retained.

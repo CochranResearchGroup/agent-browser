@@ -1227,7 +1227,8 @@ fn install_transaction_safe_actions(
         | FailedPreservedOldGeneration
         | FailedEffectUncertain => vec!["inspect"],
         RolledBackBeforeCommit => vec!["inspect", "close"],
-        RolledBackAfterCommit | ClosedZeroEffect => vec!["inspect"],
+        RolledBackAfterCommit => vec!["inspect"],
+        ClosedZeroEffect => vec!["inspect", "close"],
     }
 }
 
@@ -14163,6 +14164,12 @@ mod tests {
         transaction.terminal_result = Some("closed_zero_effect".to_string());
         let path = transaction_path(&root, &transaction.transaction_id);
         write_private_json_atomic(&path, &transaction).unwrap();
+        let inspect = inspect_install_transaction(&root, &transaction.transaction_id).unwrap();
+        assert_eq!(
+            inspect["safeActions"],
+            serde_json::json!(["inspect", "close"])
+        );
+        assert_eq!(inspect["nextSafeAction"], "close");
         let guard = InstallTransactionMutationGuard {
             transaction_id: transaction.transaction_id.clone(),
             expected_revision: transaction.revision,

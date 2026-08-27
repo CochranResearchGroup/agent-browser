@@ -194,7 +194,8 @@ These guards are compare-and-swap evidence. A mismatch means re-inspect; do not
 bypass it. `close` accepts only a proven zero-effect terminal transaction.
 The ledger keeps an older-reader-compatible failed terminal state and records
 `terminalResult: closed_zero_effect`; current list and inspect output classify
-that combination as terminal zero-effect history.
+that combination as terminal zero-effect history. A legacy
+`closed_zero_effect` enum advertises one exact guarded `close` normalization.
 There is no generic force unlock. Resume revalidates immutable candidate and
 schema evidence, while rollback restores the exact pre-migration bytes and
 prior selector when commit already occurred.

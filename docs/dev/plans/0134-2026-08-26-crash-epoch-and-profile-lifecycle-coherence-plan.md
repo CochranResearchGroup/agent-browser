@@ -1141,7 +1141,9 @@ Do not implement migration or installer effects in Slice A.
 - The same exact guarded close action can normalize a legacy
   `closed_zero_effect` record after revision, candidate generation, census
   digest, selected generation, admission drain, migration, and runtime-effect
-  checks pass. There is still no broad unlock or unguarded ledger rewrite.
+  checks pass. List and inspect explicitly advertise that one normalization
+  action for the legacy state. There is still no broad unlock or unguarded
+  ledger rewrite.
 - Validation passed the two exact guarded-close cases, all 104 workstation
   installer tests, strict Clippy, Rust formatting, docs production build, the
   source-free idempotence and host-provision fixtures, fresh-VM harness,
