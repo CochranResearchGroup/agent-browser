@@ -4679,6 +4679,7 @@ mod tests {
             runtime_owner_registry: RuntimeOwnerRegistry {
                 revision: 659,
                 owners: BTreeMap::from([(profile_identity_digest.clone(), owner)]),
+                principal_bindings: BTreeMap::new(),
                 lifecycle_records: BTreeMap::from([(
                     browser_id.to_string(),
                     RuntimeLifecycleRecord {
@@ -4790,6 +4791,7 @@ mod tests {
             runtime_owner_registry: RuntimeOwnerRegistry {
                 revision: 21,
                 owners: BTreeMap::from([(profile_identity_digest.clone(), owner)]),
+                principal_bindings: BTreeMap::new(),
                 lifecycle_records: BTreeMap::from([(
                     browser_id.to_string(),
                     RuntimeLifecycleRecord {
@@ -5227,6 +5229,7 @@ mod tests {
             runtime_owner_registry: RuntimeOwnerRegistry {
                 revision: 11,
                 owners: BTreeMap::from([(profile_identity_digest.clone(), owner)]),
+                principal_bindings: BTreeMap::new(),
                 lifecycle_records: BTreeMap::from([(
                     "session:terminal-lane".to_string(),
                     RuntimeLifecycleRecord {

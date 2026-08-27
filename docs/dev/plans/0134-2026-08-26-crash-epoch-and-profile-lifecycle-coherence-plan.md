@@ -4,7 +4,7 @@ Date: 2026-08-26
 
 State: OPEN
 
-Execution state: `slice_a_complete_slice_b_pending`
+Execution state: `slice_b_complete_slice_c_pending`
 
 Lane: P134
 
@@ -736,3 +736,39 @@ Do not implement migration or installer effects in Slice A.
 - No browser, provider, development-runtime, installed-runtime, Service State,
   owner, lease, route, display, unit, Guacamole, or profile effect occurred.
   The next authorized packet is Slice B only.
+
+## 2026-08-27 Slice B execution checkpoint
+
+- Slice B is complete at source scope. `cli/src/native/service_principal.rs`
+  defines stable registered principals, hashed principal-to-profile
+  capabilities, authenticated authority records, subordinate expiring session
+  and tab work leases, conservative legacy migration planning, and the exact
+  four continuity recourse states.
+- Caller-provided service, agent, task, session, and principal-shaped fields
+  remain attribution or untrusted input. The current public request still
+  rejects `servicePrincipalId`; only a transport-authenticated capability can
+  populate the separate internal authority record.
+- Principal authority is bound to the existing runtime owner registry by
+  canonical profile identity digest and exact ready owner generation. Binding
+  is compare-and-swap guarded, rejects unproven legacy provenance, and does not
+  create a second ownership system.
+- Registration is transactional. A conflicting capability leaves the
+  principal registry unchanged, raw capabilities are never persisted, and a
+  stale capability revision cannot bind new subordinate work.
+- Legacy Service State remains readable. Labels and even principal-shaped
+  session fields remain observation-only unless active registration,
+  capability, profile, provenance, and current owner binding agree exactly.
+- The canonical internal contract is documented at
+  `docs/dev/contracts/service-principal-authority.v1.md`. First-class lease
+  commands and reads, authenticated public transport ingestion, generated
+  client and dashboard parity, state migration effects, and installed-runtime
+  adoption remain later P134 slices.
+- Validation passed: 10 focused principal authority tests, the broader
+  17-test principal filter, exact owner-generation binding, all 50 service
+  request tests, all 35 service model tests, all 45 access-plan tests, the
+  three Slice A reproducers, Rust formatting, strict Clippy, route-confusion
+  gates, HTTP and MCP parity, generated-client contract and type checks, the
+  service collections no-launch smoke, and `git diff --check`.
+- No browser, provider, development-runtime, installed-runtime, Service State,
+  owner, lease, route, display, unit, Guacamole, or profile effect occurred.
+  The next authorized packet is Slice C only.

@@ -2401,6 +2401,13 @@ pub struct ServiceState {
     pub(crate) presentation_capacity:
         Option<super::presentation_capacity::PresentationCapacityAuthority>,
     pub profiles: BTreeMap<String, BrowserProfile>,
+    /// Registered service principals and their hashed profile capabilities.
+    /// Raw capability material is never retained in Service State.
+    #[serde(
+        default,
+        skip_serializing_if = "super::service_principal::ServicePrincipalRegistry::is_empty"
+    )]
+    pub(crate) service_principals: super::service_principal::ServicePrincipalRegistry,
     pub browsers: BTreeMap<String, BrowserProcess>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub browser_process_identities: BTreeMap<String, ServiceBrowserProcessIdentity>,
@@ -5637,6 +5644,17 @@ pub struct BrowserSession {
     pub agent_name: Option<String>,
     /// Calling task label supplied by MCP, CLI, HTTP, or API clients.
     pub task_name: Option<String>,
+    /// Stable authenticated service principal. Caller labels never populate it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) principal_id: Option<String>,
+    /// Evidence class that established `principal_id`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) principal_provenance: Option<super::service_principal::ServicePrincipalProvenance>,
+    /// Task-scoped subordinate lease under the profile-owning principal.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) work_lease_id: Option<String>,
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub(crate) work_lease_revision: u64,
     pub owner: ServiceActor,
     pub lease: LeaseState,
     pub profile_id: Option<String>,
@@ -5664,6 +5682,10 @@ impl Default for BrowserSession {
             service_name: None,
             agent_name: None,
             task_name: None,
+            principal_id: None,
+            principal_provenance: None,
+            work_lease_id: None,
+            work_lease_revision: 0,
             owner: ServiceActor::System,
             lease: LeaseState::Shared,
             profile_id: None,
@@ -5723,6 +5745,17 @@ pub struct BrowserTab {
     pub url: Option<String>,
     pub title: Option<String>,
     pub owner_session_id: Option<String>,
+    /// Authenticated principal inherited from the owning session work lease.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) principal_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) principal_provenance: Option<super::service_principal::ServicePrincipalProvenance>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) work_lease_id: Option<String>,
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub(crate) work_lease_revision: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) work_lease_expires_at: Option<String>,
     pub service_tab_handle: Option<ServiceTabHandle>,
     pub latest_snapshot_id: Option<String>,
     pub latest_screenshot_id: Option<String>,
@@ -5740,6 +5773,11 @@ impl Default for BrowserTab {
             url: None,
             title: None,
             owner_session_id: None,
+            principal_id: None,
+            principal_provenance: None,
+            work_lease_id: None,
+            work_lease_revision: 0,
+            work_lease_expires_at: None,
             service_tab_handle: None,
             latest_snapshot_id: None,
             latest_screenshot_id: None,
@@ -6376,6 +6414,10 @@ fn non_empty_label(value: Option<&str>) -> Option<&str> {
             Some(trimmed)
         }
     })
+}
+
+fn is_zero_u64(value: &u64) -> bool {
+    *value == 0
 }
 
 /// Lease semantics for a session or tab.

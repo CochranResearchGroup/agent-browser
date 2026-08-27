@@ -1748,6 +1748,7 @@ fn service_request_command_with_state_and_principal(
     let normalized = normalize_service_request(ServiceRequestNormalization {
         request: &request,
         service_state,
+        authenticated_principal: None,
         fallback_principal,
         request_id: &request_id,
         effective_session: Some(effective_session),

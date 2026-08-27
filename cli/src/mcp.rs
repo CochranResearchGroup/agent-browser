@@ -5860,6 +5860,7 @@ fn service_request_command_with_state(
     let normalized = normalize_service_request(ServiceRequestNormalization {
         request: arguments,
         service_state,
+        authenticated_principal: None,
         fallback_principal: Some(ServiceRequestFallbackPrincipal {
             source: ServiceRequestPrincipalSource::LocalProcess,
             principal: "local:mcp-stdio",

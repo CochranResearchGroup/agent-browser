@@ -2006,6 +2006,7 @@ pub fn parse_command(args: &[String], flags: &Flags) -> Result<Value, ParseError
         let normalized = normalize_service_request(ServiceRequestNormalization {
             request: &request,
             service_state: None,
+            authenticated_principal: None,
             fallback_principal: Some(ServiceRequestFallbackPrincipal {
                 source: ServiceRequestPrincipalSource::LocalProcess,
                 principal: "local:cli",

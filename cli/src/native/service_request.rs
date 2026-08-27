@@ -14,6 +14,7 @@ use crate::native::remote_view_handoff::apply_remote_view_handoff_route_hints;
 use crate::native::service_access::apply_shared_profile_route_hints_for_service_request;
 use crate::native::service_contracts::{DESKTOP_CAPTURE_HARD_MAX_BYTES, SERVICE_REQUEST_ACTIONS};
 use crate::native::service_model::ServiceState;
+use crate::native::service_principal::AuthenticatedServicePrincipal;
 
 const PROFILE_LEASE_POLICIES: &[&str] = &["reject", "wait"];
 const REPAIR_POLICIES: &[&str] = &[
@@ -385,6 +386,9 @@ impl fmt::Display for ServiceRequestIssue {
 pub(crate) struct ServiceRequestNormalization<'a> {
     pub request: &'a Value,
     pub service_state: Option<&'a ServiceState>,
+    /// Transport-authenticated profile authority. Public request fields cannot
+    /// populate this value.
+    pub authenticated_principal: Option<&'a AuthenticatedServicePrincipal>,
     pub fallback_principal: Option<ServiceRequestFallbackPrincipal<'a>>,
     pub request_id: &'a str,
     pub effective_session: Option<&'a str>,
@@ -427,6 +431,7 @@ pub(crate) struct NormalizedServiceRequest {
     pub command: Value,
     pub trace: Value,
     pub attribution: ServiceRequestAttribution,
+    pub principal_authority: Option<AuthenticatedServicePrincipal>,
 }
 
 /// Normalize one schema-backed service request without transport or queue I/O.
@@ -532,10 +537,19 @@ pub(crate) fn normalize_service_request(
         command["operationPrincipalId"] = json!(desktop_interact_operation_principal_id(request));
     }
 
+    let principal_authority = input.authenticated_principal.cloned();
+    if let Some(authority) = &principal_authority {
+        command["servicePrincipalId"] = json!(authority.principal_id);
+        command["servicePrincipalProvenance"] = json!(authority.provenance.as_str());
+        command["serviceProfileCapabilityId"] = json!(authority.capability_id);
+        command["serviceProfileCapabilityRevision"] = json!(authority.capability_revision);
+    }
+
     Ok(NormalizedServiceRequest {
         command,
         trace,
         attribution,
+        principal_authority,
     })
 }
 
@@ -1823,6 +1837,7 @@ mod tests {
         normalize_service_request(ServiceRequestNormalization {
             request: &request,
             service_state: None,
+            authenticated_principal: None,
             fallback_principal: Some(ServiceRequestFallbackPrincipal {
                 source: ServiceRequestPrincipalSource::LocalProcess,
                 principal: "local:test-normalizer",
@@ -1838,6 +1853,7 @@ mod tests {
         let error = normalize_service_request(ServiceRequestNormalization {
             request: &request,
             service_state: None,
+            authenticated_principal: None,
             fallback_principal: None,
             request_id: "http-service-request-navigate-test",
             effective_session: Some("test-normalizer"),
@@ -1865,6 +1881,7 @@ mod tests {
         let mut normalized = normalize_service_request(ServiceRequestNormalization {
             request: &request,
             service_state: None,
+            authenticated_principal: None,
             fallback_principal: Some(ServiceRequestFallbackPrincipal {
                 source: ServiceRequestPrincipalSource::AuthenticatedDashboard,
                 principal: "dashboard-admin",
@@ -1891,6 +1908,65 @@ mod tests {
         assert_eq!(
             normalized.command["requestPrincipalSource"],
             "explicit_labels"
+        );
+    }
+
+    #[test]
+    fn authenticated_profile_authority_is_separate_from_caller_labels() {
+        use crate::native::service_principal::{
+            AuthenticatedServicePrincipal, ServicePrincipalProvenance,
+        };
+
+        let request = json!({
+            "action": "navigate",
+            "serviceName": "CallerSuppliedLabel",
+            "agentName": "caller-agent",
+            "taskName": "caller-task"
+        });
+        let authority = AuthenticatedServicePrincipal {
+            principal_id: "principal:registered-service".to_string(),
+            profile_id: "registered-profile".to_string(),
+            capability_id: "profile-capability-v1:fixture".to_string(),
+            capability_revision: 3,
+            provenance: ServicePrincipalProvenance::RegisteredCapability,
+        };
+        let normalized = normalize_service_request(ServiceRequestNormalization {
+            request: &request,
+            service_state: None,
+            authenticated_principal: Some(&authority),
+            fallback_principal: None,
+            request_id: "request-with-registered-authority",
+            effective_session: Some("registered-session"),
+        })
+        .unwrap();
+
+        assert_eq!(
+            normalized.attribution.principal,
+            "service:CallerSuppliedLabel/agent:caller-agent/task:caller-task"
+        );
+        assert_eq!(normalized.principal_authority.as_ref(), Some(&authority));
+        assert_eq!(
+            normalized.command["servicePrincipalId"],
+            "principal:registered-service"
+        );
+        assert_eq!(
+            normalized.command["servicePrincipalProvenance"],
+            "registered_capability"
+        );
+        assert!(normalized.command.get("profileCapability").is_none());
+
+        let forged = normalize(json!({
+            "action": "navigate",
+            "serviceName": "CallerSuppliedLabel",
+            "agentName": "caller-agent",
+            "taskName": "caller-task",
+            "servicePrincipalId": "principal:registered-service"
+        }))
+        .unwrap_err();
+        assert_eq!(forged.kind, ServiceRequestIssueKind::UnknownField);
+        assert_eq!(
+            forged.message(),
+            "unknown service request field: servicePrincipalId"
         );
     }
 
@@ -2859,6 +2935,7 @@ mod tests {
         normalize_service_request(ServiceRequestNormalization {
             request: &request,
             service_state: Some(state),
+            authenticated_principal: None,
             fallback_principal: Some(ServiceRequestFallbackPrincipal {
                 source: ServiceRequestPrincipalSource::LocalProcess,
                 principal: "local:test-normalizer",

@@ -144,6 +144,8 @@ pub mod service_monitors;
 #[allow(dead_code)]
 pub mod service_network_capture;
 #[allow(dead_code)]
+pub(crate) mod service_principal;
+#[allow(dead_code)]
 pub mod service_probe;
 #[allow(dead_code)]
 pub mod service_renderer_crash;

@@ -113,6 +113,7 @@ fn state_for_case(case: &AccessPlanCase) -> ServiceState {
                     last_transition: None,
                 },
             )]),
+            principal_bindings: BTreeMap::new(),
             lifecycle_records: BTreeMap::from([(
                 case.holder_browser_id.clone(),
                 RuntimeLifecycleRecord {

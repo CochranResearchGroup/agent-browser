@@ -3,6 +3,15 @@
 This directory holds machine-readable schemas for service API records that
 software clients and MCP agents are expected to consume directly.
 
+## Service Principal Authority v1
+
+`service-principal-authority.v1.md` defines the internal authenticated
+principal-to-profile capability, runtime owner binding, subordinate session
+and tab work leases, conservative legacy migration, and four typed continuity
+recourse states. Caller labels remain attribution only. Public capability
+ingestion and first-class profile lease operations are intentionally deferred
+to later Plan 0134 slices.
+
 MCP agents should begin shared, authenticated, profile-sensitive, or
 operator-visible work with `agent-browser://operating-guide`. This read-only
 resource publishes the versioned intent-first workflow, the separate browser

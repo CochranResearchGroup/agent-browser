@@ -4,6 +4,7 @@
 //! owner vocabulary. A pending transfer is observation-only. Effect authority
 //! changes only when the owner-generation compare-and-swap commits.
 
+use crate::native::service_principal::ServicePrincipalProvenance;
 use crate::native::service_store::ServiceStateRepository;
 use crate::runtime_adoption::BrowserAdoptionMode;
 use serde::{Deserialize, Serialize};
@@ -296,8 +297,26 @@ pub(crate) struct RuntimeLifecycleRecord {
 pub(crate) struct RuntimeOwnerRegistry {
     pub(crate) revision: u64,
     pub(crate) owners: BTreeMap<String, ProfileOwner>,
+    /// Authenticated service-principal authority for each profile owner.
+    ///
+    /// Missing bindings identify legacy observation-only owners. The map is
+    /// keyed by canonical profile identity digest so it cannot drift from the
+    /// existing owner authority into a second owner registry.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) principal_bindings: BTreeMap<String, RuntimeOwnerPrincipalBinding>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) lifecycle_records: BTreeMap<String, RuntimeLifecycleRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct RuntimeOwnerPrincipalBinding {
+    pub(crate) principal_id: String,
+    pub(crate) profile_id: String,
+    pub(crate) profile_identity_digest: String,
+    pub(crate) capability_id: String,
+    pub(crate) provenance: ServicePrincipalProvenance,
+    pub(crate) owner_generation: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -329,15 +348,75 @@ pub(crate) struct OwnerTransferError {
 
 impl RuntimeOwnerRegistry {
     pub(crate) fn is_empty(&self) -> bool {
-        self.owners.is_empty()
+        self.owners.is_empty() && self.principal_bindings.is_empty()
     }
 
     pub(crate) fn from_owner(owner: ProfileOwner) -> Self {
         Self {
             revision: 1,
             owners: BTreeMap::from([(owner.profile_identity_digest.clone(), owner)]),
+            principal_bindings: BTreeMap::new(),
             lifecycle_records: BTreeMap::new(),
         }
+    }
+
+    pub(crate) fn bind_principal_authority(
+        &mut self,
+        binding: RuntimeOwnerPrincipalBinding,
+    ) -> Result<RuntimeOwnerPrincipalBinding, OwnerTransferError> {
+        if binding.principal_id.trim().is_empty()
+            || binding.profile_id.trim().is_empty()
+            || binding.capability_id.trim().is_empty()
+            || binding.owner_generation == 0
+            || binding.provenance == ServicePrincipalProvenance::UnprovenLegacy
+            || !is_sha256(&binding.profile_identity_digest)
+        {
+            return Err(transfer_error(OwnerTransferFailureCode::InvalidEvidence));
+        }
+        let owner = self
+            .owners
+            .get(&binding.profile_identity_digest)
+            .ok_or_else(|| transfer_error(OwnerTransferFailureCode::OwnerMissing))?;
+        if owner.state != ProfileOwnerState::Ready
+            || owner.owner_generation != binding.owner_generation
+        {
+            return Err(transfer_error(
+                OwnerTransferFailureCode::OwnerCompareAndSwapMismatch,
+            ));
+        }
+        if let Some(existing) = self
+            .principal_bindings
+            .get(&binding.profile_identity_digest)
+        {
+            if existing == &binding {
+                return Ok(existing.clone());
+            }
+            return Err(transfer_error(
+                OwnerTransferFailureCode::OwnerCompareAndSwapMismatch,
+            ));
+        }
+        self.principal_bindings
+            .insert(binding.profile_identity_digest.clone(), binding.clone());
+        self.revision = self.revision.saturating_add(1);
+        Ok(binding)
+    }
+
+    pub(crate) fn principal_binding_is_current(
+        &self,
+        binding: Option<&RuntimeOwnerPrincipalBinding>,
+    ) -> bool {
+        binding.is_some_and(|binding| {
+            self.principal_bindings
+                .get(&binding.profile_identity_digest)
+                .is_some_and(|current| current == binding)
+                && self
+                    .owners
+                    .get(&binding.profile_identity_digest)
+                    .is_some_and(|owner| {
+                        owner.state == ProfileOwnerState::Ready
+                            && owner.owner_generation == binding.owner_generation
+                    })
+        })
     }
 
     pub(crate) fn owner(&self, profile_identity_digest: &str) -> Option<&ProfileOwner> {
@@ -1158,6 +1237,45 @@ mod tests {
         let encoded = serde_json::to_value(registry).unwrap();
 
         assert!(encoded.get("lifecycleRecords").is_none());
+        assert!(encoded.get("principalBindings").is_none());
+    }
+
+    #[test]
+    fn principal_binding_requires_the_exact_ready_owner_generation() {
+        let mut registry = RuntimeOwnerRegistry::from_owner(owner());
+        let mut binding = RuntimeOwnerPrincipalBinding {
+            principal_id: "principal:odollo-fulfillment".to_string(),
+            profile_id: "odollo-fulfillment".to_string(),
+            profile_identity_digest: digest("profile"),
+            capability_id: "profile-capability-v1:synthetic".to_string(),
+            provenance: ServicePrincipalProvenance::RegisteredCapability,
+            owner_generation: 6,
+        };
+
+        let mismatch = registry
+            .bind_principal_authority(binding.clone())
+            .unwrap_err();
+        assert_eq!(
+            mismatch.code,
+            OwnerTransferFailureCode::OwnerCompareAndSwapMismatch
+        );
+        assert!(registry.principal_bindings.is_empty());
+
+        binding.owner_generation = 7;
+        let committed = registry.bind_principal_authority(binding).unwrap();
+        assert!(registry.principal_binding_is_current(Some(&committed)));
+
+        let mut conflicting = committed.clone();
+        conflicting.principal_id = "principal:foreign".to_string();
+        let conflict = registry.bind_principal_authority(conflicting).unwrap_err();
+        assert_eq!(
+            conflict.code,
+            OwnerTransferFailureCode::OwnerCompareAndSwapMismatch
+        );
+        assert_eq!(
+            registry.principal_bindings[&digest("profile")].principal_id,
+            "principal:odollo-fulfillment"
+        );
     }
 
     #[test]
