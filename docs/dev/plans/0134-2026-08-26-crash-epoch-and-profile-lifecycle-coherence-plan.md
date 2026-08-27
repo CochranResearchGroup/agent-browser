@@ -4,7 +4,7 @@ Date: 2026-08-26
 
 State: OPEN
 
-Execution state: `slice_i_complete_slice_j_pending`
+Execution state: `slice_j_complete_slice_k_candidate_presentation_pending`
 
 Lane: P134
 
@@ -14,8 +14,9 @@ Branch: `plan/crash-profile-lifecycle-coherence`
 
 Target: `main`
 
-Authority: SOURCE AND PROVIDER-FREE DEVELOPMENT ONLY. DEVELOPMENT-RUNTIME OR
-PRODUCTION EFFECTS REQUIRE A SEPARATE EXACT-CANDIDATE AUTHORIZATION.
+Authority: SOURCE, PROVIDER-FREE DEVELOPMENT, AND EXACT-CANDIDATE BUILD AND
+INSTALLATION ARE AUTHORIZED. PRESENTATION-PROVIDER MUTATION STILL REQUIRES
+SEPARATE EXACT AUTHORIZATION.
 
 Current checkpoint:
 
@@ -48,8 +49,14 @@ Current checkpoint:
 - Slice H keeps first-class profile lease authority aligned across CLI, HTTP,
   MCP, generated clients, and dashboard controls. Public status adds redacted
   crash-regeneration progress while removing its private ephemeral evidence
-  from both bounded and full-history Service State projections. Slices I
-  through K remain pending.
+  from both bounded and full-history Service State projections.
+- Slice I is complete. Slice J source and isolated development acceptance are
+  complete at source commit `49c28874`. Slice K built and exercised candidate
+  `06a24ebb603550ccac6aa10803d68ba35ed49dccf08ba0a057bbc12f69560c8b`,
+  repaired migration and runtime-host epoch blockers, and rolled back cleanly
+  when no current operator-visible presentation could satisfy final commit.
+  A successor candidate is required because Slice J live inspection found and
+  repaired one exact ready-owner binding recourse gap after that build.
 
 Depends on:
 
@@ -1083,3 +1090,38 @@ Do not implement migration or installer effects in Slice A.
 - No browser, provider, development-runtime, installed-runtime, Service State,
   owner, lease, route, display, unit, Guacamole, or profile effect occurred.
   The next authorized packet is Slice J only.
+
+## 2026-08-27 Slice J source and isolated development checkpoint
+
+- The canonical source, client, dashboard, documentation, migration, installer,
+  runtime-host, and profile-lease gates passed through source commit
+  `49c28874`. Focused profile-lease validation now covers 30 tests, including
+  exact same-capability owner-generation refresh and stale-plan rejection.
+- The exact candidate executable with SHA-256
+  `06a24ebb603550ccac6aa10803d68ba35ed49dccf08ba0a057bbc12f69560c8b`
+  was selected in the isolated development runtime as generation
+  `0.28.0-06a24ebb6035`. Three disposable `about:blank` open, URL-read, close,
+  process-exit, and profile-residue cycles passed while the development
+  publisher proved production unchanged.
+- Existing isolated Plan 0134 fixtures prove the successful crash-replay,
+  pre-registration, and ordinary reacquisition outcomes at owner generation 3
+  with no blocking identity axis and cleanup satisfied. Failed-injection
+  artifacts remain retained as observation-only doctor warnings. Orphaned
+  owners are not rebound because they lack the exact cleanup evidence required
+  for effect authority.
+- Live inspection found one remaining modeled seam: a current ready owner can
+  advance generation after its last subordinate session disappears, leaving
+  the same authenticated principal with an inert reconciliation plan. The
+  sealed plan now emits `refresh_principal_owner_binding` only when the same
+  capability remains current, the owner generation moved strictly forward,
+  and profile, browser, process, and daemon session route all agree. Apply
+  rechecks those identities, the lease revision, and boot epoch before the
+  compare-and-swap refresh.
+- The development runtime selected the freshly compiled validation binary as
+  generation `0.28.0-10ec5ffdd9c2`; production remained unchanged. The
+  development Guacamole web tier is not ready, but Slice J is explicitly
+  provider-free and did not mutate presentation-provider state.
+- Slice J is complete. Slice K must build a successor release-mode candidate
+  from this checkpoint, rerun the guarded workstation preflight, and retain
+  the accepted installation unless a genuinely ready authenticated
+  operator-visible surface satisfies the final commit gate.
