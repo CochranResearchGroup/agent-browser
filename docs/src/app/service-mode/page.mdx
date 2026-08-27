@@ -1416,7 +1416,12 @@ its same-browser active tabs. Owner rejoin, renew, and release operations
 require the exact current lease revision plus that capability. HTTP accepts it only in an
 <code>Authorization: Bearer</code> header and MCP accepts it only as an
 ephemeral <code>profileCapability</code> argument. The raw value is never
-retained in Service State or lifecycle events.
+retained in Service State or lifecycle events. When an owner-generation
+mismatch is the only blocker and no subordinate session work remains, an
+authenticated reconcile plan can contain one
+<code>refresh_principal_owner_binding</code> transition. Apply advances only
+the same capability's binding after rechecking the exact ready profile,
+browser, process, session route, lease revision, and boot epoch.
 
 <code>GET /api/service/status</code>, CLI JSON status, typed MCP status, and the
 generated client expose replayable recovery progress in the redacted

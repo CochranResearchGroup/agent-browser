@@ -49,6 +49,15 @@ routes, boot epoch, proposed transitions, expiry, idempotency key, and a
 service seal. Apply rejects any mismatch and stores an idempotent receipt.
 Replay returns that receipt without repeating transitions.
 
+An exact `owner_generation_or_binding_mismatch` with no subordinate session
+work can produce one `refresh_principal_owner_binding` transition. It is
+effect-capable only when the same authenticated capability remains current,
+the ready owner generation moved strictly forward, and the profile, browser,
+process, and daemon session route all agree. Apply rechecks the old and new
+generation values plus every sealed identity before refreshing the binding.
+It does not transfer ownership, release work, close a browser, or delete a
+profile.
+
 Reconciliation planning captures the current host boot epoch, and apply
 requires that exact epoch to remain current. If the platform cannot establish
 one, planning remains diagnostic-only with `boot_epoch_unavailable`. This
@@ -61,9 +70,8 @@ private file, HTTP mutations accept it only as an `Authorization: Bearer`
 header, and MCP mutations accept it only as the ephemeral
 `profileCapability` tool argument. Clients must not log or persist that value.
 
-The source checkpoint provides the canonical model, guarded operations, record
-and collection schemas, CLI and HTTP detail, explanation, doctor, registration,
-and owner mutations, MCP read resources and owner mutation tools, generated
-client helpers, and `profile_lease_lifecycle_changed` events. Watch,
-reconciliation transport, and dashboard parity remain in progress within Slice
-C.
+The maintained surfaces provide the canonical model, guarded operations,
+record and collection schemas, CLI and HTTP detail, explanation, doctor,
+registration and owner mutations, MCP read resources and mutation tools,
+generated client helpers, dashboard controls, watch, reconciliation transport,
+and `profile_lease_lifecycle_changed` events.

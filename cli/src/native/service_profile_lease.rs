@@ -871,6 +871,9 @@ pub(crate) fn release_profile_lease(
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Builds a sealed, no-effect descriptor for exact stale-session release or
+/// same-capability owner-generation refresh. A binding refresh is proposed
+/// only when the ready owner and every retained lease identity already agree.
 pub(crate) fn plan_profile_lease_reconciliation(
     state: &ServiceState,
     lease_id: &str,
@@ -891,7 +894,7 @@ pub(crate) fn plan_profile_lease_reconciliation(
         return Err(lease_error(ProfileLeaseFailureCode::PlanExpired, lease_id));
     }
     let boot_epoch = boot_epoch.filter(|epoch| !epoch.trim().is_empty());
-    let proposed_transitions = state
+    let mut proposed_transitions = state
         .sessions
         .values()
         .filter(|session| {
@@ -906,6 +909,42 @@ pub(crate) fn plan_profile_lease_reconciliation(
             to_state: "released".to_string(),
         })
         .collect::<Vec<_>>();
+    if lease.blocking_identity_axes == ["owner_generation_or_binding_mismatch"] {
+        let binding = state
+            .runtime_owner_registry
+            .principal_bindings
+            .values()
+            .find(|binding| {
+                binding.principal_id == authority.principal_id
+                    && binding.profile_id == authority.profile_id
+                    && binding.capability_id == authority.capability_id
+                    && binding.provenance == authority.provenance
+                    && lease.profile_identity_digest.as_deref()
+                        == Some(binding.profile_identity_digest.as_str())
+            });
+        let owner = binding.and_then(|binding| {
+            state
+                .runtime_owner_registry
+                .owners
+                .get(&binding.profile_identity_digest)
+                .map(|owner| (binding, owner))
+        });
+        if let Some((binding, owner)) = owner.filter(|(binding, owner)| {
+            owner.state == crate::runtime_owner_transfer::ProfileOwnerState::Ready
+                && owner.owner_generation > binding.owner_generation
+                && lease.owner_generation == Some(owner.owner_generation)
+                && lease.browser_id.as_deref() == Some(owner.browser_id.as_str())
+                && lease.process_instance_digest.as_deref()
+                    == Some(owner.process_instance_digest.as_str())
+        }) {
+            proposed_transitions.push(ProfileLeaseTransition {
+                action: "refresh_principal_owner_binding".to_string(),
+                session_id: owner.daemon_session_route.clone(),
+                from_state: binding.owner_generation.to_string(),
+                to_state: owner.owner_generation.to_string(),
+            });
+        }
+    }
     let mut blocked_reasons = Vec::new();
     if boot_epoch.is_none() {
         blocked_reasons.push("boot_epoch_unavailable".to_string());
@@ -941,6 +980,8 @@ pub(crate) fn plan_profile_lease_reconciliation(
     Ok(plan)
 }
 
+/// Applies only the exact sealed transitions whose lease, owner, capability,
+/// boot epoch, and compare-and-swap evidence remain current.
 pub(crate) fn apply_profile_lease_reconciliation(
     state: &mut ServiceState,
     plan: &ProfileLeaseReconcilePlan,
@@ -1004,6 +1045,37 @@ pub(crate) fn apply_profile_lease_reconciliation(
         ));
     }
     for transition in &plan.proposed_transitions {
+        if transition.action == "refresh_principal_owner_binding" {
+            let binding = state
+                .runtime_owner_registry
+                .principal_bindings
+                .values()
+                .find(|binding| {
+                    binding.principal_id == authority.principal_id
+                        && binding.profile_id == authority.profile_id
+                        && binding.capability_id == authority.capability_id
+                        && binding.provenance == authority.provenance
+                })
+                .ok_or_else(|| lease_error(ProfileLeaseFailureCode::PlanInvalid, &plan.lease_id))?;
+            let owner = state
+                .runtime_owner_registry
+                .owners
+                .get(&binding.profile_identity_digest)
+                .ok_or_else(|| lease_error(ProfileLeaseFailureCode::PlanInvalid, &plan.lease_id))?;
+            if binding.owner_generation.to_string() != transition.from_state
+                || owner.owner_generation.to_string() != transition.to_state
+                || owner.daemon_session_route != transition.session_id
+                || owner.state != crate::runtime_owner_transfer::ProfileOwnerState::Ready
+            {
+                return Err(lease_error(
+                    ProfileLeaseFailureCode::PlanInvalid,
+                    &plan.lease_id,
+                ));
+            }
+            refresh_principal_binding_to_current_owner(state, authority)
+                .map_err(|_| lease_error(ProfileLeaseFailureCode::PlanInvalid, &plan.lease_id))?;
+            continue;
+        }
         let session = state
             .sessions
             .get_mut(&transition.session_id)
@@ -2464,6 +2536,124 @@ mod tests {
             state.tabs["tab-odollo-replayed"].principal_id.as_deref(),
             Some("principal:odollo-fulfillment")
         );
+    }
+
+    #[test]
+    fn reconcile_refreshes_exact_stale_owner_generation_without_session_work() {
+        let (mut state, authority, lease_id) = state_with_lease();
+        let profile_digest = state
+            .runtime_owner_registry
+            .principal_bindings
+            .values()
+            .find(|binding| binding.principal_id == authority.principal_id)
+            .unwrap()
+            .profile_identity_digest
+            .clone();
+        let owner = state
+            .runtime_owner_registry
+            .owners
+            .get_mut(&profile_digest)
+            .unwrap();
+        owner.owner_generation += 1;
+        state.sessions.clear();
+        state.tabs.clear();
+
+        let blocked = inspect_profile_lease(&state, &lease_id, NOW).unwrap();
+        assert_eq!(
+            blocked.blocking_identity_axes,
+            vec!["owner_generation_or_binding_mismatch"]
+        );
+        assert_eq!(
+            blocked.recourse,
+            PrincipalContinuityRecourse::ReconcilePrincipalIdentity
+        );
+
+        let plan = plan_profile_lease_reconciliation(
+            &state,
+            &lease_id,
+            &blocked.lease_revision,
+            &authority,
+            NOW,
+            "2026-08-27T12:05:00Z",
+            Some("boot-epoch-1".to_string()),
+            "idempotency-owner-generation-refresh".to_string(),
+            SEAL_KEY,
+        )
+        .unwrap();
+        assert!(plan.effect_capable);
+        assert_eq!(plan.proposed_transitions.len(), 1);
+        assert_eq!(
+            plan.proposed_transitions[0].action,
+            "refresh_principal_owner_binding"
+        );
+
+        let receipt = apply_profile_lease_reconciliation(
+            &mut state,
+            &plan,
+            &authority,
+            "2026-08-27T12:01:00Z",
+            Some("boot-epoch-1"),
+            SEAL_KEY,
+        )
+        .unwrap();
+        assert_eq!(receipt.transition_count, 1);
+        let resolved = inspect_profile_lease(&state, &lease_id, "2026-08-27T12:01:00Z").unwrap();
+        assert!(!resolved.observation_only);
+        assert!(resolved.blocking_identity_axes.is_empty());
+        assert_eq!(resolved.state, "owned_idle");
+        assert_eq!(
+            state.runtime_owner_registry.principal_bindings[&profile_digest].owner_generation,
+            state.runtime_owner_registry.owners[&profile_digest].owner_generation
+        );
+    }
+
+    #[test]
+    fn reconcile_rejects_owner_binding_refresh_after_binding_changes() {
+        let (mut state, authority, lease_id) = state_with_lease();
+        let profile_digest = state
+            .runtime_owner_registry
+            .principal_bindings
+            .values()
+            .find(|binding| binding.principal_id == authority.principal_id)
+            .unwrap()
+            .profile_identity_digest
+            .clone();
+        state
+            .runtime_owner_registry
+            .owners
+            .get_mut(&profile_digest)
+            .unwrap()
+            .owner_generation += 1;
+        state.sessions.clear();
+        state.tabs.clear();
+        let blocked = inspect_profile_lease(&state, &lease_id, NOW).unwrap();
+        let plan = plan_profile_lease_reconciliation(
+            &state,
+            &lease_id,
+            &blocked.lease_revision,
+            &authority,
+            NOW,
+            "2026-08-27T12:05:00Z",
+            Some("boot-epoch-1".to_string()),
+            "idempotency-stale-owner-generation-refresh".to_string(),
+            SEAL_KEY,
+        )
+        .unwrap();
+
+        refresh_principal_binding_to_current_owner(&mut state, &authority).unwrap();
+        let error = apply_profile_lease_reconciliation(
+            &mut state,
+            &plan,
+            &authority,
+            "2026-08-27T12:01:00Z",
+            Some("boot-epoch-1"),
+            SEAL_KEY,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, ProfileLeaseFailureCode::RevisionMismatch);
+        assert!(!state
+            .profile_lease_reconcile_receipts
+            .contains_key(&plan.idempotency_key));
     }
 
     #[test]

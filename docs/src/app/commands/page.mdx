@@ -686,6 +686,8 @@ agent-browser service prune-retained --display-allocations # Dry-run retained di
 agent-browser service access-plan --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace --login-id canva
 agent-browser service profiles        # Show retained profile records
 agent-browser service leases          # Inspect principal-scoped profile lease authority and recourse
+agent-browser service leases <id> reconcile plan --revision <revision> --capability-file <path> --expires-at <rfc3339>
+agent-browser service leases <id> reconcile apply --revision <revision> --capability-file <path> --plan-file <path>
 agent-browser service sessions        # Show retained session records
 agent-browser service browsers        # Show retained browser records and latest health evidence
 agent-browser service tabs            # Show retained tab records
