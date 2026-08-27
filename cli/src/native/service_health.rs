@@ -1453,9 +1453,24 @@ pub(crate) fn persist_closed_browser_health_in_repository(
         let id = service_browser_id_for_session(session_id);
         let previous = service_state.browsers.get(&id).cloned();
         let now = current_timestamp();
-        let preserve_registered_crash_continuity = previous
+        let latest_health_event_is_unexpected_exit = service_state
+            .events
+            .iter()
+            .rev()
+            .find(|event| {
+                event.kind == ServiceEventKind::BrowserHealthChanged
+                    && event.browser_id.as_deref() == Some(id.as_str())
+            })
+            .and_then(|event| event.details.as_ref())
+            .is_some_and(|details| {
+                details["currentReasonKind"] == "process_exited"
+                    && details["processExitCause"] == "unexpected_process_exit"
+            });
+        let unexpected_exit_recorded = previous
             .as_ref()
             .is_some_and(|browser| browser.health == BrowserHealth::ProcessExited)
+            || latest_health_event_is_unexpected_exit;
+        let preserve_registered_crash_continuity = unexpected_exit_recorded
             && crate::native::service_principal::authenticated_session_work_authority(
                 service_state,
                 session_id,
@@ -5039,10 +5054,20 @@ mod tests {
                     id: browser_id.clone(),
                     profile_id: Some(profile_id.to_string()),
                     active_session_ids: vec![session_id.to_string()],
-                    health: BrowserHealth::ProcessExited,
+                    health: BrowserHealth::Ready,
                     ..BrowserProcess::default()
                 },
             )]),
+            events: vec![ServiceEvent {
+                id: "event-unexpected-exit".to_string(),
+                kind: ServiceEventKind::BrowserHealthChanged,
+                browser_id: Some(browser_id.clone()),
+                details: Some(serde_json::json!({
+                    "currentReasonKind": "process_exited",
+                    "processExitCause": "unexpected_process_exit",
+                })),
+                ..ServiceEvent::default()
+            }],
             runtime_owner_registry: crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(
                 crate::runtime_owner_transfer::ProfileOwner {
                     owner_id: "owner-odollo".to_string(),
@@ -5120,10 +5145,7 @@ mod tests {
             persisted.sessions[session_id].principal_id.as_deref(),
             Some(principal_id)
         );
-        assert_eq!(
-            persisted.browsers[&browser_id].health,
-            BrowserHealth::ProcessExited
-        );
+        assert_eq!(persisted.browsers[&browser_id].health, BrowserHealth::Ready);
         let _ = fs::remove_dir_all(&home);
     }
 
