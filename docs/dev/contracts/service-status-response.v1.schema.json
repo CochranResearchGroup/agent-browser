@@ -476,6 +476,53 @@
       },
       "additionalProperties": false
     },
+    "crashRegenerationTransactions": {
+      "description": "Redacted recovery progress. Stable service identities are retained while host PIDs, sockets, displays, viewer sessions, and provider generations remain private.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "schemaVersion", "transactionId", "state", "revision", "replayCount",
+          "completedPhases", "currentPhase", "principalId", "profileId",
+          "logicalBrowserId", "sessionRoute", "routeId", "connectionId",
+          "routeUserId", "handoffId", "operatorVisibleReady", "recourse"
+        ],
+        "properties": {
+          "schemaVersion": { "const": "agent-browser.crash-regeneration-status.v1" },
+          "transactionId": { "type": "string" },
+          "state": { "enum": ["pending", "in_progress", "interrupted", "ready"] },
+          "revision": { "type": "integer", "minimum": 0 },
+          "replayCount": { "type": "integer", "minimum": 0 },
+          "completedPhases": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "runtime_host_authority", "browser_authority", "display_discovery",
+                "guacamole_recovery", "route_projection",
+                "durable_handoff_resolution", "operator_visible_proof"
+              ]
+            }
+          },
+          "currentPhase": { "type": ["string", "null"] },
+          "principalId": { "type": "string" },
+          "profileId": { "type": "string" },
+          "logicalBrowserId": { "type": "string" },
+          "sessionRoute": { "type": "string" },
+          "routeId": { "type": "string" },
+          "connectionId": { "type": "string" },
+          "routeUserId": { "type": "string" },
+          "handoffId": { "type": "string" },
+          "operatorVisibleReady": { "type": "boolean" },
+          "recourse": {
+            "enum": [
+              "inspect_transaction_progress", "resume_same_transaction",
+              "reuse_durable_handoff"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
     "service_state": {
       "type": "object"
     }

@@ -1415,6 +1415,15 @@ exact current lease revision plus that capability. HTTP accepts it only in an
 ephemeral <code>profileCapability</code> argument. The raw value is never
 retained in Service State or lifecycle events.
 
+<code>GET /api/service/status</code>, CLI JSON status, typed MCP status, and the
+generated client expose replayable recovery progress in the redacted
+<code>crashRegenerationTransactions</code> array. Each row contains stable
+principal, profile, browser, route, connection, route-user, and durable
+handoff identity together with phase progress, visibility readiness, and safe
+recourse. Host PIDs, socket identities, display numbers, viewer-session IDs,
+and provider generations remain private transaction evidence and are removed
+from the public <code>service_state</code> projection.
+
 The Service dashboard projects the same lease record into each profile
 allocation. It shows principal provenance, owner generation, revision,
 identity blockers, doctor findings, recourse, and current authorized actions.

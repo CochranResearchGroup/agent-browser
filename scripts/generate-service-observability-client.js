@@ -859,6 +859,26 @@ export interface ServiceRuntimeLifecycleStatus {
   [key: string]: unknown;
 }
 
+export interface ServiceCrashRegenerationStatus {
+  schemaVersion: 'agent-browser.crash-regeneration-status.v1';
+  transactionId: string;
+  state: 'pending' | 'in_progress' | 'interrupted' | 'ready';
+  revision: number;
+  replayCount: number;
+  completedPhases: Array<'runtime_host_authority' | 'browser_authority' | 'display_discovery' | 'guacamole_recovery' | 'route_projection' | 'durable_handoff_resolution' | 'operator_visible_proof'>;
+  currentPhase: 'runtime_host_authority' | 'browser_authority' | 'display_discovery' | 'guacamole_recovery' | 'route_projection' | 'durable_handoff_resolution' | 'operator_visible_proof' | null;
+  principalId: string;
+  profileId: string;
+  logicalBrowserId: string;
+  sessionRoute: string;
+  routeId: string;
+  connectionId: string;
+  routeUserId: string;
+  handoffId: string;
+  operatorVisibleReady: boolean;
+  recourse: 'inspect_transaction_progress' | 'resume_same_transaction' | 'reuse_durable_handoff';
+}
+
 export interface ServiceStatusResponse {
   control_plane?: ServiceControlPlaneStatus;
   service_state: Record<string, unknown>;
@@ -870,6 +890,7 @@ export interface ServiceStatusResponse {
   browserSessionAuthority?: ServiceBrowserSessionAuthoritySnapshot;
   statusProjection?: ServiceStatusProjection;
   runtimeLifecycle?: ServiceRuntimeLifecycleStatus;
+  crashRegenerationTransactions?: ServiceCrashRegenerationStatus[];
   launchConfig?: {
     defaultBrowserBuild: string | null;
     stealthCdpChromiumRequired: boolean;

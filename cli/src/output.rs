@@ -6295,7 +6295,7 @@ without PID, CDP, or live tabs and preserves lifecycle aliases in candidateReaso
   agent-browser service profiles <profile-id> verify-seeding <target-service-id> [--state <fresh|stale|seeded_unknown_freshness|blocked_by_attached_devtools>] [--evidence <text>] [--account-id <id>] [--account-ids <id,id>]
 
 Commands:
-  status                Show worker state, browser health, queue depth, profile lease wait count, configured site policies, and providers
+  status                Show worker state, browser health, profile lease waits, redacted crash recovery progress, configured site policies, and providers
   watch                 Poll service status until interrupted
   reconcile             Probe persisted browser records and update service state
   prune-retained        Dry-run or apply removal of inert retained browser, closed-tab, orphaned profile, and display allocation records

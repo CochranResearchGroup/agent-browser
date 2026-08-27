@@ -8,6 +8,9 @@
 use super::service_store::ServiceStateRepository;
 use serde::{Deserialize, Serialize};
 
+pub(crate) const CRASH_REGENERATION_STATUS_SCHEMA_VERSION: &str =
+    "agent-browser.crash-regeneration-status.v1";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum CrashRegenerationPhase {
@@ -116,6 +119,66 @@ pub(crate) struct CrashRegenerationTransaction {
     pub(crate) current_phase: Option<CrashRegenerationPhase>,
     pub(crate) evidence: CrashRegenerationEvidence,
     pub(crate) last_error: Option<String>,
+}
+
+/// Public, stable-identity-only projection of one recovery transaction.
+///
+/// Host PIDs, socket identities, displays, viewer sessions, and provider
+/// generations remain private Service State evidence and never cross a public
+/// status response.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CrashRegenerationStatus {
+    pub(crate) schema_version: &'static str,
+    pub(crate) transaction_id: String,
+    pub(crate) state: CrashRegenerationState,
+    pub(crate) revision: u64,
+    pub(crate) replay_count: u64,
+    pub(crate) completed_phases: Vec<CrashRegenerationPhase>,
+    pub(crate) current_phase: Option<CrashRegenerationPhase>,
+    pub(crate) principal_id: String,
+    pub(crate) profile_id: String,
+    pub(crate) logical_browser_id: String,
+    pub(crate) session_route: String,
+    pub(crate) route_id: String,
+    pub(crate) connection_id: String,
+    pub(crate) route_user_id: String,
+    pub(crate) handoff_id: String,
+    pub(crate) operator_visible_ready: bool,
+    pub(crate) recourse: &'static str,
+}
+
+pub(crate) fn crash_regeneration_statuses(
+    transactions: &std::collections::BTreeMap<String, CrashRegenerationTransaction>,
+) -> Vec<CrashRegenerationStatus> {
+    transactions
+        .values()
+        .map(|transaction| CrashRegenerationStatus {
+            schema_version: CRASH_REGENERATION_STATUS_SCHEMA_VERSION,
+            transaction_id: transaction.transaction_id.clone(),
+            state: transaction.state,
+            revision: transaction.revision,
+            replay_count: transaction.replay_count,
+            completed_phases: transaction.completed_phases.clone(),
+            current_phase: transaction.current_phase,
+            principal_id: transaction.stable_identities.principal_id.clone(),
+            profile_id: transaction.stable_identities.profile_id.clone(),
+            logical_browser_id: transaction.stable_identities.logical_browser_id.clone(),
+            session_route: transaction.stable_identities.session_route.clone(),
+            route_id: transaction.stable_identities.route_id.clone(),
+            connection_id: transaction.stable_identities.connection_id.clone(),
+            route_user_id: transaction.stable_identities.route_user_id.clone(),
+            handoff_id: transaction.stable_identities.handoff_id.clone(),
+            operator_visible_ready: transaction.evidence.operator_visible_ready,
+            recourse: match transaction.state {
+                CrashRegenerationState::Ready => "reuse_durable_handoff",
+                CrashRegenerationState::Interrupted => "resume_same_transaction",
+                CrashRegenerationState::Pending | CrashRegenerationState::InProgress => {
+                    "inspect_transaction_progress"
+                }
+            },
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -825,5 +888,39 @@ mod tests {
         let decoded: ServiceState = serde_json::from_slice(&encoded).unwrap();
 
         assert_eq!(decoded.crash_regeneration_transactions["crash-tx-1"], ready);
+    }
+
+    #[test]
+    fn public_status_contains_only_stable_identity_and_progress() {
+        let repository = MemoryRepository::default();
+        let mut effects = ScriptedEffects::new(None);
+        run_crash_regeneration(&repository, &mut effects, request()).unwrap();
+        let snapshot = repository.load_snapshot().unwrap();
+        let public = serde_json::to_value(crash_regeneration_statuses(
+            &snapshot.crash_regeneration_transactions,
+        ))
+        .unwrap();
+        let encoded = public.to_string();
+
+        assert_eq!(public[0]["state"], "ready");
+        assert_eq!(
+            public[0]["profileId"],
+            snapshot.crash_regeneration_transactions["crash-tx-1"]
+                .stable_identities
+                .profile_id
+        );
+        assert_eq!(public[0]["recourse"], "reuse_durable_handoff");
+        for private_key in [
+            "bootEpoch",
+            "runtimeHostId",
+            "runtimeHostPid",
+            "socketIdentity",
+            "browserPid",
+            "displayName",
+            "guacamoleWebTierGeneration",
+            "viewerSessionId",
+        ] {
+            assert!(!encoded.contains(private_key), "leaked {private_key}");
+        }
     }
 }

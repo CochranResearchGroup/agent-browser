@@ -314,6 +314,9 @@ pub(crate) struct ServiceStatusResponse {
     pub(crate) status_projection: StatusProjection,
     #[serde(rename = "runtimeLifecycle")]
     pub(crate) runtime_lifecycle: Value,
+    #[serde(rename = "crashRegenerationTransactions")]
+    pub(crate) crash_regeneration_transactions:
+        Vec<super::service_crash_regeneration::CrashRegenerationStatus>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -494,6 +497,10 @@ impl ServiceStatusProjector {
                 observations,
             },
             runtime_lifecycle: input.runtime_lifecycle,
+            crash_regeneration_transactions:
+                super::service_crash_regeneration::crash_regeneration_statuses(
+                    &authority_state.crash_regeneration_transactions,
+                ),
         };
         serde_json::to_value(&response)
             .map_err(|error| ServiceStatusProjectionError::Serialization(error.to_string()))?;

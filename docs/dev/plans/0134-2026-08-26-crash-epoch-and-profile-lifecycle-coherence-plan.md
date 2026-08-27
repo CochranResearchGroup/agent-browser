@@ -4,7 +4,7 @@ Date: 2026-08-26
 
 State: OPEN
 
-Execution state: `slice_g_complete_slice_h_pending`
+Execution state: `slice_h_complete_slice_i_pending`
 
 Lane: P134
 
@@ -44,7 +44,11 @@ Current checkpoint:
 - Slice G adds one persisted, compare-and-swap crash-regeneration transaction.
   It resumes in dependency order with stable operation IDs, retains invalid
   visibility as an interruption, and converges after either effect failure or
-  receipt-persistence failure without duplicating logical effects. Slices H
+  receipt-persistence failure without duplicating logical effects.
+- Slice H keeps first-class profile lease authority aligned across CLI, HTTP,
+  MCP, generated clients, and dashboard controls. Public status adds redacted
+  crash-regeneration progress while removing its private ephemeral evidence
+  from both bounded and full-history Service State projections. Slices I
   through K remain pending.
 
 Depends on:
@@ -1012,3 +1016,34 @@ Do not implement migration or installer effects in Slice A.
   provider, development-runtime, installed-runtime, Service State, owner,
   lease, route, display, unit, Guacamole, or profile effect occurred. The next
   authorized packet is Slice H only.
+
+## 2026-08-27 Slice H public surface and client checkpoint
+
+- CLI, HTTP, typed MCP status, the generated observability client, and the
+  dashboard now consume one `crashRegenerationTransactions` contract for
+  transaction state, stable identity, phase progress, operator-visible
+  readiness, and typed recourse.
+- The public projection omits boot identity, host and browser PIDs, socket
+  identity, display number, Guacamole generation, and viewer-session identity.
+  Both bounded and full-tab-history status paths remove the private persisted
+  transaction map from `service_state` without mutating the authoritative
+  input snapshot.
+- Existing first-class profile lease collection, detail, explanation, doctor,
+  register, rejoin, renew, release, and sealed reconciliation surfaces remain
+  the authority for principal provenance, blocking identity axes, authorized
+  actions, and lifecycle recourse. The dashboard continues to enable only the
+  actions advertised by the exact lease record and keeps capabilities in
+  ephemeral dialog state.
+- README, CLI help, repository skill guidance, service-mode documentation,
+  status schema, generated types, and dashboard status presentation describe
+  the same redaction and recourse boundary.
+- Validation passed the focused crash and status projection tests, strict
+  Clippy and Rust formatting, fixed-input status harness, API and MCP parity,
+  full service client suite, dashboard inspector, view-stream, browser-row,
+  browser-table and production builds, docs production build, and remote-view
+  handoff documentation fixture.
+- No browser, provider, development-runtime, installed-runtime, Service State,
+  owner, lease, route, display, unit, Guacamole, or profile effect occurred.
+  The repository skill is intentionally not copied into the installed skill
+  until the guarded candidate transaction in Slice K. The next authorized
+  packet is Slice I only.

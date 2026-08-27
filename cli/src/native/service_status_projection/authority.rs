@@ -25,8 +25,10 @@ pub(super) fn project_closed_tabs(
         .filter(|tab| tab.lifecycle == TabLifecycle::Closed)
         .count();
     if full_tab_history {
+        let mut projected = state.clone();
+        projected.crash_regeneration_transactions.clear();
         return (
-            state.clone(),
+            projected,
             ClosedTabProjectionMetadata {
                 mode: "full",
                 cap: None,
@@ -65,6 +67,7 @@ pub(super) fn project_closed_tabs(
         .collect::<HashSet<_>>();
     let mut projected = state.clone();
     projected.tabs.retain(|id, _| !omitted_ids.contains(id));
+    projected.crash_regeneration_transactions.clear();
     let retained_closed_count = projected
         .tabs
         .values()
@@ -82,4 +85,55 @@ pub(super) fn project_closed_tabs(
             diagnostic_available: true,
         },
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::native::service_crash_regeneration::CrashRegenerationTransaction;
+    use serde_json::json;
+
+    fn state_with_private_crash_evidence() -> ServiceState {
+        let transaction: CrashRegenerationTransaction = serde_json::from_value(json!({
+            "transactionId": "tx-private",
+            "bootEpoch": "boot-private",
+            "stableIdentities": {
+                "principalId": "principal-stable",
+                "profileId": "profile-stable",
+                "logicalBrowserId": "browser-stable",
+                "sessionRoute": "session:stable",
+                "routeId": "route-stable",
+                "connectionId": "connection-stable",
+                "routeUserId": "route-user-stable",
+                "handoffId": "handoff-stable"
+            },
+            "state": "interrupted",
+            "revision": 2,
+            "replayCount": 1,
+            "completedPhases": ["runtime_host_authority"],
+            "currentPhase": "browser_authority",
+            "evidence": {
+                "runtimeHostPid": 4242,
+                "socketIdentity": "socket-private",
+                "displayName": ":101"
+            },
+            "lastError": "private-error"
+        }))
+        .unwrap();
+        let mut state = ServiceState::default();
+        state
+            .crash_regeneration_transactions
+            .insert("tx-private".to_string(), transaction);
+        state
+    }
+
+    #[test]
+    fn public_service_state_omits_private_crash_evidence_in_both_history_modes() {
+        let state = state_with_private_crash_evidence();
+        for full_tab_history in [false, true] {
+            let (projected, _) = project_closed_tabs(&state, full_tab_history);
+            assert!(projected.crash_regeneration_transactions.is_empty());
+        }
+        assert_eq!(state.crash_regeneration_transactions.len(), 1);
+    }
 }

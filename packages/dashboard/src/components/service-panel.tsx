@@ -10,6 +10,7 @@ import {
   rejoinServiceProfileLease,
   releaseServiceProfileLease,
   renewServiceProfileLease,
+  type ServiceCrashRegenerationStatus,
   type ServiceProfileLeaseReconcilePlan,
 } from "@agent-browser/client/service-observability";
 import { useAtomValue } from "jotai/react";
@@ -474,6 +475,7 @@ type ServiceStatusData = {
   presentationCapacity?: PresentationCapacityProjection | null;
   desktopEvidencePolicy?: DesktopEvidencePolicyProjection | null;
   statusProjection?: WorkspaceNodeInput["statusProjection"];
+  crashRegenerationTransactions?: ServiceCrashRegenerationStatus[];
 };
 
 type ServiceResourcesData = {
@@ -7221,6 +7223,10 @@ export function ServicePanel({
   const serviceJobTimeoutMs =
     control?.service_job_timeout_ms ?? serviceState?.controlPlane?.serviceJobTimeoutMs ?? null;
   const reconciliation = serviceState?.reconciliation;
+  const crashRegenerationTransactions = status?.crashRegenerationTransactions ?? [];
+  const crashRegenerationAttention = crashRegenerationTransactions.find(
+    (transaction) => transaction.state !== "ready",
+  ) ?? crashRegenerationTransactions.at(-1);
   const retainedServiceJobs = useMemo(
     () => Object.values(serviceState?.jobs ?? {}),
     [serviceState?.jobs],
@@ -8398,6 +8404,21 @@ export function ServicePanel({
               detail={`${reconciliation?.changedBrowsers ?? 0} changed of ${reconciliation?.browserCount ?? 0} browsers`}
               icon={Clock3}
               tone={reconciliation?.lastError ? "bad" : "good"}
+            />
+            <ServiceStatusLight
+              label="Recovery"
+              value={crashRegenerationAttention?.state ?? "idle"}
+              detail={crashRegenerationAttention
+                ? `${crashRegenerationAttention.profileId}; ${crashRegenerationAttention.currentPhase ?? "complete"}; ${crashRegenerationAttention.recourse}`
+                : "No retained crash-regeneration transaction"}
+              icon={Activity}
+              tone={crashRegenerationAttention?.state === "interrupted"
+                ? "bad"
+                : crashRegenerationAttention?.state === "in_progress" || crashRegenerationAttention?.state === "pending"
+                  ? "warn"
+                  : crashRegenerationAttention?.state === "ready"
+                    ? "good"
+                    : "neutral"}
             />
             <ServiceStatusLight
               label="Events"
