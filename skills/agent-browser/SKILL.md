@@ -211,6 +211,15 @@ acquisition is blocked merely because every Guacamole route is checked out or
 install doctor reports a global advisory. Require a blocker from the requested
 action, requested profile, scoped remote-view doctor, or route preflight.
 
+For a principal-bound profile, pass the lease capability ephemerally. HTTP
+clients use `Authorization: Bearer <profile-capability>` for both access-plan
+and service-request calls. MCP clients use `profileCapability` on
+`service_access_plan` and `service_request`. Generated clients accept the same
+`profileCapability` option and transmit it only as a bearer header. Never put a
+capability in a URL, request body, command-line argument, log, or persisted
+Service State. Service, agent, and task labels provide attribution but do not
+grant profile authority.
+
 Let Agent Browser own profile leases, retained-browser reuse, route selection,
 parking, handoffs, browser close, reconciliation, and GC. A consumer agent must
 not create a duplicate profile, close another workload, release another viewer,

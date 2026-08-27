@@ -121,7 +121,7 @@ const serviceSurface = [
     docsNeedles: ['service_access_plan', '/api/service/access-plan'],
     httpNeedles: [
       'path == "/api/service/access-plan"',
-      'service_access_plan_response(query)',
+      'service_access_plan_response_for_state_and_principal(',
     ],
     clientNeedles: [
       'getServiceAccessPlan',
@@ -390,9 +390,14 @@ expectSameItems(
 
 expectSameItems(
   schemaServiceRequestProperties,
-  mcpServiceRequestProperties,
+  mcpServiceRequestProperties.filter((property) => property !== 'profileCapability'),
   'service-request schema properties',
-  'MCP service_request top-level properties',
+  'MCP service_request persisted properties',
+);
+expectIncludes(
+  mcpServiceRequestProperties,
+  'profileCapability',
+  'MCP service_request exposes the ephemeral profileCapability transport field',
 );
 expectSameItems(
   schemaServiceRequestProperties,
@@ -475,7 +480,7 @@ const serviceResourceSurface = [
     ],
     httpNeedles: [
       'path == "/api/service/access-plan"',
-      'service_access_plan_response(query)',
+      'service_access_plan_response_for_state_and_principal(',
       'SERVICE_ACCESS_PLAN_HTTP_ROUTE',
       'SERVICE_ACCESS_PLAN_RESPONSE_SCHEMA_ID',
       '"serviceAccessPlanResponse"',

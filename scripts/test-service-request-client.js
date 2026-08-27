@@ -1472,13 +1472,17 @@ async function main() {
   const postResponse = await postServiceRequest({
     baseUrl: 'http://127.0.0.1:4849',
     fetch: postRecorder.fetch,
+    profileCapability: 'private-profile-capability',
     request,
   });
   assert.deepEqual(postResponse, { success: true, data: { jobId: 'job-post' } });
   assert.equal(postRecorder.calls.length, 1);
   assert.equal(postRecorder.calls[0].url, 'http://127.0.0.1:4849/api/service/request');
   assert.equal(postRecorder.calls[0].init.method, 'POST');
-  assert.deepEqual(postRecorder.calls[0].init.headers, { 'content-type': 'application/json' });
+  assert.deepEqual(postRecorder.calls[0].init.headers, {
+    'content-type': 'application/json',
+    authorization: 'Bearer private-profile-capability',
+  });
   assert.deepEqual(postRecorder.calls[0].body, request);
 
   const tabHandle = {

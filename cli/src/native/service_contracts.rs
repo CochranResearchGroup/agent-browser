@@ -257,12 +257,21 @@ pub fn service_contracts_metadata() -> Value {
                 "http": {
                     "method": "POST",
                     "route": SERVICE_REQUEST_HTTP_ROUTE,
+                    "authentication": "optional Authorization: Bearer <profile-capability>",
+                    "capabilityTransport": "header_only",
                 },
                 "mcp": {
                     "tool": SERVICE_REQUEST_MCP_TOOL_NAME,
                     "argumentsSchemaId": SERVICE_REQUEST_SCHEMA_ID,
                     "toolCallSchemaId": SERVICE_REQUEST_MCP_TOOL_CALL_SCHEMA_ID,
+                    "capabilityField": "profileCapability",
+                    "ephemeral": true,
                 },
+                "client": {
+                    "package": "@agent-browser/client/service-request",
+                    "capabilityOption": "profileCapability",
+                },
+                "principalAwareProfileAdmission": true,
                 "actions": SERVICE_REQUEST_ACTIONS,
                 "actionCount": SERVICE_REQUEST_ACTIONS.len(),
             },
@@ -658,13 +667,18 @@ pub fn service_contracts_metadata() -> Value {
                 "http": {
                     "method": "GET",
                     "route": SERVICE_ACCESS_PLAN_HTTP_ROUTE,
+                    "authentication": "optional Authorization: Bearer <profile-capability>",
+                    "capabilityTransport": "header_only",
                 },
                 "mcp": {
                     "resource": SERVICE_ACCESS_PLAN_MCP_RESOURCE,
                     "tool": SERVICE_ACCESS_PLAN_MCP_TOOL_NAME,
+                    "capabilityField": "profileCapability",
+                    "ephemeral": true,
                 },
                 "client": {
                     "package": "@agent-browser/client/service-observability",
+                    "capabilityOption": "profileCapability",
                     "helpers": [
                         "getServiceAccessPlan",
                         "runServiceAccessPlanPostSeedingProbe",
@@ -675,6 +689,8 @@ pub fn service_contracts_metadata() -> Value {
                         "verifyServiceProfileSeeding"
                     ],
                 },
+                "principalAwareProfileReuse": true,
+                "principalAwareRequestAdmission": true,
                 "responseFields": ["decision.attention", "decision.freshnessUpdate", "decision.postSeedingProbe", "decision.monitorRunDue", "decision.browserCapabilityPreflight", "decision.serviceRequest"],
             },
             "serviceDisplayAllocationsResponse": {
@@ -962,6 +978,18 @@ mod tests {
             SERVICE_REQUEST_MCP_TOOL_NAME
         );
         assert_eq!(
+            metadata["contracts"]["serviceRequest"]["http"]["capabilityTransport"],
+            "header_only"
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceRequest"]["mcp"]["capabilityField"],
+            "profileCapability"
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceRequest"]["principalAwareProfileAdmission"],
+            true
+        );
+        assert_eq!(
             metadata["contracts"]["serviceRequest"]["actionCount"],
             SERVICE_REQUEST_ACTIONS.len()
         );
@@ -1170,6 +1198,18 @@ mod tests {
         assert_eq!(
             metadata["contracts"]["serviceAccessPlanResponse"]["mcp"]["tool"],
             SERVICE_ACCESS_PLAN_MCP_TOOL_NAME
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceAccessPlanResponse"]["http"]["capabilityTransport"],
+            "header_only"
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceAccessPlanResponse"]["mcp"]["capabilityField"],
+            "profileCapability"
+        );
+        assert_eq!(
+            metadata["contracts"]["serviceAccessPlanResponse"]["principalAwareRequestAdmission"],
+            true
         );
         assert_eq!(
             metadata["contracts"]["serviceAccessPlanResponse"]["client"]["helpers"][0],

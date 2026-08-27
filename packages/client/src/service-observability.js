@@ -641,11 +641,16 @@ export async function getServiceAccessPlan({
   viewStreamProvider,
   controlInputProvider,
   displayIsolation,
+  profileCapability,
   ...options
 }) {
   return serviceGet(
     {
       ...options,
+      headers: {
+        ...options.headers,
+        ...(profileCapability ? { authorization: `Bearer ${profileCapability}` } : {}),
+      },
       query: {
         ...options.query,
         serviceName: options.serviceName,
@@ -2585,11 +2590,11 @@ export function getServiceTrace(options) {
 
 /**
  * @template TResult
- * @param {{ baseUrl: string, fetch?: typeof globalThis.fetch, signal?: AbortSignal, query?: Record<string, string | number | boolean | null | undefined> }} options
+ * @param {{ baseUrl: string, fetch?: typeof globalThis.fetch, signal?: AbortSignal, headers?: Record<string, string>, query?: Record<string, string | number | boolean | null | undefined> }} options
  * @param {string} pathname
  * @returns {Promise<TResult>}
  */
-async function serviceGet({ baseUrl, fetch = globalThis.fetch, signal, query }, pathname) {
+async function serviceGet({ baseUrl, fetch = globalThis.fetch, signal, headers = {}, query }, pathname) {
   if (typeof fetch !== 'function') {
     throw new TypeError('service observability helpers require a fetch implementation');
   }
@@ -2600,7 +2605,7 @@ async function serviceGet({ baseUrl, fetch = globalThis.fetch, signal, query }, 
   const url = new URL(pathname, baseUrl);
   appendQuery(url, query);
 
-  const response = await fetch(url, { method: 'GET', signal });
+  const response = await fetch(url, { method: 'GET', headers, signal });
   if (!response.ok) {
     throw new Error(`agent-browser service read failed: ${response.status}`);
   }

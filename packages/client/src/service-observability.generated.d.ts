@@ -1742,6 +1742,7 @@ export interface ServiceObservabilityHttpOptions {
   baseUrl: string;
   fetch?: typeof globalThis.fetch;
   signal?: AbortSignal;
+  headers?: Record<string, string>;
 }
 
 export interface ServiceQueryOptions extends ServiceObservabilityHttpOptions {
@@ -2238,6 +2239,9 @@ export interface ServiceAccessPlanProfileReuse {
     | 'seed_profile_before_reuse'
     | 'reuse_existing_browser'
     | 'wait_for_profile_lease'
+    | 'wait_for_foreign_principal'
+    | 'authenticate_for_profile_reuse'
+    | 'lifecycle_profile_identity_inconsistent'
     | 'launch_new_browser'
     | 'blocked_by_lifecycle_owner'
     | 'blocked_by_explicit_session_route'
@@ -2250,6 +2254,10 @@ export interface ServiceAccessPlanProfileReuse {
   sameProfileLiveBrowserCount: number;
   sameProfileLiveBrowserIds: string[];
   activeLeaseSessionIds: string[];
+  foreignPrincipalSessionIds?: string[];
+  principalBoundSessionIds?: string[];
+  profileMismatchBrowserIds?: string[];
+  blockingIdentityAxes?: string[];
   activeLeaseCount: number;
   duplicatePressure: boolean;
   profileLeasePolicy: 'wait' | string;
@@ -2418,6 +2426,8 @@ export interface ServiceProfileIdentityLookupOptions extends ServiceQueryOptions
 }
 
 export interface ServiceAccessPlanOptions extends ServiceProfileIdentityLookupOptions {
+  /** Ephemeral capability proving the principal that owns the selected profile. Sent only as a bearer header. */
+  profileCapability?: string;
   /** Calling agent name for multi-agent traceability. */
   agentName?: string;
   /** Caller task name for queue and trace debugging. */

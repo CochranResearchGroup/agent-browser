@@ -371,6 +371,7 @@ async function main() {
     accountId: 'user@example.test',
     url: 'https://www.canva.com/',
     runtimeProfile: 'canva-default',
+    profileCapability: 'private-canva-capability',
     headed: true,
     serviceName: 'CanvaCLI',
     agentName: 'codex',
@@ -1540,10 +1541,15 @@ async function main() {
     loginId: 'canva',
     browserBuild: 'stealthcdp_chromium',
     runtimeProfile: 'canva-default',
+    profileCapability: 'private-canva-capability',
     sitePolicyId: 'canva',
     challengeId: 'challenge-1',
   });
   assert.equal(accessPlan.calls.length, 1);
+  assert.equal(
+    accessPlan.calls[0].init.headers.authorization,
+    'Bearer private-canva-capability',
+  );
   assert.equal(
     new URL(accessPlan.calls[0].url).searchParams.get('sessionName'),
     'bill-soylei',

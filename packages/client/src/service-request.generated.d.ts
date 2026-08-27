@@ -191,6 +191,8 @@ export interface ServiceRequestMcpToolCall {
 export interface ServiceRequestHttpOptions<TRequest extends ServiceRequest = ServiceRequest> {
   baseUrl: string;
   request: TRequest;
+  /** Ephemeral profile capability sent only as an Authorization bearer header. */
+  profileCapability?: string;
   fetch?: typeof globalThis.fetch;
   signal?: AbortSignal;
 }
@@ -1554,6 +1556,8 @@ export interface ServiceTabRequestHttpOptions extends ServiceTabRequestOptions {
   baseUrl: string;
   fetch?: typeof globalThis.fetch;
   signal?: AbortSignal;
+  /** Ephemeral profile capability sent only as an Authorization bearer header. */
+  profileCapability?: string;
 }
 
 export interface ServiceCdpFreeLaunchRequestOptions extends Omit<ServiceRequest, "action" | "params"> {

@@ -4,7 +4,7 @@ Date: 2026-08-26
 
 State: OPEN
 
-Execution state: `slice_c_dashboard_complete_validation_in_progress`
+Execution state: `slice_d_complete_slice_e_pending`
 
 Lane: P134
 
@@ -29,8 +29,13 @@ Current checkpoint:
   keep reconciliation planning separate from effect-capable apply. Capability
   input is held only in the open dialog and is never written to browser
   storage or Service State.
-- Slice C closeout still requires the complete selected validation set and an
-  integrated checkpoint. Slices D through K remain pending.
+- Slice C is integrated. Slice D makes access planning and service-request
+  admission use the same transport-authenticated principal decision. The
+  capability is bound to both principal and profile, and never persists.
+- Same-principal coherent reuse returns the exact browser and session route.
+  Foreign principals wait, unauthenticated callers must authenticate, and
+  profile contradictions return a typed lifecycle identity inconsistency.
+- Slice E is the next source packet. Slices E through K remain pending.
 
 Depends on:
 
@@ -871,3 +876,36 @@ Do not implement migration or installer effects in Slice A.
   workspace parity remains open, so Slice C is not complete.
 - No browser, provider, development-runtime, installed-runtime, Service State,
   owner, lease, route, display, unit, Guacamole, or profile effect occurred.
+
+## 2026-08-27 Slice D principal-aware access and admission checkpoint
+
+- Access planning and service-request normalization now call one
+  principal-aware profile-reuse decision. HTTP authenticates an optional
+  bearer capability before either operation, and MCP authenticates the
+  ephemeral `profileCapability` field before planning or admission.
+- Raw capability material is removed before queue persistence. Generated
+  observability and request clients accept `profileCapability` as an option
+  and transmit it only in the HTTP authorization header.
+- Exact same-principal and same-profile authority reuses the retained browser
+  and session. A foreign principal returns `wait_for_foreign_principal`; an
+  unauthenticated caller returns `authenticate_for_profile_reuse`; and
+  contradictory profile evidence returns
+  `lifecycle_profile_identity_inconsistent` with the profile identity axis.
+- Capabilities are checked against both the registered principal and the
+  selected profile. A capability for another profile cannot authorize reuse
+  merely because the principal label matches.
+- Contract schemas and metadata advertise the new decisions, evidence fields,
+  header-only transport, ephemeral MCP field, and principal-aware admission.
+  README, CLI help, repository skill guidance, and both docs-site surfaces
+  describe the same authority boundary and recourse behavior.
+- Validation passed for all access-plan tests, focused HTTP, request-admission,
+  MCP, and contract tests, strict Clippy, Rust formatting, generated client
+  contracts and types, API and MCP parity, the full service-client suite, the
+  service collection no-launch smoke, route-confusion gates, source-free
+  workstation fixtures, the docs production build, and `git diff --check`.
+  The repository skill correctly differs from the installed shared skill;
+  installed skill synchronization remains an explicit Slice J and K candidate
+  effect rather than a Slice D source mutation.
+- No browser, provider, development-runtime, installed-runtime, Service State,
+  owner, lease, route, display, unit, Guacamole, or profile effect occurred.
+  The next authorized packet is Slice E only.

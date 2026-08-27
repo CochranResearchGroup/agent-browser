@@ -17,7 +17,7 @@ use crate::connection::{attach_daemon_auth_token, daemon_ready};
 use crate::connection::{get_socket_dir, resolve_port};
 use crate::flags::{launch_config_status, parse_flags};
 use crate::native::service_access::{
-    parse_service_access_plan_query, service_access_plan_for_state,
+    parse_service_access_plan_query, service_access_plan_for_state_with_principal,
 };
 use crate::native::service_config::refresh_persisted_profile_seeding_handoffs;
 use crate::native::service_contracts::{
@@ -36,6 +36,9 @@ use crate::native::service_model::{
 };
 use crate::native::service_monitors::{
     parse_monitor_state, service_monitors_response, MonitorCollectionFilters,
+};
+use crate::native::service_principal::{
+    authenticate_profile_capability, AuthenticatedServicePrincipal,
 };
 use crate::native::service_profile_lease::{
     doctor_profile_leases, inspect_profile_lease, profile_leases_for_state,
@@ -380,16 +383,25 @@ pub(super) async fn handle_http_request(
 
         if path == SERVICE_REQUEST_HTTP_ROUTE {
             let service_state = load_service_state();
+            let authenticated_principal =
+                match optional_profile_capability_authority(&headers, &service_state) {
+                    Ok(authority) => authority,
+                    Err(err) => {
+                        write_json_result(&mut stream, Err(err), "401 Unauthorized").await;
+                        return;
+                    }
+                };
             let dashboard_identity = dashboard_auth::authenticate_headers(&headers)
                 .ok()
                 .flatten();
-            let cmd = match service_request_command_with_state_and_principal(
+            let cmd = match service_request_command_with_state_and_authority(
                 body_str,
                 Some(&service_state),
                 dashboard_identity
                     .as_ref()
                     .map(|identity| identity.username.as_str()),
                 session_name,
+                authenticated_principal.as_ref(),
             ) {
                 Ok(cmd) => cmd,
                 Err(err) => {
@@ -783,7 +795,20 @@ pub(super) async fn handle_http_request(
     }
 
     if method == "GET" && path == "/api/service/access-plan" {
-        match service_access_plan_response(query) {
+        let service_state = load_service_state();
+        let authenticated_principal =
+            match optional_profile_capability_authority(&headers, &service_state) {
+                Ok(authority) => authority,
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "401 Unauthorized").await;
+                    return;
+                }
+            };
+        match service_access_plan_response_for_state_and_principal(
+            query,
+            &service_state,
+            authenticated_principal.as_ref(),
+        ) {
             Ok(data) => {
                 write_json_value(
                     &mut stream,
@@ -1823,6 +1848,22 @@ fn service_request_command_with_state_and_principal(
     authenticated_dashboard_user: Option<&str>,
     effective_session: &str,
 ) -> Result<Value, String> {
+    service_request_command_with_state_and_authority(
+        body,
+        service_state,
+        authenticated_dashboard_user,
+        effective_session,
+        None,
+    )
+}
+
+fn service_request_command_with_state_and_authority(
+    body: &str,
+    service_state: Option<&ServiceState>,
+    authenticated_dashboard_user: Option<&str>,
+    effective_session: &str,
+    authenticated_principal: Option<&AuthenticatedServicePrincipal>,
+) -> Result<Value, String> {
     let mut request = if body.trim().is_empty() {
         json!({})
     } else {
@@ -1853,7 +1894,7 @@ fn service_request_command_with_state_and_principal(
     let normalized = normalize_service_request(ServiceRequestNormalization {
         request: &request,
         service_state,
-        authenticated_principal: None,
+        authenticated_principal,
         fallback_principal,
         request_id: &request_id,
         effective_session: Some(effective_session),
@@ -2528,8 +2569,20 @@ fn service_access_plan_response_for_state(
     query: Option<&str>,
     service_state: &ServiceState,
 ) -> Result<Value, String> {
+    service_access_plan_response_for_state_and_principal(query, service_state, None)
+}
+
+fn service_access_plan_response_for_state_and_principal(
+    query: Option<&str>,
+    service_state: &ServiceState,
+    authenticated_principal: Option<&AuthenticatedServicePrincipal>,
+) -> Result<Value, String> {
     let request = parse_service_access_plan_query(query_params(query))?;
-    Ok(service_access_plan_for_state(service_state, request))
+    Ok(service_access_plan_for_state_with_principal(
+        service_state,
+        request,
+        authenticated_principal,
+    ))
 }
 
 pub(crate) fn service_profile_lookup_response_for_state(
@@ -3109,6 +3162,31 @@ fn profile_capability_bearer(headers: &[(String, String)]) -> Result<String, Str
         .filter(|value| !value.is_empty())
         .ok_or_else(|| "profile_capability_bearer_invalid".to_string())?;
     Ok(capability.to_string())
+}
+
+fn optional_profile_capability_authority(
+    headers: &[(String, String)],
+    service_state: &ServiceState,
+) -> Result<Option<AuthenticatedServicePrincipal>, String> {
+    let Some(authorization) = headers
+        .iter()
+        .find(|(name, _)| name == "authorization")
+        .map(|(_, value)| value.as_str())
+    else {
+        return Ok(None);
+    };
+    if !authorization.starts_with("Bearer ") && !authorization.starts_with("bearer ") {
+        return Ok(None);
+    }
+    let capability = profile_capability_bearer(headers)?;
+    authenticate_profile_capability(&service_state.service_principals, capability.as_str(), None)
+        .map(Some)
+        .map_err(|error| {
+            format!(
+                "profile_capability_authentication_failed:{}",
+                error.code.as_str()
+            )
+        })
 }
 
 fn service_session_id(path: &str) -> Option<&str> {
@@ -4670,6 +4748,41 @@ mod tests {
             "secret-capability"
         );
         assert!(profile_capability_bearer(&[]).is_err());
+    }
+
+    #[test]
+    fn bearer_capability_authenticates_access_and_request_authority() {
+        use crate::native::service_principal::{
+            register_profile_capability, ServicePrincipalRegistrationRequest,
+        };
+
+        let mut state = ServiceState::default();
+        register_profile_capability(
+            &mut state.service_principals,
+            ServicePrincipalRegistrationRequest {
+                principal_id: "principal:odollo-fulfillment".to_string(),
+                display_name: Some("Odollo fulfillment".to_string()),
+                profile_id: "odollo-fedex".to_string(),
+                registered_at: Some("2026-08-27T12:00:00Z".to_string()),
+                registered_by: Some("operator".to_string()),
+            },
+            "synthetic-capability-token-with-more-than-thirty-two-characters",
+        )
+        .unwrap();
+        let headers = vec![(
+            "authorization".to_string(),
+            "Bearer synthetic-capability-token-with-more-than-thirty-two-characters".to_string(),
+        )];
+
+        let authority = optional_profile_capability_authority(&headers, &state)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(authority.principal_id, "principal:odollo-fulfillment");
+        assert_eq!(authority.profile_id, "odollo-fedex");
+        assert!(optional_profile_capability_authority(&[], &state)
+            .unwrap()
+            .is_none());
     }
 
     #[test]

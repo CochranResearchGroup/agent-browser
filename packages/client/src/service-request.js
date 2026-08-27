@@ -1393,7 +1393,7 @@ export function createServiceControllerLeaseTakeoverRequest(input) {
  * @param {ServiceRequestHttpOptions} options
  * @returns {Promise<ServiceRequestResponse>}
  */
-export async function postServiceRequest({ baseUrl, request, fetch = globalThis.fetch, signal }) {
+export async function postServiceRequest({ baseUrl, request, profileCapability, fetch = globalThis.fetch, signal }) {
   if (typeof fetch !== 'function') {
     throw new TypeError('postServiceRequest requires a fetch implementation');
   }
@@ -1403,7 +1403,10 @@ export async function postServiceRequest({ baseUrl, request, fetch = globalThis.
 
   const response = await fetch(new URL('/api/service/request', baseUrl), {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'content-type': 'application/json',
+      ...(profileCapability ? { authorization: `Bearer ${profileCapability}` } : {}),
+    },
     body: JSON.stringify(createServiceRequest(request)),
     signal,
   });
@@ -1419,11 +1422,12 @@ export async function postServiceRequest({ baseUrl, request, fetch = globalThis.
  * @param {ServiceTabRequestHttpOptions} options
  * @returns {Promise<ServiceRequestResponse>}
  */
-export async function requestServiceTab({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
+export async function requestServiceTab({ baseUrl, fetch = globalThis.fetch, signal, profileCapability, ...request }) {
   return postServiceRequest({
     baseUrl,
     fetch,
     signal,
+    profileCapability,
     request: createServiceTabRequest(request),
   });
 }

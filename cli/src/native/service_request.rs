@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 use std::fmt;
 
 use crate::native::remote_view_handoff::apply_remote_view_handoff_route_hints;
-use crate::native::service_access::apply_shared_profile_route_hints_for_service_request;
+use crate::native::service_access::apply_shared_profile_route_hints_for_service_request_with_principal;
 use crate::native::service_contracts::{DESKTOP_CAPTURE_HARD_MAX_BYTES, SERVICE_REQUEST_ACTIONS};
 use crate::native::service_model::ServiceState;
 use crate::native::service_principal::AuthenticatedServicePrincipal;
@@ -521,9 +521,10 @@ pub(crate) fn normalize_service_request(
                     apply_remote_view_handoff_route_hints(service_state, &mut command);
                 }
                 RouteHintStage::SharedProfile => {
-                    apply_shared_profile_route_hints_for_service_request(
+                    apply_shared_profile_route_hints_for_service_request_with_principal(
                         service_state,
                         &mut command,
+                        input.authenticated_principal,
                     )
                     .map_err(|message| {
                         ServiceRequestIssue::new(ServiceRequestIssueKind::RouteHintFailure, message)
@@ -1967,6 +1968,84 @@ mod tests {
         assert_eq!(
             forged.message(),
             "unknown service request field: servicePrincipalId"
+        );
+    }
+
+    #[test]
+    fn request_admission_uses_authenticated_principal_for_profile_reuse() {
+        use std::collections::BTreeMap;
+
+        use crate::native::service_model::{
+            BrowserHealth, BrowserProcess, BrowserProfile, BrowserSession, LeaseState,
+        };
+        use crate::native::service_principal::{
+            AuthenticatedServicePrincipal, ServicePrincipalProvenance,
+        };
+
+        let authority = AuthenticatedServicePrincipal {
+            principal_id: "principal:foreign-service".to_string(),
+            profile_id: "odollo-fedex".to_string(),
+            capability_id: "profile-capability-v1:foreign-fedex".to_string(),
+            capability_revision: 1,
+            provenance: ServicePrincipalProvenance::RegisteredCapability,
+        };
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "odollo-fedex".to_string(),
+                BrowserProfile {
+                    id: "odollo-fedex".to_string(),
+                    target_service_ids: vec!["fedex".to_string()],
+                    authenticated_service_ids: vec!["fedex".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                "browser-fedex".to_string(),
+                BrowserProcess {
+                    id: "browser-fedex".to_string(),
+                    profile_id: Some("odollo-fedex".to_string()),
+                    health: BrowserHealth::Ready,
+                    active_session_ids: vec!["session-fedex-owner".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "session-fedex-owner".to_string(),
+                BrowserSession {
+                    id: "session-fedex-owner".to_string(),
+                    principal_id: Some("principal:odollo-fulfillment".to_string()),
+                    principal_provenance: Some(ServicePrincipalProvenance::RegisteredCapability),
+                    profile_id: Some("odollo-fedex".to_string()),
+                    browser_ids: vec!["browser-fedex".to_string()],
+                    lease: LeaseState::Exclusive,
+                    ..BrowserSession::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let request = json!({
+            "action": "tab_new",
+            "runtimeProfile": "odollo-fedex",
+            "targetServiceIds": ["fedex"],
+            "serviceName": "OdolloFulfillment",
+            "agentName": "worker",
+            "taskName": "lookup-fedex-tracking"
+        });
+
+        let error = normalize_service_request(ServiceRequestNormalization {
+            request: &request,
+            service_state: Some(&state),
+            authenticated_principal: Some(&authority),
+            fallback_principal: None,
+            request_id: "request-foreign-fedex",
+            effective_session: Some("foreign-fedex"),
+        })
+        .unwrap_err();
+
+        assert_eq!(error.kind, ServiceRequestIssueKind::RouteHintFailure);
+        assert_eq!(
+            error.message(),
+            "service_access_plan_request_unavailable:foreign_principal_profile_lease"
         );
     }
 

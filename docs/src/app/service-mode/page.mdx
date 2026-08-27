@@ -744,6 +744,20 @@ existing daemon lane. Software clients can call
 response or the tab response to get requested profile, planned profile, retained
 browser/session hints, tab handle, acquisition mode, and duplicate-process
 policy without parsing nested profile reuse fields.
+
+Principal-bound profile reuse is capability authenticated. HTTP callers send
+the capability only in the <code>Authorization: Bearer
+&lt;profile-capability&gt;</code> header on both <code>GET
+/api/service/access-plan</code> and <code>POST /api/service/request</code>. MCP
+callers pass the ephemeral <code>profileCapability</code> argument to
+<code>service_access_plan</code> and <code>service_request</code>. Generated
+clients accept <code>profileCapability</code> and translate it to the bearer
+header. Caller labels are attribution, not authority. A matching principal can
+reuse its exact retained browser and session; a foreign principal waits, an
+unauthenticated caller must authenticate, and contradictory same-principal
+profile evidence returns a typed lifecycle identity inconsistency. Never place
+the capability in a URL, request body, command-line argument, log, or persisted
+Service State.
 An explicit <code>sessionName</code> must map uniquely to one compatible retained
 browser. Missing or ambiguous mappings, and live lifecycle owners that cannot
 accept the planned operation, set <code>serviceRequest.available</code> to false,

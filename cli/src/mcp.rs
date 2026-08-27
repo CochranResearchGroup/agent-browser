@@ -5,6 +5,7 @@ use serde_json::{json, Map, Value};
 use crate::connection::{send_command, Response};
 use crate::native::service_access::{
     parse_service_access_plan_query, service_access_plan_for_state,
+    service_access_plan_for_state_with_principal,
 };
 use crate::native::service_activity::service_incident_activity_response;
 use crate::native::service_contracts::{
@@ -27,6 +28,9 @@ use crate::native::service_incidents::{
 use crate::native::service_model::{
     service_profile_allocations, service_profile_seeding_handoff, service_profile_sources,
     service_site_policy_sources, ServiceState,
+};
+use crate::native::service_principal::{
+    authenticate_profile_capability, AuthenticatedServicePrincipal,
 };
 use crate::native::service_profile_lease::{
     doctor_profile_leases, inspect_profile_lease, profile_leases_for_state,
@@ -1022,6 +1026,10 @@ fn service_mcp_tools() -> Vec<Value> {
                         "type": "string",
                         "enum": ["private_virtual_display", "shared_display", "ambient_display"],
                         "description": "Optional display allocation hint for remote-headed planned requests."
+                    },
+                    "profileCapability": {
+                        "type": "string",
+                        "description": "Ephemeral capability proving the principal that owns the selected profile. It is authenticated before planning and is never retained."
                     }
                 },
                 "required": []
@@ -1059,6 +1067,10 @@ fn service_mcp_tools() -> Vec<Value> {
                         "type": "integer",
                         "minimum": 1,
                         "description": "Maximum time to wait for profileLeasePolicy=wait before failing the request."
+                    },
+                    "profileCapability": {
+                        "type": "string",
+                        "description": "Ephemeral capability proving profile ownership for principal-aware admission. It is removed before queue persistence."
                     },
                     "browserId": {
                         "type": "string",
@@ -5466,7 +5478,12 @@ fn call_service_access_plan(
     })?;
     state.overlay_configured_entities(configured_service_state.clone());
     state.refresh_profile_readiness();
-    let data = service_access_plan_for_state(&state, request);
+    let authenticated_principal = profile_authority_from_mcp_arguments(arguments, &state)?;
+    let data = service_access_plan_for_state_with_principal(
+        &state,
+        request,
+        authenticated_principal.as_ref(),
+    );
 
     Ok(tool_response_from_payload(
         SERVICE_ACCESS_PLAN_MCP_TOOL_NAME,
@@ -6090,10 +6107,25 @@ fn service_request_command(arguments: &Value) -> Result<(Value, Value), JsonRpcE
     service_request_command_with_state(arguments, None, "default")
 }
 
+#[cfg(test)]
 fn service_request_command_with_state(
     arguments: &Value,
     service_state: Option<&ServiceState>,
     effective_session: &str,
+) -> Result<(Value, Value), JsonRpcError> {
+    service_request_command_with_state_and_authority(
+        arguments,
+        service_state,
+        effective_session,
+        None,
+    )
+}
+
+fn service_request_command_with_state_and_authority(
+    arguments: &Value,
+    service_state: Option<&ServiceState>,
+    effective_session: &str,
+    authenticated_principal: Option<&AuthenticatedServicePrincipal>,
 ) -> Result<(Value, Value), JsonRpcError> {
     // MCP owns only its JSON-RPC envelope and request identity. Canonical
     // request semantics and trace projection live in the shared normalizer.
@@ -6105,10 +6137,14 @@ fn service_request_command_with_state(
             .unwrap_or("unknown"),
         uuid::Uuid::new_v4()
     );
+    let mut request = arguments.clone();
+    if let Some(request) = request.as_object_mut() {
+        request.remove("profileCapability");
+    }
     let normalized = normalize_service_request(ServiceRequestNormalization {
-        request: arguments,
+        request: &request,
         service_state,
-        authenticated_principal: None,
+        authenticated_principal,
         fallback_principal: Some(ServiceRequestFallbackPrincipal {
             source: ServiceRequestPrincipalSource::LocalProcess,
             principal: "local:mcp-stdio",
@@ -6171,8 +6207,31 @@ fn call_service_request(
     })?;
     state.overlay_configured_entities(configured_service_state.clone());
     state.refresh_profile_readiness();
-    let (trace, command) = service_request_command_with_state(arguments, Some(&state), session)?;
+    let authenticated_principal = profile_authority_from_mcp_arguments(arguments, &state)?;
+    let (trace, command) = service_request_command_with_state_and_authority(
+        arguments,
+        Some(&state),
+        session,
+        authenticated_principal.as_ref(),
+    )?;
     send_queued_tool_command("service_request", session, trace, command)
+}
+
+fn profile_authority_from_mcp_arguments(
+    arguments: &Value,
+    state: &ServiceState,
+) -> Result<Option<AuthenticatedServicePrincipal>, JsonRpcError> {
+    let Some(capability) = optional_string_argument(arguments, "profileCapability")? else {
+        return Ok(None);
+    };
+    authenticate_profile_capability(&state.service_principals, capability, None)
+        .map(Some)
+        .map_err(|error| {
+            JsonRpcError::invalid_params(&format!(
+                "profile_capability_authentication_failed:{}",
+                error.code.as_str()
+            ))
+        })
 }
 
 fn desktop_capture_service_request(arguments: &Value) -> Result<Value, JsonRpcError> {
@@ -11398,6 +11457,7 @@ mod tests {
             service_access_plan["inputSchema"]["properties"]["controlInputProvider"].is_object()
         );
         assert!(service_access_plan["inputSchema"]["properties"]["displayIsolation"].is_object());
+        assert!(service_access_plan["inputSchema"]["properties"]["profileCapability"].is_object());
         assert!(service_access_plan["description"]
             .as_str()
             .unwrap()
@@ -11406,6 +11466,7 @@ mod tests {
             .iter()
             .find(|tool| tool["name"] == "service_request")
             .expect("service_request schema should be listed");
+        assert!(service_request["inputSchema"]["properties"]["profileCapability"].is_object());
         assert!(service_request["description"]
             .as_str()
             .unwrap()

@@ -23,6 +23,7 @@ use super::service_model::{
     SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
     SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
 };
+use super::service_principal::AuthenticatedServicePrincipal;
 
 /// Parsed access-plan selector shared by HTTP and MCP resources.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -153,7 +154,15 @@ pub(crate) fn parse_service_access_plan_query(
 /// Build the read-only service access plan from already-loaded service state.
 pub(crate) fn service_access_plan_for_state(
     service_state: &ServiceState,
+    request: ServiceAccessPlanRequest,
+) -> Value {
+    service_access_plan_for_state_with_principal(service_state, request, None)
+}
+
+pub(crate) fn service_access_plan_for_state_with_principal(
+    service_state: &ServiceState,
     mut request: ServiceAccessPlanRequest,
+    authenticated_principal: Option<&AuthenticatedServicePrincipal>,
 ) -> Value {
     let original_state = service_state;
     let mut effective_state = original_state.clone();
@@ -244,6 +253,7 @@ pub(crate) fn service_access_plan_for_state(
         monitor_findings: &monitor_findings,
         naming_warnings: &naming_warnings,
         browser_capability_evidence: &browser_capability_evidence,
+        authenticated_principal,
     });
 
     json!({
@@ -808,6 +818,7 @@ struct AccessPlanDecisionInput<'a> {
     monitor_findings: &'a Value,
     naming_warnings: &'a [&'static str],
     browser_capability_evidence: &'a Value,
+    authenticated_principal: Option<&'a AuthenticatedServicePrincipal>,
 }
 
 fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
@@ -868,6 +879,7 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         lifecycle_replacement
             .get("replacementSessionName")
             .and_then(Value::as_str),
+        input.authenticated_principal,
     );
     let lifecycle_blocks_replacement = lifecycle_replacement["available"].as_bool() == Some(true)
         && lifecycle_replacement["replacementEligible"].as_bool() == Some(false);
@@ -891,6 +903,15 @@ fn access_plan_decision(input: AccessPlanDecisionInput<'_>) -> Value {
         Some("explicit_session_route_invalid")
     } else if acquisition_blocked_by_lifecycle_owner {
         Some("lifecycle_owner_blocks_replacement")
+    } else if profile_reuse["recommendedAction"].as_str() == Some("wait_for_foreign_principal") {
+        Some("foreign_principal_profile_lease")
+    } else if profile_reuse["recommendedAction"].as_str() == Some("authenticate_for_profile_reuse")
+    {
+        Some("profile_capability_required")
+    } else if profile_reuse["recommendedAction"].as_str()
+        == Some("lifecycle_profile_identity_inconsistent")
+    {
+        Some("lifecycle_profile_identity_inconsistent")
     } else {
         None
     };
@@ -1193,6 +1214,18 @@ pub(crate) fn apply_shared_profile_route_hints_for_service_request(
     service_state: &ServiceState,
     command: &mut Value,
 ) -> Result<(), String> {
+    apply_shared_profile_route_hints_for_service_request_with_principal(
+        service_state,
+        command,
+        None,
+    )
+}
+
+pub(crate) fn apply_shared_profile_route_hints_for_service_request_with_principal(
+    service_state: &ServiceState,
+    command: &mut Value,
+    authenticated_principal: Option<&AuthenticatedServicePrincipal>,
+) -> Result<(), String> {
     if command.get("action").and_then(Value::as_str) != Some("tab_new") {
         return Ok(());
     }
@@ -1209,7 +1242,11 @@ pub(crate) fn apply_shared_profile_route_hints_for_service_request(
     }
 
     let request = service_access_plan_request_from_service_command(command)?;
-    let plan = service_access_plan_for_state(service_state, request);
+    let plan = service_access_plan_for_state_with_principal(
+        service_state,
+        request,
+        authenticated_principal,
+    );
     if plan["decision"]["serviceRequest"]["available"].as_bool() != Some(true) {
         let blocker = plan["decision"]["serviceRequest"]["acquisitionBlocker"]
             .as_str()
@@ -1443,6 +1480,7 @@ fn profile_reuse_decision(
     launch_posture: &Value,
     manual_seeding_required: bool,
     terminal_replacement_session_name: Option<&str>,
+    authenticated_principal: Option<&AuthenticatedServicePrincipal>,
 ) -> Value {
     let Some(profile) = selected_profile else {
         return json!({
@@ -1530,6 +1568,66 @@ fn profile_reuse_decision(
     reusable_browser_ids.sort();
     reusable_browser_ids.dedup();
 
+    let mut foreign_principal_session_ids = Vec::new();
+    let mut principal_bound_session_ids = service_state
+        .sessions
+        .iter()
+        .filter(|(_id, session)| {
+            session_blocks_profile_reuse(session, &profile.id) && session.principal_id.is_some()
+        })
+        .map(|(id, _session)| id.clone())
+        .collect::<Vec<_>>();
+    principal_bound_session_ids.sort();
+    principal_bound_session_ids.dedup();
+    let mut same_principal_profile_mismatch_browser_ids = Vec::new();
+    let mut capability_profile_mismatch = false;
+    if let Some(authority) = authenticated_principal {
+        foreign_principal_session_ids = service_state
+            .sessions
+            .iter()
+            .filter(|(_id, session)| {
+                session_blocks_profile_reuse(session, &profile.id)
+                    && session
+                        .principal_id
+                        .as_deref()
+                        .is_some_and(|principal_id| principal_id != authority.principal_id)
+            })
+            .map(|(id, _session)| id.clone())
+            .collect();
+        foreign_principal_session_ids.sort();
+        foreign_principal_session_ids.dedup();
+        same_principal_profile_mismatch_browser_ids = service_state
+            .sessions
+            .values()
+            .filter(|session| {
+                session_blocks_profile_reuse(session, &profile.id)
+                    && session.principal_id.as_deref() == Some(authority.principal_id.as_str())
+            })
+            .flat_map(|session| session.browser_ids.iter())
+            .filter(|browser_id| {
+                service_state
+                    .browsers
+                    .get(*browser_id)
+                    .is_some_and(|browser| {
+                        browser.profile_id.as_deref() != Some(profile.id.as_str())
+                    })
+            })
+            .cloned()
+            .collect();
+        same_principal_profile_mismatch_browser_ids.sort();
+        same_principal_profile_mismatch_browser_ids.dedup();
+        capability_profile_mismatch = authority.profile_id != profile.id
+            && service_state.sessions.values().any(|session| {
+                session_blocks_profile_reuse(session, &profile.id)
+                    && session.principal_id.as_deref() == Some(authority.principal_id.as_str())
+            });
+        if !foreign_principal_session_ids.is_empty() || capability_profile_mismatch {
+            reusable_browser_ids.clear();
+        }
+    } else if !principal_bound_session_ids.is_empty() {
+        reusable_browser_ids.clear();
+    }
+
     let mut explicit_session_route_error = None;
     let mut explicit_session_route = None;
     let mut explicit_terminal_replacement_route = false;
@@ -1579,6 +1677,7 @@ fn profile_reuse_decision(
         })
         .map(|(id, _session)| id.clone())
         .collect::<Vec<_>>();
+    active_lease_session_ids.extend(foreign_principal_session_ids.iter().cloned());
     active_lease_session_ids.sort();
     active_lease_session_ids.dedup();
 
@@ -1595,6 +1694,20 @@ fn profile_reuse_decision(
         reasons.push("no_active_profile_lease_conflict");
     } else {
         reasons.push("active_profile_lease_conflict");
+    }
+    if !foreign_principal_session_ids.is_empty() {
+        reasons.push("foreign_principal_profile_lease");
+    }
+    if authenticated_principal.is_none() && !principal_bound_session_ids.is_empty() {
+        reasons.push("profile_capability_required");
+    }
+    let profile_identity_inconsistent =
+        capability_profile_mismatch || !same_principal_profile_mismatch_browser_ids.is_empty();
+    if profile_identity_inconsistent {
+        reasons.push("lifecycle_profile_identity_inconsistent");
+    }
+    if capability_profile_mismatch {
+        reasons.push("profile_capability_profile_mismatch");
     }
     if same_profile_live_browser_ids.len() > 1 {
         reasons.push("duplicate_live_browsers_for_profile");
@@ -1630,6 +1743,12 @@ fn profile_reuse_decision(
         "seed_profile_before_reuse"
     } else if explicit_session_route_error.is_some() {
         "blocked_by_explicit_session_route"
+    } else if !foreign_principal_session_ids.is_empty() {
+        "wait_for_foreign_principal"
+    } else if authenticated_principal.is_none() && !principal_bound_session_ids.is_empty() {
+        "authenticate_for_profile_reuse"
+    } else if profile_identity_inconsistent {
+        "lifecycle_profile_identity_inconsistent"
     } else if !reusable_browser_ids.is_empty() {
         "reuse_existing_browser"
     } else if !active_lease_session_ids.is_empty() {
@@ -1673,6 +1792,10 @@ fn profile_reuse_decision(
         "sameProfileLiveBrowserIds": same_profile_live_browser_ids,
         "activeLeaseSessionIds": active_lease_session_ids,
         "activeLeaseCount": active_lease_session_ids.len(),
+        "foreignPrincipalSessionIds": foreign_principal_session_ids,
+        "principalBoundSessionIds": principal_bound_session_ids,
+        "profileMismatchBrowserIds": same_principal_profile_mismatch_browser_ids,
+        "blockingIdentityAxes": if profile_identity_inconsistent { json!(["profile"]) } else { json!([]) },
         "duplicatePressure": same_profile_live_browser_ids.len() > 1 || active_lease_session_ids.len() > 1,
         "profileLeasePolicy": "wait",
         "browserHost": browser_host,
@@ -5048,6 +5171,336 @@ mod tests {
             .as_array()
             .unwrap()
             .contains(&json!("external_byop_browser_host_unconstrained")));
+    }
+
+    #[test]
+    fn authenticated_same_principal_reuses_its_coherent_retained_browser() {
+        use crate::native::service_principal::{
+            AuthenticatedServicePrincipal, ServicePrincipalProvenance,
+        };
+
+        let authority = AuthenticatedServicePrincipal {
+            principal_id: "principal:odollo-fulfillment".to_string(),
+            profile_id: "odollo-fedex".to_string(),
+            capability_id: "profile-capability-v1:odollo-fedex".to_string(),
+            capability_revision: 1,
+            provenance: ServicePrincipalProvenance::RegisteredCapability,
+        };
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "odollo-fedex".to_string(),
+                BrowserProfile {
+                    id: "odollo-fedex".to_string(),
+                    target_service_ids: vec!["fedex".to_string()],
+                    authenticated_service_ids: vec!["fedex".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                "browser-fedex".to_string(),
+                BrowserProcess {
+                    id: "browser-fedex".to_string(),
+                    profile_id: Some("odollo-fedex".to_string()),
+                    health: BrowserHealth::Ready,
+                    active_session_ids: vec!["session-fedex-old".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "session-fedex-old".to_string(),
+                BrowserSession {
+                    id: "session-fedex-old".to_string(),
+                    principal_id: Some(authority.principal_id.clone()),
+                    principal_provenance: Some(authority.provenance),
+                    profile_id: Some("odollo-fedex".to_string()),
+                    browser_ids: vec!["browser-fedex".to_string()],
+                    lease: LeaseState::Exclusive,
+                    ..BrowserSession::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state_with_principal(
+            &state,
+            ServiceAccessPlanRequest {
+                target_service_ids: vec!["fedex".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+            Some(&authority),
+        );
+
+        assert_eq!(
+            plan["decision"]["profileReuse"]["recommendedAction"],
+            "reuse_existing_browser"
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["reusableBrowserId"],
+            "browser-fedex"
+        );
+        assert_eq!(
+            plan["decision"]["serviceRequest"]["request"]["sessionName"],
+            "session-fedex-old"
+        );
+    }
+
+    #[test]
+    fn authenticated_foreign_principal_cannot_reuse_retained_browser() {
+        use crate::native::service_principal::{
+            AuthenticatedServicePrincipal, ServicePrincipalProvenance,
+        };
+
+        let owner_principal = "principal:odollo-fulfillment";
+        let requester = AuthenticatedServicePrincipal {
+            principal_id: "principal:foreign-service".to_string(),
+            profile_id: "odollo-fedex".to_string(),
+            capability_id: "profile-capability-v1:foreign-fedex".to_string(),
+            capability_revision: 1,
+            provenance: ServicePrincipalProvenance::RegisteredCapability,
+        };
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "odollo-fedex".to_string(),
+                BrowserProfile {
+                    id: "odollo-fedex".to_string(),
+                    target_service_ids: vec!["fedex".to_string()],
+                    authenticated_service_ids: vec!["fedex".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                "browser-fedex".to_string(),
+                BrowserProcess {
+                    id: "browser-fedex".to_string(),
+                    profile_id: Some("odollo-fedex".to_string()),
+                    health: BrowserHealth::Ready,
+                    active_session_ids: vec!["session-fedex-owner".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "session-fedex-owner".to_string(),
+                BrowserSession {
+                    id: "session-fedex-owner".to_string(),
+                    principal_id: Some(owner_principal.to_string()),
+                    principal_provenance: Some(ServicePrincipalProvenance::RegisteredCapability),
+                    profile_id: Some("odollo-fedex".to_string()),
+                    browser_ids: vec!["browser-fedex".to_string()],
+                    lease: LeaseState::Exclusive,
+                    ..BrowserSession::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state_with_principal(
+            &state,
+            ServiceAccessPlanRequest {
+                target_service_ids: vec!["fedex".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+            Some(&requester),
+        );
+
+        assert_eq!(
+            plan["decision"]["profileReuse"]["recommendedAction"],
+            "wait_for_foreign_principal"
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["reusableBrowserId"],
+            Value::Null
+        );
+        assert_eq!(plan["decision"]["serviceRequest"]["available"], false);
+    }
+
+    #[test]
+    fn capability_for_another_profile_cannot_reuse_same_principal_lane() {
+        use crate::native::service_principal::{
+            AuthenticatedServicePrincipal, ServicePrincipalProvenance,
+        };
+
+        let authority = AuthenticatedServicePrincipal {
+            principal_id: "principal:odollo-fulfillment".to_string(),
+            profile_id: "odollo-ups".to_string(),
+            capability_id: "profile-capability-v1:odollo-ups".to_string(),
+            capability_revision: 1,
+            provenance: ServicePrincipalProvenance::RegisteredCapability,
+        };
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "odollo-fedex".to_string(),
+                BrowserProfile {
+                    id: "odollo-fedex".to_string(),
+                    target_service_ids: vec!["fedex".to_string()],
+                    authenticated_service_ids: vec!["fedex".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                "browser-fedex".to_string(),
+                BrowserProcess {
+                    id: "browser-fedex".to_string(),
+                    profile_id: Some("odollo-fedex".to_string()),
+                    health: BrowserHealth::Ready,
+                    active_session_ids: vec!["session-fedex".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "session-fedex".to_string(),
+                BrowserSession {
+                    id: "session-fedex".to_string(),
+                    principal_id: Some(authority.principal_id.clone()),
+                    principal_provenance: Some(authority.provenance),
+                    profile_id: Some("odollo-fedex".to_string()),
+                    browser_ids: vec!["browser-fedex".to_string()],
+                    lease: LeaseState::Exclusive,
+                    ..BrowserSession::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state_with_principal(
+            &state,
+            ServiceAccessPlanRequest {
+                target_service_ids: vec!["fedex".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+            Some(&authority),
+        );
+
+        assert_eq!(
+            plan["decision"]["profileReuse"]["recommendedAction"],
+            "lifecycle_profile_identity_inconsistent"
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["blockingIdentityAxes"],
+            json!(["profile"])
+        );
+        assert_eq!(plan["decision"]["serviceRequest"]["available"], false);
+    }
+
+    #[test]
+    fn unauthenticated_caller_cannot_reuse_principal_bound_browser() {
+        use crate::native::service_principal::ServicePrincipalProvenance;
+
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "books-bank".to_string(),
+                BrowserProfile {
+                    id: "books-bank".to_string(),
+                    target_service_ids: vec!["bank".to_string()],
+                    authenticated_service_ids: vec!["bank".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                "browser-books-bank".to_string(),
+                BrowserProcess {
+                    id: "browser-books-bank".to_string(),
+                    profile_id: Some("books-bank".to_string()),
+                    health: BrowserHealth::Ready,
+                    active_session_ids: vec!["session-books-bank".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "session-books-bank".to_string(),
+                BrowserSession {
+                    id: "session-books-bank".to_string(),
+                    principal_id: Some("principal:books-receipts".to_string()),
+                    principal_provenance: Some(ServicePrincipalProvenance::RegisteredCapability),
+                    profile_id: Some("books-bank".to_string()),
+                    browser_ids: vec!["browser-books-bank".to_string()],
+                    lease: LeaseState::Exclusive,
+                    ..BrowserSession::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state(
+            &state,
+            ServiceAccessPlanRequest {
+                target_service_ids: vec!["bank".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+        );
+
+        assert_eq!(
+            plan["decision"]["profileReuse"]["recommendedAction"],
+            "authenticate_for_profile_reuse"
+        );
+        assert_eq!(plan["decision"]["serviceRequest"]["available"], false);
+    }
+
+    #[test]
+    fn same_principal_profile_contradiction_is_not_reported_as_lease_wait() {
+        use crate::native::service_principal::{
+            AuthenticatedServicePrincipal, ServicePrincipalProvenance,
+        };
+
+        let authority = AuthenticatedServicePrincipal {
+            principal_id: "principal:last30days".to_string(),
+            profile_id: "last30days-social".to_string(),
+            capability_id: "profile-capability-v1:last30days-social".to_string(),
+            capability_revision: 1,
+            provenance: ServicePrincipalProvenance::RegisteredCapability,
+        };
+        let state = ServiceState {
+            profiles: BTreeMap::from([(
+                "last30days-social".to_string(),
+                BrowserProfile {
+                    id: "last30days-social".to_string(),
+                    target_service_ids: vec!["social".to_string()],
+                    authenticated_service_ids: vec!["social".to_string()],
+                    ..BrowserProfile::default()
+                },
+            )]),
+            browsers: BTreeMap::from([(
+                "browser-social".to_string(),
+                BrowserProcess {
+                    id: "browser-social".to_string(),
+                    profile_id: Some("default".to_string()),
+                    health: BrowserHealth::Ready,
+                    active_session_ids: vec!["session-social-old".to_string()],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            sessions: BTreeMap::from([(
+                "session-social-old".to_string(),
+                BrowserSession {
+                    id: "session-social-old".to_string(),
+                    principal_id: Some(authority.principal_id.clone()),
+                    principal_provenance: Some(authority.provenance),
+                    profile_id: Some("last30days-social".to_string()),
+                    browser_ids: vec!["browser-social".to_string()],
+                    lease: LeaseState::Exclusive,
+                    ..BrowserSession::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let plan = service_access_plan_for_state_with_principal(
+            &state,
+            ServiceAccessPlanRequest {
+                target_service_ids: vec!["social".to_string()],
+                ..ServiceAccessPlanRequest::default()
+            },
+            Some(&authority),
+        );
+
+        assert_eq!(
+            plan["decision"]["profileReuse"]["recommendedAction"],
+            "lifecycle_profile_identity_inconsistent"
+        );
+        assert_eq!(
+            plan["decision"]["profileReuse"]["blockingIdentityAxes"],
+            json!(["profile"])
+        );
+        assert_eq!(plan["decision"]["serviceRequest"]["available"], false);
     }
 
     #[test]

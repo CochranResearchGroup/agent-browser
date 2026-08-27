@@ -992,6 +992,9 @@
                 "seed_profile_before_reuse",
                 "reuse_existing_browser",
                 "wait_for_profile_lease",
+                "wait_for_foreign_principal",
+                "authenticate_for_profile_reuse",
+                "lifecycle_profile_identity_inconsistent",
                 "launch_new_browser",
                 "blocked_by_lifecycle_owner",
                 "blocked_by_explicit_session_route"
@@ -1031,6 +1034,22 @@
               "items": {
                 "type": "string"
               }
+            },
+            "foreignPrincipalSessionIds": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "principalBoundSessionIds": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "profileMismatchBrowserIds": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "blockingIdentityAxes": {
+              "type": "array",
+              "items": { "type": "string" }
             },
             "activeLeaseCount": {
               "type": "integer",
