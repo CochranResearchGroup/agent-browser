@@ -669,16 +669,20 @@ fn service_browser_id(session_id: &str) -> String {
     format!("session:{}", session_id)
 }
 
-fn persist_process_exited_browser_health(state: &DaemonState) {
+fn persist_process_exited_browser_health(
+    state: &DaemonState,
+) -> Option<crate::runtime_owner_transfer::ProfileOwner> {
     if let Ok(repository) = LockedServiceStateRepository::default_json() {
-        let _ = persist_process_exited_browser_health_in_repository(&repository, state);
+        return persist_process_exited_browser_health_in_repository(&repository, state)
+            .unwrap_or(None);
     }
+    None
 }
 
 fn persist_process_exited_browser_health_in_repository(
     repository: &impl ServiceStateRepository,
     state: &DaemonState,
-) -> Result<(), String> {
+) -> Result<Option<crate::runtime_owner_transfer::ProfileOwner>, String> {
     repository.mutate(|service_state| {
         let id = service_browser_id(&state.session_id);
         let previous = service_state.browsers.get(&id).cloned();
@@ -728,13 +732,34 @@ fn persist_process_exited_browser_health_in_repository(
         let observation_details = browser_health_observation_details(&browser, None);
         apply_browser_health_observation(&mut browser, Some(&observation_details));
         record_browser_health_changed_event(service_state, &id, previous.as_ref(), &browser);
-        let preserved_registered_session =
+        let revoked_owner_and_session =
             crate::native::service_principal::authenticated_session_work_authority(
                 service_state,
                 &state.session_id,
                 &current_timestamp(),
             )
-            .and_then(|_| service_state.sessions.get(&state.session_id).cloned());
+            .and_then(|_| {
+                let binding = service_state
+                    .runtime_owner_registry
+                    .binding_for_session(&state.session_id)
+                    .ok()
+                    .flatten()?;
+                if !binding.effect_capable {
+                    return None;
+                }
+                let revoked_owner =
+                    crate::native::runtime_lifecycle::revoke_legacy_owner_in_registry(
+                        &mut service_state.runtime_owner_registry,
+                        binding.claim.profile_identity_digest.clone(),
+                        binding.claim.logical_browser_id.clone(),
+                        binding.claim.daemon_session_route.clone(),
+                        binding.claim.owner_id.clone(),
+                        binding.claim.owner_generation,
+                    )
+                    .ok()?;
+                let session = service_state.sessions.get(&state.session_id).cloned()?;
+                Some((revoked_owner, session))
+            });
         if let Some(display_allocation_id) = browser.display_allocation_id.as_ref() {
             if let Some(allocation) = service_state
                 .display_allocations
@@ -753,15 +778,17 @@ fn persist_process_exited_browser_health_in_repository(
         remove_browser_operational_record(service_state, &id, Some(&state.session_id));
         // A dead process and its tabs are terminal, but a current registered
         // work lease remains the service's authority to relaunch this profile.
-        if let Some(mut session) = preserved_registered_session {
+        let mut revoked_owner = None;
+        if let Some((owner, mut session)) = revoked_owner_and_session {
             session.browser_ids.clear();
             session.tab_ids.clear();
             service_state
                 .sessions
                 .insert(state.session_id.clone(), session);
             service_state.refresh_derived_views();
+            revoked_owner = Some(owner);
         }
-        Ok(())
+        Ok(revoked_owner)
     })
 }
 
@@ -1898,8 +1925,23 @@ fn shutdown_close_behavior(
 }
 
 async fn cleanup_exited_browser(state: &mut DaemonState) {
-    if state.browser.is_some() {
-        persist_process_exited_browser_health(state);
+    let revoked_owner = if state.browser.is_some() {
+        persist_process_exited_browser_health(state)
+    } else {
+        None
+    };
+    if let Some(revoked_owner) = revoked_owner {
+        // The persisted compare-and-swap already revoked this dead owner.
+        // Approve cleanup of its local process handle, then retain only an
+        // observation claim for the explicit recovery-close transition.
+        if let Some(manager) = state.browser.as_mut() {
+            manager.approve_lifecycle_close();
+        }
+        state.runtime_owner_binding = Some(
+            crate::runtime_owner_transfer::RuntimeOwnerBinding::observation_only(
+                crate::runtime_owner_transfer::OwnerAuthorityClaim::from_owner(&revoked_owner),
+            ),
+        );
     }
     if state.browser.is_some() {
         state.close_behavior = CloseBehavior::CloseBrowser;
@@ -3423,7 +3465,7 @@ mod tests {
                 crate::runtime_owner_transfer::RuntimeOwnerPrincipalBinding {
                     principal_id: principal_id.to_string(),
                     profile_id: profile_id.to_string(),
-                    profile_identity_digest: profile_digest,
+                    profile_identity_digest: profile_digest.clone(),
                     capability_id: registered.capability.capability_id,
                     provenance: crate::native::service_principal::ServicePrincipalProvenance::RegisteredCapability,
                     owner_generation: 1,
@@ -3457,6 +3499,26 @@ mod tests {
         assert!(session.tab_ids.is_empty());
         assert!(!persisted.browsers.contains_key(&browser_id));
         assert!(!persisted.tabs.contains_key("target:old"));
+        let owner = persisted
+            .runtime_owner_registry
+            .owners
+            .get(&profile_digest)
+            .unwrap();
+        assert_eq!(
+            owner.state,
+            crate::runtime_owner_transfer::ProfileOwnerState::Orphaned
+        );
+        assert_eq!(owner.owner_generation, 2);
+        let lifecycle = &persisted.runtime_owner_registry.lifecycle_records[&browser_id];
+        assert_eq!(lifecycle.owner_generation, 2);
+        assert_eq!(
+            lifecycle.lifecycle_state,
+            crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Retained
+        );
+        assert_eq!(
+            lifecycle.cleanup_obligation_state,
+            crate::runtime_owner_transfer::CleanupObligationState::Owned
+        );
         let _ = std::fs::remove_dir_all(&home);
     }
 

@@ -1837,13 +1837,18 @@ async fn handle_close_with_context(
     let managed_close_claim = if let Some(binding) = state.runtime_owner_binding.as_mut() {
         let repository = runtime_handoff_service_repository()?;
         let authority = RuntimeLifecycleAuthority::new(&repository);
-        authority.authorize_effect(binding)?;
         let claim = binding.claim.clone();
-        let intent = if close_behavior == CloseBehavior::CloseBrowser {
+        let intent = if preserve_registered_work && !binding.effect_capable {
+            RuntimeLifecycleIntent::BeginRecoveryClose {
+                claim: claim.clone(),
+            }
+        } else if close_behavior == CloseBehavior::CloseBrowser {
+            authority.authorize_effect(binding)?;
             RuntimeLifecycleIntent::BeginClose {
                 claim: claim.clone(),
             }
         } else {
+            authority.authorize_effect(binding)?;
             RuntimeLifecycleIntent::PreserveRetained {
                 claim: claim.clone(),
             }

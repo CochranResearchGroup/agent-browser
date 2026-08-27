@@ -60,6 +60,9 @@ pub(crate) enum RuntimeLifecycleIntent {
     PreserveRetained {
         claim: OwnerAuthorityClaim,
     },
+    BeginRecoveryClose {
+        claim: OwnerAuthorityClaim,
+    },
     BeginClose {
         claim: OwnerAuthorityClaim,
     },
@@ -805,6 +808,32 @@ fn apply_transition(
             RuntimeLaneLifecycleState::Retained,
             CleanupObligationState::Owned,
         ),
+        RuntimeLifecycleIntent::BeginRecoveryClose { claim } => {
+            let owner = registry
+                .owner(&claim.profile_identity_digest)
+                .cloned()
+                .ok_or_else(|| "runtime_lifecycle_recovery_owner_missing".to_string())?;
+            if owner.state != crate::runtime_owner_transfer::ProfileOwnerState::Orphaned
+                || OwnerAuthorityClaim::from_owner(&owner) != claim
+            {
+                return Err("runtime_lifecycle_recovery_owner_mismatch".to_string());
+            }
+            let lifecycle = registry
+                .lifecycle_records
+                .get_mut(&claim.logical_browser_id)
+                .ok_or_else(|| "runtime_lifecycle_recovery_record_missing".to_string())?;
+            if lifecycle.profile_identity_digest != claim.profile_identity_digest
+                || lifecycle.owner_generation != claim.owner_generation
+                || lifecycle.lifecycle_state != RuntimeLaneLifecycleState::Retained
+                || lifecycle.cleanup_obligation_state != CleanupObligationState::Owned
+            {
+                return Err("runtime_lifecycle_recovery_compare_and_swap_mismatch".to_string());
+            }
+            lifecycle.lifecycle_state = RuntimeLaneLifecycleState::Closing;
+            let lifecycle = lifecycle.clone();
+            registry.revision = registry.revision.saturating_add(1);
+            Ok(RuntimeLifecycleTransition::LaneUpdated(lifecycle))
+        }
         RuntimeLifecycleIntent::BeginClose { claim } => update_effect_owned_lane(
             registry,
             &claim,
@@ -871,6 +900,32 @@ pub(crate) fn complete_reconciled_close(
         return Err("runtime_lifecycle_reconciled_close_outcome_mismatch".to_string());
     };
     Ok(record)
+}
+
+/// Revoke one exact ready owner inside an already locked Service State
+/// mutation while retaining lifecycle cleanup accountability.
+pub(crate) fn revoke_legacy_owner_in_registry(
+    registry: &mut RuntimeOwnerRegistry,
+    profile_identity_digest: String,
+    logical_browser_id: String,
+    expected_daemon_session_route: String,
+    expected_owner_id: String,
+    expected_owner_generation: u64,
+) -> Result<ProfileOwner, String> {
+    let transition = apply_transition(
+        registry,
+        RuntimeLifecycleIntent::RevokeLegacyOwner {
+            profile_identity_digest,
+            logical_browser_id,
+            expected_daemon_session_route,
+            expected_owner_id,
+            expected_owner_generation,
+        },
+    )?;
+    let RuntimeLifecycleTransition::LegacyOwnerRevoked(owner) = transition else {
+        return Err("runtime_lifecycle_legacy_revoke_outcome_mismatch".to_string());
+    };
+    Ok(owner)
 }
 
 fn update_effect_owned_lane(
@@ -1707,6 +1762,48 @@ mod tests {
         assert_eq!(
             lifecycle.cleanup_obligation_state,
             CleanupObligationState::Owned
+        );
+    }
+
+    #[test]
+    fn orphaned_owner_requires_explicit_recovery_close_before_terminal_replacement() {
+        let repository = registered_repository();
+        let authority = RuntimeLifecycleAuthority::new(&repository);
+        assert!(authority
+            .transition(RuntimeLifecycleIntent::BeginRecoveryClose {
+                claim: OwnerAuthorityClaim::from_owner(&owner()),
+            })
+            .is_err());
+
+        let orphan = authority
+            .revoke_legacy_owner(&digest("profile-a"), "browser-a", "session-a", "owner-a", 7)
+            .unwrap();
+        authority
+            .transition(RuntimeLifecycleIntent::BeginRecoveryClose {
+                claim: OwnerAuthorityClaim::from_owner(&orphan),
+            })
+            .unwrap();
+        authority
+            .transition(RuntimeLifecycleIntent::CompleteClose {
+                logical_browser_id: "browser-a".to_string(),
+                profile_identity_digest: digest("profile-a"),
+                expected_owner_generation: 8,
+                terminal_evidence: vec![
+                    "exact_process_exited".to_string(),
+                    "profile_lock_released".to_string(),
+                ],
+            })
+            .unwrap();
+
+        let state = repository.load_snapshot().unwrap();
+        let lifecycle = &state.runtime_owner_registry.lifecycle_records["browser-a"];
+        assert_eq!(
+            lifecycle.lifecycle_state,
+            RuntimeLaneLifecycleState::Terminal
+        );
+        assert_eq!(
+            lifecycle.cleanup_obligation_state,
+            CleanupObligationState::Satisfied
         );
     }
 

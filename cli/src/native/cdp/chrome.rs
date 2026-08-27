@@ -501,8 +501,10 @@ impl crate::native::runtime_reconciliation::ReviewedProcessTreeRuntime
 }
 
 /// Completes the fail-closed controlled-restart barrier. Relaunch is safe only
-/// after the exact child has been reaped and Chrome has removed its canonical
-/// profile lock. This function observes the lock and never deletes it.
+/// after the exact child has been reaped and Chrome's canonical profile lock
+/// is absent. Once exact exit is proven, the existing identity-aware cleanup
+/// may remove lock artifacts that it independently proves are stale. Ambiguous
+/// or live ownership remains a hard relaunch barrier.
 fn complete_controlled_shutdown(
     mut outcome: ProcessShutdownOutcome,
     user_data_dir: &Path,
@@ -514,6 +516,8 @@ fn complete_controlled_shutdown(
         );
         return outcome;
     }
+
+    cleanup_stale_profile_lock(user_data_dir);
 
     let lock_path = user_data_dir.join("SingletonLock");
     let start = std::time::Instant::now();
@@ -3516,11 +3520,6 @@ mod tests {
         let child = spawn_noop_child();
         let pid = child.id();
         std::os::unix::fs::symlink(format!("host-{pid}"), dir.join("SingletonLock")).unwrap();
-        let lock_path = dir.join("SingletonLock");
-        let remover = std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(125));
-            std::fs::remove_file(lock_path).unwrap();
-        });
         let mut process = ChromeProcess {
             child,
             aux_processes: Vec::new(),
@@ -3538,16 +3537,81 @@ mod tests {
             pgid: None,
         };
 
-        let started = std::time::Instant::now();
         let outcome = process.wait_or_kill(Duration::from_secs(1));
-        remover.join().unwrap();
 
         assert_eq!(outcome.pid, Some(pid));
         assert!(outcome.exact_process_exited);
         assert!(outcome.profile_lock_released);
         assert!(outcome.controlled_relaunch_ready());
-        assert!(started.elapsed() >= Duration::from_millis(100));
+        assert!(std::fs::symlink_metadata(dir.join("SingletonLock")).is_err());
         assert!(outcome.errors.is_empty(), "{:?}", outcome.errors);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn controlled_shutdown_preserves_ambiguous_live_profile_lock() {
+        let guard = EnvGuard::new(&["HOME"]);
+        let home = TempDir::new("controlled-shutdown-ambiguous-lock-home");
+        std::fs::create_dir_all(&*home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        let runtime_profile = "controlled-shutdown-ambiguous-lock";
+        let user_data_dir =
+            crate::runtime_profile::runtime_profile_user_data_dir(runtime_profile).unwrap();
+        std::fs::create_dir_all(&user_data_dir).unwrap();
+        let (_, mut ambiguous_browser) = spawn_browser_looking_child(&home);
+        write_runtime_state(&RuntimeState {
+            runtime_profile: runtime_profile.to_string(),
+            user_data_dir: user_data_dir.display().to_string(),
+            browser_pid: ambiguous_browser.id(),
+            process_identity: None,
+            headed: true,
+            launch_mode: "manual".to_string(),
+            devtools_port: None,
+            ws_url: None,
+            launch_record: None,
+        })
+        .unwrap();
+        std::os::unix::fs::symlink(
+            format!("host-{}", ambiguous_browser.id()),
+            user_data_dir.join("SingletonLock"),
+        )
+        .unwrap();
+
+        let child = spawn_noop_child();
+        let pid = child.id();
+        let mut process = ChromeProcess {
+            child,
+            aux_processes: Vec::new(),
+            ws_url: String::new(),
+            owns_process: true,
+            lifecycle_managed: false,
+            lifecycle_close_approved: false,
+            reviewed_process_tree: None,
+            temp_user_data_dir: None,
+            user_data_dir: user_data_dir.clone(),
+            runtime_profile: None,
+            display_name: None,
+            stderr_log_path: None,
+            stderr_drainer: None,
+            pgid: None,
+        };
+
+        let outcome = process.wait_or_kill(Duration::from_millis(100));
+
+        assert_eq!(outcome.pid, Some(pid));
+        assert!(outcome.exact_process_exited);
+        assert!(!outcome.profile_lock_released);
+        assert!(!outcome.controlled_relaunch_ready());
+        assert!(std::fs::symlink_metadata(user_data_dir.join("SingletonLock")).is_ok());
+        assert!(outcome
+            .errors
+            .iter()
+            .any(|error| error.contains("remained after PID")));
+        assert!(crate::process_identity::process_exists(
+            ambiguous_browser.id()
+        ));
+        let _ = ambiguous_browser.kill();
+        let _ = ambiguous_browser.wait();
     }
 
     #[cfg(unix)]
