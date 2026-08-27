@@ -5675,7 +5675,7 @@ Options:
   --candidate-generation <generation>
                        Exact immutable candidate generation recorded by the transaction
   --census-digest <sha256|none>
-                       Exact recorded census digest, or none before census exists
+                       Exact runtimeCensusDigest from transaction inspect, or none when null
   --json               Output install or doctor results as JSON
 
 Examples:

@@ -320,7 +320,8 @@ census is stable. It retains the transaction ledger, appends a recovery
 checkpoint, and only then reopens runtime admission.
 `agent-browser install transactions list|inspect` are read-only. Guarded
 `resume`, `rollback`, and `close` require the exact transaction ID, current
-revision, candidate generation, and recorded census digest shown by inspect:
+revision, candidate generation, and `runtimeCensusDigest` shown by inspect.
+Pass `none` when that field is null:
 
 ```bash
 agent-browser install transactions resume --transaction-id upgrade-... --expected-revision 7 --candidate-generation 0.28.0-... --census-digest <sha256> --json

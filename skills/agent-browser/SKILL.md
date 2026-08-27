@@ -166,8 +166,8 @@ agent-browser install workstation recover --transaction-id <id> --json
 Use `agent-browser install transactions list --json` and `inspect
 --transaction-id <id> --json` for read-only transaction discovery. Mutation is
 never inferred from the latest record. Copy the exact revision, candidate
-generation, and census digest from inspect into `resume`, `rollback`, or
-`close`:
+generation, and `runtimeCensusDigest` from inspect into `resume`, `rollback`,
+or `close`. Pass `none` when `runtimeCensusDigest` is null:
 
 ```bash
 agent-browser install transactions rollback --transaction-id <id> --expected-revision <revision> --candidate-generation <generation> --census-digest <sha256-or-none> --json

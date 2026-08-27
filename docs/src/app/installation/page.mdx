@@ -260,7 +260,8 @@ agent-browser install transactions inspect --transaction-id upgrade-... --json
 
 Guarded resume, rollback, and close require the exact transaction ID, current
 revision, immutable candidate generation, and recorded census digest returned
-by inspect:
+as <code>runtimeCensusDigest</code> by inspect. Pass <code>none</code> when the
+field is null:
 
 ```bash
 agent-browser install transactions rollback --transaction-id upgrade-... --expected-revision 7 --candidate-generation 0.28.0-... --census-digest &lt;sha256&gt; --json

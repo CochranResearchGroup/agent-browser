@@ -1223,6 +1223,8 @@ fn install_transaction_safe_actions(
     }
 }
 
+/// Returns the redacted operator-facing transaction fields, including every
+/// compare-and-swap value required by guarded transaction mutations.
 fn install_transaction_summary(transaction: &crate::runtime_adoption::UpgradeTransaction) -> Value {
     let migration = transaction.service_state_migration.as_ref();
     serde_json::json!({
@@ -1232,6 +1234,7 @@ fn install_transaction_summary(transaction: &crate::runtime_adoption::UpgradeTra
         "candidateGenerationId": transaction.candidate_generation_id,
         "oldGenerationId": transaction.old_generation_id,
         "runtimeCensusStable": transaction.runtime_census_digest.is_some(),
+        "runtimeCensusDigest": transaction.runtime_census_digest,
         "migrationStatus": migration.map(|record| record.status.as_str()),
         "sourceStateSchema": migration.map(|record| record.source_state_schema.as_str()),
         "targetStateSchema": migration.map(|record| record.target_state_schema.as_str()),
@@ -13868,12 +13871,13 @@ mod tests {
             uuid::Uuid::new_v4()
         ));
         let paths = install_paths(&root);
-        let transaction = new_upgrade_transaction(
+        let mut transaction = new_upgrade_transaction(
             &paths,
             "generation-candidate".to_string(),
             "a".repeat(64),
             "b".repeat(64),
         );
+        transaction.runtime_census_digest = Some("c".repeat(64));
         let path = transaction_path(&root, &transaction.transaction_id);
         write_private_json_atomic(&path, &transaction).unwrap();
         let before = fs::read(&path).unwrap();
@@ -13888,10 +13892,15 @@ mod tests {
             listed["transactions"][0]["safeActions"],
             serde_json::json!(["inspect", "rollback"])
         );
+        assert_eq!(
+            listed["transactions"][0]["runtimeCensusDigest"],
+            "c".repeat(64)
+        );
         let inspected = inspect_install_transaction(&root, &transaction.transaction_id).unwrap();
         assert_eq!(inspected["revision"], 0);
         assert_eq!(inspected["state"], "planned");
         assert_eq!(inspected["nextSafeAction"], "rollback");
+        assert_eq!(inspected["runtimeCensusDigest"], "c".repeat(64));
         assert_eq!(fs::read(&path).unwrap(), before);
 
         fs::remove_dir_all(root).unwrap();
