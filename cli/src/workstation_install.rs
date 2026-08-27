@@ -1956,7 +1956,11 @@ fn reconcile_workstation_locked_for_upgrade(
     require_installed_payload(paths)?;
     require_effective_groups()?;
     let support_root = &paths.support_dir;
-    let mut command_env = workstation_command_env(paths);
+    let candidate_runtime_socket_dir = expected_upgrade
+        .map(|upgrade| candidate_runtime_host_socket_dir(&upgrade.transaction_id))
+        .transpose()?;
+    let mut command_env =
+        workstation_reconcile_command_env(paths, candidate_runtime_socket_dir.as_deref());
     if let Some(expected_upgrade) = expected_upgrade {
         command_env.push((
             crate::runtime_adoption::RUNTIME_ADMISSION_TRANSACTION_ID_ENV.to_string(),
@@ -2587,6 +2591,20 @@ fn workstation_command_env(paths: &InstallPaths) -> Vec<(String, String)> {
             String::new(),
         ),
     ]
+}
+
+fn workstation_reconcile_command_env(
+    paths: &InstallPaths,
+    candidate_runtime_socket_dir: Option<&Path>,
+) -> Vec<(String, String)> {
+    let mut command_env = workstation_command_env(paths);
+    if let Some(socket_dir) = candidate_runtime_socket_dir {
+        command_env.push((
+            "AGENT_BROWSER_SOCKET_DIR".to_string(),
+            socket_dir.display().to_string(),
+        ));
+    }
+    command_env
 }
 
 fn apply_command_environment(command: &mut Command, command_env: &[(String, String)]) {
@@ -10857,6 +10875,23 @@ mod tests {
         let command_env = workstation_command_env(&paths);
         assert!(command_env.iter().any(|(key, value)| {
             key == "AGENT_BROWSER_RDP_ROUTE_POOL_JSON" && value.is_empty()
+        }));
+    }
+
+    #[test]
+    fn post_commit_reconcile_targets_the_candidate_runtime_host() {
+        let paths = install_paths(Path::new("/tmp/workstation-reconcile-command-env"));
+        let candidate_socket_dir =
+            Path::new("/run/user/1000/agent-browser/runtime-hosts/upgrade-candidate");
+        let command_env = workstation_reconcile_command_env(&paths, Some(candidate_socket_dir));
+
+        assert!(command_env.iter().any(|(key, value)| {
+            key == "AGENT_BROWSER_SOCKET_DIR"
+                && value == &candidate_socket_dir.display().to_string()
+        }));
+        assert!(command_env.iter().any(|(key, value)| {
+            key == "AGENT_BROWSER_ROUTE_DISPLAY_AGENT_BROWSER_CMD"
+                && value == &paths.binary.display().to_string()
         }));
     }
 
