@@ -704,6 +704,9 @@ fn apply_existing_session_profile_selection(
                 .any(|id| id == &session_id)
         });
     let Some(binding) = binding else {
+        if apply_registered_session_profile_continuity(options, command, &session_id, state)? {
+            return Ok(Some(ProfileSelectionReason::ExistingOwner));
+        }
         return if retained_observation {
             Err("existing_session_profile_identity_unproven".to_string())
         } else {
@@ -711,6 +714,9 @@ fn apply_existing_session_profile_selection(
         };
     };
     if !binding.effect_capable {
+        if apply_registered_session_profile_continuity(options, command, &session_id, state)? {
+            return Ok(Some(ProfileSelectionReason::ExistingOwner));
+        }
         return Err("existing_session_profile_identity_unproven".to_string());
     }
     let session = state
@@ -788,6 +794,107 @@ fn apply_existing_session_profile_selection(
         options.executable_path = None;
     }
     Ok(Some(ProfileSelectionReason::ExistingOwner))
+}
+
+fn apply_registered_session_profile_continuity(
+    options: &mut LaunchOptions,
+    command: &Value,
+    session_id: &str,
+    state: &ServiceState,
+) -> Result<bool, String> {
+    // A browser exit can temporarily remove effect-capable runtime ownership
+    // before replay creates the next owner generation. Only a current registered
+    // capability-derived session work lease may carry profile identity across
+    // that gap. Retained labels and legacy observations never qualify.
+    let Some(session) = state.sessions.get(session_id) else {
+        return Ok(false);
+    };
+    let now = crate::native::service_trace::service_commands::service_now_timestamp();
+    let Some(profile_id) = session.profile_id.as_deref() else {
+        return Ok(false);
+    };
+    let Some(principal_id) = session.principal_id.as_deref() else {
+        return Ok(false);
+    };
+    if session.principal_provenance
+        != Some(crate::native::service_principal::ServicePrincipalProvenance::RegisteredCapability)
+        || matches!(session.lease, LeaseState::Released | LeaseState::Expired)
+        || session
+            .expires_at
+            .as_deref()
+            .is_none_or(|expires_at| expires_at <= now.as_str())
+        || session.work_lease_id.as_deref().is_none_or(str::is_empty)
+        || session.work_lease_revision == 0
+    {
+        return Ok(false);
+    }
+    let Some(profile) = state.profiles.get(profile_id) else {
+        return Ok(false);
+    };
+    let user_data_dir = profile
+        .user_data_dir
+        .as_deref()
+        .map(std::path::PathBuf::from)
+        .unwrap_or(crate::runtime_profile::runtime_profile_user_data_dir(
+            profile_id,
+        )?);
+    let profile_digest = crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir)?;
+    let Some(principal_binding) = state
+        .runtime_owner_registry
+        .principal_bindings
+        .get(&profile_digest)
+    else {
+        return Ok(false);
+    };
+    if principal_binding.principal_id != principal_id
+        || principal_binding.profile_id != profile_id
+        || principal_binding.provenance != session.principal_provenance.unwrap()
+    {
+        return Ok(false);
+    }
+    let Some(capability) = state
+        .service_principals
+        .profile_capabilities
+        .get(&principal_binding.capability_id)
+    else {
+        return Ok(false);
+    };
+    let authority = crate::native::service_principal::AuthenticatedServicePrincipal {
+        principal_id: principal_id.to_string(),
+        profile_id: profile_id.to_string(),
+        capability_id: principal_binding.capability_id.clone(),
+        capability_revision: capability.revision,
+        provenance: principal_binding.provenance,
+    };
+    if !crate::native::service_principal::authenticated_authority_is_current(
+        &state.service_principals,
+        &authority,
+    ) {
+        return Ok(false);
+    }
+    if options
+        .runtime_profile
+        .as_deref()
+        .is_some_and(|requested| requested != profile_id)
+    {
+        return Err("explicit_profile_conflicts_with_registered_work_lease".to_string());
+    }
+    if let Some(requested_path) = options.profile.as_deref() {
+        let requested_digest = crate::runtime_profile::canonical_profile_identity_digest(
+            std::path::Path::new(requested_path),
+        )?;
+        if requested_digest != profile_digest {
+            return Err("explicit_profile_conflicts_with_registered_work_lease".to_string());
+        }
+    }
+    options.runtime_profile = Some(profile_id.to_string());
+    options.profile = profile.user_data_dir.clone();
+    if profile.browser_build == Some(BrowserBuild::StockChrome)
+        && command.get("executablePath").is_none()
+    {
+        options.executable_path = None;
+    }
+    Ok(true)
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct BrowserCapabilityLaunchSelection {
