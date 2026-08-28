@@ -1330,3 +1330,31 @@ Do not implement migration or installer effects in Slice A.
   presentation route and durable handoff, followed by a successor candidate
   build, guarded install, rollback proof, idempotent reapply, installed doctor,
   and the three-consumer acceptance matrix.
+
+## 2026-08-27 exact candidate preflight and terminality follow-up
+
+- Source commit `b960a7e0` produced release candidate SHA-256
+  `99c04e021310b95ee37b68e69b07b9a4487d4829a25d6787f30f4cbb21f0a113`
+  and immutable generation `0.28.0-99c04e021310-8f0862bb1e70`.
+- Its real-host dry-run was zero-effect and reported 35 `route_not_ready`
+  handoffs, zero eligible handoffs, and the exact fresh-route or reconciliation
+  next action. The authorized apply rejected immediately before installer lock
+  acquisition or candidate staging. Production stayed on generation
+  `0.28.0-32e8c9318beb-b2bd0fba532f` with steady one-dashboard and
+  one-runtime-host multiplicity.
+- The first rejection correctly preserved runtime state but exposed a ledger
+  terminality defect: it persisted `blocked_candidate_incompatible`, which the
+  installed old generation treats as an active recovery obligation. Exact
+  guarded close converted transaction
+  `upgrade-78f3f13c-0ae0-43bd-93b3-4d7f804c429b` at revision 1 into
+  old-reader-compatible `failed_preserved_old_generation` revision 2 with zero
+  outstanding owner obligations.
+- Presentation-prerequisite rejection now performs that terminal transition
+  within the original apply operation and records
+  `terminalResult: old_generation_preserved`. Future rejected attempts do not
+  require a second operator command and do not leave install doctor degraded
+  solely because the prerequisite was absent.
+- This follow-up requires one rebuilt exact candidate and another read-only
+  plus rejected-apply proof. It does not change the remaining exact authority
+  gate for creating one fresh production presentation route and durable
+  handoff.

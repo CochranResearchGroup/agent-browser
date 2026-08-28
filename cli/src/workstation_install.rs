@@ -2494,7 +2494,7 @@ fn run_workstation_install(args: &[String]) {
             "candidate_dashboard_presentation_prerequisite_unready: {}",
             candidate_presentation_prerequisite
         );
-        if let Ok(path) = record_blocked_upgrade_transaction(
+        if let Ok(path) = record_terminal_zero_effect_upgrade_transaction(
             &root,
             &paths,
             &parsed,
@@ -5666,6 +5666,28 @@ fn record_blocked_upgrade_transaction(
     let path = transaction_path(root, &transaction.transaction_id);
     write_private_json_atomic(&path, &transaction)?;
     persist_upgrade_transition(&path, &mut transaction, state, stop_reason)?;
+    Ok(path)
+}
+
+fn record_terminal_zero_effect_upgrade_transaction(
+    root: &Path,
+    paths: &InstallPaths,
+    args: &WorkstationInstallArgs,
+    blocked_state: crate::runtime_adoption::UpgradeTransactionState,
+    stop_reason: &str,
+) -> Result<PathBuf, String> {
+    let path = record_blocked_upgrade_transaction(root, paths, args, blocked_state, stop_reason)?;
+    let mut transaction: crate::runtime_adoption::UpgradeTransaction = serde_json::from_slice(
+        &fs::read(&path).map_err(display_io("read zero-effect upgrade transaction", &path))?,
+    )
+    .map_err(|error| format!("Unable to parse zero-effect upgrade transaction: {error}"))?;
+    transaction.terminal_result = Some("old_generation_preserved".to_string());
+    persist_upgrade_transition(
+        &path,
+        &mut transaction,
+        crate::runtime_adoption::UpgradeTransactionState::FailedPreservedOldGeneration,
+        "preflight_rejection_preserved_old_generation",
+    )?;
     Ok(path)
 }
 
@@ -12232,6 +12254,50 @@ mod tests {
         assert_eq!(
             recovered.state,
             crate::runtime_adoption::UpgradeTransactionState::FailedPreservedOldGeneration
+        );
+        assert!(!paths.generations_dir.exists());
+        assert!(!paths.current_selector.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn presentation_preflight_rejection_is_terminal_without_staging_payload() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-terminal-presentation-preflight-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let paths = install_paths(&root);
+        let args = WorkstationInstallArgs {
+            mode: InstallMode::Apply,
+            json: true,
+            dashboard_port: 4848,
+            guacamole_port: 8092,
+        };
+
+        let receipt = record_terminal_zero_effect_upgrade_transaction(
+            &root,
+            &paths,
+            &args,
+            crate::runtime_adoption::UpgradeTransactionState::BlockedCandidateIncompatible,
+            "candidate_dashboard_presentation_prerequisite_unready",
+        )
+        .unwrap();
+        let transaction: crate::runtime_adoption::UpgradeTransaction =
+            serde_json::from_slice(&fs::read(receipt).unwrap()).unwrap();
+
+        assert_eq!(
+            transaction.state,
+            crate::runtime_adoption::UpgradeTransactionState::FailedPreservedOldGeneration
+        );
+        assert_eq!(transaction.revision, 2);
+        assert_eq!(
+            transaction.terminal_result.as_deref(),
+            Some("old_generation_preserved")
+        );
+        assert_eq!(
+            transaction.stop_reason.as_deref(),
+            Some("candidate_dashboard_presentation_prerequisite_unready")
         );
         assert!(!paths.generations_dir.exists());
         assert!(!paths.current_selector.exists());
