@@ -92,17 +92,19 @@
         "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" }, "minItems": 1 },
         "actions": { "type": "array", "items": { "$ref": "#/$defs/mitigationAction" }, "minItems": 1 },
         "originalIntent": { "$ref": "#/$defs/intent" },
-        "integritySeal": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        "integritySeal": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
       }
     },
     "recoveryReceipt": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "recoveryId", "planId", "terminalResult", "preconditionComparison", "attemptedOperationIds", "compensationResult", "finalStateRevision", "acquisitionRetryState", "browserId", "daemonSessionRoute"],
+      "required": ["schemaVersion", "recoveryId", "planId", "principalId", "profileId", "terminalResult", "preconditionComparison", "attemptedOperationIds", "compensationResult", "finalStateRevision", "acquisitionRetryState", "browserId", "daemonSessionRoute"],
       "properties": {
         "schemaVersion": { "const": "agent-browser.profile-recovery-receipt.v1" },
         "recoveryId": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
         "planId": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "principalId": { "type": "string", "minLength": 1 },
+        "profileId": { "type": "string", "minLength": 1 },
         "terminalResult": { "type": "string", "minLength": 1 },
         "preconditionComparison": { "type": "string", "minLength": 1 },
         "attemptedOperationIds": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },

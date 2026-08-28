@@ -7,6 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::future::Future;
 
 use super::service_model::ServiceState;
 use super::service_store::ServiceStateRepository;
@@ -122,6 +123,8 @@ pub(crate) struct RecoveryReceipt {
     pub(crate) schema_version: String,
     pub(crate) recovery_id: String,
     pub(crate) plan_id: String,
+    pub(crate) principal_id: String,
+    pub(crate) profile_id: String,
     pub(crate) terminal_result: String,
     pub(crate) precondition_comparison: String,
     pub(crate) attempted_operation_ids: Vec<String>,
@@ -170,7 +173,11 @@ pub(crate) fn plan_terminal_owner_recovery(
     created_at: &str,
     expires_at: &str,
     idempotency_key: &str,
+    seal_key: &[u8],
 ) -> Result<ProfileAcquisitionOutcome, String> {
+    if seal_key.len() < 32 || idempotency_key.trim().is_empty() {
+        return Err("profile_recovery_plan_invalid".to_string());
+    }
     let profile = state
         .profiles
         .get(&intent.profile_id)
@@ -291,20 +298,7 @@ pub(crate) fn plan_terminal_owner_recovery(
         created_at,
         expires_at,
     ))?;
-    let integrity_seal = digest_json(&(
-        &plan_id,
-        &recovery_id,
-        &idempotency_key_digest,
-        state.runtime_owner_registry.revision,
-        &identities,
-        &blocker,
-        &evidence,
-        &action,
-        &intent,
-        created_at,
-        expires_at,
-    ))?;
-    let plan = RecoveryPlan {
+    let mut plan = RecoveryPlan {
         schema_version: PROFILE_RECOVERY_PLAN_SCHEMA_V1.to_string(),
         plan_id,
         recovery_id,
@@ -317,8 +311,9 @@ pub(crate) fn plan_terminal_owner_recovery(
         evidence: evidence.clone(),
         actions: vec![action],
         original_intent: intent,
-        integrity_seal,
+        integrity_seal: String::new(),
     };
+    plan.integrity_seal = seal_recovery_plan(&plan, seal_key)?;
     Ok(ProfileAcquisitionOutcome {
         schema_version: PROFILE_ACQUISITION_OUTCOME_SCHEMA_V1.to_string(),
         state: ProfileAcquisitionState::RecoveryAvailable,
@@ -332,22 +327,26 @@ pub(crate) fn plan_terminal_owner_recovery(
     })
 }
 
-pub(crate) fn apply_terminal_owner_recovery<R: ServiceStateRepository>(
+pub(crate) async fn apply_terminal_owner_recovery<R, F, Fut>(
     repository: &R,
     plan: &RecoveryPlan,
     now: &str,
-    retry_acquisition: impl FnOnce(
-        &ProfileAcquisitionIntent,
-    ) -> Result<ProfileAcquisitionRetryResult, String>,
-) -> Result<RecoveryApplyOutcome, String> {
-    verify_plan_integrity(plan)?;
+    seal_key: &[u8],
+    retry_acquisition: F,
+) -> Result<RecoveryApplyOutcome, String>
+where
+    R: ServiceStateRepository,
+    F: FnOnce(ProfileAcquisitionIntent) -> Fut,
+    Fut: Future<Output = Result<ProfileAcquisitionRetryResult, String>>,
+{
+    verify_plan_integrity(plan, seal_key)?;
     let snapshot = repository.load_snapshot()?;
     if let Some(receipt) = snapshot.profile_recovery_receipts.get(&plan.recovery_id) {
         return replay_outcome(plan, receipt);
     }
     validate_plan_preconditions(&snapshot, plan, now)?;
 
-    let acquired = retry_acquisition(&plan.original_intent)?;
+    let acquired = retry_acquisition(plan.original_intent.clone()).await?;
     repository.mutate(|state| {
         if let Some(receipt) = state.profile_recovery_receipts.get(&plan.recovery_id) {
             return replay_outcome(plan, receipt);
@@ -380,6 +379,8 @@ pub(crate) fn apply_terminal_owner_recovery<R: ServiceStateRepository>(
             schema_version: PROFILE_RECOVERY_RECEIPT_SCHEMA_V1.to_string(),
             recovery_id: plan.recovery_id.clone(),
             plan_id: plan.plan_id.clone(),
+            principal_id: plan.identities.principal_id.clone(),
+            profile_id: plan.identities.profile_id.clone(),
             terminal_result: "applied".to_string(),
             precondition_comparison: "matched".to_string(),
             attempted_operation_ids: plan
@@ -491,7 +492,7 @@ fn active_profile_lease_session_ids(state: &ServiceState, profile_id: &str) -> V
         .collect()
 }
 
-fn verify_plan_integrity(plan: &RecoveryPlan) -> Result<(), String> {
+fn verify_plan_integrity(plan: &RecoveryPlan, seal_key: &[u8]) -> Result<(), String> {
     let action = plan
         .actions
         .first()
@@ -508,19 +509,7 @@ fn verify_plan_integrity(plan: &RecoveryPlan) -> Result<(), String> {
         plan.created_at.as_str(),
         plan.expires_at.as_str(),
     ))?;
-    let expected_seal = digest_json(&(
-        &plan.plan_id,
-        &plan.recovery_id,
-        &plan.idempotency_key_digest,
-        plan.service_state_revision,
-        &plan.identities,
-        &plan.dominant_blocker,
-        &plan.evidence,
-        action,
-        &plan.original_intent,
-        plan.created_at.as_str(),
-        plan.expires_at.as_str(),
-    ))?;
+    let expected_seal = seal_recovery_plan(plan, seal_key)?;
     if plan.schema_version != PROFILE_RECOVERY_PLAN_SCHEMA_V1
         || plan.plan_id != expected_plan_id
         || plan.integrity_seal != expected_seal
@@ -530,12 +519,33 @@ fn verify_plan_integrity(plan: &RecoveryPlan) -> Result<(), String> {
     Ok(())
 }
 
+fn seal_recovery_plan(plan: &RecoveryPlan, seal_key: &[u8]) -> Result<String, String> {
+    if seal_key.len() < 32 {
+        return Err("profile_recovery_plan_invalid".to_string());
+    }
+    let mut projection = serde_json::to_value(plan)
+        .map_err(|error| format!("profile_recovery_contract_encode_failed:{error}"))?;
+    projection["integritySeal"] = serde_json::Value::String(String::new());
+    let encoded = serde_json::to_vec(&projection)
+        .map_err(|error| format!("profile_recovery_contract_encode_failed:{error}"))?;
+    let mut hasher = Sha256::new();
+    hasher.update(b"agent-browser.profile-recovery-seal.v1\0");
+    hasher.update(seal_key);
+    hasher.update(b"\0");
+    hasher.update(encoded);
+    hasher.update(b"\0");
+    hasher.update(seal_key);
+    Ok(format!("sha256:{:x}", hasher.finalize()))
+}
+
 fn replay_outcome(
     plan: &RecoveryPlan,
     receipt: &RecoveryReceipt,
 ) -> Result<RecoveryApplyOutcome, String> {
     if receipt.plan_id != plan.plan_id
         || receipt.recovery_id != plan.recovery_id
+        || receipt.principal_id != plan.identities.principal_id
+        || receipt.profile_id != plan.identities.profile_id
         || receipt.terminal_result != "applied"
     {
         return Err("profile_recovery_receipt_conflict".to_string());
@@ -712,6 +722,10 @@ mod tests {
         }
     }
 
+    fn seal_key() -> &'static [u8] {
+        b"synthetic-profile-capability-seal-key-with-at-least-thirty-two-bytes"
+    }
+
     #[test]
     fn terminal_owner_plan_is_sealed_deterministic_and_zero_effect() {
         let state = state();
@@ -722,6 +736,7 @@ mod tests {
             "2026-08-28T12:00:00Z",
             "2026-08-28T12:05:00Z",
             "request-1",
+            seal_key(),
         )
         .unwrap();
         let replay = plan_terminal_owner_recovery(
@@ -730,6 +745,7 @@ mod tests {
             "2026-08-28T12:00:00Z",
             "2026-08-28T12:05:00Z",
             "request-1",
+            seal_key(),
         )
         .unwrap();
 
@@ -748,7 +764,8 @@ mod tests {
             plan.identities.daemon_session_route,
             "handoff-a79ef2887412addf"
         );
-        assert_eq!(plan.integrity_seal.len(), 64);
+        assert_eq!(plan.integrity_seal.len(), 71);
+        assert!(plan.integrity_seal.starts_with("sha256:"));
         assert_eq!(plan.actions.len(), 1);
         assert_eq!(
             plan.actions[0].action_type,
@@ -773,6 +790,7 @@ mod tests {
             "2026-08-28T12:00:00Z",
             "2026-08-28T12:05:00Z",
             "request-2",
+            seal_key(),
         )
         .unwrap();
 
@@ -785,8 +803,8 @@ mod tests {
         assert!(outcome.recovery.is_none());
     }
 
-    #[test]
-    fn apply_retries_once_persists_receipt_and_replays_without_effect() {
+    #[tokio::test]
+    async fn apply_retries_once_persists_receipt_and_replays_without_effect() {
         let repository = MemoryRepository::new(state());
         let plan = plan_terminal_owner_recovery(
             &repository.load_snapshot().unwrap(),
@@ -794,13 +812,18 @@ mod tests {
             "2026-08-28T12:00:00Z",
             "2026-08-28T12:05:00Z",
             "request-apply-1",
+            seal_key(),
         )
         .unwrap()
         .recovery
         .unwrap();
         let profile_root = std::path::PathBuf::from("/tmp/agent-browser-p137/recovery-contract");
-        let first =
-            apply_terminal_owner_recovery(&repository, &plan, "2026-08-28T12:01:00Z", |_| {
+        let first = apply_terminal_owner_recovery(
+            &repository,
+            &plan,
+            "2026-08-28T12:01:00Z",
+            seal_key(),
+            |_| async {
                 let authority = RuntimeLifecycleAuthority::new(&repository);
                 let binding = authority.register_managed_lane(ManagedLaneRegistration {
                     logical_browser_id: "session:replacement-browser".to_string(),
@@ -821,8 +844,10 @@ mod tests {
                     browser_id: binding.claim.logical_browser_id,
                     daemon_session_route: binding.claim.daemon_session_route,
                 })
-            })
-            .unwrap();
+            },
+        )
+        .await
+        .unwrap();
 
         assert!(!first.replayed);
         assert_eq!(first.acquisition.state, ProfileAcquisitionState::Acquired);
@@ -844,17 +869,21 @@ mod tests {
         assert_eq!(owner.owner_generation, 56);
         assert_eq!(owner.browser_id, "session:replacement-browser");
 
-        let replay =
-            apply_terminal_owner_recovery(&repository, &plan, "2026-08-28T12:02:00Z", |_| {
-                panic!("receipt replay must not retry acquisition")
-            })
-            .unwrap();
+        let replay = apply_terminal_owner_recovery(
+            &repository,
+            &plan,
+            "2026-08-28T12:02:00Z",
+            seal_key(),
+            |_| async { panic!("receipt replay must not retry acquisition") },
+        )
+        .await
+        .unwrap();
         assert!(replay.replayed);
         assert_eq!(replay.receipt, first.receipt);
     }
 
-    #[test]
-    fn stale_plan_fails_before_retry_effect() {
+    #[tokio::test]
+    async fn stale_plan_fails_before_retry_effect() {
         let repository = MemoryRepository::new(state());
         let plan = plan_terminal_owner_recovery(
             &repository.load_snapshot().unwrap(),
@@ -862,6 +891,7 @@ mod tests {
             "2026-08-28T12:00:00Z",
             "2026-08-28T12:05:00Z",
             "request-stale-1",
+            seal_key(),
         )
         .unwrap()
         .recovery
@@ -874,12 +904,18 @@ mod tests {
             .unwrap();
         let retries = std::cell::Cell::new(0);
 
-        let error =
-            apply_terminal_owner_recovery(&repository, &plan, "2026-08-28T12:01:00Z", |_| {
+        let error = apply_terminal_owner_recovery(
+            &repository,
+            &plan,
+            "2026-08-28T12:01:00Z",
+            seal_key(),
+            |_| async {
                 retries.set(retries.get() + 1);
                 Err("must not run".to_string())
-            })
-            .unwrap_err();
+            },
+        )
+        .await
+        .unwrap_err();
 
         assert_eq!(error, "profile_recovery_plan_stale");
         assert_eq!(retries.get(), 0);
@@ -890,8 +926,8 @@ mod tests {
             .is_empty());
     }
 
-    #[test]
-    fn altered_seal_fails_before_retry_effect() {
+    #[tokio::test]
+    async fn altered_seal_fails_before_retry_effect() {
         let repository = MemoryRepository::new(state());
         let mut plan = plan_terminal_owner_recovery(
             &repository.load_snapshot().unwrap(),
@@ -899,17 +935,22 @@ mod tests {
             "2026-08-28T12:00:00Z",
             "2026-08-28T12:05:00Z",
             "request-seal-1",
+            seal_key(),
         )
         .unwrap()
         .recovery
         .unwrap();
         plan.identities.daemon_session_route = "tampered-route".to_string();
 
-        let error =
-            apply_terminal_owner_recovery(&repository, &plan, "2026-08-28T12:01:00Z", |_| {
-                panic!("invalid seal must fail before retry")
-            })
-            .unwrap_err();
+        let error = apply_terminal_owner_recovery(
+            &repository,
+            &plan,
+            "2026-08-28T12:01:00Z",
+            seal_key(),
+            |_| async { panic!("invalid seal must fail before retry") },
+        )
+        .await
+        .unwrap_err();
 
         assert_eq!(error, "profile_recovery_plan_integrity_mismatch");
     }
@@ -932,6 +973,7 @@ mod tests {
             "2026-08-28T12:00:00Z",
             "2026-08-28T12:05:00Z",
             "request-live-1",
+            seal_key(),
         )
         .unwrap();
         assert_eq!(live_outcome.state, ProfileAcquisitionState::Blocked);
@@ -953,6 +995,7 @@ mod tests {
             "2026-08-28T12:00:00Z",
             "2026-08-28T12:05:00Z",
             "request-lease-1",
+            seal_key(),
         )
         .unwrap();
         assert_eq!(lease_outcome.state, ProfileAcquisitionState::Blocked);
