@@ -898,6 +898,117 @@ fn presentation_evidence_from_durable_handoff(
     })
 }
 
+/// Reports whether an existing durable handoff can satisfy the authenticated
+/// shadow-dashboard journey before an upgrade is allowed to enter effects.
+/// The projection contains only opaque handoff ids and blocker classes.
+pub(crate) fn candidate_presentation_prerequisite(
+    state: &crate::native::service_model::ServiceState,
+) -> serde_json::Value {
+    let mut eligible_handoff_ids = Vec::new();
+    let mut blocker_counts = std::collections::BTreeMap::<&'static str, usize>::new();
+    for handoff in state.remote_view_handoffs.values() {
+        let owner_session =
+            crate::native::remote_view_handoff::remote_view_handoff_ready_owner_session(
+                state, handoff,
+            );
+        let owner = owner_session.as_deref().and_then(|owner_session| {
+            state.runtime_owner_registry.owners.values().find(|owner| {
+                owner.browser_id.as_str() == handoff.browser_id.as_deref().unwrap_or_default()
+                    && owner.daemon_session_route == owner_session
+            })
+        });
+        let route = handoff
+            .last_route_id
+            .as_deref()
+            .and_then(|route_id| state.remote_view_routes.get(route_id));
+        let display = handoff
+            .last_display_allocation_id
+            .as_deref()
+            .and_then(|display_id| state.display_allocations.get(display_id));
+        let blocker = if handoff.state != "ready" {
+            Some("handoff_not_ready")
+        } else if route.filter(|route| route.state == "ready").is_none() {
+            Some("route_not_ready")
+        } else if owner_session.is_none() {
+            Some("current_owner_unproven")
+        } else if handoff
+            .presentation_receipt
+            .as_ref()
+            .filter(|receipt| receipt.state == "ready" && receipt.generation > 0)
+            .is_none()
+        {
+            Some("presentation_receipt_unready")
+        } else if handoff
+            .presentation_receipt
+            .as_ref()
+            .is_some_and(|receipt| {
+                receipt.logical_browser_id.as_str()
+                    != handoff.browser_id.as_deref().unwrap_or_default()
+                    || receipt.target_id.as_str()
+                        != handoff.target_id.as_deref().unwrap_or_default()
+                    || receipt.route_id.as_str()
+                        != handoff.last_route_id.as_deref().unwrap_or_default()
+                    || receipt.display_allocation_id.as_str()
+                        != handoff
+                            .last_display_allocation_id
+                            .as_deref()
+                            .unwrap_or_default()
+                    || Some(receipt.required_stream_provider) != handoff.view_stream_provider
+                    || receipt.observed_stream_provider != receipt.required_stream_provider
+                    || receipt.observed_at.trim().is_empty()
+                    || owner.is_none_or(|owner| {
+                        Some(owner.owner_generation) != receipt.daemon_owner_generation
+                            || Some(owner.process_instance_digest.as_str())
+                                != receipt.process_instance_digest.as_deref()
+                    })
+            })
+        {
+            Some("presentation_receipt_changed")
+        } else if route.is_some_and(|route| {
+            route.browser_id.as_deref() != handoff.browser_id.as_deref()
+                || route.session_id.as_deref() != owner_session.as_deref()
+                || route.display_allocation_id.as_deref()
+                    != handoff.last_display_allocation_id.as_deref()
+                || Some(route.provider) != handoff.view_stream_provider
+        }) {
+            Some("route_changed")
+        } else if display.filter(|display| display.state == "ready").is_none() {
+            Some("display_not_ready")
+        } else if display.is_some_and(|display| {
+            display.owner_browser_id.as_deref() != handoff.browser_id.as_deref()
+                || display.owner_session_id.as_deref() != owner_session.as_deref()
+                || handoff.last_route_id.as_ref().is_none_or(|route_id| {
+                    !display
+                        .route_ids
+                        .iter()
+                        .any(|candidate| candidate == route_id)
+                })
+        }) {
+            Some("display_changed")
+        } else {
+            None
+        };
+        if let Some(blocker) = blocker {
+            *blocker_counts.entry(blocker).or_default() += 1;
+        } else {
+            eligible_handoff_ids.push(handoff.id.clone());
+        }
+    }
+    let ready = !eligible_handoff_ids.is_empty();
+    serde_json::json!({
+        "schemaVersion": "agent-browser.candidate-presentation-prerequisite.v1",
+        "ready": ready,
+        "eligibleHandoffCount": eligible_handoff_ids.len(),
+        "eligibleHandoffIds": eligible_handoff_ids,
+        "blockerCounts": blocker_counts,
+        "nextAction": if ready {
+            "resolve_eligible_handoff_through_authenticated_candidate"
+        } else {
+            "reconcile_exact_current_handoff_or_create_fresh_presentation_handoff"
+        },
+    })
+}
+
 fn hex_sha256(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
@@ -1543,6 +1654,300 @@ mod tests {
         assert_eq!(
             presentation_evidence_from_durable_handoff(&registry, &state, "r1").unwrap_err(),
             "dashboard candidate durable handoff route is not ready"
+        );
+    }
+
+    #[test]
+    fn candidate_presentation_prerequisite_blocks_released_legacy_handoff_before_effects() {
+        use crate::native::service_model::{
+            DisplayAllocation, RemoteViewHandoff, RemoteViewRoute, ServiceState, ViewStreamProvider,
+        };
+
+        let state = ServiceState {
+            remote_view_handoffs: std::collections::BTreeMap::from([(
+                "r1".to_string(),
+                RemoteViewHandoff {
+                    id: "r1".to_string(),
+                    state: "ready".to_string(),
+                    browser_id: Some("browser-1".to_string()),
+                    session_name: Some("owner-session".to_string()),
+                    target_id: Some("target-1".to_string()),
+                    last_route_id: Some("route-1".to_string()),
+                    last_display_allocation_id: Some("display-1".to_string()),
+                    view_stream_provider: Some(ViewStreamProvider::RdpGateway),
+                    ..RemoteViewHandoff::default()
+                },
+            )]),
+            remote_view_routes: std::collections::BTreeMap::from([(
+                "route-1".to_string(),
+                RemoteViewRoute {
+                    id: "route-1".to_string(),
+                    state: "released".to_string(),
+                    browser_id: Some("browser-1".to_string()),
+                    session_id: Some("owner-session".to_string()),
+                    display_allocation_id: Some("display-1".to_string()),
+                    provider: ViewStreamProvider::RdpGateway,
+                    ..RemoteViewRoute::default()
+                },
+            )]),
+            display_allocations: std::collections::BTreeMap::from([(
+                "display-1".to_string(),
+                DisplayAllocation {
+                    id: "display-1".to_string(),
+                    state: "released".to_string(),
+                    owner_browser_id: Some("browser-1".to_string()),
+                    owner_session_id: Some("owner-session".to_string()),
+                    ..DisplayAllocation::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let prerequisite = candidate_presentation_prerequisite(&state);
+
+        assert_eq!(prerequisite["ready"], false);
+        assert_eq!(prerequisite["eligibleHandoffCount"], 0);
+        assert_eq!(prerequisite["blockerCounts"]["route_not_ready"], 1);
+        assert_eq!(
+            prerequisite["nextAction"],
+            "reconcile_exact_current_handoff_or_create_fresh_presentation_handoff"
+        );
+    }
+
+    #[test]
+    fn candidate_presentation_prerequisite_requires_current_browser_process_and_target_owner() {
+        use crate::native::service_model::{
+            DisplayAllocation, RemoteViewHandoff, RemoteViewRoute, ServiceState, ViewStreamProvider,
+        };
+
+        let state = ServiceState {
+            remote_view_handoffs: std::collections::BTreeMap::from([(
+                "r1".to_string(),
+                RemoteViewHandoff {
+                    id: "r1".to_string(),
+                    state: "ready".to_string(),
+                    browser_id: Some("browser-1".to_string()),
+                    session_name: Some("owner-session".to_string()),
+                    target_id: Some("target-1".to_string()),
+                    last_route_id: Some("route-1".to_string()),
+                    last_display_allocation_id: Some("display-1".to_string()),
+                    view_stream_provider: Some(ViewStreamProvider::RdpGateway),
+                    ..RemoteViewHandoff::default()
+                },
+            )]),
+            remote_view_routes: std::collections::BTreeMap::from([(
+                "route-1".to_string(),
+                RemoteViewRoute {
+                    id: "route-1".to_string(),
+                    state: "ready".to_string(),
+                    browser_id: Some("browser-1".to_string()),
+                    session_id: Some("owner-session".to_string()),
+                    display_allocation_id: Some("display-1".to_string()),
+                    provider: ViewStreamProvider::RdpGateway,
+                    ..RemoteViewRoute::default()
+                },
+            )]),
+            display_allocations: std::collections::BTreeMap::from([(
+                "display-1".to_string(),
+                DisplayAllocation {
+                    id: "display-1".to_string(),
+                    state: "ready".to_string(),
+                    owner_browser_id: Some("browser-1".to_string()),
+                    owner_session_id: Some("owner-session".to_string()),
+                    route_ids: vec!["route-1".to_string()],
+                    ..DisplayAllocation::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+
+        let prerequisite = candidate_presentation_prerequisite(&state);
+
+        assert_eq!(prerequisite["ready"], false);
+        assert_eq!(prerequisite["eligibleHandoffCount"], 0);
+        assert_eq!(prerequisite["blockerCounts"]["current_owner_unproven"], 1);
+    }
+
+    fn exact_candidate_presentation_state() -> crate::native::service_model::ServiceState {
+        use crate::native::service_model::{
+            BrowserHealth, BrowserProcess, DisplayAllocation, DurableHandoffPresentationReceipt,
+            RemoteViewHandoff, RemoteViewRoute, ServiceBrowserProcessIdentity, ServiceState,
+            ServiceTabHandle, ViewStreamProvider,
+        };
+        use crate::process_identity::RecordedProcessIdentity;
+        use crate::runtime_owner_transfer::{
+            ProfileOwner, ProfileOwnerState, RuntimeOwnerRegistry,
+        };
+
+        let process_identity = RecordedProcessIdentity {
+            pid: 4242,
+            start_token: "linux:boot:4242".to_string(),
+            executable_path: Some("/opt/chrome".to_string()),
+            browser_family: Some("chrome".to_string()),
+        };
+        let process_digest = format!(
+            "{:x}",
+            Sha256::digest(serde_json::to_vec(&process_identity).unwrap())
+        );
+        ServiceState {
+            remote_view_handoffs: std::collections::BTreeMap::from([(
+                "r1".to_string(),
+                RemoteViewHandoff {
+                    id: "r1".to_string(),
+                    state: "ready".to_string(),
+                    browser_id: Some("browser-1".to_string()),
+                    session_name: Some("owner-session".to_string()),
+                    target_id: Some("target-1".to_string()),
+                    last_route_id: Some("route-1".to_string()),
+                    last_display_allocation_id: Some("display-1".to_string()),
+                    view_stream_provider: Some(ViewStreamProvider::RdpGateway),
+                    presentation_receipt: Some(DurableHandoffPresentationReceipt {
+                        schema_version: "agent-browser.durable-handoff-presentation.v1".to_string(),
+                        generation: 3,
+                        dashboard_deployment_generation: "generation-old".to_string(),
+                        logical_browser_id: "browser-1".to_string(),
+                        daemon_owner_generation: Some(4),
+                        process_instance_digest: Some(process_digest.clone()),
+                        target_id: "target-1".to_string(),
+                        required_stream_provider: ViewStreamProvider::RdpGateway,
+                        observed_stream_provider: ViewStreamProvider::RdpGateway,
+                        route_id: "route-1".to_string(),
+                        display_allocation_id: "display-1".to_string(),
+                        observed_at: "2026-08-27T12:00:00Z".to_string(),
+                        state: "ready".to_string(),
+                    }),
+                    ..RemoteViewHandoff::default()
+                },
+            )]),
+            remote_view_routes: std::collections::BTreeMap::from([(
+                "route-1".to_string(),
+                RemoteViewRoute {
+                    id: "route-1".to_string(),
+                    state: "ready".to_string(),
+                    browser_id: Some("browser-1".to_string()),
+                    session_id: Some("owner-session".to_string()),
+                    display_allocation_id: Some("display-1".to_string()),
+                    provider: ViewStreamProvider::RdpGateway,
+                    ..RemoteViewRoute::default()
+                },
+            )]),
+            display_allocations: std::collections::BTreeMap::from([(
+                "display-1".to_string(),
+                DisplayAllocation {
+                    id: "display-1".to_string(),
+                    state: "ready".to_string(),
+                    owner_browser_id: Some("browser-1".to_string()),
+                    owner_session_id: Some("owner-session".to_string()),
+                    route_ids: vec!["route-1".to_string()],
+                    ..DisplayAllocation::default()
+                },
+            )]),
+            browsers: std::collections::BTreeMap::from([(
+                "browser-1".to_string(),
+                BrowserProcess {
+                    id: "browser-1".to_string(),
+                    health: BrowserHealth::Ready,
+                    pid: Some(4242),
+                    active_session_ids: vec!["owner-session".to_string()],
+                    tab_handles: vec![ServiceTabHandle {
+                        browser_id: "browser-1".to_string(),
+                        session_name: Some("owner-session".to_string()),
+                        target_id: Some("target-1".to_string()),
+                        valid: true,
+                        ..ServiceTabHandle::default()
+                    }],
+                    ..BrowserProcess::default()
+                },
+            )]),
+            browser_process_identities: std::collections::BTreeMap::from([(
+                "browser-1".to_string(),
+                ServiceBrowserProcessIdentity {
+                    process_identity,
+                    user_data_dir: None,
+                    runtime_profile: Some("profile-1".to_string()),
+                },
+            )]),
+            runtime_owner_registry: RuntimeOwnerRegistry::from_owner(ProfileOwner {
+                owner_id: "owner-1".to_string(),
+                profile_identity_digest: "profile-digest".to_string(),
+                state: ProfileOwnerState::Ready,
+                owner_generation: 4,
+                browser_id: "browser-1".to_string(),
+                daemon_session_route: "owner-session".to_string(),
+                process_instance_digest: process_digest,
+                browser_family: "chrome".to_string(),
+                cdp_endpoint_identity_digest: "cdp-digest".to_string(),
+                target_set_digest: "target-digest".to_string(),
+                pending_transfer: None,
+                last_transition: None,
+            }),
+            ..ServiceState::default()
+        }
+    }
+
+    #[test]
+    fn candidate_presentation_prerequisite_rejects_cross_browser_route() {
+        let mut state = exact_candidate_presentation_state();
+        state
+            .remote_view_routes
+            .get_mut("route-1")
+            .unwrap()
+            .browser_id = Some("browser-other".to_string());
+
+        let prerequisite = candidate_presentation_prerequisite(&state);
+
+        assert_eq!(prerequisite["ready"], false);
+        assert_eq!(prerequisite["blockerCounts"]["route_changed"], 1);
+    }
+
+    #[test]
+    fn candidate_presentation_prerequisite_rejects_cross_browser_display() {
+        let mut state = exact_candidate_presentation_state();
+        state
+            .display_allocations
+            .get_mut("display-1")
+            .unwrap()
+            .owner_browser_id = Some("browser-other".to_string());
+
+        let prerequisite = candidate_presentation_prerequisite(&state);
+
+        assert_eq!(prerequisite["ready"], false);
+        assert_eq!(prerequisite["blockerCounts"]["display_changed"], 1);
+    }
+
+    #[test]
+    fn candidate_presentation_prerequisite_accepts_one_exact_current_handoff() {
+        let state = exact_candidate_presentation_state();
+
+        let prerequisite = candidate_presentation_prerequisite(&state);
+
+        assert_eq!(prerequisite["ready"], true);
+        assert_eq!(prerequisite["eligibleHandoffCount"], 1);
+        assert_eq!(
+            prerequisite["eligibleHandoffIds"],
+            serde_json::json!(["r1"])
+        );
+        assert_eq!(
+            prerequisite["nextAction"],
+            "resolve_eligible_handoff_through_authenticated_candidate"
+        );
+    }
+
+    #[test]
+    fn candidate_presentation_prerequisite_requires_ready_current_receipt() {
+        let mut state = exact_candidate_presentation_state();
+        state
+            .remote_view_handoffs
+            .get_mut("r1")
+            .unwrap()
+            .presentation_receipt = None;
+
+        let prerequisite = candidate_presentation_prerequisite(&state);
+
+        assert_eq!(prerequisite["ready"], false);
+        assert_eq!(
+            prerequisite["blockerCounts"]["presentation_receipt_unready"],
+            1
         );
     }
 

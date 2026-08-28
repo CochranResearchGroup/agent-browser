@@ -135,7 +135,15 @@ seven readiness axes. The axes are `payloadReady`,
 `selectedGenerationReady`, `runtimeConvergenceReady`,
 `upgradeTransactionState`, `dashboardIngressReady`, `operatorJourneyReady`,
 and `rollbackReady`; overall `ready` stays false until all axes agree and the
-admission drain is closed. Real-host apply starts a candidate dashboard on the
+admission drain is closed. Upgrade dry-run also reports
+`candidatePresentationPrerequisite`. It is ready only when one opaque durable
+handoff has an exact current browser, process identity, target, unique owner
+session, ready route, ready display, and matching presentation receipt. Apply
+records a terminal zero-effect preflight block when no handoff qualifies.
+Fresh and isolated installs are exempt. Never retry the upgrade or route a
+structured handoff through its old session label when this prerequisite is
+unready; reconcile exact current evidence or establish one fresh reviewed
+presentation handoff first. Real-host apply starts a candidate dashboard on the
 second port after ingress, then waits up to five minutes after runtime transfer
 for an authenticated candidate journey. Resolving an opaque durable handoff
 to a ready operator surface through the staged candidate automatically commits

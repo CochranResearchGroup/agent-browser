@@ -202,6 +202,7 @@ struct WorkstationInstallReport {
     dashboard_port: u16,
     guacamole_port: u16,
     host_plan: HostPlan,
+    candidate_presentation_prerequisite: Value,
     paths: WorkstationPaths,
     phases: Vec<&'static str>,
     host_prepared: bool,
@@ -2383,6 +2384,46 @@ fn generation_id_from_path(path: &Path, generations_dir: &Path) -> Option<String
         .map(|component| component.as_os_str().to_string_lossy().to_string())
 }
 
+fn workstation_candidate_presentation_prerequisite(
+    root: &Path,
+    paths: &InstallPaths,
+    isolated_root: bool,
+) -> Value {
+    let installed_entrypoint_exists = fs::symlink_metadata(&paths.binary).is_ok();
+    let existing_install = selected_generation_id(paths).is_some() || installed_entrypoint_exists;
+    if isolated_root || !existing_install {
+        return serde_json::json!({
+            "schemaVersion": "agent-browser.candidate-presentation-prerequisite.v1",
+            "required": false,
+            "ready": true,
+            "eligibleHandoffCount": 0,
+            "eligibleHandoffIds": [],
+            "blockerCounts": {},
+            "nextAction": "not_required_for_fresh_or_isolated_install",
+        });
+    }
+    use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
+    let state_path = root.join(".agent-browser/service/state.json");
+    match JsonServiceStateStore::new(state_path).load() {
+        Ok(state) => {
+            let mut prerequisite =
+                crate::dashboard_ingress::candidate_presentation_prerequisite(&state);
+            prerequisite["required"] = Value::Bool(true);
+            prerequisite
+        }
+        Err(error) => serde_json::json!({
+            "schemaVersion": "agent-browser.candidate-presentation-prerequisite.v1",
+            "required": true,
+            "ready": false,
+            "eligibleHandoffCount": 0,
+            "eligibleHandoffIds": [],
+            "blockerCounts": {"service_state_unreadable": 1},
+            "nextAction": "repair_service_state_before_candidate_install",
+            "error": error,
+        }),
+    }
+}
+
 fn run_workstation_install(args: &[String]) {
     let parsed = match parse_workstation_install_args(args) {
         Ok(parsed) => parsed,
@@ -2403,6 +2444,8 @@ fn run_workstation_install(args: &[String]) {
     let mut phases = vec!["plan-validated"];
     let isolated_root = env::var_os("AGENT_BROWSER_WORKSTATION_ROOT").is_some();
     let host_plan = build_host_plan(isolated_root, &root);
+    let candidate_presentation_prerequisite =
+        workstation_candidate_presentation_prerequisite(&root, &paths, isolated_root);
     if !host_plan.disk_space_ready {
         let mut error = format!(
                 "workstation installation requires at least {} bytes of free disk space; {} bytes are available",
@@ -2434,6 +2477,31 @@ fn run_workstation_install(args: &[String]) {
             ) {
                 error.push_str(&format!("; transaction: {}", path.display()));
             }
+        }
+        fail(&error, parsed.json);
+    }
+    if parsed.mode == InstallMode::Apply
+        && candidate_presentation_prerequisite
+            .get("required")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && candidate_presentation_prerequisite
+            .get("ready")
+            .and_then(Value::as_bool)
+            != Some(true)
+    {
+        let mut error = format!(
+            "candidate_dashboard_presentation_prerequisite_unready: {}",
+            candidate_presentation_prerequisite
+        );
+        if let Ok(path) = record_blocked_upgrade_transaction(
+            &root,
+            &paths,
+            &parsed,
+            crate::runtime_adoption::UpgradeTransactionState::BlockedCandidateIncompatible,
+            "candidate_dashboard_presentation_prerequisite_unready",
+        ) {
+            error.push_str(&format!("; transaction: {}", path.display()));
         }
         fail(&error, parsed.json);
     }
@@ -2762,6 +2830,7 @@ fn run_workstation_install(args: &[String]) {
         dashboard_port: parsed.dashboard_port,
         guacamole_port: parsed.guacamole_port,
         host_plan,
+        candidate_presentation_prerequisite,
         paths: WorkstationPaths {
             root: root.display().to_string(),
             binary: paths.binary.display().to_string(),
@@ -10341,6 +10410,72 @@ fn fail(message: &str, json: bool) -> ! {
 mod tests {
     use super::*;
     use crate::test_utils::EnvGuard;
+
+    #[cfg(unix)]
+    #[test]
+    fn workstation_upgrade_preflight_requires_one_exact_presentation_handoff() {
+        use std::os::unix::fs::symlink;
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-candidate-presentation-prerequisite-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        fs::create_dir_all(&paths.generations_dir).unwrap();
+        symlink("generation-old", &paths.current_selector).unwrap();
+
+        let prerequisite = workstation_candidate_presentation_prerequisite(&root, &paths, false);
+
+        assert_eq!(prerequisite["required"], true);
+        assert_eq!(prerequisite["ready"], false);
+        assert_eq!(prerequisite["eligibleHandoffCount"], 0);
+        assert_eq!(
+            prerequisite["nextAction"],
+            "reconcile_exact_current_handoff_or_create_fresh_presentation_handoff"
+        );
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn workstation_fresh_and_isolated_installs_do_not_require_presentation_handoff() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-fresh-presentation-prerequisite-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+
+        for prerequisite in [
+            workstation_candidate_presentation_prerequisite(&root, &paths, false),
+            workstation_candidate_presentation_prerequisite(&root, &paths, true),
+        ] {
+            assert_eq!(prerequisite["required"], false);
+            assert_eq!(prerequisite["ready"], true);
+            assert_eq!(
+                prerequisite["nextAction"],
+                "not_required_for_fresh_or_isolated_install"
+            );
+        }
+    }
+
+    #[test]
+    fn workstation_legacy_mutable_install_requires_presentation_handoff() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-legacy-presentation-prerequisite-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let paths = install_paths(&root);
+        fs::create_dir_all(paths.binary.parent().unwrap()).unwrap();
+        fs::write(&paths.binary, b"legacy installed binary").unwrap();
+
+        let prerequisite = workstation_candidate_presentation_prerequisite(&root, &paths, false);
+
+        assert_eq!(prerequisite["required"], true);
+        assert_eq!(prerequisite["ready"], false);
+        assert_eq!(prerequisite["eligibleHandoffCount"], 0);
+
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn shared_runtime_host_idle_lanes_do_not_retire_the_host_process() {

@@ -4,7 +4,7 @@ Date: 2026-08-26
 
 State: OPEN
 
-Execution state: `slice_k_candidate_built_install_presentation_authority_pending`
+Execution state: `slice_k_candidate_presentation_preflight_hardened_route_authority_pending`
 
 Lane: P134
 
@@ -50,13 +50,13 @@ Current checkpoint:
   MCP, generated clients, and dashboard controls. Public status adds redacted
   crash-regeneration progress while removing its private ephemeral evidence
   from both bounded and full-history Service State projections.
-- Slice I and Slice J are complete. Slice K candidate
-  `ecaa9b7f849c7ae31d64a36f5e27bc3262eedeaf109a8a14bd051344b6e84c1d`
-  from source commit `5b38a2e0` includes the ready-owner binding recourse and
-  mixed-version ledger repairs. Its guarded install rolled back cleanly at the
-  separately authorized presentation boundary. Production remains on
-  `0.28.0-32e8c9318beb-b2bd0fba532f` until an authenticated candidate durable
-  handoff is approved and proven.
+- Slice I and Slice J are complete. Slice K source now rejects stale structured
+  handoff fallback and projects an evidence-complete candidate-presentation
+  prerequisite before upgrade effects. The last built candidate from source
+  commit `efacc2a2` rolled back cleanly at the separately authorized
+  presentation boundary. Production remains on
+  `0.28.0-32e8c9318beb-b2bd0fba532f` until one exact current durable handoff is
+  approved and proven, then a successor candidate is built from this source.
 
 Depends on:
 
@@ -253,6 +253,11 @@ for live principal-bound leases.
 22. Candidate preflight reads legacy state without modifying it and produces a
     deterministic migration plan, compatibility report, runtime census digest,
     and rollback requirements.
+    For an upgrade, including a mutable legacy install with no generation
+    selector, it must also prove one exact current durable presentation handoff
+    across browser, process identity, owner session, target, route, display,
+    provider, receipt, and owner generation. A structured handoff with missing
+    current ownership never falls back to its persisted session label.
 23. No durable state migration occurs in place. The installer snapshots the
     exact authoritative inputs, migrates into a staged copy, validates all
     identities and references, then atomically commits or preserves the old
@@ -565,9 +570,17 @@ no production or provider effect.
 - Run dry-run preflight against the current workstation and require a stable
   closed-world census, complete migration plan, rollback readiness, and no
   unexplained owner, lease, route, or process ambiguity.
+- Require dry-run output to include the redacted
+  `candidatePresentationPrerequisite` projection. Existing-generation and
+  legacy mutable upgrades require one eligible exact current handoff. Fresh
+  and isolated installs are explicitly exempt.
 - If preflight blocks before effects, record terminal `blocked_preflight` or
   `blocked_census`, preserve the accepted installation unchanged, and return
   the exact first-class recourse path. Do not bypass the guard.
+- When the presentation prerequisite is unready, apply must stop before the
+  installer lock, payload staging, candidate launch, ingress routing, or
+  provider effects. It records terminal zero-effect diagnostics with stop
+  reason `candidate_dashboard_presentation_prerequisite_unready`.
 - Under separate exact-candidate authorization, apply the transaction, run the
   provider-free installed consumer matrix, inject and prove one rollback, then
   apply the same candidate again and prove idempotent convergence.
@@ -1287,3 +1300,33 @@ Do not implement migration or installer effects in Slice A.
   display binding without provider mutation; or exact authorization for one
   fresh production presentation route and durable handoff. A retry before one
   prerequisite is satisfied will repeat the five-minute zero-effect rollback.
+
+## 2026-08-27 candidate presentation preflight hardening checkpoint
+
+- A closed-world current-state read found 35 retained durable handoffs and zero
+  eligible candidate-presentation handoffs. Every retained handoff is blocked
+  first by `route_not_ready`; the inspected legacy example also lacks its
+  recorded browser, process identity, owner session, target, route, and display
+  authority. Its persisted `ready` label is therefore not current readiness.
+- Structured durable handoff targeting no longer falls back to a stale
+  persisted session label when current owner proof is unavailable. The legacy
+  fallback remains only for records that predate all structured browser,
+  target, and presentation-receipt identity.
+- Workstation dry-run now returns a redacted
+  `candidatePresentationPrerequisite` projection with eligible opaque handoff
+  ids, blocker counts, and the exact next action. Eligibility requires one
+  internally coherent current browser, package-owned process identity, active
+  owner session, bound target, ready route, ready display, provider binding,
+  presentation receipt, and owner generation.
+- Apply now treats an unready required prerequisite as a terminal zero-effect
+  preflight outcome before installer lock acquisition, payload staging,
+  candidate launch, ingress change, or provider action. This applies to sealed
+  generations and older mutable installations that have an installed binary
+  but no generation selector. Fresh and isolated installs remain exempt.
+- The live source dry-run reports `ready: false`, `eligibleHandoffCount: 0`,
+  and `blockerCounts: {route_not_ready: 35}`. Existing state cannot be safely
+  repaired because the necessary current identity axes are absent or released.
+  The remaining installation gate is exact authority for one fresh production
+  presentation route and durable handoff, followed by a successor candidate
+  build, guarded install, rollback proof, idempotent reapply, installed doctor,
+  and the three-consumer acceptance matrix.

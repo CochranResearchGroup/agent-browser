@@ -5612,6 +5612,14 @@ session binding. Effect-bearing references still block.
 A live selected runtime host with a missing or prior boot epoch is re-observed
 and CAS-refreshed only when its exact process, socket, generation, and binary
 remain in the selected scope. Ambiguous or changed identity still blocks.
+Upgrade dry-run reports candidatePresentationPrerequisite before any effect.
+It is ready only when one opaque durable handoff has an exact current browser,
+process identity, target, unique owner session, ready route, ready display, and
+matching presentation receipt. Apply records a terminal zero-effect preflight
+block instead of staging a candidate when that prerequisite is unready. Fresh
+and isolated installs do not require a retained presentation handoff. A
+structured handoff never falls back to a stale session label when current
+owner evidence is absent.
 Real-host apply starts a shadow candidate dashboard on the second port after
 ingress. After runtime transfer it waits up to five minutes for an authenticated
 candidate handoff resolution. A ready response served by the staged candidate

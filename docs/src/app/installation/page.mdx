@@ -195,6 +195,16 @@ Standalone doctor runs discover their helper scripts from the installed
 versioned support root, so no checkout or ambient script-root override is
 required.
 
+Before a real-host upgrade enters effects, dry-run reports
+<code>candidatePresentationPrerequisite</code>. It is ready only when one opaque
+durable handoff has an exact current browser, process identity, target, unique
+owner session, ready route, ready display, and matching presentation receipt.
+Apply records a terminal zero-effect preflight block when that evidence is
+absent; it does not stage a candidate and wait for an unresolvable handoff.
+Fresh installs and isolated development installs are exempt. Structured
+handoffs never fall back to stale session labels when current owner evidence
+is missing.
+
 On real-host apply, the installer starts the candidate dashboard backend on
 the second port after stable ingress and stages it before admission drain.
 After runtime transfer reaches candidate readiness, apply waits up to five

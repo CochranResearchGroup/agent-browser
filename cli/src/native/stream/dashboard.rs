@@ -920,14 +920,21 @@ fn service_request_handoff_target_session_name_from_state(
         return None;
     }
     let handoff = state.remote_view_handoffs.get(handoff_id)?;
-    remote_view_handoff_ready_owner_session(state, handoff)
+    if let Some(session_name) = remote_view_handoff_ready_owner_session(state, handoff)
         .and_then(|session_name| normalize_service_request_session_name(&session_name))
-        .or_else(|| {
-            handoff
-                .session_name
-                .as_deref()
-                .and_then(normalize_service_request_session_name)
-        })
+    {
+        return Some(session_name);
+    }
+    if handoff.browser_id.is_some()
+        || handoff.target_id.is_some()
+        || handoff.presentation_receipt.is_some()
+    {
+        return None;
+    }
+    handoff
+        .session_name
+        .as_deref()
+        .and_then(normalize_service_request_session_name)
         .or_else(|| service_request_session_candidate(handoff.intent.get("sessionName")))
 }
 
@@ -3326,6 +3333,34 @@ mod tests {
                 &state,
             ),
             Some("im-receipts-google-messages-stock-v4".to_string())
+        );
+    }
+
+    #[test]
+    fn dashboard_structured_handoff_without_current_owner_never_falls_back_to_stale_session() {
+        let state = crate::native::service_model::ServiceState {
+            remote_view_handoffs: std::collections::BTreeMap::from([(
+                "handoff-a".to_string(),
+                crate::native::service_model::RemoteViewHandoff {
+                    id: "handoff-a".to_string(),
+                    state: "ready".to_string(),
+                    session_name: Some("stale-owner-session".to_string()),
+                    browser_id: Some("browser-a".to_string()),
+                    target_id: Some("target-a".to_string()),
+                    ..crate::native::service_model::RemoteViewHandoff::default()
+                },
+            )]),
+            ..crate::native::service_model::ServiceState::default()
+        };
+        let body = r##"{"action":"service_remote_view_handoff_resolve","params":{"handoffId":"handoff-a"}}"##;
+
+        assert_eq!(
+            service_request_handoff_target_session_name_from_state(
+                "/api/service/request",
+                body,
+                &state,
+            ),
+            None
         );
     }
 
