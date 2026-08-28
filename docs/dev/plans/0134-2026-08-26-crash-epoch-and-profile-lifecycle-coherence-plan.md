@@ -1358,3 +1358,29 @@ Do not implement migration or installer effects in Slice A.
   plus rejected-apply proof. It does not change the remaining exact authority
   gate for creating one fresh production presentation route and durable
   handoff.
+
+## 2026-08-27 final terminal-preflight candidate checkpoint
+
+- Source commit `e2907764` produced final release candidate SHA-256
+  `4afed0482dbcbedd0f244bd8610a42a32d28067dd5eec2764db630fdcc0d925e`
+  and immutable generation `0.28.0-4afed0482dbc-427a73b60435`.
+- The final dry-run remained zero-effect with 35 `route_not_ready` blockers and
+  zero eligible handoffs. The authorized apply stopped immediately and wrote
+  transaction `upgrade-ee0865d5-7c2e-47f4-bb6d-4651dc9d1fa8` directly through
+  its blocked observation into terminal
+  `failed_preserved_old_generation` revision 2 with
+  `terminalResult: old_generation_preserved`.
+- The transaction has no census digest, migrations, dashboard validation, or
+  presentation validation because no installer lock, candidate payload,
+  candidate process, ingress, runtime, route, profile, lease, or provider
+  effect began. Installed generation
+  `0.28.0-32e8c9318beb-b2bd0fba532f` remains selected with steady multiplicity:
+  one dashboard, one runtime host, one executable generation, and zero legacy
+  daemons.
+- Installed doctor no longer reports an active upgrade transaction. It remains
+  nonzero for the expected workspace-versus-installed binary mismatch, the
+  unaccepted candidate readiness axis, and the pre-existing session-supervisor
+  port conflict. Candidate acceptance, skill synchronization, consumer
+  acceptance, idempotent reapply, and final green doctor remain downstream of
+  exact authority for one fresh production presentation route and durable
+  handoff.
