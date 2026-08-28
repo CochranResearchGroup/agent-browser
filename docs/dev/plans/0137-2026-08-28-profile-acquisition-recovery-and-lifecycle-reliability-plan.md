@@ -4,7 +4,7 @@ Date: 2026-08-28
 
 State: OPEN
 
-Execution state: `first_packet_active_slice_b_recovery_apply_core`
+Execution state: `first_packet_checkpoint_complete_slice_c_not_started`
 
 Lane: P137
 
@@ -761,3 +761,35 @@ The first checkpoint is accepted when the real failure shape is protected at a
 stable seam, terminal replacement succeeds only under exact evidence, and all
 live or stale controls fail before effect. Slice C begins only after that
 checkpoint is durable and the plan's identity model remains coherent.
+
+## First Packet Checkpoint | 2026-08-28
+
+- Objective: freeze Slice A contracts and incidents, then ship only the exact
+  terminal-owner Slice B vertical.
+- Source commits: `5eaca482`, `e14c9bbc`, `1752bfd1`, `3cabd593`, and
+  `7c1331c2` on `main`, pushed to `origin/main`.
+- Contract and identities: versioned acquisition outcome, Recovery Plan,
+  Recovery Receipt, and Mitigation Action contracts bind principal, profile,
+  profile digest, lifecycle owner generation, durable browser, daemon route,
+  service session, process digest, and optional presentation route. Durable
+  browser id and daemon route remain separate identities.
+- Fixture revision: Plan 0137 provider-free fixture set at `7c1331c2`, covering
+  Last30days generation 55, Odollo contractor portal identity uncertainty,
+  SoyLei identity and principal blockers, both fictitious PID-less records,
+  and the CDP-free route-proof gap.
+- Effects: source and provider-free fixture changes only. No development or
+  production publication, profile use, provider navigation, route creation,
+  process termination, candidate installation, or live Service State repair.
+- Validation: Rust formatting and Clippy passed; focused Plan 0137 recovery,
+  command, contract, and fixture tests passed; all fixture JSON parsed; service
+  API/MCP parity, generated-client contract, JavaScript types and exports,
+  route-confusion gates, and the production docs build passed.
+- Retry record: one compile correction changed fixture test keys from borrowed
+  strings to owned strings. The next run passed. No effect retry occurred.
+- Rollback: each source checkpoint is a cohesive Git commit. No runtime state
+  or cleanup obligation exists.
+- Independent review: not used for this single critical source lane.
+- Remaining gate: Slice C is not started. Full interrupted-operation recovery,
+  additional mitigation actions, state-provenance repair, dashboard actions,
+  migration, installation compatibility, isolated development acceptance, and
+  every production gate remain open under their later slices.
