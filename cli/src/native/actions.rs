@@ -167,6 +167,7 @@ use super::service_probe::handle_service_probe;
 use super::service_profile_lease::{
     handle_service_profile_lease_command, handle_service_profile_leases,
 };
+use super::service_profile_recovery::handle_service_profile_recovery_command;
 use super::service_renderer_crash::{
     race_action_with_renderer_crash, renderer_crash_error_response, RendererCrashRace,
 };
@@ -307,6 +308,9 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_profile_lease_release"
             | "service_profile_lease_reconcile_plan"
             | "service_profile_lease_reconcile_apply"
+            | "service_profile_recovery_plan"
+            | "service_profile_recovery_apply"
+            | "service_profile_recovery_status"
             | "service_profile_lookup"
             | "service_profile_seeding_handoff"
             | "service_sessions"
@@ -879,6 +883,15 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
             }
             "service_profile_lease_reconcile_apply" => {
                 handle_service_profile_lease_command(cmd).await
+            }
+            "service_profile_recovery_plan" => {
+                handle_service_profile_recovery_command(cmd, state).await
+            }
+            "service_profile_recovery_apply" => {
+                handle_service_profile_recovery_command(cmd, state).await
+            }
+            "service_profile_recovery_status" => {
+                handle_service_profile_recovery_command(cmd, state).await
             }
             "service_profile_lookup" => handle_service_profile_lookup(cmd).await,
             "service_profile_seeding_handoff" => handle_service_profile_seeding_handoff(cmd).await,

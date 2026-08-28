@@ -261,6 +261,36 @@ pub(super) async fn handle_http_request(
             return;
         }
         let body_str = full_body.as_deref().unwrap_or("");
+        if matches!(
+            path,
+            "/api/service/recovery/plan" | "/api/service/recovery/apply"
+        ) {
+            let capability = match profile_capability_bearer(&headers) {
+                Ok(capability) => capability,
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "401 Unauthorized").await;
+                    return;
+                }
+            };
+            let operation = if path.ends_with("/plan") {
+                "plan"
+            } else {
+                "apply"
+            };
+            let (command, relay_session) =
+                match service_profile_recovery_http_command(operation, body_str, capability) {
+                    Ok(command) => command,
+                    Err(err) => {
+                        write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                        return;
+                    }
+                };
+            let result =
+                relay_service_command(relay_session.as_deref().unwrap_or(session_name), command)
+                    .await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
+            return;
+        }
 
         if path == "/api/dashboard-auth/login" {
             let response = dashboard_auth::login_response(&headers, body_str, secure_cookie);
@@ -830,6 +860,32 @@ pub(super) async fn handle_http_request(
     }
 
     if method == "GET" {
+        if let Some(encoded_recovery_id) = service_profile_recovery_status_id(path) {
+            let recovery_id = match decode_path_segment(encoded_recovery_id, "profile recovery id")
+            {
+                Ok(recovery_id) => recovery_id,
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "400 Bad Request").await;
+                    return;
+                }
+            };
+            let capability = match profile_capability_bearer(&headers) {
+                Ok(capability) => capability,
+                Err(err) => {
+                    write_json_result(&mut stream, Err(err), "401 Unauthorized").await;
+                    return;
+                }
+            };
+            let command = json!({
+                "id": format!("http-service-profile-recovery-status-{}", uuid::Uuid::new_v4()),
+                "action": "service_profile_recovery_status",
+                "recoveryId": recovery_id,
+                "profileCapability": capability,
+            });
+            let result = relay_service_command(session_name, command).await;
+            write_json_result(&mut stream, result, "502 Bad Gateway").await;
+            return;
+        }
         if path == "/api/service/profile-leases/doctor" {
             let state = load_service_state();
             let now = service_now_timestamp();
@@ -3208,6 +3264,11 @@ fn service_profile_lease_mutation_route(path: &str) -> Option<(&str, &str)> {
         .then_some((id, operation))
 }
 
+fn service_profile_recovery_status_id(path: &str) -> Option<&str> {
+    path.strip_prefix("/api/service/recovery/")
+        .filter(|id| !id.is_empty() && !id.contains('/') && !matches!(*id, "plan" | "apply"))
+}
+
 fn profile_capability_bearer(headers: &[(String, String)]) -> Result<String, String> {
     let authorization = headers
         .iter()
@@ -3375,6 +3436,59 @@ fn service_profile_lease_mutation_command(
         return Err("profile_lease_reconcile_plan_required".to_string());
     }
     Ok(command)
+}
+
+fn service_profile_recovery_http_command(
+    operation: &str,
+    body: &str,
+    profile_capability: String,
+) -> Result<(Value, Option<String>), String> {
+    let input = parse_service_config_body(body, "profile recovery")?;
+    let action = match operation {
+        "plan" => "service_profile_recovery_plan",
+        "apply" => "service_profile_recovery_apply",
+        _ => return Err("profile_recovery_operation_invalid".to_string()),
+    };
+    let mut command = json!({
+        "id": format!("http-service-profile-recovery-{operation}-{}", uuid::Uuid::new_v4()),
+        "action": action,
+        "profileCapability": profile_capability,
+    });
+    for field in [
+        "profileId",
+        "expiresAt",
+        "idempotencyKey",
+        "targetServiceIds",
+        "plan",
+        "serviceName",
+        "agentName",
+        "taskName",
+    ] {
+        if let Some(value) = input.get(field) {
+            command[field] = value.clone();
+        }
+    }
+    if operation == "plan"
+        && (!command.get("profileId").is_some_and(Value::is_string)
+            || !command.get("expiresAt").is_some_and(Value::is_string))
+    {
+        return Err("profile_recovery_plan_profile_and_expiry_required".to_string());
+    }
+    if operation == "apply" && !command.get("plan").is_some_and(Value::is_object) {
+        return Err("profile_recovery_plan_required".to_string());
+    }
+    let relay_session = command
+        .get("plan")
+        .and_then(|plan| plan.get("identities"))
+        .and_then(|identities| identities.get("daemonSessionRoute"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|route| !route.is_empty())
+        .map(str::to_string);
+    if operation == "apply" && relay_session.is_none() {
+        return Err("profile_recovery_plan_daemon_route_required".to_string());
+    }
+    Ok((command, relay_session))
 }
 
 fn service_profile_seeding_handoff_update_command(

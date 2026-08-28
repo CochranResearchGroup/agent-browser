@@ -6293,6 +6293,9 @@ Usage:
   agent-browser service leases <lease-id> release --revision <lease-revision> --capability-file /absolute/private/path/fedex.cap
   agent-browser service leases <lease-id> reconcile plan --revision <lease-revision> --capability-file /absolute/private/path/fedex.cap --expires-at <rfc3339>
   agent-browser service leases <lease-id> reconcile apply --revision <lease-revision> --capability-file /absolute/private/path/fedex.cap --plan-file /absolute/path/plan.json
+  agent-browser service recovery plan --profile-id <id> --capability-file /absolute/private/path/profile.cap --expires-at <rfc3339>
+  agent-browser service recovery apply --plan-file /absolute/path/recovery-plan.json --capability-file /absolute/private/path/profile.cap --session-name <sealed-daemon-route>
+  agent-browser service recovery status <recovery-id> --capability-file /absolute/private/path/profile.cap
   agent-browser service profiles lookup [--search <text>] [--hostname <host>] [--profile-id <id>] [--profile-name <name>] [--service-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--authentication-state <state>] [--freshness-state <state>] [--tag <tag>] [--url <url>] [--browser-build <build>]
   agent-browser service sessions
   agent-browser service browsers
@@ -6425,6 +6428,7 @@ Notes:
   - Text service status includes profile, profile allocation, browser, and session summary lines for operator traceability.
   - Text service profiles includes the derived profileAllocations view with holder sessions, waiting jobs, conflicts, browser health summaries, and recommended actions.
   - service leases returns principal-scoped profile leases with exact owner generation, subordinate work, blocking identity axes, authorized actions, typed recourse, and doctor findings. An authenticated rejoin can bind a capability registered before first launch, or repair one unproven live session, only when there is one unique exact uncontested ready owner session. If a replay advanced an existing binding's owner generation, rejoin compare-and-swaps only the same principal, profile, and capability binding to the current ready generation, then binds only that session and its same-browser active tabs through the supplied expiry. Reconcile plan can instead seal one refresh_principal_owner_binding transition when the same capability's binding is stale but the exact ready profile, browser, process, and session route agree and no subordinate session work remains. Apply rechecks every identity and the boot epoch before advancing the binding. After an unexpected browser exit, a non-expired registered session work lease preserves exact profile selection while replay establishes the next owner; labels and legacy observations do not.
+  - service recovery plan is zero-effect and capability-bound. The first effect-capable recovery class supersedes one exact terminal, cleanup-satisfied, process-absent owner. Apply derives the daemon route from the sealed plan, rechecks all identities before launch, retries acquisition once, and persists a receipt. Unproven or inconsistent principal/profile identity remains blocked for a separate reconciliation plan.
   - Text service profiles includes targetReadiness for no-launch profile readiness; Google first-login profiles can report needs_manual_seeding with seedingMode=detached_headed_no_cdp, cdpAttachmentAllowedDuringSeeding=false, preferredKeyring=basic_password_store, and setup scopes for sign-in, Chrome sync, passkeys, and browser plugins. Explicit freshness rows are preserved through readiness refreshes.
   - service profiles <id> seeding-handoff [target] returns the exact detached runtime login command plus lifecycle, operator steps, and close-detection state for completing Google sign-in, Chrome sync, passkey, and plugin setup before CDP attaches.
   - service profiles <id> verify-seeding <target> records a bounded post-close auth probe by reusing the serialized profile freshness update path. Fresh evidence moves a matching closed handoff to fresh; stale, blocked, or inconclusive evidence moves it to verification_pending. Pass --account-id or --account-ids to add account labels that later profile selection can match.
@@ -7027,6 +7031,7 @@ Service:
   service prune-retained     Dry-run or apply retained closed-tab, inert-browser, orphaned-profile, and display-allocation cleanup
   service repair-retained    Dry-run or apply retained session evidence repair
   service access-plan        Show no-launch profile, retained-owner, and browser-build routing recommendation
+  service recovery           Plan, apply, or inspect capability-bound profile acquisition recovery
   service profiles           Show retained profile records and allocation state
   service sessions           Show retained service session records
   service browsers           Show retained browser health records

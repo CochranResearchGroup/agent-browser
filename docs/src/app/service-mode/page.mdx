@@ -1430,6 +1430,16 @@ authenticated reconcile plan can contain one
 the same capability's binding after rechecking the exact ready profile,
 browser, process, session route, lease revision, and boot epoch.
 
+Profile acquisition recovery is separately capability-bound. Plan generation
+is zero-effect. The first effect-capable action supersedes only an exact
+terminal owner whose cleanup, process exit, profile lock release, and lease
+absence are all proven. Apply derives its daemon route from the sealed plan,
+rechecks the Service State revision and identity joins, retries acquisition
+once, and persists a receipt. CLI, HTTP, MCP, and generated client plan,
+apply, and status surfaces share this authority. An
+<code>existing_session_profile_identity_unproven</code> result remains blocked
+for principal/profile reconciliation and cannot authorize a duplicate launch.
+
 <code>GET /api/service/status</code>, CLI JSON status, typed MCP status, and the
 generated client expose replayable recovery progress in the redacted
 <code>crashRegenerationTransactions</code> array. Each row contains stable

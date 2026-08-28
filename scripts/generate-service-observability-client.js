@@ -1239,6 +1239,25 @@ export interface ServiceProfileLeaseReconcileReceipt {
 export interface ServiceProfileLeaseReconcilePlanResponse { plan: ServiceProfileLeaseReconcilePlan; }
 export interface ServiceProfileLeaseReconcileApplyResponse { receipt: ServiceProfileLeaseReconcileReceipt; }
 
+export interface ServiceProfileRecoveryPlan extends Record<string, unknown> {
+  schemaVersion: 'agent-browser.profile-recovery-plan.v1';
+  planId: string;
+  recoveryId: string;
+  integritySeal: string;
+  identities: { principalId: string; profileId: string; daemonSessionRoute: string; [key: string]: unknown };
+}
+export interface ServiceProfileRecoveryReceipt extends Record<string, unknown> {
+  schemaVersion: 'agent-browser.profile-recovery-receipt.v1';
+  recoveryId: string;
+  planId: string;
+  principalId: string;
+  profileId: string;
+  terminalResult: string;
+}
+export interface ServiceProfileRecoveryPlanResponse { outcome: { recovery?: ServiceProfileRecoveryPlan; [key: string]: unknown }; }
+export interface ServiceProfileRecoveryApplyResponse { outcome: Record<string, unknown>; receipt: ServiceProfileRecoveryReceipt; replayed: boolean; }
+export interface ServiceProfileRecoveryStatusResponse { recoveryId: string; state: string; receipt: ServiceProfileRecoveryReceipt | null; }
+
 export interface ServiceSessionsResponse extends ServiceListResponse<ServiceSessionRecord> {
   sessions: ServiceSessionRecord[];
 }
@@ -1863,6 +1882,25 @@ export interface ServiceProfileLeaseReconcileApplyOptions extends ServiceProfile
   serviceName?: string;
   agentName?: string;
   taskName?: string;
+}
+
+export interface ServiceProfileRecoveryPlanOptions extends ServiceObservabilityHttpOptions {
+  profileId: string;
+  profileCapability: string;
+  expiresAt: string;
+  idempotencyKey?: string;
+  targetServiceIds?: string[];
+  serviceName?: string;
+  agentName?: string;
+  taskName?: string;
+}
+export interface ServiceProfileRecoveryApplyOptions extends ServiceObservabilityHttpOptions {
+  profileCapability: string;
+  plan: ServiceProfileRecoveryPlan;
+}
+export interface ServiceProfileRecoveryStatusOptions extends ServiceObservabilityHttpOptions {
+  recoveryId: string;
+  profileCapability: string;
 }
 
 export interface ServiceMonitorQueryOptions extends ServiceQueryOptions {
@@ -3078,6 +3116,9 @@ export declare function renewServiceProfileLease(options: ServiceProfileLeaseRen
 export declare function releaseServiceProfileLease(options: ServiceProfileLeaseMutationOptions): Promise<ServiceProfileLeaseMutationResponse>;
 export declare function planServiceProfileLeaseReconciliation(options: ServiceProfileLeaseReconcilePlanOptions): Promise<ServiceProfileLeaseReconcilePlanResponse>;
 export declare function applyServiceProfileLeaseReconciliation(options: ServiceProfileLeaseReconcileApplyOptions): Promise<ServiceProfileLeaseReconcileApplyResponse>;
+export declare function planServiceProfileRecovery(options: ServiceProfileRecoveryPlanOptions): Promise<ServiceProfileRecoveryPlanResponse>;
+export declare function applyServiceProfileRecovery(options: ServiceProfileRecoveryApplyOptions): Promise<ServiceProfileRecoveryApplyResponse>;
+export declare function getServiceProfileRecoveryStatus(options: ServiceProfileRecoveryStatusOptions): Promise<ServiceProfileRecoveryStatusResponse>;
 export declare function findServiceDisplayAllocation(records: ServiceDisplayAllocationRecord[] | ServiceDisplayAllocationsResponse | null | undefined, id: string): ServiceDisplayAllocationRecord | null;
 export declare function findServiceRemoteViewRoute(records: ServiceRemoteViewRouteRecord[] | ServiceRemoteViewRoutesResponse | null | undefined, id: string): ServiceRemoteViewRouteRecord | null;
 export declare function findServiceViewerLease(records: ServiceViewerLeaseRecord[] | ServiceViewerLeasesResponse | null | undefined, id: string): ServiceViewerLeaseRecord | null;

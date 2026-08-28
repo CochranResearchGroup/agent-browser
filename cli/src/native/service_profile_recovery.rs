@@ -6,11 +6,18 @@
 //! compare-and-swap boundary.
 
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use std::fs;
 use std::future::Future;
+use std::path::PathBuf;
 
+use super::action_runtime::runtime::{auto_launch, service_browser_id, DaemonState};
 use super::service_model::ServiceState;
-use super::service_store::ServiceStateRepository;
+use super::service_principal::authenticate_profile_capability;
+use super::service_resources::load_service_state_for_maintenance;
+use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
+use super::service_trace::service_commands::service_now_timestamp;
 use crate::runtime_owner_transfer::{CleanupObligationState, RuntimeLaneLifecycleState};
 
 pub(crate) const PROFILE_ACQUISITION_OUTCOME_SCHEMA_V1: &str =
@@ -165,6 +172,218 @@ pub(crate) struct ProfileAcquisitionOutcome {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) next_action: Option<String>,
     pub(crate) evidence: Vec<RecoveryEvidence>,
+}
+
+/// Executes the no-launch plan and status operations, or the exact
+/// terminal-owner apply operation, for the public recovery command surface.
+/// The raw profile capability is consumed only for authentication and plan
+/// sealing. It is never copied into Service State, receipts, or launch input.
+pub(crate) async fn handle_service_profile_recovery_command(
+    command: &Value,
+    daemon_state: &mut DaemonState,
+) -> Result<Value, String> {
+    match required_command_string(command, "action")? {
+        "service_profile_recovery_plan" => plan_profile_recovery_command(command),
+        "service_profile_recovery_status" => status_profile_recovery_command(command),
+        "service_profile_recovery_apply" => {
+            apply_profile_recovery_command(command, daemon_state).await
+        }
+        action => Err(format!("Unsupported profile recovery command: {action}")),
+    }
+}
+
+fn plan_profile_recovery_command(command: &Value) -> Result<Value, String> {
+    let state = load_service_state_for_maintenance(command)?;
+    let profile_id = required_command_string(command, "profileId")?;
+    let raw_capability = profile_capability_from_command(command)?;
+    let authority = authenticate_profile_capability(
+        &state.service_principals,
+        &raw_capability,
+        Some(profile_id),
+    )
+    .map_err(|error| format!("profile_recovery_principal_{}", error.code.as_str()))?;
+    let intent = ProfileAcquisitionIntent {
+        principal_id: authority.principal_id,
+        profile_id: authority.profile_id,
+        service_name: optional_command_string(command, "serviceName").unwrap_or_default(),
+        agent_name: optional_command_string(command, "agentName").unwrap_or_default(),
+        task_name: optional_command_string(command, "taskName").unwrap_or_default(),
+        target_service_ids: optional_command_string_array(command, "targetServiceIds")?,
+    };
+    let created_at = service_now_timestamp();
+    let expires_at = required_command_string(command, "expiresAt")?;
+    let idempotency_key = optional_command_string(command, "idempotencyKey")
+        .unwrap_or_else(|| format!("profile-recovery-{}", uuid::Uuid::new_v4()));
+    let outcome = plan_terminal_owner_recovery(
+        &state,
+        intent,
+        &created_at,
+        expires_at,
+        &idempotency_key,
+        raw_capability.as_bytes(),
+    )?;
+    Ok(json!({ "outcome": outcome }))
+}
+
+fn status_profile_recovery_command(command: &Value) -> Result<Value, String> {
+    let recovery_id = required_command_string(command, "recoveryId")?;
+    let raw_capability = profile_capability_from_command(command)?;
+    let repository = LockedServiceStateRepository::default_json()?;
+    let state = repository.load_snapshot()?;
+    let receipt = state.profile_recovery_receipts.get(recovery_id).cloned();
+    let Some(receipt) = receipt else {
+        return Ok(json!({
+            "recoveryId": recovery_id,
+            "state": "not_found",
+            "receipt": null,
+        }));
+    };
+    let authority = authenticate_profile_capability(
+        &state.service_principals,
+        &raw_capability,
+        Some(&receipt.profile_id),
+    )
+    .map_err(|error| format!("profile_recovery_principal_{}", error.code.as_str()))?;
+    if authority.principal_id != receipt.principal_id {
+        return Err("profile_recovery_principal_mismatch".to_string());
+    }
+    Ok(json!({
+        "recoveryId": recovery_id,
+        "state": receipt.terminal_result,
+        "receipt": receipt,
+    }))
+}
+
+async fn apply_profile_recovery_command(
+    command: &Value,
+    daemon_state: &mut DaemonState,
+) -> Result<Value, String> {
+    let plan = recovery_plan_from_command(command)?;
+    let raw_capability = profile_capability_from_command(command)?;
+    let repository = LockedServiceStateRepository::default_json()?;
+    let snapshot = repository.load_snapshot()?;
+    let authority = authenticate_profile_capability(
+        &snapshot.service_principals,
+        &raw_capability,
+        Some(&plan.identities.profile_id),
+    )
+    .map_err(|error| format!("profile_recovery_principal_{}", error.code.as_str()))?;
+    if authority.principal_id != plan.identities.principal_id
+        || authority.principal_id != plan.original_intent.principal_id
+    {
+        return Err("profile_recovery_principal_mismatch".to_string());
+    }
+    if daemon_state.session_id != plan.identities.daemon_session_route {
+        return Err("profile_recovery_daemon_route_mismatch".to_string());
+    }
+    if daemon_state.browser.is_some() {
+        return Err("profile_recovery_daemon_route_not_empty".to_string());
+    }
+    let now = service_now_timestamp();
+    let outcome = apply_terminal_owner_recovery(
+        &repository,
+        &plan,
+        &now,
+        raw_capability.as_bytes(),
+        |intent| async move {
+            let retry_command = json!({
+                "action": "tab_new",
+                "profileId": intent.profile_id,
+                "serviceName": intent.service_name,
+                "agentName": intent.agent_name,
+                "taskName": intent.task_name,
+                "targetServiceIds": intent.target_service_ids,
+                "sessionName": daemon_state.session_id,
+            });
+            auto_launch(daemon_state, &retry_command).await?;
+            if daemon_state.browser.is_none() {
+                return Err("profile_recovery_acquisition_retry_missing_browser".to_string());
+            }
+            Ok(ProfileAcquisitionRetryResult {
+                browser_id: service_browser_id(&daemon_state.session_id),
+                daemon_session_route: daemon_state.session_id.clone(),
+            })
+        },
+    )
+    .await?;
+    Ok(json!({
+        "outcome": outcome.acquisition,
+        "receipt": outcome.receipt,
+        "replayed": outcome.replayed,
+    }))
+}
+
+fn recovery_plan_from_command(command: &Value) -> Result<RecoveryPlan, String> {
+    if let Some(plan) = command.get("plan") {
+        return serde_json::from_value(plan.clone())
+            .map_err(|error| format!("profile_recovery_plan_invalid:{error}"));
+    }
+    let path = absolute_command_path(command, "planFile")?;
+    let encoded = fs::read(&path)
+        .map_err(|error| format!("Failed to read recovery plan {}: {error}", path.display()))?;
+    serde_json::from_slice(&encoded)
+        .map_err(|error| format!("profile_recovery_plan_invalid:{error}"))
+}
+
+fn profile_capability_from_command(command: &Value) -> Result<String, String> {
+    if let Some(capability) = optional_command_string(command, "profileCapability") {
+        return Ok(capability);
+    }
+    let path = absolute_command_path(command, "profileCapabilityFile")?;
+    fs::read_to_string(&path)
+        .map(|value| value.trim().to_string())
+        .map_err(|error| {
+            format!(
+                "Failed to read profile capability {}: {error}",
+                path.display()
+            )
+        })
+}
+
+fn absolute_command_path(command: &Value, field: &str) -> Result<PathBuf, String> {
+    let path = PathBuf::from(required_command_string(command, field)?);
+    if !path.is_absolute() {
+        return Err(format!("profile_recovery_{field}_must_be_absolute"));
+    }
+    Ok(path)
+}
+
+fn required_command_string<'a>(command: &'a Value, field: &str) -> Result<&'a str, String> {
+    command
+        .get(field)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| format!("profile_recovery_{field}_required"))
+}
+
+fn optional_command_string(command: &Value, field: &str) -> Option<String> {
+    command
+        .get(field)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn optional_command_string_array(command: &Value, field: &str) -> Result<Vec<String>, String> {
+    let Some(values) = command.get(field) else {
+        return Ok(Vec::new());
+    };
+    let values = values
+        .as_array()
+        .ok_or_else(|| format!("profile_recovery_{field}_invalid"))?;
+    values
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+                .ok_or_else(|| format!("profile_recovery_{field}_invalid"))
+        })
+        .collect()
 }
 
 pub(crate) fn plan_terminal_owner_recovery(

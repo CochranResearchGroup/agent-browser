@@ -915,6 +915,37 @@ fn service_profile_lease_reconcile_tool_schema(operation: &str, title: &str) -> 
     })
 }
 
+fn service_profile_recovery_tool_schema(operation: &str, title: &str) -> Value {
+    let required = match operation {
+        "plan" => vec!["profileId", "profileCapability", "expiresAt"],
+        "apply" => vec!["profileCapability", "plan"],
+        "status" => vec!["recoveryId", "profileCapability"],
+        _ => Vec::new(),
+    };
+    json!({
+        "name": format!("service_profile_recovery_{operation}"),
+        "title": title,
+        "description": format!("{title}. The profile capability is ephemeral and never persisted or returned. Only the exact terminal-owner recovery class is effect-capable in this first vertical."),
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "profileId": { "type": "string" },
+                "profileCapability": { "type": "string", "writeOnly": true },
+                "expiresAt": { "type": "string" },
+                "idempotencyKey": { "type": "string" },
+                "targetServiceIds": { "type": "array", "items": { "type": "string" } },
+                "plan": { "type": "object" },
+                "recoveryId": { "type": "string" },
+                "serviceName": { "type": "string" },
+                "agentName": { "type": "string" },
+                "taskName": { "type": "string" }
+            },
+            "required": required
+        }
+    })
+}
+
 fn service_mcp_tools() -> Vec<Value> {
     let tools = vec![
         json!({
@@ -3226,6 +3257,9 @@ fn service_mcp_tools() -> Vec<Value> {
             "apply",
             "Apply an exact sealed profile lease reconciliation plan",
         ),
+        service_profile_recovery_tool_schema("plan", "Plan profile acquisition recovery"),
+        service_profile_recovery_tool_schema("apply", "Apply profile acquisition recovery"),
+        service_profile_recovery_tool_schema("status", "Read profile recovery status"),
         json!({
             "name": "service_trace",
             "title": "Read service trace",
@@ -5291,6 +5325,11 @@ fn call_service_mcp_tool(
         "service_profile_lease_reconcile_plan" | "service_profile_lease_reconcile_apply" => {
             call_service_profile_lease_reconcile(name, arguments, session)
         }
+        "service_profile_recovery_plan"
+        | "service_profile_recovery_apply"
+        | "service_profile_recovery_status" => {
+            call_service_profile_recovery(name, arguments, session)
+        }
         "service_session_upsert" => call_service_session_upsert(arguments, session),
         "service_session_delete" => call_service_session_delete(arguments, session),
         "service_site_policy_upsert" => call_service_site_policy_upsert(arguments, session),
@@ -5898,6 +5937,82 @@ fn call_service_profile_lease_reconcile(
     }
     apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
     send_queued_tool_command(action, session, trace, command)
+}
+
+fn call_service_profile_recovery(
+    action: &str,
+    arguments: &Value,
+    session: &str,
+) -> Result<Value, JsonRpcError> {
+    let profile_capability = required_string_argument(arguments, "profileCapability")?;
+    let profile_id = optional_string_argument(arguments, "profileId")?;
+    let expires_at = optional_string_argument(arguments, "expiresAt")?;
+    let idempotency_key = optional_string_argument(arguments, "idempotencyKey")?;
+    let recovery_id = optional_string_argument(arguments, "recoveryId")?;
+    let plan = arguments
+        .get("plan")
+        .filter(|value| value.is_object())
+        .cloned();
+    if action.ends_with("_plan") && (profile_id.is_none() || expires_at.is_none()) {
+        return Err(JsonRpcError::invalid_params(
+            "service_profile_recovery_plan requires profileId and expiresAt",
+        ));
+    }
+    if action.ends_with("_apply") && plan.is_none() {
+        return Err(JsonRpcError::invalid_params(
+            "service_profile_recovery_apply requires plan",
+        ));
+    }
+    if action.ends_with("_status") && recovery_id.is_none() {
+        return Err(JsonRpcError::invalid_params(
+            "service_profile_recovery_status requires recoveryId",
+        ));
+    }
+    let service_name = optional_string_argument(arguments, "serviceName")?;
+    let agent_name = optional_string_argument(arguments, "agentName")?;
+    let task_name = optional_string_argument(arguments, "taskName")?;
+    let trace = service_tool_trace(service_name, agent_name, task_name);
+    let mut command = json!({
+        "id": format!("mcp-{action}-{}", uuid::Uuid::new_v4()),
+        "action": action,
+        "profileCapability": profile_capability,
+    });
+    for (field, value) in [
+        ("profileId", profile_id),
+        ("expiresAt", expires_at),
+        ("idempotencyKey", idempotency_key),
+        ("recoveryId", recovery_id),
+    ] {
+        if let Some(value) = value {
+            command[field] = json!(value);
+        }
+    }
+    if let Some(target_service_ids) = arguments.get("targetServiceIds") {
+        command["targetServiceIds"] = target_service_ids.clone();
+    }
+    if let Some(plan) = plan {
+        command["plan"] = plan;
+    }
+    apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
+    let plan_route = command
+        .get("plan")
+        .and_then(|plan| plan.get("identities"))
+        .and_then(|identities| identities.get("daemonSessionRoute"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|route| !route.is_empty())
+        .map(str::to_string);
+    if action.ends_with("_apply") && plan_route.is_none() {
+        return Err(JsonRpcError::invalid_params(
+            "service_profile_recovery_apply plan requires identities.daemonSessionRoute",
+        ));
+    }
+    send_queued_tool_command(
+        action,
+        plan_route.as_deref().unwrap_or(session),
+        trace,
+        command,
+    )
 }
 
 fn call_service_session_upsert(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {

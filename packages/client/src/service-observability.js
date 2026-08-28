@@ -42,6 +42,12 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceProfileLeaseReconcileApplyOptions} ServiceProfileLeaseReconcileApplyOptions
  * @typedef {import('./service-observability.generated.js').ServiceProfileLeaseReconcilePlanResponse} ServiceProfileLeaseReconcilePlanResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileLeaseReconcileApplyResponse} ServiceProfileLeaseReconcileApplyResponse
+ * @typedef {import('./service-observability.generated.js').ServiceProfileRecoveryPlanOptions} ServiceProfileRecoveryPlanOptions
+ * @typedef {import('./service-observability.generated.js').ServiceProfileRecoveryApplyOptions} ServiceProfileRecoveryApplyOptions
+ * @typedef {import('./service-observability.generated.js').ServiceProfileRecoveryStatusOptions} ServiceProfileRecoveryStatusOptions
+ * @typedef {import('./service-observability.generated.js').ServiceProfileRecoveryPlanResponse} ServiceProfileRecoveryPlanResponse
+ * @typedef {import('./service-observability.generated.js').ServiceProfileRecoveryApplyResponse} ServiceProfileRecoveryApplyResponse
+ * @typedef {import('./service-observability.generated.js').ServiceProfileRecoveryStatusResponse} ServiceProfileRecoveryStatusResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileLeaseMutationResponse} ServiceProfileLeaseMutationResponse
  * @typedef {import('./service-observability.generated.js').ServiceChallengesResponse} ServiceChallengesResponse
  * @typedef {import('./service-observability.generated.js').ServiceMonitorsResponse} ServiceMonitorsResponse
@@ -1002,6 +1008,45 @@ export function applyServiceProfileLeaseReconciliation({
     { ...options, headers: { authorization: `Bearer ${profileCapability}` } },
     `/api/service/profile-leases/${encodeURIComponent(id)}/reconcile/apply`,
     { plan, ...(serviceName ? { serviceName } : {}), ...(agentName ? { agentName } : {}), ...(taskName ? { taskName } : {}) },
+  );
+}
+
+/** @param {ServiceProfileRecoveryPlanOptions} options @returns {Promise<ServiceProfileRecoveryPlanResponse>} */
+export function planServiceProfileRecovery({
+  profileId, profileCapability, expiresAt, idempotencyKey, targetServiceIds, serviceName, agentName, taskName, ...options
+}) {
+  assertServiceId(profileId, 'planServiceProfileRecovery');
+  if (!profileCapability || !expiresAt) {
+    throw new TypeError('planServiceProfileRecovery requires profileId, profileCapability, and expiresAt');
+  }
+  return servicePost(
+    { ...options, headers: { authorization: `Bearer ${profileCapability}` } },
+    '/api/service/recovery/plan',
+    { profileId, expiresAt, ...(idempotencyKey ? { idempotencyKey } : {}), ...(targetServiceIds ? { targetServiceIds } : {}), ...(serviceName ? { serviceName } : {}), ...(agentName ? { agentName } : {}), ...(taskName ? { taskName } : {}) },
+  );
+}
+
+/** @param {ServiceProfileRecoveryApplyOptions} options @returns {Promise<ServiceProfileRecoveryApplyResponse>} */
+export function applyServiceProfileRecovery({ profileCapability, plan, ...options }) {
+  if (!profileCapability || !plan || typeof plan !== 'object') {
+    throw new TypeError('applyServiceProfileRecovery requires profileCapability and plan');
+  }
+  return servicePost(
+    { ...options, headers: { authorization: `Bearer ${profileCapability}` } },
+    '/api/service/recovery/apply',
+    { plan },
+  );
+}
+
+/** @param {ServiceProfileRecoveryStatusOptions} options @returns {Promise<ServiceProfileRecoveryStatusResponse>} */
+export function getServiceProfileRecoveryStatus({ recoveryId, profileCapability, ...options }) {
+  assertServiceId(recoveryId, 'getServiceProfileRecoveryStatus');
+  if (!profileCapability) {
+    throw new TypeError('getServiceProfileRecoveryStatus requires profileCapability');
+  }
+  return serviceGet(
+    { ...options, headers: { authorization: `Bearer ${profileCapability}` } },
+    `/api/service/recovery/${encodeURIComponent(recoveryId)}`,
   );
 }
 

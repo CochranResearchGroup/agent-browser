@@ -22,6 +22,10 @@ pub const SERVICE_REMOTE_VIEW_ROUTES_HTTP_ROUTE: &str = "/api/service/remote-vie
 pub const SERVICE_ROUTE_POOL_HTTP_ROUTE: &str = "/api/service/route-pool";
 pub const SERVICE_VIEWER_LEASES_HTTP_ROUTE: &str = "/api/service/viewer-leases";
 pub const SERVICE_PROFILE_LEASES_HTTP_ROUTE: &str = "/api/service/profile-leases";
+pub const SERVICE_PROFILE_RECOVERY_PLAN_HTTP_ROUTE: &str = "/api/service/recovery/plan";
+pub const SERVICE_PROFILE_RECOVERY_APPLY_HTTP_ROUTE: &str = "/api/service/recovery/apply";
+pub const SERVICE_PROFILE_RECOVERY_STATUS_HTTP_ROUTE_TEMPLATE: &str =
+    "/api/service/recovery/{recovery_id}";
 pub const SERVICE_REMEDIES_APPLY_HTTP_ROUTE: &str = "/api/service/remedies/apply";
 pub const SERVICE_MONITORS_RUN_DUE_HTTP_ROUTE: &str = "/api/service/monitors/run-due";
 pub const SERVICE_MONITOR_PAUSE_HTTP_ROUTE: &str = "/api/service/monitors/<id>/pause";
@@ -820,6 +824,30 @@ pub fn service_contracts_metadata() -> Value {
                 "effectCapable": false,
                 "blockedReason": "boot_epoch_unavailable",
                 "noLaunch": true,
+            },
+            "serviceProfileRecovery": {
+                "version": SERVICE_REQUEST_CONTRACT_VERSION,
+                "schemaPath": "docs/dev/contracts/service-profile-recovery.v1.schema.json",
+                "http": {
+                    "plan": SERVICE_PROFILE_RECOVERY_PLAN_HTTP_ROUTE,
+                    "apply": SERVICE_PROFILE_RECOVERY_APPLY_HTTP_ROUTE,
+                    "status": SERVICE_PROFILE_RECOVERY_STATUS_HTTP_ROUTE_TEMPLATE,
+                    "authentication": "Authorization: Bearer <profile-capability>",
+                },
+                "mcp": {
+                    "planTool": "service_profile_recovery_plan",
+                    "applyTool": "service_profile_recovery_apply",
+                    "statusTool": "service_profile_recovery_status",
+                    "capabilityField": "profileCapability",
+                    "ephemeral": true,
+                },
+                "client": {
+                    "planHelper": "planServiceProfileRecovery",
+                    "applyHelper": "applyServiceProfileRecovery",
+                    "statusHelper": "getServiceProfileRecoveryStatus",
+                },
+                "firstEffectCapableClass": "supersede_terminal_owner",
+                "noLaunch": false,
             },
             "serviceMonitorRunDueResponse": {
                 "version": SERVICE_REQUEST_CONTRACT_VERSION,
