@@ -32,6 +32,10 @@ It also pins one Linux-compatible browser executable so a Linux-only managed
 profile cannot accidentally inherit a Windows browser manifest. Set
 <code>AGENT_BROWSER_DEV_BROWSER_EXECUTABLE</code> before publication only for a
 reviewed absolute executable.
+Production <code>agent-browser install doctor</code> scopes its daemon census to
+the exact production socket path. The sibling <code>agent-browser-dev</code>
+namespace is excluded from production runtime-host and executable-generation
+multiplicity.
 
 Use <code>pnpm development-runtime:status</code> for a readback and
 <code>pnpm development-runtime:doctor</code> for the acceptance checks. The

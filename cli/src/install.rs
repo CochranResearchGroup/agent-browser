@@ -2603,10 +2603,14 @@ fn daemon_listener_inventory(current_executable_realpath: Option<&str>) -> serde
             .lines()
             .filter(|line| line.contains(&socket_dir_text))
         {
-            let socket_path = line
-                .split_whitespace()
-                .find(|part| part.starts_with(&socket_dir_text))
-                .unwrap_or("");
+            // `agent-browser-dev` is a sibling namespace whose text begins
+            // with `agent-browser`. Require path-component containment so the
+            // production doctor cannot adopt development listeners.
+            let Some(socket_path) = line.split_whitespace().find(|part| {
+                socket_path_belongs_to_runtime_dir(Path::new(part), socket_dir.as_path())
+            }) else {
+                continue;
+            };
             for pid in daemon_listener_pids_from_ss_line(line) {
                 if !seen.insert((pid, socket_path.to_string())) {
                     continue;
@@ -2775,6 +2779,11 @@ fn runtime_host_listener_identity(
         binary_sha256: manifest.executable_generation,
         socket_identity: manifest.socket_identity,
     })
+}
+
+#[cfg(unix)]
+fn socket_path_belongs_to_runtime_dir(socket_path: &Path, runtime_dir: &Path) -> bool {
+    socket_path.starts_with(runtime_dir)
 }
 
 #[cfg(unix)]
@@ -4286,6 +4295,21 @@ mod tests {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
     use zip::write::SimpleFileOptions;
+
+    #[cfg(unix)]
+    #[test]
+    fn daemon_listener_inventory_excludes_the_development_socket_namespace() {
+        let production_runtime_dir = Path::new("/run/user/1000/agent-browser");
+
+        assert!(socket_path_belongs_to_runtime_dir(
+            Path::new("/run/user/1000/agent-browser/runtime-hosts/owner/runtime-host.sock"),
+            production_runtime_dir,
+        ));
+        assert!(!socket_path_belongs_to_runtime_dir(
+            Path::new("/run/user/1000/agent-browser-dev/runtime-host.sock"),
+            production_runtime_dir,
+        ));
+    }
 
     fn http_response(status: u16, reason: &str, body: &[u8]) -> Vec<u8> {
         let header = format!(

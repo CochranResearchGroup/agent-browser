@@ -955,6 +955,9 @@ retains an exact cleanup obligation and must not trigger broad process cleanup.
 The stable `agent-browser-dev` command is an environment-owning launcher, not a
 plain binary alias. Direct commands therefore inherit the dev pseudo-home,
 socket, auth store, and runtime identity automatically.
+Production `agent-browser install doctor` uses exact path-component membership
+for its socket census. The sibling `agent-browser-dev` namespace is excluded
+from production runtime-host and executable-generation multiplicity.
 Use `pnpm smoke:development-dashboard-auth -- --dashboard-url <dev-url>` for a
 credential-safe authenticated ingress check. It verifies login, cookie-backed
 session status, authenticated service API access, and development manifest

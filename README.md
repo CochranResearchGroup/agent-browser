@@ -87,6 +87,10 @@ reports `runtimeEnvironment: "development"`. The Cooper service inventory owns
 the separate `agent-browser-dev` local and external ingress routes. Its isolated
 presentation provider has six development-only route identities and listens on
 local port 8093. It does not borrow production Guacamole routes.
+Production `agent-browser install doctor` scopes daemon and runtime-host
+multiplicity to the exact production socket namespace. A running
+`agent-browser-dev` host therefore remains visible only to development tooling
+and cannot create false production multiplicity drift.
 The skill commands publish and verify guidance only inside the development
 pseudo-home. They do not replace the shared user-scoped production skill.
 

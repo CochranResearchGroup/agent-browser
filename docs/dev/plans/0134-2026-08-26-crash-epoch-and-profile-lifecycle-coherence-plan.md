@@ -1437,3 +1437,23 @@ Do not implement migration or installer effects in Slice A.
   presentation route and durable handoff, followed by guarded install,
   rollback review, idempotent reapply, production installed doctor, and the
   production-installed consumer readback.
+
+## 2026-08-27 production doctor development-isolation checkpoint
+
+- A fresh production doctor readback found that its daemon listener census
+  matched socket paths by string prefix. The isolated
+  `/run/user/<uid>/agent-browser-dev` namespace therefore appeared beneath the
+  production `/run/user/<uid>/agent-browser` prefix and falsely produced two
+  runtime hosts and two executable generations.
+- The census now requires path-component membership beneath the exact
+  production socket directory. A focused regression rejects the development
+  sibling namespace while retaining a nested production runtime-host socket.
+- Live source-binary doctor readback with both runtimes active now reports one
+  production dashboard, one production runtime host, one executable
+  generation, no multiplicity issues, and `steady_current`. The development
+  runtime remained running and unchanged.
+- This removes false production drift caused by isolated candidate validation.
+  It does not satisfy or bypass the remaining candidate-presentation
+  prerequisite. The live dry run still reports 35 `route_not_ready` blockers,
+  zero eligible durable handoffs, and the exact fresh-presentation-handoff
+  recourse action.
